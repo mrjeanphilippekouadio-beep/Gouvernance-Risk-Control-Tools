@@ -12,7 +12,7 @@
  * (DEPARTEMENTS, ANOMALIES, PROCESSUS, IAM_PERMISSIONS, JOURNAL_GLOBAL),
  * avec leurs en-têtes en ligne 4 (HEADER_ROW), exactement comme les
  * dictionnaires de 02_Colonnes.gs les attendent. Idempotent : une feuille
- * déjà présente n'est jamais recréée ni modifiée. ### to delete after
+ * déjà présente n'est jamais recréée ni modifiée.
  */
 
 function creerFeuillesManquantes() {
@@ -66,6 +66,16 @@ function creerFeuillesManquantes() {
     rapport.push(spec.nom + ' : créée avec ' + spec.entetes.length + ' colonne(s), en-têtes en ligne 4.');
   });
 
-  SpreadsheetApp.getUi().alert('Création des feuilles manquantes',
-    rapport.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
+  const message = rapport.join('\n');
+  Logger.log(message);
+  // getUi() n'est disponible que si la fonction est lancée depuis le menu
+  // Sheets ; exécutée directement dans l'éditeur Apps Script, il n'y a pas
+  // de contexte d'interface, d'où ce garde-fou (le résultat reste visible
+  // dans Affichage > Journaux d'exécution / Exécutions).
+  try {
+    SpreadsheetApp.getUi().alert('Création des feuilles manquantes', message,
+      SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    Logger.log('(Alerte non affichée : ' + e.message + ' — résultat ci-dessus dans les journaux.)');
+  }
 }
