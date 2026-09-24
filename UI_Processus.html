@@ -1,0 +1,346 @@
+<!-- MARQUEUR UI_Processus v10 -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Processus</title>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style>
+  :root{ --p:#1F5FA8; }
+  [data-theme] { --color-primary: #1F5FA8; }
+  body{ background:#F4F6F9; }
+  .diag-box{ border:1px solid #D8DEE6; border-radius:10px; padding:10px 12px; background:#fff; }
+  .diag-child{ border-left:2px solid #1F5FA8; margin-left:10px; padding-left:12px; }
+</style>
+</head>
+<body class="min-h-screen text-sm" data-theme="light">
+<div class="navbar bg-base-100 border-b border-base-300 px-4 min-h-0 py-2 mb-2 shadow-sm">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm normal-case gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-6xl mx-auto p-4">
+
+  <div class="bg-base-100 rounded-2xl shadow border border-base-300 overflow-hidden mb-4">
+    <div class="flex items-end justify-between gap-4 flex-wrap p-4 border-b border-base-300">
+      <div>
+        <h1 class="text-lg font-bold">Processus</h1>
+        <p class="text-xs text-base-content/60 max-w-xl">Hiérarchie à 3 niveaux : Processus &gt; Sous-processus &gt; Activité, avec rattachement de documents (charte, politique, manuel de procédures, procédure, mode opératoire).</p>
+      </div>
+      <button id="btn-nouveau" class="btn btn-primary btn-sm">+ Nouveau processus</button>
+    </div>
+
+    <div id="msg" class="hidden mx-4 mt-3 alert py-2"></div>
+
+    <div class="flex items-center gap-2 flex-wrap p-3 border-b border-base-300 bg-base-200/40">
+      <input id="q" type="search" placeholder="Rechercher (id, nom, description…)" class="input input-bordered input-sm w-64" />
+      <select id="f-niveau" class="select select-bordered select-sm">
+        <option value="">Tous les niveaux</option>
+      </select>
+      <span class="flex-1"></span>
+      <span id="compte" class="text-xs text-base-content/60">·</span>
+    </div>
+
+    <div class="overflow-auto max-h-[480px]">
+      <table class="table table-zebra table-sm">
+        <thead class="sticky top-0 bg-base-200 z-10">
+          <tr>
+            <th>ID</th><th>Niveau</th><th>Nom</th><th>Parent</th><th>Documents</th><th>Propriétaire</th><th>Actif</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="bg-base-100 rounded-2xl shadow border border-base-300 p-4 mb-4">
+    <h2 class="font-semibold mb-2 text-sm">Diagramme d'interactions (aperçu simple)</h2>
+    <p class="text-xs text-base-content/60 mb-3">Chaque processus racine, avec ses sous-processus et activités rattachés. Un simple emboîtement suffit pour ce lot : pas de librairie de diagramme.</p>
+    <div id="diagramme" class="space-y-3"></div>
+  </div>
+</div>
+
+<!-- ================= modal de saisie ================= -->
+<dialog id="modal" class="modal">
+  <div class="modal-box max-w-xl">
+    <h3 id="m-titre" class="font-bold text-base mb-3">Nouveau processus</h3>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div class="form-control col-span-1">
+        <label class="label py-1"><span class="label-text text-xs">Niveau *</span></label>
+        <select id="f-niveau-form" class="select select-bordered select-sm"></select>
+      </div>
+      <div class="form-control col-span-1">
+        <label class="label py-1"><span class="label-text text-xs">Processus parent</span></label>
+        <select id="f-parent" class="select select-bordered select-sm"></select>
+      </div>
+      <div class="form-control col-span-2">
+        <label class="label py-1"><span class="label-text text-xs">Nom *</span></label>
+        <input id="f-nom" type="text" class="input input-bordered input-sm" />
+      </div>
+      <div class="form-control col-span-2">
+        <label class="label py-1"><span class="label-text text-xs">Description</span></label>
+        <textarea id="f-description" rows="2" class="textarea textarea-bordered textarea-sm"></textarea>
+      </div>
+      <div class="form-control col-span-1">
+        <label class="label py-1"><span class="label-text text-xs">Type de document lié</span></label>
+        <select id="f-type-doc" class="select select-bordered select-sm"></select>
+      </div>
+      <div class="form-control col-span-1">
+        <label class="label py-1"><span class="label-text text-xs">Référence du document</span></label>
+        <input id="f-ref-doc" type="text" class="input input-bordered input-sm" placeholder="Nom ou lien du document" />
+      </div>
+      <div class="form-control col-span-1">
+        <label class="label py-1"><span class="label-text text-xs">Propriétaire</span></label>
+        <select id="f-proprietaire" class="select select-bordered select-sm"></select>
+      </div>
+      <div class="form-control col-span-1 justify-end">
+        <label class="label cursor-pointer justify-start gap-2">
+          <input id="f-actif" type="checkbox" class="checkbox checkbox-sm checkbox-primary" checked />
+          <span class="label-text text-xs">Actif</span>
+        </label>
+      </div>
+    </div>
+
+    <p class="text-[11px] text-base-content/50 mt-2">Limitation connue de ce lot : pas de matrice de rôles par document (qui valide, qui rédige…) ; un seul champ de référence par processus.</p>
+
+    <div class="modal-action">
+      <button id="m-annuler" class="btn btn-ghost btn-sm">Annuler</button>
+      <button id="m-enregistrer" class="btn btn-primary btn-sm">Enregistrer</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- ================= widget de feedback (mock, dupliqué sur chaque page du lot) ================= -->
+<div class="fixed bottom-5 right-5 z-50">
+  <button id="fb-btn" class="btn btn-circle btn-primary shadow-lg" title="Donner un avis">💬</button>
+</div>
+<dialog id="fb-modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-base">Votre avis</h3>
+    <p class="py-1 text-xs text-base-content/60">Ce retour reste local à cette session (aucun envoi serveur pour l'instant).</p>
+    <textarea id="fb-texte" class="textarea textarea-bordered w-full textarea-sm" rows="4" placeholder="Qu'est-ce qui pourrait être amélioré ?"></textarea>
+    <div class="modal-action">
+      <button id="fb-annuler" class="btn btn-ghost btn-sm">Annuler</button>
+      <button id="fb-envoyer" class="btn btn-primary btn-sm">Envoyer</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+(function(){
+  const FEEDBACKS = [];
+  const modal = document.getElementById('fb-modal');
+  document.getElementById('fb-btn').onclick = function(){ modal.showModal(); };
+  document.getElementById('fb-annuler').onclick = function(){ modal.close(); };
+  document.getElementById('fb-envoyer').onclick = function(){
+    const texte = document.getElementById('fb-texte').value.trim();
+    if(!texte) return;
+    FEEDBACKS.push({ texte: texte, date: new Date().toISOString() });
+    document.getElementById('fb-texte').value = '';
+    modal.close();
+    alert("Merci, votre retour a été enregistré (localement, pour cette session).");
+  };
+})();
+</script>
+
+<script>
+let PROCESSUS = [];
+let NIVEAUX = [];
+let TYPES_DOC = [];
+let UTILISATEURS = [];
+let EDIT_ID = '';
+
+function esc(v){ return String(v === null || v === undefined ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function estVide(v){ return v === null || v === undefined || v === '' || (typeof v === 'string' && v.trim() === ''); }
+
+function message(txt, type){
+  const m = document.getElementById('msg');
+  m.className = 'alert py-2 ' + (type === 'err' ? 'alert-error' : type === 'ok' ? 'alert-success' : type === 'warn' ? 'alert-warning' : 'alert-info');
+  m.textContent = txt;
+  if(type !== 'err') setTimeout(function(){ m.classList.add('hidden'); }, 6000);
+}
+function onError(err){
+  message((err && err.message) ? err.message : "Une erreur est survenue côté serveur.", 'err');
+  try { console.error(err); } catch(e){}
+}
+
+function nomProcessus(id){
+  const p = PROCESSUS.filter(function(x){ return x.id === id; })[0];
+  return p ? p.nom : id;
+}
+
+function processusFiltres(){
+  const q = (document.getElementById('q').value || '').toLowerCase();
+  const fn = document.getElementById('f-niveau').value;
+  return PROCESSUS.filter(function(p){
+    if(fn && p.niveau !== fn) return false;
+    if(!q) return true;
+    return String(p.id).toLowerCase().indexOf(q) !== -1 ||
+      String(p.nom).toLowerCase().indexOf(q) !== -1 ||
+      String(p.description || '').toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function peindreTableau(){
+  const tbody = document.getElementById('tbody');
+  const liste = processusFiltres();
+  document.getElementById('compte').textContent = liste.length + ' processus sur ' + PROCESSUS.length;
+  if(!liste.length){
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center italic text-base-content/50 py-6">Aucun processus ne correspond.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = liste.map(function(p){
+    return '<tr>' +
+      '<td class="text-xs">' + esc(p.id) + '</td>' +
+      '<td><span class="badge badge-sm ' + (p.niveau === 'Processus' ? 'badge-primary' : p.niveau === 'Sous-processus' ? 'badge-secondary' : 'badge-ghost') + '">' + esc(p.niveau) + '</span></td>' +
+      '<td class="font-medium">' + esc(p.nom) + '</td>' +
+      '<td class="text-xs">' + esc(p.idParent ? nomProcessus(p.idParent) : '—') + '</td>' +
+      '<td class="text-xs">' + (p.typeDocument ? esc(p.typeDocument) + (p.referenceDocument ? ' · ' + esc(p.referenceDocument) : '') : '—') + '</td>' +
+      '<td class="text-xs">' + esc(p.proprietaire || '—') + '</td>' +
+      '<td>' + (p.actif ? '<span class="badge badge-success badge-sm">Actif</span>' : '<span class="badge badge-ghost badge-sm">Inactif</span>') + '</td>' +
+      '<td><button class="btn btn-ghost btn-xs btn-edit" data-id="' + esc(p.id) + '">Modifier</button></td>' +
+    '</tr>';
+  }).join('');
+}
+
+function peindreDiagramme(interactions){
+  const box = document.getElementById('diagramme');
+  if(!interactions || !interactions.length){
+    box.innerHTML = '<p class="text-xs italic text-base-content/50">Aucun processus racine pour l\'instant.</p>';
+    return;
+  }
+  box.innerHTML = interactions.map(function(racine){
+    const enfants = (racine.enfants || []).map(function(e){
+      const petits = (e.enfants || []).map(function(pe){
+        return '<div class="diag-box diag-child text-xs mt-1">' + esc(pe.nom) + '</div>';
+      }).join('');
+      return '<div class="diag-box diag-child mt-2"><div class="text-sm font-medium">' + esc(e.nom) + '</div>' + petits + '</div>';
+    }).join('');
+    return '<div class="diag-box"><div class="font-semibold text-primary">' + esc(racine.nom) + '</div>' + enfants + '</div>';
+  }).join('');
+}
+
+function remplirSelect(id, valeurs, videLabel){
+  const el = document.getElementById(id);
+  el.innerHTML = '';
+  el.appendChild(new Option(videLabel || 'Sélectionner…', ''));
+  valeurs.forEach(function(v){ el.appendChild(new Option(v, v)); });
+}
+
+function optionsParentsPour(niveau){
+  const rangs = { 'Processus': 0, 'Sous-processus': 1, 'Activité': 2 };
+  const rangCible = rangs[niveau];
+  if(rangCible === undefined || rangCible === 0) return [];
+  const niveauParent = niveau === 'Sous-processus' ? 'Processus' : 'Sous-processus';
+  return PROCESSUS.filter(function(p){ return p.niveau === niveauParent; });
+}
+
+function majParents(){
+  const niveau = document.getElementById('f-niveau-form').value;
+  const sel = document.getElementById('f-parent');
+  sel.innerHTML = '';
+  sel.appendChild(new Option('Aucun (niveau racine)', ''));
+  optionsParentsPour(niveau).forEach(function(p){ sel.appendChild(new Option(p.id + ' · ' + p.nom, p.id)); });
+  sel.disabled = (niveau === 'Processus' || !niveau);
+}
+
+function ouvrirModal(id){
+  EDIT_ID = id || '';
+  const p = id ? PROCESSUS.filter(function(x){ return x.id === id; })[0] : null;
+  document.getElementById('m-titre').textContent = p ? 'Modifier ' + p.id : 'Nouveau processus';
+  document.getElementById('f-niveau-form').value = p ? p.niveau : '';
+  majParents();
+  document.getElementById('f-parent').value = p ? p.idParent : '';
+  document.getElementById('f-nom').value = p ? p.nom : '';
+  document.getElementById('f-description').value = p ? p.description : '';
+  document.getElementById('f-type-doc').value = p ? p.typeDocument : '';
+  document.getElementById('f-ref-doc').value = p ? p.referenceDocument : '';
+  document.getElementById('f-proprietaire').value = p ? p.proprietaire : '';
+  document.getElementById('f-actif').checked = p ? !!p.actif : true;
+  document.getElementById('modal').showModal();
+}
+
+function enregistrer(){
+  const niveau = document.getElementById('f-niveau-form').value;
+  const nom = document.getElementById('f-nom').value.trim();
+  if(!niveau){ message('Le niveau est obligatoire.', 'warn'); return; }
+  if(!nom){ message('Le nom du processus est obligatoire.', 'warn'); return; }
+
+  const payload = {
+    id: EDIT_ID,
+    niveau: niveau,
+    idParent: document.getElementById('f-parent').value,
+    nom: nom,
+    description: document.getElementById('f-description').value.trim(),
+    typeDocument: document.getElementById('f-type-doc').value,
+    referenceDocument: document.getElementById('f-ref-doc').value.trim(),
+    proprietaire: document.getElementById('f-proprietaire').value,
+    actif: document.getElementById('f-actif').checked
+  };
+
+  const btn = document.getElementById('m-enregistrer');
+  btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(function(res){
+      btn.disabled = false;
+      if(res){
+        if(Array.isArray(res.processus)) PROCESSUS = res.processus;
+        peindreTableau();
+        if(res.interactions) peindreDiagramme(res.interactions);
+      }
+      message('Processus ' + (res ? res.id : '') + ' enregistré.', 'ok');
+      document.getElementById('modal').close();
+    })
+    .withFailureHandler(function(e){ btn.disabled = false; onError(e); })
+    .saveProcessus(payload);
+}
+
+function onData(data){
+  if(!data){ message("Les données n'ont pas pu être chargées.", 'err'); return; }
+  PROCESSUS = Array.isArray(data.processus) ? data.processus : [];
+  NIVEAUX = Array.isArray(data.niveaux) ? data.niveaux : [];
+  TYPES_DOC = Array.isArray(data.typesDocument) ? data.typesDocument : [];
+  UTILISATEURS = Array.isArray(data.utilisateurs) ? data.utilisateurs : [];
+
+  const selFiltre = document.getElementById('f-niveau');
+  NIVEAUX.forEach(function(n){ selFiltre.appendChild(new Option(n, n)); });
+
+  remplirSelect('f-niveau-form', NIVEAUX, 'Sélectionner…');
+  remplirSelect('f-type-doc', TYPES_DOC, 'Aucun');
+  const selProp = document.getElementById('f-proprietaire');
+  selProp.innerHTML = '';
+  selProp.appendChild(new Option('Aucun', ''));
+  UTILISATEURS.forEach(function(u){ selProp.appendChild(new Option(u.nom ? u.nom + ' (' + u.email + ')' : u.email, u.email)); });
+
+  peindreTableau();
+  peindreDiagramme(data.interactions);
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('btn-nouveau').onclick = function(){ ouvrirModal(''); };
+  document.getElementById('m-annuler').onclick = function(){ document.getElementById('modal').close(); };
+  document.getElementById('m-enregistrer').onclick = enregistrer;
+  document.getElementById('f-niveau-form').addEventListener('change', majParents);
+  document.getElementById('q').oninput = peindreTableau;
+  document.getElementById('f-niveau').onchange = peindreTableau;
+  document.getElementById('tbody').addEventListener('click', function(e){
+    const btn = e.target.closest('.btn-edit');
+    if(btn) ouvrirModal(btn.dataset.id);
+  });
+
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message('Environnement Google Apps Script non détecté.', 'err');
+    return;
+  }
+  google.script.run.withSuccessHandler(onData).withFailureHandler(onError).getProcessusData();
+});
+</script>
+</body>
+</html>

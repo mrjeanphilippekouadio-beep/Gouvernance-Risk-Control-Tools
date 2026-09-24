@@ -1,0 +1,321 @@
+<!-- MARQUEUR UI_IAM v10 -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RACI / IAM</title>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style>
+  body{ background:#F4F6F9; }
+</style>
+</head>
+<body class="min-h-screen text-sm" data-theme="light">
+<div class="navbar bg-base-100 border-b border-base-300 px-4 min-h-0 py-2 mb-2 shadow-sm">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm normal-case gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-6xl mx-auto p-4">
+
+  <div class="bg-base-100 rounded-2xl shadow border border-base-300 overflow-hidden mb-4">
+    <div class="flex items-end justify-between gap-4 flex-wrap p-4 border-b border-base-300">
+      <div>
+        <h1 class="text-lg font-bold">RACI / IAM</h1>
+        <p class="text-xs text-base-content/60 max-w-2xl">Permissions par grand objet métier (lecture, écriture, validation, admin), assignables à un niveau hiérarchique (Analyste, Lead, Direction, Comité) ou, en dérogation, à un utilisateur précis.</p>
+      </div>
+      <button id="btn-nouveau" class="btn btn-primary btn-sm">+ Nouvelle permission</button>
+    </div>
+
+    <div id="msg" class="hidden mx-4 mt-3 alert py-2"></div>
+
+    <div class="flex items-center gap-2 flex-wrap p-3 border-b border-base-300 bg-base-200/40">
+      <input id="q" type="search" placeholder="Rechercher (cible, ressource…)" class="input input-bordered input-sm w-64" />
+      <select id="f-type" class="select select-bordered select-sm">
+        <option value="">Tout type de cible</option>
+        <option value="Niveau">Niveau</option>
+        <option value="Utilisateur">Utilisateur</option>
+      </select>
+      <select id="f-ressource" class="select select-bordered select-sm"><option value="">Toutes les ressources</option></select>
+      <span class="flex-1"></span>
+      <span id="compte" class="text-xs text-base-content/60">·</span>
+    </div>
+
+    <div class="overflow-auto max-h-[480px]">
+      <table class="table table-zebra table-sm">
+        <thead class="sticky top-0 bg-base-200 z-10">
+          <tr>
+            <th>ID</th><th>Type</th><th>Cible</th><th>Ressource</th>
+            <th class="text-center">Lecture</th><th class="text-center">Écriture</th>
+            <th class="text-center">Validation</th><th class="text-center">Admin</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="bg-base-100 rounded-2xl shadow border border-base-300 p-4">
+    <h2 class="font-semibold mb-2 text-sm">Grille par niveau hiérarchique</h2>
+    <p class="text-xs text-base-content/60 mb-3">Vue de synthèse des permissions accordées à chacun des 4 niveaux, ressource par ressource. Les dérogations individuelles n'apparaissent pas ici : voir le tableau ci-dessus (type de cible « Utilisateur »).</p>
+    <div class="overflow-auto">
+      <table class="table table-xs" id="grille"></table>
+    </div>
+  </div>
+</div>
+
+<!-- ================= modal de saisie ================= -->
+<dialog id="modal" class="modal">
+  <div class="modal-box max-w-lg">
+    <h3 id="m-titre" class="font-bold text-base mb-3">Nouvelle permission</h3>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div class="form-control">
+        <label class="label py-1"><span class="label-text text-xs">Type de cible *</span></label>
+        <select id="f-type-cible" class="select select-bordered select-sm">
+          <option value="Niveau">Niveau</option>
+          <option value="Utilisateur">Utilisateur</option>
+        </select>
+      </div>
+      <div class="form-control">
+        <label class="label py-1"><span class="label-text text-xs">Cible *</span></label>
+        <select id="f-cible-niveau" class="select select-bordered select-sm"></select>
+        <input id="f-cible-user" type="text" class="input input-bordered input-sm mt-1 hidden" placeholder="email@djamo.com" />
+      </div>
+      <div class="form-control col-span-2">
+        <label class="label py-1"><span class="label-text text-xs">Ressource *</span></label>
+        <select id="f-ressource-form" class="select select-bordered select-sm"></select>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-4 gap-2 mt-3">
+      <label class="label cursor-pointer flex-col gap-1 border border-base-300 rounded-lg py-2">
+        <span class="label-text text-xs">Lecture</span>
+        <input id="f-lecture" type="checkbox" class="checkbox checkbox-sm checkbox-primary" />
+      </label>
+      <label class="label cursor-pointer flex-col gap-1 border border-base-300 rounded-lg py-2">
+        <span class="label-text text-xs">Écriture</span>
+        <input id="f-ecriture" type="checkbox" class="checkbox checkbox-sm checkbox-primary" />
+      </label>
+      <label class="label cursor-pointer flex-col gap-1 border border-base-300 rounded-lg py-2">
+        <span class="label-text text-xs">Validation</span>
+        <input id="f-validation" type="checkbox" class="checkbox checkbox-sm checkbox-primary" />
+      </label>
+      <label class="label cursor-pointer flex-col gap-1 border border-base-300 rounded-lg py-2">
+        <span class="label-text text-xs">Admin</span>
+        <input id="f-admin" type="checkbox" class="checkbox checkbox-sm checkbox-primary" />
+      </label>
+    </div>
+
+    <div class="modal-action">
+      <button id="m-annuler" class="btn btn-ghost btn-sm">Annuler</button>
+      <button id="m-enregistrer" class="btn btn-primary btn-sm">Enregistrer</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- ================= widget de feedback (mock, dupliqué sur chaque page du lot) ================= -->
+<div class="fixed bottom-5 right-5 z-50">
+  <button id="fb-btn" class="btn btn-circle btn-primary shadow-lg" title="Donner un avis">💬</button>
+</div>
+<dialog id="fb-modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-base">Votre avis</h3>
+    <p class="py-1 text-xs text-base-content/60">Ce retour reste local à cette session (aucun envoi serveur pour l'instant).</p>
+    <textarea id="fb-texte" class="textarea textarea-bordered w-full textarea-sm" rows="4" placeholder="Qu'est-ce qui pourrait être amélioré ?"></textarea>
+    <div class="modal-action">
+      <button id="fb-annuler" class="btn btn-ghost btn-sm">Annuler</button>
+      <button id="fb-envoyer" class="btn btn-primary btn-sm">Envoyer</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+(function(){
+  const FEEDBACKS = [];
+  const modal = document.getElementById('fb-modal');
+  document.getElementById('fb-btn').onclick = function(){ modal.showModal(); };
+  document.getElementById('fb-annuler').onclick = function(){ modal.close(); };
+  document.getElementById('fb-envoyer').onclick = function(){
+    const texte = document.getElementById('fb-texte').value.trim();
+    if(!texte) return;
+    FEEDBACKS.push({ texte: texte, date: new Date().toISOString() });
+    document.getElementById('fb-texte').value = '';
+    modal.close();
+    alert("Merci, votre retour a été enregistré (localement, pour cette session).");
+  };
+})();
+</script>
+
+<script>
+let PERMISSIONS = [];
+let NIVEAUX = [];
+let RESSOURCES = [];
+let UTILISATEURS = [];
+let EDIT_ID = '';
+
+function esc(v){ return String(v === null || v === undefined ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function message(txt, type){
+  const m = document.getElementById('msg');
+  m.className = 'alert py-2 ' + (type === 'err' ? 'alert-error' : type === 'ok' ? 'alert-success' : type === 'warn' ? 'alert-warning' : 'alert-info');
+  m.textContent = txt;
+  if(type !== 'err') setTimeout(function(){ m.classList.add('hidden'); }, 6000);
+}
+function onError(err){
+  message((err && err.message) ? err.message : "Une erreur est survenue côté serveur.", 'err');
+  try { console.error(err); } catch(e){}
+}
+function coche(b){ return b ? '<span class="badge badge-success badge-sm">Oui</span>' : '<span class="badge badge-ghost badge-sm">Non</span>'; }
+
+function permissionsFiltrees(){
+  const q = (document.getElementById('q').value || '').toLowerCase();
+  const ft = document.getElementById('f-type').value;
+  const fr = document.getElementById('f-ressource').value;
+  return PERMISSIONS.filter(function(p){
+    if(ft && p.typeCible !== ft) return false;
+    if(fr && p.ressource !== fr) return false;
+    if(!q) return true;
+    return String(p.cible).toLowerCase().indexOf(q) !== -1 || String(p.ressource).toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function peindreTableau(){
+  const tbody = document.getElementById('tbody');
+  const liste = permissionsFiltrees();
+  document.getElementById('compte').textContent = liste.length + ' permission(s) sur ' + PERMISSIONS.length;
+  if(!liste.length){
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center italic text-base-content/50 py-6">Aucune permission ne correspond.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = liste.map(function(p){
+    return '<tr>' +
+      '<td class="text-xs">' + esc(p.id) + '</td>' +
+      '<td><span class="badge badge-sm ' + (p.typeCible === 'Niveau' ? 'badge-primary' : 'badge-secondary') + '">' + esc(p.typeCible) + '</span></td>' +
+      '<td class="font-medium">' + esc(p.cible) + '</td>' +
+      '<td class="text-xs">' + esc(p.ressource) + '</td>' +
+      '<td class="text-center">' + coche(p.lecture) + '</td>' +
+      '<td class="text-center">' + coche(p.ecriture) + '</td>' +
+      '<td class="text-center">' + coche(p.validation) + '</td>' +
+      '<td class="text-center">' + coche(p.admin) + '</td>' +
+      '<td><button class="btn btn-ghost btn-xs btn-edit" data-id="' + esc(p.id) + '">Modifier</button></td>' +
+    '</tr>';
+  }).join('');
+}
+
+function peindreGrille(){
+  const table = document.getElementById('grille');
+  let html = '<thead><tr><th>Ressource</th>' + NIVEAUX.map(function(n){ return '<th class="text-center">' + esc(n) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  RESSOURCES.forEach(function(r){
+    html += '<tr><td class="font-medium">' + esc(r) + '</td>' + NIVEAUX.map(function(n){
+      const p = PERMISSIONS.filter(function(x){ return x.typeCible === 'Niveau' && x.cible === n && x.ressource === r; })[0];
+      if(!p) return '<td class="text-center text-base-content/30">—</td>';
+      const lettres = [p.lecture ? 'L' : '', p.ecriture ? 'E' : '', p.validation ? 'V' : '', p.admin ? 'A' : ''].filter(Boolean).join('');
+      return '<td class="text-center"><span class="badge badge-sm badge-outline">' + (lettres || '—') + '</span></td>';
+    }).join('') + '</tr>';
+  });
+  table.innerHTML = html + '</tbody>';
+}
+
+function majCibleForm(){
+  const type = document.getElementById('f-type-cible').value;
+  document.getElementById('f-cible-niveau').classList.toggle('hidden', type !== 'Niveau');
+  document.getElementById('f-cible-user').classList.toggle('hidden', type !== 'Utilisateur');
+}
+
+function ouvrirModal(id){
+  EDIT_ID = id || '';
+  const p = id ? PERMISSIONS.filter(function(x){ return x.id === id; })[0] : null;
+  document.getElementById('m-titre').textContent = p ? 'Modifier ' + p.id : 'Nouvelle permission';
+  document.getElementById('f-type-cible').value = p ? p.typeCible : 'Niveau';
+  majCibleForm();
+  if(p && p.typeCible === 'Utilisateur') document.getElementById('f-cible-user').value = p.cible;
+  else if(p) document.getElementById('f-cible-niveau').value = p.cible;
+  else { document.getElementById('f-cible-niveau').value = ''; document.getElementById('f-cible-user').value = ''; }
+  document.getElementById('f-ressource-form').value = p ? p.ressource : '';
+  document.getElementById('f-lecture').checked = p ? !!p.lecture : false;
+  document.getElementById('f-ecriture').checked = p ? !!p.ecriture : false;
+  document.getElementById('f-validation').checked = p ? !!p.validation : false;
+  document.getElementById('f-admin').checked = p ? !!p.admin : false;
+  document.getElementById('modal').showModal();
+}
+
+function enregistrer(){
+  const typeCible = document.getElementById('f-type-cible').value;
+  const cible = typeCible === 'Niveau' ? document.getElementById('f-cible-niveau').value : document.getElementById('f-cible-user').value.trim();
+  const ressource = document.getElementById('f-ressource-form').value;
+  if(!cible){ message('La cible est obligatoire.', 'warn'); return; }
+  if(!ressource){ message('La ressource est obligatoire.', 'warn'); return; }
+
+  const payload = {
+    id: EDIT_ID, typeCible: typeCible, cible: cible, ressource: ressource,
+    lecture: document.getElementById('f-lecture').checked,
+    ecriture: document.getElementById('f-ecriture').checked,
+    validation: document.getElementById('f-validation').checked,
+    admin: document.getElementById('f-admin').checked
+  };
+
+  const btn = document.getElementById('m-enregistrer');
+  btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(function(res){
+      btn.disabled = false;
+      if(res && Array.isArray(res.permissions)) PERMISSIONS = res.permissions;
+      peindreTableau(); peindreGrille();
+      message('Permission ' + (res ? res.id : '') + ' enregistrée.', 'ok');
+      document.getElementById('modal').close();
+    })
+    .withFailureHandler(function(e){ btn.disabled = false; onError(e); })
+    .savePermission(payload);
+}
+
+function onData(data){
+  if(!data){ message("Les données n'ont pas pu être chargées.", 'err'); return; }
+  PERMISSIONS = Array.isArray(data.permissions) ? data.permissions : [];
+  NIVEAUX = Array.isArray(data.niveaux) ? data.niveaux : [];
+  RESSOURCES = Array.isArray(data.ressources) ? data.ressources : [];
+  UTILISATEURS = Array.isArray(data.utilisateurs) ? data.utilisateurs : [];
+
+  const selFR = document.getElementById('f-ressource');
+  RESSOURCES.forEach(function(r){ selFR.appendChild(new Option(r, r)); });
+
+  const selCN = document.getElementById('f-cible-niveau');
+  selCN.innerHTML = '';
+  NIVEAUX.forEach(function(n){ selCN.appendChild(new Option(n, n)); });
+
+  const selRF = document.getElementById('f-ressource-form');
+  selRF.innerHTML = '';
+  selRF.appendChild(new Option('Sélectionner…', ''));
+  RESSOURCES.forEach(function(r){ selRF.appendChild(new Option(r, r)); });
+
+  peindreTableau();
+  peindreGrille();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('btn-nouveau').onclick = function(){ ouvrirModal(''); };
+  document.getElementById('m-annuler').onclick = function(){ document.getElementById('modal').close(); };
+  document.getElementById('m-enregistrer').onclick = enregistrer;
+  document.getElementById('f-type-cible').addEventListener('change', majCibleForm);
+  document.getElementById('q').oninput = peindreTableau;
+  document.getElementById('f-type').onchange = peindreTableau;
+  document.getElementById('f-ressource').onchange = peindreTableau;
+  document.getElementById('tbody').addEventListener('click', function(e){
+    const btn = e.target.closest('.btn-edit');
+    if(btn) ouvrirModal(btn.dataset.id);
+  });
+
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message('Environnement Google Apps Script non détecté.', 'err');
+    return;
+  }
+  google.script.run.withSuccessHandler(onData).withFailureHandler(onError).getIamPermissionsData();
+});
+</script>
+</body>
+</html>

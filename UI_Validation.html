@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     FICHIER  : UI_Validation            type : HTML (.html)
+     SECTION  : MENU 2 · Validation des évaluations
+     VA AVEC  : 20_Validation (Script)
+     MARQUEUR UI_Validation v9   (lu par Administration > Controler l'installation)
+     ===================================================================== -->
+<html lang="fr">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+/* Résiduel : palette de couleurs et composants très spécifiques sans équivalent
+   daisyUI direct (tableau de cotation à double bandeau, pastilles de notation,
+   fiches "ldg", chips d'identification, encadré de définition au survol,
+   état vide). Boutons génériques, textarea de saisie et bandeau de message ont
+   été convertis en classes daisyUI/Tailwind ; leurs anciennes règles CSS ont
+   été retirées ci-dessous pour éviter tout conflit avec les classes .btn et
+   .alert fournies par daisyUI. Charte de couleurs conservée à l'identique. */
+:root{
+  color-scheme: light only;
+  --bg:#F4F6F9; --surface:#FFFFFF; --surface-2:#FAFBFC;
+  --border:#D8DEE6; --border-strong:#B9C3CF;
+  --text:#16202C; --muted:#5B6877; --primary:#1F5FA8; --primary-soft:#E8F0FA;
+  --warn-bg:#FFF6DC; --warn-text:#7A5A00; --danger:#B3261E; --ok:#1B7F3B;
+  --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 12px rgba(16,24,40,.06);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+html,body{color-scheme:light only}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:13.5px/1.42 var(--font)}
+.wrap{max-width:1160px;margin:0 auto;padding:12px 14px 18px}
+
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:10px}
+header h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
+header p{margin:2px 0 0;font-size:12px;color:var(--muted)}
+.compteur{display:flex;align-items:baseline;gap:4px;background:var(--surface);border:1px solid var(--border);
+  border-radius:999px;padding:6px 14px;box-shadow:var(--shadow)}
+.compteur #pos{font-size:19px;font-weight:750;color:var(--primary)}
+.compteur .sep{color:var(--muted)}
+.compteur #tot{font-size:15px;font-weight:650}
+.compteur .lbl{font-size:11px;color:var(--muted);margin-left:4px}
+
+.scene{display:flex;align-items:stretch;gap:8px}
+.nav{flex:none;width:40px;border:1px solid var(--border);background:var(--surface);color:var(--muted);
+  border-radius:var(--radius);font-size:26px;line-height:1;cursor:pointer;box-shadow:var(--shadow)}
+.nav:hover:not(:disabled){color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
+.nav:disabled{opacity:.35;cursor:not-allowed}
+
+.carte{flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
+
+.bandeau{display:flex;align-items:center;justify-content:space-between;gap:18px;
+  padding:12px 16px;border-bottom:1px solid var(--border);border-left:8px solid var(--border-strong)}
+.bandeau-txt{min-width:0}
+.eid{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace}
+.int{font-size:15px;font-weight:650;margin:1px 0 2px;line-height:1.3}
+.meta{font-size:11.5px;color:var(--muted)}
+.scores{display:flex;align-items:center;gap:10px;flex:none}
+.sc{display:flex;flex-direction:column;align-items:center;min-width:70px}
+.sc .n{font-size:22px;font-weight:750;line-height:1}
+.sc .t{font-size:10.5px;font-weight:700;color:#fff;border-radius:999px;padding:1px 8px;margin-top:3px}
+.sc .c{font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.fleche{color:var(--muted);font-size:16px}
+
+.corps{display:flex;flex-direction:column;flex:1;overflow:auto}
+.zone{padding:10px 16px;min-width:0}
+.zone.cotation{background:var(--surface-2);border-bottom:1px solid var(--border)}
+.cot-wrap{display:block}
+/* L'encadre montre toujours un critere complet : sa cotation inherente et sa
+   cotation residuelle cote a cote, sur toute la largeur du tableau. */
+.cot-wrap .def{margin-top:8px;min-height:0;padding:9px 11px;display:block}
+.paire .tete{display:flex;align-items:center;gap:9px;margin-bottom:7px;flex-wrap:wrap}
+.paire .tete b{display:inline;margin:0;color:var(--text);font-size:12px}
+.duo{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted)}
+.mini{display:inline-flex;align-items:center;justify-content:center;width:20px;height:19px;
+  border-radius:5px;color:#fff;font-size:11px;font-weight:750}
+.cotes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cote{border-left:3px solid var(--border-strong);padding:1px 0 1px 9px;opacity:.62;
+  transition:opacity .12s}
+.cote.on{opacity:1}
+.cote .k{display:flex;align-items:center;gap:6px;font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.04em;color:var(--muted)}
+.cote .lib{display:block;font-size:11.5px;font-weight:650;color:var(--text);margin:3px 0 2px}
+.cote .d{font-size:11.5px;color:var(--muted);line-height:1.4}
+.deux{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);flex:1;align-items:stretch}
+.col{padding:12px 16px 14px;min-width:0;display:flex;flex-direction:column}
+.col:first-child{border-right:1px solid var(--border)}
+/* Le bloc de decision prend la hauteur restante : la colonne de gauche se
+   termine alors au meme niveau que la colonne de droite, et la zone de
+   saisie grandit au lieu de laisser un vide. */
+.decision{margin-top:auto;padding-top:2px;display:flex;flex-direction:column;flex:1;min-height:150px}
+.decision .champ{flex:1;display:flex;flex-direction:column;min-height:0}
+.decision textarea{flex:1;min-height:92px}
+.mait-wrap{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+h2{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--primary);
+  margin:11px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+h2:first-child{margin-top:0}
+h2 .aide{float:right;display:inline-flex;align-items:center;gap:5px;
+  background:var(--primary-soft);color:var(--primary);border:1px solid #BFD6EF;
+  border-radius:999px;padding:2px 10px 2px 7px;margin-top:-2px;
+  text-transform:none;letter-spacing:0;font-weight:600;font-size:10.5px}
+h2 .aide svg{width:12px;height:12px;flex:none}
+h2 .aide .pin{color:#8A5410}
+
+
+table.cot{width:100%;border-collapse:collapse;table-layout:fixed}
+table.cot th{font-size:9.5px;color:var(--muted);text-align:center;padding:0 2px 6px;
+  font-weight:650;line-height:1.2;vertical-align:bottom;height:34px}
+table.cot th .n{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;word-break:break-word;hyphens:auto}
+/* Un bandeau de groupe distingue d'un coup d'oeil le multiplicateur, les sept
+   axes et la valeur retenue, que le texte seul ne separait pas. */
+table.cot tr.grp th{height:auto;padding:3px 6px;font-size:9px;font-weight:750;color:#fff;
+  text-transform:uppercase;letter-spacing:.06em;vertical-align:middle;border-radius:6px 6px 0 0;
+  line-height:1.2}
+th.g-proba{background:#1F5FA8}
+th.g-imp{background:#5C6B8A}
+th.g-ret{background:#16324F}
+table.cot th.a-proba{background:rgba(31,95,168,.10)}
+table.cot th.a-imp{background:rgba(92,107,138,.08)}
+table.cot th.a-ret{background:rgba(22,50,79,.10)}
+table.cot td.col-proba{background:rgba(31,95,168,.06)}
+table.cot td.col-imp{background:rgba(92,107,138,.04)}
+table.cot td.col-ret{background:rgba(22,50,79,.07)}
+table.cot tr.res td.col-proba{background:rgba(31,95,168,.11)}
+table.cot tr.res td.col-imp{background:rgba(92,107,138,.09)}
+table.cot tr.res td.col-ret{background:rgba(22,50,79,.12)}
+table.cot th.lbl{text-align:left}
+/* En table-layout fixed, seule la PREMIERE rangee fixe les largeurs. Ici la
+   premiere rangee est le bandeau de groupe, qui porte des colspan : les
+   largeurs posees sur la rangee des libelles etaient donc ignorees, d'ou des
+   gouttieres inegales. Le colgroup les declare colonne par colonne, ce qui
+   rend les trois separations strictement identiques. */
+table.cot col.c-lbl{width:76px}
+table.cot col.c-proba{width:88px}
+table.cot col.c-sep{width:16px}
+table.cot col.c-ret{width:76px}
+table.cot .sep{background:none !important;border-top:none !important;padding:0}
+table.cot td{padding:5px 2px;border-top:1px solid var(--border);font-size:12px;text-align:center}
+table.cot td.lbl{text-align:left;font-weight:650;font-size:11.5px;color:var(--text)}
+table.cot td.sep{border-top:none}
+table.cot tr.res td{background:var(--surface-2)}
+table.cot td.ret{font-weight:750;font-size:13px}
+.note{display:inline-flex;align-items:center;justify-content:center;border:2px solid transparent;
+  border-radius:8px;padding:2px;cursor:help;background:none;font:inherit;color:var(--text)}
+.note:hover{border-color:var(--primary)}
+.note.on{border-color:var(--primary)}
+.note .p{display:inline-flex;align-items:center;justify-content:center;width:26px;height:24px;
+  border-radius:6px;color:#fff;font-size:12.5px;font-weight:750;flex:none}
+.note .vide{display:inline-block;color:var(--muted);font-weight:650}
+.def{margin-top:6px;padding:7px 9px;border-radius:8px;background:var(--surface);
+  border:1px solid var(--border);border-left:3px solid var(--border-strong);
+  font-size:11.5px;color:var(--muted);line-height:1.4;min-height:64px;transition:border-color .12s}
+.def b{display:block;color:var(--text);margin-bottom:2px}
+.def.actif{border-left-color:var(--primary);background:var(--primary-soft)}
+.def.actif b{color:var(--primary)}
+.def .src{display:inline-block;background:var(--primary);color:#fff;border-radius:5px;
+  padding:0 6px;font-size:10px;font-weight:750;margin-right:6px;vertical-align:1px}
+.def.actif .src{background:var(--primary)}
+.def .vide{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-style:italic}
+.def .vide svg{width:12px;height:12px;flex:none;color:var(--primary)}
+
+.ldg{border:1px solid var(--border);border-radius:9px;padding:6px 9px;margin-bottom:5px;
+  background:var(--surface-2)}
+.ldg .h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ldg .h b{font-size:12px}
+.ldg .t{font-size:11.5px;color:var(--muted);margin-top:3px;white-space:pre-wrap}
+.pastille{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px;
+  border-radius:6px;color:#fff;font-size:11px;font-weight:750;padding:0 7px;
+  border:2px solid transparent;font-family:inherit}
+button.pastille{cursor:help}
+button.pastille:hover, button.pastille.on{border-color:var(--primary)}
+button.pastille.defaut{border-color:var(--primary);border-style:dashed}
+.def table{width:100%;border-collapse:collapse;margin-top:4px}
+.def table td{font-size:11px;padding:3px 5px;vertical-align:top;border-bottom:1px solid var(--border);
+  color:var(--muted)}
+.def table td:first-child{width:94px;font-weight:650;color:var(--text)}
+.def table tr:last-child td{border-bottom:none}
+
+.chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:7px;margin-bottom:11px}
+.chip{border:1px solid var(--border);border-radius:8px;background:var(--surface-2);padding:6px 9px;
+  min-width:0}
+.chip .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+  display:block;line-height:1.1}
+.chip .v{font-size:12px;font-weight:650;display:block;margin-top:2px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.chip[title]{cursor:help}
+.chip.alerte{border-color:var(--danger);background:#FDECEA}
+.chip.alerte .v{color:var(--danger)}
+.chip.ok .v{color:var(--ok)}
+.notes{display:flex;flex-direction:column;gap:8px}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.tagset{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.tagset .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+  margin-right:2px}
+.tag{display:inline-block;border:1px solid var(--border-strong);border-radius:999px;
+  padding:1px 8px;font-size:10.5px;font-weight:650;background:var(--surface);
+  font-family:ui-monospace,Menlo,Consolas,monospace}
+.note-b .v.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.note-b .plus{font-size:10px;color:var(--primary);cursor:pointer;font-weight:650;margin-top:2px;
+  display:inline-block}
+.note-b{border-left:3px solid var(--border-strong);padding:3px 0 3px 9px}
+.note-b .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.note-b .v{font-size:11.5px;line-height:1.35;white-space:pre-wrap}
+.pied{border-top:1px solid var(--border);background:var(--surface-2);padding:9px 16px;
+  display:flex;align-items:center;justify-content:space-between;gap:14px}
+.pied-hint{font-size:11.5px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis}
+.pied-hint.att{color:var(--warn-text)}
+.champ{min-width:0;margin-top:2px}
+.champ label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px;
+  text-transform:uppercase;letter-spacing:.03em}
+.champ label .req{color:var(--danger)}
+.actions{display:flex;gap:8px;flex:none}
+
+/* Nom dedie : la classe generique .vide entrait en collision avec les
+   cellules vides du bandeau de groupe et avec la pastille d'une note non
+   cotee, que le display:none faisait disparaitre. */
+.etat-vide{display:none;text-align:center;padding:64px 20px;background:var(--surface);
+  border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow)}
+.etat-vide.on{display:block}
+.vide-ico{width:52px;height:52px;border-radius:50%;background:#E7F5EC;color:var(--ok);
+  font-size:26px;line-height:52px;margin:0 auto 12px}
+.vide-t{font-size:16px;font-weight:650}
+.vide-s{font-size:12.5px;color:var(--muted);margin-top:5px}
+
+@media (max-width:980px){
+  .cotes{grid-template-columns:1fr}
+}
+@media (max-width:820px){
+  .deux{grid-template-columns:1fr}
+  .col:first-child{border-right:none;border-bottom:1px solid var(--border)}
+  .nav{width:32px;font-size:20px}
+}
+</style>
+
+</head>
+<body>
+<div class="navbar bg-base-100 border-b border-base-300 min-h-0 py-2 px-4">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Validation des évaluations</h1>
+      <p id="sous">Chargement de la file d'attente…</p>
+    </div>
+    <div class="compteur"><span id="pos">·</span><span class="sep">/</span><span id="tot">·</span>
+      <span class="lbl">restantes</span></div>
+  </header>
+
+  <div id="msg" class="alert hidden text-sm py-2 mb-2"></div>
+
+  <div class="scene">
+    <button class="nav gauche" id="prev" title="Évaluation précédente" aria-label="Précédente">‹</button>
+
+    <div class="carte" id="carte">
+      <div class="bandeau" id="bandeau">
+        <div class="bandeau-txt">
+          <div class="eid" id="b-id">·</div>
+          <div class="int" id="b-int">·</div>
+          <div class="meta" id="b-meta">·</div>
+        </div>
+        <div class="scores">
+          <div class="sc"><span class="n" id="b-si">·</span><span class="t" id="b-ti">·</span>
+            <span class="c">Inhérent</span></div>
+          <div class="fleche">→</div>
+          <div class="sc"><span class="n" id="b-sr">·</span><span class="t" id="b-tr">·</span>
+            <span class="c">Résiduel</span></div>
+        </div>
+      </div>
+
+      <div class="corps">
+
+        <section class="zone cotation">
+          <h2>Cotation <span class="aide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3l7 17 2.4-6.6L20 11z"/></svg>Survolez une note pour lire l'échelle, <span class="pin">cliquez pour l'épingler</span></span></h2>
+          <div class="cot-wrap">
+            <table class="cot" id="cot-table">
+              <thead id="cot-head"></thead>
+              <tbody id="cot"></tbody>
+            </table>
+            <div class="def" id="def">Survolez une note pour afficher sa définition.</div>
+          </div>
+        </section>
+
+        <div class="deux">
+          <section class="col">
+            <h2>Identification</h2>
+            <div class="chips" id="f-chips"></div>
+            <div class="tags" id="f-tags"></div>
+            <div class="notes" id="f-notes"></div>
+
+            <div class="decision">
+              <h2>Décision du validateur</h2>
+              <div class="champ">
+                <label for="com" id="com-lbl">Commentaire du validateur</label>
+                <textarea id="com" class="textarea textarea-bordered w-full"
+                  placeholder="Obligatoire pour un renvoi : dites au propriétaire ce qui doit être revu, axe par axe si nécessaire."></textarea>
+              </div>
+            </div>
+          </section>
+
+          <section class="col">
+            <h2>Dispositif de maîtrise <span class="aide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3l7 17 2.4-6.6L20 11z"/></svg>Survolez une note pour lire l'échelle</span></h2>
+            <div class="mait-wrap">
+              <div id="maitrise"></div>
+              <div class="def" id="def-m">Survolez une note de ligne de défense pour afficher l'échelle.</div>
+            </div>
+
+            <h2>Dynamique, appétence et traitement</h2>
+            <div class="chips" id="chips"></div>
+            <div class="notes" id="notes"></div>
+          </section>
+        </div>
+      </div>
+
+      <div class="pied">
+        <div class="pied-hint" id="pied-hint"></div>
+        <div class="actions">
+          <button class="btn btn-sm btn-outline btn-warning" id="renvoyer">Renvoyer pour révision</button>
+          <button class="btn btn-sm btn-success" id="valider">Valider l'évaluation</button>
+        </div>
+      </div>
+    </div>
+
+    <button class="nav droite" id="next" title="Évaluation suivante" aria-label="Suivante">›</button>
+  </div>
+
+  <div class="etat-vide" id="vide">
+    <div class="vide-ico">✓</div>
+    <div class="vide-t">Aucune évaluation en attente</div>
+    <div class="vide-s">La file est vide. Les évaluations validées ou renvoyées ne réapparaissent pas ici.</div>
+  </div>
+
+</div>
+  <script>
+/**
+ * UI_Valid_JS — fiche de validation.
+ * Le validateur parcourt la file avec les fleches. Une evaluation traitee
+ * disparait du fil, le compteur suit. Rien n'est ecrit tant qu'un bouton
+ * n'a pas ete presse.
+ */
+
+let D = null;              // donnees initiales
+let FILE = [];             // file d'attente courante
+let I = 0;                 // index dans la file
+let AXES = [], NIV = [], PROBA = [], MAITRISE = { dimensions: [], niveaux: [] };
+let occupe = false;
+let motifObligatoire = true;
+let commentaireObligatoire = false;   // pour valider, selon CONFIG (formulaire VALIDATION, champ commentaire)
+
+/* ---------------- couleurs ---------------- */
+function couleurScore(s){
+  if(s === null || s === undefined || s === '') return null;
+  const t = Math.max(0, Math.min(1, (Number(s) - 1) / 24));
+  return 'hsl(' + (145 - t*145).toFixed(0) + ' ' + (66 + t*12).toFixed(0) + '% ' +
+    (26 + t*21).toFixed(0) + '%)';
+}
+function couleurCote(n){ return couleurScore(1 + (Number(n) - 1) * 6); }
+function niveauTexte(s){
+  if(s === null || s === '' || s === undefined) return '';
+  const v = Number(s);
+  const seuils = (D && Array.isArray(D.seuils) && D.seuils.length) ? D.seuils : [{min:1,max:4,label:'Faible'},
+    {min:5,max:9,label:'Modéré'},{min:10,max:14,label:'Élevé'},{min:15,max:19,label:'Majeur'},{min:20,max:25,label:'Critique'}];
+  for(let i = 0; i < seuils.length; i++){ if(v >= seuils[i].min && v <= seuils[i].max) return seuils[i].label; }
+  return seuils[seuils.length - 1].label;
+}
+function dateCourte(d){
+  if(!d) return '';
+  const x = (d instanceof Date) ? d : new Date(d);
+  return isNaN(x.getTime()) ? String(d) : x.toLocaleDateString('fr-FR');
+}
+function txt(v){ return (v === null || v === undefined || v === '') ? '·' : String(v); }
+// Tout texte venu du classeur est echappe avant d'entrer dans le HTML : une
+// saisie contenant du code ne doit jamais s'executer chez le validateur.
+function esc(v){
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* ---------------- demarrage ---------------- */
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('prev').addEventListener('click', function(){ aller(-1); });
+  document.getElementById('next').addEventListener('click', function(){ aller(1); });
+  document.getElementById('com').addEventListener('input', majBoutons);
+  document.getElementById('valider').addEventListener('click', function(){ agir('valider'); });
+  document.getElementById('renvoyer').addEventListener('click', function(){ agir('renvoyer'); });
+  document.addEventListener('keydown', function(e){
+    if(e.target && e.target.tagName === 'TEXTAREA') return;
+    if(e.key === 'ArrowLeft') aller(-1);
+    if(e.key === 'ArrowRight') aller(1);
+  });
+
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message("Environnement Google Apps Script non détecté. Ouvrez la fiche depuis le menu Risk Management.", 'err');
+    return;
+  }
+  google.script.run.withSuccessHandler(onData).withFailureHandler(onError).getValidationData();
+});
+
+function onError(err){
+  message((err && err.message) ? err.message : "Erreur côté serveur. Rien n'a été enregistré.", 'err');
+  occupe = false;
+  majBoutons();
+}
+
+function onData(data){
+  if(!data || !data.references){
+    message("Les données du classeur n'ont pas pu être chargées. Lancez Risk Management > " +
+      "Administration > Contrôler l'installation des scripts.", 'err');
+    return;
+  }
+  D = data;
+  AXES = data.references.impact.axes || [];
+  NIV = data.references.impact.niveaux || [];
+  PROBA = data.references.probabilite || [];
+  MAITRISE = data.references.maitrise || { dimensions: [], niveaux: [] };
+  FILE = data.file || [];
+  I = 0;
+
+  const m = (data.champs || []).filter(function(c){ return c.champ === 'motif'; })[0];
+  motifObligatoire = m ? m.obligatoire : true;
+  const cv = (data.champs || []).filter(function(c){ return c.champ === 'commentaire'; })[0];
+  commentaireObligatoire = cv ? cv.obligatoire : false;
+  if(data.version && data.version !== 'v9'){
+    message('Les scripts du projet sont en version ' + data.version + ' et cette fiche en v9 : ' +
+      'recopiez tous les fichiers de la même livraison.', 'err');
+  }
+  const lbl = document.getElementById('com-lbl');
+  if(lbl) lbl.innerHTML = 'Commentaire du validateur' +
+    (motifObligatoire && commentaireObligatoire ? ' <span class="req">obligatoire</span>'
+      : motifObligatoire ? ' <span class="req">obligatoire pour un renvoi</span>'
+      : commentaireObligatoire ? ' <span class="req">obligatoire pour valider</span>' : '');
+
+  if(!data.user.reconnu){
+    message("Votre compte (" + (data.user.email || 'inconnu') +
+      ") n'est pas présent dans la feuille UTILISATEURS.", 'err');
+  } else if(!data.user.peutValider){
+    message("Votre compte n'a pas les droits de validation. La lecture reste possible, " +
+      "l'enregistrement sera refusé.", 'warn');
+  }
+
+  rendre();
+}
+
+/* ---------------- navigation ---------------- */
+function aller(pas){
+  if(!FILE.length) return;
+  I = Math.max(0, Math.min(FILE.length - 1, I + pas));
+  rendre();
+}
+
+function majCompteur(){
+  document.getElementById('pos').textContent = FILE.length ? (I + 1) : 0;
+  document.getElementById('tot').textContent = FILE.length;
+  document.getElementById('prev').disabled = occupe || I <= 0;
+  document.getElementById('next').disabled = occupe || I >= FILE.length - 1;
+}
+
+function commentaireCourant(){
+  const el = document.getElementById('com');
+  return el ? el.value.trim() : '';
+}
+
+/**
+ * Indice affiche a cote des boutons : le validateur voit pourquoi le renvoi
+ * est momentanement indisponible, sans avoir a cliquer pour l'apprendre.
+ */
+function majIndice(){
+  const el = document.getElementById('pied-hint');
+  if(!el) return;
+  if(!FILE.length){ el.textContent = ''; el.className = 'pied-hint'; return; }
+  const vide = !commentaireCourant();
+  if(vide && motifObligatoire && commentaireObligatoire){
+    el.textContent = "Un commentaire est obligatoire, pour valider comme pour renvoyer.";
+    el.className = 'pied-hint att';
+  } else if(motifObligatoire && vide){
+    el.textContent = "Un motif est obligatoire pour renvoyer. La validation, elle, peut se passer de commentaire.";
+    el.className = 'pied-hint att';
+  } else if(commentaireObligatoire && vide){
+    el.textContent = "Un commentaire est obligatoire pour valider.";
+    el.className = 'pied-hint att';
+  } else if(vide){
+    el.textContent = "Commentaire facultatif.";
+    el.className = 'pied-hint';
+  } else {
+    el.textContent = "Le commentaire sera consigné dans la ligne d'évaluation.";
+    el.className = 'pied-hint';
+  }
+}
+
+function majBoutons(){
+  const droit = D && D.user && D.user.peutValider;
+  const bloqueRenvoi = motifObligatoire && !commentaireCourant();
+  const bloqueValidation = commentaireObligatoire && !commentaireCourant();
+  const v = document.getElementById('valider'), r = document.getElementById('renvoyer');
+  v.disabled = occupe || !FILE.length || !droit || bloqueValidation;
+  v.title = bloqueValidation ? "Renseignez d'abord le commentaire du validateur." : '';
+  r.disabled = occupe || !FILE.length || !droit || bloqueRenvoi;
+  r.title = bloqueRenvoi ? "Renseignez d'abord le motif du renvoi." : '';
+  majIndice();
+  majCompteur();
+}
+
+/* ---------------- rendu ---------------- */
+function rendre(){
+  const vide = !FILE.length;
+  document.querySelector('.scene').style.display = vide ? 'none' : 'flex';
+  document.getElementById('vide').classList.toggle('on', vide);
+  document.getElementById('sous').textContent = vide
+    ? "Rien à traiter pour le moment."
+    : "Parcourez la file avec les flèches, à l'écran ou au clavier. Une évaluation traitée disparaît du fil.";
+  majBoutons();
+  if(vide) return;
+
+  const e = FILE[I];
+  const cr = couleurScore(e.residual.score) || 'var(--border-strong)';
+  document.getElementById('bandeau').style.borderLeftColor = cr;
+  document.getElementById('b-id').textContent =
+    e.idEval + '  ·  ' + e.idRisque + '  ·  évaluation ' + e.nbEvaluations;
+  document.getElementById('b-int').textContent = txt(e.fiche.intitule);
+  document.getElementById('b-meta').textContent =
+    [dateCourte(e.date), e.type, e.evaluateur].filter(Boolean).join('  ·  ');
+
+  peindre('b-si', 'b-ti', e.inherent.score);
+  peindre('b-sr', 'b-tr', e.residual.score);
+
+  rendreIdentification(e.fiche);
+
+  rendreCotation(e);
+  rendreMaitrise(e);
+  rendreTraitement(e);
+
+  document.getElementById('com').value = '';
+  majBoutons();
+  const c = document.querySelector('.corps'); if(c) c.scrollTop = 0;
+}
+
+function peindre(idN, idT, score){
+  const n = document.getElementById(idN), t = document.getElementById(idT);
+  const c = couleurScore(score);
+  n.textContent = (score === '' || score === null || score === undefined) ? '·' : score;
+  n.style.color = c || 'var(--muted)';
+  t.textContent = niveauTexte(score) || '·';
+  t.style.background = c || 'var(--border-strong)';
+}
+
+let COLONNES = [];          // un critere par colonne du tableau
+let defColEpinglee = null;  // {i, cote} quand le validateur a epingle
+
+const ICO_POINTEUR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3l7 17 2.4-6.6L20 11z"/></svg>';
+
+/**
+ * L'encadre ne montre jamais une seule valeur : il montre le critere entier,
+ * inherent et residuel cote a cote, le cote survole etant mis en avant. Par
+ * defaut c'est la probabilite qui est affichee, jamais une invite vide.
+ */
+function afficherPaire(i, cote){
+  const c = COLONNES[i];
+  const el = document.getElementById('def');
+  if(!c){ el.classList.remove('actif'); el.innerHTML = ''; return; }
+  el.classList.add('actif');
+
+  function bloc(k, d, actif){
+    const col = d.n ? couleurCote(d.n) : 'var(--border-strong)';
+    return '<div class="cote ' + (actif ? 'on' : '') + '" style="border-left-color:' + col + '">' +
+      '<span class="k">' + k + '<span class="mini" style="background:' + col + '">' +
+      esc(d.n || '·') + '</span></span>' +
+      '<span class="lib">' + esc(d.lib || 'Non coté') + '</span>' +
+      '<span class="d">' + esc(d.def || 'Aucune définition dans le référentiel pour ce niveau.') + '</span></div>';
+  }
+
+  el.innerHTML = '<div class="paire"><div class="tete"><b>' + esc(c.titre) + '</b>' +
+    '<span class="duo">' +
+      '<span class="mini" style="background:' + (c.inh.n ? couleurCote(c.inh.n) : 'var(--border-strong)') + '">' +
+      esc(c.inh.n || '·') + '</span>→' +
+      '<span class="mini" style="background:' + (c.res.n ? couleurCote(c.res.n) : 'var(--border-strong)') + '">' +
+      esc(c.res.n || '·') + '</span>' +
+      (c.inh.n && c.res.n && Number(c.inh.n) === Number(c.res.n)
+        ? '<span style="color:var(--warn-text);font-weight:650">&nbsp;aucun effet du dispositif</span>' : '') +
+    '</span></div><div class="cotes">' +
+    bloc('Inhérent', c.inh, cote !== 'res') + bloc('Résiduel', c.res, cote === 'res') +
+    '</div></div>';
+}
+
+function paireParDefaut(){
+  if(defColEpinglee) afficherPaire(defColEpinglee.i, defColEpinglee.cote);
+  else afficherPaire(0, 'inh');
+}
+
+/**
+ * Une note se resume a sa pastille. Elle porte la colonne qu'elle represente
+ * et son cote, ce qui permet a l'encadre d'afficher le critere complet.
+ */
+function bouton(valeur, libelleCourt, i, cote, titre){
+  if(valeur === '' || valeur === null || valeur === undefined){
+    return '<span class="note"><span class="vide">·</span></span>';
+  }
+  return '<button class="note" data-col="' + i + '" data-cote="' + cote + '" title="' +
+    esc(titre) + (libelleCourt ? ' — ' + esc(libelleCourt) : '') + '">' +
+    '<span class="p" style="background:' + couleurCote(valeur) + '">' + esc(valeur) + '</span></button>';
+}
+
+function courtNiveau_(niv){
+  if(!niv) return '';
+  return String(niv.libelle).split('·').pop().trim();
+}
+
+/**
+ * Identification. Les champs bornes par une liste deroulante a la saisie
+ * deviennent des pastilles : leur longueur est connue, ils n'ont pas besoin
+ * d'une ligne chacun. Les identifiants deviennent des etiquettes, et seuls
+ * les textes libres reellement renseignes gardent un bloc, borne a quatre
+ * lignes avec un deplie.
+ */
+function chip_(k, v, cls){
+  const val = txt(v);
+  return '<div class="chip ' + (cls || '') + '"><span class="k">' + k +
+    '</span><span class="v" title="' + esc(val) + '">' + esc(val) +
+    '</span></div>';
+}
+
+function tagset_(k, valeur){
+  const brut = String(valeur || '').split(/[,;]/).map(function(x){ return x.trim(); })
+    .filter(function(x){ return x !== ''; });
+  if(!brut.length) return '';
+  return '<div class="tagset"><span class="k">' + k + '</span>' +
+    brut.map(function(t){ return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</div>';
+}
+
+function rendreIdentification(f){
+  document.getElementById('f-chips').innerHTML =
+    chip_('Entité', f.entite) + chip_('Pays', f.pays) +
+    chip_('Catégorie', f.categorie) + chip_('Sous-catégorie', f.sousCategorie) +
+    chip_('Processus', f.processus) + chip_('Département', f.departement) +
+    chip_('Propriétaire', f.proprietaire) + chip_('Objectif', f.objectif);
+
+  const tags = tagset_('Contrôles', f.controles) + tagset_('KRI', f.kri);
+  const hostT = document.getElementById('f-tags');
+  hostT.innerHTML = tags || '<div class="tagset"><span class="k">Contrôles et KRI</span>' +
+    '<span style="font-size:11px;color:var(--muted);font-style:italic">aucun rattachement déclaré</span></div>';
+
+  const blocs = [['Description', f.description], ['Causes principales', f.causes],
+                 ['Conséquences principales', f.consequences]]
+    .filter(function(x){ return x[1] !== '' && x[1] !== null && x[1] !== undefined; });
+
+  const hostN = document.getElementById('f-notes');
+  hostN.innerHTML = blocs.length
+    ? blocs.map(function(x){
+        return '<div class="note-b"><div class="k">' + x[0] + '</div>' +
+          '<div class="v clamp">' + esc(x[1]) + '</div></div>';
+      }).join('')
+    : '<div class="note-b"><div class="v" style="color:var(--muted);font-style:italic">' +
+      'Description, causes et conséquences non renseignées.</div></div>';
+
+  // Un deplie n'apparait que si le texte est reellement tronque.
+  hostN.querySelectorAll('.note-b .v.clamp').forEach(function(v){
+    if(v.scrollHeight - v.clientHeight < 4) { v.classList.remove('clamp'); return; }
+    const a = document.createElement('span');
+    a.className = 'plus';
+    a.textContent = 'Voir la suite';
+    a.onclick = function(){
+      const replie = v.classList.toggle('clamp');
+      a.textContent = replie ? 'Voir la suite' : 'Replier';
+    };
+    v.parentNode.appendChild(a);
+  });
+}
+
+function rendreCotation(e){
+  const head = document.getElementById('cot-head');
+  const tb = document.getElementById('cot');
+
+  // Deux rangs : un bandeau de groupe colore, puis les libelles. Hauteur du
+  // second rang constante, libelles bornes a deux lignes et cales en bas.
+  function th_(libelle, titre, cls){
+    return '<th' + (cls ? ' class="' + cls + '"' : '') +
+      (titre ? ' title="' + esc(titre) + '"' : '') +
+      '><span class="n">' + esc(libelle) + '</span></th>';
+  }
+
+  // Le colgroup est regenere a chaque rendu : le nombre d'axes vient du
+  // referentiel et peut changer sans toucher au code.
+  const table = document.getElementById('cot-table');
+  let cg = table.querySelector('colgroup');
+  if(!cg){ cg = document.createElement('colgroup'); table.insertBefore(cg, table.firstChild); }
+  cg.innerHTML = '<col class="c-lbl"><col class="c-proba"><col class="c-sep">' +
+    AXES.map(function(){ return '<col class="c-imp">'; }).join('') +
+    '<col class="c-sep"><col class="c-ret">';
+
+  const groupes = '<tr class="grp">' +
+    '<th class="sep"></th>' +
+    '<th class="g-proba" title="Multiplicateur du score">Probabilité</th>' +
+    '<th class="sep"></th>' +
+    '<th class="g-imp" colspan="' + AXES.length + '" title="Les ' + AXES.length +
+      ' axes d’impact du référentiel">Impacts par axe</th>' +
+    '<th class="sep"></th>' +
+    '<th class="g-ret" title="Maximum des axes, c’est lui qui entre dans le score">Retenu</th>' +
+    '</tr>';
+
+  const libelles = '<tr>' +
+    th_('Cotation', '', 'lbl') +
+    th_('Probabilité', 'Probabilité de survenance', 'a-proba') +
+    '<th class="sep"></th>' +
+    AXES.map(function(a){ return th_(a, a, 'a-imp'); }).join('') +
+    '<th class="sep"></th>' +
+    th_('Retenu', 'Impact retenu, le maximum des sept axes', 'a-ret') +
+    '</tr>';
+
+  head.innerHTML = groupes + libelles;
+
+  // Un critere par colonne : la probabilite, puis les sept axes.
+  function pn_(v){ return PROBA.filter(function(x){ return Number(x.niveau) === Number(v); })[0]; }
+  function in_(v){ return NIV.filter(function(x){ return Number(x.niveau) === Number(v); })[0]; }
+
+  COLONNES = [{
+    titre: 'Probabilité de survenance',
+    inh: { n: e.inherent.p, lib: pn_(e.inherent.p) ? pn_(e.inherent.p).libelle : '',
+           def: pn_(e.inherent.p) ? pn_(e.inherent.p).definition : '' },
+    res: { n: e.residual.p, lib: pn_(e.residual.p) ? pn_(e.residual.p).libelle : '',
+           def: pn_(e.residual.p) ? pn_(e.residual.p).definition : '' }
+  }].concat(AXES.map(function(axe, k){
+    const a = in_(e.inherent.impacts[k]), r = in_(e.residual.impacts[k]);
+    return {
+      titre: 'Impact ' + axe,
+      inh: { n: e.inherent.impacts[k], lib: courtNiveau_(a), def: a ? a.parAxe[axe] : '' },
+      res: { n: e.residual.impacts[k], lib: courtNiveau_(r), def: r ? r.parAxe[axe] : '' }
+    };
+  }));
+
+  function ligne(cls, libelle, bloc, phase, cote){
+    let h = '<tr class="' + cls + '"><td class="lbl">' + libelle + '</td>';
+    h += '<td class="col-proba">' + bouton(bloc.p, COLONNES[0][cote].lib, 0, cote,
+      'Probabilité ' + phase + ', niveau ' + bloc.p) + '</td>';
+    h += '<td class="sep"></td>';
+    AXES.forEach(function(axe, k){
+      h += '<td class="col-imp">' + bouton(bloc.impacts[k], COLONNES[k + 1][cote].lib, k + 1, cote,
+        'Impact ' + axe + ', ' + phase + ', niveau ' + bloc.impacts[k]) + '</td>';
+    });
+    h += '<td class="sep"></td><td class="ret col-ret" style="color:' +
+      (couleurCote(bloc.retenu) || 'var(--muted)') + '">' + esc(txt(bloc.retenu)) + '</td></tr>';
+    return h;
+  }
+
+  tb.innerHTML = ligne('inh', 'Inhérent', e.inherent, 'inhérent', 'inh') +
+                 ligne('res', 'Résiduel', e.residual, 'résiduel', 'res');
+
+  const notes = tb.querySelectorAll('button.note');
+  notes.forEach(function(b){
+    const i = Number(b.dataset.col), cote = b.dataset.cote;
+    b.addEventListener('mouseenter', function(){ afficherPaire(i, cote); });
+    b.addEventListener('focus', function(){ afficherPaire(i, cote); });
+    b.addEventListener('click', function(){
+      const deja = b.classList.contains('on');
+      notes.forEach(function(x){ x.classList.remove('on'); });
+      if(deja){ defColEpinglee = null; paireParDefaut(); return; }
+      b.classList.add('on');
+      defColEpinglee = { i: i, cote: cote };
+      afficherPaire(i, cote);
+    });
+  });
+
+  document.getElementById('cot-table').onmouseleave = paireParDefaut;
+  defColEpinglee = null;
+  afficherPaire(0, 'inh');   // la probabilite est le critere affiche par defaut
+}
+
+let defMaitriseEpinglee = null;
+
+function courtDimension_(dim){
+  const c = String(dim).split('/')[0]
+    .replace('du contrôle', '').replace('de la mesure', '').trim();
+  return c.charAt(0).toUpperCase() + c.slice(1);
+}
+
+/**
+ * Echelle du dispositif. L'encadre n'est jamais vide : il montre par defaut
+ * la ligne L1, avec une etiquette qui dit de quelle ligne vient le texte.
+ * Survoler une autre pastille remplace le contenu, quitter le bloc ramene
+ * a L1, sauf si une ligne a ete epinglee d'un clic.
+ */
+function afficherDefMaitrise(n, src){
+  const cible = document.getElementById('def-m');
+  const etiquette = '<span class="src">' + (src || 'L1') + '</span>';
+  cible.classList.add('actif');
+
+  if(!n){
+    cible.innerHTML = '<b>' + etiquette + 'Ligne de défense non évaluable</b>' +
+      'Elle est exclue du calcul de la maîtrise globale, qui porte alors sur les lignes restantes.';
+    return;
+  }
+  const niv = MAITRISE.niveaux.filter(function(y){ return Number(y.niveau) === Number(n); })[0];
+  if(!niv){
+    cible.innerHTML = '<b>' + etiquette + 'Niveau ' + esc(n) + '</b>Aucune définition dans le référentiel.';
+    return;
+  }
+  const dims = MAITRISE.dimensions || [];
+  cible.innerHTML = '<b>' + etiquette + esc(niv.libelle) + '</b><table>' +
+    dims.map(function(d){
+      return '<tr><td>' + esc(courtDimension_(d)) + '</td><td>' + esc(niv.parDimension[d] || '·') + '</td></tr>';
+    }).join('') + '</table>';
+}
+
+function rendreMaitrise(e){
+  const host = document.getElementById('maitrise');
+  const lignes = [['l1', 'L1, première ligne de défense'], ['l2', 'L2, deuxième ligne de défense'],
+                  ['l3', 'L3, troisième ligne de défense']];
+  let html = '';
+  lignes.forEach(function(x){
+    const src = e.mastery[x[0]] || {};
+    const n = src.n;
+    const niv = MAITRISE.niveaux.filter(function(y){ return Number(y.niveau) === Number(n); })[0];
+    const coul = n ? couleurCote(5 - Number(n)) : 'var(--border-strong)';
+    const libelle = n ? n + ' · ' + String(niv ? niv.libelle : '').split('·').pop().trim()
+                      : 'non évaluable';
+    html += '<div class="ldg"><div class="h"><b>' + x[1] + '</b>' +
+      '<button type="button" class="pastille" data-n="' + esc(n || '') +
+      '" data-src="' + x[0].toUpperCase() + '" style="background:' + coul + '" ' +
+      'title="' + esc(niv ? niv.libelle : 'Non évaluable') + '">' +
+      esc(libelle) + '</button></div><div class="t">' + esc(txt(src.txt)) + '</div></div>';
+  });
+  html += '<div class="ldg"><div class="h"><b>Maîtrise globale</b>' +
+    '<span class="pastille" style="background:var(--primary)">' + esc(txt(e.mastery.globale)) +
+    '</span></div><div class="t">' + esc(txt(e.mastery.mes)) + '</div>' +
+    (e.mastery.justif ? '<div class="t">' + esc(e.mastery.justif) + '</div>' : '') + '</div>';
+  host.innerHTML = html;
+
+  const notes = host.querySelectorAll('button.pastille');
+  const defaut = { n: (e.mastery.l1 || {}).n || null, src: 'L1' };
+
+  function revenirAuDefaut(){
+    if(defMaitriseEpinglee) afficherDefMaitrise(defMaitriseEpinglee.n, defMaitriseEpinglee.src);
+    else afficherDefMaitrise(defaut.n, defaut.src);
+  }
+
+  notes.forEach(function(b){
+    const n = b.dataset.n ? Number(b.dataset.n) : null;
+    const src = b.dataset.src || 'L1';
+    b.addEventListener('mouseenter', function(){ afficherDefMaitrise(n, src); });
+    b.addEventListener('focus', function(){ afficherDefMaitrise(n, src); });
+    b.addEventListener('click', function(){
+      const deja = b.classList.contains('on');
+      notes.forEach(function(x){ x.classList.remove('on'); });
+      if(deja){ defMaitriseEpinglee = null; revenirAuDefaut(); return; }
+      b.classList.add('on');
+      defMaitriseEpinglee = { n: n, src: src };
+      afficherDefMaitrise(n, src);
+    });
+  });
+  host.onmouseleave = revenirAuDefaut;
+
+  defMaitriseEpinglee = null;
+  // La pastille L1 porte un liseré pointillé : c'est elle qui alimente
+  // l'encadré tant qu'on ne survole ni n'épingle autre chose.
+  const pL1 = host.querySelector('button.pastille[data-src="L1"]');
+  if(pL1) pL1.classList.add('defaut');
+  afficherDefMaitrise(defaut.n, defaut.src);
+}
+
+/**
+ * Dynamique et traitement : six faits courts en pastilles sur deux rangs,
+ * et seulement les textes reellement renseignes en dessous. L'ancienne
+ * liste occupait neuf lignes, dont plusieurs vides.
+ */
+function rendreTraitement(e){
+  const v = D.references.velocite.filter(function(x){ return Number(x.niveau) === Number(e.dyn.velo); })[0];
+  const p = (D.references.persistance || []).filter(function(x){ return Number(x.niveau) === Number(e.dyn.pers); })[0];
+  const hors = String(e.position || '').toLowerCase().indexOf('hors') === 0;
+  const dans = String(e.position || '').toLowerCase().indexOf('dans') === 0;
+
+  const chips = [
+    { k: 'Vélocité', v: e.dyn.velo ? e.dyn.velo + ' · ' + (v ? v.libelle : '') : '·',
+      t: v ? v.definition : '' },
+    { k: 'Persistance', v: e.dyn.pers ? e.dyn.pers + ' · ' + (p ? p.libelle : '') : '·',
+      t: p ? p.definition : '' },
+    { k: 'Tendance', v: txt(e.dyn.tend), t: 'Sens d’évolution depuis la revue précédente' },
+    { k: 'Seuil d’appétence', v: txt(e.appetence),
+      t: 'Score résiduel plafond défini dans APPETENCE pour cette sous-catégorie' },
+    { k: 'Positionnement', v: txt(e.position), t: '',
+      cls: hors ? 'alerte' : (dans ? 'ok' : '') },
+    { k: 'Décision', v: txt(e.decision), t: 'Traitement retenu par l’évaluateur' }
+  ];
+
+  document.getElementById('chips').innerHTML = chips.map(function(c){
+    return '<div class="chip ' + (c.cls || '') + '"' +
+      (c.t ? ' title="' + esc(c.t) + '"' : '') +
+      '><span class="k">' + c.k + '</span><span class="v" title="' +
+      esc(c.v) + '">' + esc(c.v) + '</span></div>';
+  }).join('');
+
+  const notes = [
+    ['Justification de la décision', e.justifDecision],
+    ['Justification de la probabilité résiduelle', e.residual.justif],
+    ['Actions associées', e.actions]
+  ].filter(function(x){ return x[1] !== '' && x[1] !== null && x[1] !== undefined; });
+
+  document.getElementById('notes').innerHTML = notes.length
+    ? notes.map(function(x){
+        return '<div class="note-b"><div class="k">' + x[0] + '</div><div class="v">' + esc(x[1]) + '</div></div>';
+      }).join('')
+    : '<div class="note-b"><div class="v" style="color:var(--muted);font-style:italic">' +
+      'Aucune justification ni action renseignée.</div></div>';
+}
+
+/* ---------------- actions ---------------- */
+function agir(quoi){
+  if(occupe || !FILE.length) return;
+  const e = FILE[I];
+  const com = document.getElementById('com').value.trim();
+
+  if(quoi === 'renvoyer' && motifObligatoire && !com){
+    message("Le motif du renvoi est obligatoire : il part au propriétaire du risque, " +
+      "il doit lui dire ce qui est à revoir.", 'warn');
+    document.getElementById('com').focus();
+    return;
+  }
+
+  occupe = true;
+  majBoutons();
+  message(quoi === 'valider' ? 'Validation en cours…' : 'Renvoi en cours…', 'info');
+
+  const suite = function(res){
+    // On retire l'evaluation traitee du fil, sans recharger toute la file.
+    FILE.splice(I, 1);
+    if(I >= FILE.length) I = Math.max(0, FILE.length - 1);
+    occupe = false;
+    rendre();
+    message(quoi === 'valider'
+      ? 'Évaluation ' + res.idEval + ' validée. Date et validateur enregistrés. ' +
+        (FILE.length ? FILE.length + ' restante(s).' : 'La file est vide.')
+      : 'Évaluation ' + res.idEval + ' renvoyée pour révision. Le propriétaire doit la recoter. ' +
+        (FILE.length ? FILE.length + ' restante(s).' : 'La file est vide.'),
+      'ok');
+  };
+
+  const echec = function(err){
+    occupe = false;
+    onError(err);
+    // Un conflit signifie que quelqu'un a traite cette ligne entre temps :
+    // on recharge la file pour repartir sur l'etat reel du classeur.
+    google.script.run.withSuccessHandler(function(f){
+      FILE = f || [];
+      if(I >= FILE.length) I = Math.max(0, FILE.length - 1);
+      rendre();
+    }).withFailureHandler(function(){}).getFileValidationSeule();
+  };
+
+  if(quoi === 'valider'){
+    google.script.run.withSuccessHandler(suite).withFailureHandler(echec)
+      .validerEvaluation(e.idEval, com);
+  } else {
+    google.script.run.withSuccessHandler(suite).withFailureHandler(echec)
+      .renvoyerPourRevision(e.idEval, com);
+  }
+}
+
+function message(t, type){
+  const m = document.getElementById('msg');
+  const cls = {info:'alert-info', warn:'alert-warning', err:'alert-error', ok:'alert-success'}[type] || 'alert-info';
+  m.className = 'alert ' + cls + ' text-sm py-2 mb-2';
+  m.textContent = t;
+  if(type === 'ok' || type === 'info') setTimeout(function(){ m.classList.add('hidden'); }, 7000);
+}
+</script>
+
+</body>
+</html>

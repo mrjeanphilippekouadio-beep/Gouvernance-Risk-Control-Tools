@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     FICHIER  : UI_Controles              type : HTML (.html)
+     SECTION  : MENU 5 · Contrôle interne > Catalogue des contrôles
+     VA AVEC  : 11_Controles (Script)
+     MARQUEUR UI_Controles v10   (lu par Administration > Controler l'installation)
+     ===================================================================== -->
+<html lang="fr">
+<head>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+/* Résiduel : couleurs de la charte utilisées par le JS (pastilles calculées
+   dynamiquement) et mécanique des composants sans équivalent daisyUI direct
+   (panneau latéral coulissant, liste déroulante à cases). */
+:root{
+  --primary:#1F5FA8; --primary-soft:#E8F0FA; --muted:#5B6877; --border-strong:#B9C3CF;
+  --ok:#1B7F3B; --danger:#B3261E;
+}
+.overlay{position:fixed;inset:0;background:rgba(16,24,40,.38);display:none;z-index:50}
+.overlay.on{display:block}
+.overlay .panel{transform:translateX(100%);transition:transform .18s ease}
+.overlay.on .panel{transform:translateX(0)}
+.cb{position:relative}
+.cb-list{display:none}
+.cb.open .cb-list{display:block}
+.manque{border-color:#B3261E !important;box-shadow:0 0 0 3px rgba(179,38,30,.14) !important}
+</style>
+</head>
+<body class="bg-base-200 text-base-content text-sm">
+<div class="navbar bg-base-100 border-b border-base-300 min-h-0 py-2 px-4">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-[1180px] mx-auto p-4">
+
+<div class="bg-base-100 border border-base-300 rounded-2xl shadow overflow-hidden">
+  <header class="p-4 pb-3 border-b border-base-300 flex items-end justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="m-0 text-lg font-semibold tracking-tight">Catalogue des contrôles</h1>
+      <p class="mt-1 text-xs text-base-content/60">Définition des contrôles : ce qu'ils maîtrisent, comment ils s'exécutent, qui les exécute et qui les valide.</p>
+    </div>
+    <button class="btn btn-primary btn-sm" id="btn-nouveau">+ Nouveau contrôle</button>
+  </header>
+
+  <div id="msg" class="alert hidden mx-5 mt-3 text-sm py-2"></div>
+
+  <div class="flex items-center gap-2 flex-wrap p-3.5 px-5 border-b border-base-300 bg-base-200/40">
+    <input type="search" id="q" class="input input-bordered input-sm min-w-[220px]" placeholder="Rechercher un contrôle (id, libellé, processus…)">
+    <select id="f-processus" class="select select-bordered select-sm"><option value="">Tous les processus</option></select>
+    <select id="f-departement" class="select select-bordered select-sm"><option value="">Tous les départements</option></select>
+    <select id="f-type" class="select select-bordered select-sm"><option value="">Tous les types</option></select>
+    <span class="flex-1"></span>
+    <span class="text-xs text-base-content/60 whitespace-nowrap" id="compte">·</span>
+  </div>
+
+  <main class="p-0 min-h-[360px]">
+    <div class="overflow-auto max-h-[520px]">
+      <table class="table table-zebra table-sm w-full text-xs">
+        <thead>
+          <tr class="bg-base-200">
+            <th>ID</th><th>Libellé</th><th>Risques couverts</th><th>Processus</th><th>Département</th>
+            <th>Type</th><th>Fréquence</th><th>Exécuteur</th><th>Valideur</th><th>Statut</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <div class="border-t border-base-300 bg-base-200/40">
+    <h3 class="text-xs uppercase tracking-wide text-base-content/60 m-0 px-5 pt-2.5 pb-1.5">Journal des actions (cette session)</h3>
+    <ul id="journal-list" class="list-none m-0 px-5 pb-3 max-h-[140px] overflow-auto"></ul>
+  </div>
+</div>
+
+</div>
+
+<!-- ================= panneau creation / edition ================= -->
+<div class="overlay" id="overlay">
+  <div class="panel fixed top-0 right-0 bottom-0 w-[560px] max-w-[94vw] bg-base-100 shadow-2xl flex flex-col z-[51]">
+    <div class="p-4 px-5 border-b border-base-300 flex items-center justify-between gap-2.5">
+      <h2 id="p-titre" class="m-0 text-base font-semibold">Nouveau contrôle</h2>
+      <button class="btn btn-sm btn-ghost btn-circle text-lg" id="p-close">&times;</button>
+    </div>
+    <div class="p-4 px-5 overflow-auto flex-1">
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Libellé du contrôle <span class="text-error font-bold">*</span></label>
+        <input type="text" id="f-libelle" class="input input-bordered w-full" placeholder="Intitulé court et explicite du contrôle"></div>
+
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Objectif du contrôle</label>
+        <textarea id="f-objectif" class="textarea textarea-bordered w-full" rows="2" placeholder="Ce que ce contrôle cherche à maîtriser"></textarea></div>
+
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Risques couverts <span class="text-error font-bold">*</span></label>
+        <div id="picker-risques"></div>
+        <div class="flex flex-wrap gap-1.5 mt-1.5" id="chips-risques"></div>
+        <div class="text-xs text-base-content/60 mt-1">Un contrôle doit couvrir au moins un risque.</div>
+      </div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Rattachement</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Processus</label><select id="f-processus-form" class="select select-bordered w-full"></select></div>
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Département</label><select id="f-departement-form" class="select select-bordered w-full"></select></div>
+      </div>
+
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Description de la procédure</label>
+        <textarea id="f-procedure" class="textarea textarea-bordered w-full" rows="3" placeholder="Fonctionnement attendu, mode opératoire"></textarea></div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Caractéristiques</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Type de contrôle <span class="text-error font-bold">*</span></label>
+          <select id="f-type-form" class="select select-bordered w-full">
+            <option value="">Sélectionner…</option>
+            <option value="Préventif">Préventif</option>
+            <option value="Détectif">Détectif</option>
+            <option value="Correctif">Correctif</option>
+          </select></div>
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Nature</label>
+          <select id="f-nature" class="select select-bordered w-full">
+            <option value="">Sélectionner…</option>
+            <option value="Manuel">Manuel</option>
+            <option value="Automatisé">Automatisé</option>
+            <option value="Semi-automatisé">Semi-automatisé</option>
+          </select></div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Ligne de défense</label>
+          <select id="f-ligne" class="select select-bordered w-full">
+            <option value="">Sélectionner…</option>
+            <option value="L1">L1</option>
+            <option value="L2">L2</option>
+            <option value="L3">L3</option>
+          </select></div>
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Fréquence <span class="text-error font-bold">*</span></label>
+          <input type="text" id="f-frequence" class="input input-bordered w-full" placeholder="Quotidienne, mensuelle, trimestrielle…"></div>
+      </div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Exécution et validation</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Exécuteur <span class="text-error font-bold">*</span></label><select id="f-executeur" class="select select-bordered w-full"></select></div>
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Valideur</label><select id="f-valideur" class="select select-bordered w-full"></select></div>
+      </div>
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Preuves attendues</label>
+        <textarea id="f-preuves" class="textarea textarea-bordered w-full" rows="2" placeholder="Éléments de preuve à produire pour attester l'exécution"></textarea></div>
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Critères de conformité <span class="text-error font-bold">*</span></label>
+        <textarea id="f-criteres" class="textarea textarea-bordered w-full" rows="2" placeholder="Critères permettant de juger le contrôle conforme"></textarea></div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Statut</div>
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Statut du contrôle</label>
+        <select id="f-statut" class="select select-bordered w-full">
+          <option value="Actif">Actif</option>
+          <option value="Inactif">Inactif</option>
+          <option value="En révision">En révision</option>
+        </select></div>
+    </div>
+    <div class="p-3.5 px-5 border-t border-base-300 bg-base-200/40 flex justify-end gap-2.5">
+      <button class="btn" id="p-annuler">Annuler</button>
+      <button class="btn btn-success" id="p-enregistrer">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==================================================================
+   Etat et donnees recues du serveur (getControlesData)
+   ================================================================== */
+let DATA = null;               // { version, user, controles, risques, departements, utilisateurs, processus }
+let CONTROLES = [];
+let RISQUES = [];
+let DEPARTEMENTS = [];
+let UTILISATEURS = [];
+let PROCESSUS = [];
+
+let EDIT_ID = null;            // id du controle en cours d'edition, null si creation
+let RISQUES_SELECTIONNES = []; // ids selectionnes dans le panneau
+let JOURNAL = [];               // { t: heure, texte } local, append-only, non persiste
+let SAVING = false;
+
+/* ---------------- utilitaires ---------------- */
+function esc(v){
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function message(txt, type){
+  const m = document.getElementById('msg');
+  const cls = {info:'alert-info', warn:'alert-warning', err:'alert-error', ok:'alert-success'}[type] || 'alert-info';
+  m.className = 'alert ' + cls + ' mx-5 mt-3 text-sm py-2';
+  m.textContent = txt;
+  if(type === 'ok' || type === 'info') setTimeout(function(){ m.classList.add('hidden'); }, 6000);
+}
+function onError(err){
+  const txt = (err && err.message) ? err.message
+    : "Une erreur est survenue côté serveur. Aucune donnée n'a été enregistrée.";
+  message(txt, 'err');
+  try { console.error(err); } catch(e) {}
+}
+function heure(){
+  const d = new Date();
+  return d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+}
+function journaliser(texte){
+  JOURNAL.unshift({ t: heure(), texte: texte });
+  if(JOURNAL.length > 50) JOURNAL.length = 50;
+  peindreJournal();
+}
+function peindreJournal(){
+  const ul = document.getElementById('journal-list');
+  if(!JOURNAL.length){
+    ul.innerHTML = '<li class="italic text-base-content/50">Aucune action enregistrée dans cette session pour le moment.</li>';
+    return;
+  }
+  ul.innerHTML = JOURNAL.map(function(e){
+    return '<li class="text-xs py-1 border-b border-dashed border-base-300 last:border-0"><span class="text-base-content/50 text-[11px] mr-1.5">' + esc(e.t) + '</span>' + esc(e.texte) + '</li>';
+  }).join('');
+}
+
+function couleurType(type){
+  const t = String(type || '').toLowerCase();
+  if(t.indexOf('prevent') !== -1 || t.indexOf('préven') !== -1) return 'badge-success';
+  if(t.indexOf('detect') !== -1 || t.indexOf('détect') !== -1) return 'badge-warning';
+  if(t.indexOf('correct') !== -1) return 'badge-error';
+  return 'badge-neutral';
+}
+function couleurStatut(statut){
+  const s = String(statut || '').toLowerCase();
+  if(s.indexOf('actif') === 0) return 'badge-success';
+  if(s.indexOf('inactif') === 0) return 'badge-neutral';
+  if(s.indexOf('révision') !== -1 || s.indexOf('revision') !== -1) return 'badge-warning';
+  return 'badge-neutral';
+}
+
+function remplirSelect(id, valeurs, videLabel){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.innerHTML = '';
+  el.appendChild(new Option(videLabel || 'Sélectionner…', ''));
+  valeurs.forEach(function(v){ el.appendChild(new Option(v, v)); });
+}
+
+function intituleRisque(id){
+  const r = RISQUES.filter(function(x){ return String(x.id) === String(id); })[0];
+  return r ? (r.intitule || r.id) : id;
+}
+
+/* ==================================================================
+   Selecteur de risques couverts (multi-selection avec recherche)
+   ================================================================== */
+function construirePickerRisques(){
+  const host = document.getElementById('picker-risques');
+  host.innerHTML = '';
+  const wrap = document.createElement('div'); wrap.className = 'cb';
+  const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'cb-btn btn btn-outline w-full justify-between font-normal';
+  const list = document.createElement('div'); list.className = 'cb-list absolute z-[60] top-full mt-1 left-0 w-full bg-base-100 border border-base-300 rounded-lg shadow-xl p-1.5 max-h-[280px] overflow-auto';
+  list.innerHTML = '<div class="p-1.5 border-b border-base-300 mb-1"><input type="text" id="cb-risque-q" class="input input-bordered input-sm w-full" placeholder="Rechercher un risque…"></div>' +
+    '<div id="cb-risque-opts"></div>';
+  wrap.appendChild(btn); wrap.appendChild(list); host.appendChild(wrap);
+
+  function dessineBouton(){
+    const n = RISQUES_SELECTIONNES.length;
+    btn.innerHTML = (n ? '<span>' + n + ' risque' + (n > 1 ? 's' : '') + ' sélectionné' + (n > 1 ? 's' : '') + '</span>'
+      : '<span class="text-base-content/50">Sélectionner un ou plusieurs risques…</span>') + '<span class="text-base-content/50 text-xs">▾</span>';
+  }
+
+  function dessineOptions(filtre){
+    const q = (filtre || '').toLowerCase();
+    const zone = list.querySelector('#cb-risque-opts');
+    const filtres = RISQUES.filter(function(r){
+      return !q || String(r.id).toLowerCase().indexOf(q) !== -1 ||
+        String(r.intitule || '').toLowerCase().indexOf(q) !== -1;
+    });
+    if(!filtres.length){
+      zone.innerHTML = '<div class="p-2 text-base-content/50 italic text-sm">Aucun risque ne correspond.</div>';
+      return;
+    }
+    zone.innerHTML = '';
+    filtres.forEach(function(r){
+      const it = document.createElement('div'); it.className = 'flex gap-2 p-2 rounded-lg cursor-pointer items-start hover:bg-primary/10';
+      const checked = RISQUES_SELECTIONNES.indexOf(String(r.id)) !== -1;
+      it.innerHTML = '<input type="checkbox" class="checkbox checkbox-sm mt-0.5" ' + (checked ? 'checked' : '') + '>' +
+        '<span class="min-w-0"><div class="text-sm font-semibold">' + esc(r.id) + ' · ' + esc(r.intitule || '') + '</div>' +
+        '<div class="text-xs text-base-content/60">' + esc(r.processus || r.categorie || '') + '</div></span>';
+      it.onclick = function(e){
+        e.stopPropagation();
+        const idx = RISQUES_SELECTIONNES.indexOf(String(r.id));
+        if(idx === -1) RISQUES_SELECTIONNES.push(String(r.id)); else RISQUES_SELECTIONNES.splice(idx, 1);
+        dessineBouton(); dessineOptions(list.querySelector('#cb-risque-q').value); dessineChips();
+      };
+      zone.appendChild(it);
+    });
+  }
+
+  btn.onclick = function(e){
+    e.stopPropagation();
+    document.querySelectorAll('.cb.open').forEach(function(x){ if(x !== wrap) x.classList.remove('open'); });
+    wrap.classList.toggle('open');
+    if(wrap.classList.contains('open')) list.querySelector('#cb-risque-q').focus();
+  };
+  list.addEventListener('click', function(e){ e.stopPropagation(); });
+  list.querySelector('#cb-risque-q').oninput = function(e){ dessineOptions(e.target.value); };
+
+  dessineBouton(); dessineOptions('');
+}
+document.addEventListener('click', function(){
+  document.querySelectorAll('.cb.open').forEach(function(x){ x.classList.remove('open'); });
+});
+
+function dessineChips(){
+  const host = document.getElementById('chips-risques');
+  host.innerHTML = '';
+  RISQUES_SELECTIONNES.forEach(function(id){
+    const c = document.createElement('span'); c.className = 'badge badge-primary badge-outline gap-1 py-3';
+    c.innerHTML = '<span>' + esc(id) + ' · ' + esc(intituleRisque(id)) + '</span><button type="button" class="text-current leading-none">&times;</button>';
+    c.querySelector('button').onclick = function(){
+      RISQUES_SELECTIONNES = RISQUES_SELECTIONNES.filter(function(x){ return x !== id; });
+      construirePickerRisques(); dessineChips();
+    };
+    host.appendChild(c);
+  });
+}
+
+/* ==================================================================
+   Catalogue : rendu du tableau
+   ================================================================== */
+function controlesFiltres(){
+  const q = (document.getElementById('q').value || '').toLowerCase();
+  const fp = document.getElementById('f-processus').value;
+  const fd = document.getElementById('f-departement').value;
+  const ft = document.getElementById('f-type').value;
+  return CONTROLES.filter(function(c){
+    if(fp && c.processus !== fp) return false;
+    if(fd && c.departement !== fd) return false;
+    if(ft && c.type !== ft) return false;
+    if(!q) return true;
+    return String(c.id).toLowerCase().indexOf(q) !== -1 ||
+      String(c.libelle || '').toLowerCase().indexOf(q) !== -1 ||
+      String(c.processus || '').toLowerCase().indexOf(q) !== -1 ||
+      String(c.departement || '').toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function listeRisquesCouverts(c){
+  const bruts = String(c.risquesCouverts || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  return bruts;
+}
+
+function peindreTableau(){
+  const tbody = document.getElementById('tbody');
+  const liste = controlesFiltres();
+  document.getElementById('compte').textContent = liste.length + ' contrôle' + (liste.length > 1 ? 's' : '') +
+    ' sur ' + CONTROLES.length;
+
+  if(!liste.length){
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center italic text-base-content/50 py-6">' +
+      (CONTROLES.length ? 'Aucun contrôle ne correspond à cette recherche.' : "Aucun contrôle dans le catalogue pour l'instant.") +
+      '</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = liste.map(function(c){
+    const ids = listeRisquesCouverts(c);
+    const tags = ids.slice(0, 3).map(function(id){ return '<span class="badge badge-ghost badge-sm">' + esc(id) + '</span>'; }).join('');
+    const reste = ids.length > 3 ? '<span class="badge badge-ghost badge-sm">+' + (ids.length - 3) + '</span>' : '';
+    return '<tr>' +
+      '<td class="text-base-content/60 text-xs">' + esc(c.id) + '</td>' +
+      '<td class="font-semibold max-w-[260px]">' + esc(c.libelle) + '</td>' +
+      '<td><div class="flex flex-wrap gap-1 max-w-[220px]">' + (tags + reste || '<span class="text-xs text-base-content/60">—</span>') + '</div></td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(c.processus || '—') + '</td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(c.departement || '—') + '</td>' +
+      '<td><span class="badge ' + couleurType(c.type) + '">' + esc(c.type || '·') + '</span></td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(c.frequence || '—') + '</td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(c.executeur || '—') + '</td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(c.valideur || '—') + '</td>' +
+      '<td><span class="badge ' + couleurStatut(c.statut) + '">' + esc(c.statut || '·') + '</span></td>' +
+      '<td><button class="btn btn-xs btn-outline rowbtn" data-id="' + esc(c.id) + '">Modifier</button></td>' +
+    '</tr>';
+  }).join('');
+
+  tbody.querySelectorAll('.rowbtn').forEach(function(b){
+    b.onclick = function(){ ouvrirPanneau(b.dataset.id); };
+  });
+}
+
+/* ==================================================================
+   Panneau de creation / edition
+   ================================================================== */
+function remplirFormulaire(c){
+  document.getElementById('f-libelle').value = c ? (c.libelle || '') : '';
+  document.getElementById('f-objectif').value = c ? (c.objectif || '') : '';
+  document.getElementById('f-procedure').value = c ? (c.procedure || '') : '';
+  document.getElementById('f-type-form').value = c ? (c.type || '') : '';
+  document.getElementById('f-nature').value = c ? (c.nature || '') : '';
+  document.getElementById('f-ligne').value = c ? (c.ligneDefense || '') : '';
+  document.getElementById('f-frequence').value = c ? (c.frequence || '') : '';
+  document.getElementById('f-executeur').value = c ? (c.executeur || '') : '';
+  document.getElementById('f-valideur').value = c ? (c.valideur || '') : '';
+  document.getElementById('f-preuves').value = c ? (c.preuvesAttendues || '') : '';
+  document.getElementById('f-criteres').value = c ? (c.criteresConformite || '') : '';
+  document.getElementById('f-statut').value = c ? (c.statut || 'Actif') : 'Actif';
+  document.getElementById('f-processus-form').value = c ? (c.processus || '') : '';
+  document.getElementById('f-departement-form').value = c ? (c.departement || '') : '';
+  RISQUES_SELECTIONNES = c ? listeRisquesCouverts(c) : [];
+  construirePickerRisques(); dessineChips();
+}
+
+function nettoyerMarques(){
+  document.querySelectorAll('#overlay .manque').forEach(function(e){ e.classList.remove('manque'); });
+}
+
+function ouvrirPanneau(id){
+  nettoyerMarques();
+  EDIT_ID = id || null;
+  const c = id ? CONTROLES.filter(function(x){ return String(x.id) === String(id); })[0] : null;
+  document.getElementById('p-titre').textContent = c ? ('Modifier ' + c.id) : 'Nouveau contrôle';
+  remplirFormulaire(c);
+  document.getElementById('overlay').classList.add('on');
+}
+function fermerPanneau(){
+  document.getElementById('overlay').classList.remove('on');
+  nettoyerMarques();
+}
+
+/* ---------------- validation cote client, miroir de validateControle_ ---------------- */
+function champsManquantsFormulaire(){
+  const manquants = [];
+  if(!document.getElementById('f-libelle').value.trim()) manquants.push(['f-libelle', 'Le libellé du contrôle est obligatoire.']);
+  if(!RISQUES_SELECTIONNES.length) manquants.push(['picker-risques', 'Un contrôle doit couvrir au moins un risque.']);
+  if(!document.getElementById('f-type-form').value) manquants.push(['f-type-form', 'Le type de contrôle est obligatoire.']);
+  if(!document.getElementById('f-frequence').value.trim()) manquants.push(['f-frequence', 'La fréquence est obligatoire.']);
+  if(!document.getElementById('f-executeur').value) manquants.push(["f-executeur", "L'exécuteur est obligatoire."]);
+  if(!document.getElementById('f-criteres').value.trim()) manquants.push(['f-criteres', 'Les critères de conformité sont obligatoires.']);
+  return manquants;
+}
+function signalerManquantsFormulaire(manquants){
+  nettoyerMarques();
+  manquants.forEach(function(m){
+    const el = document.getElementById(m[0]);
+    if(el) el.classList.add('manque');
+  });
+  if(manquants.length && document.getElementById(manquants[0][0])){
+    try { document.getElementById(manquants[0][0]).scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch(e){}
+  }
+}
+
+function enregistrerControle(){
+  if(SAVING) return;
+  const manquants = champsManquantsFormulaire();
+  if(manquants.length){
+    signalerManquantsFormulaire(manquants);
+    message(manquants.length === 1 ? manquants[0][1]
+      : manquants.length + ' champs obligatoires ne sont pas renseignés.', 'warn');
+    return;
+  }
+  nettoyerMarques();
+
+  const payload = {
+    id: EDIT_ID || '',
+    libelle: document.getElementById('f-libelle').value.trim(),
+    objectif: document.getElementById('f-objectif').value.trim(),
+    risquesCouverts: RISQUES_SELECTIONNES.slice(),
+    processus: document.getElementById('f-processus-form').value,
+    departement: document.getElementById('f-departement-form').value,
+    procedure: document.getElementById('f-procedure').value.trim(),
+    type: document.getElementById('f-type-form').value,
+    nature: document.getElementById('f-nature').value,
+    ligneDefense: document.getElementById('f-ligne').value,
+    frequence: document.getElementById('f-frequence').value.trim(),
+    executeur: document.getElementById('f-executeur').value,
+    valideur: document.getElementById('f-valideur').value,
+    preuvesAttendues: document.getElementById('f-preuves').value.trim(),
+    criteresConformite: document.getElementById('f-criteres').value.trim(),
+    statut: document.getElementById('f-statut').value
+  };
+
+  SAVING = true;
+  const bEnr = document.getElementById('p-enregistrer');
+  const bAnn = document.getElementById('p-annuler');
+  bEnr.disabled = true; bAnn.disabled = true;
+  const texteInitial = bEnr.textContent;
+  bEnr.textContent = 'Enregistrement…';
+
+  function fini(){
+    SAVING = false;
+    bEnr.disabled = false; bAnn.disabled = false; bEnr.textContent = texteInitial;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res && Array.isArray(res.controles)) CONTROLES = res.controles;
+      const nouveauId = res ? res.id : (EDIT_ID || '·');
+      journaliser((EDIT_ID ? 'Contrôle modifié : ' : 'Contrôle créé : ') + nouveauId + ' · ' + payload.libelle);
+      message((EDIT_ID ? 'Contrôle ' + nouveauId + ' mis à jour.' : 'Contrôle ' + nouveauId + ' créé.'), 'ok');
+      fini();
+      fermerPanneau();
+      peindreTableau();
+    })
+    .withFailureHandler(function(e){
+      fini();
+      onError(e);
+    })
+    .saveControle(payload);
+}
+
+/* ==================================================================
+   Chargement initial
+   ================================================================== */
+function onControlesData(data){
+  if(!data){
+    message("Les données du classeur n'ont pas pu être chargées. Lancez Risk Management > " +
+      "Administration > Contrôler l'installation des scripts.", 'err');
+    return;
+  }
+  DATA = data;
+  CONTROLES = Array.isArray(data.controles) ? data.controles : [];
+  RISQUES = Array.isArray(data.risques) ? data.risques : [];
+  DEPARTEMENTS = Array.isArray(data.departements) ? data.departements : [];
+  UTILISATEURS = Array.isArray(data.utilisateurs) ? data.utilisateurs : [];
+  PROCESSUS = Array.isArray(data.processus) ? data.processus : [];
+
+  const nomsDepartements = DEPARTEMENTS.map(function(d){ return d.nom || d.id; }).filter(Boolean);
+  const emailsUtilisateurs = UTILISATEURS.filter(function(u){ return u.actif !== false; })
+    .map(function(u){ return u.email; }).filter(Boolean);
+
+  remplirSelect('f-processus', PROCESSUS, 'Tous les processus');
+  remplirSelect('f-departement', nomsDepartements, 'Tous les départements');
+  remplirSelect('f-processus-form', PROCESSUS, 'Sélectionner…');
+  remplirSelect('f-departement-form', nomsDepartements, 'Sélectionner…');
+  remplirSelect('f-executeur', emailsUtilisateurs, 'Sélectionner…');
+  remplirSelect('f-valideur', emailsUtilisateurs, 'Sélectionner…');
+
+  if(data.user && !data.user.reconnu){
+    message("Votre compte (" + (data.user.email || 'inconnu') + ") n'est pas présent dans la feuille " +
+      "UTILISATEURS. L'enregistrement sera refusé.", 'err');
+  } else if(data.user && !data.user.actif){
+    message('Votre compte est inactif dans la feuille UTILISATEURS.', 'err');
+  }
+
+  if(data.version){
+    document.title = 'Catalogue des contrôles';
+  }
+
+  peindreTableau();
+  peindreJournal();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('btn-nouveau').onclick = function(){ ouvrirPanneau(null); };
+  document.getElementById('p-close').onclick = fermerPanneau;
+  document.getElementById('p-annuler').onclick = fermerPanneau;
+  document.getElementById('p-enregistrer').onclick = enregistrerControle;
+  document.getElementById('overlay').addEventListener('click', function(e){
+    if(e.target.id === 'overlay') fermerPanneau();
+  });
+  document.getElementById('q').oninput = peindreTableau;
+  document.getElementById('f-processus').onchange = peindreTableau;
+  document.getElementById('f-departement').onchange = peindreTableau;
+  document.getElementById('f-type').onchange = peindreTableau;
+
+  peindreJournal();
+
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message("Environnement Google Apps Script non détecté. Ouvrez le catalogue depuis le menu Risk Management.", 'err');
+    return;
+  }
+  google.script.run.withSuccessHandler(onControlesData).withFailureHandler(onError).getControlesData();
+});
+</script>
+
+</body>
+</html>

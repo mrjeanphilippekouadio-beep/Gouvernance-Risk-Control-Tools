@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     FICHIER  : UI_Cartographie          type : HTML (.html)
+     SECTION  : MENU 3 · Cartographie
+     VA AVEC  : 30_Cartographie (Script)
+     MARQUEUR UI_Cartographie v9   (lu par Administration > Controler l'installation)
+     ===================================================================== -->
+<html lang="fr">
+<head>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{ --muted:#5B6877; }
+canvas{display:none}
+</style>
+</head>
+<body class="bg-base-200 text-base-content text-sm">
+<div class="navbar bg-base-100 border-b border-base-300 min-h-0 py-2 px-4">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-[1090px] mx-auto p-3.5">
+  <header class="flex items-end justify-between gap-4 mb-2.5 flex-wrap">
+    <div>
+      <h1 class="m-0 text-lg font-semibold">Cartographie des risques</h1>
+      <p class="mt-0.5 text-xs text-base-content/60">Image PNG, risque inhérent face au risque résiduel, échelles de probabilité et d'impact sur chaque matrice.</p>
+    </div>
+    <div class="flex items-center gap-2.5 flex-wrap">
+      <div class="join" role="group" aria-label="Périmètre">
+        <button type="button" data-p="derniere" class="btn btn-sm join-item btn-primary">Dernière évaluation de chaque risque</button>
+        <button type="button" data-p="validees" class="btn btn-sm join-item btn-outline">Évaluations validées uniquement</button>
+      </div>
+      <button class="btn btn-primary btn-sm" id="dl" disabled>Télécharger le PNG</button>
+    </div>
+  </header>
+
+  <div id="msg" class="alert hidden mb-2.5 text-sm py-2"></div>
+
+  <div class="bg-base-100 border border-base-300 rounded-xl p-2.5 shadow">
+    <div class="h-[520px] flex items-center justify-center text-base-content/60" id="attente">Lecture du classeur…</div>
+    <img id="img" alt="Cartographie des risques, inhérent face au résiduel" class="block w-full h-auto rounded-md" style="display:none">
+  </div>
+  <p class="text-xs text-base-content/60 mt-1.5 mx-0.5">L'image est posée dans la feuille CARTOGRAPHIE à la ligne 16, en remplaçant la précédente.
+    Le bouton ci-dessus en télécharge une version haute définition ; à défaut, clic droit sur l'aperçu,
+    « Enregistrer l'image sous ».</p>
+
+  <details id="det" class="mt-3 bg-base-100 border border-base-300 rounded-lg p-2 px-3">
+    <summary class="cursor-pointer font-semibold text-xs text-primary">Détail des risques positionnés</summary>
+    <div class="overflow-x-auto">
+      <table class="table table-sm w-full mt-2">
+        <thead><tr><th>Risque</th><th>Intitulé</th><th>Inhérent</th><th>Résiduel</th><th>Statut</th></tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+  </details>
+  <canvas id="cv"></canvas>
+</div>
+
+<script>
+/*
+ * Niveaux de criticite : vert fonce -> vert -> ambre -> orange -> rouge.
+ * Palette verifiee pour la vision des couleurs deficiente : paires voisines
+ * separees d'au moins 12 (deuteranopie, protanopie) et 16,8 en vision normale.
+ * Le texte pose sur une couleur est blanc ou encre selon la luminance.
+ */
+const NIVEAUX = [
+  { fond: '#1b7a3d', teinte: '#d3ecd9', texte: '#ffffff' },
+  { fond: '#8fd19e', teinte: '#e6f4d6', texte: '#16202c' },
+  { fond: '#e9a100', teinte: '#fcefcf', texte: '#16202c' },
+  { fond: '#e25822', teinte: '#fcdfd1', texte: '#16202c' },
+  { fond: '#a61b1b', teinte: '#f6d3d3', texte: '#ffffff' }
+];
+const ENCRE = '#16202c', ATTENUE = '#5b6877', TRAIT = '#d8dee6';
+const POLICE = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+
+let D = null;
+let PERIMETRE = 'derniere';
+let occupe = false;
+
+function message(t, type){
+  const m = document.getElementById('msg');
+  const cls = {info:'alert-info', warn:'alert-warning', err:'alert-error', ok:'alert-success'}[type] || 'alert-info';
+  m.className = 'alert ' + cls + ' mb-2.5 text-sm py-2';
+  m.textContent = t;
+}
+function esc(v){
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ---------------- niveaux ---------------- */
+function indexNiveau(score){
+  const s = D.seuils || [];
+  for(let i = 0; i < s.length; i++){ if(score >= s[i].min && score <= s[i].max) return Math.min(i, NIVEAUX.length - 1); }
+  return NIVEAUX.length - 1;
+}
+function libelleNiveau(i){ return (D.seuils[i] || {}).label || ''; }
+
+/* ---------------- dessin ---------------- */
+function texte(ctx, t, x, y, taille, poids, couleur, align){
+  ctx.font = (poids || 400) + ' ' + taille + 'px ' + POLICE;
+  ctx.fillStyle = couleur || ENCRE;
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(t, x, y);
+}
+function rect(ctx, x, y, w, h, r, couleur){
+  ctx.fillStyle = couleur;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath(); ctx.fill();
+}
+function tronquer(ctx, t, largeur){
+  if(ctx.measureText(t).width <= largeur) return t;
+  while(t.length > 1 && ctx.measureText(t + '…').width > largeur) t = t.slice(0, -1);
+  return t + '…';
+}
+
+/**
+ * Une matrice 5 x 5. phase vaut 'inh' ou 'res'. Renvoie le decompte par
+ * niveau pour la legende du panneau.
+ */
+function matrice(ctx, x0, titre, sousTitre, phase){
+  const G = { x: x0 + 128, y: 156, c: 86, h: 80, gap: 3 };
+  const cases = {};
+  let places = 0, horsGrille = 0;
+  const parNiveau = [0, 0, 0, 0, 0];
+  D.risques.forEach(function(r){
+    const v = r[phase];
+    if(!v || !v.p || !v.i){ horsGrille++; return; }
+    const k = v.p + ':' + v.i;
+    (cases[k] = cases[k] || []).push(r.court);
+    parNiveau[indexNiveau(v.p * v.i)]++;
+    places++;
+  });
+
+  texte(ctx, titre, x0, 126, 18, 700, ENCRE);
+  ctx.font = '700 18px ' + POLICE;
+  const lt = ctx.measureText(titre).width;
+  texte(ctx, '·  ' + places + ' risque' + (places > 1 ? 's' : ''), x0 + lt + 10, 126, 14, 600, ATTENUE);
+  texte(ctx, sousTitre, x0, 145, 12, 400, ATTENUE);
+
+  // Cases : teinte du niveau quand la case est vide, couleur pleine quand
+  // elle porte au moins un risque, 3 px de blanc entre deux cases.
+  for(let p = 5; p >= 1; p--){
+    for(let i = 1; i <= 5; i++){
+      const x = G.x + (i - 1) * G.c, y = G.y + (5 - p) * G.h;
+      const niv = NIVEAUX[indexNiveau(p * i)];
+      const ids = cases[p + ':' + i] || [];
+      rect(ctx, x + G.gap / 2, y + G.gap / 2, G.c - G.gap, G.h - G.gap, 6, ids.length ? niv.fond : niv.teinte);
+      if(ids.length){
+        const cx = x + G.c / 2;
+        texte(ctx, String(ids.length), cx, y + 36, 26, 700, niv.texte, 'center');
+        ctx.font = '600 10.5px ' + POLICE;
+        const l1 = ids.slice(0, 2).join(' · ');
+        const reste = ids.length - 2;
+        const l2 = reste <= 0 ? '' : (reste <= 2 ? ids.slice(2, 4).join(' · ') : ids[2] + '  +' + (reste - 1));
+        texte(ctx, tronquer(ctx, l1, G.c - 8), cx, y + 54, 10.5, 600, niv.texte, 'center');
+        if(l2) texte(ctx, tronquer(ctx, l2, G.c - 8), cx, y + 67, 10.5, 600, niv.texte, 'center');
+      }
+    }
+  }
+
+  // Echelle de probabilite, a gauche de chaque matrice
+  const proba = D.echelles.probabilite;
+  for(let p = 5; p >= 1; p--){
+    const y = G.y + (5 - p) * G.h + G.h / 2;
+    const def = proba.filter(function(e){ return Number(e.niveau) === p; })[0];
+    texte(ctx, String(p), G.x - 10, y - 2, 15, 700, ENCRE, 'right');
+    ctx.font = '400 11.5px ' + POLICE;
+    texte(ctx, tronquer(ctx, def ? def.libelle : '', 104), G.x - 10, y + 13, 11.5, 400, ATTENUE, 'right');
+  }
+  // Echelle d'impact, sous chaque matrice
+  const imp = D.echelles.impact;
+  const yBas = G.y + 5 * G.h;
+  for(let i = 1; i <= 5; i++){
+    const x = G.x + (i - 1) * G.c + G.c / 2;
+    const def = imp.filter(function(e){ return Number(e.niveau) === i; })[0];
+    texte(ctx, String(i), x, yBas + 18, 15, 700, ENCRE, 'center');
+    ctx.font = '400 11.5px ' + POLICE;
+    texte(ctx, tronquer(ctx, def ? def.libelle : '', G.c - 4), x, yBas + 33, 11.5, 400, ATTENUE, 'center');
+  }
+  // Titres d'axes
+  texte(ctx, 'Impact retenu  →', G.x + 2.5 * G.c, yBas + 54, 12, 650, ENCRE, 'center');
+  ctx.save();
+  ctx.translate(x0 + 8, G.y + 2.5 * G.h);
+  ctx.rotate(-Math.PI / 2);
+  texte(ctx, 'Probabilité  →', 0, 0, 12, 650, ENCRE, 'center');
+  ctx.restore();
+
+  // Legende du panneau : couleur, libelle, nombre de risques par niveau
+  ctx.font = '600 12px ' + POLICE;
+  const libs = NIVEAUX.map(function(_, n){ return libelleNiveau(n) + ' ' + parNiveau[n]; });
+  const total = libs.reduce(function(t, l){ return t + 17 + ctx.measureText(l).width + 16; }, -16);
+  let lx = G.x + (5 * G.c - total) / 2, ly = yBas + 84;
+  for(let n = 0; n < NIVEAUX.length; n++){
+    const lib = libs[n];
+    rect(ctx, lx, ly - 10, 12, 12, 3, NIVEAUX[n].fond);
+    ctx.font = '600 12px ' + POLICE;
+    texte(ctx, lib, lx + 17, ly, 12, 600, ENCRE);
+    lx += 17 + ctx.measureText(lib).width + 16;
+  }
+  return { places: places, horsGrille: horsGrille };
+}
+
+function dessiner(echelle){
+  const L = 1280, H = 720;
+  const cv = document.getElementById('cv');
+  cv.width = L * echelle; cv.height = H * echelle;
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(echelle, 0, 0, echelle, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, L, H);
+
+  const cotes = D.risques.length;
+  texte(ctx, 'Cartographie des risques' + (D.entite ? ' · ' + D.entite : ''), 40, 50, 26, 700, ENCRE);
+  texte(ctx, (D.perimetre === 'validees' ? 'Évaluations validées uniquement' : 'Dernière évaluation de chaque risque') +
+    ' · situation au ' + D.genereLe.split(' à ')[0] + ' · ' + cotes + ' risque' + (cotes > 1 ? 's' : '') +
+    ' sur ' + D.totalRisques + ' au registre', 40, 76, 14, 400, ATTENUE);
+  ctx.fillStyle = TRAIT; ctx.fillRect(40, 92, L - 80, 1);
+
+  const a = matrice(ctx, 40, 'Risque inhérent', 'Avant dispositif de maîtrise', 'inh');
+  const b = matrice(ctx, 670, 'Risque résiduel', 'Après dispositif de maîtrise', 'res');
+  texte(ctx, '→', 640, 156 + 2.5 * 80 + 10, 30, 400, ATTENUE, 'center');
+
+  // Pied : lecture des niveaux et provenance
+  const seuils = (D.seuils || []).map(function(s){ return s.label + ' ' + s.min + '–' + s.max; }).join('  ·  ');
+  ctx.fillStyle = TRAIT; ctx.fillRect(40, 668, L - 80, 1);
+  texte(ctx, 'Score = probabilité × impact retenu (maximum des axes).  ' + seuils, 40, 688, 11.5, 400, ATTENUE);
+  const non = D.totalRisques - cotes;
+  const src = 'Source : feuille RISQUES · méthodologie ' + D.methodologie + ' · généré le ' + D.genereLe +
+    (D.auteur ? ' par ' + D.auteur : '') +
+    (non > 0 ? ' · ' + non + ' risque' + (non > 1 ? 's' : '') +
+      (D.perimetre === 'validees' ? ' sans évaluation validée' : ' non coté' + (non > 1 ? 's' : '')) : '') +
+    (a.horsGrille || b.horsGrille ? ' · cotation incomplète : ' + a.horsGrille + ' en inhérent, ' +
+      b.horsGrille + ' en résiduel' : '');
+  ctx.font = '400 11px ' + POLICE;
+  texte(ctx, tronquer(ctx, src, L - 80), 40, 706, 11, 400, ATTENUE);
+  return { inh: a, res: b };
+}
+
+/* ---------------- tableau de detail ---------------- */
+function cellule(v){
+  if(!v || !v.s) return '<span class="text-base-content/60">non positionné</span>';
+  const n = NIVEAUX[indexNiveau(v.s)];
+  return '<span class="inline-block min-w-[26px] px-1.5 py-0.5 rounded font-bold text-center mr-1.5" style="background:' + n.fond + ';color:' + n.texte + '">' + v.s + '</span>' +
+    v.p + ' × ' + v.i + ' · ' + esc(v.niveau);
+}
+function remplirTableau(){
+  document.getElementById('tb').innerHTML = D.risques.map(function(r){
+    return '<tr><td class="whitespace-nowrap">' + esc(r.id) + '</td><td>' + esc(r.intitule) + '</td><td class="whitespace-nowrap">' +
+      cellule(r.inh) + '</td><td class="whitespace-nowrap">' + cellule(r.res) + '</td><td>' + esc(r.statut) + '</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="text-base-content/60">Aucun risque positionné.</td></tr>';
+}
+
+/* ---------------- enchainement ---------------- */
+function charger(perimetre){
+  if(occupe) return;
+  occupe = true;
+  PERIMETRE = perimetre;
+  document.querySelectorAll('.join button').forEach(function(b){
+    const on = b.dataset.p === perimetre;
+    b.classList.toggle('btn-primary', on);
+    b.classList.toggle('btn-outline', !on);
+  });
+  document.getElementById('dl').disabled = true;
+  message('Lecture du classeur…', 'info');
+  google.script.run
+    .withSuccessHandler(function(data){
+      occupe = false;
+      if(!data || !data.echelles){ message("Les données du classeur n'ont pas pu être lues.", 'err'); return; }
+      D = data;
+      const r = dessiner(1);
+      const url = document.getElementById('cv').toDataURL('image/png');
+      const img = document.getElementById('img');
+      img.src = url; img.style.display = 'block';
+      document.getElementById('attente').style.display = 'none';
+      document.getElementById('dl').disabled = false;
+      remplirTableau();
+      if(!D.risques.length){
+        message(D.perimetre === 'validees'
+          ? "Aucune évaluation validée pour l'instant : l'aperçu est vide et n'a pas été posé dans la feuille."
+          : "Aucun risque coté pour l'instant : l'aperçu est vide et n'a pas été posé dans la feuille.", 'warn');
+        return;
+      }
+      poser(url, r);
+    })
+    .withFailureHandler(function(e){ occupe = false; message((e && e.message) || 'Erreur côté serveur.', 'err'); })
+    .getDonneesCartographie(perimetre);
+}
+
+function poser(url, r){
+  message("Pose de l'image dans la feuille CARTOGRAPHIE…", 'info');
+  const legende = 'Cartographie des risques, ' +
+    (D.perimetre === 'validees' ? 'évaluations validées' : 'dernière évaluation de chaque risque') +
+    ', générée le ' + D.genereLe + ' (' + D.risques.length + ' risques).';
+  google.script.run
+    .withSuccessHandler(function(res){
+      message('Image posée dans la feuille ' + res.feuille + ' à la ligne ' + res.ligne +
+        (res.remplacees ? ', elle remplace la précédente.' : '.') +
+        ' Inhérent : ' + r.inh.places + ' risque(s) placé(s), résiduel : ' + r.res.places + '.', 'ok');
+    })
+    .withFailureHandler(function(e){ message((e && e.message) || "L'image n'a pas pu être posée.", 'err'); })
+    .poserImageCartographie(url, legende);
+}
+
+function telecharger(){
+  if(!D) return;
+  dessiner(2);
+  const url = document.getElementById('cv').toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url; a.download = D.fichier || 'cartographie_risques.png';
+  document.body.appendChild(a); a.click(); a.remove();
+  dessiner(1);
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('.join button').forEach(function(b){
+    b.addEventListener('click', function(){ if(b.dataset.p !== PERIMETRE) charger(b.dataset.p); });
+  });
+  document.getElementById('dl').addEventListener('click', telecharger);
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message('Environnement Google Apps Script non détecté. Ouvrez la cartographie depuis le menu Risk Management.', 'err');
+    return;
+  }
+  charger('derniere');
+});
+</script>
+</body>
+</html>

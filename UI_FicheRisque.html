@@ -1,0 +1,280 @@
+<!-- MARQUEUR UI_FicheRisque v10 -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fiche risque 360°</title>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style>
+  body{ background:#F4F6F9; }
+  .kpi{ border:1px solid #E5E9EF; border-radius:12px; padding:10px 14px; background:#fff; }
+</style>
+</head>
+<body class="min-h-screen text-sm" data-theme="light">
+<div class="navbar bg-base-100 border-b border-base-300 px-4 min-h-0 py-2 mb-2 shadow-sm">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm normal-case gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-6xl mx-auto p-4">
+
+  <div class="bg-base-100 rounded-2xl shadow border border-base-300 overflow-hidden mb-4">
+    <div class="flex items-end justify-between gap-4 flex-wrap p-4 border-b border-base-300">
+      <div>
+        <h1 class="text-lg font-bold">Fiche risque 360°</h1>
+        <p class="text-xs text-base-content/60 max-w-2xl">Vue d'ensemble d'un risque : identification, cotation historisée, contrôles liés, exécutions, efficacité, anomalies, position vs appétence et extrait du journal. Page de lecture uniquement, sans écriture.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="f-risque" class="select select-bordered select-sm w-80"><option value="">Choisir un risque…</option></select>
+      </div>
+    </div>
+    <div id="msg" class="hidden mx-4 mt-3 alert py-2"></div>
+  </div>
+
+  <div id="fiche" class="hidden space-y-4">
+
+    <div class="bg-base-100 rounded-2xl shadow border border-base-300 p-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div class="text-xs text-base-content/50" id="r-id">·</div>
+          <h2 class="text-base font-bold" id="r-intitule">·</h2>
+          <p class="text-xs text-base-content/60 mt-1 max-w-2xl" id="r-description">·</p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <span class="badge badge-outline" id="r-processus">·</span>
+          <span class="badge badge-outline" id="r-categorie">·</span>
+          <span class="badge badge-outline" id="r-departement">·</span>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+        <div class="kpi"><div class="text-[11px] text-base-content/50 uppercase">Niveau inhérent</div><div class="text-lg font-bold" id="k-inherent">·</div></div>
+        <div class="kpi"><div class="text-[11px] text-base-content/50 uppercase">Niveau résiduel</div><div class="text-lg font-bold" id="k-residuel">·</div></div>
+        <div class="kpi"><div class="text-[11px] text-base-content/50 uppercase">Position vs appétence</div><div class="text-lg font-bold" id="k-appetence">·</div></div>
+        <div class="kpi"><div class="text-[11px] text-base-content/50 uppercase">Statut de la dernière évaluation</div><div class="text-lg font-bold" id="k-statut">·</div></div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 text-xs">
+        <div><span class="font-semibold">Propriétaire :</span> <span id="r-proprietaire">·</span></div>
+        <div><span class="font-semibold">Pilote de risque (département) :</span> <span id="r-pilote">·</span></div>
+        <div><span class="font-semibold">Causes :</span> <span id="r-causes">·</span></div>
+        <div><span class="font-semibold">Conséquences :</span> <span id="r-consequences">·</span></div>
+      </div>
+    </div>
+
+    <div class="bg-base-100 rounded-2xl shadow border border-base-300 p-4">
+      <h3 class="font-semibold text-sm mb-2">Historique des évaluations (cotation)</h3>
+      <div class="overflow-auto max-h-72">
+        <table class="table table-zebra table-xs">
+          <thead><tr><th>Date</th><th>Type</th><th>Évaluateur</th><th>Score inh.</th><th>Niveau inh.</th><th>Score rés.</th><th>Niveau rés.</th><th>Tendance</th><th>Décision</th><th>Statut</th></tr></thead>
+          <tbody id="tbody-evals"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bg-base-100 rounded-2xl shadow border border-base-300 p-4">
+      <h3 class="font-semibold text-sm mb-2">Contrôles liés</h3>
+      <div class="overflow-auto max-h-72">
+        <table class="table table-zebra table-xs">
+          <thead><tr><th>ID</th><th>Libellé</th><th>Type</th><th>Fréquence</th><th>Statut</th><th>Dernière efficacité</th></tr></thead>
+          <tbody id="tbody-controles"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="bg-base-100 rounded-2xl shadow border border-base-300 p-4">
+        <h3 class="font-semibold text-sm mb-2">Exécutions des contrôles liés</h3>
+        <div class="overflow-auto max-h-72">
+          <table class="table table-zebra table-xs">
+            <thead><tr><th>Contrôle</th><th>Date réalisation</th><th>Résultat</th><th>Statut</th></tr></thead>
+            <tbody id="tbody-executions"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="bg-base-100 rounded-2xl shadow border border-base-300 p-4">
+        <h3 class="font-semibold text-sm mb-2">Évaluations d'efficacité</h3>
+        <div class="overflow-auto max-h-72">
+          <table class="table table-zebra table-xs">
+            <thead><tr><th>Contrôle</th><th>Date</th><th>Efficacité op.</th><th>Résultat</th></tr></thead>
+            <tbody id="tbody-efficacite"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-base-100 rounded-2xl shadow border border-base-300 p-4">
+      <h3 class="font-semibold text-sm mb-2">Anomalies liées</h3>
+      <div class="overflow-auto max-h-72">
+        <table class="table table-zebra table-xs">
+          <thead><tr><th>ID</th><th>Date constat</th><th>Description</th><th>Gravité</th><th>Statut</th></tr></thead>
+          <tbody id="tbody-anomalies"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bg-base-100 rounded-2xl shadow border border-base-300 p-4">
+      <h3 class="font-semibold text-sm mb-2">Extrait du journal global</h3>
+      <p class="text-xs text-base-content/50 mb-2">Le raccordement automatique du journal n'existe pas encore : seules les entrées ajoutées manuellement, référençant ce risque ou l'un de ses contrôles, apparaissent ici.</p>
+      <ul id="liste-journal" class="text-xs space-y-1"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- ================= widget de feedback (mock, dupliqué sur chaque page du lot) ================= -->
+<div class="fixed bottom-5 right-5 z-50">
+  <button id="fb-btn" class="btn btn-circle btn-primary shadow-lg" title="Donner un avis">💬</button>
+</div>
+<dialog id="fb-modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-base">Votre avis</h3>
+    <p class="py-1 text-xs text-base-content/60">Ce retour reste local à cette session (aucun envoi serveur pour l'instant).</p>
+    <textarea id="fb-texte" class="textarea textarea-bordered w-full textarea-sm" rows="4" placeholder="Qu'est-ce qui pourrait être amélioré ?"></textarea>
+    <div class="modal-action">
+      <button id="fb-annuler" class="btn btn-ghost btn-sm">Annuler</button>
+      <button id="fb-envoyer" class="btn btn-primary btn-sm">Envoyer</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+(function(){
+  const FEEDBACKS = [];
+  const modal = document.getElementById('fb-modal');
+  document.getElementById('fb-btn').onclick = function(){ modal.showModal(); };
+  document.getElementById('fb-annuler').onclick = function(){ modal.close(); };
+  document.getElementById('fb-envoyer').onclick = function(){
+    const texte = document.getElementById('fb-texte').value.trim();
+    if(!texte) return;
+    FEEDBACKS.push({ texte: texte, date: new Date().toISOString() });
+    document.getElementById('fb-texte').value = '';
+    modal.close();
+    alert("Merci, votre retour a été enregistré (localement, pour cette session).");
+  };
+})();
+</script>
+
+<script>
+function esc(v){ return String(v === null || v === undefined ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function message(txt, type){
+  const m = document.getElementById('msg');
+  m.className = 'alert py-2 ' + (type === 'err' ? 'alert-error' : type === 'ok' ? 'alert-success' : 'alert-info');
+  m.textContent = txt;
+  m.classList.remove('hidden');
+  if(type !== 'err') setTimeout(function(){ m.classList.add('hidden'); }, 6000);
+}
+function onError(err){
+  message((err && err.message) ? err.message : "Une erreur est survenue côté serveur.", 'err');
+  try { console.error(err); } catch(e){}
+}
+function dateCourte(d){
+  if(!d) return '—';
+  const x = (d instanceof Date) ? d : new Date(d);
+  return isNaN(x.getTime()) ? String(d) : x.toLocaleDateString('fr-FR');
+}
+function dateHeure(d){
+  if(!d) return '—';
+  const x = (d instanceof Date) ? d : new Date(d);
+  return isNaN(x.getTime()) ? String(d) : x.toLocaleString('fr-FR');
+}
+
+function chargerListe(){
+  google.script.run
+    .withSuccessHandler(function(data){
+      const sel = document.getElementById('f-risque');
+      sel.innerHTML = '<option value="">Choisir un risque…</option>';
+      (data.risques || []).forEach(function(r){
+        sel.appendChild(new Option(r.id + ' · ' + (r.intitule || '') + (r.niveauResiduel ? ' (' + r.niveauResiduel + ')' : ''), r.id));
+      });
+    })
+    .withFailureHandler(onError)
+    .getFicheRisqueListe();
+}
+
+function peindreFiche(f){
+  document.getElementById('fiche').classList.remove('hidden');
+  const r = f.risque;
+  document.getElementById('r-id').textContent = r.id;
+  document.getElementById('r-intitule').textContent = r.intitule || '(sans intitulé)';
+  document.getElementById('r-description').textContent = r.description || '';
+  document.getElementById('r-processus').textContent = r.processus || 'Processus —';
+  document.getElementById('r-categorie').textContent = r.categorie || 'Catégorie —';
+  document.getElementById('r-departement').textContent = r.departement || 'Département —';
+  document.getElementById('k-inherent').textContent = r.niveauInherent || '—';
+  document.getElementById('k-residuel').textContent = r.niveauResiduel || '—';
+  document.getElementById('k-appetence').textContent = f.positionAppetence || '—';
+  document.getElementById('k-statut').textContent = r.statut || '—';
+  document.getElementById('r-proprietaire').textContent = r.proprietaire || '—';
+  document.getElementById('r-pilote').textContent = f.departement ? (f.departement.piloteRisque || '—') : '—';
+  document.getElementById('r-causes').textContent = r.causes || '—';
+  document.getElementById('r-consequences').textContent = r.consequences || '—';
+
+  const tbEvals = document.getElementById('tbody-evals');
+  const evals = (f.historiqueEvaluations || []).slice().reverse();
+  tbEvals.innerHTML = evals.length ? evals.map(function(e){
+    return '<tr><td>' + esc(dateCourte(e.dateEval)) + '</td><td>' + esc(e.typeEval || '—') + '</td><td>' + esc(e.evaluateur || '—') +
+      '</td><td>' + esc(e.scoreInherent || '—') + '</td><td>' + esc(e.niveauInherent || '—') +
+      '</td><td>' + esc(e.scoreResiduel || '—') + '</td><td>' + esc(e.niveauResiduel || '—') +
+      '</td><td>' + esc(e.tendance || '—') + '</td><td>' + esc(e.decision || '—') + '</td><td>' + esc(e.statut || '—') + '</td></tr>';
+  }).join('') : '<tr><td colspan="10" class="text-center italic text-base-content/50 py-4">Aucune évaluation.</td></tr>';
+
+  const tbCtrl = document.getElementById('tbody-controles');
+  const derniereEff = f.derniereEfficacitePar || {};
+  tbCtrl.innerHTML = (f.controlesLies || []).length ? f.controlesLies.map(function(c){
+    const de = derniereEff[c.id];
+    return '<tr><td class="text-xs">' + esc(c.id) + '</td><td class="font-medium">' + esc(c.libelle || '—') +
+      '</td><td>' + esc(c.type || '—') + '</td><td>' + esc(c.frequence || '—') + '</td><td>' + esc(c.statut || '—') +
+      '</td><td>' + (de ? esc(de.efficaciteOperationnelle || '—') + ' (' + dateCourte(de.dateEval) + ')' : '—') + '</td></tr>';
+  }).join('') : '<tr><td colspan="6" class="text-center italic text-base-content/50 py-4">Aucun contrôle lié à ce risque.</td></tr>';
+
+  const tbExec = document.getElementById('tbody-executions');
+  tbExec.innerHTML = (f.executionsLiees || []).length ? f.executionsLiees.map(function(e){
+    return '<tr><td class="text-xs">' + esc(e.idControle) + '</td><td>' + esc(dateCourte(e.dateRealisation)) +
+      '</td><td>' + esc(e.resultat || '—') + '</td><td>' + esc(e.statut || '—') + '</td></tr>';
+  }).join('') : '<tr><td colspan="4" class="text-center italic text-base-content/50 py-4">Aucune exécution enregistrée.</td></tr>';
+
+  const tbEff = document.getElementById('tbody-efficacite');
+  tbEff.innerHTML = (f.efficaciteLiee || []).length ? f.efficaciteLiee.map(function(e){
+    return '<tr><td class="text-xs">' + esc(e.idControle) + '</td><td>' + esc(dateCourte(e.dateEval)) +
+      '</td><td>' + esc(e.efficaciteOperationnelle || '—') + '</td><td>' + esc(e.resultat || '—') + '</td></tr>';
+  }).join('') : '<tr><td colspan="4" class="text-center italic text-base-content/50 py-4">Aucune évaluation d\'efficacité.</td></tr>';
+
+  const tbAno = document.getElementById('tbody-anomalies');
+  tbAno.innerHTML = (f.anomaliesLiees || []).length ? f.anomaliesLiees.map(function(a){
+    return '<tr><td class="text-xs">' + esc(a.id) + '</td><td>' + esc(dateCourte(a.dateConstat)) +
+      '</td><td>' + esc(a.description || '—') + '</td><td>' + esc(a.gravite || '—') + '</td><td>' + esc(a.statut || '—') + '</td></tr>';
+  }).join('') : '<tr><td colspan="5" class="text-center italic text-base-content/50 py-4">Aucune anomalie liée.</td></tr>';
+
+  const ul = document.getElementById('liste-journal');
+  ul.innerHTML = (f.extraitJournal || []).length ? f.extraitJournal.map(function(e){
+    return '<li class="border-b border-base-200 pb-1"><span class="text-base-content/50">' + esc(dateHeure(e.date)) + '</span> · ' +
+      '<span class="font-medium">' + esc(e.action) + '</span> — ' + esc(e.detail || '') + '</li>';
+  }).join('') : '<li class="italic text-base-content/50">Aucune entrée du journal ne référence ce risque pour l\'instant.</li>';
+}
+
+function chargerFiche(id){
+  if(!id){ document.getElementById('fiche').classList.add('hidden'); return; }
+  google.script.run
+    .withSuccessHandler(function(f){
+      if(!f){ message('Risque introuvable.', 'err'); return; }
+      peindreFiche(f);
+    })
+    .withFailureHandler(onError)
+    .getFicheRisque(id);
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('f-risque').addEventListener('change', function(e){ chargerFiche(e.target.value); });
+
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message('Environnement Google Apps Script non détecté.', 'err');
+    return;
+  }
+  chargerListe();
+});
+</script>
+</body>
+</html>

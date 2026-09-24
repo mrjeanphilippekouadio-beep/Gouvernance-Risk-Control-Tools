@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     FICHIER  : UI_Efficacite            type : HTML (.html)
+     SECTION  : MENU 5 · Contrôle interne > Efficacité des contrôles
+     VA AVEC  : 13_Efficacite (Script)
+     MARQUEUR UI_Efficacite v10   (lu par Administration > Controler l'installation)
+     ===================================================================== -->
+<html lang="fr">
+<head>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+:root{
+  --primary:#1F5FA8; --primary-soft:#E8F0FA; --muted:#5B6877; --border-strong:#B9C3CF;
+  --ok:#1B7F3B; --danger:#B3261E;
+}
+.overlay{position:fixed;inset:0;background:rgba(16,24,40,.38);display:none;z-index:50}
+.overlay.on{display:block}
+.overlay .panel{transform:translateX(100%);transition:transform .18s ease}
+.overlay.on .panel{transform:translateX(0)}
+.manque{border-color:#B3261E !important;box-shadow:0 0 0 3px rgba(179,38,30,.14) !important}
+</style>
+</head>
+<body class="bg-base-200 text-base-content text-sm">
+<div class="navbar bg-base-100 border-b border-base-300 min-h-0 py-2 px-4">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-[1180px] mx-auto p-4">
+
+<div class="bg-base-100 border border-base-300 rounded-2xl shadow overflow-hidden mb-4">
+  <header class="p-4 pb-3 border-b border-base-300 flex items-end justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="m-0 text-lg font-semibold tracking-tight">Efficacité des contrôles</h1>
+      <p class="mt-1 text-xs text-base-content/60 max-w-[640px]">L'exécution d'un contrôle ne signifie pas qu'il est efficace. Cette page évalue sa conception et son efficacité opérationnelle, distinctement de son exécution.</p>
+    </div>
+    <button class="btn btn-primary btn-sm" id="btn-nouveau">+ Évaluer un contrôle</button>
+  </header>
+
+  <div id="msg" class="alert hidden mx-5 mt-3 text-sm py-2"></div>
+
+  <div class="flex items-center gap-2 flex-wrap p-3.5 px-5 border-b border-base-300 bg-base-200/40">
+    <input type="search" id="q" class="input input-bordered input-sm min-w-[220px]" placeholder="Rechercher (id, contrôle, évaluateur, justification…)">
+    <select id="f-controle" class="select select-bordered select-sm"><option value="">Tous les contrôles</option></select>
+    <select id="f-efficacite" class="select select-bordered select-sm">
+      <option value="">Toute efficacité opérationnelle</option>
+      <option value="Efficace">Efficace</option>
+      <option value="Partiellement efficace">Partiellement efficace</option>
+      <option value="Non efficace">Non efficace</option>
+    </select>
+    <span class="flex-1"></span>
+    <span class="text-xs text-base-content/60 whitespace-nowrap" id="compte">·</span>
+  </div>
+
+  <main class="p-0 min-h-[120px]">
+    <div class="overflow-auto max-h-[520px]">
+      <table class="table table-zebra table-sm w-full text-xs">
+        <thead>
+          <tr class="bg-base-200">
+            <th>ID</th><th>Contrôle</th><th>Date</th><th>Évaluateur</th>
+            <th>Efficacité opérationnelle</th><th>Résultat</th><th>Statut</th>
+            <th>Justification</th><th>Validation</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <div class="border-t border-base-300 bg-base-200/40">
+    <h3 class="text-xs uppercase tracking-wide text-base-content/60 m-0 px-5 pt-2.5 pb-1.5">Journal des actions (cette session)</h3>
+    <ul id="journal-list" class="list-none m-0 px-5 pb-3 max-h-[140px] overflow-auto"></ul>
+  </div>
+</div>
+
+</div>
+
+<!-- ================= panneau de saisie ================= -->
+<div class="overlay" id="overlay">
+  <div class="panel fixed top-0 right-0 bottom-0 w-[560px] max-w-[94vw] bg-base-100 shadow-2xl flex flex-col z-[51]">
+    <div class="p-4 px-5 border-b border-base-300 flex items-center justify-between gap-2.5">
+      <h2 id="p-titre" class="m-0 text-base font-semibold">Évaluer un contrôle</h2>
+      <button class="btn btn-sm btn-ghost btn-circle text-lg" id="p-close">&times;</button>
+    </div>
+    <div class="p-4 px-5 overflow-auto flex-1">
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Contrôle évalué <span class="text-error font-bold">*</span></label>
+        <select id="f-idcontrole" class="select select-bordered w-full"></select>
+        <div class="hint text-xs text-base-content/60 mt-1" id="derniere-eval" style="display:none"></div>
+      </div>
+
+      <div id="fiche-controle" class="fiche-ctrl border border-base-300 rounded-lg p-3 bg-base-200/40 -mt-0.5 mb-3.5 text-xs hidden">
+        <div class="font-semibold text-sm mb-1" id="fc-libelle">·</div>
+        <div class="flex gap-3.5 flex-wrap text-base-content/60">
+          <span>Type <b id="fc-type" class="text-base-content font-semibold">·</b></span>
+          <span>Fréquence <b id="fc-freq" class="text-base-content font-semibold">·</b></span>
+          <span>Statut <b id="fc-statut" class="text-base-content font-semibold">·</b></span>
+        </div>
+      </div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Type d'évaluation</div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Type d'évaluation</label>
+        <select id="f-type-eval" class="select select-bordered w-full">
+          <option value="">Sélectionner…</option>
+          <option value="Auto-évaluation">Auto-évaluation</option>
+          <option value="Revue indépendante">Revue indépendante</option>
+          <option value="Audit interne">Audit interne</option>
+          <option value="Audit externe">Audit externe</option>
+        </select>
+      </div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Conception</div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Adéquation de la conception</label>
+        <select id="f-adequation" class="select select-bordered w-full">
+          <option value="">Sélectionner…</option>
+          <option value="Adéquate">Adéquate</option>
+          <option value="À améliorer">À améliorer</option>
+          <option value="Inadéquate">Inadéquate</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Qualité de l'exécution</label>
+        <textarea id="f-qualite" class="textarea textarea-bordered w-full" rows="2" placeholder="Appréciation de la qualité des exécutions observées"></textarea>
+      </div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Efficacité</div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Efficacité opérationnelle <span class="text-error font-bold">*</span></label>
+        <select id="f-efficacite-op" class="select select-bordered w-full">
+          <option value="">Sélectionner…</option>
+          <option value="Efficace">Efficace</option>
+          <option value="Partiellement efficace">Partiellement efficace</option>
+          <option value="Non efficace">Non efficace</option>
+        </select>
+        <div class="text-xs text-base-content/60 mt-1">Exécuté ne veut pas dire efficace : cette conclusion est obligatoire.</div>
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Résultat</label>
+        <select id="f-resultat" class="select select-bordered w-full">
+          <option value="">Sélectionner…</option>
+          <option value="Efficace">Efficace</option>
+          <option value="Partiellement efficace">Partiellement efficace</option>
+          <option value="Non efficace">Non efficace</option>
+          <option value="Non concluant">Non concluant</option>
+        </select>
+        <div class="text-xs text-base-content/60 mt-1">Verdict de synthèse de l'évaluation (colonne « Résultat » de R06).</div>
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Limitations</label>
+        <textarea id="f-limitations" class="textarea textarea-bordered w-full" rows="2" placeholder="Limites ou dépendances identifiées"></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Mesures compensatoires</label>
+        <textarea id="f-mesures" class="textarea textarea-bordered w-full" rows="2" placeholder="Mesures qui compensent une limitation du contrôle"></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Conclusion</label>
+        <textarea id="f-conclusion" class="textarea textarea-bordered w-full" rows="2" placeholder="Synthèse de l'évaluation"></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Justification <span class="text-error font-bold">*</span></label>
+        <textarea id="f-justification" class="textarea textarea-bordered w-full" rows="3" placeholder="Éléments justifiant la conclusion d'efficacité"></textarea>
+      </div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Statut</div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Statut de l'évaluation</label>
+        <select id="f-statut" class="select select-bordered w-full">
+          <option value="Réalisée">Réalisée</option>
+          <option value="Provisoire">Provisoire</option>
+          <option value="Validée">Validée</option>
+        </select>
+      </div>
+    </div>
+    <div class="p-3.5 px-5 border-t border-base-300 bg-base-200/40 flex justify-end gap-2.5">
+      <button class="btn" id="p-annuler">Annuler</button>
+      <button class="btn btn-success" id="p-enregistrer">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==================================================================
+   Etat et donnees recues du serveur (getEfficaciteData)
+   ================================================================== */
+let DATA = null;             // { version, user, evaluations, controles }
+let EVALUATIONS = [];
+let CONTROLES = [];
+let REQUEST_ID = '';         // jeton d'idempotence cote client, regenere a chaque ouverture
+let JOURNAL = [];             // { t: heure, texte } local, append-only, non persiste
+let SAVING = false;
+let VALIDATING_ID = '';       // id de l'evaluation en cours de validation, pour desactiver le bouton
+
+/* ---------------- utilitaires ---------------- */
+function esc(v){
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function estVide(v){
+  return v === null || v === undefined || v === '' || (typeof v === 'string' && v.trim() === '');
+}
+function message(txt, type){
+  const m = document.getElementById('msg');
+  const cls = {info:'alert-info', warn:'alert-warning', err:'alert-error', ok:'alert-success'}[type] || 'alert-info';
+  m.className = 'alert ' + cls + ' mx-5 mt-3 text-sm py-2';
+  m.textContent = txt;
+  if(type === 'ok' || type === 'info') setTimeout(function(){ m.classList.add('hidden'); }, 6000);
+}
+function onError(err){
+  const txt = (err && err.message) ? err.message
+    : "Une erreur est survenue côté serveur. Aucune donnée n'a été enregistrée.";
+  message(txt, 'err');
+  try { console.error(err); } catch(e) {}
+}
+function heure(){
+  const d = new Date();
+  return d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+}
+function journaliser(texte){
+  JOURNAL.unshift({ t: heure(), texte: texte });
+  if(JOURNAL.length > 50) JOURNAL.length = 50;
+  peindreJournal();
+}
+function peindreJournal(){
+  const ul = document.getElementById('journal-list');
+  if(!JOURNAL.length){
+    ul.innerHTML = '<li class="italic text-base-content/50">Aucune action enregistrée dans cette session pour le moment.</li>';
+    return;
+  }
+  ul.innerHTML = JOURNAL.map(function(e){
+    return '<li class="text-xs py-1 border-b border-dashed border-base-300 last:border-0"><span class="text-base-content/50 text-[11px] mr-1.5">' + esc(e.t) + '</span>' + esc(e.texte) + '</li>';
+  }).join('');
+}
+function dateCourte(d){
+  if(!d) return '';
+  const x = (d instanceof Date) ? d : new Date(d);
+  return isNaN(x.getTime()) ? String(d) : x.toLocaleDateString('fr-FR');
+}
+function jetonUnique(){
+  return 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+}
+
+function couleurEfficacite(v){
+  const s = String(v || '').toLowerCase();
+  if(s === 'efficace') return 'badge-success';
+  if(s.indexOf('partiellement') !== -1) return 'badge-warning';
+  if(s.indexOf('non efficace') !== -1) return 'badge-error';
+  return 'badge-neutral';
+}
+
+function remplirSelect(id, valeurs, videLabel){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.innerHTML = '';
+  el.appendChild(new Option(videLabel || 'Sélectionner…', ''));
+  valeurs.forEach(function(v){ el.appendChild(new Option(v, v)); });
+}
+
+function controleParId(id){
+  return CONTROLES.filter(function(c){ return String(c.id) === String(id); })[0] || null;
+}
+function libelleControle(id){
+  const c = controleParId(id);
+  return c ? (c.libelle || c.id) : id;
+}
+
+/* ==================================================================
+   Tableau : filtre + rendu
+   ================================================================== */
+function evaluationsFiltrees(){
+  const q = (document.getElementById('q').value || '').toLowerCase();
+  const fc = document.getElementById('f-controle').value;
+  const fe = document.getElementById('f-efficacite').value;
+  return EVALUATIONS.filter(function(e){
+    if(fc && e.idControle !== fc) return false;
+    if(fe && e.efficaciteOperationnelle !== fe) return false;
+    if(!q) return true;
+    return String(e.id).toLowerCase().indexOf(q) !== -1 ||
+      String(e.idControle).toLowerCase().indexOf(q) !== -1 ||
+      libelleControle(e.idControle).toLowerCase().indexOf(q) !== -1 ||
+      String(e.evaluateur || '').toLowerCase().indexOf(q) !== -1 ||
+      String(e.justification || '').toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function peindreTableau(){
+  const tbody = document.getElementById('tbody');
+  const liste = evaluationsFiltrees().slice().sort(function(a, b){
+    return String(b.id).localeCompare(String(a.id));
+  });
+  document.getElementById('compte').textContent = liste.length + ' évaluation' + (liste.length > 1 ? 's' : '') +
+    ' sur ' + EVALUATIONS.length;
+
+  if(!liste.length){
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center italic text-base-content/50 py-6">' +
+      (EVALUATIONS.length ? 'Aucune évaluation ne correspond à cette recherche.' : "Aucune évaluation d'efficacité enregistrée pour l'instant.") +
+      '</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = liste.map(function(e){
+    const dejaValidee = !estVide(e.validateur);
+    const memePersonne = DATA && DATA.user && DATA.user.email &&
+      String(DATA.user.email).toLowerCase() === String(e.evaluateur || '').toLowerCase();
+    let validationCell;
+    if(dejaValidee){
+      validationCell = '<span class="text-xs">' + esc(e.validateur) +
+        (e.dateValidation ? '<br>' + esc(dateCourte(e.dateValidation)) : '') + '</span>';
+    } else if(memePersonne){
+      validationCell = '<span class="text-xs" title="L\\'évaluateur ne peut pas valider sa propre évaluation.">— (auto-évaluée)</span>';
+    } else {
+      validationCell = '<button class="btn btn-xs btn-success btn-valider" data-id="' + esc(e.id) + '"' +
+        (VALIDATING_ID === e.id ? ' disabled' : '') + '>Valider</button>';
+    }
+    return '<tr>' +
+      '<td class="text-base-content/60 text-xs">' + esc(e.id) + '</td>' +
+      '<td class="font-semibold max-w-[260px]">' + esc(e.idControle) + '<br><span class="text-base-content/60 text-xs">' + esc(libelleControle(e.idControle)) + '</span></td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(dateCourte(e.dateEval)) + '</td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(e.evaluateur || '—') + '</td>' +
+      '<td><span class="badge ' + couleurEfficacite(e.efficaciteOperationnelle) + '">' +
+        esc(e.efficaciteOperationnelle || '·') + '</span></td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(e.resultat || '—') + '</td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(e.statut || '—') + '</td>' +
+      '<td class="max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap" title="' + esc(e.justification || '') + '">' + esc(e.justification || '—') + '</td>' +
+      '<td>' + validationCell + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+/* ==================================================================
+   Validation d'une evaluation (circuit R06, maker-checker)
+   ================================================================== */
+function validerEvaluation(id){
+  if(VALIDATING_ID) return;
+  VALIDATING_ID = id;
+  peindreTableau();
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res && Array.isArray(res.evaluations)) EVALUATIONS = res.evaluations;
+      journaliser('Évaluation validée : ' + id);
+      message('Évaluation ' + id + ' validée.', 'ok');
+      VALIDATING_ID = '';
+      peindreTableau();
+    })
+    .withFailureHandler(function(e){
+      VALIDATING_ID = '';
+      onError(e);
+      peindreTableau();
+    })
+    .validerEfficacite(id, '');
+}
+
+/* ==================================================================
+   Panneau de saisie (evaluation d'un controle, toujours une nouvelle ligne)
+   ================================================================== */
+function afficherFicheControle(id){
+  const box = document.getElementById('fiche-controle');
+  const c = controleParId(id);
+  if(!c){ box.classList.remove('on'); box.classList.add('hidden'); return; }
+  box.classList.add('on'); box.classList.remove('hidden');
+  document.getElementById('fc-libelle').textContent = c.id + ' · ' + (c.libelle || '·');
+  document.getElementById('fc-type').textContent = c.type || '·';
+  document.getElementById('fc-freq').textContent = c.frequence || '·';
+  document.getElementById('fc-statut').textContent = c.statut || '·';
+}
+
+function derniereEvaluationDe(idControle){
+  const liste = EVALUATIONS.filter(function(e){ return e.idControle === idControle; });
+  return liste.length ? liste[liste.length - 1] : null;
+}
+function afficherDerniereEvaluation(id){
+  const box = document.getElementById('derniere-eval');
+  const derniere = id ? derniereEvaluationDe(id) : null;
+  if(!derniere){ box.style.display = 'none'; box.textContent = ''; return; }
+  box.style.display = 'block';
+  box.textContent = 'Dernière évaluation : ' + (derniere.efficaciteOperationnelle || '·') +
+    (derniere.dateEval ? ' le ' + dateCourte(derniere.dateEval) : '');
+}
+
+function nettoyerMarques(){
+  document.querySelectorAll('#overlay .manque').forEach(function(e){ e.classList.remove('manque'); });
+}
+
+function reinitialiserFormulaire(){
+  document.getElementById('f-idcontrole').value = '';
+  document.getElementById('f-type-eval').value = '';
+  document.getElementById('f-adequation').value = '';
+  document.getElementById('f-qualite').value = '';
+  document.getElementById('f-efficacite-op').value = '';
+  document.getElementById('f-resultat').value = '';
+  document.getElementById('f-limitations').value = '';
+  document.getElementById('f-mesures').value = '';
+  document.getElementById('f-conclusion').value = '';
+  document.getElementById('f-justification').value = '';
+  document.getElementById('f-statut').value = 'Réalisée';
+  afficherFicheControle('');
+  afficherDerniereEvaluation('');
+  nettoyerMarques();
+}
+
+function ouvrirPanneau(idPreselectionne){
+  nettoyerMarques();
+  reinitialiserFormulaire();
+  REQUEST_ID = jetonUnique();
+  if(idPreselectionne){
+    document.getElementById('f-idcontrole').value = idPreselectionne;
+    afficherFicheControle(idPreselectionne);
+    afficherDerniereEvaluation(idPreselectionne);
+  }
+  document.getElementById('overlay').classList.add('on');
+}
+function fermerPanneau(){
+  document.getElementById('overlay').classList.remove('on');
+  nettoyerMarques();
+}
+
+/* ---------------- validation cote client, miroir du serveur ---------------- */
+function champsManquantsFormulaire(){
+  const manquants = [];
+  if(estVide(document.getElementById('f-idcontrole').value)) manquants.push(['f-idcontrole', 'Le contrôle évalué est obligatoire.']);
+  if(estVide(document.getElementById('f-efficacite-op').value)) manquants.push(['f-efficacite-op',
+    "La conclusion sur l'efficacité opérationnelle est obligatoire : exécuté ne veut pas dire efficace."]);
+  if(estVide(document.getElementById('f-justification').value)) manquants.push(['f-justification', "La justification de l'évaluation est obligatoire."]);
+  return manquants;
+}
+function signalerManquantsFormulaire(manquants){
+  nettoyerMarques();
+  manquants.forEach(function(m){
+    const el = document.getElementById(m[0]);
+    if(el) el.classList.add('manque');
+  });
+  if(manquants.length && document.getElementById(manquants[0][0])){
+    try { document.getElementById(manquants[0][0]).scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch(e){}
+  }
+}
+
+function enregistrerEvaluation(){
+  if(SAVING) return;
+  const manquants = champsManquantsFormulaire();
+  if(manquants.length){
+    signalerManquantsFormulaire(manquants);
+    message(manquants.length === 1 ? manquants[0][1]
+      : manquants.length + ' champs obligatoires ne sont pas renseignés.', 'warn');
+    return;
+  }
+  nettoyerMarques();
+
+  const idControle = document.getElementById('f-idcontrole').value;
+  const payload = {
+    idControle: idControle,
+    typeEval: document.getElementById('f-type-eval').value,
+    adequationConception: document.getElementById('f-adequation').value,
+    qualiteExecution: document.getElementById('f-qualite').value.trim(),
+    efficaciteOperationnelle: document.getElementById('f-efficacite-op').value,
+    resultat: document.getElementById('f-resultat').value,
+    limitations: document.getElementById('f-limitations').value.trim(),
+    mesuresCompensatoires: document.getElementById('f-mesures').value.trim(),
+    conclusion: document.getElementById('f-conclusion').value.trim(),
+    justification: document.getElementById('f-justification').value.trim(),
+    statut: document.getElementById('f-statut').value,
+    requestId: REQUEST_ID
+  };
+
+  SAVING = true;
+  const bEnr = document.getElementById('p-enregistrer');
+  const bAnn = document.getElementById('p-annuler');
+  bEnr.disabled = true; bAnn.disabled = true;
+  const texteInitial = bEnr.textContent;
+  bEnr.textContent = 'Enregistrement…';
+
+  function fini(){
+    SAVING = false;
+    bEnr.disabled = false; bAnn.disabled = false; bEnr.textContent = texteInitial;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res && Array.isArray(res.evaluations)) EVALUATIONS = res.evaluations;
+      const nouveauId = res ? res.id : '·';
+      journaliser('Évaluation créée : ' + nouveauId + ' · ' + idControle + ' · ' + payload.efficaciteOperationnelle);
+      message('Évaluation ' + nouveauId + ' enregistrée.', 'ok');
+      fini();
+      fermerPanneau();
+      peindreTableau();
+    })
+    .withFailureHandler(function(e){
+      fini();
+      onError(e);
+    })
+    .enregistrerEvaluationEfficacite(payload);
+}
+
+/* ==================================================================
+   Chargement initial
+   ================================================================== */
+function onEfficaciteData(data){
+  if(!data){
+    message("Les données du classeur n'ont pas pu être chargées. Lancez Risk Management > " +
+      "Administration > Contrôler l'installation des scripts.", 'err');
+    return;
+  }
+  DATA = data;
+  EVALUATIONS = Array.isArray(data.evaluations) ? data.evaluations : [];
+  CONTROLES = Array.isArray(data.controles) ? data.controles : [];
+
+  const optionsControles = CONTROLES.map(function(c){ return { valeur: c.id, texte: c.id + ' · ' + (c.libelle || '') }; });
+
+  const selFiltre = document.getElementById('f-controle');
+  selFiltre.innerHTML = '';
+  selFiltre.appendChild(new Option('Tous les contrôles', ''));
+  optionsControles.forEach(function(o){ selFiltre.appendChild(new Option(o.texte, o.valeur)); });
+
+  const selForm = document.getElementById('f-idcontrole');
+  selForm.innerHTML = '';
+  selForm.appendChild(new Option('Sélectionner…', ''));
+  optionsControles.forEach(function(o){ selForm.appendChild(new Option(o.texte, o.valeur)); });
+
+  if(data.user && !data.user.reconnu){
+    message("Votre compte (" + (data.user.email || 'inconnu') + ") n'est pas présent dans la feuille " +
+      "UTILISATEURS. L'enregistrement sera refusé.", 'err');
+  } else if(data.user && !data.user.actif){
+    message('Votre compte est inactif dans la feuille UTILISATEURS.', 'err');
+  }
+
+  if(data.version){
+    document.title = 'Efficacité des contrôles';
+  }
+
+  peindreTableau();
+  peindreJournal();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('btn-nouveau').onclick = function(){ ouvrirPanneau(null); };
+  document.getElementById('p-close').onclick = fermerPanneau;
+  document.getElementById('p-annuler').onclick = fermerPanneau;
+  document.getElementById('p-enregistrer').onclick = enregistrerEvaluation;
+  document.getElementById('overlay').addEventListener('click', function(e){
+    if(e.target.id === 'overlay') fermerPanneau();
+  });
+  document.getElementById('f-idcontrole').addEventListener('change', function(e){
+    e.target.classList.remove('manque');
+    afficherFicheControle(e.target.value);
+    afficherDerniereEvaluation(e.target.value);
+  });
+  ['input','change'].forEach(function(ev){
+    document.getElementById('overlay').addEventListener(ev, function(e){
+      if(e.target && e.target.classList && e.target.classList.contains('manque')){
+        e.target.classList.remove('manque');
+      }
+    }, true);
+  });
+  document.getElementById('q').oninput = peindreTableau;
+  document.getElementById('f-controle').onchange = peindreTableau;
+  document.getElementById('f-efficacite').onchange = peindreTableau;
+  document.getElementById('tbody').addEventListener('click', function(e){
+    const btn = e.target.closest('.btn-valider');
+    if(btn && btn.dataset.id) validerEvaluation(btn.dataset.id);
+  });
+
+  peindreJournal();
+
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message("Environnement Google Apps Script non détecté. Ouvrez cette page depuis le menu Risk Management.", 'err');
+    return;
+  }
+  google.script.run.withSuccessHandler(onEfficaciteData).withFailureHandler(onError).getEfficaciteData();
+});
+</script>
+
+</body>
+</html>

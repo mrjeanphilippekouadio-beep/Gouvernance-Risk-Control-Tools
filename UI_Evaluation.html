@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     FICHIER  : UI_Evaluation            type : HTML (.html)
+     SECTION  : MENU 1 · Évaluation des risques
+     VA AVEC  : 10_Evaluation (Script)
+     MARQUEUR UI_Evaluation v9   (lu par Administration > Controler l'installation)
+     ===================================================================== -->
+<html lang="fr">
+<head>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+:root{
+  color-scheme: light only;
+  --bg:#F4F6F9; --surface:#FFFFFF; --surface-2:#FAFBFC;
+  --border:#D8DEE6; --border-strong:#B9C3CF;
+  --text:#16202C; --muted:#5B6877; --primary:#1F5FA8; --primary-soft:#E8F0FA;
+  --warn-bg:#FFF6DC; --warn-text:#7A5A00;
+  --danger:#B3261E; --ok:#1B7F3B;
+  --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 12px rgba(16,24,40,.06);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+
+*{box-sizing:border-box}
+html,body{color-scheme:light only;}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 var(--font);}
+.wrap{max-width:1180px;margin:0 auto;padding:16px;}
+
+.shell{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  box-shadow:var(--shadow);overflow:hidden;}
+header{padding:16px 20px 12px;border-bottom:1px solid var(--border);}
+header h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
+
+.steps{display:flex;gap:6px;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.steps div{flex:1;font-size:12px;color:var(--muted);padding:7px 10px;border-radius:8px;text-align:center;
+  border:1px solid transparent}
+.steps div.active{background:var(--primary-soft);color:var(--primary);font-weight:650;border-color:var(--border)}
+.steps div.done{color:var(--ok)}
+
+main{padding:18px 20px;min-height:430px}
+.panel{display:none}.panel.on{display:block}
+
+label.lbl{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin:0 0 4px;
+  text-transform:uppercase;letter-spacing:.03em}
+/* L'asterisque est pose par le formulaire d'apres CONFIG, jamais ecrit en dur
+   dans le HTML : le marquage suit donc le parametrage sans retouche de code. */
+.req{color:#B3261E;font-weight:700;margin-left:1px}
+/* Champ obligatoire laisse vide : la marque accompagne le message, elle
+   s'efface des la premiere saisie. */
+.manque{border-color:#B3261E !important;
+  box-shadow:0 0 0 3px rgba(179,38,30,.14) !important;background:#FFF7F6 !important}
+select.manque, .manque select{border-color:#B3261E !important}
+.subsect .req{margin-left:2px}
+.field{margin-bottom:12px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+.sect{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--primary);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.sect:first-child{margin-top:0}
+
+/* ---- grille de cotation face a face ---- */
+.cot{width:100%;border-collapse:separate;border-spacing:0}
+.cot th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+  font-weight:650;padding:0 8px 8px;text-align:left}
+.cot th.c{text-align:center}
+.cot td{padding:4px 8px;vertical-align:middle;border-top:1px solid var(--border)}
+.cot tr:first-child td{border-top:none}
+.cot td.ax{width:190px;font-size:13px;font-weight:600}
+.cot td.ct{width:calc((100% - 190px)/2)}
+.cot tr.head-p td{background:var(--surface-2)}
+
+/* ---- slicer de probabilite : cinq paliers cliquables ---- */
+.probwrap{border:1px solid var(--border);border-radius:10px;background:var(--surface-2);
+  padding:10px 12px 12px;margin-bottom:14px}
+.slicer{display:flex;gap:5px}
+.slicer button{flex:1;padding:9px 0;border:1px solid var(--border-strong);background:var(--surface);
+  color:var(--text);font:14px var(--font);font-weight:750;border-radius:8px;cursor:pointer;
+  transition:transform .08s ease}
+.slicer button:hover{border-color:var(--primary);transform:translateY(-1px)}
+.slicer button.on{color:#fff;border-color:transparent;box-shadow:0 2px 6px rgba(16,24,40,.18)}
+.slicer-def{margin-top:7px;font-size:12px;color:var(--muted);line-height:1.42;min-height:50px}
+.slicer-def b{color:var(--text);display:block;margin-bottom:2px}
+.subsect{display:flex;align-items:baseline;gap:8px;margin:2px 0 8px;font-size:12px;color:var(--muted)}
+.subsect b{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text)}
+.etape{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;
+  background:var(--primary);color:#fff;font-size:11px;font-weight:700;flex:none}
+
+/* ---- liste deroulante personnalisee (le texte peut passer a la ligne) ---- */
+.cb{position:relative}
+.cb-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 10px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);
+  color:var(--text);font:13.5px var(--font);cursor:pointer;text-align:left}
+.cb-btn:hover{border-color:var(--primary)}
+.cb-btn .ph{color:var(--muted)}
+.cb-btn .chev{color:var(--muted);font-size:11px}
+.cb-btn .pill{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;
+  border-radius:6px;font-size:12px;font-weight:700;color:#fff;margin-right:8px;flex:none}
+.cb-list{position:absolute;z-index:40;top:calc(100% + 4px);left:0;width:460px;max-width:78vw;
+  background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;
+  box-shadow:0 10px 28px rgba(16,24,40,.18);padding:5px;display:none;max-height:340px;overflow:auto}
+.cb.open .cb-list{display:block}
+.cb-list.right{left:auto;right:0}
+.cb-opt{display:flex;gap:9px;padding:8px 9px;border-radius:8px;cursor:pointer;align-items:flex-start}
+.cb-opt:hover{background:var(--primary-soft)}
+.cb-opt.sel{background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary)}
+.cb-opt .pill{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+  border-radius:6px;font-size:12px;font-weight:700;color:#fff;margin-top:1px}
+.cb-opt .txt{min-width:0}
+.cb-opt .t1{font-size:12.5px;font-weight:650;margin-bottom:2px}
+.cb-opt .t2{font-size:12px;color:var(--muted);line-height:1.38}
+
+/* ---- scores ---- */
+.scores{display:grid;grid-template-columns:190px 1fr 1fr;gap:0 16px;margin-top:14px;align-items:stretch}
+.scorebox{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface-2);
+  display:flex;align-items:center;gap:12px}
+.scorebox .n{font-size:26px;font-weight:750;line-height:1;min-width:44px;text-align:center}
+.scorebox .meta{min-width:0}
+.tag{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;color:#fff}
+.scorebox .sub{font-size:11.5px;color:var(--muted);margin-top:3px}
+.gauge{height:6px;border-radius:999px;margin-top:7px;background:linear-gradient(90deg,
+  hsl(145 70% 26%), hsl(90 62% 34%), hsl(48 88% 46%), hsl(24 88% 48%), hsl(0 78% 47%));position:relative}
+.gauge i{position:absolute;top:-3px;width:3px;height:12px;background:var(--text);border-radius:2px;
+  transform:translateX(-1px)}
+.delta{grid-column:2/4;margin-top:10px;font-size:12.5px;color:var(--muted);text-align:center;
+  border:1px dashed var(--border-strong);border-radius:8px;padding:7px}
+
+/* ---- maitrise ---- */
+.ldg{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surface-2)}
+.ldg .hd{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
+.ldg .hd b{font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden}
+.seg button{border:none;background:var(--surface);color:var(--text);font:12.5px var(--font);font-weight:650;
+  padding:6px 12px;cursor:pointer;border-right:1px solid var(--border)}
+.seg button:last-child{border-right:none}
+.seg button.on{color:#fff}
+.seg button.na{font-weight:500;color:var(--muted)}
+.aide{margin-top:9px;padding:8px 10px;border-radius:8px;background:var(--surface);
+  border:1px solid var(--border);border-left:3px solid var(--border-strong)}
+.aide .ttl{font-size:11.5px;font-weight:700;letter-spacing:.02em;margin-bottom:6px}
+.aide .vide{font-size:12px;color:var(--muted);font-style:italic}
+.aide table{width:100%;border-collapse:collapse}
+.aide td{font-size:12px;padding:4px 6px;vertical-align:top;border-bottom:1px solid var(--border)}
+.aide td:first-child{width:112px;color:var(--muted);font-weight:650}
+.aide tr:last-child td{border-bottom:none}
+.link{background:none;border:none;color:var(--primary);font:12px var(--font);font-weight:650;
+  cursor:pointer;padding:0;text-decoration:underline}
+
+footer{display:flex;justify-content:space-between;gap:10px;padding:14px 20px;
+  border-top:1px solid var(--border);background:var(--surface-2)}
+.rec{display:flex;justify-content:flex-end;margin:10px 0 0}
+.sum{border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface-2)}
+.sum div{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;padding:4px 0;
+  border-bottom:1px solid var(--border)}
+.sum div:last-child{border-bottom:none}
+.sum div.renvoi{background:var(--warn-bg);color:var(--warn-text);padding:7px 9px;border-radius:7px;
+  margin-top:6px;border-bottom:none}
+.sum div.renvoi span:first-child{color:var(--warn-text);font-weight:650}
+.sum span:first-child{color:var(--muted)}
+.hint{font-size:11.5px;color:var(--muted);margin-top:4px}
+ul.rl{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto;border:1px solid var(--border-strong);
+  border-radius:8px}
+ul.rl li{padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px}
+ul.rl li:last-child{border-bottom:none}
+ul.rl li:hover{background:var(--primary-soft)}
+ul.rl li.actif{background:var(--primary-soft);outline:2px solid var(--primary);outline-offset:-2px}
+ul.rl li.vide{color:var(--muted);font-style:italic;cursor:default}
+ul.rl li.vide:hover{background:transparent}
+.rl-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.rl-int{margin-top:2px;font-size:13px;line-height:1.35}
+.rl-meta{margin-top:2px;font-size:11px;color:var(--muted)}
+.pastille{flex:none;min-width:24px;height:20px;border-radius:6px;color:#fff;font-size:11.5px;
+  font-weight:750;display:inline-flex;align-items:center;justify-content:center;padding:0 6px}
+ul.rl li.sel{background:var(--primary-soft);box-shadow:inset 3px 0 0 var(--primary)}
+ul.rl li .id{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace}
+@media (max-width:820px){
+  .cot td.ax{width:120px}.cb-list{width:min(440px,86vw)}
+  .scores{grid-template-columns:1fr}.delta{grid-column:1}
+}
+</style>
+
+</head>
+<body data-mode="<?= modeInitial ?>" class="bg-base-200 text-base-content text-sm">
+<div class="navbar bg-base-100 border-b border-base-300 min-h-0 py-2 px-4">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-[1180px] mx-auto p-4">
+
+<div class="bg-base-100 border border-base-300 rounded-2xl shadow overflow-hidden">
+  <header class="p-4 pb-3 border-b border-base-300">
+    <h1 class="m-0 text-lg font-semibold tracking-tight">Évaluation des risques</h1>
+  </header>
+
+  <div class="steps">
+    <div data-s="1" class="active">1 · Risque</div>
+    <div data-s="2">2 · Cotation et maîtrise</div>
+    <div data-s="3">3 · Dynamique et décision</div>
+  </div>
+
+  <div id="msg" class="alert hidden mx-5 mt-3 text-sm py-2"></div>
+
+  <main>
+    <!-- ================= 1 ================= -->
+    <section class="panel on" data-p="1">
+      <div class="field">
+        <label class="lbl">Mode</label>
+        <label class="text-sm mr-4">
+          <input type="radio" name="mode" value="existing" class="radio radio-sm align-middle mr-1" checked> Réévaluer un risque existant</label>
+        <label class="text-sm">
+          <input type="radio" name="mode" value="new" class="radio radio-sm align-middle mr-1"> Évaluer un nouveau risque</label>
+      </div>
+
+      <div id="p-exist">
+        <div class="field">
+          <label class="lbl">Rechercher</label>
+          <input type="text" id="q" class="input input-bordered w-full" placeholder="Identifiant ou intitulé">
+        </div>
+        <ul class="rl" id="rl"></ul>
+        <div id="lastev" class="sum" style="margin-top:10px;display:none"></div>
+      </div>
+
+      <div class="sect" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>Fiche du risque</span>
+        <button class="link" id="fiche-toggle" style="text-transform:none;letter-spacing:0">Replier</button>
+      </div>
+      <p class="hint" id="fiche-note" style="margin:-4px 0 10px"></p>
+
+      <div id="fiche">
+        <div class="field"><label class="lbl">Intitulé du risque *</label><input type="text" id="f-int" class="input input-bordered w-full"></div>
+        <div class="row3">
+          <div class="field"><label class="lbl">Entité</label><select id="f-ent" class="select select-bordered w-full"></select></div>
+          <div class="field"><label class="lbl">Pays</label><select id="f-pays" class="select select-bordered w-full"></select></div>
+          <div class="field"><label class="lbl">Département / Fonction</label><input type="text" id="f-dep" class="input input-bordered w-full"></div>
+        </div>
+        <div class="row3">
+          <div class="field"><label class="lbl">Catégorie *</label><select id="f-cat" class="select select-bordered w-full"></select></div>
+          <div class="field"><label class="lbl">Sous-catégorie</label><select id="f-sc" class="select select-bordered w-full"></select></div>
+          <div class="field"><label class="lbl">Processus *</label><input type="text" id="f-proc" class="input input-bordered w-full"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label class="lbl">Objectif concerné</label><input type="text" id="f-obj" class="input input-bordered w-full"
+            placeholder="Objectif de l'entité que ce risque menace"></div>
+          <div class="field"><label class="lbl">Propriétaire du risque</label><input type="text" id="f-own" class="input input-bordered w-full"></div>
+        </div>
+        <div class="field"><label class="lbl">Description du risque</label><textarea id="f-desc" class="textarea textarea-bordered w-full" rows="3"></textarea></div>
+        <div class="row2">
+          <div class="field"><label class="lbl">Causes principales</label><textarea id="f-causes" class="textarea textarea-bordered w-full" rows="3"></textarea></div>
+          <div class="field"><label class="lbl">Conséquences principales</label><textarea id="f-cons" class="textarea textarea-bordered w-full" rows="3"></textarea></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label class="lbl">Contrôles associés</label><input type="text" id="f-ctrl" class="input input-bordered w-full"
+            placeholder="Identifiants de la matrice de contrôles, séparés par des virgules"></div>
+          <div class="field"><label class="lbl">KRI associés</label><input type="text" id="f-kri" class="input input-bordered w-full"
+            placeholder="Identifiants des indicateurs de risque"></div>
+        </div>
+      </div>
+
+      <div class="field" style="max-width:320px;margin-top:14px">
+        <label class="lbl">Type d'évaluation *</label><select id="tev" class="select select-bordered w-full"></select>
+      </div>
+    </section>
+
+    <!-- ================= 2 ================= -->
+    <section class="panel" data-p="2">
+      <div class="sect">Cotation, inhérent face au résiduel</div>
+
+      <div class="probwrap">
+        <div class="subsect"><span class="etape">1</span><b class="etape-proba">Probabilité de survenance</b>
+          <span>un seul choix par colonne, il multiplie le score</span></div>
+        <table class="cot">
+          <thead><tr><th></th><th class="c">Inhérent</th><th class="c">Résiduel</th></tr></thead>
+          <tbody id="probrow"></tbody>
+        </table>
+      </div>
+
+      <div class="subsect"><span class="etape">2</span><b class="etape-imp">Impacts par axe</b>
+        <span>les sept axes sont à coter, le score retient le maximum</span></div>
+      <table class="cot">
+        <tbody id="grid"></tbody>
+      </table>
+
+      <div class="rec">
+        <button class="btn btn-sm" id="vierge" style="margin-right:8px">Repartir d'une cotation vierge</button>
+        <button class="btn btn-sm" id="copy">Recopier l'inhérent vers le résiduel</button>
+      </div>
+
+      <div class="scores">
+        <div style="display:flex;align-items:center;font-size:12px;color:var(--muted)">Score et criticité</div>
+        <div class="scorebox"><div class="n" id="si">·</div>
+          <div class="meta"><span class="tag" id="ti">·</span><div class="sub" id="di">Inhérent</div>
+          <div class="gauge"><i id="gi" style="left:0;display:none"></i></div></div></div>
+        <div class="scorebox"><div class="n" id="sr">·</div>
+          <div class="meta"><span class="tag" id="tr">·</span><div class="sub" id="dr">Résiduel, après dispositif de maîtrise</div>
+          <div class="gauge"><i id="gr" style="left:0;display:none"></i></div></div></div>
+        <div class="delta" id="delta">·</div>
+      </div>
+
+      <div class="field" style="margin-top:16px">
+        <label class="lbl">Justification de la probabilité résiduelle</label>
+        <textarea id="jpr" class="textarea textarea-bordered w-full" rows="2" placeholder="Ce qui justifie l'écart de probabilité entre inhérent et résiduel"></textarea>
+      </div>
+
+      <div class="sect">Dispositif de maîtrise</div>
+      <div class="field">
+        <label class="lbl">Mesures de maîtrise principales</label>
+        <textarea id="mes" class="textarea textarea-bordered w-full" rows="2" placeholder="Vue d'ensemble du dispositif"></textarea>
+      </div>
+      <div id="lignes"></div>
+      <div class="scorebox" style="margin-top:4px">
+        <div class="n" id="mg" style="font-size:18px">·</div>
+        <div class="meta"><span class="tag" id="mgt">Maîtrise globale</span>
+          <div class="sub" id="mgs">Moyenne des lignes de défense renseignées</div></div>
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label class="lbl">Justification de la maîtrise</label>
+        <textarea id="jm" class="textarea textarea-bordered w-full" rows="2"></textarea>
+      </div>
+    </section>
+
+    <!-- ================= 3 ================= -->
+    <section class="panel" data-p="3">
+      <div class="sect">Dynamique</div>
+      <div class="row3">
+        <div class="field"><label class="lbl">Vélocité</label><select id="velo" class="select select-bordered w-full"></select>
+          <div class="hint" id="velo-d"></div></div>
+        <div class="field"><label class="lbl">Persistance</label><select id="pers" class="select select-bordered w-full"></select>
+          <div class="hint" id="pers-d"></div></div>
+        <div class="field"><label class="lbl">Tendance</label><select id="tend" class="select select-bordered w-full"></select>
+          <div class="hint" id="tend-d"></div></div>
+      </div>
+
+      <div class="sect">Appétence</div>
+      <div class="row2">
+        <div class="field">
+          <label class="lbl">Seuil applicable</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" id="app" class="input input-bordered" min="1" max="25" style="max-width:110px">
+            <span class="hint" id="app-src" style="margin:0"></span>
+          </div>
+          <div class="hint">Proposé depuis l'onglet APPETENCE, modifiable.</div>
+        </div>
+        <div class="field"><label class="lbl">Positionnement</label>
+          <div style="padding-top:5px"><span class="tag" id="pos">·</span></div></div>
+      </div>
+
+      <div class="sect">Décision</div>
+      <div class="row2">
+        <div class="field"><label class="lbl">Décision de traitement *</label><select id="dec" class="select select-bordered w-full"></select></div>
+        <div class="field"><label class="lbl">Justification</label><textarea id="jd" class="textarea textarea-bordered w-full" rows="2"></textarea></div>
+        <div class="field"><label class="lbl">Actions associées</label>
+          <input type="text" id="act" class="input input-bordered w-full" placeholder="Identifiants du plan d'actions, séparés par des virgules"></div>
+      </div>
+
+      <div class="sect">Résumé</div>
+      <div class="sum" id="sum"></div>
+    </section>
+  </main>
+
+  <footer>
+    <button class="btn btn-sm" id="back" style="visibility:hidden">Retour</button>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-sm" id="reset">Réinitialiser</button>
+      <button class="btn btn-sm btn-primary" id="next">Suivant</button>
+      <button class="btn btn-sm btn-success" id="save" style="display:none">Enregistrer</button>
+    </div>
+  </footer>
+</div>
+
+</div>
+  <script>
+let DATA = null;
+
+let PERSISTANCE = [];
+let TENDANCE_DEFAUT = 'Nouvelle';
+const TENDANCE_LIB = {"↑":"↑  En hausse","→":"→  Stable","↓":"↓  En baisse",
+  "Nouvelle":"Nouvelle · première évaluation"};
+
+let AXES = [], NIV_IMPACT = [], PROBA = [], MAITRISE = { dimensions: [], niveaux: [] };
+
+let S = null;
+function vierge(){
+  return {
+    step:1, mode:'existing', riskId:null, newRisk:{}, typeEval:'',
+    inh:{p:null, imp:AXES.map(()=>null)},
+    res:{p:null, imp:AXES.map(()=>null), justif:''},
+    mast:{mes:'', l1:{n:null,na:false,txt:''}, l2:{n:null,na:false,txt:''}, l3:{n:null,na:false,txt:''}, justif:''},
+    dyn:{velo:'', pers:'', tend:TENDANCE_DEFAUT},
+    appet:null, appetSrc:'', dec:'', decJustif:'', saving:false,
+    histo:null, tendanceManuelle:false, nbEvaluations:0, actions:''
+  };
+}
+
+/* ---------------- couleurs de score ---------------- */
+function couleurScore(s){
+  if(s===null||s===undefined||s==='') return null;
+  const t = Math.max(0, Math.min(1, (Number(s)-1)/24));
+  const h = 145 - t*145, sat = 66 + t*12, l = 26 + t*21;
+  return `hsl(${h.toFixed(0)} ${sat.toFixed(0)}% ${l.toFixed(0)}%)`;
+}
+function couleurNiveauCote(n){ // n de 1 a 5
+  return couleurScore(1 + (n-1)*6);
+}
+// Seuils de criticite : ceux de CONFIG, recus au chargement. Ces valeurs
+// ne servent que tant que le classeur n'a pas repondu.
+let SEUILS = [{min:1,max:4,label:'Faible'},{min:5,max:9,label:'Modéré'},{min:10,max:14,label:'Élevé'},
+  {min:15,max:19,label:'Majeur'},{min:20,max:25,label:'Critique'}];
+function niveauTexte(s){
+  if(s===null||s===undefined||s==='') return '';
+  const v=Number(s);
+  for(let i=0;i<SEUILS.length;i++){ if(v>=SEUILS[i].min && v<=SEUILS[i].max) return SEUILS[i].label; }
+  return SEUILS.length ? SEUILS[SEUILS.length-1].label : '';
+}
+// Valeur lue dans le classeur : nombre, ou null si vide ou illisible.
+function num(v){
+  if(v===null||v===undefined||v==='') return null;
+  const n=Number(v); return isNaN(n)?null:n;
+}
+
+/* ---------------- liste deroulante personnalisee ---------------- */
+function combo(host, opts, valeur, onPick, aligneDroite){
+  host.innerHTML='';
+  const wrap=document.createElement('div'); wrap.className='cb';
+  const btn=document.createElement('button'); btn.type='button'; btn.className='cb-btn';
+  const list=document.createElement('div'); list.className='cb-list'+(aligneDroite?' right':'');
+  wrap.appendChild(btn); wrap.appendChild(list); host.appendChild(wrap);
+
+  function dessineBouton(){
+    const o = opts.filter(o=>String(o.value)===String(valeur))[0];
+    btn.innerHTML = o
+      ? `<span style="display:flex;align-items:center;min-width:0"><span class="pill" style="background:${o.couleur}">${esc(o.value)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.court)}</span></span><span class="chev">▾</span>`
+      : `<span class="ph">Sélectionner…</span><span class="chev">▾</span>`;
+  }
+  opts.forEach(o=>{
+    const it=document.createElement('div'); it.className='cb-opt'+(String(o.value)===String(valeur)?' sel':'');
+    it.innerHTML=`<span class="pill" style="background:${o.couleur}">${esc(o.value)}</span>
+      <span class="txt"><div class="t1">${esc(o.court)}</div><div class="t2">${esc(o.long||'')}</div></span>`;
+    it.onclick=e=>{e.stopPropagation(); valeur=o.value; wrap.classList.remove('open');
+      list.querySelectorAll('.cb-opt').forEach(x=>x.classList.remove('sel')); it.classList.add('sel');
+      dessineBouton(); onPick(o.value);};
+    list.appendChild(it);
+  });
+  btn.onclick=e=>{e.stopPropagation();
+    document.querySelectorAll('.cb.open').forEach(x=>{if(x!==wrap)x.classList.remove('open')});
+    wrap.classList.toggle('open');};
+  dessineBouton();
+  return {set(v){valeur=v; dessineBouton();
+    list.querySelectorAll('.cb-opt').forEach((x,i)=>x.classList.toggle('sel', String(opts[i].value)===String(v)));}};
+}
+document.addEventListener('click',()=>document.querySelectorAll('.cb.open').forEach(x=>x.classList.remove('open')));
+
+/* ---------------- slicer : cinq paliers, pour la probabilite ---------------- */
+function slicer(host, opts, valeur, onPick){
+  host.innerHTML='<div class="slicer"></div><div class="slicer-def"></div>';
+  const bar=host.querySelector('.slicer'), def=host.querySelector('.slicer-def');
+  function peint(){
+    bar.querySelectorAll('button').forEach(b=>{
+      const on=String(b.dataset.v)===String(valeur);
+      b.classList.toggle('on', on);
+      b.style.background = on ? b.dataset.c : '';
+    });
+    const o=opts.filter(x=>String(x.value)===String(valeur))[0];
+    def.innerHTML = o ? `<b>${esc(o.court)}</b>${esc(o.long||'')}`
+      : `<b>Aucun niveau retenu</b>Cliquez sur un palier de 1 à 5 : sa définition s'affiche ici.`;
+  }
+  opts.forEach(o=>{
+    const b=document.createElement('button'); b.type='button';
+    b.dataset.v=o.value; b.dataset.c=o.couleur; b.textContent=o.value; b.title=o.court;
+    b.onclick=()=>{valeur=o.value; peint(); onPick(o.value);};
+    bar.appendChild(b);
+  });
+  peint();
+  return {set(v){valeur=v; peint();}};
+}
+
+/* ---------------- construction ---------------- */
+const combos={inh:{}, res:{}};
+
+function optsProba(){
+  return PROBA.map(p=>({value:p.niveau, court:`${p.niveau} · ${p.libelle}`,
+    long:p.definition, couleur:couleurNiveauCote(p.niveau)}));
+}
+function optsImpact(axe){
+  return NIV_IMPACT.map(n=>({value:n.niveau, court:String(n.libelle),
+    long:n.parAxe[axe]||'', couleur:couleurNiveauCote(n.niveau)}));
+}
+
+function construireProbabilite(){
+  const tb=document.getElementById('probrow'); tb.innerHTML='';
+  const tr=document.createElement('tr');
+  tr.innerHTML='<td class="ax">Probabilité<div class="hint" style="margin:1px 0 0;font-weight:400">de 1, rare, à 5, très probable</div></td>'+
+    '<td class="ct" id="p-inh"></td><td class="ct" id="p-res"></td>';
+  tb.appendChild(tr);
+  combos.inh.p=slicer(document.getElementById('p-inh'), optsProba(), S.inh.p, v=>{S.inh.p=v; recalc();});
+  combos.res.p=slicer(document.getElementById('p-res'), optsProba(), S.res.p, v=>{S.res.p=v; recalc();});
+}
+
+function construireImpacts(){
+  const tb=document.getElementById('grid'); tb.innerHTML='';
+  AXES.forEach((a,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="ax">${esc(a)}</td><td class="ct" id="c-inh-${i}"></td><td class="ct" id="c-res-${i}"></td>`;
+    tb.appendChild(tr);
+  });
+  AXES.forEach((a,i)=>{
+    combos.inh[i]=combo(document.getElementById(`c-inh-${i}`), optsImpact(a), S.inh.imp[i], v=>{S.inh.imp[i]=v; recalc();});
+    combos.res[i]=combo(document.getElementById(`c-res-${i}`), optsImpact(a), S.res.imp[i], v=>{S.res.imp[i]=v; recalc();}, true);
+  });
+}
+
+function construireGrille(){ construireProbabilite(); construireImpacts(); }
+
+function construireLignes(){
+  const host=document.getElementById('lignes'); host.innerHTML='';
+  [['l1','L1, première ligne de défense','Opérationnels et propriétaires du risque'],
+   ['l2','L2, deuxième ligne de défense','Risques, conformité, contrôle interne'],
+   ['l3','L3, troisième ligne de défense','Audit interne']].forEach(([k,titre,soustitre])=>{
+    const d=document.createElement('div'); d.className='ldg';
+    d.innerHTML=`
+      <div class="hd">
+        <div><b>${titre}</b><div class="hint" style="margin:1px 0 0">${soustitre}</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="seg" id="seg-${k}"></div>
+        </div>
+      </div>
+      <textarea id="txt-${k}" class="textarea textarea-bordered w-full" rows="2" placeholder="Mesures et contrôles en place sur cette ligne"></textarea>
+      <div class="aide" id="box-${k}"></div>`;
+    host.appendChild(d);
+
+    const seg=d.querySelector('#seg-'+k);
+    MAITRISE.niveaux.forEach(n=>{
+      const b=document.createElement('button'); b.type='button'; b.dataset.n=n.niveau;
+      b.textContent=String(n.libelle).split('·')[1] ? n.niveau+' · '+String(n.libelle).split('·')[1].trim().split('/')[0].trim() : n.niveau;
+      b.onclick=()=>{S.mast[k].na=false; S.mast[k].n=n.niveau; majLigne(k); recalcMaitrise();};
+      seg.appendChild(b);
+    });
+    const bna=document.createElement('button'); bna.type='button'; bna.className='na'; bna.textContent='n/d';
+    bna.title="Non disponible : cette ligne de défense n'est pas évaluable";
+    bna.onclick=()=>{S.mast[k].na=!S.mast[k].na; if(S.mast[k].na) S.mast[k].n=null; majLigne(k); recalcMaitrise();};
+    seg.appendChild(bna);
+
+    d.querySelector('#txt-'+k).oninput=e=>S.mast[k].txt=e.target.value;
+    majLigne(k);
+  });
+}
+
+function majLigne(k){
+  const seg=document.getElementById('seg-'+k); if(!seg) return;
+  seg.querySelectorAll('button').forEach(b=>{
+    if(b.classList.contains('na')){ b.classList.toggle('on', S.mast[k].na);
+      b.style.background=S.mast[k].na?'var(--muted)':''; b.style.color=S.mast[k].na?'#fff':''; return; }
+    const on = String(S.mast[k].n)===b.dataset.n;
+    b.classList.toggle('on', on);
+    b.style.background = on ? couleurNiveauCote(4 - Number(b.dataset.n) + 1) : '';
+  });
+  const t=document.getElementById('txt-'+k); if(t){ t.disabled=S.mast[k].na; t.value=S.mast[k].na?'':S.mast[k].txt; }
+  const box=document.getElementById('box-'+k);
+  if(!box) return;
+
+  if(S.mast[k].na){
+    box.style.borderLeftColor='var(--border-strong)';
+    box.innerHTML = `<div class="vide">Ligne de défense marquée non évaluable, elle est exclue du calcul de la maîtrise globale.</div>`;
+    return;
+  }
+  if(!S.mast[k].n){
+    box.style.borderLeftColor='var(--border-strong)';
+    box.innerHTML = `<div class="vide">Choisissez un niveau ci-dessus : la lecture de l'échelle correspondante s'affichera ici.</div>`;
+    return;
+  }
+
+  const n = MAITRISE.niveaux.filter(x=>x.niveau===S.mast[k].n)[0];
+  const c = couleurNiveauCote(5 - S.mast[k].n);
+  box.style.borderLeftColor = c;
+  if(!n){ box.innerHTML = `<div class="vide">Niveau ${esc(S.mast[k].n)} absent de l'échelle de maîtrise.</div>`; return; }
+  box.innerHTML = `<div class="ttl" style="color:${c}">${esc(n.libelle)}</div><table>` +
+    MAITRISE.dimensions.map(dim=>{
+      const court = dim.split('/')[0].replace('du contrôle','').replace('de la mesure','').trim();
+      return `<tr><td>${esc(court.charAt(0).toUpperCase()+court.slice(1))}</td><td>${esc(n.parDimension[dim])}</td></tr>`;
+    }).join('') + `</table>`;
+}
+
+/* ---------------- calculs ---------------- */
+function retenu(arr){ const v=arr.filter(x=>x!==null&&x!==undefined); return v.length?Math.max(...v):null; }
+function score(p,i){ return (p&&i)?p*i:null; }
+
+// Axes qui portent la cotation maximale, celle qui est retenue pour le score.
+function axesPorteurs(arr){
+  const m=retenu(arr); if(m===null) return [];
+  return AXES.filter((a,i)=>Number(arr[i])===Number(m));
+}
+function detailCalcul(bloc, libelle){
+  const manquants = AXES.filter((a,i)=>bloc.imp[i]===null||bloc.imp[i]===undefined);
+  if(!bloc.p && manquants.length) return `${libelle} : probabilité non renseignée et ${manquants.length} axe${manquants.length>1?'s':''} non coté${manquants.length>1?'s':''}.`;
+  if(!bloc.p) return `${libelle} : probabilité non renseignée. Le score ne peut pas être calculé.`;
+  if(manquants.length) return `${libelle} : ${manquants.length} axe${manquants.length>1?'s':''} non coté${manquants.length>1?'s':''} (${manquants.join(', ')}).`;
+  const m=retenu(bloc.imp), porteurs=axesPorteurs(bloc.imp);
+  const liste = porteurs.length>2 ? `${porteurs.length} axes à ${m}` : porteurs.join(' et ');
+  return `${libelle} : probabilité ${bloc.p} × impact retenu ${m} (${liste}) = ${bloc.p*m}.`;
+}
+
+function peindre(nEl,tEl,gEl,s){
+  const c=couleurScore(s);
+  nEl.textContent = s===null?'·':s;
+  nEl.style.color = c||'var(--muted)';
+  tEl.textContent = s===null?'·':niveauTexte(s);
+  tEl.style.background = c||'var(--border-strong)';
+  if(s===null){ gEl.style.display='none'; }
+  else { gEl.style.display='block'; gEl.style.left = (((s-1)/24)*100).toFixed(1)+'%'; }
+}
+
+function recalc(){
+  const ii=retenu(S.inh.imp), si=score(S.inh.p,ii);
+  const ir=retenu(S.res.imp), sr=score(S.res.p,ir);
+  peindre(document.getElementById('si'),document.getElementById('ti'),document.getElementById('gi'),si);
+  peindre(document.getElementById('sr'),document.getElementById('tr'),document.getElementById('gr'),sr);
+  document.getElementById('di').textContent=detailCalcul(S.inh,'Inhérent');
+  document.getElementById('dr').textContent=detailCalcul(S.res,'Résiduel');
+
+  const d=document.getElementById('delta');
+  if(si!==null&&sr!==null){
+    const e=si-sr;
+    d.textContent = e>0 ? `Le dispositif de maîtrise fait passer le score de ${si} à ${sr}, soit ${e} point${e>1?'s':''} de réduction.`
+      : e===0 ? `Score identique en inhérent et en résiduel : le dispositif de maîtrise n'a pas d'effet mesurable.`
+      : `Le score résiduel dépasse l'inhérent de ${Math.abs(e)} point${Math.abs(e)>1?'s':''}. Cette aggravation doit être justifiée.`;
+    d.style.color = e<0 ? 'var(--danger)' : 'var(--muted)';
+  } else { d.textContent='·'; d.style.color='var(--muted)'; }
+  majAppetence();
+  // Isolee : un defaut d'historique ne doit jamais interrompre le recalcul
+  // des scores, qui est l'information principale de l'ecran.
+  try { majTendance(); } catch(e) { try { console.error(e); } catch(_){} }
+  rafraichirMarques();
+}
+
+function recalcMaitrise(){
+  const v=['l1','l2','l3'].map(k=>S.mast[k].n).filter(x=>x);
+  const el=document.getElementById('mg'), tg=document.getElementById('mgt'), sb=document.getElementById('mgs');
+  if(!v.length){ el.textContent='·'; el.style.color='var(--muted)';
+    tg.textContent='Maîtrise globale'; tg.style.background='var(--border-strong)';
+    sb.textContent='Moyenne des lignes de défense renseignées'; return; }
+  const m=v.reduce((a,b)=>a+b,0)/v.length;
+  const lib = m>=2.5?'Satisfaisant':(m>=1.75?'Partiellement satisfaisant':'Insuffisant');
+  const c = m>=2.5?'hsl(145 66% 28%)':(m>=1.75?'hsl(42 88% 42%)':'hsl(0 78% 47%)');
+  el.textContent=m.toFixed(2); el.style.color=c;
+  tg.textContent=lib; tg.style.background=c;
+  sb.textContent=`Moyenne sur ${v.length} ligne${v.length>1?'s':''} de défense renseignée${v.length>1?'s':''}, sur 3`;
+  rafraichirMarques();
+}
+
+function majAppetence(){
+  const ir=retenu(S.res.imp), sr=score(S.res.p,ir);
+  const p=document.getElementById('pos');
+  const seuil = S.appet;
+  if(sr!==null && seuil!==null && seuil!==''){
+    const dans = Number(sr)<=Number(seuil);
+    p.textContent = dans?'Dans l’appétence':'Hors appétence';
+    p.style.background = dans?'hsl(145 66% 28%)':'hsl(0 78% 47%)';
+  } else { p.textContent='·'; p.style.background='var(--border-strong)'; }
+}
+
+/* ---------------- etape 1 ---------------- */
+function remplirSelect(id, valeurs, vide, transform){
+  const el=document.getElementById(id); el.innerHTML='';
+  if(vide!==false) el.appendChild(new Option('Sélectionner…',''));
+  valeurs.forEach(v=>el.appendChild(new Option(transform?transform(v):v, v)));
+}
+
+/* ---------------- fiche du risque ---------------- */
+const FICHE={intitule:'f-int', entite:'f-ent', pays:'f-pays', departement:'f-dep',
+  categorie:'f-cat', sousCategorie:'f-sc', processus:'f-proc', objectif:'f-obj',
+  proprietaire:'f-own', description:'f-desc', causes:'f-causes', consequences:'f-cons',
+  controles:'f-ctrl', kri:'f-kri'};
+
+function ecrireFiche(r){
+  Object.keys(FICHE).forEach(k=>{
+    const e=document.getElementById(FICHE[k]); if(e) e.value=(r && r[k])?r[k]:'';
+  });
+}
+function lireFiche(){
+  const out={};
+  Object.keys(FICHE).forEach(k=>{
+    const e=document.getElementById(FICHE[k]); out[k]=e?e.value:'';
+  });
+  return out;
+}
+function replierFiche(replie){
+  const f=document.getElementById('fiche'), b=document.getElementById('fiche-toggle');
+  f.style.display = replie?'none':'block';
+  b.textContent = replie?'Déplier':'Replier';
+}
+
+/* ---------------- erreurs ---------------- */
+function onError(err){
+  const txt = (err && err.message) ? err.message
+    : "Une erreur est survenue cote serveur. Aucune donnee n'a ete enregistree.";
+  message(txt, 'err');
+  try { console.error(err); } catch(e) {}
+}
+
+/* ---------------- reprise de la derniere evaluation ---------------- */
+const HISTO = {};   // cache local des fiches deja chargees dans cette session
+
+function choisirRisque(r){
+  S.riskId = r.id;
+  S.tendanceManuelle = false;
+  nettoyerMarques();
+  ecrireFiche(r);
+  replierFiche(true);
+  document.getElementById('fiche-note').textContent = 'Chargement de la dernière évaluation…';
+  listerRisques(document.getElementById('q').value);
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      // L'utilisateur a pu choisir un autre risque pendant le chargement :
+      // seule la reponse du risque affiche est appliquee.
+      if(!res || S.riskId !== r.id) return;
+      HISTO[r.id] = res;
+      const d = res.derniere;
+      S.histo = (d && d.cotee) ? d : null;
+      S.nbEvaluations = res.nbEvaluations || 0;
+      ecrireFiche(res.risk || r);
+      afficherDerniere(res);
+      let note;
+      if(S.histo){
+        note = "Reprise de l'évaluation " + d.id + (d.date ? " du " + dateCourte(d.date) : '') +
+          ". Ce risque a été évalué " + S.nbEvaluations + " fois. Toute correction faite ici sera " +
+          "portée par la nouvelle ligne, sans modifier les précédentes.";
+        appliquerHistorique(d);
+      } else {
+        note = "Risque jamais coté" + (d ? ", repris de l'ancienne cartographie" : '') +
+          ". La fiche est reprise, la cotation part de zéro.";
+        effacerCotation(false);
+        S.typeEval = (d && d.type) ? String(d.type) : '';
+        const tev = document.getElementById('tev'); if(tev) tev.value = S.typeEval;
+        chargerAppetence(r.sousCategorie, r.entite);
+      }
+      // La fiche reste depliee tant qu'un de ses champs obligatoires est vide :
+      // l'utilisateur voit tout de suite ce qu'il doit completer.
+      const aCompleter = champsManquants(1).filter(function(c){ return CLES_FICHE_FORM.indexOf(c) !== -1; });
+      replierFiche(aCompleter.length === 0);
+      if(aCompleter.length){
+        note += ' À compléter dans la fiche : ' +
+          aCompleter.map(function(c){ return OBLIG[c].libelle; }).join(', ') + '.';
+        signalerManquants(aCompleter, false);
+      }
+      document.getElementById('fiche-note').textContent = note;
+    })
+    .withFailureHandler(onError)
+    .getRiskWithLatestEvaluation(r.id);
+}
+
+function dateCourte(d){
+  if(!d) return '';
+  const x = (d instanceof Date) ? d : new Date(d);
+  return isNaN(x.getTime()) ? String(d) : x.toLocaleDateString('fr-FR');
+}
+
+/**
+ * Reprise d'une evaluation cotee. Tout est ramene en nombres : une cellule
+ * saisie a la main en texte ("3") doit s'afficher comme une cotation 3.
+ */
+function appliquerHistorique(h){
+  const inh = h.inherent || {}, res = h.residual || {}, mast = h.mastery || {}, dyn = h.dyn || {};
+  S.inh.p = num(inh.p);
+  S.inh.imp = AXES.map(function(a, i){ return num((inh.impacts || [])[i]); });
+  S.res.p = num(res.p);
+  S.res.imp = AXES.map(function(a, i){ return num((res.impacts || [])[i]); });
+  S.res.justif = res.justif || '';
+  S.mast.mes = mast.mes || ''; S.mast.justif = mast.justif || '';
+  ['l1','l2','l3'].forEach(function(k){
+    const src = mast[k] || {};
+    const n = num(src.n);
+    // Une ligne de defense sans note dans une evaluation cotee avait ete
+    // declaree non evaluable : on reprend ce choix.
+    S.mast[k] = { n: n, na: n === null, txt: src.txt || '' };
+  });
+  S.dyn.velo = num(dyn.velo) === null ? '' : String(num(dyn.velo));
+  S.dyn.pers = num(dyn.pers) === null ? '' : String(num(dyn.pers));
+  S.typeEval = h.type ? String(h.type) : '';
+  S.dec = h.dec ? String(h.dec) : ''; S.decJustif = h.decJustif || '';
+  S.actions = h.actions || '';
+  S.appet = num(h.appet);
+  S.appetSrc = S.appet === null ? '' : 'reprise de la revue précédente';
+  S.tendanceManuelle = false;
+  rafraichirChamps();
+}
+
+function effacerCotation(avecMessage){
+  S.inh={p:null, imp:AXES.map(()=>null)};
+  S.res={p:null, imp:AXES.map(()=>null), justif:''};
+  S.mast={mes:'', l1:{n:null,na:false,txt:''}, l2:{n:null,na:false,txt:''}, l3:{n:null,na:false,txt:''}, justif:''};
+  S.dyn.velo=''; S.dyn.pers=''; S.dyn.tend=S.histo?'→':TENDANCE_DEFAUT;
+  S.dec=''; S.decJustif=''; S.tendanceManuelle=false;
+  rafraichirChamps();
+  if(avecMessage) message('Cotation remise à zéro. Les informations du risque restent sélectionnées.', 'info');
+}
+
+function rafraichirChamps(){
+  if(!DATA) return;
+  const p=(id,v)=>{const e=document.getElementById(id); if(e) e.value=(v===null||v===undefined)?'':v;};
+  p('act',S.actions);
+  p('jpr',S.res.justif); p('mes',S.mast.mes); p('jm',S.mast.justif); p('jd',S.decJustif);
+  p('tev',S.typeEval); p('dec',S.dec); p('velo',S.dyn.velo); p('pers',S.dyn.pers);
+  p('app',S.appet); p('tend',S.dyn.tend);
+  const sa=document.getElementById('app-src'); if(sa) sa.textContent=S.appetSrc;
+  const vd=document.getElementById('velo-d');
+  const ov=DATA.references.velocite.filter(x=>String(x.niveau)===String(S.dyn.velo))[0];
+  if(vd) vd.textContent=ov?ov.definition:'';
+  const pd=document.getElementById('pers-d');
+  const op=PERSISTANCE.filter(x=>String(x.niveau)===String(S.dyn.pers))[0];
+  if(pd) pd.textContent=op?op.definition:'';
+  construireGrille(); construireLignes(); recalc(); recalcMaitrise();
+}
+
+function majTendance(){
+  const sel=document.getElementById('tend'), hint=document.getElementById('tend-d');
+  if(!sel) return;
+  if(!S.histo){
+    if(hint) hint.textContent = S.dyn.tend===TENDANCE_DEFAUT
+      ? "Aucune évaluation antérieure : valeur de départ, distincte des trois valeurs du référentiel." : '';
+    return;
+  }
+  const sr=score(S.res.p, retenu(S.res.imp));
+  if(sr===null) return;
+  if(S.tendanceManuelle){ return; }
+  // La derniere evaluation vient du serveur, qui nomme ce bloc `residual`.
+  const ancien = (S.histo.residual && S.histo.residual.score) || null;
+  if(ancien === null || ancien === '') return;
+  const auto = sr > ancien ? '↑' : (sr < ancien ? '↓' : '→');
+  S.dyn.tend = auto; sel.value = auto;
+  if(hint) hint.textContent = 'Déduite du score résiduel : ' + ancien +
+    ' lors de la revue du ' + dateCourte(S.histo.date) + ', ' + sr + " aujourd'hui. Modifiable.";
+}
+
+let RISQUES_AFFICHES = [];
+let INDEX_ACTIF = -1;
+
+function listerRisques(filtre){
+  const ul = document.getElementById('rl');
+  if(!ul) return;
+  const q = (filtre || '').toLowerCase();
+  const liste = (DATA && DATA.risks) ? DATA.risks : [];
+  RISQUES_AFFICHES = liste.filter(function(r){
+    return !q || String(r.id).toLowerCase().indexOf(q) !== -1 ||
+      String(r.intitule || '').toLowerCase().indexOf(q) !== -1 ||
+      String(r.sousCategorie || '').toLowerCase().indexOf(q) !== -1;
+  });
+
+  ul.innerHTML = '';
+  if(!RISQUES_AFFICHES.length){
+    const li = document.createElement('li');
+    li.className = 'vide';
+    li.textContent = liste.length ? 'Aucun risque ne correspond à cette recherche.'
+      : 'Aucun risque dans la base pour le moment.';
+    ul.appendChild(li);
+    INDEX_ACTIF = -1;
+    return;
+  }
+
+  RISQUES_AFFICHES.forEach(function(r, i){
+    const sr = Number(r.scoreResiduel) || null;
+    const couleur = sr ? couleurScore(sr) : 'var(--border-strong)';
+    const li = document.createElement('li');
+    li.style.borderLeft = '5px solid ' + couleur;
+    li.className = (S.riskId === r.id ? 'sel' : '') + (i === INDEX_ACTIF ? ' actif' : '');
+    const marque = (r.nbEvaluations || 0) > 0
+      ? r.nbEvaluations + ' évaluation(s)' : 'jamais coté';
+    li.innerHTML =
+      '<div class="rl-head">' +
+        '<span class="id">' + esc(r.id) + ' · ' + esc(r.sousCategorie || '') + '</span>' +
+        (sr ? '<span class="pastille" style="background:' + couleur + '">' + sr + '</span>' : '') +
+      '</div>' +
+      '<div class="rl-int">' + esc(r.intitule || '') + '</div>' +
+      '<div class="rl-meta">' + marque +
+        (r.niveauResiduel ? ' · résiduel ' + esc(r.niveauResiduel) : '') +
+        (r.statut && (r.nbEvaluations || 0) > 0 ? ' · ' + esc(r.statut) : '') + '</div>';
+    li.onclick = function(){ INDEX_ACTIF = i; choisirRisque(r); };
+    ul.appendChild(li);
+  });
+}
+
+function deplacerSelection(pas){
+  if(!RISQUES_AFFICHES.length) return;
+  INDEX_ACTIF = Math.max(0, Math.min(RISQUES_AFFICHES.length - 1, INDEX_ACTIF + pas));
+  listerRisques(document.getElementById('q').value);
+  const ul = document.getElementById('rl');
+  const el = ul.children[INDEX_ACTIF];
+  if(el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+}
+
+function validerSelectionClavier(){
+  if(!RISQUES_AFFICHES.length) return;
+  const i = INDEX_ACTIF >= 0 ? INDEX_ACTIF : 0;
+  INDEX_ACTIF = i;
+  choisirRisque(RISQUES_AFFICHES[i]);
+}
+function esc(v){
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function sansAccent(s){
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[^\x00-\x7f]/g,'');
+}
+
+function estARevoir(statut){ return sansAccent(statut).indexOf('a reviser') === 0; }
+
+function afficherDerniere(res){
+  const b = document.getElementById('lastev'); b.style.display = 'block';
+  const r = res.risk || {}, h = res.derniere;
+  const base = '<div><span>Risque retenu</span><span>' + esc(r.id) + '</span></div>' +
+    '<div><span>Entité</span><span>' + esc(r.entite || '·') + '</span></div>' +
+    '<div><span>Catégorie</span><span>' + esc(r.categorie || '·') + '</span></div>' +
+    "<div><span>Nombre d'évaluations</span><span>" + (res.nbEvaluations || 0) + '</span></div>';
+  if(!h || !h.cotee){
+    b.innerHTML = base + '<div><span>Dernière évaluation</span><span>' +
+      (h ? 'aucune cotation, statut ' + esc(h.statut || '·') : 'aucune cotation enregistrée') +
+      '</span></div>';
+    return;
+  }
+  const v = ['l1','l2','l3'].map(function(k){ return num((h.mastery[k] || {}).n); })
+    .filter(function(x){ return x !== null; });
+  const m = v.length ? (v.reduce(function(a,b){ return a + b; }, 0) / v.length).toFixed(2) : '·';
+  let html = base +
+    '<div><span>Dernière évaluation</span><span>' + esc(h.id) + ' · ' + esc(h.type || '') +
+      (h.date ? ' · ' + dateCourte(h.date) : '') + '</span></div>' +
+    '<div><span>Statut</span><span>' + esc(h.statut || '·') + '</span></div>' +
+    '<div><span>Score inhérent</span><span>' + esc(h.inherent.score || '·') + ' · ' + esc(h.inherent.niveau || '') + '</span></div>' +
+    '<div><span>Score résiduel</span><span>' + esc(h.residual.score || '·') + ' · ' + esc(h.residual.niveau || '') + '</span></div>' +
+    '<div><span>Maîtrise globale</span><span>' + m + '</span></div>' +
+    '<div><span>Décision précédente</span><span>' + esc(h.dec || '·') + '</span></div>';
+  if(estARevoir(h.statut)){
+    // Le motif du validateur est la premiere chose a lire avant de recoter.
+    html += '<div class="renvoi"><span>Renvoyée pour révision' +
+      (h.validateur ? ' par ' + esc(h.validateur) : '') +
+      (h.dateValidation ? ' le ' + dateCourte(h.dateValidation) : '') + '</span><span>' +
+      esc(h.commentaireValidation || 'motif consigné dans la justification de la décision') + '</span></div>';
+    message('Cette évaluation a été renvoyée pour révision. Le motif du validateur est rappelé ' +
+      'dans le récapitulatif.', 'warn');
+  }
+  b.innerHTML = html;
+}
+
+function chargerAppetence(sousCategorie, entite){
+  const el = document.getElementById('appetence-auto') || document.getElementById('app-src');
+  if(!sousCategorie){
+    S.appet = null; S.appetSrc = '';
+    rafraichirAppetence(); return;
+  }
+  google.script.run
+    .withSuccessHandler(function(p){
+      if(!p){ S.appet = null; S.appetSrc = 'aucune règle applicable dans APPETENCE'; }
+      else { S.appet = p.value; S.appetSrc = 'proposé depuis APPETENCE (' + p.source + ')'; }
+      rafraichirAppetence();
+    })
+    .withFailureHandler(function(){ S.appetSrc = 'proposition indisponible'; rafraichirAppetence(); })
+    .getAppetenceProposal(sousCategorie, entite);
+}
+
+function rafraichirAppetence(){
+  const e = document.getElementById('app');
+  if(e) e.value = (S.appet === null || S.appet === undefined) ? '' : S.appet;
+  const s = document.getElementById('app-src');
+  if(s) s.textContent = S.appetSrc || '';
+  majAppetence();
+}
+
+function proposerAppetence(sc){
+  chargerAppetence(sc, document.getElementById('f-ent').value);
+}
+
+/* ---------------- navigation ---------------- */
+function aller(n){
+  S.step=n;
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on', p.dataset.p==String(n)));
+  document.querySelectorAll('.steps div').forEach(d=>{
+    const s=Number(d.dataset.s); d.classList.toggle('active', s===n); d.classList.toggle('done', s<n);});
+  document.getElementById('back').style.visibility = n===1?'hidden':'visible';
+  document.getElementById('next').style.display = n===3?'none':'inline-block';
+  document.getElementById('save').style.display = n===3?'inline-block':'none';
+  if(n===3) majResume();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+/* ---------------- champs obligatoires, pilotes par CONFIG ---------------- */
+
+let OBLIG = {};   // champ -> {libelle, obligatoire}
+
+// Repli si le bloc 4 de CONFIG est absent : on garde le socle metier plutot
+// que de laisser un formulaire sans aucun controle.
+const OBLIG_DEFAUT = [
+  ['intitule', 'Intitulé du risque'], ['categorie', 'Catégorie'], ['processus', 'Processus'],
+  ['typeEval', "Type d'évaluation"], ['probaInherente', 'Probabilité inhérente'],
+  ['impactsInherents', "Les axes d'impact inhérents"],
+  ['lignesDefense', 'Les trois lignes de défense'],
+  ['probaResiduelle', 'Probabilité résiduelle'],
+  ['impactsResiduels', "Les axes d'impact résiduels"],
+  ['decision', 'Décision de traitement']
+];
+
+// Repartition des champs par etape : un champ obligatoire bloque le passage
+// a l'etape suivante, pas l'enregistrement final seulement.
+const ETAPE_CHAMPS = {
+  1: ['intitule', 'categorie', 'processus', 'entite', 'pays', 'departement', 'sousCategorie',
+      'objectif', 'description', 'causes', 'consequences', 'proprietaire', 'controles',
+      'kri', 'typeEval'],
+  2: ['probaInherente', 'impactsInherents', 'mesures', 'lignesDefense', 'justifMaitrise',
+      'probaResiduelle', 'justifProbaResiduelle', 'impactsResiduels'],
+  3: ['velocite', 'persistance', 'tendance', 'appetence', 'decision', 'justifDecision', 'actions']
+};
+
+// Ou poser l'asterisque : id d'un champ de saisie, ou selecteur direct.
+const CHAMP_CIBLE = {
+  intitule: '#f-int', categorie: '#f-cat', processus: '#f-proc', entite: '#f-ent',
+  pays: '#f-pays', departement: '#f-dep', sousCategorie: '#f-sc', objectif: '#f-obj',
+  description: '#f-desc', causes: '#f-causes', consequences: '#f-cons',
+  proprietaire: '#f-own', controles: '#f-ctrl', kri: '#f-kri', typeEval: '#tev',
+  mesures: '#mes', justifMaitrise: '#jm', justifProbaResiduelle: '#jpr',
+  velocite: '#velo', persistance: '#pers', tendance: '#tend', appetence: '#app',
+  decision: '#dec', justifDecision: '#jd', actions: '#act'
+};
+
+// Les trois blocs de l'etape 2 n'ont pas de label : on marque leur sous-titre.
+const BLOC_CIBLE = {
+  probaInherente: '.subsect .etape-proba', impactsInherents: '.subsect .etape-imp',
+  probaResiduelle: '.subsect .etape-proba', impactsResiduels: '.subsect .etape-imp'
+};
+
+function estVide(v){
+  return v === null || v === undefined || v === '' ||
+    (typeof v === 'string' && v.trim() === '');
+}
+
+function chargerChamps(liste){
+  OBLIG = {};
+  if(Array.isArray(liste) && liste.length){
+    liste.forEach(function(c){
+      OBLIG[c.champ] = { libelle: c.libelle || c.champ, obligatoire: !!c.obligatoire };
+    });
+  } else {
+    OBLIG_DEFAUT.forEach(function(x){ OBLIG[x[0]] = { libelle: x[1], obligatoire: true }; });
+  }
+  marquerObligatoires();
+}
+
+/**
+ * Valeur courante d'un champ logique. Miroir exact de valeurChamp_ cote
+ * serveur : les deux doivent juger la meme saisie de la meme facon.
+ */
+function valeurChamp(cle){
+  const f = lireFiche();
+  switch(cle){
+    case 'intitule': case 'categorie': case 'processus': case 'entite': case 'pays':
+    case 'departement': case 'sousCategorie': case 'objectif': case 'description':
+    case 'causes': case 'consequences': case 'proprietaire': case 'controles': case 'kri':
+      return f[cle];
+    case 'typeEval': return S.typeEval;
+    case 'probaInherente': return S.inh.p;
+    case 'probaResiduelle': return S.res.p;
+    case 'justifProbaResiduelle': return S.res.justif;
+    case 'impactsInherents':
+      return S.inh.imp.length && S.inh.imp.every(function(v){ return !estVide(v); }) ? 'ok' : '';
+    case 'impactsResiduels':
+      return S.res.imp.length && S.res.imp.every(function(v){ return !estVide(v); }) ? 'ok' : '';
+    case 'mesures': return S.mast.mes;
+    case 'justifMaitrise': return S.mast.justif;
+    case 'lignesDefense':
+      return ['l1','l2','l3'].every(function(k){
+        return !estVide(S.mast[k].n) || S.mast[k].na === true; }) ? 'ok' : '';
+    case 'velocite': return S.dyn.velo;
+    case 'persistance': return S.dyn.pers;
+    case 'tendance': return S.dyn.tend;
+    case 'appetence': return S.appet;
+    case 'decision': return S.dec;
+    case 'justifDecision': return S.decJustif;
+    case 'actions': return S.actions;
+    default: return 'ok';   // champ declare dans CONFIG mais inconnu du formulaire
+  }
+}
+
+function champsManquants(n){
+  return (ETAPE_CHAMPS[n] || []).filter(function(c){
+    const d = OBLIG[c];
+    return d && d.obligatoire && estVide(valeurChamp(c));
+  });
+}
+
+const CLES_FICHE_FORM = ['intitule','categorie','processus','entite','pays','departement',
+  'sousCategorie','objectif','description','causes','consequences','proprietaire','controles','kri'];
+
+function nettoyerMarques(){
+  document.querySelectorAll('.manque').forEach(function(e){ e.classList.remove('manque'); });
+}
+
+/**
+ * Un message ne suffit pas : si le champ manquant est dans la fiche repliee,
+ * l'utilisateur lit un reproche sur un champ qu'il ne voit pas. On deplie, on
+ * marque, et on amene le premier champ concerne sous les yeux.
+ */
+/**
+ * Elements precis a marquer pour les blocs sans champ de saisie unique :
+ * la barre de probabilite, chaque axe d'impact non cote, chaque ligne de
+ * defense ni notee ni declaree non evaluable.
+ */
+function ciblesBloc(c){
+  const q = function(s){ return document.querySelector(s); };
+  if(c === 'probaInherente') return [q('#p-inh .slicer')];
+  if(c === 'probaResiduelle') return [q('#p-res .slicer')];
+  if(c === 'impactsInherents' || c === 'impactsResiduels'){
+    const inh = c === 'impactsInherents', bloc = inh ? S.inh : S.res;
+    return AXES.map(function(a, i){
+      return estVide(bloc.imp[i]) ? q('#c-' + (inh ? 'inh' : 'res') + '-' + i + ' .cb-btn') : null;
+    });
+  }
+  if(c === 'lignesDefense'){
+    return ['l1','l2','l3'].map(function(k){
+      return (estVide(S.mast[k].n) && !S.mast[k].na) ? q('#seg-' + k) : null;
+    });
+  }
+  return [];
+}
+
+/**
+ * Retire la marque rouge des blocs devenus complets, quelle que soit la
+ * facon dont ils l'ont ete : clic, recopie de l'inherent, reprise.
+ */
+function rafraichirMarques(){
+  if(!document.querySelector('.slicer.manque, .cb-btn.manque, .seg.manque')) return;
+  const encoreVides = new Set();
+  ['probaInherente','probaResiduelle','impactsInherents','impactsResiduels','lignesDefense'].forEach(function(c){
+    ciblesBloc(c).forEach(function(el){ if(el) encoreVides.add(el); });
+  });
+  document.querySelectorAll('.slicer.manque, .cb-btn.manque, .seg.manque').forEach(function(el){
+    if(!encoreVides.has(el)) el.classList.remove('manque');
+  });
+}
+
+function signalerManquants(cles, defiler){
+  nettoyerMarques();
+  if(!cles.length) return;
+
+  if(cles.some(function(c){ return CLES_FICHE_FORM.indexOf(c) !== -1; })) replierFiche(false);
+
+  let premier = null;
+  cles.forEach(function(c){
+    const sel = CHAMP_CIBLE[c];
+    if(sel){
+      const el = document.querySelector(sel);
+      if(el){ el.classList.add('manque'); if(!premier) premier = el; }
+      return;
+    }
+    ciblesBloc(c).forEach(function(el){
+      if(!el) return;
+      el.classList.add('manque');
+      if(!premier) premier = el;
+    });
+    const bl = BLOC_CIBLE[c] ? document.querySelector(BLOC_CIBLE[c]) : null;
+    if(bl && !premier) premier = bl;
+  });
+
+  if(premier && defiler !== false){
+    try { premier.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch(e) {}
+    if(typeof premier.focus === 'function'){
+      setTimeout(function(){ try { premier.focus({ preventScroll: true }); } catch(e) {} }, 140);
+    }
+  }
+}
+
+function labelDe(cle){
+  const sel = CHAMP_CIBLE[cle];
+  if(sel){
+    const el = document.querySelector(sel);
+    if(!el) return null;
+    const champ = el.closest('.field');
+    return champ ? champ.querySelector('label.lbl') : null;
+  }
+  const bloc = BLOC_CIBLE[cle];
+  return bloc ? document.querySelector(bloc) : null;
+}
+
+/**
+ * L'asterisque suit le parametrage : un champ passe a Non le perd, un champ
+ * passe a Oui le gagne, sans retoucher le HTML.
+ */
+function marquerObligatoires(){
+  const vus = {};
+  Object.keys(CHAMP_CIBLE).concat(Object.keys(BLOC_CIBLE)).forEach(function(cle){
+    const l = labelDe(cle);
+    if(!l) return;
+    if(l.dataset.base === undefined){
+      l.dataset.base = l.textContent.replace(/\s*\*\s*$/, '').trim();
+    }
+    const d = OBLIG[cle];
+    // Un sous-titre partage par l'inherent et le residuel : obligatoire si
+    // l'un des deux l'est.
+    const deja = vus[l.dataset.base] || false;
+    const oblig = deja || (d ? d.obligatoire : false);
+    vus[l.dataset.base] = oblig;
+    l.innerHTML = l.dataset.base + (oblig ? ' <span class="req">*</span>' : '');
+  });
+}
+
+function valider(n){
+  if(n === 1){
+    if(S.mode === 'existing' && !S.riskId){
+      return 'Sélectionnez un risque dans la liste, ou passez en mode nouveau risque.';
+    }
+    S.newRisk = lireFiche();
+  }
+  const cles = champsManquants(n);
+  if(cles.length){
+    signalerManquants(cles);
+    const noms = cles.map(function(c){ return OBLIG[c].libelle; });
+    if(noms.length === 1) return noms[0] + ' : champ obligatoire.';
+    return noms.length + ' champs obligatoires ne sont pas renseignés : ' + noms.join(', ') + '.';
+  }
+  nettoyerMarques();
+  return null;
+}
+const val=id=>document.getElementById(id).value;
+
+function majResume(){
+  const ii=retenu(S.inh.imp), si=score(S.inh.p,ii), ir=retenu(S.res.imp), sr=score(S.res.p,ir);
+  const r = DATA.risks.filter(x=>x.id===S.riskId)[0];
+  const f=lireFiche();
+  const lbl = S.mode==='new' ? (f.intitule||'·') : ((S.riskId?S.riskId+' · ':'')+(f.intitule||'·'));
+  const v=['l1','l2','l3'].map(k=>S.mast[k].n).filter(x=>x);
+  const m=v.length? (v.reduce((a,b)=>a+b,0)/v.length).toFixed(2) : '·';
+  document.getElementById('sum').innerHTML=[
+    ['Risque',lbl],["Type d'évaluation",S.typeEval||'·'],
+    ['Score inhérent', si===null?'·':`${si} · ${niveauTexte(si)}`],
+    ['Score résiduel', sr===null?'·':`${sr} · ${niveauTexte(sr)}`],
+    ['Maîtrise globale', m],
+    ['Seuil d’appétence', S.appet===null?'·':S.appet],
+    ['Positionnement', document.getElementById('pos').textContent],
+    ['Vélocité', libelleEchelle(DATA.references.velocite, S.dyn.velo)],
+    ['Persistance', libelleEchelle(PERSISTANCE, S.dyn.pers)],
+    ['Tendance', TENDANCE_LIB[S.dyn.tend]||S.dyn.tend||'·'],
+    ['Décision', S.dec||'·']
+  ].map(([a,b])=>`<div><span>${a}</span><span>${esc(b)}</span></div>`).join('');
+}
+
+function libelleEchelle(echelle, v){
+  if(v===null||v===undefined||v==='') return '·';
+  const o=(echelle||[]).filter(x=>String(x.niveau)===String(v))[0];
+  return o ? o.niveau+' · '+o.libelle : String(v);
+}
+
+function message(txt,type){
+  const m=document.getElementById('msg');
+  const cls = {info:'alert-info', warn:'alert-warning', err:'alert-error', ok:'alert-success'}[type] || 'alert-info';
+  m.className = 'alert ' + cls + ' mx-5 mt-3 text-sm py-2'; m.textContent=txt;
+  if(type==='ok'||type==='info') setTimeout(()=>m.classList.add('hidden'), 6000);
+}
+
+/* ---------------- enregistrement ---------------- */
+function jetonUnique(){
+  return 'req-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+/**
+ * Premiere etape encore incomplete, 0 si tout est en ordre. L'enregistrement
+ * rejuge les trois etapes : un retour en arriere suivi d'une modification
+ * ne doit pas laisser passer un champ obligatoire vide.
+ */
+function premiereEtapeIncomplete(){
+  if(S.mode === 'existing' && !S.riskId) return 1;
+  for(let n = 1; n <= 3; n++){ if(champsManquants(n).length) return n; }
+  return 0;
+}
+
+function enregistrer(){
+  if(S.saving) return;
+  const etape = premiereEtapeIncomplete();
+  if(etape){
+    if(S.step !== etape) aller(etape);
+    message(valider(etape) || 'Formulaire incomplet.', 'warn');
+    return;
+  }
+
+  S.saving = true;
+  const b = document.getElementById('save');
+  b.disabled = true; b.textContent = 'Enregistrement...';
+  document.getElementById('next').disabled = true;
+  document.getElementById('back').disabled = true;
+
+  const payload = {
+    requestId: jetonUnique(),
+    mode: S.mode,
+    riskId: S.mode === 'existing' ? S.riskId : null,
+    fiche: lireFiche(),
+    typeEval: S.typeEval,
+    inherent: { probability: S.inh.p, impacts: S.inh.imp },
+    residual: { probability: S.res.p, impacts: S.res.imp, justification: S.res.justif },
+    mastery: {
+      measures: S.mast.mes,
+      l1Mesures: S.mast.l1.txt, l1Note: S.mast.l1.n, l1Na: S.mast.l1.na,
+      l2Mesures: S.mast.l2.txt, l2Note: S.mast.l2.n, l2Na: S.mast.l2.na,
+      l3Mesures: S.mast.l3.txt, l3Note: S.mast.l3.n, l3Na: S.mast.l3.na,
+      justification: S.mast.justif
+    },
+    dynamics: { velocity: S.dyn.velo, persistence: S.dyn.pers, trend: S.dyn.tend },
+    appetence: S.appet,
+    decision: { treatment: S.dec, justification: S.decJustif, actions: S.actions || '' }
+  };
+
+  function fini(){
+    S.saving = false;
+    b.disabled = false; b.textContent = 'Enregistrer';
+    document.getElementById('next').disabled = false;
+    document.getElementById('back').disabled = false;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      // La liste repart a jour : nouveau risque visible, scores et nombre
+      // d'evaluations actualises, sans rouvrir le formulaire.
+      if(res && Array.isArray(res.risks)) DATA.risks = res.risks;
+      reinitialiser();
+      message('Évaluation ' + res.idEvaluation + ' enregistrée au statut « ' + res.statut +
+        ' ». Inhérent ' + res.scoreInherent + ' · ' + res.niveauInherent +
+        ', résiduel ' + res.scoreResiduel + ' · ' + res.niveauResiduel +
+        ". Le formulaire est revenu à l'écran de départ.", 'ok');
+      fini();
+    })
+    .withFailureHandler(function(e){
+      message((e && e.message) ? e.message : "Échec de l'enregistrement. Aucune ligne n'a été ajoutée.", 'err');
+      fini();
+    })
+    .saveAssessment(payload);
+}
+
+function reinitialiser(){
+  S=vierge();
+  document.querySelectorAll('input[name=mode]')[0].checked=true;
+  document.getElementById('p-exist').style.display='block';
+  ecrireFiche(null); replierFiche(false);
+  document.getElementById('fiche-note').textContent=
+    "Sélectionnez un risque existant pour reprendre sa fiche, ou renseignez-la pour un nouveau risque.";
+  ['jpr','mes','jm','jd','act','q'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('lastev').style.display='none';
+  document.getElementById('app').value=''; document.getElementById('app-src').textContent='';
+  document.getElementById('tev').value=''; document.getElementById('dec').value='';
+  document.getElementById('velo').value=''; document.getElementById('pers').value='';
+  document.getElementById('tend').value=TENDANCE_DEFAUT;
+  document.getElementById('velo-d').textContent=''; document.getElementById('pers-d').textContent='';
+  construireGrille(); construireLignes(); listerRisques(''); recalc(); recalcMaitrise();
+  aller(1);
+}
+
+/* ---------------- gestionnaires independants des donnees ---------------- */
+function bindStatique(){
+  // La marque rouge s'efface au premier caractere saisi, sans attendre une
+  // nouvelle tentative de passage a l'etape suivante.
+  ['input','change'].forEach(function(ev){
+    document.addEventListener(ev, function(e){
+      if(e.target && e.target.classList && e.target.classList.contains('manque')){
+        e.target.classList.remove('manque');
+      }
+    }, true);
+  });
+  // Meme chose pour les blocs cliquables : paliers, listes d'axes, lignes de defense.
+  document.addEventListener('click', function(e){
+    const m = e.target && e.target.closest ? e.target.closest('.manque') : null;
+    if(m && m.tagName !== 'INPUT' && m.tagName !== 'TEXTAREA' && m.tagName !== 'SELECT') {
+      m.classList.remove('manque');
+    }
+  }, true);
+
+  document.querySelectorAll('input[name=mode]').forEach(function(r){
+    r.addEventListener('change', function(){
+      if(!this.checked) return;
+      S.mode = this.value;
+      document.getElementById('p-exist').style.display = (S.mode === 'existing') ? 'block' : 'none';
+      nettoyerMarques();
+      if(S.mode === 'new'){
+        // Un nouveau risque ne doit rien heriter du risque consulte juste avant.
+        S.riskId = null; S.histo = null; S.nbEvaluations = 0; INDEX_ACTIF = -1;
+        S.typeEval = ''; S.dec = ''; S.decJustif = ''; S.actions = '';
+        S.appet = null; S.appetSrc = '';
+        ecrireFiche(null); replierFiche(false);
+        if(DATA){ effacerCotation(false); listerRisques(document.getElementById('q').value); }
+        document.getElementById('lastev').style.display = 'none';
+        document.getElementById('fiche-note').textContent =
+          "Nouveau risque : la fiche renseignée ici constituera sa première ligne au registre.";
+      } else {
+        document.getElementById('fiche-note').textContent =
+          "Sélectionnez un risque dans la liste pour reprendre sa fiche et sa dernière évaluation.";
+      }
+    });
+  });
+  // Le resume de l'etape 3 suit la saisie, au lieu de rester fige a l'arrivee sur l'etape.
+  const p3 = document.querySelector('.panel[data-p="3"]');
+  if(p3) ['change','input'].forEach(function(ev){
+    p3.addEventListener(ev, function(){ if(DATA && S.step === 3) setTimeout(majResume, 0); });
+  });
+  const ft = document.getElementById('fiche-toggle');
+  if(ft) ft.addEventListener('click', function(){
+    replierFiche(document.getElementById('fiche').style.display !== 'none');
+  });
+}
+
+/* ---------------- demarrage ---------------- */
+S = vierge();
+
+document.addEventListener('DOMContentLoaded', function(){
+  bindStatique();
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message("Environnement Google Apps Script non détecté. Ouvrez le formulaire depuis le menu Risk Management.", 'err');
+    return;
+  }
+  google.script.run.withSuccessHandler(onInitialData).withFailureHandler(onError).getInitialData();
+});
+
+function onInitialData(data){
+  if(!data || !data.references || !data.lists){
+    message("Les données du classeur n'ont pas pu être chargées. Lancez Risk Management > " +
+      "Administration > Contrôler l'installation des scripts.", 'err');
+    return;
+  }
+  DATA = data;
+  if(Array.isArray(data.seuils) && data.seuils.length) SEUILS = data.seuils;
+  AXES = data.references.impact.axes || [];
+  NIV_IMPACT = data.references.impact.niveaux || [];
+  PROBA = data.references.probabilite || [];
+  MAITRISE = data.references.maitrise || { dimensions: [], niveaux: [] };
+  PERSISTANCE = data.references.persistance || [];
+  TENDANCE_DEFAUT = data.tendanceDefaut || 'Nouvelle';
+  chargerChamps(data.champs);
+  S.inh.imp = AXES.map(function(){ return null; });
+  S.res.imp = AXES.map(function(){ return null; });
+  S.dyn.tend = TENDANCE_DEFAUT;
+
+  if(!data.user.reconnu){
+    message("Votre compte (" + (data.user.email||'inconnu') + ") n'est pas présent dans la feuille " +
+      "UTILISATEURS. L'enregistrement sera refusé.", 'err');
+  } else if(!data.user.actif){
+    message('Votre compte est inactif dans la feuille UTILISATEURS.', 'err');
+  } else if(!data.user.peutEvaluer){
+    message("Votre compte n'a pas le droit d'évaluer. Contactez l'administrateur du classeur.", 'warn');
+  }
+
+remplirSelect('f-ent',DATA.lists.entites); remplirSelect('f-pays',DATA.lists.pays);
+remplirSelect('f-cat',DATA.lists.categories); remplirSelect('f-sc',DATA.lists.sousCategories);
+remplirSelect('tev',DATA.lists.typesEval); remplirSelect('dec',DATA.lists.decisions);
+remplirSelect('velo',DATA.references.velocite.map(v=>v.niveau),true,v=>{
+  const o=DATA.references.velocite.filter(x=>x.niveau==v)[0]; return o.niveau+' · '+o.libelle;});
+if(PERSISTANCE.length){
+  remplirSelect('pers',PERSISTANCE.map(v=>v.niveau),true,v=>{
+    const o=PERSISTANCE.filter(x=>x.niveau==v)[0]; return o.niveau+' · '+o.libelle;});
+} else {
+  document.getElementById('pers-d').textContent =
+    "Aucune échelle de persistance trouvée dans ECHELLES_COTATION, bloc 6.";
+}
+remplirSelect('tend',[TENDANCE_DEFAUT].concat((DATA.lists.tendances||[]).filter(t=>String(t)!==TENDANCE_DEFAUT)),false,v=>TENDANCE_LIB[v]||v);
+
+document.getElementById('velo').onchange=e=>{S.dyn.velo=e.target.value;
+  const o=DATA.references.velocite.filter(x=>x.niveau==e.target.value)[0];
+  document.getElementById('velo-d').textContent=o?o.definition:'';};
+document.getElementById('pers').onchange=e=>{S.dyn.pers=e.target.value;
+  const o=PERSISTANCE.filter(x=>x.niveau==e.target.value)[0];
+  document.getElementById('pers-d').textContent=o?o.definition:'';};
+document.getElementById('tend').onchange=e=>{S.dyn.tend=e.target.value; S.tendanceManuelle=true;
+  document.getElementById('tend-d').textContent = e.target.value===TENDANCE_DEFAUT
+    ? "Valeur de départ, distincte des trois valeurs du référentiel."
+    : (S.histo ? "Saisie manuelle : elle remplace la tendance déduite du score précédent." : '');};
+document.getElementById('tev').onchange=e=>S.typeEval=e.target.value;
+document.getElementById('dec').onchange=e=>{S.dec=e.target.value;};
+document.getElementById('app').oninput=e=>{S.appet=e.target.value===''?null:Number(e.target.value);
+  document.getElementById('app-src').textContent='saisi manuellement'; majAppetence();};
+document.getElementById('jpr').oninput=e=>S.res.justif=e.target.value;
+document.getElementById('mes').oninput=e=>S.mast.mes=e.target.value;
+document.getElementById('jm').oninput=e=>S.mast.justif=e.target.value;
+document.getElementById('jd').oninput=e=>S.decJustif=e.target.value;
+document.getElementById('act').oninput=e=>S.actions=e.target.value;
+document.getElementById('q').oninput=function(e){ INDEX_ACTIF=-1; listerRisques(e.target.value); };
+document.getElementById('q').addEventListener('keydown', function(e){
+  if(e.key === 'ArrowDown'){ e.preventDefault(); deplacerSelection(1); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); deplacerSelection(-1); }
+  else if(e.key === 'Enter'){ e.preventDefault(); validerSelectionClavier(); }
+});
+document.getElementById('f-sc').onchange=e=>proposerAppetence(e.target.value);
+
+document.getElementById('copy').onclick=()=>{
+  S.res.p=S.inh.p; S.res.imp=S.inh.imp.slice();
+  combos.res.p.set(S.res.p); AXES.forEach((a,i)=>combos.res[i].set(S.res.imp[i]));
+  recalc();
+  message("Cotation inhérente recopiée vers le résiduel. Ajustez ensuite les axes réellement atténués par le dispositif de maîtrise.", 'info');
+};
+document.getElementById('vierge').onclick=()=>effacerCotation(true);
+document.getElementById('next').onclick=()=>{const e=valider(S.step); if(e){message(e,'warn');return;} aller(S.step+1);};
+document.getElementById('back').onclick=()=>aller(S.step-1);
+document.getElementById('save').onclick=enregistrer;
+document.getElementById('reset').onclick=()=>{reinitialiser(); message('Formulaire réinitialisé.','info');};
+
+  ecrireFiche(null);
+document.getElementById('fiche-note').textContent=
+  "Sélectionnez un risque existant pour reprendre sa fiche, ou renseignez-la pour un nouveau risque.";
+  construireGrille(); construireLignes(); listerRisques(''); recalc(); recalcMaitrise();
+  aller(1);
+
+  if(data.version && data.version !== 'v9'){
+    message('Les scripts du projet sont en version ' + data.version + ' et ce formulaire en v9 : ' +
+      'recopiez tous les fichiers de la même livraison.', 'err');
+  }
+  // Menu 1 > Évaluer un nouveau risque : le formulaire s'ouvre directement dans ce mode.
+  if(document.body.dataset.mode === 'new'){
+    const rn = document.querySelector('input[name=mode][value=new]');
+    if(rn){ rn.checked = true; rn.dispatchEvent(new Event('change')); }
+  }
+}
+</script>
+
+</body>
+</html>

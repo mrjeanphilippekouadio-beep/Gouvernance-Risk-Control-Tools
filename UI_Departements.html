@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     FICHIER  : UI_Departements          type : HTML (.html)
+     SECTION  : MENU 6 · Départements
+     VA AVEC  : 06_Departements (Script)
+     MARQUEUR UI_Departements v10   (lu par Administration > Controler l'installation)
+     ===================================================================== -->
+<html lang="fr">
+<head>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+:root{
+  --primary:#1F5FA8; --primary-soft:#E8F0FA; --muted:#5B6877; --border-strong:#B9C3CF;
+  --ok:#1B7F3B; --danger:#B3261E; --warn-bg:#FFF6DC; --warn-text:#7A5A00;
+}
+.overlay{position:fixed;inset:0;background:rgba(16,24,40,.38);display:none;z-index:50}
+.overlay.on{display:block}
+.overlay .panel{transform:translateX(100%);transition:transform .18s ease}
+.overlay.on .panel{transform:translateX(0)}
+.cb{position:relative}
+.cb-list{display:none}
+.cb.open .cb-list{display:block}
+.manque{border-color:#B3261E !important;box-shadow:0 0 0 3px rgba(179,38,30,.14) !important}
+</style>
+</head>
+<body class="bg-base-200 text-base-content text-sm">
+<div class="navbar bg-base-100 border-b border-base-300 px-4 min-h-0 py-2 mb-2 rounded-lg shadow-sm">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm normal-case gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-[1180px] mx-auto p-4">
+
+<div class="bg-base-100 border border-base-300 rounded-2xl shadow overflow-hidden">
+  <header class="p-4 pb-3 border-b border-base-300 flex items-end justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="m-0 text-lg font-semibold tracking-tight">Départements</h1>
+      <p class="mt-1 text-xs text-base-content/60">Catalogue des départements : rattachement, manager, pilote de risque et processus couverts.</p>
+    </div>
+    <button class="btn btn-primary btn-sm" id="btn-nouveau">+ Nouveau département</button>
+  </header>
+
+  <div id="msg" class="alert hidden mx-5 mt-3 text-sm py-2"></div>
+
+  <div class="flex items-center gap-2 flex-wrap p-3.5 px-5 border-b border-base-300 bg-base-200/40">
+    <input type="search" id="q" class="input input-bordered input-sm min-w-[220px]" placeholder="Rechercher un département (id, nom, manager, entité…)">
+    <select id="f-entite" class="select select-bordered select-sm"><option value="">Toutes les entités</option></select>
+    <select id="f-statut" class="select select-bordered select-sm">
+      <option value="">Tous les statuts</option>
+      <option value="actif">Actifs</option>
+      <option value="inactif">Inactifs</option>
+    </select>
+    <span class="flex-1"></span>
+    <span class="text-xs text-base-content/60 whitespace-nowrap" id="compte">·</span>
+  </div>
+
+  <main class="p-0 min-h-[360px]">
+    <div class="overflow-auto max-h-[520px]">
+      <table class="table table-zebra table-sm w-full text-xs">
+        <thead>
+          <tr class="bg-base-200">
+            <th>ID</th><th>Nom</th><th>Entité</th><th>Manager</th><th>Pilote de risque</th>
+            <th>Désigné par</th><th>Processus rattachés</th><th>Statut</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <div class="border-t border-base-300 bg-base-200/40">
+    <h3 class="text-xs uppercase tracking-wide text-base-content/60 m-0 px-5 pt-2.5 pb-1.5">Journal des actions (cette session)</h3>
+    <ul id="journal-list" class="list-none m-0 px-5 pb-3 max-h-[140px] overflow-auto"></ul>
+  </div>
+</div>
+
+</div>
+
+<!-- ================= panneau creation / edition complete ================= -->
+<div class="overlay" id="overlay">
+  <div class="panel fixed top-0 right-0 bottom-0 w-[560px] max-w-[94vw] bg-base-100 shadow-2xl flex flex-col z-[51]">
+    <div class="p-4 px-5 border-b border-base-300 flex items-center justify-between gap-2.5">
+      <h2 id="p-titre" class="m-0 text-base font-semibold">Nouveau département</h2>
+      <button class="btn btn-sm btn-ghost btn-circle text-lg" id="p-close">&times;</button>
+    </div>
+    <div class="p-4 px-5 overflow-auto flex-1">
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Nom du département <span class="text-error font-bold">*</span></label>
+        <input type="text" id="f-nom" class="input input-bordered w-full" placeholder="Intitulé du département"></div>
+
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Entité</label>
+        <input type="text" id="f-entite-form" class="input input-bordered w-full" placeholder="Entité juridique ou pôle de rattachement"></div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Responsabilités</div>
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Manager (supérieur hiérarchique) <span class="text-error font-bold">*</span></label>
+        <select id="f-manager" class="select select-bordered w-full"></select></div>
+
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Pilote de risque</label>
+        <select id="f-pilote" class="select select-bordered w-full"></select>
+        <div class="text-xs text-base-content/60 mt-1">Si aucun pilote n'est désigné, le manager devient automatiquement le pilote par défaut.</div></div>
+
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Désigné par</label>
+        <input type="text" id="f-designe-par" class="input input-bordered w-full" placeholder="Nom ou email de la personne ayant désigné le pilote"></div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Processus rattachés</div>
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Processus</label>
+        <div id="picker-processus"></div>
+        <div class="flex flex-wrap gap-1.5 mt-1.5" id="chips-processus"></div>
+      </div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Statut</div>
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Département actif</label>
+        <select id="f-actif" class="select select-bordered w-full">
+          <option value="oui">Oui</option>
+          <option value="non">Non</option>
+        </select></div>
+    </div>
+    <div class="p-3.5 px-5 border-t border-base-300 bg-base-200/40 flex justify-end gap-2.5">
+      <button class="btn" id="p-annuler">Annuler</button>
+      <button class="btn btn-success" id="p-enregistrer">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= panneau rapide : designer le pilote de risque ================= -->
+<div class="overlay" id="overlay-pilote">
+  <div class="panel fixed top-0 right-0 bottom-0 w-[420px] max-w-[94vw] bg-base-100 shadow-2xl flex flex-col z-[51]">
+    <div class="p-4 px-5 border-b border-base-300 flex items-center justify-between gap-2.5">
+      <h2 id="pp-titre" class="m-0 text-base font-semibold">Désigner le pilote de risque</h2>
+      <button class="btn btn-sm btn-ghost btn-circle text-lg" id="pp-close">&times;</button>
+    </div>
+    <div class="p-4 px-5 overflow-auto flex-1">
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Département</label>
+        <input type="text" id="pp-departement" class="input input-bordered w-full" disabled></div>
+
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Pilote de risque <span class="text-error font-bold">*</span></label>
+        <select id="pp-pilote" class="select select-bordered w-full"></select></div>
+
+      <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Désigné par</label>
+        <input type="text" id="pp-designe-par" class="input input-bordered w-full" placeholder="Email de la personne qui désigne"></div>
+      <div class="text-xs text-base-content/60 mt-1">Cette action remplace la désignation actuelle du pilote de risque pour ce département uniquement.</div>
+    </div>
+    <div class="p-3.5 px-5 border-t border-base-300 bg-base-200/40 flex justify-end gap-2.5">
+      <button class="btn" id="pp-annuler">Annuler</button>
+      <button class="btn btn-success" id="pp-enregistrer">Désigner</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==================================================================
+   Etat et donnees recues du serveur (getDepartementsData)
+   ================================================================== */
+let DATA = null;               // { version, user, departements, utilisateurs, processus }
+let DEPARTEMENTS = [];
+let UTILISATEURS = [];
+let PROCESSUS = [];
+
+let EDIT_ID = null;               // id du departement en cours d'edition, null si creation
+let PROCESSUS_SELECTIONNES = [];  // libelles selectionnes dans le panneau
+let PILOTE_ID = null;             // id du departement cible de la designation rapide
+let JOURNAL = [];                  // { t: heure, texte } local, append-only, non persiste
+let SAVING = false;
+
+/* ---------------- utilitaires ---------------- */
+function esc(v){
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function message(txt, type){
+  const m = document.getElementById('msg');
+  const cls = {info:'alert-info', warn:'alert-warning', err:'alert-error', ok:'alert-success'}[type] || 'alert-info';
+  m.className = 'alert ' + cls + ' mx-5 mt-3 text-sm py-2';
+  m.textContent = txt;
+  if(type === 'ok' || type === 'info') setTimeout(function(){ m.classList.add('hidden'); }, 6000);
+}
+function onError(err){
+  const txt = (err && err.message) ? err.message
+    : "Une erreur est survenue côté serveur. Aucune donnée n'a été enregistrée.";
+  message(txt, 'err');
+  try { console.error(err); } catch(e) {}
+}
+function heure(){
+  const d = new Date();
+  return d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+}
+function journaliser(texte){
+  JOURNAL.unshift({ t: heure(), texte: texte });
+  if(JOURNAL.length > 50) JOURNAL.length = 50;
+  peindreJournal();
+}
+function peindreJournal(){
+  const ul = document.getElementById('journal-list');
+  if(!JOURNAL.length){
+    ul.innerHTML = '<li class="italic text-base-content/50">Aucune action enregistrée dans cette session pour le moment.</li>';
+    return;
+  }
+  ul.innerHTML = JOURNAL.map(function(e){
+    return '<li class="text-xs py-1 border-b border-dashed border-base-300 last:border-0"><span class="text-base-content/50 text-[11px] mr-1.5">' + esc(e.t) + '</span>' + esc(e.texte) + '</li>';
+  }).join('');
+}
+
+function couleurStatut(actif){
+  return actif ? 'badge-success' : 'badge-neutral';
+}
+
+function remplirSelect(id, valeurs, videLabel){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.innerHTML = '';
+  el.appendChild(new Option(videLabel || 'Sélectionner…', ''));
+  valeurs.forEach(function(v){ el.appendChild(new Option(v, v)); });
+}
+
+function estPiloteParDefaut(d){
+  const dp = String(d.piloteDesignePar || '').trim();
+  return !dp || dp.toLowerCase().indexOf('pilote par défaut') !== -1 || dp.toLowerCase().indexOf('pilote par defaut') !== -1;
+}
+
+function listeProcessusRattaches(d){
+  return String(d.processusRattaches || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+}
+
+/* ==================================================================
+   Selecteur de processus rattaches (multi-selection avec recherche)
+   ================================================================== */
+function construirePickerProcessus(){
+  const host = document.getElementById('picker-processus');
+  host.innerHTML = '';
+  const wrap = document.createElement('div'); wrap.className = 'cb';
+  const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'cb-btn btn btn-outline w-full justify-between font-normal';
+  const list = document.createElement('div'); list.className = 'cb-list absolute z-[60] top-full mt-1 left-0 w-full bg-base-100 border border-base-300 rounded-lg shadow-xl p-1.5 max-h-[280px] overflow-auto';
+  list.innerHTML = '<div class="p-1.5 border-b border-base-300 mb-1"><input type="text" id="cb-processus-q" class="input input-bordered input-sm w-full" placeholder="Rechercher un processus…"></div>' +
+    '<div id="cb-processus-opts"></div>';
+  wrap.appendChild(btn); wrap.appendChild(list); host.appendChild(wrap);
+
+  function dessineBouton(){
+    const n = PROCESSUS_SELECTIONNES.length;
+    btn.innerHTML = (n ? '<span>' + n + ' processus sélectionné' + (n > 1 ? 's' : '') + '</span>'
+      : '<span class="text-base-content/50">Sélectionner un ou plusieurs processus…</span>') + '<span class="text-base-content/50 text-xs">▾</span>';
+  }
+
+  function dessineOptions(filtre){
+    const q = (filtre || '').toLowerCase();
+    const zone = list.querySelector('#cb-processus-opts');
+    const filtres = PROCESSUS.filter(function(p){
+      return !q || String(p).toLowerCase().indexOf(q) !== -1;
+    });
+    if(!filtres.length){
+      zone.innerHTML = '<div class="p-2 text-base-content/50 italic text-sm">Aucun processus ne correspond.</div>';
+      return;
+    }
+    zone.innerHTML = '';
+    filtres.forEach(function(p){
+      const it = document.createElement('div'); it.className = 'flex gap-2 p-2 rounded-lg cursor-pointer items-start hover:bg-primary/10';
+      const checked = PROCESSUS_SELECTIONNES.indexOf(p) !== -1;
+      it.innerHTML = '<input type="checkbox" class="checkbox checkbox-sm mt-0.5" ' + (checked ? 'checked' : '') + '>' +
+        '<span class="min-w-0"><div class="text-sm font-semibold">' + esc(p) + '</div></span>';
+      it.onclick = function(e){
+        e.stopPropagation();
+        const idx = PROCESSUS_SELECTIONNES.indexOf(p);
+        if(idx === -1) PROCESSUS_SELECTIONNES.push(p); else PROCESSUS_SELECTIONNES.splice(idx, 1);
+        dessineBouton(); dessineOptions(list.querySelector('#cb-processus-q').value); dessineChipsProcessus();
+      };
+      zone.appendChild(it);
+    });
+  }
+
+  btn.onclick = function(e){
+    e.stopPropagation();
+    document.querySelectorAll('.cb.open').forEach(function(x){ if(x !== wrap) x.classList.remove('open'); });
+    wrap.classList.toggle('open');
+    if(wrap.classList.contains('open')) list.querySelector('#cb-processus-q').focus();
+  };
+  list.addEventListener('click', function(e){ e.stopPropagation(); });
+  list.querySelector('#cb-processus-q').oninput = function(e){ dessineOptions(e.target.value); };
+
+  dessineBouton(); dessineOptions('');
+}
+document.addEventListener('click', function(){
+  document.querySelectorAll('.cb.open').forEach(function(x){ x.classList.remove('open'); });
+});
+
+function dessineChipsProcessus(){
+  const host = document.getElementById('chips-processus');
+  host.innerHTML = '';
+  PROCESSUS_SELECTIONNES.forEach(function(p){
+    const c = document.createElement('span'); c.className = 'badge badge-primary badge-outline gap-1 py-3';
+    c.innerHTML = '<span>' + esc(p) + '</span><button type="button" class="text-current leading-none">&times;</button>';
+    c.querySelector('button').onclick = function(){
+      PROCESSUS_SELECTIONNES = PROCESSUS_SELECTIONNES.filter(function(x){ return x !== p; });
+      construirePickerProcessus(); dessineChipsProcessus();
+    };
+    host.appendChild(c);
+  });
+}
+
+/* ==================================================================
+   Catalogue : rendu du tableau
+   ================================================================== */
+function departementsFiltres(){
+  const q = (document.getElementById('q').value || '').toLowerCase();
+  const fe = document.getElementById('f-entite').value;
+  const fs = document.getElementById('f-statut').value;
+  return DEPARTEMENTS.filter(function(d){
+    if(fe && d.entite !== fe) return false;
+    if(fs === 'actif' && !d.actif) return false;
+    if(fs === 'inactif' && d.actif) return false;
+    if(!q) return true;
+    return String(d.id).toLowerCase().indexOf(q) !== -1 ||
+      String(d.nom || '').toLowerCase().indexOf(q) !== -1 ||
+      String(d.manager || '').toLowerCase().indexOf(q) !== -1 ||
+      String(d.entite || '').toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function peindreTableau(){
+  const tbody = document.getElementById('tbody');
+  const liste = departementsFiltres();
+  document.getElementById('compte').textContent = liste.length + ' département' + (liste.length > 1 ? 's' : '') +
+    ' sur ' + DEPARTEMENTS.length;
+
+  if(!liste.length){
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center italic text-base-content/50 py-6">' +
+      (DEPARTEMENTS.length ? 'Aucun département ne correspond à cette recherche.' : "Aucun département dans le catalogue pour l'instant.") +
+      '</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = liste.map(function(d){
+    const procs = listeProcessusRattaches(d);
+    const tags = procs.slice(0, 3).map(function(p){ return '<span class="badge badge-ghost badge-sm">' + esc(p) + '</span>'; }).join('');
+    const reste = procs.length > 3 ? '<span class="badge badge-ghost badge-sm">+' + (procs.length - 3) + '</span>' : '';
+    const parDefaut = estPiloteParDefaut(d);
+    return '<tr>' +
+      '<td class="text-base-content/60 text-xs">' + esc(d.id) + '</td>' +
+      '<td class="font-semibold max-w-[220px]">' + esc(d.nom) + '</td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(d.entite || '—') + '</td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(d.manager || '—') + '</td>' +
+      '<td class="text-base-content/60 text-xs">' + esc(d.piloteRisque || '—') +
+        (parDefaut ? '<span class="badge badge-warning badge-outline badge-xs ml-1.5 uppercase">Par défaut</span>' : '') + '</td>' +
+      '<td class="text-base-content/60 text-xs">' + (parDefaut ? '—' : esc(d.piloteDesignePar || '—')) + '</td>' +
+      '<td><div class="flex flex-wrap gap-1 max-w-[220px]">' + (tags + reste || '<span class="text-xs text-base-content/60">—</span>') + '</div></td>' +
+      '<td><span class="badge ' + couleurStatut(d.actif) + '">' + (d.actif ? 'Actif' : 'Inactif') + '</span></td>' +
+      '<td><div class="flex flex-col gap-1.5">' +
+        '<button class="btn btn-xs btn-outline rowbtn" data-id="' + esc(d.id) + '" data-action="edit">Modifier</button>' +
+        '<button class="btn btn-xs btn-outline rowbtn" data-id="' + esc(d.id) + '" data-action="pilote">Désigner pilote</button>' +
+      '</div></td>' +
+    '</tr>';
+  }).join('');
+
+  tbody.querySelectorAll('.rowbtn').forEach(function(b){
+    b.onclick = function(){
+      if(b.dataset.action === 'pilote') ouvrirPanneauPilote(b.dataset.id);
+      else ouvrirPanneau(b.dataset.id);
+    };
+  });
+}
+
+/* ==================================================================
+   Panneau de creation / edition complete
+   ================================================================== */
+function remplirFormulaire(d){
+  document.getElementById('f-nom').value = d ? (d.nom || '') : '';
+  document.getElementById('f-entite-form').value = d ? (d.entite || '') : '';
+  document.getElementById('f-manager').value = d ? (d.manager || '') : '';
+  document.getElementById('f-pilote').value = d ? (d.piloteRisque || '') : '';
+  document.getElementById('f-designe-par').value = d ? (estPiloteParDefaut(d) ? '' : (d.piloteDesignePar || '')) : '';
+  document.getElementById('f-actif').value = (!d || d.actif !== false) ? 'oui' : 'non';
+  PROCESSUS_SELECTIONNES = d ? listeProcessusRattaches(d) : [];
+  construirePickerProcessus(); dessineChipsProcessus();
+}
+
+function nettoyerMarques(){
+  document.querySelectorAll('#overlay .manque').forEach(function(e){ e.classList.remove('manque'); });
+}
+
+function ouvrirPanneau(id){
+  nettoyerMarques();
+  EDIT_ID = id || null;
+  const d = id ? DEPARTEMENTS.filter(function(x){ return String(x.id) === String(id); })[0] : null;
+  document.getElementById('p-titre').textContent = d ? ('Modifier ' + d.id) : 'Nouveau département';
+  remplirFormulaire(d);
+  document.getElementById('overlay').classList.add('on');
+}
+function fermerPanneau(){
+  document.getElementById('overlay').classList.remove('on');
+  nettoyerMarques();
+}
+
+/* ---------------- validation cote client, miroir de la validation serveur ---------------- */
+function champsManquantsFormulaire(){
+  const manquants = [];
+  if(!document.getElementById('f-nom').value.trim()) manquants.push(['f-nom', 'Le nom du département est obligatoire.']);
+  if(!document.getElementById('f-manager').value) manquants.push(['f-manager', 'Le manager (supérieur hiérarchique) est obligatoire.']);
+  return manquants;
+}
+function signalerManquantsFormulaire(manquants){
+  nettoyerMarques();
+  manquants.forEach(function(m){
+    const el = document.getElementById(m[0]);
+    if(el) el.classList.add('manque');
+  });
+  if(manquants.length && document.getElementById(manquants[0][0])){
+    try { document.getElementById(manquants[0][0]).scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch(e){}
+  }
+}
+
+function enregistrerDepartement(){
+  if(SAVING) return;
+  const manquants = champsManquantsFormulaire();
+  if(manquants.length){
+    signalerManquantsFormulaire(manquants);
+    message(manquants.length === 1 ? manquants[0][1]
+      : manquants.length + ' champs obligatoires ne sont pas renseignés.', 'warn');
+    return;
+  }
+  nettoyerMarques();
+
+  const payload = {
+    id: EDIT_ID || '',
+    nom: document.getElementById('f-nom').value.trim(),
+    entite: document.getElementById('f-entite-form').value.trim(),
+    manager: document.getElementById('f-manager').value,
+    piloteRisque: document.getElementById('f-pilote').value,
+    designePar: document.getElementById('f-designe-par').value.trim(),
+    processusRattaches: PROCESSUS_SELECTIONNES.slice(),
+    actif: document.getElementById('f-actif').value === 'oui'
+  };
+
+  SAVING = true;
+  const bEnr = document.getElementById('p-enregistrer');
+  const bAnn = document.getElementById('p-annuler');
+  bEnr.disabled = true; bAnn.disabled = true;
+  const texteInitial = bEnr.textContent;
+  bEnr.textContent = 'Enregistrement…';
+
+  function fini(){
+    SAVING = false;
+    bEnr.disabled = false; bAnn.disabled = false; bEnr.textContent = texteInitial;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res && Array.isArray(res.departements)) DEPARTEMENTS = res.departements;
+      const nouveauId = res ? res.id : (EDIT_ID || '·');
+      journaliser((EDIT_ID ? 'Département modifié : ' : 'Département créé : ') + nouveauId + ' · ' + payload.nom);
+      message((EDIT_ID ? 'Département ' + nouveauId + ' mis à jour.' : 'Département ' + nouveauId + ' créé.'), 'ok');
+      fini();
+      fermerPanneau();
+      peindreTableau();
+    })
+    .withFailureHandler(function(e){
+      fini();
+      onError(e);
+    })
+    .saveDepartement(payload);
+}
+
+/* ==================================================================
+   Panneau rapide : designer le pilote de risque
+   ================================================================== */
+function ouvrirPanneauPilote(id){
+  nettoyerMarquesPilote();
+  PILOTE_ID = id;
+  const d = DEPARTEMENTS.filter(function(x){ return String(x.id) === String(id); })[0];
+  document.getElementById('pp-titre').textContent = 'Désigner le pilote — ' + (d ? d.nom : id);
+  document.getElementById('pp-departement').value = d ? (d.id + ' · ' + d.nom) : id;
+  document.getElementById('pp-pilote').value = d ? (d.piloteRisque || '') : '';
+  document.getElementById('pp-designe-par').value = (DATA && DATA.user && DATA.user.email) ? DATA.user.email : '';
+  document.getElementById('overlay-pilote').classList.add('on');
+}
+function fermerPanneauPilote(){
+  document.getElementById('overlay-pilote').classList.remove('on');
+  nettoyerMarquesPilote();
+}
+function nettoyerMarquesPilote(){
+  document.querySelectorAll('#overlay-pilote .manque').forEach(function(e){ e.classList.remove('manque'); });
+}
+
+function designerPilote(){
+  if(SAVING) return;
+  const pilote = document.getElementById('pp-pilote').value;
+  if(!pilote){
+    nettoyerMarquesPilote();
+    document.getElementById('pp-pilote').classList.add('manque');
+    message('Le pilote de risque est obligatoire.', 'warn');
+    return;
+  }
+  nettoyerMarquesPilote();
+
+  const designePar = document.getElementById('pp-designe-par').value.trim();
+  const idCible = PILOTE_ID;
+
+  SAVING = true;
+  const bEnr = document.getElementById('pp-enregistrer');
+  const bAnn = document.getElementById('pp-annuler');
+  bEnr.disabled = true; bAnn.disabled = true;
+  const texteInitial = bEnr.textContent;
+  bEnr.textContent = 'Enregistrement…';
+
+  function fini(){
+    SAVING = false;
+    bEnr.disabled = false; bAnn.disabled = false; bEnr.textContent = texteInitial;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res && Array.isArray(res.departements)) DEPARTEMENTS = res.departements;
+      journaliser('Pilote de risque désigné pour ' + idCible + ' : ' + pilote);
+      message('Pilote de risque désigné pour ' + idCible + '.', 'ok');
+      fini();
+      fermerPanneauPilote();
+      peindreTableau();
+    })
+    .withFailureHandler(function(e){
+      fini();
+      onError(e);
+    })
+    .designerPiloteRisque(idCible, pilote, designePar);
+}
+
+/* ==================================================================
+   Chargement initial
+   ================================================================== */
+function onDepartementsData(data){
+  if(!data){
+    message("Les données du classeur n'ont pas pu être chargées. Lancez Risk Management > " +
+      "Administration > Contrôler l'installation des scripts.", 'err');
+    return;
+  }
+  DATA = data;
+  DEPARTEMENTS = Array.isArray(data.departements) ? data.departements : [];
+  UTILISATEURS = Array.isArray(data.utilisateurs) ? data.utilisateurs : [];
+  PROCESSUS = Array.isArray(data.processus) ? data.processus : [];
+
+  const entites = DEPARTEMENTS.map(function(d){ return d.entite; }).filter(Boolean);
+  const entitesUniques = entites.filter(function(v, i){ return entites.indexOf(v) === i; }).sort();
+  const emailsUtilisateurs = UTILISATEURS.filter(function(u){ return u.actif !== false; })
+    .map(function(u){ return u.email; }).filter(Boolean);
+
+  remplirSelect('f-entite', entitesUniques, 'Toutes les entités');
+  remplirSelect('f-manager', emailsUtilisateurs, 'Sélectionner…');
+  remplirSelect('f-pilote', emailsUtilisateurs, 'Sélectionner…');
+  remplirSelect('pp-pilote', emailsUtilisateurs, 'Sélectionner…');
+
+  if(data.user && !data.user.reconnu){
+    message("Votre compte (" + (data.user.email || 'inconnu') + ") n'est pas présent dans la feuille " +
+      "UTILISATEURS. L'enregistrement sera refusé.", 'err');
+  } else if(data.user && !data.user.actif){
+    message('Votre compte est inactif dans la feuille UTILISATEURS.', 'err');
+  }
+
+  if(data.version){
+    document.title = 'Départements';
+  }
+
+  peindreTableau();
+  peindreJournal();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('btn-nouveau').onclick = function(){ ouvrirPanneau(null); };
+  document.getElementById('p-close').onclick = fermerPanneau;
+  document.getElementById('p-annuler').onclick = fermerPanneau;
+  document.getElementById('p-enregistrer').onclick = enregistrerDepartement;
+  document.getElementById('overlay').addEventListener('click', function(e){
+    if(e.target.id === 'overlay') fermerPanneau();
+  });
+
+  document.getElementById('pp-close').onclick = fermerPanneauPilote;
+  document.getElementById('pp-annuler').onclick = fermerPanneauPilote;
+  document.getElementById('pp-enregistrer').onclick = designerPilote;
+  document.getElementById('overlay-pilote').addEventListener('click', function(e){
+    if(e.target.id === 'overlay-pilote') fermerPanneauPilote();
+  });
+
+  document.getElementById('q').oninput = peindreTableau;
+  document.getElementById('f-entite').onchange = peindreTableau;
+  document.getElementById('f-statut').onchange = peindreTableau;
+
+  peindreJournal();
+
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message("Environnement Google Apps Script non détecté. Ouvrez la page des départements depuis le menu Risk Management.", 'err');
+    return;
+  }
+  google.script.run.withSuccessHandler(onDepartementsData).withFailureHandler(onError).getDepartementsData();
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     FICHIER  : UI_Visualisation         type : HTML (.html)
+     SECTION  : MENU 4 · Visualisation des risques
+     VA AVEC  : 40_Visualisation (Script)
+     MARQUEUR UI_Visualisation v9   (lu par Administration > Controler l'installation)
+     ===================================================================== -->
+<html lang="fr">
+<head>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* Résiduel : composants de visualisation sans équivalent daisyUI (carrousel
+   de lots, cartes de progression Chart.js, palette de criticité, panneau de
+   détail en recouvrement). Charte conservée à l'identique. */
+:root{
+  --border:#D8DEE6; --border-strong:#B9C3CF; --text:#16202C; --muted:#5B6877;
+  --primary:#1F5FA8; --primary-soft:#E8F0FA; --inh:#1F5FA8; --res:#1B7F3B;
+}
+.carrousel{position:relative;display:flex;align-items:stretch;gap:0}
+.carrousel-fenetre{overflow:hidden;flex:1;border-radius:13px}
+.carrousel-piste{display:flex;transition:transform .55s cubic-bezier(.65,0,.35,1)}
+.carrousel-page{flex:0 0 100%;min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;padding:2px}
+.fleche-nav{flex:none;width:42px;height:42px;align-self:center;border-radius:50%;border:1px solid var(--border-strong);
+  background:#fff;color:var(--primary);font-size:19px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(16,24,40,.12);
+  transition:transform .15s ease,background .15s ease,color .15s ease,opacity .2s ease;z-index:2}
+.fleche-nav.gauche{margin-right:-21px}
+.fleche-nav.droite{margin-left:-21px}
+.fleche-nav:hover:not(:disabled){background:var(--primary);color:#fff;transform:scale(1.09)}
+.fleche-nav:active:not(:disabled){transform:scale(.96)}
+.fleche-nav:disabled{opacity:.32;cursor:default;box-shadow:none}
+.lot-info{text-align:center;margin-top:11px;font-size:11.5px;color:var(--muted);font-weight:600;
+  display:flex;align-items:center;justify-content:center;gap:8px}
+.lot-info .points{display:inline-flex;gap:5px}
+.lot-info .point{width:6px;height:6px;border-radius:50%;background:var(--border-strong);transition:background .2s,transform .2s}
+.lot-info .point.actif{background:var(--primary);transform:scale(1.35)}
+.carte{background:#fff;border:1px solid var(--border);border-radius:13px;padding:13px 14px 10px;
+  box-shadow:0 1px 2px rgba(16,24,40,.05);display:flex;flex-direction:column;gap:8px;
+  cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease}
+.carte:hover{border-color:var(--primary);box-shadow:0 4px 14px rgba(31,95,168,.14);transform:translateY(-1px)}
+.carte:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.carte-id{font:700 11.5px/1 sans-serif;color:var(--primary);background:var(--primary-soft);
+  padding:3px 7px;border-radius:5px;letter-spacing:.02em}
+.pastille-nb{font:700 11px/1 sans-serif;color:var(--muted);background:#FAFBFC;
+  border:1px solid var(--border);padding:3px 7px;border-radius:5px}
+.pastille-statut{font:700 10.5px/1 sans-serif;padding:3px 7px;border-radius:5px;margin-left:auto;
+  background:#FAFBFC;color:var(--muted);border:1px solid var(--border)}
+.position{display:flex;align-items:center;gap:8px;margin-top:2px}
+.pos-boite{flex:1;border-radius:10px;padding:8px 9px;text-align:center}
+.pos-boite .lbl{font:700 10px/1 sans-serif;text-transform:uppercase;letter-spacing:.04em;opacity:.85}
+.pos-boite .score{font:800 22px/1.15 sans-serif;margin:3px 0 1px;font-variant-numeric:tabular-nums}
+.pos-boite .niv{font:600 11px/1 sans-serif}
+.pos-boite.pos-vide{background:#FAFBFC;color:var(--muted);border:1px dashed var(--border)}
+.progression{position:relative;height:120px;margin-top:2px}
+.progression canvas{width:100%!important;height:100%!important}
+.vide-graph{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  color:var(--border-strong);background:#FAFBFC;border:1px dashed var(--border);border-radius:9px}
+.vide-graph span{font-size:10.5px;line-height:1.4;color:var(--muted);max-width:220px;text-align:center}
+.carte-pied{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:10.5px;color:var(--muted);
+  border-top:1px solid var(--border);padding-top:6px;margin-top:2px;flex-wrap:wrap}
+.legende-mini{display:flex;gap:10px}
+.legende-mini span{display:inline-flex;align-items:center;gap:4px}
+.legende-mini i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.carte-voir{font-size:10.5px;color:var(--primary);font-weight:700;opacity:0;transition:opacity .15s ease}
+.carte:hover .carte-voir{opacity:1}
+.voile{position:fixed;inset:0;background:rgba(15,23,32,.5);display:flex;align-items:flex-start;
+  justify-content:center;padding:5vh 16px;z-index:50;opacity:0;pointer-events:none;transition:opacity .18s ease}
+.voile.ouvert{opacity:1;pointer-events:auto}
+.panneau-detail{background:#fff;border-radius:14px;max-width:760px;width:100%;max-height:90vh;
+  overflow-y:auto;box-shadow:0 20px 60px rgba(16,24,40,.35);transform:translateY(10px) scale(.98);
+  transition:transform .18s ease}
+.voile.ouvert .panneau-detail{transform:translateY(0) scale(1)}
+.detail-entete{position:sticky;top:0;background:#fff;display:flex;align-items:flex-start;gap:10px;
+  padding:16px 18px 12px;border-bottom:1px solid var(--border);z-index:1}
+.detail-fermer{margin-left:auto;background:#FAFBFC;border:1px solid var(--border);
+  color:var(--muted);width:30px;height:30px;border-radius:8px;font-size:15px;cursor:pointer;flex:none}
+.detail-controles{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.tableau-hist{width:100%;border-collapse:collapse;font-size:11.5px}
+.tableau-hist th{text-align:left;font:700 10px sans-serif;text-transform:uppercase;letter-spacing:.03em;
+  color:var(--muted);border-bottom:1px solid var(--border);padding:5px 7px}
+.tableau-hist td{padding:6px 7px;border-bottom:1px solid var(--border)}
+@media (max-width:560px){
+  .fleche-nav{width:34px;height:34px;font-size:16px}
+  .fleche-nav.gauche{margin-right:-17px}
+  .fleche-nav.droite{margin-left:-17px}
+}
+</style>
+</head>
+<body class="bg-base-200 text-base-content text-sm">
+<div class="navbar bg-base-100 border-b border-base-300 min-h-0 py-2 px-4">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-[1190px] mx-auto p-3.5 pb-6">
+  <header class="flex items-end justify-between gap-4 mb-2.5 flex-wrap">
+    <div>
+      <h1 class="m-0 text-lg font-semibold">Visualisation des risques</h1>
+      <p class="mt-0.5 text-xs text-base-content/60">Position inhérent → résiduel et progression des évaluations, risque par risque. Cliquez sur une carte pour le détail complet.</p>
+    </div>
+  </header>
+
+  <div id="msg" class="alert hidden mb-2.5 text-sm py-2"></div>
+
+  <div class="flex items-center gap-2 flex-wrap bg-base-100 border border-base-300 rounded-xl p-2.5 mb-2.5" id="barre" style="display:none">
+    <input type="search" id="recherche" class="input input-bordered input-sm min-w-[190px]" placeholder="Rechercher un risque (id, intitulé)…">
+    <select id="fEntite" class="select select-bordered select-sm"><option value="">Toutes les entités</option></select>
+    <select id="fCategorie" class="select select-bordered select-sm"><option value="">Toutes les catégories</option></select>
+    <select id="fStatut" class="select select-bordered select-sm"><option value="">Tous les statuts</option></select>
+    <select id="tri" class="select select-bordered select-sm">
+      <option value="score">Trier par criticité résiduelle</option>
+      <option value="nb">Trier par nombre d'évaluations</option>
+      <option value="alpha">Trier par intitulé</option>
+    </select>
+    <div class="flex-1"></div>
+    <span class="text-xs text-base-content/60" id="compte"></span>
+  </div>
+
+  <div class="carrousel" id="carrousel" style="display:none">
+    <button type="button" class="fleche-nav gauche" id="flechePrec" aria-label="Lot précédent">‹</button>
+    <div class="carrousel-fenetre">
+      <div class="carrousel-piste" id="piste"></div>
+    </div>
+    <button type="button" class="fleche-nav droite" id="flecheSuiv" aria-label="Lot suivant">›</button>
+  </div>
+  <div class="lot-info" id="lotInfo"></div>
+
+  <div id="videGeneral" class="bg-base-100 border border-dashed border-base-300 rounded-xl p-10 text-center text-base-content/60" style="display:none">Aucun risque ne correspond au critère de lignes remplies retenu.</div>
+
+  <details id="det" class="mt-3.5 bg-base-100 border border-base-300 rounded-lg p-2 px-3" style="display:none">
+    <summary class="cursor-pointer font-semibold text-xs text-primary">Paramétrage utilisé</summary>
+    <div class="text-xs text-base-content/60 leading-relaxed mt-2" id="reglages"></div>
+  </details>
+</div>
+
+<div class="voile" id="voile" aria-hidden="true">
+  <div class="panneau-detail" id="panneauDetail" role="dialog" aria-modal="true"></div>
+</div>
+
+<script>
+/*
+ * Meme palette de criticite que la cartographie (UI_Cartographie) : vert
+ * fonce -> vert -> ambre -> orange -> rouge, verifiee pour la vision des
+ * couleurs deficiente. L'index est calcule sur le nombre reel de seuils
+ * renvoyes par le serveur (CONFIG > SEUILS_NIVEAU), au cas ou il differe de 5.
+ */
+const PALETTE = [
+  { fond: '#1b7a3d', texte: '#ffffff' },
+  { fond: '#8fd19e', texte: '#16202c' },
+  { fond: '#e9a100', texte: '#16202c' },
+  { fond: '#e25822', texte: '#16202c' },
+  { fond: '#a61b1b', texte: '#ffffff' }
+];
+
+let D = null;
+let GRAPHES = {};          // id risque -> instance Chart.js
+let ACTIFS = [];           // risques apres filtre + tri, dans l'ordre affiche
+let CARTES_PAR_LOT = 2;    // ecrase par D.cartesParLot (CONFIG > VISU_CARTES_PAR_LOT) au chargement
+let LOT = 0;
+
+function message(t, type){
+  const m = document.getElementById('msg');
+  const cls = {info:'alert-info', warn:'alert-warning', err:'alert-error'}[type] || 'alert-info';
+  m.className = 'alert ' + cls + ' mb-2.5 text-sm py-2';
+  m.textContent = t;
+}
+function esc(v){
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function normaliser(s){
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+function cssId_(id){ return String(id).replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+/* ---------------- niveaux ---------------- */
+function indexNiveau(score){
+  if(score === null || score === undefined) return PALETTE.length - 1;
+  const s = D.seuils || [];
+  for(let i = 0; i < s.length; i++){ if(score >= s[i].min && score <= s[i].max) return Math.min(i, PALETTE.length - 1); }
+  return PALETTE.length - 1;
+}
+function couleurNiveau(score){ return PALETTE[indexNiveau(score)]; }
+
+function formatDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return String(iso);
+  const j = ('0' + d.getDate()).slice(-2), m = ('0' + (d.getMonth() + 1)).slice(-2);
+  return j + '/' + m + '/' + String(d.getFullYear()).slice(-2);
+}
+
+/* ---------------- construction d'une carte ---------------- */
+function positionHtml(v, libelle){
+  const vide = !v || v.s === null || v.s === undefined;
+  if(vide){
+    return '<div class="pos-boite pos-vide"><div class="lbl">' + libelle + '</div><div class="score">—</div>' +
+      '<div class="niv">non positionné</div></div>';
+  }
+  const c = couleurNiveau(v.s);
+  return '<div class="pos-boite" style="background:' + c.fond + ';color:' + c.texte + '">' +
+    '<div class="lbl">' + libelle + '</div><div class="score">' + v.s + '</div>' +
+    '<div class="niv">' + esc(v.niveau) + ' · ' + v.p + '×' + v.i + '</div></div>';
+}
+
+/* Icone "pas de donnees" : sert d'espace reserve tant qu'aucune evaluation
+ * n'est cotee, a la place d'un canvas vide. En principe getDonneesVisualisation
+ * exclut deja ces risques (VISU_CRITERES_LIGNE), ce cas est donc defensif. */
+const ICONE_VIDE = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+  'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M3 17 L8 11 L12 14 L21 5" stroke-dasharray="2.4 2.6"/>' +
+  '<path d="M3 21 H21" stroke-dasharray="2.4 2.6"/>' +
+  '<circle cx="17.5" cy="17.5" r="5.2" fill="#fff"/>' +
+  '<path d="M15.6 15.6 L19.4 19.4 M19.4 15.6 L15.6 19.4" stroke-width="1.5"/>' +
+  '</svg>';
+
+function graphiqueOuVideHtml(r){
+  if(!r.evaluations.length){
+    return '<div class="progression"><div class="vide-graph">' + ICONE_VIDE +
+      '<span>Pas encore d’évaluation cotée.<br>Le graphique apparaît ici dès la première évaluation retenue.</span>' +
+      '</div></div>';
+  }
+  return '<div class="progression"><canvas id="cv-' + cssId_(r.id) + '"></canvas></div>';
+}
+
+function carteHtml(r){
+  const badgeStatut = r.statut ? '<span class="pastille-statut">' + esc(r.statut) + '</span>' : '';
+  return '' +
+    '<div class="carte" data-id="' + esc(r.id) + '" tabindex="0" role="button" ' +
+      'aria-label="Voir le détail de ' + esc(r.id) + '">' +
+      '<div class="flex items-center gap-1.5 flex-wrap">' +
+        '<span class="carte-id">' + esc(r.id) + '</span>' +
+        '<span class="pastille-nb">' + r.nbEvaluations + ' évaluation' + (r.nbEvaluations > 1 ? 's' : '') + '</span>' +
+        badgeStatut +
+      '</div>' +
+      '<h3 class="m-0 text-sm font-semibold leading-snug">' + esc(r.intitule || '(sans intitulé)') + '</h3>' +
+      '<div class="text-xs text-base-content/60">' +
+        [r.processus, r.sousCategorie || r.categorie, r.entite].filter(Boolean).map(esc).join(' · ') +
+      '</div>' +
+      '<div class="position">' +
+        positionHtml(r.derniere && r.derniere.inh, 'Inhérent') + '<span class="text-base-content/60 text-xl">→</span>' +
+        positionHtml(r.derniere && r.derniere.res, 'Résiduel') +
+      '</div>' +
+      graphiqueOuVideHtml(r) +
+      '<div class="carte-pied">' +
+        '<span>' + (r.evaluations.length > 1
+          ? (r.evaluations.length + ' évaluations, du ' + (formatDate(r.evaluations[0].date) || '?') +
+             ' au ' + (formatDate(r.evaluations[r.evaluations.length - 1].date) || '?'))
+          : (r.evaluations.length === 1 ? 'Évaluation unique, ' + (formatDate(r.evaluations[0].date) || 'date inconnue')
+            : 'Aucune évaluation')) +
+        '</span>' +
+        '<span class="legende-mini"><span><i style="background:var(--inh)"></i>Inhérent</span>' +
+          '<span><i style="background:var(--res)"></i>Résiduel</span></span>' +
+        '<span class="carte-voir">Voir le détail →</span>' +
+      '</div>' +
+    '</div>';
+}
+
+/* Anime la construction du trait point par point : recette officielle
+ * Chart.js (Animations > Advanced Animations > Progressive Line),
+ * appliquee independamment a chaque serie (inherent, residuel). */
+function animationProgressive(nbPoints, dureeTotale){
+  const delai = nbPoints > 1 ? dureeTotale / nbPoints : dureeTotale;
+  const previousY = (ctx) => ctx.index === 0
+    ? ctx.chart.scales.y.getPixelForValue(0)
+    : ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.index - 1].getProps(['y'], true).y;
+  return {
+    x: {
+      type: 'number', easing: 'linear', duration: delai, from: NaN,
+      delay(ctx){ if(ctx.type !== 'data' || ctx.xStarted) return 0; ctx.xStarted = true; return ctx.index * delai; }
+    },
+    y: {
+      type: 'number', easing: 'linear', duration: delai, from: previousY,
+      delay(ctx){ if(ctx.type !== 'data' || ctx.yStarted) return 0; ctx.yStarted = true; return ctx.index * delai; }
+    }
+  };
+}
+
+const DUREE_ANIMATION = 1300;
+
+function construireGraphique(r){
+  if(!r.evaluations.length) return; // carte deja rendue avec l'etat vide, pas de canvas a chercher
+  const canvas = document.getElementById('cv-' + cssId_(r.id));
+  if(!canvas) return;
+  if(typeof Chart === 'undefined'){
+    canvas.replaceWith(Object.assign(document.createElement('div'), {
+      className: 'text-xs text-base-content/60', textContent: 'Chart.js ne s’est pas chargé (réseau bloqué ?).'
+    }));
+    return;
+  }
+  if(GRAPHES[r.id]){ try{ GRAPHES[r.id].destroy(); }catch(e){} }
+
+  const labels = r.evaluations.map(function(e){ return formatDate(e.date) || e.idEval || '?'; });
+  const inh = r.evaluations.map(function(e){ return e.inh && e.inh.s !== null ? e.inh.s : null; });
+  const res = r.evaluations.map(function(e){ return e.res && e.res.s !== null ? e.res.s : null; });
+  const styleRoot = getComputedStyle(document.documentElement);
+  const cInh = styleRoot.getPropertyValue('--inh').trim();
+  const cRes = styleRoot.getPropertyValue('--res').trim();
+  const unSeulPoint = labels.length <= 1;
+
+  /* Points {x:i, y:valeur} sur une echelle X lineaire (pas categorielle) :
+   * c'est ce qui permet a l'animation de faire glisser chaque point depuis
+   * une position "from: NaN" jusqu'a sa vraie position, point par point. */
+  const versPoints = function(valeurs){ return valeurs.map(function(v, i){ return { x: i, y: v }; }); };
+
+  const dataset = function(label, valeurs, couleur){
+    return {
+      label: label, data: versPoints(valeurs), borderColor: couleur,
+      backgroundColor: couleur + '26', borderWidth: 1,
+      radius: unSeulPoint ? 5 : 0, pointHoverRadius: 5,
+      tension: 0.3, fill: true, spanGaps: true
+    };
+  };
+
+  const chart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { datasets: [dataset('Inhérent', inh, cInh), dataset('Résiduel', res, cRes)] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: { beginAtZero: true, suggestedMax: 25, ticks: { stepSize: 5, font: { size: 9 } }, grid: { color: '#EEF1F5' } },
+        x: {
+          type: 'linear', min: 0, max: Math.max(labels.length - 1, 0),
+          ticks: {
+            font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 6, stepSize: 1,
+            callback: function(val){ const i = Math.round(val); return labels[i] !== undefined ? labels[i] : ''; }
+          },
+          grid: { display: false }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          titleFont: { size: 11 }, bodyFont: { size: 11 },
+          callbacks: {
+            title: function(items){ const i = items[0] ? Math.round(items[0].parsed.x) : 0; return labels[i] || ''; },
+            label: function(ctx){ return ctx.dataset.label + ' : ' + (ctx.parsed.y === null ? 'non positionné' : ctx.parsed.y); }
+          }
+        }
+      },
+      animation: false,
+      animations: animationProgressive(labels.length, DUREE_ANIMATION)
+    }
+  });
+  GRAPHES[r.id] = chart;
+}
+
+/* ---------------------------------------------------------------- *
+ * Carrousel de lots : la piste porte un <div class="carrousel-page">
+ * par lot, cote a cote. Tous les graphiques sont construits des le rendu —
+ * un canvas hors ecran n'est jamais vide — et le lot cible rejoue son
+ * animation d'entree a chaque arrivee.
+ * ---------------------------------------------------------------- */
+function lots(){
+  const out = [];
+  for(let i = 0; i < ACTIFS.length; i += CARTES_PAR_LOT) out.push(ACTIFS.slice(i, i + CARTES_PAR_LOT));
+  return out.length ? out : [[]];
+}
+
+function construireTousLesGraphiques(){ ACTIFS.forEach(construireGraphique); }
+
+function construireGraphiquesLot(indexLot){
+  const page = document.querySelectorAll('.carrousel-page')[indexLot];
+  if(!page) return;
+  page.querySelectorAll('.carte').forEach(function(el){
+    const r = ACTIFS.filter(function(x){ return x.id === el.dataset.id; })[0];
+    if(r) construireGraphique(r);
+  });
+}
+
+function majControlesCarrousel(nbLots){
+  document.getElementById('flechePrec').disabled = LOT === 0;
+  document.getElementById('flecheSuiv').disabled = LOT >= nbLots - 1;
+  const points = [];
+  for(let i = 0; i < nbLots; i++) points.push('<span class="point' + (i === LOT ? ' actif' : '') + '"></span>');
+  document.getElementById('lotInfo').innerHTML = nbLots > 1
+    ? '<span>Lot ' + (LOT + 1) + ' / ' + nbLots + '</span><span class="points">' + points.join('') + '</span>'
+    : '';
+}
+
+function positionnerPiste(animer){
+  const piste = document.getElementById('piste');
+  if(!animer){
+    piste.style.transition = 'none';
+    piste.style.transform = 'translateX(-' + (LOT * 100) + '%)';
+    void piste.offsetHeight;
+    piste.style.transition = '';
+  } else {
+    piste.style.transform = 'translateX(-' + (LOT * 100) + '%)';
+  }
+}
+
+function rendreCarrousel(){
+  const groupes = lots();
+  LOT = Math.min(LOT, groupes.length - 1);
+  document.getElementById('piste').innerHTML = groupes.map(function(g){
+    return '<div class="carrousel-page">' + g.map(carteHtml).join('') + '</div>';
+  }).join('');
+  GRAPHES = {};
+  positionnerPiste(false);
+  construireTousLesGraphiques();
+  majControlesCarrousel(groupes.length);
+}
+
+function allerLot(delta){
+  const nbLots = lots().length;
+  const cible = LOT + delta;
+  if(cible < 0 || cible >= nbLots) return;
+  LOT = cible;
+  positionnerPiste(true);
+  majControlesCarrousel(nbLots);
+  window.setTimeout(function(){ construireGraphiquesLot(LOT); }, 560);
+}
+
+/* ---------------- filtres et tri ---------------- */
+function remplirFiltres(){
+  function remplir(select, valeurs){
+    valeurs.forEach(function(v){
+      const o = document.createElement('option'); o.value = v; o.textContent = v;
+      select.appendChild(o);
+    });
+  }
+  remplir(document.getElementById('fEntite'), D.filtres.entites);
+  remplir(document.getElementById('fCategorie'), D.filtres.categories);
+  remplir(document.getElementById('fStatut'), D.filtres.statuts);
+}
+
+function appliquer(){
+  const q = normaliser(document.getElementById('recherche').value.trim());
+  const fe = document.getElementById('fEntite').value;
+  const fc = document.getElementById('fCategorie').value;
+  const fs = document.getElementById('fStatut').value;
+  const tri = document.getElementById('tri').value;
+
+  let liste = D.risques.filter(function(r){
+    if(fe && r.entite !== fe) return false;
+    if(fc && r.categorie !== fc && r.sousCategorie !== fc) return false;
+    if(fs && r.statut !== fs) return false;
+    if(q && normaliser(r.id + ' ' + r.intitule).indexOf(q) === -1) return false;
+    return true;
+  });
+
+  if(tri === 'nb'){
+    liste = liste.slice().sort(function(a, b){ return b.nbEvaluations - a.nbEvaluations; });
+  } else if(tri === 'alpha'){
+    liste = liste.slice().sort(function(a, b){ return String(a.intitule).localeCompare(String(b.intitule)); });
+  }
+  // 'score' : l'ordre envoye par le serveur est deja du plus critique au moins critique.
+
+  ACTIFS = liste;
+  LOT = 0;
+
+  document.getElementById('compte').textContent = liste.length + ' risque' + (liste.length > 1 ? 's' : '') +
+    ' affiché' + (liste.length > 1 ? 's' : '') + ' sur ' + D.risquesRetenus + ' (' + D.lignesRetenues +
+    ' ligne' + (D.lignesRetenues > 1 ? 's' : '') + ' retenue' + (D.lignesRetenues > 1 ? 's' : '') +
+    ' sur ' + D.totalLignes + ' au registre)';
+
+  const carrousel = document.getElementById('carrousel');
+  if(!liste.length){
+    Object.keys(GRAPHES).forEach(function(id){ try{ GRAPHES[id].destroy(); }catch(e){} });
+    GRAPHES = {};
+    document.getElementById('piste').innerHTML = '';
+    document.getElementById('lotInfo').innerHTML = '';
+    carrousel.style.display = 'none';
+    document.getElementById('videGeneral').style.display = D.risques.length ? 'block' : 'none';
+    document.getElementById('videGeneral').textContent = D.risques.length
+      ? 'Aucun risque ne correspond à ces filtres.'
+      : "Aucun risque ne correspond au critère de lignes remplies retenu.";
+    return;
+  }
+  document.getElementById('videGeneral').style.display = 'none';
+  carrousel.style.display = 'flex';
+  rendreCarrousel();
+}
+
+/* ---------------------------------------------------------------- *
+ * Detail complet du risque : ouvert au clic sur une carte.
+ * ---------------------------------------------------------------- */
+function puceNiveauHtml(v){
+  if(!v || v.s === null || v.s === undefined){
+    return '<span class="badge badge-neutral badge-outline">non coté</span>';
+  }
+  const c = couleurNiveau(v.s);
+  return '<span class="inline-block px-1.5 py-0.5 rounded text-xs font-bold" style="background:' + c.fond + ';color:' + c.texte + '">' +
+    v.s + ' · ' + esc(v.niveau) + '</span>';
+}
+
+function ligneHistoriqueHtml(e, estDerniere){
+  return '<tr' + (estDerniere ? ' class="font-semibold"' : '') + '>' +
+    '<td>' + (formatDate(e.date) || '?') + (estDerniere ? ' <span class="text-base-content/60 font-normal">(dernière)</span>' : '') + '</td>' +
+    '<td>' + puceNiveauHtml(e.inh) + '</td>' +
+    '<td>' + puceNiveauHtml(e.res) + '</td>' +
+  '</tr>';
+}
+
+/* Un champ texte libre (causes, consequences, controles) peut contenir
+ * plusieurs elements separes par un saut de ligne ou un point-virgule :
+ * on les scinde pour un rendu en liste plutot qu'un bloc illisible. */
+function versListe_(texte){
+  return String(texte || '').split(/\r?\n|;/).map(function(s){ return s.trim(); }).filter(Boolean);
+}
+
+function detailHtml(r){
+  const historique = r.evaluations.slice().reverse()
+    .map(function(e, i){ return ligneHistoriqueHtml(e, i === 0); }).join('');
+  const controlesListe = versListe_(r.controles);
+  return '' +
+    '<div class="detail-entete">' +
+      '<div>' +
+        '<span class="carte-id">' + esc(r.id) + '</span>' +
+        '<h2 class="mt-0.5 text-base font-bold leading-snug">' + esc(r.intitule || '(sans intitulé)') + '</h2>' +
+      '</div>' +
+      '<button type="button" class="detail-fermer" id="detailFermer" aria-label="Fermer">✕</button>' +
+    '</div>' +
+    '<div class="p-4 px-5 pb-5 flex flex-col gap-4">' +
+      '<div class="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2.5">' +
+        '<div class="bg-base-200/60 border border-base-300 rounded-lg p-2 px-2.5"><div class="text-[9.5px] uppercase tracking-wide text-base-content/60 mb-1">Entité</div><div class="text-sm">' + esc(r.entite || '—') + '</div></div>' +
+        '<div class="bg-base-200/60 border border-base-300 rounded-lg p-2 px-2.5"><div class="text-[9.5px] uppercase tracking-wide text-base-content/60 mb-1">Processus</div><div class="text-sm">' + esc(r.processus || '—') + '</div></div>' +
+        '<div class="bg-base-200/60 border border-base-300 rounded-lg p-2 px-2.5"><div class="text-[9.5px] uppercase tracking-wide text-base-content/60 mb-1">Catégorie</div><div class="text-sm">' + esc(r.categorie || r.sousCategorie || '—') + '</div></div>' +
+        '<div class="bg-base-200/60 border border-base-300 rounded-lg p-2 px-2.5"><div class="text-[9.5px] uppercase tracking-wide text-base-content/60 mb-1">Sous-catégorie</div><div class="text-sm">' + esc(r.sousCategorie || '—') + '</div></div>' +
+        '<div class="bg-base-200/60 border border-base-300 rounded-lg p-2 px-2.5"><div class="text-[9.5px] uppercase tracking-wide text-base-content/60 mb-1">Propriétaire</div><div class="text-sm">' + esc(r.proprietaire || '—') + '</div></div>' +
+        '<div class="bg-base-200/60 border border-base-300 rounded-lg p-2 px-2.5"><div class="text-[9.5px] uppercase tracking-wide text-base-content/60 mb-1">Statut</div><div class="text-sm">' + esc(r.statut || '—') + '</div></div>' +
+        '<div class="bg-base-200/60 border border-base-300 rounded-lg p-2 px-2.5"><div class="text-[9.5px] uppercase tracking-wide text-base-content/60 mb-1">Évaluations</div><div class="text-sm">' + r.nbEvaluations + '</div></div>' +
+      '</div>' +
+      '<div class="position">' +
+        positionHtml(r.derniere && r.derniere.inh, 'Inhérent') + '<span class="text-base-content/60 text-xl">→</span>' +
+        positionHtml(r.derniere && r.derniere.res, 'Résiduel') +
+      '</div>' +
+      (r.description ? '<div><h4 class="m-0 mb-1.5 text-xs font-bold">Description</h4><p class="m-0 text-sm leading-relaxed whitespace-pre-line">' + esc(r.description) + '</p></div>' : '') +
+      (r.causes ? '<div><h4 class="m-0 mb-1.5 text-xs font-bold">Causes</h4><p class="m-0 text-sm leading-relaxed whitespace-pre-line">' + esc(r.causes) + '</p></div>' : '') +
+      (r.consequences ? '<div><h4 class="m-0 mb-1.5 text-xs font-bold">Conséquences</h4><p class="m-0 text-sm leading-relaxed whitespace-pre-line">' + esc(r.consequences) + '</p></div>' : '') +
+      (controlesListe.length ? '<div><h4 class="m-0 mb-1.5 text-xs font-bold">Contrôles associés</h4><ul class="detail-controles">' +
+        controlesListe.map(function(c){ return '<li class="bg-base-200/60 border border-base-300 rounded-lg p-2 px-2.5 text-xs flex gap-2 items-start"><span class="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-none"></span><span>' + esc(c) + '</span></li>'; }).join('') +
+        '</ul></div>' : '') +
+      '<div><h4 class="m-0 mb-1.5 text-xs font-bold">Historique des évaluations</h4>' +
+      (r.evaluations.length ?
+        '<table class="tableau-hist"><thead><tr><th>Date</th><th>Inhérent</th><th>Résiduel</th></tr></thead>' +
+        '<tbody>' + historique + '</tbody></table>' :
+        '<p class="text-base-content/60 text-sm">Aucune évaluation retenue pour ce risque pour l’instant.</p>') +
+      '</div>' +
+    '</div>';
+}
+
+function ouvrirDetail(id){
+  const r = ACTIFS.filter(function(x){ return x.id === id; })[0] ||
+    (D && D.risques.filter(function(x){ return x.id === id; })[0]);
+  if(!r) return;
+  const panneau = document.getElementById('panneauDetail');
+  panneau.innerHTML = detailHtml(r);
+  document.getElementById('detailFermer').addEventListener('click', fermerDetail);
+  const voile = document.getElementById('voile');
+  voile.classList.add('ouvert');
+  voile.setAttribute('aria-hidden', 'false');
+}
+
+function fermerDetail(){
+  const voile = document.getElementById('voile');
+  voile.classList.remove('ouvert');
+  voile.setAttribute('aria-hidden', 'true');
+}
+
+function reglagesHtml(){
+  return 'Lignes retenues si au moins une de ces colonnes est renseignée (<code>CONFIG &gt; VISU_CRITERES_LIGNE</code>) : ' +
+    D.criteres.map(esc).join(', ') + '.<br>' +
+    'Axes d’impact utilisés pour recalculer le score (<code>CONFIG &gt; VISU_AXES_IMPACT</code>) : ' +
+    (D.axes.length === D.axesReferentiel.length ? 'tous les axes du référentiel — ' : '') +
+    D.axes.map(esc).join(', ') + '.<br>' +
+    'Combinaison des axes retenus (<code>CONFIG &gt; VISU_MODE_IMPACT</code>) : ' +
+    (D.mode === 'moyenne' ? 'moyenne des axes' : 'maximum des axes') + '.<br>' +
+    'Cartes par lot dans le carrousel (<code>CONFIG &gt; VISU_CARTES_PAR_LOT</code>) : ' + D.cartesParLot + '.<br>' +
+    'Méthodologie active : ' + esc(D.methodologie) + '.';
+}
+
+/* ---------------- enchainement ---------------- */
+function charger(){
+  message('Lecture du classeur…', 'info');
+  google.script.run
+    .withSuccessHandler(function(data){
+      if(!data || !data.echelles){ message("Les données du classeur n'ont pas pu être lues.", 'err'); return; }
+      D = data;
+      CARTES_PAR_LOT = data.cartesParLot > 0 ? data.cartesParLot : 2;
+      document.getElementById('msg').className = 'alert hidden';
+      if(!D.risques.length){
+        document.getElementById('barre').style.display = 'none';
+        document.getElementById('videGeneral').style.display = 'block';
+        document.getElementById('videGeneral').textContent = 'Aucun risque ne correspond au critère de lignes remplies retenu.';
+        document.getElementById('reglages').innerHTML = reglagesHtml();
+        document.getElementById('det').style.display = 'block';
+        return;
+      }
+      document.getElementById('barre').style.display = 'flex';
+      remplirFiltres();
+      document.getElementById('reglages').innerHTML = reglagesHtml();
+      document.getElementById('det').style.display = 'block';
+      appliquer();
+    })
+    .withFailureHandler(function(e){ message((e && e.message) || 'Erreur côté serveur.', 'err'); })
+    .getDonneesVisualisation();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  ['recherche'].forEach(function(id){ document.getElementById(id).addEventListener('input', appliquer); });
+  ['fEntite', 'fCategorie', 'fStatut', 'tri'].forEach(function(id){
+    document.getElementById(id).addEventListener('change', appliquer);
+  });
+
+  document.getElementById('flechePrec').addEventListener('click', function(){ allerLot(-1); });
+  document.getElementById('flecheSuiv').addEventListener('click', function(){ allerLot(1); });
+
+  document.getElementById('piste').addEventListener('click', function(e){
+    const carte = e.target.closest('.carte');
+    if(carte) ouvrirDetail(carte.dataset.id);
+  });
+  document.getElementById('piste').addEventListener('keydown', function(e){
+    if(e.key !== 'Enter' && e.key !== ' ') return;
+    const carte = e.target.closest('.carte');
+    if(!carte) return;
+    e.preventDefault();
+    ouvrirDetail(carte.dataset.id);
+  });
+  document.getElementById('voile').addEventListener('click', function(e){
+    if(e.target.id === 'voile') fermerDetail();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') fermerDetail();
+  });
+
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message('Environnement Google Apps Script non détecté. Ouvrez la visualisation depuis le menu Risk Management.', 'err');
+    return;
+  }
+  charger();
+});
+</script>
+</body>
+</html>

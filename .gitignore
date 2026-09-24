@@ -1,0 +1,14 @@
+# Clasp (Google Apps Script CLI)
+.clasp.json
+.clasprc.json
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# Logs
+*.log

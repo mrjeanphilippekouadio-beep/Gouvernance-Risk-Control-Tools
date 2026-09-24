@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     FICHIER  : UI_Accueil               type : HTML (.html)
+     SECTION  : Web App (page d'accueil, second mode d'acces)
+     VA AVEC  : 16_WebApp (Script)
+     MARQUEUR UI_Accueil v10   (lu par Administration > Controler l'installation)
+     ===================================================================== -->
+<html lang="fr">
+<head>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Risk Management</title>
+  <style>
+:root{
+  --primary:#1F5FA8; --primary-soft:#E8F0FA; --muted:#5B6877; --border-strong:#B9C3CF;
+  --ok:#1B7F3B; --danger:#B3261E;
+}
+.card-module{transition:border-color .12s ease, transform .12s ease, box-shadow .12s ease}
+.card-module:hover{border-color:var(--primary); transform:translateY(-1px); box-shadow:0 6px 16px rgba(31,95,168,.12)}
+</style>
+</head>
+<body class="bg-base-200 text-base-content text-sm">
+<div class="max-w-[1180px] mx-auto p-4">
+
+  <div class="bg-base-100 border border-base-300 rounded-2xl shadow overflow-hidden">
+    <header class="p-5 pb-4 border-b border-base-300">
+      <h1 class="m-0 text-xl font-semibold tracking-tight">Risk Management</h1>
+      <p class="mt-1.5 text-xs text-base-content/60">
+        Dispositif de gestion des risques et de contrôle interne. Choisissez un module ci-dessous.
+      </p>
+    </header>
+
+    <main class="p-5">
+      <div id="grille" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    </main>
+
+    <footer class="px-5 pb-5 text-xs text-base-content/50">
+      Cette page sert de point d'entrée à la Web App ; le menu Risk Management dans Google Sheets reste
+      disponible en parallèle.
+    </footer>
+  </div>
+
+</div>
+
+<script>
+/* Memes cles / libelles que PAGES_WEBAPP_ (16_WebApp.gs). A tenir a jour
+   manuellement si le manifeste cote serveur change : cette page n'appelle
+   pas google.script.run pour rester autonome (self-contained). */
+const MODULES = [
+  { cle: 'evaluation',    titre: 'Évaluation des risques',        desc: 'Évaluer un risque existant ou en créer un nouveau.' },
+  { cle: 'validation',    titre: 'Validation',                    desc: 'Ouvrir la fiche de validation d’une évaluation.' },
+  { cle: 'cartographie',  titre: 'Cartographie',                  desc: 'Vue d’ensemble probabilité / impact des risques.' },
+  { cle: 'visualisation', titre: 'Visualisation',                 desc: 'Explorer les données du dispositif sous forme visuelle.' },
+  { cle: 'controles',     titre: 'Catalogue des contrôles',       desc: 'Contrôles associés aux risques, dispositif de maîtrise.' },
+  { cle: 'executions',    titre: 'Exécutions des contrôles',      desc: 'Occurrences réalisées d’un contrôle et leurs preuves.' },
+  { cle: 'efficacite',    titre: 'Efficacité des contrôles',      desc: 'Appréciation de la conception et de l’efficacité.' },
+  { cle: 'anomalies',     titre: 'Anomalies et incidents',        desc: 'Cycle de vie : Nouvelle → En analyse → Action engagée → Clôturée.' },
+  { cle: 'departements',  titre: 'Départements',                  desc: 'Rattachement, manager, pilote de risque, processus couverts.' },
+  { cle: 'processus',     titre: 'Processus',                     desc: 'Cartographie des processus de l’organisation.' },
+  { cle: 'iam',           titre: 'RACI / IAM',                    desc: 'Accès et permissions rattachés au dispositif.' },
+  { cle: 'journal',       titre: 'Journal global',                desc: 'Historique append-only des actions du dispositif.' },
+  { cle: 'ficheRisque',   titre: 'Fiche risque 360°',             desc: 'Vue consolidée d’un risque : évaluations, contrôles, actions.' }
+];
+
+function esc(v){
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function peindreGrille(){
+  const host = document.getElementById('grille');
+  host.innerHTML = MODULES.map(function(m){
+    return '<a class="card-module bg-base-100 border border-base-300 rounded-xl p-4 flex flex-col gap-1.5 no-underline text-base-content" ' +
+      'href="?page=' + encodeURIComponent(m.cle) + '">' +
+      '<span class="text-sm font-semibold text-primary">' + esc(m.titre) + '</span>' +
+      '<span class="text-xs text-base-content/60">' + esc(m.desc) + '</span>' +
+      '</a>';
+  }).join('');
+}
+
+document.addEventListener('DOMContentLoaded', peindreGrille);
+</script>
+
+</body>
+</html>

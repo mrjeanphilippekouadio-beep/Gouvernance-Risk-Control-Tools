@@ -1,0 +1,238 @@
+<!-- MARQUEUR UI_JournalGlobal v10 -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Journal global</title>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style>
+  body{ background:#F4F6F9; }
+</style>
+</head>
+<body class="min-h-screen text-sm" data-theme="light">
+<div class="navbar bg-base-100 border-b border-base-300 px-4 min-h-0 py-2 mb-2 shadow-sm">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm normal-case gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-6xl mx-auto p-4">
+
+  <div class="bg-base-100 rounded-2xl shadow border border-base-300 overflow-hidden mb-4">
+    <div class="flex items-end justify-between gap-4 flex-wrap p-4 border-b border-base-300">
+      <div>
+        <h1 class="text-lg font-bold">Journal global</h1>
+        <p class="text-xs text-base-content/60 max-w-2xl">Trace des actions du dispositif, toutes objets confondus. Le raccordement automatique aux autres modules (Contrôles, Exécutions, Efficacité, Départements, Anomalies, Évaluation, Validation) n'est pas encore fait dans ce lot : seules les entrées ajoutées manuellement ci-dessous apparaissent pour l'instant.</p>
+      </div>
+      <button id="btn-nouveau" class="btn btn-primary btn-sm">+ Ajouter une entrée</button>
+    </div>
+
+    <div id="msg" class="hidden mx-4 mt-3 alert py-2"></div>
+
+    <div class="flex items-center gap-2 flex-wrap p-3 border-b border-base-300 bg-base-200/40">
+      <input id="q" type="search" placeholder="Rechercher (objet, action, détail…)" class="input input-bordered input-sm w-64" />
+      <select id="f-objet" class="select select-bordered select-sm"><option value="">Tous les objets</option></select>
+      <select id="f-utilisateur" class="select select-bordered select-sm"><option value="">Tous les utilisateurs</option></select>
+      <input id="f-depuis" type="date" class="input input-bordered input-sm" title="Depuis le" />
+      <input id="f-jusqua" type="date" class="input input-bordered input-sm" title="Jusqu'au" />
+      <span class="flex-1"></span>
+      <span id="compte" class="text-xs text-base-content/60">·</span>
+    </div>
+
+    <div class="overflow-auto max-h-[560px]">
+      <table class="table table-zebra table-sm">
+        <thead class="sticky top-0 bg-base-200 z-10">
+          <tr><th>Date</th><th>Utilisateur</th><th>Objet</th><th>Action</th><th>Détail</th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================= modal de saisie ================= -->
+<dialog id="modal" class="modal">
+  <div class="modal-box max-w-lg">
+    <h3 class="font-bold text-base mb-3">Ajouter une entrée au journal</h3>
+    <div class="form-control mb-3">
+      <label class="label py-1"><span class="label-text text-xs">Objet *</span></label>
+      <input id="f-objet-form" type="text" class="input input-bordered input-sm" placeholder="Ex : RSK-DF-2026-014, Départements…" />
+    </div>
+    <div class="form-control mb-3">
+      <label class="label py-1"><span class="label-text text-xs">Action *</span></label>
+      <input id="f-action-form" type="text" class="input input-bordered input-sm" placeholder="Ex : Création, Mise à jour, Décision…" />
+    </div>
+    <div class="form-control mb-1">
+      <label class="label py-1"><span class="label-text text-xs">Détail</span></label>
+      <textarea id="f-detail-form" rows="3" class="textarea textarea-bordered textarea-sm"></textarea>
+    </div>
+    <div class="modal-action">
+      <button id="m-annuler" class="btn btn-ghost btn-sm">Annuler</button>
+      <button id="m-enregistrer" class="btn btn-primary btn-sm">Enregistrer</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- ================= widget de feedback (mock, dupliqué sur chaque page du lot) ================= -->
+<div class="fixed bottom-5 right-5 z-50">
+  <button id="fb-btn" class="btn btn-circle btn-primary shadow-lg" title="Donner un avis">💬</button>
+</div>
+<dialog id="fb-modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-base">Votre avis</h3>
+    <p class="py-1 text-xs text-base-content/60">Ce retour reste local à cette session (aucun envoi serveur pour l'instant).</p>
+    <textarea id="fb-texte" class="textarea textarea-bordered w-full textarea-sm" rows="4" placeholder="Qu'est-ce qui pourrait être amélioré ?"></textarea>
+    <div class="modal-action">
+      <button id="fb-annuler" class="btn btn-ghost btn-sm">Annuler</button>
+      <button id="fb-envoyer" class="btn btn-primary btn-sm">Envoyer</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+(function(){
+  const FEEDBACKS = [];
+  const modal = document.getElementById('fb-modal');
+  document.getElementById('fb-btn').onclick = function(){ modal.showModal(); };
+  document.getElementById('fb-annuler').onclick = function(){ modal.close(); };
+  document.getElementById('fb-envoyer').onclick = function(){
+    const texte = document.getElementById('fb-texte').value.trim();
+    if(!texte) return;
+    FEEDBACKS.push({ texte: texte, date: new Date().toISOString() });
+    document.getElementById('fb-texte').value = '';
+    modal.close();
+    alert("Merci, votre retour a été enregistré (localement, pour cette session).");
+  };
+})();
+</script>
+
+<script>
+let ENTREES = [];
+
+function esc(v){ return String(v === null || v === undefined ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function message(txt, type){
+  const m = document.getElementById('msg');
+  m.className = 'alert py-2 ' + (type === 'err' ? 'alert-error' : type === 'ok' ? 'alert-success' : type === 'warn' ? 'alert-warning' : 'alert-info');
+  m.textContent = txt;
+  if(type !== 'err') setTimeout(function(){ m.classList.add('hidden'); }, 6000);
+}
+function onError(err){
+  message((err && err.message) ? err.message : "Une erreur est survenue côté serveur.", 'err');
+  try { console.error(err); } catch(e){}
+}
+function dateHeure(d){
+  if(!d) return '';
+  const x = (d instanceof Date) ? d : new Date(d);
+  return isNaN(x.getTime()) ? String(d) : x.toLocaleString('fr-FR');
+}
+function dateSeule(d){
+  if(!d) return null;
+  const x = (d instanceof Date) ? d : new Date(d);
+  return isNaN(x.getTime()) ? null : x;
+}
+
+function entreesFiltrees(){
+  const q = (document.getElementById('q').value || '').toLowerCase();
+  const fo = document.getElementById('f-objet').value;
+  const fu = document.getElementById('f-utilisateur').value;
+  const depuis = document.getElementById('f-depuis').value ? new Date(document.getElementById('f-depuis').value) : null;
+  const jusqua = document.getElementById('f-jusqua').value ? new Date(document.getElementById('f-jusqua').value + 'T23:59:59') : null;
+  return ENTREES.filter(function(e){
+    if(fo && e.objet !== fo) return false;
+    if(fu && e.utilisateur !== fu) return false;
+    const d = dateSeule(e.date);
+    if(depuis && d && d < depuis) return false;
+    if(jusqua && d && d > jusqua) return false;
+    if(!q) return true;
+    return String(e.objet).toLowerCase().indexOf(q) !== -1 ||
+      String(e.action).toLowerCase().indexOf(q) !== -1 ||
+      String(e.detail || '').toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function peindreTableau(){
+  const tbody = document.getElementById('tbody');
+  const liste = entreesFiltrees();
+  document.getElementById('compte').textContent = liste.length + ' entrée(s) sur ' + ENTREES.length;
+  if(!liste.length){
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center italic text-base-content/50 py-6">' +
+      (ENTREES.length ? 'Aucune entrée ne correspond.' : "Journal vide pour l'instant.") + '</td></tr>';
+    return;
+  }
+  tbody.innerHTML = liste.map(function(e){
+    return '<tr>' +
+      '<td class="text-xs whitespace-nowrap">' + esc(dateHeure(e.date)) + '</td>' +
+      '<td class="text-xs">' + esc(e.utilisateur || '—') + '</td>' +
+      '<td class="font-medium">' + esc(e.objet) + '</td>' +
+      '<td>' + esc(e.action) + '</td>' +
+      '<td class="text-xs">' + esc(e.detail || '—') + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function peuplerFiltres(){
+  const objets = Array.from(new Set(ENTREES.map(function(e){ return e.objet; }).filter(Boolean))).sort();
+  const utilisateurs = Array.from(new Set(ENTREES.map(function(e){ return e.utilisateur; }).filter(Boolean))).sort();
+  const selO = document.getElementById('f-objet');
+  selO.innerHTML = '<option value="">Tous les objets</option>';
+  objets.forEach(function(o){ selO.appendChild(new Option(o, o)); });
+  const selU = document.getElementById('f-utilisateur');
+  selU.innerHTML = '<option value="">Tous les utilisateurs</option>';
+  utilisateurs.forEach(function(u){ selU.appendChild(new Option(u, u)); });
+}
+
+function enregistrer(){
+  const objet = document.getElementById('f-objet-form').value.trim();
+  const action = document.getElementById('f-action-form').value.trim();
+  if(!objet){ message("L'objet est obligatoire.", 'warn'); return; }
+  if(!action){ message("L'action est obligatoire.", 'warn'); return; }
+  const detail = document.getElementById('f-detail-form').value.trim();
+
+  const btn = document.getElementById('m-enregistrer');
+  btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(function(res){
+      btn.disabled = false;
+      if(res && Array.isArray(res.entrees)) ENTREES = res.entrees;
+      peuplerFiltres(); peindreTableau();
+      message('Entrée ' + (res ? res.id : '') + ' ajoutée au journal.', 'ok');
+      document.getElementById('f-objet-form').value = '';
+      document.getElementById('f-action-form').value = '';
+      document.getElementById('f-detail-form').value = '';
+      document.getElementById('modal').close();
+    })
+    .withFailureHandler(function(e){ btn.disabled = false; onError(e); })
+    .ajouterEntreeJournal(objet, action, detail);
+}
+
+function onData(data){
+  if(!data){ message("Les données n'ont pas pu être chargées.", 'err'); return; }
+  ENTREES = Array.isArray(data.entrees) ? data.entrees : [];
+  peuplerFiltres();
+  peindreTableau();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('btn-nouveau').onclick = function(){ document.getElementById('modal').showModal(); };
+  document.getElementById('m-annuler').onclick = function(){ document.getElementById('modal').close(); };
+  document.getElementById('m-enregistrer').onclick = enregistrer;
+  document.getElementById('q').oninput = peindreTableau;
+  document.getElementById('f-objet').onchange = peindreTableau;
+  document.getElementById('f-utilisateur').onchange = peindreTableau;
+  document.getElementById('f-depuis').onchange = peindreTableau;
+  document.getElementById('f-jusqua').onchange = peindreTableau;
+
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message('Environnement Google Apps Script non détecté.', 'err');
+    return;
+  }
+  google.script.run.withSuccessHandler(onData).withFailureHandler(onError).getJournalGlobalData();
+});
+</script>
+</body>
+</html>

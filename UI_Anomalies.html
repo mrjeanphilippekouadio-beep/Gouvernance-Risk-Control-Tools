@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     FICHIER  : UI_Anomalies             type : HTML (.html)
+     SECTION  : MENU 5 · Contrôle interne > Anomalies et incidents
+     VA AVEC  : 14_Anomalies (Script)
+     MARQUEUR UI_Anomalies v10   (lu par Administration > Controler l'installation)
+     ===================================================================== -->
+<html lang="fr">
+<head>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --primary:#1F5FA8; --muted:#5B6877; --border-strong:#B9C3CF; --ok:#1B7F3B; --danger:#B3261E;
+}
+/* Résiduel : tableau kanban, sans équivalent daisyUI direct. */
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start}
+.card{cursor:pointer;transition:border-color .1s ease}
+.card:hover{border-color:var(--primary)}
+.card.sel{outline:2px solid var(--primary);outline-offset:-2px}
+.card .c-desc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.close-note{display:none}
+.close-note.on{display:block}
+@media (max-width:900px){ .board{grid-template-columns:1fr 1fr} }
+@media (max-width:560px){ .board{grid-template-columns:1fr} }
+</style>
+</head>
+<body class="bg-base-200 text-base-content text-sm">
+<div class="navbar bg-base-100 border-b border-base-300 px-4 min-h-0 py-2 mb-2 rounded-lg shadow-sm">
+  <div class="flex-1">
+    <a href="?page=accueil" class="btn btn-ghost btn-sm normal-case gap-1">← Accueil</a>
+  </div>
+</div>
+<div class="max-w-[1180px] mx-auto p-4">
+<div class="bg-base-100 border border-base-300 rounded-2xl shadow overflow-hidden">
+  <header class="p-4 pb-3 border-b border-base-300">
+    <h1 class="m-0 text-lg font-semibold tracking-tight">Anomalies et incidents</h1>
+    <p class="mt-1 text-xs text-base-content/60">Cycle de vie : Nouvelle → En analyse → Action engagée → Clôturée. La clôture exige un commentaire.</p>
+  </header>
+
+  <div id="msg" class="alert hidden mx-5 mt-3 text-sm py-2"></div>
+
+  <div class="flex items-center gap-2.5 p-3 px-5 border-b border-base-300 bg-base-200/40 flex-wrap">
+    <input type="text" id="q" class="input input-bordered input-sm flex-1 min-w-[220px]" placeholder="Rechercher par identifiant, description, contrôle ou risque">
+    <button class="btn btn-primary btn-sm" id="btn-new">+ Déclarer une anomalie</button>
+  </div>
+
+  <main class="p-4 px-5 min-h-[430px]">
+    <section id="board" class="board"></section>
+
+    <!-- ================= nouvelle anomalie ================= -->
+    <section class="border border-base-300 rounded-lg p-4 bg-base-200/40 mt-4" id="panel-new" style="display:none">
+      <div class="flex items-center justify-between mb-3"><b class="text-sm">Déclarer une anomalie</b>
+        <button class="btn btn-ghost btn-xs" id="new-close">Fermer</button></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Contrôle concerné</label><select id="n-ctrl" class="select select-bordered w-full"></select></div>
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Exécution concernée</label><select id="n-exec" class="select select-bordered w-full"></select></div>
+        <div class="mb-3"><label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Risque concerné</label><select id="n-risque" class="select select-bordered w-full"></select></div>
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Description <span class="text-error font-bold">*</span></label>
+        <textarea id="n-desc" class="textarea textarea-bordered w-full" rows="3" placeholder="Ce qui a été constaté"></textarea>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="mb-3">
+          <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Gravité <span class="text-error font-bold">*</span></label>
+          <select id="n-gravite" class="select select-bordered w-full"></select>
+        </div>
+        <div class="mb-3">
+          <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Origine</label>
+          <input type="text" id="n-origine" class="input input-bordered w-full" list="n-origines" placeholder="Exécution de contrôle, audit, client, autre…">
+          <datalist id="n-origines">
+            <option value="Exécution de contrôle">
+            <option value="Signalement direct">
+            <option value="Audit interne">
+            <option value="Audit externe">
+            <option value="Client">
+            <option value="Autre">
+          </datalist>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Actions associées</label>
+        <input type="text" id="n-actions" class="input input-bordered w-full" placeholder="Identifiants du plan d'actions, séparés par des virgules">
+      </div>
+
+      <div class="flex justify-end gap-2.5 mt-3.5">
+        <button class="btn" id="new-annuler">Annuler</button>
+        <button class="btn btn-primary" id="new-save">Enregistrer</button>
+      </div>
+    </section>
+
+    <!-- ================= detail / changement de statut ================= -->
+    <section class="border border-base-300 rounded-lg p-4 bg-base-200/40 mt-4" id="panel-detail" style="display:none">
+      <div class="flex items-center justify-between mb-3"><b class="text-sm" id="d-titre">Anomalie</b>
+        <button class="btn btn-ghost btn-xs" id="d-close">Fermer</button></div>
+
+      <div class="grid grid-cols-[150px_1fr] gap-x-3 gap-y-1.5 text-xs mb-3.5" id="d-grid"></div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-primary mt-4 mb-2 pb-1.5 border-b border-base-300">Changer de statut</div>
+      <div class="flex flex-wrap gap-2 my-2.5" id="d-transitions"></div>
+      <div class="mb-3">
+        <label class="block text-xs font-semibold text-base-content/60 mb-1 uppercase tracking-wide">Commentaire</label>
+        <textarea id="d-commentaire" class="textarea textarea-bordered w-full" rows="2" placeholder="Ce qui a été fait, requis pour la clôture"></textarea>
+        <div class="close-note text-xs text-error mt-1" id="d-close-note">La clôture d'une anomalie exige un commentaire décrivant ce qui a été fait.</div>
+      </div>
+
+      <div class="flex justify-end gap-2.5 mt-3.5">
+        <button class="btn btn-primary" id="d-appliquer" disabled>Appliquer le changement de statut</button>
+      </div>
+    </section>
+  </main>
+</div>
+</div>
+
+<script>
+/* ---------------- etat ---------------- */
+let DATA = null;
+let ANOMALIES = [], CONTROLES = [], EXECUTIONS = [], RISQUES = [], STATUTS = [];
+let CIBLE_STATUT = null;   // statut choisi dans le panneau detail, avant application
+let ANOMALIE_COURANTE = null;
+
+// Miroir exact de TRANSITIONS_ANOMALIE_ cote serveur (14_Anomalies.gs) : ne
+// jamais proposer un statut que le serveur refuserait.
+const TRANSITIONS = {
+  'Nouvelle': ['En analyse', 'Action engagée'],
+  'En analyse': ['Action engagée', 'Clôturée'],
+  'Action engagée': ['Clôturée'],
+  'Clôturée': []
+};
+const STATUT_CLOTUREE = 'Clôturée';
+
+const GRAVITES = ['Faible', 'Modéré', 'Élevé', 'Majeur', 'Critique'];
+
+/* ---------------- utilitaires ---------------- */
+function esc(v){
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function message(txt, type){
+  const m = document.getElementById('msg');
+  const cls = {info:'alert-info', warn:'alert-warning', err:'alert-error', ok:'alert-success'}[type] || 'alert-info';
+  m.className = 'alert ' + cls + ' mx-5 mt-3 text-sm py-2';
+  m.textContent = txt;
+  if(type === 'ok' || type === 'info') setTimeout(() => m.classList.add('hidden'), 6000);
+}
+function onError(err){
+  const txt = (err && err.message) ? err.message
+    : "Une erreur est survenue côté serveur. Aucune donnée n'a été enregistrée.";
+  message(txt, 'err');
+  try { console.error(err); } catch(e) {}
+}
+function jetonUnique(){
+  return 'req-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+}
+function dateCourte(d){
+  if(!d) return '';
+  const x = (d instanceof Date) ? d : new Date(d);
+  return isNaN(x.getTime()) ? String(d) : x.toLocaleDateString('fr-FR');
+}
+function couleurGravite(g){
+  const i = GRAVITES.indexOf(g);
+  const classes = ['badge-success', 'badge-success', 'badge-warning', 'badge-error', 'badge-error'];
+  return i === -1 ? 'badge-neutral' : classes[i];
+}
+function couleurStatut(st){
+  if(st === STATUT_CLOTUREE) return 'badge-success';
+  if(st === 'Action engagée') return 'badge-warning';
+  if(st === 'En analyse') return 'badge-info';
+  return 'badge-neutral';
+}
+
+/* ---------------- selects ---------------- */
+function remplirSelect(id, options, vide){
+  const el = document.getElementById(id); el.innerHTML = '';
+  if(vide !== false) el.appendChild(new Option('Sélectionner…', ''));
+  options.forEach(o => el.appendChild(new Option(o.label, o.value)));
+}
+
+function optionsControles(){
+  return CONTROLES.map(c => ({ value: c.id, label: c.id + ' · ' + (c.libelle || '') }));
+}
+function optionsExecutions(idControle){
+  const liste = idControle ? EXECUTIONS.filter(e => e.idControle === idControle) : EXECUTIONS;
+  return liste.map(e => ({ value: e.id, label: e.id + (e.dateRealisation ? ' · ' + dateCourte(e.dateRealisation) : (e.dateExecution ? ' · ' + dateCourte(e.dateExecution) : '')) }));
+}
+function optionsRisques(){
+  return RISQUES.map(r => ({ value: r.id, label: r.id + ' · ' + (r.intitule || '') }));
+}
+
+/* ---------------- rendu du tableau (kanban) ---------------- */
+function slug(s){ return String(s).toLowerCase().normalize('NFD').replace(/[^\w]+/g, '-'); }
+
+function correspond(a, filtre){
+  if(!filtre) return true;
+  const q = filtre.toLowerCase();
+  return String(a.id).toLowerCase().indexOf(q) !== -1 ||
+    String(a.description || '').toLowerCase().indexOf(q) !== -1 ||
+    String(a.idControle || '').toLowerCase().indexOf(q) !== -1 ||
+    String(a.idRisque || '').toLowerCase().indexOf(q) !== -1;
+}
+
+function carteAnomalie(a){
+  const div = document.createElement('div');
+  div.className = 'card bg-base-100 border border-base-300 rounded-lg p-2.5' + (ANOMALIE_COURANTE && ANOMALIE_COURANTE.id === a.id ? ' sel' : '');
+  const badgeGravite = couleurGravite(a.gravite);
+  div.innerHTML =
+    '<div class="flex justify-between items-center gap-1.5 mb-1 text-xs text-base-content/60 font-mono"><span>' + esc(a.id) + '</span>' +
+    (a.gravite ? '<span class="badge badge-sm ' + badgeGravite + '">' + esc(a.gravite) + '</span>' : '') +
+    '</div>' +
+    '<div class="c-desc text-sm leading-snug">' + esc(a.description || '·') + '</div>' +
+    '<div class="mt-1.5 text-xs text-base-content/60">' +
+      (a.idControle ? esc(a.idControle) + ' · ' : '') +
+      (a.idRisque ? esc(a.idRisque) + ' · ' : '') +
+      (a.dateConstat ? dateCourte(a.dateConstat) : '') +
+    '</div>';
+  div.onclick = () => ouvrirDetail(a.id);
+  return div;
+}
+
+function renderBoard(){
+  const board = document.getElementById('board'); board.innerHTML = '';
+  const filtre = document.getElementById('q').value;
+  STATUTS.forEach(st => {
+    const col = document.createElement('div'); col.className = 'bg-base-200/60 border border-base-300 rounded-lg p-2.5 min-h-[120px]';
+    const items = ANOMALIES.filter(a => a.statut === st && correspond(a, filtre));
+    col.innerHTML = '<h3 class="m-0 mb-2 text-xs uppercase tracking-wide text-base-content/60 font-bold flex items-center justify-between">' +
+      '<span>' + esc(st) + '</span><span class="badge badge-ghost badge-sm">' + items.length + '</span></h3>' +
+      '<div class="flex flex-col gap-2 max-h-[560px] overflow-auto" id="cards-' + slug(st) + '"></div>';
+    board.appendChild(col);
+    const host = col.querySelector('div:last-child');
+    if(!items.length){
+      const v = document.createElement('div'); v.className = 'text-xs italic text-base-content/50 p-1.5'; v.textContent = 'Aucune anomalie.';
+      host.appendChild(v);
+    } else {
+      items.forEach(a => host.appendChild(carteAnomalie(a)));
+    }
+  });
+}
+
+/* ---------------- panneau : nouvelle anomalie ---------------- */
+function ouvrirNouvelle(){
+  fermerDetail();
+  document.getElementById('panel-new').style.display = 'block';
+  document.getElementById('n-desc').value = '';
+  document.getElementById('n-gravite').value = '';
+  document.getElementById('n-origine').value = '';
+  document.getElementById('n-actions').value = '';
+  document.getElementById('n-ctrl').value = '';
+  document.getElementById('n-exec').value = '';
+  document.getElementById('n-risque').value = '';
+  remplirSelect('n-exec', optionsExecutions(''));
+  document.querySelectorAll('#panel-new .manque').forEach(e => e.classList.remove('manque'));
+  document.getElementById('panel-new').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function fermerNouvelle(){
+  document.getElementById('panel-new').style.display = 'none';
+}
+
+function enregistrerNouvelle(){
+  const description = document.getElementById('n-desc').value.trim();
+  const gravite = document.getElementById('n-gravite').value;
+  const dEl = document.getElementById('n-desc'), gEl = document.getElementById('n-gravite');
+  dEl.classList.toggle('manque', !description);
+  gEl.classList.toggle('manque', !gravite);
+  if(!description || !gravite){
+    message(!description ? 'La description est obligatoire.' : 'La gravité est obligatoire.', 'warn');
+    return;
+  }
+
+  const payload = {
+    requestId: jetonUnique(),
+    idControle: document.getElementById('n-ctrl').value || '',
+    idExecution: document.getElementById('n-exec').value || '',
+    idRisque: document.getElementById('n-risque').value || '',
+    description: description,
+    gravite: gravite,
+    origine: document.getElementById('n-origine').value || '',
+    actionsAssociees: document.getElementById('n-actions').value || ''
+  };
+
+  const b = document.getElementById('new-save');
+  b.disabled = true; b.textContent = 'Enregistrement...';
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res && Array.isArray(res.anomalies)) ANOMALIES = res.anomalies;
+      renderBoard();
+      fermerNouvelle();
+      message('Anomalie ' + res.id + ' déclarée au statut « Nouvelle ».', 'ok');
+      b.disabled = false; b.textContent = 'Enregistrer';
+    })
+    .withFailureHandler(function(e){
+      onError(e);
+      b.disabled = false; b.textContent = 'Enregistrer';
+    })
+    .declarerAnomalie(payload);
+}
+
+/* ---------------- panneau : detail et changement de statut ---------------- */
+function libelleControle(id){
+  const c = CONTROLES.filter(x => x.id === id)[0];
+  return c ? id + ' · ' + (c.libelle || '') : id;
+}
+function libelleRisque(id){
+  const r = RISQUES.filter(x => x.id === id)[0];
+  return r ? id + ' · ' + (r.intitule || '') : id;
+}
+
+function ouvrirDetail(id){
+  fermerNouvelle();
+  const a = ANOMALIES.filter(x => x.id === id)[0];
+  if(!a) return;
+  ANOMALIE_COURANTE = a;
+  CIBLE_STATUT = null;
+  renderBoard();
+
+  document.getElementById('d-titre').textContent = 'Anomalie ' + a.id;
+  document.getElementById('d-grid').innerHTML = [
+    ['Statut actuel', a.statut || '·'],
+    ['Description', a.description || '·'],
+    ['Gravité', a.gravite || '·'],
+    ['Origine', a.origine || '·'],
+    ['Contrôle', a.idControle ? libelleControle(a.idControle) : '·'],
+    ['Exécution', a.idExecution || '·'],
+    ['Risque', a.idRisque ? libelleRisque(a.idRisque) : '·'],
+    ['Détecté par', a.detectePar || '·'],
+    ['Date de constat', a.dateConstat ? dateCourte(a.dateConstat) : '·'],
+    ['Actions associées', a.actionsAssociees || '·'],
+    ['Date de clôture', a.dateCloture ? dateCourte(a.dateCloture) : '·'],
+    ['Commentaire de clôture', a.commentaireCloture || '·']
+  ].map(([k, v]) => '<span class="text-base-content/60">' + esc(k) + '</span><span>' + esc(v) + '</span>').join('');
+
+  const box = document.getElementById('d-transitions'); box.innerHTML = '';
+  const autorises = TRANSITIONS[a.statut] || [];
+  if(!autorises.length){
+    box.innerHTML = '<span class="text-xs text-base-content/60">Statut terminal : aucune transition possible.</span>';
+  } else {
+    autorises.forEach(st => {
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn btn-sm';
+      btn.textContent = 'Passer à « ' + st + ' »';
+      btn.onclick = () => choisirCible(st, btn);
+      box.appendChild(btn);
+    });
+  }
+  document.getElementById('d-commentaire').value = '';
+  document.getElementById('d-close-note').classList.remove('on');
+  document.getElementById('d-appliquer').disabled = true;
+
+  document.getElementById('panel-detail').style.display = 'block';
+  document.getElementById('panel-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function choisirCible(st, btn){
+  CIBLE_STATUT = st;
+  document.querySelectorAll('#d-transitions .btn').forEach(b => b.classList.remove('btn-primary'));
+  btn.classList.add('btn-primary');
+  document.getElementById('d-close-note').classList.toggle('on', st === STATUT_CLOTUREE);
+  document.getElementById('d-appliquer').disabled = false;
+  document.getElementById('d-appliquer').textContent = 'Appliquer : passer à « ' + st + ' »';
+}
+
+function appliquerTransition(){
+  if(!ANOMALIE_COURANTE || !CIBLE_STATUT) return;
+  const commentaire = document.getElementById('d-commentaire').value.trim();
+  if(CIBLE_STATUT === STATUT_CLOTUREE && !commentaire){
+    document.getElementById('d-commentaire').classList.add('manque');
+    message("La clôture d'une anomalie exige un commentaire décrivant ce qui a été fait.", 'warn');
+    return;
+  }
+  document.getElementById('d-commentaire').classList.remove('manque');
+
+  const b = document.getElementById('d-appliquer');
+  b.disabled = true; const texteInitial = b.textContent; b.textContent = 'Application...';
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res && Array.isArray(res.anomalies)) ANOMALIES = res.anomalies;
+      const maj = ANOMALIES.filter(x => x.id === res.id)[0];
+      renderBoard();
+      message('Anomalie ' + res.id + ' passée au statut « ' + res.statut + ' ».', 'ok');
+      if(maj) ouvrirDetail(maj.id); else fermerDetail();
+      b.disabled = false; b.textContent = texteInitial;
+    })
+    .withFailureHandler(function(e){
+      onError(e);
+      b.disabled = false; b.textContent = texteInitial;
+    })
+    .mettreAJourStatutAnomalie(ANOMALIE_COURANTE.id, CIBLE_STATUT, commentaire);
+}
+
+function fermerDetail(){
+  document.getElementById('panel-detail').style.display = 'none';
+  ANOMALIE_COURANTE = null; CIBLE_STATUT = null;
+  renderBoard();
+}
+
+/* ---------------- demarrage ---------------- */
+function bindStatique(){
+  document.getElementById('btn-new').onclick = ouvrirNouvelle;
+  document.getElementById('new-close').onclick = fermerNouvelle;
+  document.getElementById('new-annuler').onclick = fermerNouvelle;
+  document.getElementById('new-save').onclick = enregistrerNouvelle;
+  document.getElementById('d-close').onclick = fermerDetail;
+  document.getElementById('d-appliquer').onclick = appliquerTransition;
+  document.getElementById('n-ctrl').onchange = function(e){
+    remplirSelect('n-exec', optionsExecutions(e.target.value));
+  };
+  document.getElementById('q').oninput = renderBoard;
+  ['input', 'change'].forEach(function(ev){
+    document.addEventListener(ev, function(e){
+      if(e.target && e.target.classList && e.target.classList.contains('manque')){
+        e.target.classList.remove('manque');
+      }
+    }, true);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  bindStatique();
+  if(typeof google === 'undefined' || !google.script || !google.script.run){
+    message("Environnement Google Apps Script non détecté. Ouvrez le formulaire depuis le menu Risk Management.", 'err');
+    return;
+  }
+  google.script.run.withSuccessHandler(onInitialData).withFailureHandler(onError).getAnomaliesData();
+});
+
+function onInitialData(data){
+  if(!data){
+    message("Les données du classeur n'ont pas pu être chargées. Lancez Risk Management > " +
+      "Administration > Contrôler l'installation des scripts.", 'err');
+    return;
+  }
+  DATA = data;
+  ANOMALIES = data.anomalies || [];
+  CONTROLES = data.controles || [];
+  EXECUTIONS = data.executions || [];
+  RISQUES = data.risques || [];
+  STATUTS = (data.statuts && data.statuts.length) ? data.statuts :
+    ['Nouvelle', 'En analyse', 'Action engagée', 'Clôturée'];
+
+  remplirSelect('n-ctrl', optionsControles());
+  remplirSelect('n-exec', optionsExecutions(''));
+  remplirSelect('n-risque', optionsRisques());
+  remplirSelect('n-gravite', GRAVITES.map(g => ({ value: g, label: g })));
+
+  if(!data.user || !data.user.reconnu){
+    message("Votre compte (" + ((data.user && data.user.email) || 'inconnu') + ") n'est pas présent dans la feuille " +
+      "UTILISATEURS. L'enregistrement sera refusé.", 'err');
+  } else if(!data.user.actif){
+    message('Votre compte est inactif dans la feuille UTILISATEURS.', 'warn');
+  }
+
+  renderBoard();
+
+  if(data.version && data.version !== 'v10'){
+    message('Les scripts du projet sont en version ' + data.version + ' et ce formulaire en v10 : ' +
+      'recopiez tous les fichiers de la même livraison.', 'err');
+  }
+}
+</script>
+</body>
+</html>
