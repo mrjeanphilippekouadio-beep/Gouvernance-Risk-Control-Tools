@@ -12,7 +12,7 @@
  * (DEPARTEMENTS, ANOMALIES, PROCESSUS, IAM_PERMISSIONS, JOURNAL_GLOBAL),
  * avec leurs en-têtes en ligne 4 (HEADER_ROW), exactement comme les
  * dictionnaires de 02_Colonnes.gs les attendent. Idempotent : une feuille
- * déjà présente n'est jamais recréée ni modifiée.
+ * déjà présente n'est jamais recréée ni modifiée. ### to delete after
  */
 
 function creerFeuillesManquantes() {
