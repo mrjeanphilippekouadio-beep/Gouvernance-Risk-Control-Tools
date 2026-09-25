@@ -5,7 +5,7 @@ import type { RiskRepository } from "../src/domain/repositories/RiskRepository.j
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
 import type { Risk } from "../src/domain/entities/Risk.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
-import { ValidationError } from "../src/domain/errors/DomainErrors.js";
+import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 
 function inMemoryRiskRepository(): RiskRepository {
   const store = new Map<string, Risk>();
@@ -67,7 +67,7 @@ const actor: AuthenticatedUser = {
   tenantId: "tenant-1",
   email: "jp@example.com",
   displayName: "JP",
-  roles: ["risk.create", "risk.update"],
+  roles: ["risk.read", "risk.create", "risk.update", "risk.delete"],
 };
 
 describe("RiskService", () => {
@@ -106,5 +106,24 @@ describe("RiskService", () => {
     const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository());
     const risk = await service.create(actor, { process: "P", description: "D" }, "REQ-6");
     await expect(service.archive(actor, risk.id, "", "REQ-7")).rejects.toThrow(ValidationError);
+  });
+
+  it("rejects an actor without risk.create permission", async () => {
+    const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository());
+    const readOnlyActor = { ...actor, roles: ["risk.read"] };
+    await expect(
+      service.create(readOnlyActor, { process: "P", description: "D" }, "REQ-8"),
+    ).rejects.toThrow(ForbiddenError);
+  });
+
+  it("rejects an actor without risk.delete permission trying to archive", async () => {
+    const repo = inMemoryRiskRepository();
+    const service = new RiskService(repo, inMemoryAuditRepository());
+    const risk = await service.create(actor, { process: "P", description: "D" }, "REQ-9");
+
+    const noDeleteActor = { ...actor, roles: ["risk.read", "risk.create", "risk.update"] };
+    await expect(service.archive(noDeleteActor, risk.id, "reason", "REQ-10")).rejects.toThrow(
+      ForbiddenError,
+    );
   });
 });

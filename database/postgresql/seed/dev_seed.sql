@@ -13,6 +13,6 @@ VALUES (
   '00000000-0000-0000-0000-000000000001',
   'dev@example.com',
   'Dev User',
-  ARRAY['risk.create', 'risk.update', 'risk.approve']
+  ARRAY['risk.read', 'risk.create', 'risk.update', 'risk.delete']
 )
 ON CONFLICT DO NOTHING;

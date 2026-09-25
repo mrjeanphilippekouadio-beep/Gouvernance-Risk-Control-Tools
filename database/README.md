@@ -42,3 +42,10 @@ futur, pas encore fait) :
       vérifier `git status` avant de commit si un fichier `.env*` apparaît).
 - [ ] Le frontend ne reçoit jamais `DATABASE_URL` (le backend est le seul
       composant qui s'y connecte — voir ADR-001).
+- [ ] **Non fait en V1** : `audit_log` n'a pas encore de protection au
+      niveau rôle DB contre `UPDATE`/`DELETE` (seul le code applicatif
+      s'engage à ne faire que des `INSERT`). Avant tout usage en
+      production, créer un rôle applicatif dédié et lui retirer les
+      privilèges `UPDATE`/`DELETE` sur `audit_log` — sans ça, l'intégrité
+      du journal d'audit repose uniquement sur la discipline du code, pas
+      sur la base.

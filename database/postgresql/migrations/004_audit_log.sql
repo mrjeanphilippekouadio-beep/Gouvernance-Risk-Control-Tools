@@ -17,5 +17,8 @@ CREATE TABLE audit_log (
   request_id   text NOT NULL
 );
 
--- Audit trails are append-only: no UPDATE/DELETE grants at the
--- application role level (enforced in 005_security.sql).
+-- Audit trails should be append-only in principle: the application code
+-- (PostgresAuditRepository) only ever INSERTs. This is NOT yet enforced
+-- at the database role level (no REVOKE UPDATE/DELETE) — see the open
+-- item in database/README.md. Don't assume DB-level tamper protection
+-- until that's added.

@@ -3,6 +3,7 @@ import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { CreateRiskInput, Risk, UpdateRiskInput } from "../domain/entities/Risk.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 /**
@@ -17,6 +18,7 @@ export class RiskService {
   ) {}
 
   async create(actor: AuthenticatedUser, input: Omit<CreateRiskInput, "tenantId">, requestId: string): Promise<Risk> {
+    requirePermission(actor, "risk.create");
     if (!input.process.trim()) throw new ValidationError("process is required");
     if (!input.description.trim()) throw new ValidationError("description is required");
 
@@ -38,16 +40,19 @@ export class RiskService {
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<Risk> {
+    requirePermission(actor, "risk.read");
     const risk = await this.risks.getById(actor.tenantId, id);
     if (!risk) throw new NotFoundError("Risk", id);
     return risk;
   }
 
   async list(actor: AuthenticatedUser, includeArchived = false): Promise<Risk[]> {
+    requirePermission(actor, "risk.read");
     return this.risks.list(actor.tenantId, { includeArchived });
   }
 
   async update(actor: AuthenticatedUser, id: string, input: UpdateRiskInput, requestId: string): Promise<Risk> {
+    requirePermission(actor, "risk.update");
     const before = await this.get(actor, id);
 
     if (input.status && !isValidTransition(before.status, input.status)) {
@@ -72,6 +77,7 @@ export class RiskService {
   }
 
   async archive(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<void> {
+    requirePermission(actor, "risk.delete");
     if (!reason.trim()) throw new ValidationError("A reason is required to archive a risk");
     const before = await this.get(actor, id);
 
