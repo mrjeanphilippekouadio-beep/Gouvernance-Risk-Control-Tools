@@ -9,6 +9,7 @@ import { PostgresTenantRepository } from "./infrastructure/database/postgres/Pos
 import { PostgresControlRepository } from "./infrastructure/database/postgres/PostgresControlRepository.js";
 import { PostgresControlExecutionRepository } from "./infrastructure/database/postgres/PostgresControlExecutionRepository.js";
 import { PostgresControlEffectivenessRepository } from "./infrastructure/database/postgres/PostgresControlEffectivenessRepository.js";
+import { PostgresAnomalyRepository } from "./infrastructure/database/postgres/PostgresAnomalyRepository.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
@@ -16,11 +17,13 @@ import { EvidenceService } from "./services/EvidenceService.js";
 import { ControlService } from "./services/ControlService.js";
 import { ControlExecutionService } from "./services/ControlExecutionService.js";
 import { ControlEffectivenessService } from "./services/ControlEffectivenessService.js";
+import { AnomalyService } from "./services/AnomalyService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { controlsRouter } from "./api/v1/controls.routes.js";
 import { executionsRouter } from "./api/v1/executions.routes.js";
 import { effectivenessRouter } from "./api/v1/effectiveness.routes.js";
+import { anomaliesRouter } from "./api/v1/anomalies.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
@@ -39,6 +42,7 @@ const tenantRepository = new PostgresTenantRepository(pool);
 const controlRepository = new PostgresControlRepository(pool);
 const executionRepository = new PostgresControlExecutionRepository(pool);
 const effectivenessRepository = new PostgresControlEffectivenessRepository(pool);
+const anomalyRepository = new PostgresAnomalyRepository(pool);
 
 const riskService = new RiskService(riskRepository, auditRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository);
@@ -48,6 +52,7 @@ const effectivenessService = new ControlEffectivenessService(
   controlRepository,
   auditRepository,
 );
+const anomalyService = new AnomalyService(anomalyRepository, auditRepository);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
@@ -87,6 +92,7 @@ app.use("/api/v1/evidences", authMiddleware(identityProvider), evidencesRouter(e
 app.use("/api/v1/controls", authMiddleware(identityProvider), controlsRouter(controlService));
 app.use("/api/v1/executions", authMiddleware(identityProvider), executionsRouter(executionService));
 app.use("/api/v1/effectiveness", authMiddleware(identityProvider), effectivenessRouter(effectivenessService));
+app.use("/api/v1/anomalies", authMiddleware(identityProvider), anomaliesRouter(anomalyService));
 
 app.use(errorHandler);
 

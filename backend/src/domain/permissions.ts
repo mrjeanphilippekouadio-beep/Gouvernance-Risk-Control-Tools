@@ -23,7 +23,10 @@ export type Permission =
   | "execution.validate"
   | "effectiveness.read"
   | "effectiveness.create"
-  | "effectiveness.validate";
+  | "effectiveness.validate"
+  | "anomaly.read"
+  | "anomaly.create"
+  | "anomaly.update";
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
   if (!actor.roles.includes(permission)) {
