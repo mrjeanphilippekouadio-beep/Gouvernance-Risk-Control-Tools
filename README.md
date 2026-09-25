@@ -55,13 +55,26 @@ Détails complets dans [docs/architecture/ADR-001-cible-architecture.md](docs/ar
 ## État actuel
 
 - ✅ Apps Script legacy : fonctionnel, inchangé, toujours en production pour Djamo.
-- ✅ Backend : squelette en couches posé, premier vertical slice **Risks**
-  (domaine → service → repository Postgres → API `/api/v1/risks`) avec
-  tests unitaires, build et audit de sécurité des dépendances vérifiés.
-- ✅ Frontend : squelette React + Vite posé, page Risks reliée à l'API.
-- ⬜ Authentification Google réelle côté frontend (actuellement un champ
-  de saisie de token, pour dev uniquement).
-- ⬜ Reste du périmètre Apps Script (contrôles, exécutions, efficacité,
-  anomalies, cartographie, IAM, workflow maker-checker) à porter vers le
-  backend, module par module.
+- ✅ Backend : squelette en couches posé, 4 vertical slices complets
+  (domaine → service → repository Postgres → API), tous testés
+  (29 tests unitaires), build et audit de sécurité des dépendances verts :
+  - **Risks** (`/api/v1/risks`) — CRUD, transitions d'état, archivage avec raison.
+  - **Evidence** (`/api/v1/evidences`) — upload/lecture/suppression via Google
+    Drive, isolation stricte par tenant (voir la revue de sécurité qui a
+    identifié et corrigé ce point).
+  - **Controls** (`/api/v1/controls`) — catalogue des contrôles, lien
+    many-to-many avec les risques couverts.
+  - **ControlExecutions** (`/api/v1/executions`) — historisé (append-only),
+    validation maker-checker.
+- ✅ Frontend : squelette React + Vite posé, page Risks reliée à l'API,
+  connexion Google Identity Services réelle (avec repli dev si
+  `VITE_GOOGLE_CLIENT_ID` n'est pas encore configuré).
+- ✅ `CLAUDE.md` à la racine pour les futures sessions Claude Code.
+- ⬜ Configuration réelle : projet Neon, client OAuth Google, service
+  account Drive — rien de tout ça n'existe encore, le backend ne peut
+  pas tourner en vrai tant que ce n'est pas fait.
+- ⬜ Reste du périmètre Apps Script (efficacité, anomalies, cartographie,
+  IAM, journal global) à porter vers le backend, module par module — le
+  vertical slice **Risks**/**Evidence** est le gabarit à suivre (voir
+  `CLAUDE.md`).
 - ⬜ Export Apps Script → import backend (pont de migration des données Djamo).
