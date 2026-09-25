@@ -4,9 +4,14 @@ import { env } from "./config/env.js";
 import { pool } from "./infrastructure/database/pool.js";
 import { PostgresRiskRepository } from "./infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresAuditRepository } from "./infrastructure/database/postgres/PostgresAuditRepository.js";
+import { PostgresEvidenceRepository } from "./infrastructure/database/postgres/PostgresEvidenceRepository.js";
+import { PostgresTenantRepository } from "./infrastructure/database/postgres/PostgresTenantRepository.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
+import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
+import { EvidenceService } from "./services/EvidenceService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
+import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
@@ -20,11 +25,21 @@ app.use(requestIdMiddleware);
 // --- Wiring: infrastructure implementations behind their interfaces ---
 const riskRepository = new PostgresRiskRepository(pool);
 const auditRepository = new PostgresAuditRepository(pool);
+const evidenceRepository = new PostgresEvidenceRepository(pool);
+const tenantRepository = new PostgresTenantRepository(pool);
+
 const riskService = new RiskService(riskRepository, auditRepository);
 
+const documentStorage = new GoogleDriveStorage(
+  (tenantId) => tenantRepository.getDriveFolderId(tenantId),
+  env.GOOGLE_DRIVE_CREDENTIALS_PATH,
+);
+const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository);
+
 const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, async (email) => {
-  // TODO: replace with a real UserRepository lookup once the users/tenants
-  // migration lands. Placeholder keeps the auth chain wired end-to-end.
+  // Real lookup against the `users` table from migration 002 — one user
+  // row per (tenant, email); tenant/roles are ours, never trusted from
+  // the Google token itself.
   const { rows } = await pool.query<{ id: string; tenant_id: string; roles: string[] }>(
     `SELECT id, tenant_id, roles FROM users WHERE email = $1 AND deleted_at IS NULL`,
     [email],
@@ -49,6 +64,7 @@ app.get("/ready", async (_req, res) => {
 
 // --- Authenticated API ---
 app.use("/api/v1/risks", authMiddleware(identityProvider), risksRouter(riskService));
+app.use("/api/v1/evidences", authMiddleware(identityProvider), evidencesRouter(evidenceService));
 
 app.use(errorHandler);
 
