@@ -16,6 +16,12 @@ usage SaaS multi-tenant futur. Contexte complet de la décision :
 | `database/` | Migrations SQL versionnées (Neon PostgreSQL) et jeu de données de démonstration. |
 | `docs/architecture/` | Document d'échange complet + décisions d'architecture (ADR). |
 
+## Configuration de l'infrastructure (Neon, OAuth Google, Drive)
+
+Avant de pouvoir démarrer le backend pour de vrai, il faut créer un
+projet Neon, un client OAuth Google et un service account Drive — guide
+pas-à-pas dans [docs/SETUP.md](docs/SETUP.md).
+
 ## Démarrer en local
 
 ### Backend

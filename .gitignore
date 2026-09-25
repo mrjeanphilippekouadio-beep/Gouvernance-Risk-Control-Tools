@@ -26,6 +26,8 @@ coverage/
 .env.*.local
 *.pem
 *.key
+secrets/
+**/secrets/
 
 # Google Cloud / gcloud local state
 .gcloud/
