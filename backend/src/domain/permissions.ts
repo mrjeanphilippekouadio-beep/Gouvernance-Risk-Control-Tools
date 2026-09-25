@@ -20,7 +20,10 @@ export type Permission =
   | "control.delete"
   | "execution.read"
   | "execution.create"
-  | "execution.validate";
+  | "execution.validate"
+  | "effectiveness.read"
+  | "effectiveness.create"
+  | "effectiveness.validate";
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
   if (!actor.roles.includes(permission)) {

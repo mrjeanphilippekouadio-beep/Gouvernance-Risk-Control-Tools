@@ -8,16 +8,19 @@ import { PostgresEvidenceRepository } from "./infrastructure/database/postgres/P
 import { PostgresTenantRepository } from "./infrastructure/database/postgres/PostgresTenantRepository.js";
 import { PostgresControlRepository } from "./infrastructure/database/postgres/PostgresControlRepository.js";
 import { PostgresControlExecutionRepository } from "./infrastructure/database/postgres/PostgresControlExecutionRepository.js";
+import { PostgresControlEffectivenessRepository } from "./infrastructure/database/postgres/PostgresControlEffectivenessRepository.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
 import { EvidenceService } from "./services/EvidenceService.js";
 import { ControlService } from "./services/ControlService.js";
 import { ControlExecutionService } from "./services/ControlExecutionService.js";
+import { ControlEffectivenessService } from "./services/ControlEffectivenessService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { controlsRouter } from "./api/v1/controls.routes.js";
 import { executionsRouter } from "./api/v1/executions.routes.js";
+import { effectivenessRouter } from "./api/v1/effectiveness.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
@@ -35,10 +38,16 @@ const evidenceRepository = new PostgresEvidenceRepository(pool);
 const tenantRepository = new PostgresTenantRepository(pool);
 const controlRepository = new PostgresControlRepository(pool);
 const executionRepository = new PostgresControlExecutionRepository(pool);
+const effectivenessRepository = new PostgresControlEffectivenessRepository(pool);
 
 const riskService = new RiskService(riskRepository, auditRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository);
+const effectivenessService = new ControlEffectivenessService(
+  effectivenessRepository,
+  controlRepository,
+  auditRepository,
+);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
@@ -77,6 +86,7 @@ app.use("/api/v1/risks", authMiddleware(identityProvider), risksRouter(riskServi
 app.use("/api/v1/evidences", authMiddleware(identityProvider), evidencesRouter(evidenceService));
 app.use("/api/v1/controls", authMiddleware(identityProvider), controlsRouter(controlService));
 app.use("/api/v1/executions", authMiddleware(identityProvider), executionsRouter(executionService));
+app.use("/api/v1/effectiveness", authMiddleware(identityProvider), effectivenessRouter(effectivenessService));
 
 app.use(errorHandler);
 
