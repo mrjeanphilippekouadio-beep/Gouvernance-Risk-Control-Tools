@@ -12,3 +12,21 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Node / backend / frontend
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+
+# Environment / secrets — never commit real credentials
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Google Cloud / gcloud local state
+.gcloud/
+
