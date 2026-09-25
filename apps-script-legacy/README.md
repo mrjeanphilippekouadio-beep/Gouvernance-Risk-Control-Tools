@@ -90,6 +90,14 @@ fichier manquant, mal nommé ou resté à une version antérieure.
 
 ## Points de vigilance connus (non bloquants)
 
+- Le commentaire `<!-- MARQUEUR ... -->` de chaque page HTML doit se
+  trouver **à l'intérieur** de la balise `<html>...</html>` (dans
+  `<head>`), jamais avant `<!DOCTYPE html>` ni avant `<html>` : Apps
+  Script élague silencieusement tout commentaire placé hors du document
+  au moment de l'enregistrement du fichier, ce qui fait échouer
+  `Contrôler l'installation` (« sans marqueur ») même quand le contenu
+  collé est correct. Corrigé dans cette version (24/09/2026) — tous les
+  marqueurs sont désormais dans `<head>`.
 - `UI_Evaluation.html` et `UI_Validation.html` portent encore un marqueur
   `v9` (fonctionnels, mais pas encore recopiés au même rythme que les
   modules plus récents).
