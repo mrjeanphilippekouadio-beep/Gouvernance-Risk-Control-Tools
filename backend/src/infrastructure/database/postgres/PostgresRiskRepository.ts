@@ -1,7 +1,8 @@
 import type { Pool } from "pg";
 import type { RiskRepository } from "../../../domain/repositories/RiskRepository.js";
 import type { CreateRiskInput, Risk, UpdateRiskInput } from "../../../domain/entities/Risk.js";
-import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import { buildUpdateSet } from "./dynamicUpdate.js";
 
 interface RiskRow {
   id: string;
@@ -44,6 +45,15 @@ export class PostgresRiskRepository implements RiskRepository {
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
+  async listByIds(tenantId: string, ids: string[]): Promise<Risk[]> {
+    if (ids.length === 0) return [];
+    const { rows } = await this.pool.query<RiskRow>(
+      `SELECT * FROM risks WHERE tenant_id = $1 AND id = ANY($2) AND deleted_at IS NULL`,
+      [tenantId, ids],
+    );
+    return rows.map(toDomain);
+  }
+
   async list(tenantId: string, options?: { includeArchived?: boolean }): Promise<Risk[]> {
     const statusFilter = options?.includeArchived ? "" : "AND status <> 'ARCHIVED'";
     const { rows } = await this.pool.query<RiskRow>(
@@ -68,23 +78,26 @@ export class PostgresRiskRepository implements RiskRepository {
   }
 
   async update(tenantId: string, id: string, input: UpdateRiskInput): Promise<Risk> {
+    // Dynamic SET list, not COALESCE: COALESCE($n, col) can't distinguish
+    // "field omitted" from "field explicitly set to null", so a caller
+    // could never clear ownerDepartmentId that way.
+    const { setClauses, values } = buildUpdateSet(
+      {
+        process: input.process,
+        description: input.description,
+        owner_department_id: input.ownerDepartmentId,
+        status: input.status,
+      },
+      3,
+    );
+    if (setClauses.length === 0) throw new ValidationError("No fields to update");
+
     const { rows } = await this.pool.query<RiskRow>(
       `UPDATE risks
-       SET process = COALESCE($3, process),
-           description = COALESCE($4, description),
-           owner_department_id = COALESCE($5, owner_department_id),
-           status = COALESCE($6, status),
-           updated_at = now()
+       SET ${setClauses.join(", ")}, updated_at = now()
        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
        RETURNING *`,
-      [
-        tenantId,
-        id,
-        input.process ?? null,
-        input.description ?? null,
-        input.ownerDepartmentId ?? null,
-        input.status ?? null,
-      ],
+      [tenantId, id, ...values],
     );
     const row = rows[0];
     if (!row) throw new NotFoundError("Risk", id);

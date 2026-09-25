@@ -55,8 +55,13 @@ export class RiskService {
     requirePermission(actor, "risk.update");
     const before = await this.get(actor, id);
 
-    if (input.status && !isValidTransition(before.status, input.status)) {
-      throw new ValidationError(`Cannot transition risk from ${before.status} to ${input.status}`);
+    if (input.status) {
+      if (input.status === "ARCHIVED") {
+        throw new ValidationError("Use the archive endpoint to archive a risk (requires a reason)");
+      }
+      if (!isValidTransition(before.status, input.status)) {
+        throw new ValidationError(`Cannot transition risk from ${before.status} to ${input.status}`);
+      }
     }
 
     const after = await this.risks.update(actor.tenantId, id, input);

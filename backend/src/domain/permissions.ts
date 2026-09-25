@@ -13,7 +13,11 @@ export type Permission =
   | "risk.delete"
   | "evidence.read"
   | "evidence.upload"
-  | "evidence.delete";
+  | "evidence.delete"
+  | "control.read"
+  | "control.create"
+  | "control.update"
+  | "control.delete";
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
   if (!actor.roles.includes(permission)) {

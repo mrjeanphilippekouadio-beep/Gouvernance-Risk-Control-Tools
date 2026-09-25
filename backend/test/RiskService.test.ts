@@ -14,6 +14,11 @@ function inMemoryRiskRepository(): RiskRepository {
       const risk = store.get(id);
       return risk && risk.tenantId === tenantId && !risk.deletedAt ? risk : null;
     },
+    async listByIds(tenantId, ids) {
+      return ids
+        .map((id) => store.get(id))
+        .filter((r): r is Risk => !!r && r.tenantId === tenantId && !r.deletedAt);
+    },
     async list(tenantId) {
       return [...store.values()].filter((r) => r.tenantId === tenantId && !r.deletedAt);
     },
@@ -98,6 +103,14 @@ describe("RiskService", () => {
     expect(active.status).toBe("ACTIVE");
 
     await expect(service.update(actor, risk.id, { status: "DRAFT" }, "REQ-5")).rejects.toThrow(
+      ValidationError,
+    );
+  });
+
+  it("rejects setting status to ARCHIVED via update (must use archive endpoint)", async () => {
+    const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository());
+    const risk = await service.create(actor, { process: "P", description: "D" }, "REQ-11");
+    await expect(service.update(actor, risk.id, { status: "ARCHIVED" }, "REQ-12")).rejects.toThrow(
       ValidationError,
     );
   });

@@ -6,12 +6,15 @@ import { PostgresRiskRepository } from "./infrastructure/database/postgres/Postg
 import { PostgresAuditRepository } from "./infrastructure/database/postgres/PostgresAuditRepository.js";
 import { PostgresEvidenceRepository } from "./infrastructure/database/postgres/PostgresEvidenceRepository.js";
 import { PostgresTenantRepository } from "./infrastructure/database/postgres/PostgresTenantRepository.js";
+import { PostgresControlRepository } from "./infrastructure/database/postgres/PostgresControlRepository.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
 import { EvidenceService } from "./services/EvidenceService.js";
+import { ControlService } from "./services/ControlService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
+import { controlsRouter } from "./api/v1/controls.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
@@ -27,8 +30,10 @@ const riskRepository = new PostgresRiskRepository(pool);
 const auditRepository = new PostgresAuditRepository(pool);
 const evidenceRepository = new PostgresEvidenceRepository(pool);
 const tenantRepository = new PostgresTenantRepository(pool);
+const controlRepository = new PostgresControlRepository(pool);
 
 const riskService = new RiskService(riskRepository, auditRepository);
+const controlService = new ControlService(controlRepository, riskRepository, auditRepository);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
@@ -65,6 +70,7 @@ app.get("/ready", async (_req, res) => {
 // --- Authenticated API ---
 app.use("/api/v1/risks", authMiddleware(identityProvider), risksRouter(riskService));
 app.use("/api/v1/evidences", authMiddleware(identityProvider), evidencesRouter(evidenceService));
+app.use("/api/v1/controls", authMiddleware(identityProvider), controlsRouter(controlService));
 
 app.use(errorHandler);
 

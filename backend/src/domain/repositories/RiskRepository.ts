@@ -8,6 +8,8 @@ import type { CreateRiskInput, Risk, UpdateRiskInput } from "../entities/Risk.js
  */
 export interface RiskRepository {
   getById(tenantId: string, id: string): Promise<Risk | null>;
+  /** Batched existence check — used instead of N getById calls (e.g. validating a control's covered risks). */
+  listByIds(tenantId: string, ids: string[]): Promise<Risk[]>;
   list(tenantId: string, options?: { includeArchived?: boolean }): Promise<Risk[]>;
   create(input: CreateRiskInput): Promise<Risk>;
   update(tenantId: string, id: string, input: UpdateRiskInput): Promise<Risk>;

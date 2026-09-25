@@ -1,34 +1,50 @@
 import { useState } from "react";
 import { RisksPage } from "./features/risks/RisksPage";
+import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import "./App.css";
 
-/**
- * TODO(auth): replace this dev-only token box with real Google Identity
- * Services sign-in (see backend GoogleIdentityProvider). Until then, paste
- * a valid Google ID token here to exercise the API against a local
- * backend — never ship this input as-is.
- */
+const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
+
 function App() {
-  const [token, setToken] = useState("");
+  const { idToken, error, buttonRef, signOut } = useGoogleSignIn(GOOGLE_CLIENT_ID);
+  const [devToken, setDevToken] = useState("");
+
+  const token = idToken ?? devToken;
+
+  if (token) {
+    return (
+      <main>
+        <h1>GRC Tools</h1>
+        <button type="button" onClick={idToken ? signOut : () => setDevToken("")}>
+          Déconnexion
+        </button>
+        <RisksPage token={token} />
+      </main>
+    );
+  }
 
   return (
     <main>
       <h1>GRC Tools</h1>
 
-      {!token ? (
+      {error ? (
         <div>
+          <p role="alert">
+            Connexion Google indisponible ({error}). Configurer
+            VITE_GOOGLE_CLIENT_ID dans .env.local pour l'activer.
+          </p>
           <p>
-            Dev only — collez un ID token Google valide pour tester l'API
-            (l'écran de connexion réel n'est pas encore branché).
+            En attendant, pour tester en local, collez un ID token Google
+            valide (jamais à exposer ainsi en dehors du développement) :
           </p>
           <input
             placeholder="Google ID token"
-            onChange={(e) => setToken(e.target.value)}
+            onChange={(e) => setDevToken(e.target.value)}
             style={{ width: "100%" }}
           />
         </div>
       ) : (
-        <RisksPage token={token} />
+        <div ref={buttonRef} />
       )}
     </main>
   );
