@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
 import { pool } from "./infrastructure/database/pool.js";
@@ -39,6 +40,10 @@ import { errorHandler } from "./api/middleware/errorHandler.js";
 const app = express();
 
 app.use(pinoHttp());
+// Must run before authMiddleware: the browser's CORS preflight (OPTIONS)
+// never carries the Authorization header, so if auth ran first it would
+// reject the preflight and the real request would never be sent.
+app.use(cors({ origin: env.CORS_ALLOWED_ORIGINS, allowedHeaders: ["Authorization", "Content-Type"] }));
 app.use(express.json());
 app.use(requestIdMiddleware);
 

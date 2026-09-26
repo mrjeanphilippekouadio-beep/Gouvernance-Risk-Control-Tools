@@ -15,6 +15,15 @@ const EnvSchema = z.object({
   GOOGLE_DRIVE_CREDENTIALS_PATH: z
     .string()
     .min(1, "GOOGLE_DRIVE_CREDENTIALS_PATH is required (service account JSON key path)"),
+
+  // Comma-separated list of origins the frontend is served from. The
+  // browser sends a CORS preflight (OPTIONS, no Authorization header)
+  // before every cross-origin GET/POST — without this, authMiddleware
+  // rejects the preflight itself and the real request never fires.
+  CORS_ALLOWED_ORIGINS: z
+    .string()
+    .default("http://localhost:5173")
+    .transform((value) => value.split(",").map((origin) => origin.trim())),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
