@@ -10,6 +10,7 @@ import { PostgresControlRepository } from "./infrastructure/database/postgres/Po
 import { PostgresControlExecutionRepository } from "./infrastructure/database/postgres/PostgresControlExecutionRepository.js";
 import { PostgresControlEffectivenessRepository } from "./infrastructure/database/postgres/PostgresControlEffectivenessRepository.js";
 import { PostgresAnomalyRepository } from "./infrastructure/database/postgres/PostgresAnomalyRepository.js";
+import { PostgresDepartmentRepository } from "./infrastructure/database/postgres/PostgresDepartmentRepository.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
@@ -18,12 +19,14 @@ import { ControlService } from "./services/ControlService.js";
 import { ControlExecutionService } from "./services/ControlExecutionService.js";
 import { ControlEffectivenessService } from "./services/ControlEffectivenessService.js";
 import { AnomalyService } from "./services/AnomalyService.js";
+import { DepartmentService } from "./services/DepartmentService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { controlsRouter } from "./api/v1/controls.routes.js";
 import { executionsRouter } from "./api/v1/executions.routes.js";
 import { effectivenessRouter } from "./api/v1/effectiveness.routes.js";
 import { anomaliesRouter } from "./api/v1/anomalies.routes.js";
+import { departmentsRouter } from "./api/v1/departments.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
@@ -43,8 +46,10 @@ const controlRepository = new PostgresControlRepository(pool);
 const executionRepository = new PostgresControlExecutionRepository(pool);
 const effectivenessRepository = new PostgresControlEffectivenessRepository(pool);
 const anomalyRepository = new PostgresAnomalyRepository(pool);
+const departmentRepository = new PostgresDepartmentRepository(pool);
 
 const riskService = new RiskService(riskRepository, auditRepository);
+const departmentService = new DepartmentService(departmentRepository, auditRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository);
 const effectivenessService = new ControlEffectivenessService(
@@ -93,6 +98,7 @@ app.use("/api/v1/controls", authMiddleware(identityProvider), controlsRouter(con
 app.use("/api/v1/executions", authMiddleware(identityProvider), executionsRouter(executionService));
 app.use("/api/v1/effectiveness", authMiddleware(identityProvider), effectivenessRouter(effectivenessService));
 app.use("/api/v1/anomalies", authMiddleware(identityProvider), anomaliesRouter(anomalyService));
+app.use("/api/v1/departments", authMiddleware(identityProvider), departmentsRouter(departmentService));
 
 app.use(errorHandler);
 

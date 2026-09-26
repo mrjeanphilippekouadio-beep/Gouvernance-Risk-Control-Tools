@@ -26,7 +26,11 @@ export type Permission =
   | "effectiveness.validate"
   | "anomaly.read"
   | "anomaly.create"
-  | "anomaly.update";
+  | "anomaly.update"
+  | "department.read"
+  | "department.create"
+  | "department.update"
+  | "department.delete";
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
   if (!actor.roles.includes(permission)) {
