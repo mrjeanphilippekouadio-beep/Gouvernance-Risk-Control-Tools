@@ -34,7 +34,8 @@ export type Permission =
   | "process.read"
   | "process.create"
   | "process.update"
-  | "process.delete";
+  | "process.delete"
+  | "audit.read";
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
   if (!actor.roles.includes(permission)) {
