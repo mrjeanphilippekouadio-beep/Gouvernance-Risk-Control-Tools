@@ -84,15 +84,46 @@ frontend. Every create/update/delete goes through
 `AuditRepository.record(...)` in the same service method — audit logging
 is not optional or bolted on later.
 
-## Adding a new domain module (e.g. Controls, Executions)
+## Adding a new domain module
 
-Follow the `Risk` / `Evidence` vertical slices as the template, in this
-order: `domain/entities/X.ts` → `domain/repositories/XRepository.ts`
+Nine slices exist already (Risk, Evidence, Control, ControlExecution,
+ControlEffectivenessAssessment, Anomaly, Department, Process, plus the
+read-only audit log) — check `apps-script-legacy/` for the module you're
+porting; one of these nine is almost always the closest shape to copy.
+Order: `domain/entities/X.ts` → `domain/repositories/XRepository.ts`
 (interface) → `infrastructure/database/postgres/PostgresXRepository.ts`
 → `services/XService.ts` (permissions + rules + audit) →
 `api/v1/x.routes.ts` → wire into `server.ts` → migration in
 `database/postgresql/migrations/NNN_x.sql`. Add the new permission
 strings to `domain/permissions.ts`'s `Permission` union.
+
+Three different write patterns coexist on purpose — match the one the
+legacy `.gs` file for that module actually used, don't default to one:
+- **Append-only** (Risk assessments — not yet built —, ControlExecution,
+  ControlEffectivenessAssessment): a new row per occurrence, the only
+  mutation ever allowed after creation is the maker-checker validation
+  step. Repository exposes a narrow `recordValidation`/similar, never a
+  general `update`.
+- **Updated in place** (Department, Process): one row, edited directly.
+  Uses `buildUpdateSet` (see below), not `UPDATE ... SET x = COALESCE($n, x)`.
+- **Ticket lifecycle** (Anomaly): one row with a state machine
+  (`VALID_TRANSITIONS` map in the service), closing/terminal states
+  require a mandatory comment.
+
+**`buildUpdateSet` (`infrastructure/database/postgres/dynamicUpdate.ts`)
+is mandatory for any partial update with nullable columns.**
+`COALESCE($n, col)` cannot distinguish "field omitted" from "field
+explicitly set to null" — a real bug caught by `/code-review` and fixed
+in both Risk and Control. Always build the SET list from only the keys
+the caller actually provided.
+
+**A generic `update()` must never allow a transition into the terminal/
+archived state.** `RiskService.update`/`ControlService.update` both
+explicitly reject `status: "ARCHIVED"` and point callers at the
+dedicated `archive()` method — that's what enforces the mandatory reason
+and the `*.delete` permission. This was a real authorization bypass
+found by `/code-review`; don't reintroduce it in a new service that has
+both a general update and an archive/close action.
 
 ## Security-sensitive conventions
 
