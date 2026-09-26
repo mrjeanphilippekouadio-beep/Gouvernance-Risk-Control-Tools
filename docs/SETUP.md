@@ -67,6 +67,18 @@ tout le reste (migrations, démarrage) est déjà scripté.
 
 ## 4. Tout assembler
 
+> **Windows / PowerShell** : si `npm install` échoue avec
+> `UnauthorizedAccess` / `l'exécution de scripts est désactivée sur ce
+> système`, c'est la politique d'exécution PowerShell qui bloque
+> `npm.ps1` — rien à voir avec le projet. Trois solutions, du plus simple
+> au plus définitif :
+> 1. Utiliser **Git Bash** au lieu de PowerShell pour ces commandes
+>    (aucun souci de policy).
+> 2. Appeler le launcher `.cmd` directement, sans rien changer au système :
+>    `npm.cmd install`, `npm.cmd run migrate`, `npm.cmd run dev`.
+> 3. Autoriser les scripts pour votre utilisateur (une fois) :
+>    `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`.
+
 ```bash
 cd backend
 cp .env.example .env
