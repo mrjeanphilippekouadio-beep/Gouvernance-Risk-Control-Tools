@@ -30,7 +30,11 @@ export type Permission =
   | "department.read"
   | "department.create"
   | "department.update"
-  | "department.delete";
+  | "department.delete"
+  | "process.read"
+  | "process.create"
+  | "process.update"
+  | "process.delete";
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
   if (!actor.roles.includes(permission)) {
