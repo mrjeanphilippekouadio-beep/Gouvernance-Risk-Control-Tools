@@ -90,9 +90,13 @@ Détails complets dans [docs/architecture/ADR-001-cible-architecture.md](docs/ar
   connexion Google Identity Services réelle (avec repli dev si
   `VITE_GOOGLE_CLIENT_ID` n'est pas encore configuré).
 - ✅ `CLAUDE.md` à la racine pour les futures sessions Claude Code.
-- ⬜ Configuration réelle : projet Neon, client OAuth Google, service
-  account Drive — rien de tout ça n'existe encore, le backend ne peut
-  pas tourner en vrai tant que ce n'est pas fait (guide : `docs/SETUP.md`).
+- ✅ Infrastructure configurée : projet Neon (12 migrations appliquées),
+  client OAuth Google. `GET /health` et `GET /ready` répondent OK contre
+  la vraie base. Guide dans `docs/SETUP.md`.
+- ⬜ Service account Drive : pas encore de clé JSON en place localement
+  (`GOOGLE_DRIVE_CREDENTIALS_PATH` pointe vers un fichier qui n'existe pas
+  encore) — l'upload d'evidences échouera tant que ce n'est pas fait,
+  le reste de l'API n'en dépend pas.
 - ⬜ **Moteur de cotation des risques** (`10_Evaluation.gs` /
   `20_Validation.gs`) — volontairement pas encore porté. C'est le module
   le plus complexe du legacy : axes d'impact multiples et configurables,
