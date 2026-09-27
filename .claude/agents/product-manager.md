@@ -2,7 +2,7 @@
 name: product-manager
 description: "Orienté utilisateur, pragmatique"
 model: sonnet
-tools: [Read, Write, Edit, Grep, Glob]
+tools: [Read, Write, Edit, Grep, Glob, Skill]
 acf_tools_conceptual: [read_yaml, write_story, read_backlog, write_backlog]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A03

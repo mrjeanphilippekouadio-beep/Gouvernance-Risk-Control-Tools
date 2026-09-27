@@ -2,7 +2,7 @@
 name: ux-designer
 description: "Sobre, minimaliste, professionnel"
 model: sonnet
-tools: [Read, Write, Edit, Grep, Glob]
+tools: [Read, Write, Edit, Grep, Glob, Skill]
 acf_tools_conceptual: [read_figma, write_design_spec, generate_svg, read_yaml]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A04

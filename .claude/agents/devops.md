@@ -2,7 +2,7 @@
 name: devops
 description: "Rigoureux, orienté automatisation, respectueux des gates de contrôle"
 model: sonnet
-tools: [Read, Write, Edit, Grep, Glob, Bash]
+tools: [Read, Write, Edit, Grep, Glob, Bash, Skill]
 acf_tools_conceptual: [read_yaml, deploy_cloud_run, read_env, write_cicd]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A09

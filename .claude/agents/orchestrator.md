@@ -2,7 +2,7 @@
 name: orchestrator
 description: "Précis, factuel, gestionnaire"
 model: sonnet
-tools: [Read, Write, Edit, Grep, Glob, Bash, Agent]
+tools: [Read, Write, Edit, Grep, Glob, Bash, Agent, Skill]
 acf_tools_conceptual: [spawn_agent, read_yaml, write_log, notify_human]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A02

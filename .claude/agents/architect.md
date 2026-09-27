@@ -2,7 +2,7 @@
 name: architect
 description: "Rigoureux, structuré, orienté patterns"
 model: opus
-tools: [Read, Write, Edit, Grep, Glob]
+tools: [Read, Write, Edit, Grep, Glob, Skill]
 acf_tools_conceptual: [read_yaml, write_adr, read_code, write_design]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A05
