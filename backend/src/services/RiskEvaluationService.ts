@@ -19,6 +19,8 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 const EVALUATION_TYPES: RiskEvaluationType[] = ["AD_HOC", "ANNUELLE", "ANTICIPEE"];
 const MIN_APPETITE_THRESHOLD = 1;
 const MAX_APPETITE_THRESHOLD = 25;
+/** ACT-253: Majeur (15-19) and Critique (20-25) are contiguous — a single floor covers both bands. */
+const COMMITTEE_VALIDATION_MIN_SCORE = 15;
 
 export interface InherentScoringRequest {
   probability: number;
@@ -412,6 +414,50 @@ export class RiskEvaluationService {
       entityType: "RiskEvaluation",
       entityId: id,
       action: "REJECT",
+      oldValue: before,
+      newValue: after,
+      reason: comment,
+      requestId,
+    });
+
+    return after;
+  }
+
+  /**
+   * ACT-253: distinct terminal status from validate()/VALIDATED — a
+   * separate "Comité des Risques / Direction" maker-checker for
+   * significant risks only (residual score in Majeur 15-19 or Critique
+   * 20-25), gated by its own permission (riskevaluation.validate.committee,
+   * never riskevaluation.validate). Purely additive: validate()/reject()
+   * and their permission are unchanged.
+   */
+  async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string): Promise<RiskEvaluation> {
+    requirePermission(actor, "riskevaluation.validate.committee");
+    const before = await this.get(actor, id);
+
+    if (before.status !== "BROUILLON") {
+      throw new ValidationError(`This evaluation has already been finalized (${before.status})`);
+    }
+    if (before.residualScore === null) {
+      throw new ValidationError("Cannot validate an evaluation before residual scoring is completed");
+    }
+    if (before.residualScore < COMMITTEE_VALIDATION_MIN_SCORE) {
+      throw new ValidationError(
+        `Committee validation only applies to Majeur (15-19) or Critique (20-25) residual scores (this evaluation scored ${before.residualScore})`,
+      );
+    }
+    if (before.evaluatorId === actor.userId) {
+      throw new ForbiddenError("An evaluator cannot validate their own risk evaluation, including committee validation");
+    }
+
+    const after = await this.evaluations.recordCommitteeValidation(actor.tenantId, id, actor.userId, comment);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "RiskEvaluation",
+      entityId: id,
+      action: "VALIDATE",
       oldValue: before,
       newValue: after,
       reason: comment,

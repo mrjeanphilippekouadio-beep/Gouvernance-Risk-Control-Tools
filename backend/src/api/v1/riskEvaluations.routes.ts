@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { RiskEvaluationService } from "../../services/RiskEvaluationService.js";
 
 const EvaluationType = z.enum(["AD_HOC", "ANNUELLE", "ANTICIPEE"]);
-const EvaluationStatus = z.enum(["BROUILLON", "VALIDATED", "REJECTED"]);
+const EvaluationStatus = z.enum(["BROUILLON", "VALIDATED", "REJECTED", "VALIDE_COMITE"]);
 
 const ImpactAxisScoreSchema = z.object({
   code: z.string().min(1),
@@ -155,6 +155,22 @@ export function riskEvaluationsRouter(riskEvaluationService: RiskEvaluationServi
     try {
       const body = RejectBody.parse(req.body);
       const evaluation = await riskEvaluationService.reject(req.user, req.params["id"] as string, body.comment, req.requestId);
+      res.json({ data: evaluation });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ACT-253: distinct from /validate — Comité des Risques / Direction, Majeur/Critique only.
+  router.patch("/:id/validate-committee", async (req, res, next) => {
+    try {
+      const body = ValidateBody.parse(req.body);
+      const evaluation = await riskEvaluationService.validateByCommittee(
+        req.user,
+        req.params["id"] as string,
+        body.comment ?? null,
+        req.requestId,
+      );
       res.json({ data: evaluation });
     } catch (err) {
       next(err);

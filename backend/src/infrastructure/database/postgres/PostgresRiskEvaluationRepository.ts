@@ -248,4 +248,17 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
     if (!row) throw new NotFoundError("RiskEvaluation", id);
     return toDomain(row);
   }
+
+  async recordCommitteeValidation(tenantId: string, id: string, validatedBy: string, comment: string | null): Promise<RiskEvaluation> {
+    const { rows } = await this.pool.query<RiskEvaluationRow>(
+      `UPDATE risk_evaluations
+       SET status = 'VALIDE_COMITE', validated_by = $3, validated_at = now(), comment = $4, updated_at = now()
+       WHERE tenant_id = $1 AND id = $2
+       RETURNING *`,
+      [tenantId, id, validatedBy, comment],
+    );
+    const row = rows[0];
+    if (!row) throw new NotFoundError("RiskEvaluation", id);
+    return toDomain(row);
+  }
 }
