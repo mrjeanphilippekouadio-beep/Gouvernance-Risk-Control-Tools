@@ -54,7 +54,11 @@ export type Permission =
   | "ratingscale.read"
   | "ratingscale.create"
   | "ratingscale.update"
-  | "ratingscale.delete";
+  | "ratingscale.delete"
+  | "riskevaluation.read"
+  | "riskevaluation.create"
+  | "riskevaluation.update"
+  | "riskevaluation.validate";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -110,6 +114,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "ratingscale.create",
   "ratingscale.update",
   "ratingscale.delete",
+  "riskevaluation.read",
+  "riskevaluation.create",
+  "riskevaluation.update",
+  "riskevaluation.validate",
 ];
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
