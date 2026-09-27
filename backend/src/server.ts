@@ -24,6 +24,8 @@ import { PostgresRiskEvaluationRepository } from "./infrastructure/database/post
 import { PostgresKriRepository } from "./infrastructure/database/postgres/PostgresKriRepository.js";
 import { PostgresKriMeasureRepository } from "./infrastructure/database/postgres/PostgresKriMeasureRepository.js";
 import { PostgresUserRepository } from "./infrastructure/database/postgres/PostgresUserRepository.js";
+import { PostgresRiskEscalationRepository } from "./infrastructure/database/postgres/PostgresRiskEscalationRepository.js";
+import { PostgresActionPlanRepository } from "./infrastructure/database/postgres/PostgresActionPlanRepository.js";
 import { TelegramNotifier } from "./infrastructure/notifications/TelegramNotifier.js";
 import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
@@ -47,6 +49,9 @@ import { RiskEvaluationService } from "./services/RiskEvaluationService.js";
 import { KriService } from "./services/KriService.js";
 import { KriMeasureService } from "./services/KriMeasureService.js";
 import { UserService } from "./services/UserService.js";
+import { RiskOwnershipService } from "./services/RiskOwnershipService.js";
+import { ActionPlanService } from "./services/ActionPlanService.js";
+import { CartographyService } from "./services/CartographyService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { controlsRouter } from "./api/v1/controls.routes.js";
@@ -66,6 +71,10 @@ import { riskEvaluationsRouter } from "./api/v1/riskEvaluations.routes.js";
 import { krisRouter } from "./api/v1/kris.routes.js";
 import { kriMeasuresRouter } from "./api/v1/kriMeasures.routes.js";
 import { usersRouter } from "./api/v1/users.routes.js";
+import { riskOwnersRouter } from "./api/v1/riskOwners.routes.js";
+import { actionPlansRouter } from "./api/v1/actionPlans.routes.js";
+import { actionPlanDashboardRouter } from "./api/v1/actionPlanDashboard.routes.js";
+import { cartographyRouter } from "./api/v1/cartography.routes.js";
 import { permissionsRouter } from "./api/v1/permissions.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
@@ -102,12 +111,21 @@ const riskEvaluationRepository = new PostgresRiskEvaluationRepository(pool);
 const kriRepository = new PostgresKriRepository(pool);
 const kriMeasureRepository = new PostgresKriMeasureRepository(pool);
 const userRepository = new PostgresUserRepository(pool);
+const riskEscalationRepository = new PostgresRiskEscalationRepository(pool);
+const actionPlanRepository = new PostgresActionPlanRepository(pool);
 const notifier =
   env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID
     ? new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID)
     : new NoopNotifier();
 
-const riskService = new RiskService(riskRepository, auditRepository, departmentRepository);
+const riskService = new RiskService(
+  riskRepository,
+  auditRepository,
+  departmentRepository,
+  userRepository,
+  notifier,
+  riskEscalationRepository,
+);
 const departmentService = new DepartmentService(departmentRepository, auditRepository);
 const processService = new ProcessService(processRepository, auditRepository);
 const auditLogService = new AuditLogService(auditRepository);
@@ -141,6 +159,18 @@ const riskEvaluationService = new RiskEvaluationService(
 const kriService = new KriService(kriRepository, kriMeasureRepository, riskRepository, auditRepository);
 const kriMeasureService = new KriMeasureService(kriMeasureRepository, kriRepository, auditRepository, notifier);
 const userService = new UserService(userRepository, auditRepository, roleService);
+const riskOwnershipService = new RiskOwnershipService(riskRepository, userRepository, riskEvaluationRepository);
+const actionPlanService = new ActionPlanService(
+  actionPlanRepository,
+  auditRepository,
+  riskRepository,
+  controlRepository,
+  kriRepository,
+  anomalyRepository,
+  evidenceRepository,
+  notifier,
+);
+const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
@@ -224,6 +254,10 @@ app.use("/api/v1/risk-evaluations", authMiddleware(identityProvider), riskEvalua
 app.use("/api/v1/kris", authMiddleware(identityProvider), krisRouter(kriService));
 app.use("/api/v1/kri-measures", authMiddleware(identityProvider), kriMeasuresRouter(kriMeasureService));
 app.use("/api/v1/users", authMiddleware(identityProvider), usersRouter(userService));
+app.use("/api/v1/risk-owners", authMiddleware(identityProvider), riskOwnersRouter(riskOwnershipService));
+app.use("/api/v1/actions", authMiddleware(identityProvider), actionPlansRouter(actionPlanService));
+app.use("/api/v1/dashboard", authMiddleware(identityProvider), actionPlanDashboardRouter(actionPlanService));
+app.use("/api/v1/cartography", authMiddleware(identityProvider), cartographyRouter(cartographyService));
 
 app.use(errorHandler);
 
