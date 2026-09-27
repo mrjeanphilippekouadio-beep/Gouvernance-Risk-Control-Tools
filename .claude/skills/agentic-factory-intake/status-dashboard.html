@@ -229,14 +229,14 @@
   </header>
 
   <div class="stats">
-    <div class="stat"><div class="n">~50%</div><div class="l">du backlog fonctionnel ACF couvert (142 actions, 26 domaines)</div></div>
-    <div class="stat"><div class="n">14</div><div class="l">modules métier livrés (Risk, Control, RBAC, KPI, RiskEvaluation…)</div></div>
-    <div class="stat"><div class="n">202</div><div class="l">tests automatisés, 22 fichiers, tous verts</div></div>
-    <div class="stat"><div class="n">20</div><div class="l">migrations appliquées sur Neon</div></div>
+    <div class="stat"><div class="n">~62%</div><div class="l">du backlog fonctionnel ACF couvert (142 actions, 26 domaines)</div></div>
+    <div class="stat"><div class="n">17</div><div class="l">modules métier livrés (Risk, Control, RBAC, KPI, RiskEvaluation…)</div></div>
+    <div class="stat"><div class="n">268</div><div class="l">tests automatisés, 25 fichiers, tous verts</div></div>
+    <div class="stat"><div class="n">22</div><div class="l">migrations appliquées sur Neon</div></div>
   </div>
 
   <section>
-    <h2>Livré <span class="count">14 modules · &ge; 85 %</span></h2>
+    <h2>Livré <span class="count">17 modules · &ge; 80 %</span></h2>
     <div class="modules">
 
       <div class="card">
@@ -299,41 +299,62 @@
         <div class="row1"><h3>KPI</h3><span class="pct">90%</span></div>
         <div class="track"><div class="fill" style="width:90%"></div></div>
         <p>Définition par département/processus, mesures append-only horodatées.</p>
-        <span class="badge new">Nouveau</span>
+        <span class="badge done">Livré</span>
       </div>
 
       <div class="card">
         <div class="row1"><h3>RiskAppetite</h3><span class="pct">90%</span></div>
         <div class="track"><div class="fill" style="width:90%"></div></div>
         <p>Seuils par sous-catégorie (et entité), archivage motivé.</p>
-        <span class="badge new">Nouveau</span>
+        <span class="badge done">Livré</span>
       </div>
 
       <div class="card">
         <div class="row1"><h3>RatingScale</h3><span class="pct">90%</span></div>
         <div class="track"><div class="fill" style="width:90%"></div></div>
         <p>Grille probabilité/impact, 7 axes, maîtrise L1/L2/L3, activation de version avec archivage automatique de la précédente.</p>
-        <span class="badge new">Nouveau</span>
+        <span class="badge done">Livré</span>
       </div>
 
       <div class="card">
         <div class="row1"><h3>UserManagement</h3><span class="pct">85%</span></div>
         <div class="track"><div class="fill" style="width:85%"></div></div>
         <p>Création (rôle RBAC obligatoire), suspension/réactivation, <code>GET /users/me</code>. Reste : profil étendu (fonction/entité).</p>
-        <span class="badge new">Nouveau</span>
+        <span class="badge done">Livré</span>
       </div>
 
       <div class="card">
         <div class="row1"><h3>RiskEvaluation</h3><span class="pct">85%</span></div>
         <div class="track"><div class="fill" style="width:85%"></div></div>
         <p>Cotation inhérente → maîtrise → résiduelle, scores calculés serveur, comparaison à l'appétence, validation maker-checker, immuable une fois finalisée.</p>
-        <span class="badge new">Nouveau</span>
+        <span class="badge done">Livré</span>
       </div>
 
       <div class="card">
         <div class="row1"><h3>KRI</h3><span class="pct">85%</span></div>
         <div class="track"><div class="fill" style="width:85%"></div></div>
         <p>Miroir de KPI avec seuils Vert/Orange/Rouge, mesures append-only, alerte automatique sur dépassement.</p>
+        <span class="badge done">Livré</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>RiskOwnership</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Owner individuel &amp; superior owner (utilisateur actif requis), escalade avec historique append-only, vue admin par owner.</p>
+        <span class="badge new">Nouveau</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>ActionPlan</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Actions correctives depuis risque/contrôle/KRI/audit, cycle de vie ticket, clôture avec preuve + maker-checker.</p>
+        <span class="badge new">Nouveau</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Cartography</h3><span class="pct">80%</span></div>
+        <div class="track"><div class="fill" style="width:80%"></div></div>
+        <p>Heatmap P×I en lecture seule (inhérent/résiduel), filtres combinables. Manque : vélocité (non capturée par RiskEvaluation) et filtre par owner (à connecter).</p>
         <span class="badge new">Nouveau</span>
       </div>
 
@@ -376,16 +397,13 @@
   </section>
 
   <section>
-    <h2>Backlog <span class="count">9 domaines · 55 actions · 0 %</span></h2>
+    <h2>Backlog <span class="count">6 domaines · 35 actions · 0 %</span></h2>
     <table class="backlog-table">
       <thead><tr><th>Domaine</th><th class="n">Actions</th></tr></thead>
       <tbody>
         <tr><td>Dashboard</td><td class="n">10</td></tr>
-        <tr><td>RiskOwnership</td><td class="n">8</td></tr>
         <tr><td>Config</td><td class="n">7</td></tr>
-        <tr><td>ActionPlan</td><td class="n">7</td></tr>
         <tr><td>Reporting</td><td class="n">6</td></tr>
-        <tr><td>Cartography</td><td class="n">5</td></tr>
         <tr><td>Notification (métier)</td><td class="n">4</td></tr>
         <tr><td>JournalGlobal</td><td class="n">4</td></tr>
         <tr><td>Governance</td><td class="n">4</td></tr>
@@ -398,22 +416,26 @@
     <div class="vigilance">
       <div class="vig-item resolved"><b>Revue de sécurité effectuée sur le code déjà en production.</b> 6 vulnérabilités réelles corrigées (maker-checker contournable sur l'exécution de contrôle, surcharge client de champs sensibles, permissions héritées non filtrées, suppression Drive définitive au lieu d'une corbeille…) — suite couverte par 16 tests de régression dédiés.</div>
       <div class="vig-item resolved"><b>Onboarding partiellement outillé.</b> Un admin peut désormais créer un utilisateur via <code>POST /users</code> (UserManagement) au lieu d'un <code>INSERT</code> SQL manuel. Reste : invitation / whitelist SSO en libre-service (ACT-090-092).</div>
+      <div class="vig-item resolved"><b>KRI a maintenant un vrai ciblage d'alerte possible.</b> <code>Risk.ownerId</code> existe depuis RiskOwnership — reste à câbler l'alerte KRI dessus (elle notifie encore de façon best-effort, sans journal persistant).</div>
+      <div class="vig-item"><b>Cartography.ownerId n'est pas encore câblé.</b> Le module a été construit en parallèle de RiskOwnership et rejette explicitement ce filtre pour l'instant (<code>ValidationError</code> volontaire plutôt qu'un no-op silencieux) — petit patch de suivi maintenant que <code>Risk.ownerId</code> existe.</div>
+      <div class="vig-item"><b>ActionPlan.ACT-193 (auto-escalade) n'a pas de déclencheur périodique.</b> Aucun scheduler/cron n'existe dans ce backend — le statut "En retard" est calculé à la lecture (comme KRI), et la notification d'escalade n'est appelée qu'à des points précis (démarrage d'une action déjà en retard, appel manuel), jamais en tâche de fond.</div>
+      <div class="vig-item"><b>RiskEvaluation ne capture toujours pas de score de vélocité.</b> Bloque la taille des bulles dans Cartography — décision à prendre sur qui possède ce champ.</div>
       <div class="vig-item"><b>Un seul environnement.</b> La base Neon utilisée en développement est la base réelle — aucune séparation dev/prod aujourd'hui.</div>
       <div class="vig-item"><b>Rien n'est déployé.</b> La CI construit et teste, mais aucun Cloud Run n'est actif — l'app ne tourne qu'en local.</div>
       <div class="vig-item"><b>Secrets en clair localement.</b> Le token Telegram et <code>DATABASE_URL</code> vivent dans un <code>.env</code> non commité — à migrer vers un gestionnaire de secrets avant toute mise en production.</div>
       <div class="vig-item"><b>RiskEvaluation duplique sous-catégorie/entité depuis Risk.</b> <code>Risk</code> n'a pas encore de colonne <code>subCategory</code>/<code>entity</code> canonique ; l'évaluation les capture en snapshot à la création (cohérent avec le legacy Apps Script) — à trancher si ces champs doivent migrer sur <code>Risk</code>.</div>
-      <div class="vig-item"><b>KRI : ciblage d'alerte incomplet.</b> L'alerte automatique sur seuil dépassé n'a pas de journal persistant, et ne peut pas encore cibler un "Risk Owner" individuel — <code>Risk</code> ne porte qu'un département propriétaire, pas un utilisateur.</div>
       <div class="vig-item"><b>Divergence non tranchée.</b> Le modèle LLM de l'agent DevOps (A09) diffère entre la feuille Config et la feuille Model Registry du classeur ACF.</div>
       <div class="vig-item"><b>5 agents ACF sans prompt source.</b> A01 (Intake, actif), A11, A17, A19, A20 référencés dans la hiérarchie mais absents de la feuille System Prompts.</div>
-      <div class="vig-item"><b>Les 6 nouveaux modules n'ont pas encore d'interface frontend.</b> KPI, RiskAppetite, RatingScale, UserManagement, RiskEvaluation et KRI sont utilisables via API seulement — le frontend reste sur Risk/Admin/Feedback.</div>
+      <div class="vig-item"><b>9 modules n'ont pas encore d'interface frontend.</b> KPI, RiskAppetite, RatingScale, UserManagement, RiskEvaluation, KRI, RiskOwnership, ActionPlan et Cartography sont utilisables via API seulement — le frontend reste sur Risk/Admin/Feedback.</div>
     </div>
   </section>
 
   <section>
     <h2>Prochaines étapes recommandées</h2>
     <ol class="steps">
-      <li><div class="step-body"><b>Construire l'interface frontend des 6 nouveaux modules</b><span>KPI, RiskAppetite, RatingScale, UserManagement, RiskEvaluation, KRI n'existent qu'en API pour l'instant — le design system livré ce batch (Table, FormField, StatusBadge, Button) est prêt à les recevoir.</span></div></li>
-      <li><div class="step-body"><b>Reprendre le reste du backlog</b><span>Dashboard, RiskOwnership et ActionPlan sont les briques restantes les plus proches du cœur risque déjà construit.</span></div></li>
+      <li><div class="step-body"><b>Câbler le filtre Risk Owner de Cartography</b><span>Petit patch : <code>Risk.ownerId</code> existe désormais (RiskOwnership) — il ne reste qu'à connecter le filtre déjà prévu côté Cartography.</span></div></li>
+      <li><div class="step-body"><b>Construire l'interface frontend des 9 nouveaux modules</b><span>KPI, RiskAppetite, RatingScale, UserManagement, RiskEvaluation, KRI, RiskOwnership, ActionPlan, Cartography n'existent qu'en API — le design system livré (Table, FormField, StatusBadge, Button) est prêt à les recevoir.</span></div></li>
+      <li><div class="step-body"><b>Reprendre le reste du backlog</b><span>Dashboard, Reporting et Config sont les briques restantes les plus transverses ; Governance/Notification/JournalGlobal restent à cadrer.</span></div></li>
       <li><div class="step-body"><b>Décider et déployer un environnement de production</b><span>Cloud Run, séparé de la base de développement, secrets en Secret Manager.</span></div></li>
       <li><div class="step-body"><b>Achever l'onboarding utilisateur en libre-service</b><span>ACT-090 à 092 — whitelist / invitation SSO, au-delà de la création admin déjà livrée.</span></div></li>
       <li><div class="step-body"><b>Rendre les permissions éditables</b><span>ACT-116/118 — une vraie matrice IAM en base plutôt qu'une énumération TypeScript figée.</span></div></li>
