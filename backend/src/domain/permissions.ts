@@ -69,7 +69,11 @@ export type Permission =
   | "kri.update"
   | "kri.delete"
   /** ACT-125: distinct workflow action beyond risk.update, mirroring execution.validate/riskevaluation.validate. */
-  | "risk.escalate";
+  | "risk.escalate"
+  | "actionplan.read"
+  | "actionplan.create"
+  | "actionplan.update"
+  | "actionplan.validate";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -139,6 +143,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "kri.update",
   "kri.delete",
   "risk.escalate",
+  "actionplan.read",
+  "actionplan.create",
+  "actionplan.update",
+  "actionplan.validate",
 ];
 
 /**
