@@ -74,7 +74,12 @@ export type Permission =
   | "actionplan.create"
   | "actionplan.update"
   | "actionplan.validate"
-  | "cartography.read";
+  | "cartography.read"
+  /** ACT-220/226: methodology settings + appetite mode — "impact immédiat sur tous les calculs", kept distinct from config.read. */
+  | "config.read"
+  | "config.update"
+  /** ACT-221/222/223/224/225: module toggles, tenant management, regulatory frameworks, risk categories, Excel import — super-admin-ish operations. */
+  | "config.manage";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -149,6 +154,9 @@ export const ALL_PERMISSIONS: Permission[] = [
   "actionplan.update",
   "actionplan.validate",
   "cartography.read",
+  "config.read",
+  "config.update",
+  "config.manage",
 ];
 
 /**
