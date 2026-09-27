@@ -10,6 +10,8 @@ interface RiskRow {
   process: string;
   description: string;
   owner_department_id: string | null;
+  owner_id: string | null;
+  superior_owner_id: string | null;
   status: Risk["status"];
   created_at: Date;
   updated_at: Date;
@@ -25,6 +27,8 @@ function toDomain(row: RiskRow): Risk {
     process: row.process,
     description: row.description,
     ownerDepartmentId: row.owner_department_id,
+    ownerId: row.owner_id,
+    superiorOwnerId: row.superior_owner_id,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -54,13 +58,19 @@ export class PostgresRiskRepository implements RiskRepository {
     return rows.map(toDomain);
   }
 
-  async list(tenantId: string, options?: { includeArchived?: boolean }): Promise<Risk[]> {
+  async list(tenantId: string, options?: { includeArchived?: boolean; ownerId?: string }): Promise<Risk[]> {
     const statusFilter = options?.includeArchived ? "" : "AND status <> 'ARCHIVED'";
+    const params: unknown[] = [tenantId];
+    let ownerFilter = "";
+    if (options?.ownerId) {
+      params.push(options.ownerId);
+      ownerFilter = `AND owner_id = $${params.length}`;
+    }
     const { rows } = await this.pool.query<RiskRow>(
       `SELECT * FROM risks
-       WHERE tenant_id = $1 AND deleted_at IS NULL ${statusFilter}
+       WHERE tenant_id = $1 AND deleted_at IS NULL ${statusFilter} ${ownerFilter}
        ORDER BY created_at DESC`,
-      [tenantId],
+      params,
     );
     return rows.map(toDomain);
   }
@@ -98,6 +108,34 @@ export class PostgresRiskRepository implements RiskRepository {
        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
        RETURNING *`,
       [tenantId, id, ...values],
+    );
+    const row = rows[0];
+    if (!row) throw new NotFoundError("Risk", id);
+    return toDomain(row);
+  }
+
+  /** ACT-120/121: narrow write, never through the generic `update()` (see RiskRepository interface). */
+  async assignOwner(tenantId: string, id: string, ownerId: string | null): Promise<Risk> {
+    const { rows } = await this.pool.query<RiskRow>(
+      `UPDATE risks
+       SET owner_id = $3, updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+       RETURNING *`,
+      [tenantId, id, ownerId],
+    );
+    const row = rows[0];
+    if (!row) throw new NotFoundError("Risk", id);
+    return toDomain(row);
+  }
+
+  /** ACT-122: narrow write, never through the generic `update()` (see RiskRepository interface). */
+  async assignSuperiorOwner(tenantId: string, id: string, superiorOwnerId: string | null): Promise<Risk> {
+    const { rows } = await this.pool.query<RiskRow>(
+      `UPDATE risks
+       SET superior_owner_id = $3, updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+       RETURNING *`,
+      [tenantId, id, superiorOwnerId],
     );
     const row = rows[0];
     if (!row) throw new NotFoundError("Risk", id);
