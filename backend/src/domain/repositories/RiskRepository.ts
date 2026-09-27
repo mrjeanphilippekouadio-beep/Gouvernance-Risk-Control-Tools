@@ -10,8 +10,13 @@ export interface RiskRepository {
   getById(tenantId: string, id: string): Promise<Risk | null>;
   /** Batched existence check — used instead of N getById calls (e.g. validating a control's covered risks). */
   listByIds(tenantId: string, ids: string[]): Promise<Risk[]>;
-  list(tenantId: string, options?: { includeArchived?: boolean }): Promise<Risk[]>;
+  /** ACT-124: `ownerId` filters to risks individually owned by that user (the "my risks" view). */
+  list(tenantId: string, options?: { includeArchived?: boolean; ownerId?: string }): Promise<Risk[]>;
   create(input: CreateRiskInput): Promise<Risk>;
   update(tenantId: string, id: string, input: UpdateRiskInput): Promise<Risk>;
+  /** ACT-120/121: the only way `ownerId` is ever written — never via the generic `update()`. `null` clears it. */
+  assignOwner(tenantId: string, id: string, ownerId: string | null): Promise<Risk>;
+  /** ACT-122: the only way `superiorOwnerId` is ever written. `null` clears it. */
+  assignSuperiorOwner(tenantId: string, id: string, superiorOwnerId: string | null): Promise<Risk>;
   softDelete(tenantId: string, id: string, deletedBy: string, reason: string): Promise<void>;
 }
