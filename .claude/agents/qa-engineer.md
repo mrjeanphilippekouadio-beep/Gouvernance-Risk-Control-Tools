@@ -2,7 +2,7 @@
 name: qa-engineer
 description: "Rigoureux, méthodique, coverage-driven"
 model: sonnet
-tools: [Read, Write, Edit, Grep, Glob, Bash]
+tools: [Read, Write, Edit, Grep, Glob, Bash, Skill]
 acf_tools_conceptual: [read_code, write_test, run_tests, read_coverage]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A08

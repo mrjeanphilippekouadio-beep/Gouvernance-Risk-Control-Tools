@@ -2,7 +2,7 @@
 name: risk-manager
 description: "Analytique, calibré, orienté cadres"
 model: sonnet
-tools: [Read, Write, Edit, Grep, Glob]
+tools: [Read, Write, Edit, Grep, Glob, Skill]
 acf_tools_conceptual: [read_yaml, write_risk_matrix, read_domain_risk, write_report]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A13

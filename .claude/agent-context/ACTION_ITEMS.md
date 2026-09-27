@@ -6,8 +6,9 @@ pour l'usage.
 
 | Agent | Item | Depuis | Statut |
 |---|---|---|---|
-| @qa-engineer | Revue QA indépendante des 9 modules livrés (batches 1-3) — aucune n'a eu lieu jusqu'ici, seuls les tests écrits par A06 lui-même existent. | 2026-09-27 | Ouvert |
-| @security | Repasser une revue sécurité sur les 9 modules livrés depuis le premier passage (qui a trouvé 6 failles réelles sur l'ancien code, jamais répété depuis). | 2026-09-27 | Ouvert |
+| @qa-engineer | Revue QA indépendante des 9 modules livrés (batches 1-3) — aucune n'a eu lieu jusqu'ici, seuls les tests écrits par A06 lui-même existent. | 2026-09-27 | En cours (agent dispatché, worktree isolé) |
+| @security | Repasser une revue sécurité sur les 9 modules livrés depuis le premier passage (qui a trouvé 6 failles réelles sur l'ancien code, jamais répété depuis). | 2026-09-27 | En cours (agent dispatché, worktree isolé) |
+| @dev-backend | Batch 4 lancé : Dashboard+Reporting, Config, Notification+Governance (3 agents en worktrees isolés). Config explicitement scopé pour ne PAS re-câbler RatingScale/RiskEvaluation dessus (voir item @risk-manager/@architect ci-dessous). | 2026-09-27 | En cours |
 | @risk-manager | Valider ou challenger la méthodologie de scoring : RatingScale (7 axes, règle MAX, moyenne de maîtrise L1/L2/L3), RiskEvaluation (P×I, comparaison à l'appétence), KRI (seuils Vert/Orange/Rouge en bornes numériques simples). | 2026-09-27 | Ouvert |
 | @architect | Formaliser/valider a posteriori les 3 conventions transverses adoptées ad hoc (permissions terminales séparées, pattern paramètre optionnel, isolation worktree par défaut). | 2026-09-27 | Ouvert |
 | @dev-db | Cross-review des 9 migrations déjà écrites par A06 sans spawn (016 à 022), pour constituer le track record avant de figer la règle "pas de spawn pour les cas simples". | 2026-09-27 | Ouvert |

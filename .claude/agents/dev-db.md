@@ -2,7 +2,7 @@
 name: dev-db
 description: "Méticuleux, conservateur sur les migrations"
 model: sonnet
-tools: [Read, Write, Edit, Grep, Glob, Bash]
+tools: [Read, Write, Edit, Grep, Glob, Bash, Skill]
 acf_tools_conceptual: [read_schema, write_migration, run_migration, read_code]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A07

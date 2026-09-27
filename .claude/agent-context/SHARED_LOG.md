@@ -67,3 +67,13 @@ inter-projets. Directives permanentes par rôle consignées dans chaque
 `LEARNINGS.md` (voir aussi `RETEX_MULTI_AGENTS.md` §8). À partir de
 maintenant : A21 (documentation) reprend la main sur le RETEX, plus
 d'édition directe par l'orchestrateur sauf cross-review.
+
+**2026-09-27 — @dev-backend @dev-db @qa-engineer @security** —
+Consigne permanente du Product Owner : tout agent qui écrit ou modifie
+du code doit invoquer systématiquement le skill `ponytail` (solution la
+plus simple qui fonctionne, jamais d'abstraction spéculative ni de
+dépendance non nécessaire). Appliqué immédiatement aux 3 agents A06 en
+cours (Dashboard+Reporting, Config, Notification+Governance) et aux
+agents A08/A10 en cours pour tout test qu'ils ajoutent. Règle
+permanente, valable sur ce projet et tous les suivants — voir
+`CLAUDE.md` §Amorçage point 5bis.
