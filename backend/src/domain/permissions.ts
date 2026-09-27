@@ -67,7 +67,11 @@ export type Permission =
   | "kri.read"
   | "kri.create"
   | "kri.update"
-  | "kri.delete";
+  | "kri.delete"
+  | "actionplan.read"
+  | "actionplan.create"
+  | "actionplan.update"
+  | "actionplan.validate";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -136,6 +140,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "kri.create",
   "kri.update",
   "kri.delete",
+  "actionplan.read",
+  "actionplan.create",
+  "actionplan.update",
+  "actionplan.validate",
 ];
 
 /**
