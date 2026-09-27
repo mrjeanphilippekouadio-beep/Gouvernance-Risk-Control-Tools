@@ -16,6 +16,10 @@ import { PostgresDepartmentRepository } from "./infrastructure/database/postgres
 import { PostgresProcessRepository } from "./infrastructure/database/postgres/PostgresProcessRepository.js";
 import { PostgresRoleRepository } from "./infrastructure/database/postgres/PostgresRoleRepository.js";
 import { PostgresFeedbackRepository } from "./infrastructure/database/postgres/PostgresFeedbackRepository.js";
+import { PostgresKpiRepository } from "./infrastructure/database/postgres/PostgresKpiRepository.js";
+import { PostgresKpiMeasureRepository } from "./infrastructure/database/postgres/PostgresKpiMeasureRepository.js";
+import { PostgresRiskAppetiteRepository } from "./infrastructure/database/postgres/PostgresRiskAppetiteRepository.js";
+import { PostgresRatingScaleRepository } from "./infrastructure/database/postgres/PostgresRatingScaleRepository.js";
 import { TelegramNotifier } from "./infrastructure/notifications/TelegramNotifier.js";
 import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
@@ -31,6 +35,10 @@ import { ProcessService } from "./services/ProcessService.js";
 import { AuditLogService } from "./services/AuditLogService.js";
 import { RoleService } from "./services/RoleService.js";
 import { FeedbackService } from "./services/FeedbackService.js";
+import { KpiService } from "./services/KpiService.js";
+import { KpiMeasureService } from "./services/KpiMeasureService.js";
+import { RiskAppetiteService } from "./services/RiskAppetiteService.js";
+import { RatingScaleService } from "./services/RatingScaleService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { controlsRouter } from "./api/v1/controls.routes.js";
@@ -42,6 +50,10 @@ import { processesRouter } from "./api/v1/processes.routes.js";
 import { auditLogRouter } from "./api/v1/auditLog.routes.js";
 import { rolesRouter } from "./api/v1/roles.routes.js";
 import { feedbackRouter } from "./api/v1/feedback.routes.js";
+import { kpisRouter } from "./api/v1/kpis.routes.js";
+import { kpiMeasuresRouter } from "./api/v1/kpiMeasures.routes.js";
+import { riskAppetiteRouter } from "./api/v1/riskAppetite.routes.js";
+import { ratingScalesRouter } from "./api/v1/ratingScales.routes.js";
 import { permissionsRouter } from "./api/v1/permissions.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
@@ -70,6 +82,10 @@ const departmentRepository = new PostgresDepartmentRepository(pool);
 const processRepository = new PostgresProcessRepository(pool);
 const roleRepository = new PostgresRoleRepository(pool);
 const feedbackRepository = new PostgresFeedbackRepository(pool);
+const kpiRepository = new PostgresKpiRepository(pool);
+const kpiMeasureRepository = new PostgresKpiMeasureRepository(pool);
+const riskAppetiteRepository = new PostgresRiskAppetiteRepository(pool);
+const ratingScaleRepository = new PostgresRatingScaleRepository(pool);
 const notifier =
   env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID
     ? new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID)
@@ -95,6 +111,10 @@ const anomalyService = new AnomalyService(
 );
 const roleService = new RoleService(roleRepository, auditRepository);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
+const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
+const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
+const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository);
+const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
@@ -175,6 +195,10 @@ app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(au
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
 app.use("/api/v1/feedback", authMiddleware(identityProvider), feedbackRouter(feedbackService));
 app.use("/api/v1/permissions", authMiddleware(identityProvider), permissionsRouter());
+app.use("/api/v1/kpis", authMiddleware(identityProvider), kpisRouter(kpiService));
+app.use("/api/v1/kpi-measures", authMiddleware(identityProvider), kpiMeasuresRouter(kpiMeasureService));
+app.use("/api/v1/appetite", authMiddleware(identityProvider), riskAppetiteRouter(riskAppetiteService));
+app.use("/api/v1/rating-scales", authMiddleware(identityProvider), ratingScalesRouter(ratingScaleService));
 
 app.use(errorHandler);
 

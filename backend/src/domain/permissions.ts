@@ -43,7 +43,18 @@ export type Permission =
   | "role.assign"
   | "feedback.create"
   | "feedback.read"
-  | "feedback.update";
+  | "feedback.update"
+  | "kpi.read"
+  | "kpi.create"
+  | "kpi.update"
+  | "kpi.delete"
+  | "riskappetite.read"
+  | "riskappetite.update"
+  | "riskappetite.delete"
+  | "ratingscale.read"
+  | "ratingscale.create"
+  | "ratingscale.update"
+  | "ratingscale.delete";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -88,6 +99,17 @@ export const ALL_PERMISSIONS: Permission[] = [
   "feedback.create",
   "feedback.read",
   "feedback.update",
+  "kpi.read",
+  "kpi.create",
+  "kpi.update",
+  "kpi.delete",
+  "riskappetite.read",
+  "riskappetite.update",
+  "riskappetite.delete",
+  "ratingscale.read",
+  "ratingscale.create",
+  "ratingscale.update",
+  "ratingscale.delete",
 ];
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
