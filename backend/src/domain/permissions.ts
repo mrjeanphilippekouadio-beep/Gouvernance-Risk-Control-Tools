@@ -95,3 +95,16 @@ export function requirePermission(actor: AuthenticatedUser, permission: Permissi
     throw new ForbiddenError(`Missing permission: ${permission}`);
   }
 }
+
+/**
+ * SEC-005: `users.roles` is a free-form legacy/bootstrap grant list
+ * (seeded or hand-edited via SQL, never validated) that server.ts unions
+ * with RBAC-role permissions to compute an actor's effective grants. A
+ * typo or stale/renamed string could otherwise sit there silently
+ * forever. Filters candidates down to real, current permissions before
+ * they're trusted — call this on `users.roles`, never on RBAC-derived
+ * permissions (those already came from RoleService.assertKnownPermissions).
+ */
+export function filterKnownPermissions(candidates: readonly string[]): Permission[] {
+  return candidates.filter((c): c is Permission => (ALL_PERMISSIONS as readonly string[]).includes(c));
+}

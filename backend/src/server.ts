@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
+import { filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { pool } from "./infrastructure/database/pool.js";
 import { PostgresRiskRepository } from "./infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresAuditRepository } from "./infrastructure/database/postgres/PostgresAuditRepository.js";
@@ -74,7 +75,7 @@ const notifier =
     ? new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID)
     : new NoopNotifier();
 
-const riskService = new RiskService(riskRepository, auditRepository);
+const riskService = new RiskService(riskRepository, auditRepository, departmentRepository);
 const departmentService = new DepartmentService(departmentRepository, auditRepository);
 const processService = new ProcessService(processRepository, auditRepository);
 const auditLogService = new AuditLogService(auditRepository);
@@ -85,7 +86,13 @@ const effectivenessService = new ControlEffectivenessService(
   controlRepository,
   auditRepository,
 );
-const anomalyService = new AnomalyService(anomalyRepository, auditRepository);
+const anomalyService = new AnomalyService(
+  anomalyRepository,
+  auditRepository,
+  controlRepository,
+  executionRepository,
+  riskRepository,
+);
 const roleService = new RoleService(roleRepository, auditRepository);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 
@@ -93,7 +100,7 @@ const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
   env.GOOGLE_DRIVE_CREDENTIALS_PATH,
 );
-const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository);
+const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository, executionRepository);
 
 // Granted to every authenticated user regardless of role — there's no
 // invite/onboarding flow yet (ACT-091) that could assign it per-user,
@@ -124,7 +131,20 @@ const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, 
     [row.tenant_id, row.id],
   );
 
-  const roles = Array.from(new Set([...BASE_PERMISSIONS, ...row.roles, ...rolePerms.map((r) => r.permission)]));
+  // SEC-005: users.roles is hand-edited/seeded, never validated — filter
+  // out anything that isn't a real, current permission before trusting
+  // it, and log what got dropped (a typo or a stale/renamed permission
+  // should be visible, not silently inert forever).
+  const legacyPermissions = filterKnownPermissions(row.roles);
+  const droppedLegacyPermissions = row.roles.filter((r) => !legacyPermissions.includes(r as Permission));
+  if (droppedLegacyPermissions.length > 0) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `users.roles for ${email} contains unknown permission string(s), ignored: ${droppedLegacyPermissions.join(", ")}`,
+    );
+  }
+
+  const roles = Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePerms.map((r) => r.permission)]));
   return { userId: row.id, tenantId: row.tenant_id, roles };
 });
 

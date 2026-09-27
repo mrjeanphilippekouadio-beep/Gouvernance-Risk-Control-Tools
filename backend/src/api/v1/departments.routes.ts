@@ -12,7 +12,12 @@ const CreateDepartmentBody = z.object({
   active: z.boolean().optional(),
 });
 
-const UpdateDepartmentBody = CreateDepartmentBody.partial();
+// SEC-003: riskOwner/riskOwnerDesignatedBy are intentionally excluded —
+// a generic PATCH must never bypass the audited ASSIGN event that
+// designate-risk-owner records. Setting an initial risk owner at
+// creation is fine (no prior designation to protect); changing one
+// later must go through POST /:id/designate-risk-owner.
+const UpdateDepartmentBody = CreateDepartmentBody.omit({ riskOwner: true, riskOwnerDesignatedBy: true }).partial();
 
 const DesignateRiskOwnerBody = z.object({ riskOwner: z.string().min(1) });
 const ArchiveDepartmentBody = z.object({ reason: z.string().min(1) });

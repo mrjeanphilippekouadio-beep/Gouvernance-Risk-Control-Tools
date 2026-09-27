@@ -67,9 +67,25 @@ export class RoleService {
     return this.roles.list(actor.tenantId, { includeDisabled });
   }
 
+  /**
+   * SEC-002: an actor holding role.update could otherwise widen a role
+   * they themselves hold (self-escalation) — assignToUser/revokeFromUser
+   * already block self-assignment, this closes the same door on the
+   * role definition itself. An actor editing a role they hold must ask
+   * another admin, same as assigning/revoking one on themselves.
+   */
   async update(actor: AuthenticatedUser, id: string, input: UpdateRoleInput, requestId: string): Promise<Role> {
     requirePermission(actor, "role.update");
     const before = await this.get(actor, id);
+
+    if (input.permissions !== undefined) {
+      const held = await this.roles.listForUser(actor.tenantId, actor.userId);
+      if (held.some((r) => r.id === id)) {
+        throw new ForbiddenError(
+          "You cannot change the permissions of a role you hold yourself — ask another admin",
+        );
+      }
+    }
 
     if (input.name !== undefined && !input.name.trim()) throw new ValidationError("name cannot be empty");
     if (input.permissions !== undefined) assertKnownPermissions(input.permissions);

@@ -100,22 +100,18 @@ export class PostgresDepartmentRepository implements DepartmentRepository {
   }
 
   async update(tenantId: string, id: string, input: UpdateDepartmentInput): Promise<Department> {
-    // If the manager changes and no explicit riskOwner is given in the
-    // same call, the legacy rule still re-derives riskOwner = manager —
-    // fetch current state first so we know whether riskOwner was ever
-    // explicitly designated.
+    // SEC-003: riskOwner/riskOwnerDesignatedBy are not accepted here at
+    // all (see UpdateDepartmentInput) — only designateRiskOwner() may
+    // change them, so every real designation goes through its audited
+    // ASSIGN event. The one thing this method still does automatically:
+    // if the manager changes and the risk owner was never explicitly
+    // designated (still tracking the default), keep it tracking the
+    // new manager — fetch current state to know which case applies.
     const current = await this.getById(tenantId, id);
     if (!current) throw new NotFoundError("Department", id);
 
     let riskOwnerUpdate: string | undefined;
-    let designatedByUpdate: string | undefined;
-    if (input.riskOwner !== undefined) {
-      riskOwnerUpdate = input.riskOwner?.trim() || input.manager || current.manager;
-      designatedByUpdate = input.riskOwner?.trim()
-        ? (input.riskOwnerDesignatedBy ?? input.manager ?? current.manager)
-        : "Pilote par défaut (manager, aucune désignation explicite)";
-    } else if (input.manager !== undefined && current.riskOwnerDesignatedBy?.startsWith("Pilote par défaut")) {
-      // Risk owner was never explicitly designated — keep tracking the manager.
+    if (input.manager !== undefined && current.riskOwnerDesignatedBy?.startsWith("Pilote par défaut")) {
       riskOwnerUpdate = input.manager;
     }
 
@@ -125,7 +121,6 @@ export class PostgresDepartmentRepository implements DepartmentRepository {
         entity: input.entity,
         manager: input.manager,
         risk_owner: riskOwnerUpdate,
-        risk_owner_designated_by: designatedByUpdate,
         linked_processes: input.linkedProcesses,
         active: input.active,
       },

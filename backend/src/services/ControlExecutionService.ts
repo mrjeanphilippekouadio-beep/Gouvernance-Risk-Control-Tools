@@ -22,7 +22,7 @@ export class ControlExecutionService {
 
   async create(
     actor: AuthenticatedUser,
-    input: Omit<CreateControlExecutionInput, "tenantId" | "executedBy"> & { executedBy?: string },
+    input: Omit<CreateControlExecutionInput, "tenantId" | "executedBy">,
     requestId: string,
   ): Promise<ControlExecution> {
     requirePermission(actor, "execution.create");
@@ -36,10 +36,14 @@ export class ControlExecutionService {
       );
     }
 
+    // SEC-001: executedBy must always be the actor, never client-supplied —
+    // otherwise one user can attribute an execution to a colleague and then
+    // validate it themselves, defeating maker-checker (before.executedBy ===
+    // actor.userId in validate() would never fire).
     const execution = await this.executions.create({
       ...input,
       tenantId: actor.tenantId,
-      executedBy: input.executedBy ?? actor.userId,
+      executedBy: actor.userId,
     });
 
     await this.audit.record({
