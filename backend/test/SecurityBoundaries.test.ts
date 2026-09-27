@@ -26,6 +26,33 @@ import type { AuditEvent } from "../src/domain/entities/AuditEvent.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 
+// --- round 2 (SEC-009..SEC-014) ------------------------------------------
+import { KriMeasureService } from "../src/services/KriMeasureService.js";
+import { KpiMeasureService } from "../src/services/KpiMeasureService.js";
+import { UserService } from "../src/services/UserService.js";
+import { RiskEvaluationService } from "../src/services/RiskEvaluationService.js";
+import { ActionPlanService } from "../src/services/ActionPlanService.js";
+import { RatingScaleService } from "../src/services/RatingScaleService.js";
+import { RiskAppetiteService } from "../src/services/RiskAppetiteService.js";
+import type { KriMeasureRepository } from "../src/domain/repositories/KriMeasureRepository.js";
+import type { KriRepository } from "../src/domain/repositories/KriRepository.js";
+import type { KpiMeasureRepository } from "../src/domain/repositories/KpiMeasureRepository.js";
+import type { KpiRepository } from "../src/domain/repositories/KpiRepository.js";
+import type { UserRepository } from "../src/domain/repositories/UserRepository.js";
+import type { RiskEvaluationRepository } from "../src/domain/repositories/RiskEvaluationRepository.js";
+import type { RatingScaleRepository } from "../src/domain/repositories/RatingScaleRepository.js";
+import type { ActionPlanRepository } from "../src/domain/repositories/ActionPlanRepository.js";
+import type { RiskAppetiteRepository } from "../src/domain/repositories/RiskAppetiteRepository.js";
+import type { CreateKriMeasureInput, KriMeasure } from "../src/domain/entities/KriMeasure.js";
+import type { Kri } from "../src/domain/entities/Kri.js";
+import type { CreateKpiMeasureInput, KpiMeasure } from "../src/domain/entities/KpiMeasure.js";
+import type { Kpi } from "../src/domain/entities/Kpi.js";
+import type { CreateUserInput, User } from "../src/domain/entities/User.js";
+import type { RiskEvaluation } from "../src/domain/entities/RiskEvaluation.js";
+import type { RatingScale } from "../src/domain/entities/RatingScale.js";
+import type { ActionPlan, CreateActionPlanInput } from "../src/domain/entities/ActionPlan.js";
+import type { RiskAppetite, SetRiskAppetiteInput } from "../src/domain/entities/RiskAppetite.js";
+
 /**
  * Security boundary tests (agent A10 / Security review).
  *
@@ -756,5 +783,278 @@ describe("SEC-008 evidence deletion ordering (regression lock)", () => {
     // DELETED — the old order (storage first) could leave it ACTIVE and
     // pointing at a file already gone.
     expect(repo._store.get(evidence.id)?.status).toBe("DELETED");
+  });
+});
+
+// =========================================================================
+// Round 2 (agent A10 / Security review, 2026-09-27) — the 9 domain modules
+// shipped after the first pass (Kpi/KpiMeasure, RiskAppetite, RatingScale,
+// User, RiskEvaluation, Kri/KriMeasure, RiskOwnership, ActionPlan,
+// Cartography), none of which had ever been security-reviewed.
+//
+// Same convention as above: `it.fails` = confirmed open finding, the body
+// asserts the SECURE behaviour. Stubs here are deliberately partial (only
+// the methods the path under test actually calls) — the point is to prove
+// the boundary, not to rebuild a database.
+// =========================================================================
+
+// --- SEC-009: client-supplied recordedBy on KPI/KRI measures -------------
+// Exact reintroduction of SEC-001: attribution of an append-only record is
+// taken from the request body instead of being forced to the actor.
+// `Omit<..., "recordedBy"> & { recordedBy?: string }` in both service
+// signatures, and `recordedBy: z.string().nullish()` in both route bodies,
+// put the field back under client control.
+
+describe("SEC-009 measure attribution (append-only recordedBy)", () => {
+  const measureActor: AuthenticatedUser = { ...attacker, roles: ["kri.create", "kpi.create"] };
+
+  it.fails("SEC-009: KriMeasureService.record must ignore a client-supplied recordedBy", async () => {
+    let recordedBy = "";
+    const measures = {
+      async create(input: CreateKriMeasureInput) {
+        recordedBy = input.recordedBy;
+        return { ...input, id: randomUUID(), createdAt: new Date() } as KriMeasure;
+      },
+    } as unknown as KriMeasureRepository;
+    const kris = {
+      async getById() {
+        return {
+          id: "kri-1",
+          label: "Fraud rate",
+          riskId: "risk-1",
+          thresholdGreen: 1,
+          thresholdOrange: 2,
+          thresholdRed: 3,
+        } as unknown as Kri;
+      },
+    } as unknown as KriRepository;
+
+    await new KriMeasureService(measures, kris, inMemoryAuditRepository()).record(
+      measureActor,
+      { kriId: "kri-1", measureDate: new Date(), value: 5, source: "manual", comment: null, recordedBy: "user-victim" },
+      "REQ-SEC-009a",
+    );
+
+    expect(recordedBy).toBe(measureActor.userId);
+  });
+
+  it.fails("SEC-009: KpiMeasureService.record must ignore a client-supplied recordedBy", async () => {
+    let recordedBy = "";
+    const measures = {
+      async create(input: CreateKpiMeasureInput) {
+        recordedBy = input.recordedBy;
+        return { ...input, id: randomUUID(), createdAt: new Date() } as KpiMeasure;
+      },
+    } as unknown as KpiMeasureRepository;
+    const kpis = {
+      async getById() {
+        return { id: "kpi-1", targetValue: 10 } as unknown as Kpi;
+      },
+    } as unknown as KpiRepository;
+
+    await new KpiMeasureService(measures, kpis, inMemoryAuditRepository()).record(
+      measureActor,
+      { kpiId: "kpi-1", period: new Date(), value: 5, comment: null, recordedBy: "user-victim" },
+      "REQ-SEC-009b",
+    );
+
+    expect(recordedBy).toBe(measureActor.userId);
+  });
+});
+
+// --- SEC-010: account provisioning without role.assign -------------------
+// UserService.create inserts the users row FIRST, then calls
+// RoleService.assignToUser (which is what requires role.assign). An actor
+// holding only user.create gets a 403 back, but the account row survives —
+// and server.ts resolves identity with `SELECT ... FROM users WHERE email =
+// $1 AND deleted_at IS NULL`, so that orphan row is a login-capable account
+// nobody authorised and no role was ever attached to.
+
+describe("SEC-010 user provisioning bypasses the role.assign gate", () => {
+  it.fails("SEC-010: a refused role grant must not leave a login-capable account behind", async () => {
+    const inserted: string[] = [];
+    const users = {
+      async create(input: CreateUserInput) {
+        inserted.push(input.email);
+        return { ...input, id: randomUUID(), roles: [], createdAt: new Date(), deletedAt: null } as User;
+      },
+    } as unknown as UserRepository;
+
+    // user.create but NOT role.assign — so assignToUser throws ForbiddenError.
+    const actor: AuthenticatedUser = { ...attacker, roles: ["user.create"] };
+    const service = new UserService(
+      users,
+      inMemoryAuditRepository(),
+      new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository()),
+    );
+
+    await expect(
+      service.create(actor, { email: "ghost@example.com", displayName: "Ghost", roleId: "role-1" }, "REQ-SEC-010a"),
+    ).rejects.toThrow(ForbiddenError);
+
+    // The call failed, so no account should exist.
+    expect(inserted).toEqual([]);
+  });
+});
+
+// --- SEC-011: RiskEvaluation maker-checker binds the wrong actor ----------
+// validate()/reject() compare actor.userId against `evaluatorId`, which is
+// stamped at create() time only. The scoring setters require nothing but
+// `riskevaluation.update` and never check the actor is the evaluator, and no
+// field records who actually supplied the numbers. So a third party can
+// author 100% of an evaluation's content (including the appetiteOverride
+// that decides `appetiteExceeded`) on a shell draft opened by someone else,
+// then validate it themselves — evaluatorId still names the shell creator,
+// so the four-eyes guard never fires.
+
+describe("SEC-011 RiskEvaluation scoring is not bound to the evaluator", () => {
+  it.fails("SEC-011: a non-evaluator must not be able to record scoring on another evaluator's draft", async () => {
+    const draft = {
+      id: "ev-1",
+      tenantId: TENANT,
+      evaluatorId: "user-victim",
+      status: "BROUILLON",
+      ratingScaleId: "rs-1",
+      masteryGlobal: 2,
+      subCategory: "Fraude",
+      entity: null,
+      residualScore: null,
+    } as unknown as RiskEvaluation;
+
+    const evaluations = {
+      async getById() {
+        return draft;
+      },
+      async recordResidualScoring() {
+        return { ...draft, residualScore: 9 };
+      },
+    } as unknown as RiskEvaluationRepository;
+    const ratingScales = {
+      async getById() {
+        return {
+          id: "rs-1",
+          probabilityLevels: 5,
+          impactLevels: 5,
+          impactAxes: { axes: [{ code: "FIN", label: "Financier", order: 1 }], retainedImpactRule: "MAX" },
+        } as unknown as RatingScale;
+      },
+    } as unknown as RatingScaleRepository;
+
+    const service = new RiskEvaluationService(evaluations, inMemoryAuditRepository(), undefined, ratingScales);
+    const thirdParty: AuthenticatedUser = { ...attacker, roles: ["riskevaluation.read", "riskevaluation.update"] };
+
+    await expect(
+      service.recordResidualScoring(
+        thirdParty,
+        "ev-1",
+        { probability: 3, impacts: [{ code: "FIN", value: 3 }], justification: "rewritten by a third party" },
+        "REQ-SEC-011a",
+      ),
+    ).rejects.toThrow(ForbiddenError);
+  });
+});
+
+// --- SEC-012: ActionPlan responsibleUserId/departmentId unvalidated -------
+// create() carefully validates `sourceId` against Risk/Control/Kri in the
+// actor's tenant (assertSourceExists) but takes `responsibleUserId` and
+// `departmentId` on trust — ActionPlanService has no UserRepository or
+// DepartmentRepository at all. RiskService.assignOwner (assertActiveUser)
+// and RiskService.create (assertDepartmentExists) show the intended
+// pattern; this module skipped it.
+
+describe("SEC-012 ActionPlan cross-entity reference validation", () => {
+  it.fails("SEC-012: responsibleUserId must resolve to an active user in the actor's tenant", async () => {
+    const actions = {
+      async create(input: CreateActionPlanInput) {
+        return {
+          ...input,
+          id: randomUUID(),
+          status: "PLANIFIEE",
+          progressPercent: 0,
+          progressComment: null,
+          evidenceId: null,
+          closedBy: null,
+          closedAt: null,
+          closureComment: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as ActionPlan;
+      },
+    } as unknown as ActionPlanRepository;
+
+    const service = new ActionPlanService(actions, inMemoryAuditRepository());
+    const actor: AuthenticatedUser = { ...attacker, roles: ["actionplan.create"] };
+
+    await expect(
+      service.create(
+        actor,
+        {
+          title: "Remediate",
+          sourceType: "MANAGEMENT",
+          responsibleUserId: "user-of-tenant-2",
+          dueDate: new Date(Date.now() + 86_400_000),
+        },
+        "REQ-SEC-012a",
+      ),
+    ).rejects.toThrow(ValidationError);
+  });
+});
+
+// --- SEC-013: rating scale archived under the generic update permission ---
+// disable() correctly demands ratingscale.delete + a reason. But
+// activateVersion() — gated on ratingscale.update alone, no reason — calls
+// activateAndArchivePrevious, which pushes the previously ACTIVE scale to
+// ARCHIVED, and that is irreversible ("Cannot re-activate an archived
+// rating scale"). Exactly the "a generic update must never reach a terminal
+// state" bypass CLAUDE.md documents for Risk/Control.
+
+describe("SEC-013 rating scale terminal transition via the update permission", () => {
+  it.fails("SEC-013: archiving the previously-active scale must require ratingscale.delete", async () => {
+    let archivedPrevious = false;
+    const ratingScales = {
+      async getById() {
+        return { id: "rs-new", status: "DRAFT", version: "v2" } as unknown as RatingScale;
+      },
+      async activateAndArchivePrevious() {
+        archivedPrevious = true;
+        return { id: "rs-new", status: "ACTIVE", version: "v2" } as unknown as RatingScale;
+      },
+    } as unknown as RatingScaleRepository;
+
+    const service = new RatingScaleService(ratingScales, inMemoryAuditRepository());
+    const actor: AuthenticatedUser = { ...attacker, roles: ["ratingscale.read", "ratingscale.update"] };
+
+    await expect(service.activateVersion(actor, "rs-new", "REQ-SEC-013a")).rejects.toThrow(ForbiddenError);
+    expect(archivedPrevious).toBe(false);
+  });
+});
+
+// --- SEC-014: appetite threshold retired under the update permission -----
+// archive() demands riskappetite.delete + a reason. setThreshold() accepts
+// `active` straight from the body (`active: z.boolean().optional()` in the
+// route) and upserts it, so `active: false` retires a governance ceiling
+// with only riskappetite.update, no reason, audited as a plain UPDATE.
+// Worse, the two readers disagree: list() filters `active = true`, so the
+// threshold vanishes from the ACT-168 oversight table, while
+// getBySubCategory() (what RiskEvaluationService actually compares a
+// residual score against) ignores `active` entirely and keeps applying it.
+
+describe("SEC-014 risk appetite retired via the update permission", () => {
+  it.fails("SEC-014: deactivating an appetite threshold must require riskappetite.delete", async () => {
+    const appetites = {
+      async getBySubCategory() {
+        return null;
+      },
+      async upsert(input: SetRiskAppetiteInput) {
+        return { ...input, id: randomUUID(), createdAt: new Date(), updatedAt: new Date() } as RiskAppetite;
+      },
+    } as unknown as RiskAppetiteRepository;
+
+    const service = new RiskAppetiteService(appetites, inMemoryAuditRepository());
+    const actor: AuthenticatedUser = { ...attacker, roles: ["riskappetite.update"] };
+
+    await expect(
+      service.setThreshold(actor, "Fraude", { threshold: 10, methodologyVersion: "v1", active: false }, "REQ-SEC-014a"),
+    ).rejects.toThrow(ForbiddenError);
   });
 });
