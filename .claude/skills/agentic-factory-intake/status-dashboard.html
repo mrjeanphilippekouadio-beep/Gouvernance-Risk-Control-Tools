@@ -1,0 +1,385 @@
+<title>GRC Tools — Avancement</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --ink: #161a26;
+    --paper: #eeece6;
+    --paper-raised: #f9f8f4;
+    --line: #d9d6cb;
+    --muted: #6b6f78;
+    --accent: #1f6f66;
+    --accent-soft: #dce9e7;
+    --done: #3f8f5c;
+    --done-soft: #e1efe4;
+    --progress: #b8791e;
+    --progress-soft: #f5ead2;
+    --risk: #a83a3a;
+    --risk-soft: #f6dede;
+    --todo: #82868f;
+    --todo-soft: #e7e6e2;
+    --shadow: 0 1px 2px rgba(22,26,38,.06), 0 8px 24px -12px rgba(22,26,38,.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eae8e1;
+      --paper: #12141b;
+      --paper-raised: #1a1d26;
+      --line: #2b2f3a;
+      --muted: #9a9ea8;
+      --accent: #6fc0b4;
+      --accent-soft: #1c3330;
+      --done: #74c28a;
+      --done-soft: #1b3123;
+      --progress: #e0ac52;
+      --progress-soft: #392e19;
+      --risk: #e28080;
+      --risk-soft: #3a2222;
+      --todo: #767a84;
+      --todo-soft: #23262f;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eae8e1;
+    --paper: #12141b;
+    --paper-raised: #1a1d26;
+    --line: #2b2f3a;
+    --muted: #9a9ea8;
+    --accent: #6fc0b4;
+    --accent-soft: #1c3330;
+    --done: #74c28a;
+    --done-soft: #1b3123;
+    --progress: #e0ac52;
+    --progress-soft: #392e19;
+    --risk: #e28080;
+    --risk-soft: #3a2222;
+    --todo: #767a84;
+    --todo-soft: #23262f;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    margin: 0;
+    padding: 0 20px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding-block: 48px 80px; }
+
+  h1, h2, h3 { font-family: "Source Serif 4", Georgia, serif; text-wrap: balance; margin: 0; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .72rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  header.top { margin-bottom: 40px; }
+  header.top h1 { font-size: clamp(2rem, 5vw, 2.6rem); font-weight: 700; margin-top: 8px; }
+  header.top .sub { color: var(--muted); font-size: 1.02rem; max-width: 62ch; margin-top: 10px; line-height: 1.55; }
+  header.top .meta {
+    display: flex; gap: 18px; flex-wrap: wrap;
+    margin-top: 18px; font-size: .85rem; color: var(--muted);
+    font-family: "IBM Plex Mono", monospace;
+  }
+  header.top .meta b { color: var(--ink); font-weight: 600; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 28px 0 48px;
+    box-shadow: var(--shadow);
+  }
+  .stat { background: var(--paper-raised); padding: 20px 18px; }
+  .stat .n {
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: 1.9rem;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .stat .l { font-size: .78rem; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+
+  section { margin-bottom: 44px; }
+  section > h2 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  section > h2 .count {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .78rem;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .modules { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 620px) { .modules { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .card h3 { font-size: 1.02rem; font-weight: 600; }
+  .card .pct {
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: .95rem;
+    flex-shrink: 0;
+  }
+  .track {
+    height: 6px; border-radius: 4px; background: var(--todo-soft);
+    margin: 10px 0 10px; overflow: hidden;
+  }
+  .fill { height: 100%; border-radius: 4px; background: var(--accent); }
+  .card p { margin: 0; font-size: .86rem; color: var(--muted); line-height: 1.5; }
+  .badge {
+    display: inline-block; font-size: .7rem; font-weight: 600;
+    padding: 2px 8px; border-radius: 99px; letter-spacing: .01em;
+    margin-top: 10px;
+  }
+  .badge.done { background: var(--done-soft); color: var(--done); }
+  .badge.partial { background: var(--progress-soft); color: var(--progress); }
+
+  .backlog-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  .backlog-table th {
+    text-align: left; font-family: "IBM Plex Mono", monospace; font-weight: 500;
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); border-bottom: 1px solid var(--line); padding: 0 10px 10px 0;
+  }
+  .backlog-table td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .backlog-table tr:last-child td { border-bottom: none; }
+  .backlog-table .n {
+    font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums;
+    color: var(--muted); text-align: right; width: 3em;
+  }
+
+  .vigilance { display: flex; flex-direction: column; gap: 10px; }
+  .vig-item {
+    border-left: 3px solid var(--risk);
+    background: var(--risk-soft);
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    font-size: .89rem;
+    line-height: 1.5;
+  }
+  .vig-item b { color: var(--ink); }
+
+  ol.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  ol.steps li {
+    counter-increment: step;
+    display: flex; gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  ol.steps li:last-child { border-bottom: none; }
+  ol.steps li::before {
+    content: counter(step);
+    font-family: "IBM Plex Mono", monospace; font-weight: 600;
+    color: var(--accent); background: var(--accent-soft);
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: .82rem;
+  }
+  ol.steps .step-body b { display: block; font-size: .95rem; margin-bottom: 2px; }
+  ol.steps .step-body span { font-size: .85rem; color: var(--muted); line-height: 1.5; }
+
+  footer {
+    margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--line);
+    font-size: .78rem; color: var(--muted); line-height: 1.6;
+  }
+  footer code { font-family: "IBM Plex Mono", monospace; background: var(--todo-soft); padding: 1px 5px; border-radius: 4px; }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow">Rapport d'avancement</div>
+    <h1>GRC Tools</h1>
+    <div class="sub">Outil de gouvernance, risques &amp; conformité pour Djamo — état des lieux du backend, du frontend et de l'intégration Telegram, au 27 septembre 2026.</div>
+    <div class="meta">
+      <span><b>Tenant</b> Djamo</span>
+      <span><b>Environnement</b> unique (pas de dev/prod séparés)</span>
+      <span><b>Branche</b> main</span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="n">~22%</div><div class="l">du backlog fonctionnel ACF couvert (142 actions, 26 domaines)</div></div>
+    <div class="stat"><div class="n">11</div><div class="l">modules métier livrés (Risk, Control, RBAC, Feedback…)</div></div>
+    <div class="stat"><div class="n">70</div><div class="l">tests automatisés, 13 fichiers, tous verts</div></div>
+    <div class="stat"><div class="n">15</div><div class="l">migrations appliquées sur Neon</div></div>
+  </div>
+
+  <section>
+    <h2>Livré <span class="count">8 modules · &ge; 85 %</span></h2>
+    <div class="modules">
+
+      <div class="card">
+        <div class="row1"><h3>Risk</h3><span class="pct">90%</span></div>
+        <div class="track"><div class="fill" style="width:90%"></div></div>
+        <p>CRUD, transitions de statut, soft-delete avec motif obligatoire, audit sur chaque écriture.</p>
+        <span class="badge done">Livré</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Department / Process</h3><span class="pct">90%</span></div>
+        <div class="track"><div class="fill" style="width:90%"></div></div>
+        <p>Mise à jour en place, désignation du pilote de risque, historique des changements.</p>
+        <span class="badge done">Livré</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Control</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>CRUD + couverture des risques liés (table de jointure control_risks).</p>
+        <span class="badge done">Livré</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>ControlExecution</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Append-only, validation maker-checker (l'exécutant ≠ le validateur).</p>
+        <span class="badge done">Livré</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>ControlEffectiveness</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Évaluations d'efficacité en append-only, liées à un contrôle.</p>
+        <span class="badge done">Livré</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Anomaly</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Cycle de vie ticket avec machine à états, commentaire obligatoire à la clôture.</p>
+        <span class="badge done">Livré</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Evidence</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Upload vers Google Drive, résolution tenant vérifiée avant tout accès stockage.</p>
+        <span class="badge done">Livré</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Feedback</h3><span class="pct">100%</span></div>
+        <div class="track"><div class="fill" style="width:100%"></div></div>
+        <p>Hors backlog ACF d'origine — widget flottant, triage admin, notification Telegram automatique.</p>
+        <span class="badge done">Livré</span>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Partiel <span class="count">3 briques</span></h2>
+    <div class="modules">
+
+      <div class="card">
+        <div class="row1"><h3>Audit trail</h3><span class="pct">75%</span></div>
+        <div class="track"><div class="fill" style="width:75%; background:var(--progress)"></div></div>
+        <p>Append-only strict, recherche filtrée (utilisateur / action / date). Manque : purge RGPD (ACT-072, Post-MVP).</p>
+        <span class="badge partial">Partiel</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>RBAC (rôles)</h3><span class="pct">70%</span></div>
+        <div class="track"><div class="fill" style="width:70%; background:var(--progress)"></div></div>
+        <p>Création, assignation, révocation, maker-checker. Manque : permissions comme donnée éditable plutôt qu'énumération figée.</p>
+        <span class="badge partial">Partiel</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Auth / SSO</h3><span class="pct">25%</span></div>
+        <div class="track"><div class="fill" style="width:25%; background:var(--progress)"></div></div>
+        <p>Login Google fonctionnel. Manque : invitation, désactivation self-service d'un utilisateur (ACT-091/092).</p>
+        <span class="badge partial">Partiel</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Notifications Telegram</h3><span class="pct">40%</span></div>
+        <div class="track"><div class="fill" style="width:40%; background:var(--progress)"></div></div>
+        <p>Phase A (notifications) et B1 (questions bloquantes texte) livrées et testées. Manque : B2 (notes vocales), C (pilotage GRC).</p>
+        <span class="badge partial">Partiel</span>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Backlog <span class="count">15 domaines · 93 actions · 0 %</span></h2>
+    <table class="backlog-table">
+      <thead><tr><th>Domaine</th><th class="n">Actions</th></tr></thead>
+      <tbody>
+        <tr><td>RiskEvaluation</td><td class="n">11</td></tr>
+        <tr><td>Dashboard</td><td class="n">10</td></tr>
+        <tr><td>KRI</td><td class="n">10</td></tr>
+        <tr><td>UserManagement</td><td class="n">8</td></tr>
+        <tr><td>RiskOwnership</td><td class="n">8</td></tr>
+        <tr><td>RatingScale</td><td class="n">8</td></tr>
+        <tr><td>ActionPlan</td><td class="n">7</td></tr>
+        <tr><td>Config</td><td class="n">7</td></tr>
+        <tr><td>Reporting</td><td class="n">6</td></tr>
+        <tr><td>Cartography</td><td class="n">5</td></tr>
+        <tr><td>KPI</td><td class="n">5</td></tr>
+        <tr><td>RiskAppetite</td><td class="n">4</td></tr>
+        <tr><td>Notification (métier)</td><td class="n">4</td></tr>
+        <tr><td>JournalGlobal</td><td class="n">4</td></tr>
+        <tr><td>Governance</td><td class="n">4</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Points de vigilance</h2>
+    <div class="vigilance">
+      <div class="vig-item"><b>Un seul environnement.</b> La base Neon utilisée en développement est la base réelle — aucune séparation dev/prod aujourd'hui.</div>
+      <div class="vig-item"><b>Rien n'est déployé.</b> La CI construit et teste, mais aucun Cloud Run n'est actif — l'app ne tourne qu'en local.</div>
+      <div class="vig-item"><b>Secrets en clair localement.</b> Le token Telegram et <code>DATABASE_URL</code> vivent dans un <code>.env</code> non commité — à migrer vers un gestionnaire de secrets avant toute mise en production.</div>
+      <div class="vig-item"><b>Pas d'onboarding self-service.</b> Ajouter un utilisateur autorisé demande aujourd'hui un <code>INSERT</code> SQL manuel dans <code>users</code>.</div>
+      <div class="vig-item"><b>Divergence non tranchée.</b> Le modèle LLM de l'agent DevOps (A09) diffère entre la feuille Config et la feuille Model Registry du classeur ACF.</div>
+      <div class="vig-item"><b>5 agents ACF sans prompt source.</b> A01 (Intake, actif), A11, A17, A19, A20 référencés dans la hiérarchie mais absents de la feuille System Prompts.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Prochaines étapes recommandées</h2>
+    <ol class="steps">
+      <li><div class="step-body"><b>Décider et déployer un environnement de production</b><span>Cloud Run, séparé de la base de développement, secrets en Secret Manager.</span></div></li>
+      <li><div class="step-body"><b>Construire l'onboarding utilisateur</b><span>ACT-090 à 093 — sortir de l'ajout manuel en base pour whitelister un nouvel utilisateur.</span></div></li>
+      <li><div class="step-body"><b>Rendre les permissions éditables</b><span>ACT-116/118 — une vraie matrice IAM en base plutôt qu'une énumération TypeScript figée.</span></div></li>
+      <li><div class="step-body"><b>Reprendre le backlog métier</b><span>RiskEvaluation, KRI et RiskAppetite sont les briques les plus proches du cœur risque déjà construit.</span></div></li>
+      <li><div class="step-body"><b>Revue de sécurité</b><span><code>/security-review</code> sur l'ensemble avant d'ouvrir l'accès à davantage d'utilisateurs.</span></div></li>
+      <li><div class="step-body"><b>Décider de la suite Telegram</b><span>Phase B2 (transcription vocale, fournisseur à choisir) et Phase C (piloter GRC Tools depuis Telegram), ou s'arrêter à B1.</span></div></li>
+    </ol>
+  </section>
+
+  <footer>
+    Méthodologie : couverture calculée à partir des 142 actions du backlog ACF (<code>.claude/backlog/grc-actions.yaml</code>), pondérée par domaine. Les pourcentages par module reflètent une estimation raisonnée du code existant, pas une mesure automatisée — à recalibrer si la définition d'une action change.
+  </footer>
+
+</div>
