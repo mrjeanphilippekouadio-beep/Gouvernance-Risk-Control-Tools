@@ -24,6 +24,12 @@ const EnvSchema = z.object({
     .string()
     .default("http://localhost:5173")
     .transform((value) => value.split(",").map((origin) => origin.trim())),
+
+  // Optional: Telegram bot notifications (Phase A). Both unset = no-op
+  // notifier, nothing breaks — this is a nice-to-have side channel, not
+  // a required piece of the app.
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_CHAT_ID: z.string().optional(),
 });
 
 const parsed = EnvSchema.safeParse(process.env);

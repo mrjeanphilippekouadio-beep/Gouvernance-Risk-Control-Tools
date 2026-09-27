@@ -15,6 +15,8 @@ import { PostgresDepartmentRepository } from "./infrastructure/database/postgres
 import { PostgresProcessRepository } from "./infrastructure/database/postgres/PostgresProcessRepository.js";
 import { PostgresRoleRepository } from "./infrastructure/database/postgres/PostgresRoleRepository.js";
 import { PostgresFeedbackRepository } from "./infrastructure/database/postgres/PostgresFeedbackRepository.js";
+import { TelegramNotifier } from "./infrastructure/notifications/TelegramNotifier.js";
+import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
@@ -67,6 +69,10 @@ const departmentRepository = new PostgresDepartmentRepository(pool);
 const processRepository = new PostgresProcessRepository(pool);
 const roleRepository = new PostgresRoleRepository(pool);
 const feedbackRepository = new PostgresFeedbackRepository(pool);
+const notifier =
+  env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID
+    ? new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID)
+    : new NoopNotifier();
 
 const riskService = new RiskService(riskRepository, auditRepository);
 const departmentService = new DepartmentService(departmentRepository, auditRepository);
@@ -81,7 +87,7 @@ const effectivenessService = new ControlEffectivenessService(
 );
 const anomalyService = new AnomalyService(anomalyRepository, auditRepository);
 const roleService = new RoleService(roleRepository, auditRepository);
-const feedbackService = new FeedbackService(feedbackRepository, auditRepository);
+const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
