@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { rolesApi, type Role } from "../../api/roles";
 import { permissionsApi } from "../../api/permissions";
 import { ApiError } from "../../api/client";
+import { Button, FormField, StatusBadge, Table } from "../../design-system";
 
 interface RolesAdminProps {
   token: string;
@@ -102,12 +103,12 @@ export function RolesAdmin({ token }: RolesAdminProps) {
       <h2>Rôles (RBAC)</h2>
 
       <form onSubmit={handleCreate} className="admin-form">
-        <input placeholder="Nom du rôle" value={name} onChange={(e) => setName(e.target.value)} required />
-        <input
-          placeholder="Description (optionnel)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
+        <FormField label="Nom du rôle" htmlFor="role-name">
+          <input id="role-name" value={name} onChange={(e) => setName(e.target.value)} required />
+        </FormField>
+        <FormField label="Description" htmlFor="role-description" help="Optionnel">
+          <input id="role-description" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </FormField>
         <fieldset className="admin-permissions">
           <legend>Permissions</legend>
           {allPermissions.map((p) => (
@@ -121,59 +122,65 @@ export function RolesAdmin({ token }: RolesAdminProps) {
             </label>
           ))}
         </fieldset>
-        <button type="submit" disabled={!name.trim() || selectedPermissions.length === 0}>
+        <Button type="submit" variant="primary" disabled={!name.trim() || selectedPermissions.length === 0}>
           Créer le rôle
-        </button>
+        </Button>
       </form>
 
       {error && <p role="alert">{error}</p>}
 
-      {loading ? (
-        <p>Chargement…</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Nom</th>
-              <th>Permissions</th>
-              <th>Statut</th>
-              <th>Assigner / révoquer (user id)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {roles.map((role) => (
-              <tr key={role.id}>
-                <td>
-                  {role.name}
-                  {role.description && <div className="admin-muted">{role.description}</div>}
-                </td>
-                <td>{role.permissions.join(", ")}</td>
-                <td>
-                  {role.deletedAt ? "Désactivé" : "Actif"}
-                  {!role.deletedAt && (
-                    <button type="button" onClick={() => handleDisable(role.id)}>
-                      Désactiver
-                    </button>
-                  )}
-                </td>
-                <td>
-                  <input
-                    placeholder="user id"
-                    value={assignUserId[role.id] ?? ""}
-                    onChange={(e) => setAssignUserId((prev) => ({ ...prev, [role.id]: e.target.value }))}
-                  />
-                  <button type="button" onClick={() => handleAssign(role.id)}>
-                    Assigner
-                  </button>
-                  <button type="button" onClick={() => handleRevoke(role.id)}>
-                    Révoquer
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <Table
+        loading={loading}
+        emptyMessage="Aucun rôle défini."
+        rows={roles}
+        rowKey={(role) => role.id}
+        columns={[
+          {
+            key: "name",
+            header: "Nom",
+            render: (role) => (
+              <>
+                {role.name}
+                {role.description && <div className="admin-muted">{role.description}</div>}
+              </>
+            ),
+          },
+          { key: "permissions", header: "Permissions", render: (role) => role.permissions.join(", ") },
+          {
+            key: "status",
+            header: "Statut",
+            render: (role) =>
+              role.deletedAt ? (
+                <StatusBadge label="Désactivé" tone="neutral" />
+              ) : (
+                <StatusBadge label="Actif" tone="success" />
+              ),
+          },
+          {
+            key: "actions",
+            header: "Assigner / révoquer (user id)",
+            render: (role) => (
+              <div className="row-actions">
+                <input
+                  aria-label={`Identifiant utilisateur pour le rôle ${role.name}`}
+                  placeholder="user id"
+                  value={assignUserId[role.id] ?? ""}
+                  onChange={(e) => setAssignUserId((prev) => ({ ...prev, [role.id]: e.target.value }))}
+                />
+                <Button onClick={() => handleAssign(role.id)}>Assigner</Button>
+                <Button variant="destructive" onClick={() => handleRevoke(role.id)}>
+                  Révoquer
+                </Button>
+                {!role.deletedAt && (
+                  <Button variant="destructive" onClick={() => handleDisable(role.id)}>
+                    Désactiver
+                  </Button>
+                )}
+              </div>
+            ),
+          },
+        ]}
+      />
     </section>
   );
 }

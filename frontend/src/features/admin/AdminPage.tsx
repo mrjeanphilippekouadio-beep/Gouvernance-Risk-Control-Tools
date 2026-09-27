@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { RolesAdmin } from "./RolesAdmin";
 import { FeedbackAdmin } from "./FeedbackAdmin";
+import { Tabs } from "../../design-system";
 
 interface AdminPageProps {
   token: string;
@@ -18,14 +19,14 @@ export function AdminPage({ token }: AdminPageProps) {
 
   return (
     <div>
-      <nav className="admin-tabs">
-        <button type="button" disabled={tab === "roles"} onClick={() => setTab("roles")}>
-          Rôles
-        </button>
-        <button type="button" disabled={tab === "feedback"} onClick={() => setTab("feedback")}>
-          Feedback
-        </button>
-      </nav>
+      <Tabs
+        items={[
+          { value: "roles", label: "Rôles" },
+          { value: "feedback", label: "Feedback" },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
       {tab === "roles" ? <RolesAdmin token={token} /> : <FeedbackAdmin token={token} />}
     </div>
   );

@@ -1,0 +1,38 @@
+.table-scroll {
+  overflow-x: auto;
+  margin-top: var(--gs-space-3);
+}
+
+.gs-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--gs-bg-surface);
+}
+
+.gs-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--gs-bg-surface);
+  text-align: left;
+  font-size: var(--gs-font-size-body);
+  font-weight: 600;
+  color: var(--gs-text-secondary);
+  padding: var(--gs-space-2) var(--gs-space-3);
+  border-bottom: 1px solid var(--gs-border);
+  white-space: nowrap;
+}
+
+.gs-table td {
+  font-size: var(--gs-font-size-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--gs-text);
+  padding: var(--gs-space-2) var(--gs-space-3);
+  border-bottom: 1px solid var(--gs-border);
+  vertical-align: top;
+}
+
+.table-status {
+  margin-top: var(--gs-space-3);
+  color: var(--gs-text-secondary);
+  font-size: var(--gs-font-size-body);
+}

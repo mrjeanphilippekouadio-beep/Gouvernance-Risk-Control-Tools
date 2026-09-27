@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { feedbackApi, type FeedbackCategory } from "../../api/feedback";
 import { ApiError } from "../../api/client";
+import { Button, FormField } from "../../design-system";
 
 interface FeedbackWidgetProps {
   /** Google ID token — see AuthContext TODO in App.tsx. */
@@ -50,45 +51,46 @@ export function FeedbackWidget({ token }: FeedbackWidgetProps) {
 
   return (
     <div className="feedback-widget">
-      <button type="button" className="feedback-widget__toggle" onClick={() => setOpen((v) => !v)}>
+      <Button variant="primary" className="feedback-widget__toggle" onClick={() => setOpen((v) => !v)}>
         {open ? "Fermer" : "Feedback"}
-      </button>
+      </Button>
 
       {open && (
         <div className="feedback-widget__panel">
           {sent ? (
             <>
               <p>Merci, c'est transmis.</p>
-              <button type="button" onClick={reset}>
-                Envoyer autre chose
-              </button>
+              <Button onClick={reset}>Envoyer autre chose</Button>
             </>
           ) : (
             <form onSubmit={handleSubmit}>
-              <label>
-                Catégorie
-                <select value={category} onChange={(e) => setCategory(e.target.value as FeedbackCategory)}>
+              <FormField label="Catégorie" htmlFor="feedback-category">
+                <select
+                  id="feedback-category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as FeedbackCategory)}
+                >
                   {(Object.keys(CATEGORY_LABELS) as FeedbackCategory[]).map((key) => (
                     <option key={key} value={key}>
                       {CATEGORY_LABELS[key]}
                     </option>
                   ))}
                 </select>
-              </label>
-              <label>
-                Message
+              </FormField>
+              <FormField label="Message" htmlFor="feedback-message">
                 <textarea
+                  id="feedback-message"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   rows={4}
                   required
                   placeholder="Un bug, une idée, une recommandation…"
                 />
-              </label>
+              </FormField>
               {error && <p role="alert">{error}</p>}
-              <button type="submit" disabled={sending || !message.trim()}>
+              <Button type="submit" variant="primary" disabled={sending || !message.trim()}>
                 {sending ? "Envoi…" : "Envoyer"}
-              </button>
+              </Button>
             </form>
           )}
         </div>

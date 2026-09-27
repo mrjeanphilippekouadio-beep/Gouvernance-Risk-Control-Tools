@@ -1,0 +1,28 @@
+.gs-tabs {
+  display: flex;
+  gap: var(--gs-space-2);
+  margin-bottom: var(--gs-space-3);
+  border-bottom: 1px solid var(--gs-border);
+}
+
+.gs-tab {
+  font-family: var(--gs-font-ui);
+  font-size: var(--gs-font-size-body);
+  font-weight: 500;
+  color: var(--gs-text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--gs-space-2) var(--gs-space-1);
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+
+.gs-tab:hover {
+  color: var(--gs-text);
+}
+
+.gs-tab-active {
+  color: var(--gs-primary);
+  border-bottom-color: var(--gs-primary);
+}

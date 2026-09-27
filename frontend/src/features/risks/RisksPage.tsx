@@ -1,11 +1,24 @@
 import { useEffect, useState } from "react";
-import { risksApi, type Risk } from "../../api/risks";
+import { risksApi, type Risk, type RiskStatus } from "../../api/risks";
 import { ApiError } from "../../api/client";
+import { Button, FormField, StatusBadge, Table, type StatusTone } from "../../design-system";
 
 interface RisksPageProps {
   /** Google ID token — see AuthContext TODO in App.tsx. */
   token: string;
 }
+
+const STATUS_LABELS: Record<RiskStatus, string> = {
+  DRAFT: "Brouillon",
+  ACTIVE: "Actif",
+  ARCHIVED: "Archivé",
+};
+
+const STATUS_TONES: Record<RiskStatus, StatusTone> = {
+  DRAFT: "neutral",
+  ACTIVE: "success",
+  ARCHIVED: "neutral",
+};
 
 /**
  * Pure presentation + API calls. No scoring, no transition rules, no
@@ -52,45 +65,40 @@ export function RisksPage({ token }: RisksPageProps) {
     <section>
       <h1>Risques</h1>
 
-      <form onSubmit={handleCreate}>
-        <input
-          placeholder="Processus"
-          value={process}
-          onChange={(e) => setProcess(e.target.value)}
-          required
-        />
-        <input
-          placeholder="Description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          required
-        />
-        <button type="submit">Créer</button>
+      <form onSubmit={handleCreate} className="inline-form">
+        <FormField label="Processus" htmlFor="risk-process">
+          <input id="risk-process" value={process} onChange={(e) => setProcess(e.target.value)} required />
+        </FormField>
+        <FormField label="Description" htmlFor="risk-description">
+          <input
+            id="risk-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            required
+          />
+        </FormField>
+        <Button type="submit" variant="primary">
+          Créer
+        </Button>
       </form>
 
       {error && <p role="alert">{error}</p>}
-      {loading ? (
-        <p>Chargement…</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Processus</th>
-              <th>Description</th>
-              <th>Statut</th>
-            </tr>
-          </thead>
-          <tbody>
-            {risks.map((risk) => (
-              <tr key={risk.id}>
-                <td>{risk.process}</td>
-                <td>{risk.description}</td>
-                <td>{risk.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+
+      <Table
+        loading={loading}
+        emptyMessage="Aucun risque enregistré."
+        rows={risks}
+        rowKey={(risk) => risk.id}
+        columns={[
+          { key: "process", header: "Processus", render: (risk) => risk.process },
+          { key: "description", header: "Description", render: (risk) => risk.description },
+          {
+            key: "status",
+            header: "Statut",
+            render: (risk) => <StatusBadge label={STATUS_LABELS[risk.status]} tone={STATUS_TONES[risk.status]} />,
+          },
+        ]}
+      />
     </section>
   );
 }

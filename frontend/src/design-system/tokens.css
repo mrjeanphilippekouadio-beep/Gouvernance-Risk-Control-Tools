@@ -1,0 +1,77 @@
+/**
+ * Unified design tokens — replaces the two disconnected systems that
+ * coexisted before (index.css custom properties vs. hardcoded values in
+ * App.css). See frontend/DESIGN_NOTES.md section 4 for the rationale
+ * behind each value; this file is the single source of truth they
+ * describe. No Djamo brand chart was found in the repo — this is a
+ * neutral, professional direction pending validation, not a brand
+ * decision (see DESIGN_NOTES.md intro).
+ */
+:root {
+  /* Neutrals */
+  --gs-bg-page: #f7f8fa;
+  --gs-bg-surface: #ffffff;
+  --gs-border: #dde1e6;
+  --gs-text: #1a2027;
+  --gs-text-secondary: #5a6472;
+  --gs-text-disabled: #9aa3ae;
+
+  /* Brand accent (neutral direction — see DESIGN_NOTES.md 4.1) */
+  --gs-primary: #1f4b99;
+  --gs-primary-hover: #173b7a;
+  --gs-primary-bg: #e7eef9;
+
+  /* Status semantics — always paired with a text label, never color alone */
+  --gs-danger: #b3261e;
+  --gs-danger-bg: #fbeae9;
+  --gs-warning: #8a5a00;
+  --gs-warning-bg: #fcf1d9;
+  --gs-success: #1e7a46;
+  --gs-success-bg: #e7f5ec;
+  --gs-neutral: #5a6472;
+  --gs-neutral-bg: #eef0f2;
+  --gs-info: #1f4b99;
+  --gs-info-bg: #e7eef9;
+
+  /* Spacing scale — every margin/padding in the design system draws from this */
+  --gs-space-1: 4px;
+  --gs-space-2: 8px;
+  --gs-space-3: 16px;
+  --gs-space-4: 24px;
+  --gs-space-5: 32px;
+
+  /* Typography — 3 roles, system font stack only (see DESIGN_NOTES.md 4.2) */
+  --gs-font-ui: system-ui, "Segoe UI", Roboto, sans-serif;
+  --gs-font-size-title: 20px;
+  --gs-font-size-subtitle: 16px;
+  --gs-font-size-body: 14px;
+  --gs-font-size-data: 14px;
+
+  --gs-radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --gs-bg-page: #16171d;
+    --gs-bg-surface: #1f2028;
+    --gs-border: #2e303a;
+    --gs-text: #f3f4f6;
+    --gs-text-secondary: #9ca3af;
+    --gs-text-disabled: #6b7280;
+
+    --gs-primary: #6f9ce8;
+    --gs-primary-hover: #8fb2ec;
+    --gs-primary-bg: rgba(111, 156, 232, 0.15);
+
+    --gs-danger: #f2887f;
+    --gs-danger-bg: rgba(179, 38, 30, 0.2);
+    --gs-warning: #e0b34d;
+    --gs-warning-bg: rgba(138, 90, 0, 0.2);
+    --gs-success: #6fd19b;
+    --gs-success-bg: rgba(30, 122, 70, 0.2);
+    --gs-neutral: #9ca3af;
+    --gs-neutral-bg: rgba(90, 100, 114, 0.2);
+    --gs-info: #6f9ce8;
+    --gs-info-bg: rgba(31, 75, 153, 0.2);
+  }
+}
