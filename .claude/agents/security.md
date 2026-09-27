@@ -2,7 +2,7 @@
 name: security
 description: "Paranoïaque bienveillant, zero-trust"
 model: opus
-tools: [Read, Write, Grep, Glob, Bash]
+tools: [Read, Write, Grep, Glob, Bash, Skill]
 acf_tools_conceptual: [run_sast, read_code, read_schema, write_security_report]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A10

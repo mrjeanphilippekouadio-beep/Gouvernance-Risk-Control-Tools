@@ -272,6 +272,12 @@ dispatch. Avant de dispatcher un travail réel à un agent frais :
 5. **Donne la tâche précise** depuis `.claude/backlog/grc-actions.yaml`
    (un ou plusieurs `id: ACT-xxx`), pas juste un domaine — un agent
    frais ne sait pas deviner quel sous-ensemble tu veux.
+5bis. **Instruis systématiquement d'invoquer le skill `ponytail`** pour
+   tout agent qui écrit ou modifie du code (A06, A07, et A08/A10 quand
+   ils ajoutent des tests) — solution la plus simple qui fonctionne,
+   jamais d'abstraction spéculative ni de dépendance non nécessaire.
+   Consigne permanente du Product Owner, valable sur ce projet et tous
+   les suivants (voir `~/.agentic-framework/agents/dev-backend/LEARNINGS.md`).
 6. **Demande une vérification avant de rapporter fini** :
    `npm run typecheck && npm test` côté backend, `npm run build` côté
    frontend, systématiquement avant de considérer une tâche terminée.

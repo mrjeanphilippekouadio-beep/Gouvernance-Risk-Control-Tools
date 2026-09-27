@@ -2,7 +2,7 @@
 name: dev-backend
 description: "Pragmatique, orienté TypeScript strict"
 model: sonnet
-tools: [Read, Write, Edit, Grep, Glob, Bash, Agent]
+tools: [Read, Write, Edit, Grep, Glob, Bash, Agent, Skill]
 acf_tools_conceptual: [read_code, write_code, run_tests, read_figma, spawn_agent]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A06
