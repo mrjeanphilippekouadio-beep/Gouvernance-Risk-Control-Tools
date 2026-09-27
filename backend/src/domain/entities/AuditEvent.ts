@@ -10,6 +10,7 @@ export type AuditAction =
   | "REOPEN"
   | "ASSIGN"
   | "UNASSIGN"
+  | "ESCALATE"
   | "STATUS_CHANGE"
   | "ROLE_CHANGE"
   | "PERMISSION_CHANGE";

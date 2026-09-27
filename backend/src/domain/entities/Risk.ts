@@ -11,6 +11,23 @@ export interface Risk {
   process: string;
   description: string;
   ownerDepartmentId: string | null;
+  /**
+   * ACT-120/121: individual Risk Owner (a `User`, unlike
+   * Department.riskOwner which is free-text — see that entity's doc
+   * comment for why the two are deliberately different shapes). Never
+   * set via the generic `update()` — only through
+   * `RiskService.assignOwner`, which validates the target is an active
+   * user in the tenant and always audits the change.
+   */
+  ownerId: string | null;
+  /**
+   * ACT-122: the owner's N+1 for escalation purposes (ACT-125). Set only
+   * through `RiskService.assignSuperiorOwner`. `regles_critiques`
+   * "hiérarchie owner < superior_owner" is enforced as: a superior owner
+   * can never be the same person as the owner — see assignOwner/
+   * assignSuperiorOwner in RiskService for the bidirectional check.
+   */
+  superiorOwnerId: string | null;
   status: RiskStatus;
   createdAt: Date;
   updatedAt: Date;
