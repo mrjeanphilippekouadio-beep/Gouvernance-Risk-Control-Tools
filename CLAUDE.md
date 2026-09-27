@@ -253,12 +253,13 @@ dispatch. Avant de dispatcher un travail réel à un agent frais :
 2. **Signale les fichiers partagés à haut risque de conflit** :
    `backend/src/server.ts` et `backend/src/domain/permissions.ts` sont
    modifiés par quasiment chaque nouveau module (wiring + permissions).
-   Deux agents qui les éditent en parallèle sans coordination
-   produisent des conflits garantis — soit un seul agent à la fois y
-   touche, soit l'orchestrateur fait la fusion après coup (voir le
-   pattern utilisé pour séparer les commits RBAC/Feedback/Telegram :
-   éditer temporairement le fichier pour isoler ce qui appartient à
-   chaque commit, tester, committer, ré-appliquer le reste).
+   Dès que plus d'un agent A06 travaille en parallèle sur ce dépôt,
+   dispatcher chacun avec `isolation: "worktree"` (mode par défaut
+   depuis le batch 2) — jamais laisser deux agents éditer ces fichiers
+   dans le même répertoire de travail en même temps. L'orchestrateur
+   fusionne les worktrees un par un ensuite (conflit attendu et trivial
+   sur `permissions.ts` : deux blocs de nouvelles lignes en fin d'union
+   de types et de tableau).
 3. **Rappelle le pattern « paramètre optionnel »** pour ne jamais
    casser un test existant : quand un service gagne une nouvelle
    dépendance (ex. `Notifier` dans `FeedbackService`), elle doit être
@@ -274,6 +275,25 @@ dispatch. Avant de dispatcher un travail réel à un agent frais :
 6. **Demande une vérification avant de rapporter fini** :
    `npm run typecheck && npm test` côté backend, `npm run build` côté
    frontend, systématiquement avant de considérer une tâche terminée.
+   Un agent A06 n'écrit que des tests de **niveau 1** (cas heureux +
+   validations directement liées à son propre code) — la couverture des
+   cas limites inter-modules revient à A08 (QA), en aval, jamais au même
+   agent qui a écrit le code testé.
+7. **Consulte `.claude/agent-context/`** avant de rédiger le prompt de
+   dispatch : `SHARED_LOG.md` (grep le tag `@<rôle>` de l'agent que tu
+   dispatches) et `ACTION_ITEMS.md` (un point déjà ouvert sur son
+   périmètre ?). Après le dispatch, si l'agent a pris une décision qui
+   concerne le périmètre d'un autre rôle (même non dispatché), ajoute
+   une entrée dans `SHARED_LOG.md` avec le bon tag — c'est le mécanisme
+   de "mise en copie" qui permet à un agent jamais appelé de ne pas
+   repartir de zéro le jour où on l'active. Ce qui a une valeur au-delà
+   de ce seul projet (une convention, une règle d'autorisation) se
+   reporte en plus dans `~/.agentic-framework/agents/<rôle>/LEARNINGS.md`
+   (en dehors du dépôt — survit au projet, alimente le suivant).
+8. **Passages QA (A08) et sécurité (A10) après chaque batch livré/mergé**
+   — non optionnels, pas seulement en début de projet. Voir
+   `.claude/agent-context/ACTION_ITEMS.md` pour les passages déjà en
+   retard sur ce projet.
 
 Pour du travail répétitif sur ce même repo (ex. plusieurs modules du
 backlog en parallèle), un **fork** de la session en cours est presque

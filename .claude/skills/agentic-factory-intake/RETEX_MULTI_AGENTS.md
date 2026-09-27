@@ -512,7 +512,111 @@ plutôt que de le découvrir au premier `git push` refusé.
 
 ---
 
+## 8. Bilan d'utilisation des 16 agents et mise en place d'un dispositif de mémoire inter-agents (27/09/2026)
+
+### 8.1 Constat — utilisation très concentrée
+
+Sur les 16 agents ACF disponibles, **3 seulement ont réellement tourné**
+sur ce projet après 3 batches de modules :
+
+| Agent | Dispatches | Valeur observée |
+|---|---|---|
+| A06 — Dev Backend | 9 | Tout le code des 9 modules livrés, avec ses propres tests |
+| A10 — Security | 1 | 6 vulnérabilités réelles trouvées dans du code déjà en production |
+| A04 — UX Designer | 1 | Audit de 4 écrans → design system traduit en composants |
+
+**13 agents sur 16 n'ont jamais été appelés une seule fois**, dont deux
+touchent à des risques réels non couverts : A08 (QA — aucune revue
+indépendante des 9 modules livrés, uniquement les tests de l'agent qui a
+écrit le code) et A13 (Risk Manager — la méthodologie de scoring du
+cœur métier du produit n'a jamais été validée par un expert du domaine
+risque, alors que ce projet EST un outil de gestion des risques).
+
+Le détail agent par agent (rôle, tâches exécutées, pourquoi non
+utilisé, contexte manqué) est conservé dans
+`~/.agentic-framework/agents/<rôle>/LEARNINGS.md` — voir §8.3.
+
+### 8.2 Décisions prises pour chaque agent (directives du Product Owner, 27/09/2026)
+
+| Agent | Décision |
+|---|---|
+| A02 — Orchestrator | Le mettre "en copie" de toutes les décisions d'orchestration pour qu'il apprenne et accumule du contexte, en vue de pouvoir lui déléguer de vraies tâches avec cross-review à terme. |
+| A03 — Product Manager | Point de passage systématique avant tout nouveau batch, pour confirmer/challenger la priorisation du backlog. |
+| A04 — UX Designer | Un compte Figma existe (commentaires du PO exploitables par l'agent) ; charte graphique de l'outil pas encore statuée. |
+| A05 — Architect | En faire un point de contact régulier qui accompagne les tâches de l'orchestrateur en continu, pour qu'il prenne du contexte réel et devienne utilisable en aval. |
+| A06 — Dev Backend | Ne rédige plus la suite de tests complète — seulement des tests de niveau 1 ; le reste revient à A08 (QA). |
+| A07 — Dev DB | Peut faire les migrations simples seul avec cross-review ; une fois le track record établi sur quelques tâches, le spawn obligatoire par A06 peut sauter pour les cas non sensibles. |
+| A08 — QA Engineer | Confirmé : passage obligatoire après chaque batch. |
+| A09 — DevOps | En copie pour avoir le contexte, même sans mission active. |
+| A10 — Security | Confirmé : passage obligatoire après chaque batch. |
+| A13 — Risk Manager | Doit fournir des éléments de réponse à chaque arbitrage de méthodologie de risque et faire profiter le produit de sa véritable expertise, pour résoudre de vrais problèmes de gestion des risques. |
+| A14 — Compliance | Doit participer activement (même logique que A13), pas seulement être consulté après coup. |
+| A15 — Privacy | Doit participer activement (même logique que A13). |
+| A16 — Infrastructure | Doit participer activement (même logique que A13). |
+| A21 — Documentation | Reprend la main sur ce document RETEX à partir de maintenant — l'orchestrateur ne l'édite plus directement, seulement en cross-review. Le tenir en copie du contexte projet au fil de l'eau. |
+| A22 — Release Manager | Doit avoir du contexte au fil des batches pour mieux répondre le jour où on en a besoin. |
+| A23 — Audit | Lui donner le contexte du domaine Audit pour qu'il puisse prendre des décisions autonomes. |
+
+### 8.3 Dispositif mis en place — mémoire à deux niveaux
+
+Le Product Owner construit ici son propre framework agentique,
+avec l'objectif explicite d'amélioration continue : *"quand un projet
+finit, tout le retex sert à renforcer les agents du nouveau projet, et
+tout agent — nouveau ou en cours de projet — doit avoir la capacité
+d'apprendre."* Concrètement, deux niveaux de mémoire persistante ont été
+créés le 27/09/2026 :
+
+**Niveau 1 — contexte partagé intra-projet** (`.claude/agent-context/`
+dans ce dépôt, versionné avec le code, disparaît avec le projet) :
+- `SHARED_LOG.md` — journal chronologique append-only, chaque entrée
+  taguée `@<agent>` (une décision peut concerner plusieurs rôles à la
+  fois). N'importe qui peut grep son tag pour voir ce qui le concerne
+  sans lire tout l'historique.
+- `ACTION_ITEMS.md` — la liste vivante des points en attente d'une
+  intervention d'un agent précis, avec statut (jamais supprimé, marqué
+  `Résolu` avec date + lien).
+- C'est le mécanisme concret de "mise en copie" : un agent jamais
+  dispatché peut quand même savoir ce qui a été décidé sur son périmètre
+  et ce qu'on attend de lui, via ces deux fichiers.
+
+**Niveau 2 — apprentissage inter-projets**
+(`~/.agentic-framework/agents/<rôle>/LEARNINGS.md`, **en dehors de tout
+dépôt**, survit à la fin du projet) :
+- Un dossier par rôle ACF, avec deux sections : *Directives permanentes*
+  (des règles qui s'appliquent quel que soit le projet — ex. "A06 ne
+  rédige plus la suite de tests complète") et *Historique par projet*
+  (ce qui a été appris spécifiquement sur GRC Tools, daté).
+- Ce sont ces fichiers que le skill `agentic-factory-intake` devra lire
+  au démarrage d'un nouveau projet pour injecter les directives
+  permanentes pertinentes dans les system prompts générés ou le
+  briefing d'amorçage de chaque agent — c'est le mécanisme concret par
+  lequel "le retex sert à renforcer les agents du nouveau projet".
+
+**Ce que ça change dans le processus d'amorçage** (voir aussi
+`CLAUDE.md` § « Amorçage d'un agent ACF », mis à jour en conséquence) :
+avant chaque dispatch, l'orchestrateur consulte `SHARED_LOG.md` et
+`ACTION_ITEMS.md` pour le rôle concerné ; après chaque dispatch qui
+produit une décision dépassant le périmètre immédiat de la tâche,
+l'orchestrateur met à jour ces fichiers, et reporte dans
+`LEARNINGS.md` ce qui a une valeur au-delà de ce seul projet.
+
+**Limite honnête à noter** : un agent dispatché frais (pas un fork) n'a
+pas d'accès autonome à `~/.agentic-framework/` (hors du dépôt) ni de
+mémoire persistante d'un dispatch à l'autre — c'est toujours
+l'orchestrateur qui lit ces fichiers et injecte ce qui est pertinent
+dans le prompt de dispatch. Le "apprentissage" des agents n'est donc pas
+encore autonome ; il est médié par l'orchestrateur. Une vraie
+autonomie demanderait soit que le skill génère des system prompts
+enrichis directement à partir de `LEARNINGS.md` au moment de l'intake,
+soit que chaque agent reçoive une instruction explicite dans son propre
+prompt de dispatch pour aller lire son fichier — les deux sont
+faisables, ni l'un ni l'autre n'est encore automatisé.
+
+---
+
 *Document vivant — mis à jour après chaque batch de modules livré ou
 fusionné dans `main`. Ne pas archiver en fin de projet : c'est
 l'intrant direct de la prochaine révision du workbook ACF et du skill
-`agentic-factory-intake`.*
+`agentic-factory-intake`. À partir du 27/09/2026, la mise à jour de ce
+document est de la responsabilité de l'agent A21 (Documentation),
+l'orchestrateur n'y contribuant plus qu'en cross-review — voir §8.2.*
