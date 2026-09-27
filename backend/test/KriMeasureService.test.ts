@@ -242,4 +242,22 @@ describe("KriMeasureService.listForKri (ACT-138)", () => {
     const service = new KriMeasureService(inMemoryKriMeasureRepository(), fakeKriRepository([]), inMemoryAuditRepository());
     await expect(service.listForKri(actor, "missing")).rejects.toThrow(ValidationError);
   });
+
+  // QA-BATCH-1-3: no test in this suite previously seeded two tenants'
+  // data into the same shared repository instance — every other test
+  // above uses a single tenant, so a tenant-scoping regression (e.g. a
+  // dropped tenantId filter) would slip through unnoticed.
+  it("never mixes another tenant's measures into this tenant's history, even with the same kriId and a shared repository", async () => {
+    const measures = inMemoryKriMeasureRepository();
+    const kris = fakeKriRepository([kri({ tenantId: "tenant-1" }), kri({ tenantId: "tenant-2" })]);
+    const service = new KriMeasureService(measures, kris, inMemoryAuditRepository());
+
+    const tenant2Actor: AuthenticatedUser = { ...actor, tenantId: "tenant-2" };
+    await service.record(actor, { kriId: "kri-1", measureDate: new Date("2026-01-01"), value: 1, source: "manuel" }, "REQ-T1");
+    await service.record(tenant2Actor, { kriId: "kri-1", measureDate: new Date("2026-01-02"), value: 2, source: "manuel" }, "REQ-T2");
+
+    const tenant1History = await service.listForKri(actor, "kri-1");
+    expect(tenant1History.items).toHaveLength(1);
+    expect(tenant1History.items[0]?.value).toBe(1);
+  });
 });
