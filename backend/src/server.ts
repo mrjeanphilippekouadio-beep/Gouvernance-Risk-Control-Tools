@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
-import { filterKnownPermissions, type Permission } from "./domain/permissions.js";
+import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { pool } from "./infrastructure/database/pool.js";
 import { PostgresRiskRepository } from "./infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresAuditRepository } from "./infrastructure/database/postgres/PostgresAuditRepository.js";
@@ -20,6 +20,10 @@ import { PostgresKpiRepository } from "./infrastructure/database/postgres/Postgr
 import { PostgresKpiMeasureRepository } from "./infrastructure/database/postgres/PostgresKpiMeasureRepository.js";
 import { PostgresRiskAppetiteRepository } from "./infrastructure/database/postgres/PostgresRiskAppetiteRepository.js";
 import { PostgresRatingScaleRepository } from "./infrastructure/database/postgres/PostgresRatingScaleRepository.js";
+import { PostgresRiskEvaluationRepository } from "./infrastructure/database/postgres/PostgresRiskEvaluationRepository.js";
+import { PostgresKriRepository } from "./infrastructure/database/postgres/PostgresKriRepository.js";
+import { PostgresKriMeasureRepository } from "./infrastructure/database/postgres/PostgresKriMeasureRepository.js";
+import { PostgresUserRepository } from "./infrastructure/database/postgres/PostgresUserRepository.js";
 import { TelegramNotifier } from "./infrastructure/notifications/TelegramNotifier.js";
 import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
@@ -39,6 +43,10 @@ import { KpiService } from "./services/KpiService.js";
 import { KpiMeasureService } from "./services/KpiMeasureService.js";
 import { RiskAppetiteService } from "./services/RiskAppetiteService.js";
 import { RatingScaleService } from "./services/RatingScaleService.js";
+import { RiskEvaluationService } from "./services/RiskEvaluationService.js";
+import { KriService } from "./services/KriService.js";
+import { KriMeasureService } from "./services/KriMeasureService.js";
+import { UserService } from "./services/UserService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { controlsRouter } from "./api/v1/controls.routes.js";
@@ -54,6 +62,10 @@ import { kpisRouter } from "./api/v1/kpis.routes.js";
 import { kpiMeasuresRouter } from "./api/v1/kpiMeasures.routes.js";
 import { riskAppetiteRouter } from "./api/v1/riskAppetite.routes.js";
 import { ratingScalesRouter } from "./api/v1/ratingScales.routes.js";
+import { riskEvaluationsRouter } from "./api/v1/riskEvaluations.routes.js";
+import { krisRouter } from "./api/v1/kris.routes.js";
+import { kriMeasuresRouter } from "./api/v1/kriMeasures.routes.js";
+import { usersRouter } from "./api/v1/users.routes.js";
 import { permissionsRouter } from "./api/v1/permissions.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
@@ -86,6 +98,10 @@ const kpiRepository = new PostgresKpiRepository(pool);
 const kpiMeasureRepository = new PostgresKpiMeasureRepository(pool);
 const riskAppetiteRepository = new PostgresRiskAppetiteRepository(pool);
 const ratingScaleRepository = new PostgresRatingScaleRepository(pool);
+const riskEvaluationRepository = new PostgresRiskEvaluationRepository(pool);
+const kriRepository = new PostgresKriRepository(pool);
+const kriMeasureRepository = new PostgresKriMeasureRepository(pool);
+const userRepository = new PostgresUserRepository(pool);
 const notifier =
   env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID
     ? new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID)
@@ -109,23 +125,28 @@ const anomalyService = new AnomalyService(
   executionRepository,
   riskRepository,
 );
-const roleService = new RoleService(roleRepository, auditRepository);
+const roleService = new RoleService(roleRepository, auditRepository, userRepository);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
 const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository);
 const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository);
+const riskEvaluationService = new RiskEvaluationService(
+  riskEvaluationRepository,
+  auditRepository,
+  riskRepository,
+  ratingScaleRepository,
+  riskAppetiteRepository,
+);
+const kriService = new KriService(kriRepository, kriMeasureRepository, riskRepository, auditRepository);
+const kriMeasureService = new KriMeasureService(kriMeasureRepository, kriRepository, auditRepository, notifier);
+const userService = new UserService(userRepository, auditRepository, roleService);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
   env.GOOGLE_DRIVE_CREDENTIALS_PATH,
 );
 const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository, executionRepository);
-
-// Granted to every authenticated user regardless of role — there's no
-// invite/onboarding flow yet (ACT-091) that could assign it per-user,
-// and feedback capture is meant to be frictionless, not gated.
-const BASE_PERMISSIONS = ["feedback.create"];
 
 const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, async (email) => {
   // Real lookup against the `users` table from migration 002 — one user
@@ -199,6 +220,10 @@ app.use("/api/v1/kpis", authMiddleware(identityProvider), kpisRouter(kpiService)
 app.use("/api/v1/kpi-measures", authMiddleware(identityProvider), kpiMeasuresRouter(kpiMeasureService));
 app.use("/api/v1/appetite", authMiddleware(identityProvider), riskAppetiteRouter(riskAppetiteService));
 app.use("/api/v1/rating-scales", authMiddleware(identityProvider), ratingScalesRouter(ratingScaleService));
+app.use("/api/v1/risk-evaluations", authMiddleware(identityProvider), riskEvaluationsRouter(riskEvaluationService));
+app.use("/api/v1/kris", authMiddleware(identityProvider), krisRouter(kriService));
+app.use("/api/v1/kri-measures", authMiddleware(identityProvider), kriMeasuresRouter(kriMeasureService));
+app.use("/api/v1/users", authMiddleware(identityProvider), usersRouter(userService));
 
 app.use(errorHandler);
 

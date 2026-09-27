@@ -1,7 +1,14 @@
 import type { RoleRepository } from "../domain/repositories/RoleRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
+import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { CreateRoleInput, Role, UpdateRoleInput } from "../domain/entities/Role.js";
-import { ALL_PERMISSIONS, requirePermission, type Permission } from "../domain/permissions.js";
+import {
+  ALL_PERMISSIONS,
+  BASE_PERMISSIONS,
+  filterKnownPermissions,
+  requirePermission,
+  type Permission,
+} from "../domain/permissions.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
@@ -24,6 +31,7 @@ export class RoleService {
   constructor(
     private readonly roles: RoleRepository,
     private readonly audit: AuditRepository,
+    private readonly users?: UserRepository,
   ) {}
 
   async create(
@@ -188,5 +196,29 @@ export class RoleService {
   async listForUser(actor: AuthenticatedUser, userId: string): Promise<Role[]> {
     requirePermission(actor, "role.read");
     return this.roles.listForUser(actor.tenantId, userId);
+  }
+
+  /**
+   * SEC-005 (second half): the RBAC role list alone (`listForUser`) isn't
+   * what actually gates a request — server.ts's identity resolver unions
+   * it with `users.roles` (legacy/bootstrap grants) and BASE_PERMISSIONS
+   * to get the permission set `requirePermission` checks against. This
+   * mirrors that same computation so an admin can see what a user can
+   * *actually* do, not just which named roles they hold.
+   */
+  async getEffectivePermissions(actor: AuthenticatedUser, userId: string): Promise<Permission[]> {
+    requirePermission(actor, "role.read");
+    if (!this.users) {
+      throw new Error("RoleService.getEffectivePermissions requires a UserRepository");
+    }
+
+    const user = await this.users.getById(actor.tenantId, userId);
+    if (!user) throw new NotFoundError("User", userId);
+
+    const roles = await this.roles.listForUser(actor.tenantId, userId);
+    const legacyPermissions = filterKnownPermissions(user.roles);
+    const rolePermissions = roles.flatMap((r) => r.permissions);
+
+    return Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePermissions]));
   }
 }

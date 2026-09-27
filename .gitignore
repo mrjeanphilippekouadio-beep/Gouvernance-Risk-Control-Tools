@@ -32,3 +32,6 @@ secrets/
 # Google Cloud / gcloud local state
 .gcloud/
 
+# Claude Code agent git worktrees (isolated copies for parallel subagents)
+.claude/worktrees/
+
