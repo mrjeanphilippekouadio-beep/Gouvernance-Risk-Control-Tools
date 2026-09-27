@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { RisksPage } from "./features/risks/RisksPage";
+import { FeedbackWidget } from "./features/feedback/FeedbackWidget";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import "./App.css";
 
@@ -13,13 +14,18 @@ function App() {
 
   if (token) {
     return (
-      <main>
-        <h1>GRC Tools</h1>
-        <button type="button" onClick={idToken ? signOut : () => setDevToken("")}>
-          Déconnexion
-        </button>
-        <RisksPage token={token} />
-      </main>
+      <>
+        <main>
+          <h1>GRC Tools</h1>
+          <button type="button" onClick={idToken ? signOut : () => setDevToken("")}>
+            Déconnexion
+          </button>
+          <RisksPage token={token} />
+        </main>
+        {/* Rendered at the shell level, not per-page, so every
+            authenticated page gets the feedback button for free. */}
+        <FeedbackWidget token={token} />
+      </>
     );
   }
 

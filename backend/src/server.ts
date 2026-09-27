@@ -14,6 +14,7 @@ import { PostgresAnomalyRepository } from "./infrastructure/database/postgres/Po
 import { PostgresDepartmentRepository } from "./infrastructure/database/postgres/PostgresDepartmentRepository.js";
 import { PostgresProcessRepository } from "./infrastructure/database/postgres/PostgresProcessRepository.js";
 import { PostgresRoleRepository } from "./infrastructure/database/postgres/PostgresRoleRepository.js";
+import { PostgresFeedbackRepository } from "./infrastructure/database/postgres/PostgresFeedbackRepository.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
@@ -26,6 +27,7 @@ import { DepartmentService } from "./services/DepartmentService.js";
 import { ProcessService } from "./services/ProcessService.js";
 import { AuditLogService } from "./services/AuditLogService.js";
 import { RoleService } from "./services/RoleService.js";
+import { FeedbackService } from "./services/FeedbackService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { controlsRouter } from "./api/v1/controls.routes.js";
@@ -36,6 +38,7 @@ import { departmentsRouter } from "./api/v1/departments.routes.js";
 import { processesRouter } from "./api/v1/processes.routes.js";
 import { auditLogRouter } from "./api/v1/auditLog.routes.js";
 import { rolesRouter } from "./api/v1/roles.routes.js";
+import { feedbackRouter } from "./api/v1/feedback.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
@@ -62,6 +65,7 @@ const anomalyRepository = new PostgresAnomalyRepository(pool);
 const departmentRepository = new PostgresDepartmentRepository(pool);
 const processRepository = new PostgresProcessRepository(pool);
 const roleRepository = new PostgresRoleRepository(pool);
+const feedbackRepository = new PostgresFeedbackRepository(pool);
 
 const riskService = new RiskService(riskRepository, auditRepository);
 const departmentService = new DepartmentService(departmentRepository, auditRepository);
@@ -76,6 +80,7 @@ const effectivenessService = new ControlEffectivenessService(
 );
 const anomalyService = new AnomalyService(anomalyRepository, auditRepository);
 const roleService = new RoleService(roleRepository, auditRepository);
+const feedbackService = new FeedbackService(feedbackRepository, auditRepository);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
@@ -136,6 +141,7 @@ app.use("/api/v1/departments", authMiddleware(identityProvider), departmentsRout
 app.use("/api/v1/processes", authMiddleware(identityProvider), processesRouter(processService));
 app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(auditLogService));
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
+app.use("/api/v1/feedback", authMiddleware(identityProvider), feedbackRouter(feedbackService));
 
 app.use(errorHandler);
 

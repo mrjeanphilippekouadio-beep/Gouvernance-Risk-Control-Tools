@@ -40,7 +40,10 @@ export type Permission =
   | "role.create"
   | "role.update"
   | "role.delete"
-  | "role.assign";
+  | "role.assign"
+  | "feedback.create"
+  | "feedback.read"
+  | "feedback.update";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -82,6 +85,9 @@ export const ALL_PERMISSIONS: Permission[] = [
   "role.update",
   "role.delete",
   "role.assign",
+  "feedback.create",
+  "feedback.read",
+  "feedback.update",
 ];
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
