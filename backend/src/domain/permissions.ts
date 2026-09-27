@@ -73,7 +73,8 @@ export type Permission =
   | "actionplan.read"
   | "actionplan.create"
   | "actionplan.update"
-  | "actionplan.validate";
+  | "actionplan.validate"
+  | "cartography.read";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -147,6 +148,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "actionplan.create",
   "actionplan.update",
   "actionplan.validate",
+  "cartography.read",
 ];
 
 /**
