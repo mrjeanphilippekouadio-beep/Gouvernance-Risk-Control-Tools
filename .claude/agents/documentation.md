@@ -2,7 +2,8 @@
 name: documentation
 description: "[À RENSEIGNER]"
 model: haiku
-tools: [read_code, read_schema, write_doc, read_yaml]
+tools: [Read, Write, Edit, Grep, Glob]
+acf_tools_conceptual: [read_code, read_schema, write_doc, read_yaml]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A26
 acf_model_exact: claude-haiku-4-5
