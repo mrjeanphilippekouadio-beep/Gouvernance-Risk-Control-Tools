@@ -1,0 +1,1658 @@
+actions:
+# Backlog fonctionnel GRC Tools — généré depuis la feuille 8 (GRC ACTIONS)
+# de docs/acf/ACF_GRC_Tools_v2_COMPLET.xlsx. Source de vérité : le classeur Excel,
+# pas ce fichier — regénérer ce fichier si la feuille 8 change.
+#
+# Chaque agent lit ce backlog pour savoir ce qu’il doit produire :
+#  - A03 (Product Manager) : traduit chaque action en user story + critères
+#  - A06 (Dev Backend)     : implémente l’endpoint (http_sql) + pattern_db
+#  - A07 (Dev DB)          : crée la migration si nouvelle table/colonne
+#  - A08 (QA)              : écrit les tests couvrant regles_critiques
+#  - A14 (Compliance)      : vérifie le cadre réglementaire de l’action
+#  - A23 (Audit)           : garantit que l’action est journalisée (append-only)
+#
+# Filtrer mvp: true pour le périmètre MVP.
+
+
+
+# ── Risk ──
+
+  - id: ACT-001
+    domaine: "Risk"
+    acteur: "Utilisateur"
+    action: "Créer un risque"
+    http_sql: "POST /risks — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "tenant_id obligatoire"
+    statut: "À développer"
+
+  - id: ACT-002
+    domaine: "Risk"
+    acteur: "Utilisateur"
+    action: "Modifier un risque (scoring, statut)"
+    http_sql: "PUT /risks/:id — UPDATE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "buildUpdateSet, tenant_id"
+    statut: "À développer"
+
+  - id: ACT-003
+    domaine: "Risk"
+    acteur: "Utilisateur"
+    action: "Supprimer un risque (soft)"
+    http_sql: "DELETE /risks/:id → deleted_at"
+    pattern_db: "soft-delete"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Jamais DELETE physique"
+    statut: "À développer"
+
+  - id: ACT-004
+    domaine: "Risk"
+    acteur: "Agent A13"
+    action: "Calculer la matrice de risques"
+    http_sql: "Lecture + scoring interne"
+    pattern_db: "read-only"
+    agents_responsables: [A13]
+    mvp: true
+    regles_critiques: "Probabilité × Impact"
+    statut: "À développer"
+
+  - id: ACT-005
+    domaine: "Risk"
+    acteur: "Utilisateur"
+    action: "Lier un risque à un contrôle"
+    http_sql: "POST /risks/:id/controls"
+    pattern_db: "relation"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "tenant_id sur la relation"
+    statut: "À développer"
+
+
+# ── Evidence ──
+
+  - id: ACT-010
+    domaine: "Evidence"
+    acteur: "Utilisateur"
+    action: "Uploader une preuve (fichier)"
+    http_sql: "POST /evidences — Google Drive API"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A20]
+    mvp: true
+    regles_critiques: "Google Drive API token"
+    statut: "À développer"
+
+  - id: ACT-011
+    domaine: "Evidence"
+    acteur: "Utilisateur"
+    action: "Lier une preuve à un contrôle"
+    http_sql: "POST /evidences/:id/link"
+    pattern_db: "relation"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "tenant_id"
+    statut: "À développer"
+
+  - id: ACT-012
+    domaine: "Evidence"
+    acteur: "Utilisateur"
+    action: "Archiver une preuve"
+    http_sql: "PATCH /evidences/:id/archive"
+    pattern_db: "soft-delete"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "deleted_at"
+    statut: "À développer"
+
+
+# ── Control ──
+
+  - id: ACT-020
+    domaine: "Control"
+    acteur: "Utilisateur"
+    action: "Créer un contrôle interne"
+    http_sql: "POST /controls — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A14]
+    mvp: true
+    regles_critiques: "tenant_id, cadre réglementaire"
+    statut: "À développer"
+
+  - id: ACT-021
+    domaine: "Control"
+    acteur: "Utilisateur"
+    action: "Modifier un contrôle"
+    http_sql: "PUT /controls/:id"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "buildUpdateSet"
+    statut: "À développer"
+
+  - id: ACT-022
+    domaine: "Control"
+    acteur: "Utilisateur"
+    action: "Désactiver un contrôle"
+    http_sql: "PATCH /controls/:id/disable"
+    pattern_db: "soft-delete"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "deleted_at"
+    statut: "À développer"
+
+  - id: ACT-023
+    domaine: "Control"
+    acteur: "Agent A14"
+    action: "Vérifier la conformité d'un contrôle"
+    http_sql: "Lecture + check cadre"
+    pattern_db: "read-only"
+    agents_responsables: [A14]
+    mvp: true
+    regles_critiques: "Référence cadre obligatoire"
+    statut: "À développer"
+
+
+# ── ControlExecution ──
+
+  - id: ACT-030
+    domaine: "ControlExecution"
+    acteur: "Exécuteur"
+    action: "Enregistrer une exécution de contrôle"
+    http_sql: "POST /control-executions — INSERT"
+    pattern_db: "append-only"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Jamais UPDATE/DELETE. Exécuteur ≠ validateur"
+    statut: "À développer"
+
+  - id: ACT-031
+    domaine: "ControlExecution"
+    acteur: "Validateur"
+    action: "Valider une exécution"
+    http_sql: "POST /control-executions/:id/validate"
+    pattern_db: "append-only"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Maker-checker : validateur ≠ exécuteur"
+    statut: "À développer"
+
+
+# ── Effectiveness ──
+
+  - id: ACT-040
+    domaine: "Effectiveness"
+    acteur: "Évaluateur"
+    action: "Créer une évaluation d'efficacité"
+    http_sql: "POST /effectiveness — INSERT"
+    pattern_db: "append-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Append-only. Jamais de modification"
+    statut: "À développer"
+
+  - id: ACT-041
+    domaine: "Effectiveness"
+    acteur: "Agent A13"
+    action: "Agréger les scores d'efficacité"
+    http_sql: "Lecture + scoring"
+    pattern_db: "read-only"
+    agents_responsables: [A13]
+    mvp: true
+    regles_critiques: "Corrélation avec Risk"
+    statut: "À développer"
+
+
+# ── Anomaly ──
+
+  - id: ACT-050
+    domaine: "Anomaly"
+    acteur: "Utilisateur / Système"
+    action: "Ouvrir une anomalie"
+    http_sql: "POST /anomalies — INSERT status=open"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "tenant_id, statut initial = open"
+    statut: "À développer"
+
+  - id: ACT-051
+    domaine: "Anomaly"
+    acteur: "Responsable"
+    action: "Prendre en charge"
+    http_sql: "PATCH /anomalies/:id — status=in_progress"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Transition valide : open→in_progress"
+    statut: "À développer"
+
+  - id: ACT-052
+    domaine: "Anomaly"
+    acteur: "Responsable"
+    action: "Résoudre une anomalie"
+    http_sql: "PATCH /anomalies/:id — status=resolved"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Transition valide : in_progress→resolved"
+    statut: "À développer"
+
+  - id: ACT-053
+    domaine: "Anomaly"
+    acteur: "Superviseur"
+    action: "Fermer une anomalie"
+    http_sql: "PATCH /anomalies/:id — status=closed"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Transition valide : resolved→closed"
+    statut: "À développer"
+
+  - id: ACT-054
+    domaine: "Anomaly"
+    acteur: "Système"
+    action: "Escalader une anomalie"
+    http_sql: "PATCH /anomalies/:id — priority=HIGH"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Notification déclenchée"
+    statut: "À développer"
+
+
+# ── Department ──
+
+  - id: ACT-060
+    domaine: "Department"
+    acteur: "Admin"
+    action: "Créer un département"
+    http_sql: "POST /departments — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "tenant_id"
+    statut: "À développer"
+
+  - id: ACT-061
+    domaine: "Department"
+    acteur: "Admin"
+    action: "Modifier un département"
+    http_sql: "PUT /departments/:id"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "buildUpdateSet"
+    statut: "À développer"
+
+
+# ── Process ──
+
+  - id: ACT-062
+    domaine: "Process"
+    acteur: "Admin"
+    action: "Créer un processus métier"
+    http_sql: "POST /processes — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "tenant_id, lien département"
+    statut: "À développer"
+
+  - id: ACT-063
+    domaine: "Process"
+    acteur: "Admin"
+    action: "Modifier un processus"
+    http_sql: "PUT /processes/:id"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "buildUpdateSet"
+    statut: "À développer"
+
+
+# ── AuditLog ──
+
+  - id: ACT-070
+    domaine: "AuditLog"
+    acteur: "Système"
+    action: "Logger chaque action métier"
+    http_sql: "INSERT INTO audit_logs — automatique"
+    pattern_db: "append-only"
+    agents_responsables: [A23, A06]
+    mvp: true
+    regles_critiques: "Append-only. Jamais UPDATE/DELETE. Pas de PII en clair"
+    statut: "À développer"
+
+  - id: ACT-071
+    domaine: "AuditLog"
+    acteur: "Auditeur"
+    action: "Consulter l'audit trail"
+    http_sql: "GET /audit-logs (filtres : user, action, date, tenant)"
+    pattern_db: "read-only"
+    agents_responsables: [A23]
+    mvp: true
+    regles_critiques: "tenant_id en filtre obligatoire"
+    statut: "À développer"
+
+  - id: ACT-072
+    domaine: "AuditLog"
+    acteur: "Agent A15"
+    action: "Purge RGPD des logs expirés"
+    http_sql: "DELETE ciblé sur audit_logs (données expirées)"
+    pattern_db: "soft-delete → purge"
+    agents_responsables: [A15]
+    mvp: false
+    regles_critiques: "Approbation HUMAN obligatoire avant purge"
+    statut: "À planifier"
+
+
+# ── Dashboard ──
+
+  - id: ACT-080
+    domaine: "Dashboard"
+    acteur: "Utilisateur"
+    action: "Vue consolidée des risques"
+    http_sql: "GET /dashboard/risks"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06]
+    mvp: true
+    regles_critiques: "Motion UI. Filtres tenant"
+    statut: "À développer"
+
+  - id: ACT-081
+    domaine: "Dashboard"
+    acteur: "Utilisateur"
+    action: "Vue des anomalies en cours"
+    http_sql: "GET /dashboard/anomalies?status=open,in_progress"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06]
+    mvp: true
+    regles_critiques: "Temps réel ou cache court"
+    statut: "À développer"
+
+  - id: ACT-082
+    domaine: "Dashboard"
+    acteur: "Utilisateur"
+    action: "Rapport de conformité"
+    http_sql: "GET /reports/compliance?framework=BCEAO"
+    pattern_db: "read-only"
+    agents_responsables: [A14, A06]
+    mvp: true
+    regles_critiques: "Cadre obligatoire en param"
+    statut: "À développer"
+
+  - id: ACT-083
+    domaine: "Dashboard"
+    acteur: "Utilisateur"
+    action: "Export PDF / Excel"
+    http_sql: "POST /exports"
+    pattern_db: "read-only"
+    agents_responsables: [A06, A11]
+    mvp: false
+    regles_critiques: "Google Drive API ou download direct"
+    statut: "À planifier"
+
+  - id: ACT-084
+    domaine: "Dashboard"
+    acteur: "Utilisateur"
+    action: "Importer le logo client"
+    http_sql: "POST /settings/branding (multipart image)"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A04]
+    mvp: true
+    regles_critiques: "Image stockée, appliquée au thème"
+    statut: "À développer"
+
+
+# ── Auth ──
+
+  - id: ACT-090
+    domaine: "Auth"
+    acteur: "Utilisateur"
+    action: "Connexion SSO Google"
+    http_sql: "OAuth2 Google Identity Services"
+    pattern_db: "auth-flow"
+    agents_responsables: [A06, A09]
+    mvp: true
+    regles_critiques: "JWT Google. tenant_id résolu à la connexion"
+    statut: "À développer"
+
+  - id: ACT-091
+    domaine: "Auth"
+    acteur: "Admin"
+    action: "Inviter un utilisateur"
+    http_sql: "POST /users/invite"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "tenant_id hérité de l'organisation"
+    statut: "À développer"
+
+  - id: ACT-092
+    domaine: "Auth"
+    acteur: "Admin"
+    action: "Désactiver un utilisateur"
+    http_sql: "PATCH /users/:id/disable"
+    pattern_db: "soft-delete"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "deleted_at. Sessions révoquées"
+    statut: "À développer"
+
+  - id: ACT-093
+    domaine: "Auth"
+    acteur: "Admin"
+    action: "Définir les rôles (RBAC)"
+    http_sql: "POST /users/:id/roles"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A10]
+    mvp: true
+    regles_critiques: "Maker-checker : admin ≠ attribueur de ses propres rôles"
+    statut: "À développer"
+
+
+# ── UserManagement ──
+
+  - id: ACT-100
+    domaine: "UserManagement"
+    acteur: "Admin"
+    action: "Créer un compte utilisateur (email, nom, rôle, entité)"
+    http_sql: "POST /users — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A10]
+    mvp: true
+    regles_critiques: "tenant_id obligatoire ; email unique par tenant ; rôle initial obligatoire"
+    statut: "À développer"
+
+  - id: ACT-101
+    domaine: "UserManagement"
+    acteur: "Admin"
+    action: "Modifier le profil utilisateur (nom, fonction, entité)"
+    http_sql: "PUT /users/:id — UPDATE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "buildUpdateSet ; tenant_id vérifié"
+    statut: "À développer"
+
+  - id: ACT-102
+    domaine: "UserManagement"
+    acteur: "Admin"
+    action: "Suspendre un utilisateur (accès bloqué, données conservées)"
+    http_sql: "PATCH /users/:id/suspend"
+    pattern_db: "soft-delete"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "deleted_at ; sessions révoquées ; maker-checker si auto-suspension impossible"
+    statut: "À développer"
+
+  - id: ACT-103
+    domaine: "UserManagement"
+    acteur: "Admin"
+    action: "Réactiver un utilisateur suspendu"
+    http_sql: "PATCH /users/:id/reactivate"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Audit log de réactivation obligatoire"
+    statut: "À développer"
+
+  - id: ACT-104
+    domaine: "UserManagement"
+    acteur: "Utilisateur"
+    action: "Consulter son propre profil"
+    http_sql: "GET /users/me"
+    pattern_db: "read-only"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Seules ses propres données ; pas de cross-tenant"
+    statut: "À développer"
+
+  - id: ACT-105
+    domaine: "UserManagement"
+    acteur: "Admin"
+    action: "Lister les utilisateurs du tenant"
+    http_sql: "GET /users?tenant_id=..."
+    pattern_db: "read-only"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "tenant_id en filtre obligatoire ; pagination"
+    statut: "À développer"
+
+  - id: ACT-106
+    domaine: "UserManagement"
+    acteur: "Admin"
+    action: "Exporter la liste des utilisateurs (Excel / CSV)"
+    http_sql: "GET /users/export"
+    pattern_db: "read-only"
+    agents_responsables: [A06, A11]
+    mvp: false
+    regles_critiques: "Droits admin + log export"
+    statut: "À planifier"
+
+  - id: ACT-107
+    domaine: "UserManagement"
+    acteur: "Système"
+    action: "Révoquer toutes les sessions actives d'un utilisateur"
+    http_sql: "DELETE /sessions?user_id=..."
+    pattern_db: "soft-delete"
+    agents_responsables: [A06, A10]
+    mvp: true
+    regles_critiques: "Déclenchée automatiquement sur suspension ; JWT invalidation"
+    statut: "À développer"
+
+
+# ── RBAC ──
+
+  - id: ACT-110
+    domaine: "RBAC"
+    acteur: "Admin"
+    action: "Créer un rôle personnalisé (nom, description, permissions)"
+    http_sql: "POST /roles — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A10]
+    mvp: true
+    regles_critiques: "tenant_id ; pas de doublon de nom ; maker-checker obligatoire"
+    statut: "À développer"
+
+  - id: ACT-111
+    domaine: "RBAC"
+    acteur: "Admin"
+    action: "Modifier un rôle existant (description, permissions associées)"
+    http_sql: "PUT /roles/:id — UPDATE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A10]
+    mvp: true
+    regles_critiques: "buildUpdateSet ; audit log obligatoire"
+    statut: "À développer"
+
+  - id: ACT-112
+    domaine: "RBAC"
+    acteur: "Admin"
+    action: "Désactiver un rôle (soft-delete, ne pas supprimer)"
+    http_sql: "PATCH /roles/:id/disable"
+    pattern_db: "soft-delete"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Vérifier qu'aucun utilisateur actif n'est sur ce rôle avant désactivation"
+    statut: "À développer"
+
+  - id: ACT-113
+    domaine: "RBAC"
+    acteur: "Admin"
+    action: "Attribuer un ou plusieurs rôles à un utilisateur"
+    http_sql: "POST /users/:id/roles"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A10]
+    mvp: true
+    regles_critiques: "Maker-checker : l'admin ne peut pas s'attribuer ses propres rôles"
+    statut: "À développer"
+
+  - id: ACT-114
+    domaine: "RBAC"
+    acteur: "Admin"
+    action: "Retirer un rôle d'un utilisateur"
+    http_sql: "DELETE /users/:id/roles/:role_id → soft"
+    pattern_db: "soft-delete"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Audit log ; vérifier qu'il reste au moins un rôle actif"
+    statut: "À développer"
+
+  - id: ACT-115
+    domaine: "RBAC"
+    acteur: "Utilisateur / Admin"
+    action: "Consulter les rôles et permissions associés à un compte"
+    http_sql: "GET /users/:id/roles"
+    pattern_db: "read-only"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Lecture cross-tenant interdite ; filtre tenant_id"
+    statut: "À développer"
+
+  - id: ACT-116
+    domaine: "RBAC"
+    acteur: "Admin"
+    action: "Définir les permissions granulaires (lecture/écriture/validation/admin) par ressource"
+    http_sql: "POST /permissions — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A10]
+    mvp: true
+    regles_critiques: "Modèle IAM_PERMISSIONS : Type cible (rôle/utilisateur), Ressource, droits boolean"
+    statut: "À développer"
+
+  - id: ACT-117
+    domaine: "RBAC"
+    acteur: "Système"
+    action: "Vérifier les droits d'un utilisateur avant chaque action (middleware)"
+    http_sql: "Middleware auth — lecture permissions"
+    pattern_db: "read-only"
+    agents_responsables: [A06, A10]
+    mvp: true
+    regles_critiques: "tenant_id + rôle + ressource → autorisé/refusé ; 403 si refus"
+    statut: "À développer"
+
+  - id: ACT-118
+    domaine: "RBAC"
+    acteur: "Admin"
+    action: "Consulter la matrice des accès (IAM) par rôle et ressource"
+    http_sql: "GET /iam/matrix"
+    pattern_db: "read-only"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Vue lisible, exportable ; filtre tenant_id"
+    statut: "À développer"
+
+
+# ── RiskOwnership ──
+
+  - id: ACT-120
+    domaine: "RiskOwnership"
+    acteur: "Admin / Risk Manager"
+    action: "Désigner un Risk Owner pour un risque"
+    http_sql: "PATCH /risks/:id — owner_id"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Owner doit être un utilisateur actif du même tenant ; audit log obligatoire"
+    statut: "À développer"
+
+  - id: ACT-121
+    domaine: "RiskOwnership"
+    acteur: "Admin / Risk Manager"
+    action: "Changer le Risk Owner d'un risque (transfert de responsabilité)"
+    http_sql: "PATCH /risks/:id — owner_id nouveau"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Notification à l'ancien et au nouvel owner ; append audit log"
+    statut: "À développer"
+
+  - id: ACT-122
+    domaine: "RiskOwnership"
+    acteur: "Admin"
+    action: "Désigner un Risk Owner Supérieur (N+1) rattaché à un risque ou une catégorie"
+    http_sql: "PATCH /risks/:id — superior_owner_id"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Hiérarchie owner < superior_owner ; escalade automatique si seuil atteint"
+    statut: "À développer"
+
+  - id: ACT-123
+    domaine: "RiskOwnership"
+    acteur: "Admin"
+    action: "Désigner un Pilote de risque par département"
+    http_sql: "PATCH /departments/:id — risk_pilot_id"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Pilote = utilisateur actif ; date de désignation enregistrée ; désignateur tracé"
+    statut: "À développer"
+
+  - id: ACT-124
+    domaine: "RiskOwnership"
+    acteur: "Risk Owner"
+    action: "Consulter les risques sous ma responsabilité (vue personnalisée Risk Owner)"
+    http_sql: "GET /risks?owner_id=me"
+    pattern_db: "read-only"
+    agents_responsables: [A06, A04]
+    mvp: true
+    regles_critiques: "Vue dashboard dédiée Risk Owner ; filtres entité/catégorie/score"
+    statut: "À développer"
+
+  - id: ACT-125
+    domaine: "RiskOwnership"
+    acteur: "Risk Owner"
+    action: "Escalader un risque vers le Risk Owner Supérieur"
+    http_sql: "POST /risks/:id/escalate"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Notification au superior_owner ; motif d'escalade obligatoire ; audit log"
+    statut: "À développer"
+
+  - id: ACT-126
+    domaine: "RiskOwnership"
+    acteur: "Risk Owner"
+    action: "Déléguer temporairement la gestion d'un risque à un autre utilisateur"
+    http_sql: "POST /risks/:id/delegate"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: false
+    regles_critiques: "Date de fin de délégation obligatoire ; le délégant reste responsable"
+    statut: "À planifier"
+
+  - id: ACT-127
+    domaine: "RiskOwnership"
+    acteur: "Admin"
+    action: "Consulter la liste des Risk Owners par entité et département"
+    http_sql: "GET /risk-owners?tenant_id=..."
+    pattern_db: "read-only"
+    agents_responsables: [A06, A04]
+    mvp: true
+    regles_critiques: "Vue admin : owner, risques associés, score max, statut"
+    statut: "À développer"
+
+
+# ── KRI ──
+
+  - id: ACT-130
+    domaine: "KRI"
+    acteur: "Risk Manager / Admin"
+    action: "Créer un KRI (intitulé, formule, seuils vert/orange/rouge, fréquence)"
+    http_sql: "POST /kris — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "tenant_id ; lien risque obligatoire ; seuils Vert < Orange < Rouge"
+    statut: "À développer"
+
+  - id: ACT-131
+    domaine: "KRI"
+    acteur: "Risk Manager"
+    action: "Modifier un KRI (seuils, fréquence, description)"
+    http_sql: "PUT /kris/:id — UPDATE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "buildUpdateSet ; version méthodologique tracée"
+    statut: "À développer"
+
+  - id: ACT-132
+    domaine: "KRI"
+    acteur: "Risk Manager"
+    action: "Désactiver un KRI (soft-delete)"
+    http_sql: "PATCH /kris/:id/disable"
+    pattern_db: "soft-delete"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "deleted_at ; historique conservé"
+    statut: "À développer"
+
+  - id: ACT-133
+    domaine: "KRI"
+    acteur: "Pilote de risque / Système"
+    action: "Enregistrer une mesure de KRI (valeur à une date donnée)"
+    http_sql: "POST /kri-measures — INSERT"
+    pattern_db: "append-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Append-only ; jamais UPDATE/DELETE ; date_mesure + valeur + source"
+    statut: "À développer"
+
+  - id: ACT-134
+    domaine: "KRI"
+    acteur: "Système / Agent A13"
+    action: "Calculer le statut d'un KRI (Vert / Orange / Rouge) selon les seuils"
+    http_sql: "Lecture mesure + calcul seuil"
+    pattern_db: "read-only"
+    agents_responsables: [A13]
+    mvp: true
+    regles_critiques: "Statut = comparaison valeur vs seuils ; horodaté"
+    statut: "À développer"
+
+  - id: ACT-135
+    domaine: "KRI"
+    acteur: "Système"
+    action: "Déclencher une alerte automatique si KRI dépasse seuil Orange ou Rouge"
+    http_sql: "POST /notifications — alerte KRI"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Notification Risk Owner + superior_owner ; seuil configurable"
+    statut: "À développer"
+
+  - id: ACT-136
+    domaine: "KRI"
+    acteur: "Risk Manager / Admin"
+    action: "Lier un KRI à un risque du registre"
+    http_sql: "POST /kris/:id/risk — relation"
+    pattern_db: "relation"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Un KRI peut couvrir plusieurs risques ; tenant_id sur la relation"
+    statut: "À développer"
+
+  - id: ACT-137
+    domaine: "KRI"
+    acteur: "Utilisateur autorisé"
+    action: "Consulter le tableau de bord KRI (statuts, tendances, alertes actives)"
+    http_sql: "GET /dashboard/kri"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06, A13]
+    mvp: true
+    regles_critiques: "Filtres : entité, département, statut (Vert/Orange/Rouge), période"
+    statut: "À développer"
+
+  - id: ACT-138
+    domaine: "KRI"
+    acteur: "Utilisateur autorisé"
+    action: "Consulter l'historique des mesures d'un KRI"
+    http_sql: "GET /kri-measures?kri_id=...&from=...&to=..."
+    pattern_db: "read-only"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Pagination ; tenant_id obligatoire"
+    statut: "À développer"
+
+  - id: ACT-139
+    domaine: "KRI"
+    acteur: "Risk Manager / Auditeur"
+    action: "Exporter les KRI et leurs mesures (Excel / PDF)"
+    http_sql: "GET /kris/export"
+    pattern_db: "read-only"
+    agents_responsables: [A06, A11]
+    mvp: false
+    regles_critiques: "Droits Risk Manager minimum ; log export"
+    statut: "À planifier"
+
+
+# ── KPI ──
+
+  - id: ACT-140
+    domaine: "KPI"
+    acteur: "Admin / Manager"
+    action: "Créer un KPI (intitulé, objectif cible, unité, fréquence, responsable)"
+    http_sql: "POST /kpis — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: false
+    regles_critiques: "tenant_id ; lien département ou processus ; cible chiffrée obligatoire"
+    statut: "À planifier"
+
+  - id: ACT-141
+    domaine: "KPI"
+    acteur: "Manager / Pilote"
+    action: "Enregistrer une valeur de KPI à une période donnée"
+    http_sql: "POST /kpi-measures — INSERT"
+    pattern_db: "append-only"
+    agents_responsables: [A06]
+    mvp: false
+    regles_critiques: "Append-only ; période + valeur + commentaire"
+    statut: "À planifier"
+
+  - id: ACT-142
+    domaine: "KPI"
+    acteur: "Système"
+    action: "Calculer le statut d'un KPI (Atteint / En risque / Non atteint)"
+    http_sql: "Lecture mesure + comparaison cible"
+    pattern_db: "read-only"
+    agents_responsables: [A06]
+    mvp: false
+    regles_critiques: "Statut selon % d'atteinte de la cible"
+    statut: "À planifier"
+
+  - id: ACT-143
+    domaine: "KPI"
+    acteur: "Utilisateur"
+    action: "Consulter le tableau de bord KPI par département et processus"
+    http_sql: "GET /dashboard/kpi"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06]
+    mvp: false
+    regles_critiques: "Filtres entité/département/période"
+    statut: "À planifier"
+
+  - id: ACT-144
+    domaine: "KPI"
+    acteur: "Admin"
+    action: "Lier un KPI à un département ou un processus"
+    http_sql: "POST /kpis/:id/link"
+    pattern_db: "relation"
+    agents_responsables: [A06]
+    mvp: false
+    regles_critiques: "tenant_id sur la relation"
+    statut: "À planifier"
+
+
+# ── RiskEvaluation ──
+
+  - id: ACT-150
+    domaine: "RiskEvaluation"
+    acteur: "Risk Owner / Évaluateur"
+    action: "Initier une évaluation de risque (ad hoc ou annuelle)"
+    http_sql: "POST /risk-evaluations — INSERT statut=BROUILLON"
+    pattern_db: "append-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Append-only ; type_evaluation (ad_hoc / annuelle / anticipée) ; tenant_id"
+    statut: "À développer"
+
+  - id: ACT-151
+    domaine: "RiskEvaluation"
+    acteur: "Risk Owner / Évaluateur"
+    action: "Saisir la cotation inhérente (Probabilité × 7 axes d'impact)"
+    http_sql: "PATCH /risk-evaluations/:id — cotation inhérente"
+    pattern_db: "append-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Impact retenu = MAX des 7 axes (CONFIG.IMPACT_RETENU_RULE) ; Score = P × I"
+    statut: "À développer"
+
+  - id: ACT-152
+    domaine: "RiskEvaluation"
+    acteur: "Risk Owner / L1 / L2 / L3"
+    action: "Saisir l'appréciation de la maîtrise (adéquation, exécution, efficacité × L1/L2/L3)"
+    http_sql: "PATCH /risk-evaluations/:id — maitrise L1/L2/L3"
+    pattern_db: "append-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Échelle 1–3 par ligne de défense ; maîtrise globale = moyenne ; seuils CONFIG.SEUILS_MAITRISE"
+    statut: "À développer"
+
+  - id: ACT-153
+    domaine: "RiskEvaluation"
+    acteur: "Risk Owner / Risk Manager"
+    action: "Calculer et saisir le risque résiduel (probabilité et impact résiduels)"
+    http_sql: "PATCH /risk-evaluations/:id — cotation résiduelle"
+    pattern_db: "append-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Résiduel = réévaluation P et I après maîtrise (jamais formule automatique) ; justification obligatoire"
+    statut: "À développer"
+
+  - id: ACT-154
+    domaine: "RiskEvaluation"
+    acteur: "Système / Agent A13"
+    action: "Calculer automatiquement les scores inhérent et résiduel (P × I)"
+    http_sql: "Lecture évaluation + calcul"
+    pattern_db: "read-only"
+    agents_responsables: [A13]
+    mvp: true
+    regles_critiques: "Formule CONFIG.SCORE_FORMULA = PROBABILITE_X_IMPACT_RETENU ; seuils CONFIG.SEUILS_NIVEAU"
+    statut: "À développer"
+
+  - id: ACT-155
+    domaine: "RiskEvaluation"
+    acteur: "Système"
+    action: "Proposer automatiquement l'appétence applicable (CONFIG.APPETENCE_MODE)"
+    http_sql: "Lecture APPETENCE table + suggestion"
+    pattern_db: "read-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "AUTO_AVEC_SURCHARGE_MANUELLE : proposition auto + surcharge possible par évaluateur"
+    statut: "À développer"
+
+  - id: ACT-156
+    domaine: "RiskEvaluation"
+    acteur: "Risk Manager / Validateur"
+    action: "Valider une évaluation de risque (workflow maker-checker)"
+    http_sql: "PATCH /risk-evaluations/:id — statut=VALIDÉ"
+    pattern_db: "append-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Validateur ≠ évaluateur (maker-checker) ; statut initial À_VALIDER (CONFIG)"
+    statut: "À développer"
+
+  - id: ACT-157
+    domaine: "RiskEvaluation"
+    acteur: "Risk Manager"
+    action: "Rejeter / renvoyer une évaluation avec commentaire"
+    http_sql: "PATCH /risk-evaluations/:id — statut=REJETÉ"
+    pattern_db: "append-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Motif de rejet obligatoire ; notification à l'évaluateur"
+    statut: "À développer"
+
+  - id: ACT-158
+    domaine: "RiskEvaluation"
+    acteur: "Système"
+    action: "Déclencher une révision anticipée (incident, changement majeur, résultat audit)"
+    http_sql: "POST /risk-evaluations — type=anticipée"
+    pattern_db: "append-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Événements déclencheurs listés dans ECHELLES_COTATION ; notification Risk Owner"
+    statut: "À développer"
+
+  - id: ACT-159
+    domaine: "RiskEvaluation"
+    acteur: "Utilisateur autorisé"
+    action: "Consulter l'historique complet des évaluations d'un risque"
+    http_sql: "GET /risk-evaluations?risk_id=...&tenant_id=..."
+    pattern_db: "read-only"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Append-only : toutes versions conservées ; pagination ; filtre par statut"
+    statut: "À développer"
+
+  - id: ACT-160
+    domaine: "RiskEvaluation"
+    acteur: "Risk Manager / Auditeur"
+    action: "Comparer risque résiduel vs appétence (seuil dépassé ou non)"
+    http_sql: "GET /risk-evaluations/:id/vs-appetite"
+    pattern_db: "read-only"
+    agents_responsables: [A13]
+    mvp: true
+    regles_critiques: "Alerte si score résiduel > seuil appétence (APPETENCE table) ; flag dépassement"
+    statut: "À développer"
+
+
+# ── RiskAppetite ──
+
+  - id: ACT-165
+    domaine: "RiskAppetite"
+    acteur: "Risk Manager / Admin"
+    action: "Définir ou modifier un seuil d'appétence par sous-catégorie de risque"
+    http_sql: "PUT /appetite/:sous_categorie — UPDATE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Score plafond 1–25 ; entité optionnelle ; version méthodologique ; actif Oui/Non"
+    statut: "À développer"
+
+  - id: ACT-166
+    domaine: "RiskAppetite"
+    acteur: "Système"
+    action: "Comparer automatiquement le risque résiduel au seuil d'appétence applicable"
+    http_sql: "GET /appetite/check?risk_id=...&score=..."
+    pattern_db: "read-only"
+    agents_responsables: [A13]
+    mvp: true
+    regles_critiques: "Retourne : dans_appetence / dépassement + écart quantifié"
+    statut: "À développer"
+
+  - id: ACT-167
+    domaine: "RiskAppetite"
+    acteur: "Système"
+    action: "Déclencher une alerte dépassement d'appétence (risque résiduel > seuil)"
+    http_sql: "POST /notifications — dépassement appétence"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Notif Risk Owner + superior_owner + Risk Manager ; niveau = dépassement critique si score ≥ 20"
+    statut: "À développer"
+
+  - id: ACT-168
+    domaine: "RiskAppetite"
+    acteur: "Risk Manager"
+    action: "Consulter le tableau des appétences actives par entité et catégorie"
+    http_sql: "GET /appetite?tenant_id=..."
+    pattern_db: "read-only"
+    agents_responsables: [A06, A04]
+    mvp: true
+    regles_critiques: "Vue consolidée ; actif=Oui en filtre par défaut ; version méthodologique"
+    statut: "À développer"
+
+
+# ── RatingScale ──
+
+  - id: ACT-170
+    domaine: "RatingScale"
+    acteur: "Admin / Risk Manager"
+    action: "Créer ou configurer une échelle de cotation n×n (probabilité × impact)"
+    http_sql: "POST /rating-scales — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Dimensions : n_proba (1–5) × n_impact (1–5) ; libellés par niveau ; tenant_id"
+    statut: "À développer"
+
+  - id: ACT-171
+    domaine: "RatingScale"
+    acteur: "Admin / Risk Manager"
+    action: "Configurer les seuils de criticité (Faible/Modéré/Élevé/Majeur/Critique)"
+    http_sql: "PUT /rating-scales/:id/thresholds — UPDATE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Seuils actuels CONFIG : 1–4 Faible ; 5–9 Modéré ; 10–14 Élevé ; 15–19 Majeur ; 20–25 Critique"
+    statut: "À développer"
+
+  - id: ACT-172
+    domaine: "RatingScale"
+    acteur: "Admin / Risk Manager"
+    action: "Configurer les axes d'impact (7 axes Djamo Finances : Financier, Client, Opérationnel, Réglementaire, Sécurité, Réputationnel, Stratégique)"
+    http_sql: "PUT /rating-scales/:id/impact-axes — UPDATE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Axes flexibles ; règle impact retenu = MAX (configurable dans CONFIG.IMPACT_RETENU_RULE)"
+    statut: "À développer"
+
+  - id: ACT-173
+    domaine: "RatingScale"
+    acteur: "Admin / Risk Manager"
+    action: "Configurer les niveaux de vélocité (1–5 : Très lente → Très rapide)"
+    http_sql: "PUT /rating-scales/:id/velocity — UPDATE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Vélocité évaluée séparément, n'entre pas dans le score P×I"
+    statut: "À développer"
+
+  - id: ACT-174
+    domaine: "RatingScale"
+    acteur: "Admin / Risk Manager"
+    action: "Configurer les niveaux de persistance (1–5 : Transitoire → Durable/Irréversible)"
+    http_sql: "PUT /rating-scales/:id/persistence — UPDATE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Persistance COSO ERM ; durée d'impact au-delà de l'événement"
+    statut: "À développer"
+
+  - id: ACT-175
+    domaine: "RatingScale"
+    acteur: "Admin / Risk Manager"
+    action: "Configurer l'échelle de maîtrise (1–3 : Inadéquat → Adéquat) par ligne de défense"
+    http_sql: "PUT /rating-scales/:id/mastery — UPDATE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "3 lignes de défense (L1/L2/L3) ; maîtrise globale = moyenne ; seuils CONFIG.SEUILS_MAITRISE"
+    statut: "À développer"
+
+  - id: ACT-176
+    domaine: "RatingScale"
+    acteur: "Admin"
+    action: "Activer une version méthodologique et archiver la précédente"
+    http_sql: "PATCH /methodology-versions/:id/activate"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Une seule version active à la fois ; date_début auto ; version précédente → archived"
+    statut: "À développer"
+
+  - id: ACT-177
+    domaine: "RatingScale"
+    acteur: "Admin"
+    action: "Désactiver une échelle de cotation (soft-delete, remplacée par nouvelle)"
+    http_sql: "PATCH /rating-scales/:id/disable"
+    pattern_db: "soft-delete"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "deleted_at ; version méthodologique trackée ; données historiques conservées"
+    statut: "À développer"
+
+
+# ── Cartography ──
+
+  - id: ACT-180
+    domaine: "Cartography"
+    acteur: "Risk Manager / Utilisateur"
+    action: "Générer la cartographie des risques (heatmap P×I avec bulles)"
+    http_sql: "GET /cartography?tenant_id=...&version=..."
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06, A13]
+    mvp: true
+    regles_critiques: "Bulles = risques ; couleur = criticité ; taille = vélocité ; double vue (inhérent / résiduel)"
+    statut: "À développer"
+
+  - id: ACT-181
+    domaine: "Cartography"
+    acteur: "Utilisateur autorisé"
+    action: "Filtrer la cartographie (par entité, catégorie, score, département, Risk Owner)"
+    http_sql: "GET /cartography?filters=..."
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06]
+    mvp: true
+    regles_critiques: "Filtres combinables ; vue par entité (Djamo Finances, CI, SN)"
+    statut: "À développer"
+
+  - id: ACT-182
+    domaine: "Cartography"
+    acteur: "Risk Manager / Auditeur"
+    action: "Exporter la cartographie (image PNG / PDF)"
+    http_sql: "POST /cartography/export"
+    pattern_db: "read-only"
+    agents_responsables: [A06, A11]
+    mvp: false
+    regles_critiques: "Google Drive API ou download direct ; log export"
+    statut: "À planifier"
+
+  - id: ACT-183
+    domaine: "Cartography"
+    acteur: "Risk Owner / Pilote de risque"
+    action: "Vue cartographie filtrée par Risk Owner ou par département"
+    http_sql: "GET /cartography?owner_id=me"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06]
+    mvp: true
+    regles_critiques: "Personnalisée selon le rôle connecté ; seuls les risques de son périmètre"
+    statut: "À développer"
+
+  - id: ACT-184
+    domaine: "Cartography"
+    acteur: "Risk Manager"
+    action: "Vue comparée cartographie inhérente vs résiduelle (avant/après maîtrise)"
+    http_sql: "GET /cartography/compare?version=résiduel|inhérent"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A13]
+    mvp: true
+    regles_critiques: "Double vue côte à côte ou superposée ; visualisation de l'effet des contrôles"
+    statut: "À développer"
+
+
+# ── ActionPlan ──
+
+  - id: ACT-190
+    domaine: "ActionPlan"
+    acteur: "Risk Owner / Risk Manager"
+    action: "Créer une action corrective (depuis un risque, contrôle, KRI, audit, incident)"
+    http_sql: "POST /actions — INSERT"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Source : risk_id / control_id / kri_id / audit / incident / management ; tenant_id"
+    statut: "À développer"
+
+  - id: ACT-191
+    domaine: "ActionPlan"
+    acteur: "Responsable action"
+    action: "Mettre à jour l'avancement d'une action (% réalisation, commentaire)"
+    http_sql: "PATCH /actions/:id — avancement"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "buildUpdateSet ; historique des mises à jour ; date_maj"
+    statut: "À développer"
+
+  - id: ACT-192
+    domaine: "ActionPlan"
+    acteur: "Responsable / Système"
+    action: "Changer le statut d'une action (Planifiée → En cours → Terminée / En retard)"
+    http_sql: "PATCH /actions/:id — statut"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Transitions : Planifiée→En cours→Terminée / Planifiée→En retard si date dépassée"
+    statut: "À développer"
+
+  - id: ACT-193
+    domaine: "ActionPlan"
+    acteur: "Système"
+    action: "Escalader automatiquement une action en retard (date échéance dépassée)"
+    http_sql: "PATCH /actions/:id — priorité=HIGH"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Notification responsable + Risk Owner + superior_owner ; log escalade"
+    statut: "À développer"
+
+  - id: ACT-194
+    domaine: "ActionPlan"
+    acteur: "Risk Manager"
+    action: "Lier une action à une ou plusieurs ressources (risque, contrôle, KRI, anomalie)"
+    http_sql: "POST /actions/:id/links"
+    pattern_db: "relation"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Relations multiples ; tenant_id sur chaque lien"
+    statut: "À développer"
+
+  - id: ACT-195
+    domaine: "ActionPlan"
+    acteur: "Responsable / Validateur"
+    action: "Clôturer une action avec preuve jointe (document ou lien evidence)"
+    http_sql: "PATCH /actions/:id — statut=Terminée + evidence_id"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06, A23]
+    mvp: true
+    regles_critiques: "Preuve obligatoire pour clôture ; maker-checker : clôturant ≠ validateur"
+    statut: "À développer"
+
+  - id: ACT-196
+    domaine: "ActionPlan"
+    acteur: "Utilisateur autorisé"
+    action: "Consulter le tableau de bord des actions (par statut, source, responsable, retard)"
+    http_sql: "GET /dashboard/actions"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06]
+    mvp: true
+    regles_critiques: "Filtres : statut, source, responsable, date, entité, département"
+    statut: "À développer"
+
+
+# ── Notification ──
+
+  - id: ACT-200
+    domaine: "Notification"
+    acteur: "Utilisateur"
+    action: "S'abonner ou se désabonner à des notifications (risques, KRI, actions)"
+    http_sql: "POST /notification-subscriptions"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Par ressource et type d'événement ; tenant_id"
+    statut: "À développer"
+
+  - id: ACT-201
+    domaine: "Notification"
+    acteur: "Système"
+    action: "Envoyer une notification email (alerte seuil, échéance, escalade)"
+    http_sql: "POST /notifications/send — email"
+    pattern_db: "append-only"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Destinataires : Risk Owner, superior_owner, Risk Manager selon règle ; log envoi"
+    statut: "À développer"
+
+  - id: ACT-202
+    domaine: "Notification"
+    acteur: "Utilisateur / Admin"
+    action: "Consulter le centre de notifications (alertes reçues, lu/non lu)"
+    http_sql: "GET /notifications?user_id=me"
+    pattern_db: "read-only"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "tenant_id ; pagination ; filtre type/statut"
+    statut: "À développer"
+
+  - id: ACT-203
+    domaine: "Notification"
+    acteur: "Système"
+    action: "Créer un rappel automatique avant échéance (J-7, J-3, J-1)"
+    http_sql: "POST /reminders — scheduler"
+    pattern_db: "append-only"
+    agents_responsables: [A06]
+    mvp: false
+    regles_critiques: "Cron ou Cloud Scheduler ; destinataires = responsable action / pilote KRI"
+    statut: "À planifier"
+
+
+# ── Reporting ──
+
+  - id: ACT-210
+    domaine: "Reporting"
+    acteur: "Risk Manager / Auditeur"
+    action: "Générer un rapport par cadre réglementaire (BCEAO, ISO 31000, COSO ERM, DORA, SOX)"
+    http_sql: "GET /reports/compliance?framework=BCEAO"
+    pattern_db: "read-only"
+    agents_responsables: [A14, A06]
+    mvp: true
+    regles_critiques: "Cadre en paramètre obligatoire ; filtres entité/période ; tenant_id"
+    statut: "À développer"
+
+  - id: ACT-211
+    domaine: "Reporting"
+    acteur: "Risk Manager"
+    action: "Générer un rapport Comité des Risques (risques top N, KRI en alerte, actions en retard)"
+    http_sql: "GET /reports/risk-committee"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06, A13]
+    mvp: true
+    regles_critiques: "Agrégation : top risques par criticité ; KRI Rouge/Orange ; actions J+N en retard"
+    statut: "À développer"
+
+  - id: ACT-212
+    domaine: "Reporting"
+    acteur: "Risk Manager / Admin"
+    action: "Rapport consolidé multi-entités (groupe Djamo CI + SN + Finances)"
+    http_sql: "GET /reports/consolidated?entities=..."
+    pattern_db: "read-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Multi-tenant view ; droits group-admin obligatoires"
+    statut: "À développer"
+
+  - id: ACT-213
+    domaine: "Reporting"
+    acteur: "Pilote de risque / Risk Owner"
+    action: "Rapport par département (risques, contrôles, actions, KRI du département)"
+    http_sql: "GET /reports/department/:id"
+    pattern_db: "read-only"
+    agents_responsables: [A06, A04]
+    mvp: true
+    regles_critiques: "Filtré sur le périmètre du département ; rôle pilote de risque minimum"
+    statut: "À développer"
+
+  - id: ACT-214
+    domaine: "Reporting"
+    acteur: "Risk Manager / Auditeur"
+    action: "Rapport appétence au risque vs niveaux résiduels actuels"
+    http_sql: "GET /reports/appetite-vs-residual"
+    pattern_db: "read-only"
+    agents_responsables: [A13, A06]
+    mvp: true
+    regles_critiques: "Par sous-catégorie : score résiduel vs seuil ; dépassements mis en évidence"
+    statut: "À développer"
+
+  - id: ACT-215
+    domaine: "Reporting"
+    acteur: "Risk Manager"
+    action: "Rapport KRI consolidé (statuts, tendances, alertes)"
+    http_sql: "GET /reports/kri-consolidated"
+    pattern_db: "read-only"
+    agents_responsables: [A13, A04, A06]
+    mvp: true
+    regles_critiques: "Vue globale KRI ; tendance sur N périodes ; alertes actives"
+    statut: "À développer"
+
+
+# ── Config ──
+
+  - id: ACT-220
+    domaine: "Config"
+    acteur: "Admin"
+    action: "Modifier les paramètres méthodologiques (formule score, seuils, règle impact retenu)"
+    http_sql: "PUT /config — UPDATE SCORE_FORMULA, SEUILS_NIVEAU, IMPACT_RETENU_RULE"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Maker-checker obligatoire ; impact immédiat sur tous les calculs ; version tracée"
+    statut: "À développer"
+
+  - id: ACT-221
+    domaine: "Config"
+    acteur: "Admin"
+    action: "Activer / désactiver un module fonctionnel (Risk, Control, KRI, KPI, Dashboard…)"
+    http_sql: "PATCH /modules/:name/toggle"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Module désactivé = routes inaccessibles ; audit log"
+    statut: "À développer"
+
+  - id: ACT-222
+    domaine: "Config"
+    acteur: "Admin"
+    action: "Gérer les entités du groupe (créer, modifier, désactiver une entité multi-tenant)"
+    http_sql: "POST /tenants — INSERT / PATCH /tenants/:id"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A10]
+    mvp: true
+    regles_critiques: "Super-admin uniquement ; chaque entité = tenant_id isolé"
+    statut: "À développer"
+
+  - id: ACT-223
+    domaine: "Config"
+    acteur: "Admin / Risk Manager"
+    action: "Gérer les cadres réglementaires de référence (BCEAO, ISO 31000, COSO ERM, DORA…)"
+    http_sql: "POST/PUT /regulatory-frameworks"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A14]
+    mvp: true
+    regles_critiques: "Actif/Inactif ; lien aux contrôles et rapports"
+    statut: "À développer"
+
+  - id: ACT-224
+    domaine: "Config"
+    acteur: "Admin / Risk Manager"
+    action: "Gérer les catégories et sous-catégories de risques (taxonomie)"
+    http_sql: "POST/PUT /risk-categories"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Hiérarchie catégorie → sous-catégorie ; lien appétence ; actif/inactif"
+    statut: "À développer"
+
+  - id: ACT-225
+    domaine: "Config"
+    acteur: "Admin"
+    action: "Importer des données depuis un fichier Excel (migration Suivi_Risques)"
+    http_sql: "POST /import/excel — multipart"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A11]
+    mvp: true
+    regles_critiques: "Mapping colonnes Excel → modèle DB ; validation Zod ; dry-run avant import réel"
+    statut: "À développer"
+
+  - id: ACT-226
+    domaine: "Config"
+    acteur: "Admin"
+    action: "Configurer le mode appétence (AUTO / MANUEL / AUTO_AVEC_SURCHARGE_MANUELLE)"
+    http_sql: "PUT /config/appetite-mode"
+    pattern_db: "in-place update"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Valeur config APPETENCE_MODE ; impact sur les suggestions automatiques"
+    statut: "À développer"
+
+
+# ── JournalGlobal ──
+
+  - id: ACT-230
+    domaine: "JournalGlobal"
+    acteur: "Auditeur / Admin"
+    action: "Consulter le journal global de toutes les actions (tous domaines confondus)"
+    http_sql: "GET /audit-logs?tenant_id=...&filters=..."
+    pattern_db: "read-only"
+    agents_responsables: [A23, A06]
+    mvp: true
+    regles_critiques: "Filtres : utilisateur, domaine, action, date_début/fin, entité ; pagination ; tenant_id obligatoire"
+    statut: "À développer"
+
+  - id: ACT-231
+    domaine: "JournalGlobal"
+    acteur: "Auditeur"
+    action: "Filtrer le journal par utilisateur, type d'action, ressource, période"
+    http_sql: "GET /audit-logs?user_id=...&action=...&resource=...&from=...&to=..."
+    pattern_db: "read-only"
+    agents_responsables: [A23]
+    mvp: true
+    regles_critiques: "Recherche full-text sur action ; index sur user_id, created_at, tenant_id"
+    statut: "À développer"
+
+  - id: ACT-232
+    domaine: "JournalGlobal"
+    acteur: "Auditeur / Risk Manager"
+    action: "Exporter le journal d'audit (Excel / CSV)"
+    http_sql: "GET /audit-logs/export"
+    pattern_db: "read-only"
+    agents_responsables: [A23, A11]
+    mvp: false
+    regles_critiques: "Droits auditeur minimum ; log de l'export lui-même tracé"
+    statut: "À planifier"
+
+  - id: ACT-233
+    domaine: "JournalGlobal"
+    acteur: "Système / Agent A15"
+    action: "Purge RGPD ciblée des logs expirés (données hors rétention)"
+    http_sql: "DELETE ciblé audit_logs WHERE created_at < retention_date"
+    pattern_db: "soft-delete → purge"
+    agents_responsables: [A15, A23]
+    mvp: false
+    regles_critiques: "Approbation HUMAN obligatoire avant purge ; rétention configurable ; log de purge conservé"
+    statut: "À planifier"
+
+
+# ── Dashboard ──
+
+  - id: ACT-240
+    domaine: "Dashboard"
+    acteur: "Risk Owner"
+    action: "Dashboard Risk Owner : mes risques, KRI, actions, score résiduel, alertes actives"
+    http_sql: "GET /dashboard/risk-owner?user_id=me"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06, A13]
+    mvp: true
+    regles_critiques: "Vue personnalisée : seuls les risques dont owner_id = user connecté ; alerte dépassement appétence"
+    statut: "À développer"
+
+  - id: ACT-241
+    domaine: "Dashboard"
+    acteur: "Pilote de risque / Manager département"
+    action: "Dashboard département : risques, contrôles, KPI, KRI, actions du département"
+    http_sql: "GET /dashboard/department/:id"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06]
+    mvp: true
+    regles_critiques: "Pilote = utilisateur désigné dans DEPARTEMENTS.risk_pilot_id ; périmètre filtré"
+    statut: "À développer"
+
+  - id: ACT-242
+    domaine: "Dashboard"
+    acteur: "Risk Manager / Admin"
+    action: "Dashboard exécutif groupe : vue consolidée multi-entités, top risques, KRI critiques"
+    http_sql: "GET /dashboard/executive"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06, A13]
+    mvp: true
+    regles_critiques: "Droits Risk Manager groupe ; agrégation toutes entités du tenant ; exportable"
+    statut: "À développer"
+
+  - id: ACT-243
+    domaine: "Dashboard"
+    acteur: "Compliance / Auditeur"
+    action: "Dashboard conformité : taux de conformité par cadre réglementaire, contrôles en retard"
+    http_sql: "GET /dashboard/compliance"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A14, A06]
+    mvp: true
+    regles_critiques: "Filtres : cadre (BCEAO, ISO 31000, COSO ERM…), entité, période ; taux calculé auto"
+    statut: "À développer"
+
+  - id: ACT-244
+    domaine: "Dashboard"
+    acteur: "Admin / DevOps"
+    action: "Dashboard santé système : statut des modules, erreurs API, dernières actions système"
+    http_sql: "GET /dashboard/system-health"
+    pattern_db: "read-only"
+    agents_responsables: [A04, A06, A09]
+    mvp: false
+    regles_critiques: "Monitoring Pino ; alertes erreurs critiques GRC ; SLA/SLO"
+    statut: "À planifier"
+
+
+# ── Governance ──
+
+  - id: ACT-250
+    domaine: "Governance"
+    acteur: "Risk Manager / Admin"
+    action: "Planifier une revue annuelle de la cartographie (création du cycle de revue)"
+    http_sql: "POST /review-cycles — INSERT"
+    pattern_db: "in-place update"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Fréquence min annuelle (ECHELLES_COTATION) ; notifications aux Risk Owners"
+    statut: "À développer"
+
+  - id: ACT-251
+    domaine: "Governance"
+    acteur: "Risk Manager"
+    action: "Déclencher une revue anticipée (incident, changement majeur, résultat audit)"
+    http_sql: "POST /review-cycles — type=anticipée"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Événements déclencheurs configurables ; motif obligatoire"
+    statut: "À développer"
+
+  - id: ACT-252
+    domaine: "Governance"
+    acteur: "Risk Manager / Direction"
+    action: "Valider et clôturer une revue de cartographie"
+    http_sql: "PATCH /review-cycles/:id — statut=CLÔTURÉ"
+    pattern_db: "ticket-lifecycle"
+    agents_responsables: [A06]
+    mvp: true
+    regles_critiques: "Maker-checker Risk Manager → Direction ; log de clôture avec date et validateur"
+    statut: "À développer"
+
+  - id: ACT-253
+    domaine: "Governance"
+    acteur: "Comité des Risques / Direction"
+    action: "Valider les risques significatifs (Majeur/Critique) lors du Comité des Risques"
+    http_sql: "PATCH /risk-evaluations/:id — statut=VALIDÉ_COMITÉ"
+    pattern_db: "append-only"
+    agents_responsables: [A06, A13]
+    mvp: true
+    regles_critiques: "Seuils : Majeur (15–19) ou Critique (20–25) → validation Comité ou Direction requise"
+    statut: "À développer"

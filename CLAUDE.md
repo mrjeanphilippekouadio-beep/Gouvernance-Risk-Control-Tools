@@ -134,3 +134,61 @@ both a general update and an archive/close action.
   it, even though the product is currently single-tenant.
 - Secrets only via env vars (`backend/.env`, `frontend/.env.local`),
   never committed — see `.gitignore`.
+
+## Architecture Agentique ACF
+
+Source de vérité : `docs/acf/ACF_GRC_Tools_v2_COMPLET.xlsx` (feuilles
+4️⃣ AGENT HIERARCHY, 5️⃣ AGENT CONFIG, 6️⃣ SYSTEM PROMPTS, 7️⃣ MODEL
+REGISTRY, 8️⃣ GRC ACTIONS). Les subagents Claude Code générés à partir
+de ce classeur vivent dans `.claude/agents/*.md` (un fichier par agent,
+`name`/`model`/`tools` en frontmatter Claude Code, `acf_*` en métadonnées
+de documentation, corps = system prompt copié verbatim depuis la feuille
+6). Le backlog fonctionnel est dans `.claude/backlog/grc-actions.yaml`,
+généré depuis la feuille 8 — c'est ce fichier qui dit aux agents quoi
+construire (voir son en-tête pour le flux de découverte par agent).
+
+**Hiérarchie** : N0 = HUMAN (Jean-Philippe, Product Owner — décision
+finale, valide avant toute action irréversible, reçoit les escalades)
+> N1 = A02 Orchestrator (chef de pipeline, décide de l'ordre
+d'activation, escalade vers HUMAN si bloqué) > N2 = agents spécialistes
+(un par domaine technique ou GRC).
+
+**Agent teams** (feuille 4) :
+- `core-team` — A01, A02, A22 : pipeline principal (intake →
+  orchestration → release)
+- `product-team` — A03, A04, A21 : produit, UX, documentation
+- `tech-team` — A05, A06, A07 : architecture, backend, base de données
+- `qa-team` — A08 : tests et qualité
+- `security-team` — A10, A23 : sécurité, audit
+- `grc-team` — A13, A14, A15 : risques, compliance, privacy
+- `infra-team` — A09, A16 : DevOps, infrastructure GCP
+
+**can_spawn_agents** : seul HUMAN valide/débloque, seul A02 peut spawner
+n'importe quel agent, et seul A06 (Dev Backend) peut spawner — uniquement
+A07 (Dev DB), et uniquement pour une migration liée à une feature qu'il
+implémente. Tous les autres agents de la feuille 4 ont `can_spawn_agents
+= NON`. Ne fais pas spawner un agent qui n'a pas ce droit dans la feuille
+4.
+
+**Règles de sécurité transverses** (issues des system prompts feuille 6
+et du catalogue GRC ACTIONS feuille 8, en plus des conventions déjà
+listées ci-dessus) :
+- `tenant_id` obligatoire sur toute table business et sur tout filtre de
+  lecture (ex. ACT-071, ACT-230/231 sur l'audit trail).
+- Soft-delete uniquement — jamais de `DELETE FROM` physique sur une
+  table métier ; les system prompts A05/A06/A07 le répètent comme
+  contrainte absolue.
+- Maker-checker : l'exécuteur d'une action n'est jamais son propre
+  validateur (ex. ACT-093/ACT-113 : un admin ne peut pas s'attribuer ses
+  propres rôles).
+- `audit_logs` est append-only strict (voir section Audit ci-dessous).
+- A10 (Security) escalade vers HUMAN dès qu'une vulnérabilité atteint un
+  CVSS ≥ 7 ; ne pas laisser un agent N2 trancher seul au-delà de ce
+  seuil.
+
+**JEV Decision Engine = DISABLED** (`JEV = NON` dans le classeur ACF).
+Conséquence directe : A00 (Decision Router) est désactivé, et tous les
+skills marqués `JEV_DYNAMIC` (feuille 9️⃣ SKILL REGISTRY) tombent en
+`fallback_skills_mode = ALL_ACTIVE` — c'est-à-dire chargés/activés
+automatiquement plutôt que routés dynamiquement par un moteur de
+décision central.
