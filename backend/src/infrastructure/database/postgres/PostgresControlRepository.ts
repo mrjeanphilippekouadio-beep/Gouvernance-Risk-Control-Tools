@@ -95,7 +95,11 @@ async function replaceCoveredRisks(
   controlId: string,
   riskIds: string[],
 ): Promise<void> {
-  await client.query(`DELETE FROM control_risks WHERE control_id = $1`, [controlId]);
+  // control_risks is a pure link table (see the exemption in
+  // CLAUDE.md's Security-sensitive conventions) — rebuilt by delete +
+  // insert rather than soft-deleted, but still tenant-scoped so this
+  // can never touch another tenant's row even if controlId were reused.
+  await client.query(`DELETE FROM control_risks WHERE tenant_id = $1 AND control_id = $2`, [tenantId, controlId]);
   for (const riskId of riskIds) {
     await client.query(
       `INSERT INTO control_risks (tenant_id, control_id, risk_id) VALUES ($1, $2, $3)`,

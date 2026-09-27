@@ -35,7 +35,54 @@ export type Permission =
   | "process.create"
   | "process.update"
   | "process.delete"
-  | "audit.read";
+  | "audit.read"
+  | "role.read"
+  | "role.create"
+  | "role.update"
+  | "role.delete"
+  | "role.assign";
+
+/**
+ * Kept in sync with the Permission union by hand (TS types don't exist
+ * at runtime) — used by RoleService to reject a role definition that
+ * names a permission that doesn't exist.
+ */
+export const ALL_PERMISSIONS: Permission[] = [
+  "risk.read",
+  "risk.create",
+  "risk.update",
+  "risk.delete",
+  "evidence.read",
+  "evidence.upload",
+  "evidence.delete",
+  "control.read",
+  "control.create",
+  "control.update",
+  "control.delete",
+  "execution.read",
+  "execution.create",
+  "execution.validate",
+  "effectiveness.read",
+  "effectiveness.create",
+  "effectiveness.validate",
+  "anomaly.read",
+  "anomaly.create",
+  "anomaly.update",
+  "department.read",
+  "department.create",
+  "department.update",
+  "department.delete",
+  "process.read",
+  "process.create",
+  "process.update",
+  "process.delete",
+  "audit.read",
+  "role.read",
+  "role.create",
+  "role.update",
+  "role.delete",
+  "role.assign",
+];
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
   if (!actor.roles.includes(permission)) {

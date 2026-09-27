@@ -1,4 +1,13 @@
-import type { AuditEvent } from "../entities/AuditEvent.js";
+import type { AuditAction, AuditEvent } from "../entities/AuditEvent.js";
+
+export interface AuditSearchFilters {
+  userId?: string;
+  action?: AuditAction;
+  entityType?: string;
+  entityId?: string;
+  from?: Date;
+  to?: Date;
+}
 
 export interface AuditRepository {
   record(event: Omit<AuditEvent, "id" | "timestamp">): Promise<void>;
@@ -12,4 +21,11 @@ export interface AuditRepository {
    * already writes through `record`.
    */
   listRecent(tenantId: string, limit: number): Promise<AuditEvent[]>;
+  /**
+   * ACT-071/ACT-230/231's filtered journal (user, action, resource,
+   * date range). Optional so the existing in-memory test doubles for
+   * this interface (built before this filter existed) keep compiling
+   * without being touched — only PostgresAuditRepository implements it.
+   */
+  search?(tenantId: string, filters: AuditSearchFilters, limit: number): Promise<AuditEvent[]>;
 }

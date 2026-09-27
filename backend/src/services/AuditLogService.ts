@@ -1,4 +1,4 @@
-import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
+import type { AuditRepository, AuditSearchFilters } from "../domain/repositories/AuditRepository.js";
 import type { AuditEvent } from "../domain/entities/AuditEvent.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
@@ -24,5 +24,14 @@ export class AuditLogService {
   async listForEntity(actor: AuthenticatedUser, entityType: string, entityId: string): Promise<AuditEvent[]> {
     requirePermission(actor, "audit.read");
     return this.audit.listForEntity(actor.tenantId, entityType, entityId);
+  }
+
+  /** ACT-071 / ACT-230-231: the filtered journal (user, action, resource, date range). */
+  async search(actor: AuthenticatedUser, filters: AuditSearchFilters, limit = DEFAULT_LIMIT): Promise<AuditEvent[]> {
+    requirePermission(actor, "audit.read");
+    if (!this.audit.search) {
+      throw new Error("This AuditRepository implementation does not support filtered search");
+    }
+    return this.audit.search(actor.tenantId, filters, Math.min(limit, MAX_LIMIT));
   }
 }

@@ -13,6 +13,7 @@ import { PostgresControlEffectivenessRepository } from "./infrastructure/databas
 import { PostgresAnomalyRepository } from "./infrastructure/database/postgres/PostgresAnomalyRepository.js";
 import { PostgresDepartmentRepository } from "./infrastructure/database/postgres/PostgresDepartmentRepository.js";
 import { PostgresProcessRepository } from "./infrastructure/database/postgres/PostgresProcessRepository.js";
+import { PostgresRoleRepository } from "./infrastructure/database/postgres/PostgresRoleRepository.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
@@ -24,6 +25,7 @@ import { AnomalyService } from "./services/AnomalyService.js";
 import { DepartmentService } from "./services/DepartmentService.js";
 import { ProcessService } from "./services/ProcessService.js";
 import { AuditLogService } from "./services/AuditLogService.js";
+import { RoleService } from "./services/RoleService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { controlsRouter } from "./api/v1/controls.routes.js";
@@ -33,6 +35,7 @@ import { anomaliesRouter } from "./api/v1/anomalies.routes.js";
 import { departmentsRouter } from "./api/v1/departments.routes.js";
 import { processesRouter } from "./api/v1/processes.routes.js";
 import { auditLogRouter } from "./api/v1/auditLog.routes.js";
+import { rolesRouter } from "./api/v1/roles.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
@@ -58,6 +61,7 @@ const effectivenessRepository = new PostgresControlEffectivenessRepository(pool)
 const anomalyRepository = new PostgresAnomalyRepository(pool);
 const departmentRepository = new PostgresDepartmentRepository(pool);
 const processRepository = new PostgresProcessRepository(pool);
+const roleRepository = new PostgresRoleRepository(pool);
 
 const riskService = new RiskService(riskRepository, auditRepository);
 const departmentService = new DepartmentService(departmentRepository, auditRepository);
@@ -71,6 +75,7 @@ const effectivenessService = new ControlEffectivenessService(
   auditRepository,
 );
 const anomalyService = new AnomalyService(anomalyRepository, auditRepository);
+const roleService = new RoleService(roleRepository, auditRepository);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
@@ -87,7 +92,23 @@ const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, 
     [email],
   );
   const row = rows[0];
-  return row ? { userId: row.id, tenantId: row.tenant_id, roles: row.roles } : null;
+  if (!row) return null;
+
+  // `users.roles` stays as a direct/legacy permission list (e.g. for
+  // bootstrapping the first admin before any Role exists). Permissions
+  // granted through the RBAC module (013_roles.sql) are layered on top
+  // by resolving every role currently assigned to this user — this is
+  // what makes assigning the "Auditeur" role actually grant audit.read.
+  const { rows: rolePerms } = await pool.query<{ permission: string }>(
+    `SELECT DISTINCT unnest(r.permissions) AS permission
+     FROM user_roles ur
+     JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+     WHERE ur.tenant_id = $1 AND ur.user_id = $2 AND ur.revoked_at IS NULL`,
+    [row.tenant_id, row.id],
+  );
+
+  const roles = Array.from(new Set([...row.roles, ...rolePerms.map((r) => r.permission)]));
+  return { userId: row.id, tenantId: row.tenant_id, roles };
 });
 
 // --- Health checks (no auth — used by Cloud Run / uptime checks) ---
@@ -114,6 +135,7 @@ app.use("/api/v1/anomalies", authMiddleware(identityProvider), anomaliesRouter(a
 app.use("/api/v1/departments", authMiddleware(identityProvider), departmentsRouter(departmentService));
 app.use("/api/v1/processes", authMiddleware(identityProvider), processesRouter(processService));
 app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(auditLogService));
+app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
 
 app.use(errorHandler);
 

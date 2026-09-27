@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { AuditRepository } from "../../../domain/repositories/AuditRepository.js";
+import type { AuditRepository, AuditSearchFilters } from "../../../domain/repositories/AuditRepository.js";
 import type { AuditEvent } from "../../../domain/entities/AuditEvent.js";
 
 interface AuditRow {
@@ -68,6 +68,44 @@ export class PostgresAuditRepository implements AuditRepository {
     const { rows } = await this.pool.query<AuditRow>(
       `SELECT * FROM audit_log WHERE tenant_id = $1 ORDER BY "timestamp" DESC LIMIT $2`,
       [tenantId, limit],
+    );
+    return rows.map(toDomain);
+  }
+
+  async search(tenantId: string, filters: AuditSearchFilters, limit: number): Promise<AuditEvent[]> {
+    const conditions = ["tenant_id = $1"];
+    const values: unknown[] = [tenantId];
+    let i = 2;
+
+    if (filters.userId !== undefined) {
+      conditions.push(`user_id = $${i++}`);
+      values.push(filters.userId);
+    }
+    if (filters.action !== undefined) {
+      conditions.push(`action = $${i++}`);
+      values.push(filters.action);
+    }
+    if (filters.entityType !== undefined) {
+      conditions.push(`entity_type = $${i++}`);
+      values.push(filters.entityType);
+    }
+    if (filters.entityId !== undefined) {
+      conditions.push(`entity_id = $${i++}`);
+      values.push(filters.entityId);
+    }
+    if (filters.from !== undefined) {
+      conditions.push(`"timestamp" >= $${i++}`);
+      values.push(filters.from);
+    }
+    if (filters.to !== undefined) {
+      conditions.push(`"timestamp" <= $${i++}`);
+      values.push(filters.to);
+    }
+    values.push(limit);
+
+    const { rows } = await this.pool.query<AuditRow>(
+      `SELECT * FROM audit_log WHERE ${conditions.join(" AND ")} ORDER BY "timestamp" DESC LIMIT $${i}`,
+      values,
     );
     return rows.map(toDomain);
   }

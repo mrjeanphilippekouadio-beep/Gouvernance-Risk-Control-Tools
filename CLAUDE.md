@@ -130,6 +130,16 @@ both a general update and an archive/close action.
 - Soft delete only (`deleted_at`/`status` columns) — no `DELETE FROM` in
   application code, this is a compliance/audit requirement, not a style
   preference.
+  - **Exception**: pure link/join tables with no `deleted_at` of their
+    own and no business meaning outside the pair they represent (e.g.
+    `control_risks`, mapping which risks a control covers) may be
+    rebuilt with `DELETE` + `INSERT` — see `replaceCoveredRisks` in
+    `PostgresControlRepository.ts`. This trades away history of *which*
+    risk was linked/unlinked *when*; if a regulatory framework ever
+    requires that history, migrate the table to carry its own
+    `deleted_at` (diff + soft-delete the removed pairs) instead of
+    stretching this exception. Every `DELETE`/`INSERT` on a link table
+    must still filter by `tenant_id`, exception or not.
 - `tenant_id` on every business table from the first migration touching
   it, even though the product is currently single-tenant.
 - Secrets only via env vars (`backend/.env`, `frontend/.env.local`),
@@ -192,3 +202,30 @@ skills marqués `JEV_DYNAMIC` (feuille 9️⃣ SKILL REGISTRY) tombent en
 `fallback_skills_mode = ALL_ACTIVE` — c'est-à-dire chargés/activés
 automatiquement plutôt que routés dynamiquement par un moteur de
 décision central.
+
+### Domaine Audit
+
+- `backend/src/domain/entities/AuditEvent.ts` porte déjà `tenantId`, et
+  `AuditRepository` (`domain/repositories/AuditRepository.ts`) n'expose
+  que `record`/`listForEntity`/`listRecent`/`search` — pas d'`update` ni
+  de `delete`, ce qui applique l'append-only strict voulu par A23
+  (Audit) et son `disallowedTools` (`update_audit_log`,
+  `delete_audit_log` en feuille 5).
+- `AuditLogService` vérifie la permission `audit.read` et scope toujours
+  par `actor.tenantId` avant de lire — c'est le point d'accès qui
+  correspond à ACT-071 (« Consulter l'audit trail », acteur Auditeur).
+  `GET /audit-logs` accepte désormais les filtres `userId`, `action`,
+  `entityType`, `entityId`, `from`, `to` (ACT-071, ACT-230/231) via
+  `AuditRepository.search` — optionnel sur l'interface pour ne pas
+  casser les faux-repository des tests existants (seul
+  `PostgresAuditRepository` l'implémente).
+- Le rôle applicatif « Auditeur » (ACT-093, ACT-110 à ACT-118) existe
+  désormais via le module RBAC : `domain/entities/Role.ts` +
+  `RoleRepository`/`RoleService`/`roles.routes.ts`, tables `roles` /
+  `user_roles` (migration `013_roles.sql`). Un rôle « Auditeur » limité
+  à `audit.read` est seedé en dev
+  (`database/postgresql/seed/dev_seed.sql`) et assignable via
+  `POST /api/v1/roles/:id/assign` — l'assigner donne un accès
+  lecture-seule à l'audit trail, tenant-scopé, sans jamais pouvoir
+  écrire (`RoleService` applique le maker-checker : un admin ne peut ni
+  s'auto-assigner ni s'auto-révoquer un rôle).
