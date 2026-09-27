@@ -3,9 +3,11 @@ import { randomUUID } from "node:crypto";
 import { RoleService } from "../src/services/RoleService.js";
 import type { RoleRepository } from "../src/domain/repositories/RoleRepository.js";
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
+import type { UserRepository } from "../src/domain/repositories/UserRepository.js";
 import type { Role, RoleAssignment } from "../src/domain/entities/Role.js";
+import type { User } from "../src/domain/entities/User.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
-import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
+import { ForbiddenError, NotFoundError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 
 function inMemoryRoleRepository(): RoleRepository {
   const roles = new Map<string, Role>();
@@ -82,6 +84,39 @@ function inMemoryRoleRepository(): RoleRepository {
     },
     async listAssignments(tenantId, roleId) {
       return [...assignments.values()].filter((a) => a.tenantId === tenantId && a.roleId === roleId);
+    },
+  };
+}
+
+function inMemoryUserRepository(users: User[]): UserRepository {
+  return {
+    async getById(tenantId, id) {
+      return users.find((u) => u.tenantId === tenantId && u.id === id) ?? null;
+    },
+    async getByEmail(tenantId, email, options) {
+      return (
+        users.find(
+          (u) => u.tenantId === tenantId && u.email === email && (options?.includeSuspended || !u.deletedAt),
+        ) ?? null
+      );
+    },
+    async list(tenantId, options) {
+      return users.filter((u) => u.tenantId === tenantId && (options?.includeSuspended || !u.deletedAt));
+    },
+    async count(tenantId, options) {
+      return users.filter((u) => u.tenantId === tenantId && (options?.includeSuspended || !u.deletedAt)).length;
+    },
+    async create() {
+      throw new Error("not implemented in this fake");
+    },
+    async update() {
+      throw new Error("not implemented in this fake");
+    },
+    async suspend() {
+      throw new Error("not implemented in this fake");
+    },
+    async reactivate() {
+      throw new Error("not implemented in this fake");
     },
   };
 }
@@ -164,5 +199,52 @@ describe("RoleService", () => {
     const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-15");
     await service.assignToUser(otherAdmin, role.id, admin.userId, "REQ-16");
     await expect(service.revokeFromUser(admin, role.id, admin.userId, "REQ-17")).rejects.toThrow(ForbiddenError);
+  });
+
+  describe("getEffectivePermissions", () => {
+    const targetUser: User = {
+      id: "user-1",
+      tenantId: "tenant-1",
+      email: "user1@example.com",
+      displayName: "User One",
+      // "not.a.real.permission" simulates a stale/hand-edited grant that
+      // must be filtered out, not trusted (SEC-005).
+      roles: ["evidence.upload", "not.a.real.permission"],
+      createdAt: new Date(),
+      deletedAt: null,
+    };
+
+    it("unions BASE_PERMISSIONS, filtered legacy grants and RBAC role permissions", async () => {
+      const service = new RoleService(
+        inMemoryRoleRepository(),
+        inMemoryAuditRepository(),
+        inMemoryUserRepository([targetUser]),
+      );
+      const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-18");
+      await service.assignToUser(admin, role.id, targetUser.id, "REQ-19");
+
+      const permissions = await service.getEffectivePermissions(admin, targetUser.id);
+
+      expect(permissions).toContain("feedback.create"); // BASE_PERMISSIONS
+      expect(permissions).toContain("evidence.upload"); // legacy grant, known permission
+      expect(permissions).toContain("audit.read"); // via RBAC role
+      expect(permissions).not.toContain("not.a.real.permission");
+    });
+
+    it("throws NotFoundError for a user that doesn't exist", async () => {
+      const service = new RoleService(
+        inMemoryRoleRepository(),
+        inMemoryAuditRepository(),
+        inMemoryUserRepository([]),
+      );
+      await expect(service.getEffectivePermissions(admin, "missing-user")).rejects.toThrow(NotFoundError);
+    });
+
+    it("throws when constructed without a UserRepository", async () => {
+      const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
+      await expect(service.getEffectivePermissions(admin, targetUser.id)).rejects.toThrow(
+        "requires a UserRepository",
+      );
+    });
   });
 });

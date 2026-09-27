@@ -138,6 +138,13 @@ export const ALL_PERMISSIONS: Permission[] = [
   "kri.delete",
 ];
 
+/**
+ * Granted to every authenticated user regardless of role — there's no
+ * invite/onboarding flow yet (ACT-091) that could assign it per-user,
+ * and feedback capture is meant to be frictionless, not gated.
+ */
+export const BASE_PERMISSIONS: Permission[] = ["feedback.create"];
+
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
   if (!actor.roles.includes(permission)) {
     throw new ForbiddenError(`Missing permission: ${permission}`);

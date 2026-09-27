@@ -53,6 +53,19 @@ export function rolesRouter(roleService: RoleService): Router {
     }
   });
 
+  // SEC-005: the RBAC role names above aren't the full picture — this
+  // returns the actual effective permission set (legacy users.roles +
+  // BASE_PERMISSIONS + every held role's permissions), same computation
+  // server.ts's identity resolver uses to gate requests.
+  router.get("/users/:userId/permissions", async (req, res, next) => {
+    try {
+      const permissions = await roleService.getEffectivePermissions(req.user, req.params["userId"] as string);
+      res.json({ data: permissions });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/:id", async (req, res, next) => {
     try {
       const role = await roleService.get(req.user, req.params["id"] as string);
