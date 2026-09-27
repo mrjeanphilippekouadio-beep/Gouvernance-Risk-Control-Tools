@@ -1,3 +1,4 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>GRC Tools — Avancement</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
@@ -161,6 +162,7 @@
   }
   .badge.done { background: var(--done-soft); color: var(--done); }
   .badge.partial { background: var(--progress-soft); color: var(--progress); }
+  .badge.new { background: var(--accent-soft); color: var(--accent); }
 
   .backlog-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
   .backlog-table th {
@@ -185,6 +187,7 @@
     line-height: 1.5;
   }
   .vig-item b { color: var(--ink); }
+  .vig-item.resolved { border-left-color: var(--done); background: var(--done-soft); }
 
   ol.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
   ol.steps li {
@@ -226,14 +229,14 @@
   </header>
 
   <div class="stats">
-    <div class="stat"><div class="n">~22%</div><div class="l">du backlog fonctionnel ACF couvert (142 actions, 26 domaines)</div></div>
-    <div class="stat"><div class="n">11</div><div class="l">modules métier livrés (Risk, Control, RBAC, Feedback…)</div></div>
-    <div class="stat"><div class="n">70</div><div class="l">tests automatisés, 13 fichiers, tous verts</div></div>
-    <div class="stat"><div class="n">15</div><div class="l">migrations appliquées sur Neon</div></div>
+    <div class="stat"><div class="n">~50%</div><div class="l">du backlog fonctionnel ACF couvert (142 actions, 26 domaines)</div></div>
+    <div class="stat"><div class="n">14</div><div class="l">modules métier livrés (Risk, Control, RBAC, KPI, RiskEvaluation…)</div></div>
+    <div class="stat"><div class="n">202</div><div class="l">tests automatisés, 22 fichiers, tous verts</div></div>
+    <div class="stat"><div class="n">20</div><div class="l">migrations appliquées sur Neon</div></div>
   </div>
 
   <section>
-    <h2>Livré <span class="count">8 modules · &ge; 85 %</span></h2>
+    <h2>Livré <span class="count">14 modules · &ge; 85 %</span></h2>
     <div class="modules">
 
       <div class="card">
@@ -281,7 +284,7 @@
       <div class="card">
         <div class="row1"><h3>Evidence</h3><span class="pct">85%</span></div>
         <div class="track"><div class="fill" style="width:85%"></div></div>
-        <p>Upload vers Google Drive, résolution tenant vérifiée avant tout accès stockage.</p>
+        <p>Upload vers Google Drive, résolution tenant vérifiée avant tout accès stockage ; suppression = corbeille Drive, jamais définitive.</p>
         <span class="badge done">Livré</span>
       </div>
 
@@ -290,6 +293,48 @@
         <div class="track"><div class="fill" style="width:100%"></div></div>
         <p>Hors backlog ACF d'origine — widget flottant, triage admin, notification Telegram automatique.</p>
         <span class="badge done">Livré</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>KPI</h3><span class="pct">90%</span></div>
+        <div class="track"><div class="fill" style="width:90%"></div></div>
+        <p>Définition par département/processus, mesures append-only horodatées.</p>
+        <span class="badge new">Nouveau</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>RiskAppetite</h3><span class="pct">90%</span></div>
+        <div class="track"><div class="fill" style="width:90%"></div></div>
+        <p>Seuils par sous-catégorie (et entité), archivage motivé.</p>
+        <span class="badge new">Nouveau</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>RatingScale</h3><span class="pct">90%</span></div>
+        <div class="track"><div class="fill" style="width:90%"></div></div>
+        <p>Grille probabilité/impact, 7 axes, maîtrise L1/L2/L3, activation de version avec archivage automatique de la précédente.</p>
+        <span class="badge new">Nouveau</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>UserManagement</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Création (rôle RBAC obligatoire), suspension/réactivation, <code>GET /users/me</code>. Reste : profil étendu (fonction/entité).</p>
+        <span class="badge new">Nouveau</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>RiskEvaluation</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Cotation inhérente → maîtrise → résiduelle, scores calculés serveur, comparaison à l'appétence, validation maker-checker, immuable une fois finalisée.</p>
+        <span class="badge new">Nouveau</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>KRI</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Miroir de KPI avec seuils Vert/Orange/Rouge, mesures append-only, alerte automatique sur dépassement.</p>
+        <span class="badge new">Nouveau</span>
       </div>
 
     </div>
@@ -307,16 +352,16 @@
       </div>
 
       <div class="card">
-        <div class="row1"><h3>RBAC (rôles)</h3><span class="pct">70%</span></div>
-        <div class="track"><div class="fill" style="width:70%; background:var(--progress)"></div></div>
-        <p>Création, assignation, révocation, maker-checker. Manque : permissions comme donnée éditable plutôt qu'énumération figée.</p>
+        <div class="row1"><h3>RBAC (rôles)</h3><span class="pct">78%</span></div>
+        <div class="track"><div class="fill" style="width:78%; background:var(--progress)"></div></div>
+        <p>Création, assignation, révocation, maker-checker, permissions effectives d'un utilisateur consultables. Manque : permissions comme donnée éditable plutôt qu'énumération figée.</p>
         <span class="badge partial">Partiel</span>
       </div>
 
       <div class="card">
         <div class="row1"><h3>Auth / SSO</h3><span class="pct">25%</span></div>
         <div class="track"><div class="fill" style="width:25%; background:var(--progress)"></div></div>
-        <p>Login Google fonctionnel. Manque : invitation, désactivation self-service d'un utilisateur (ACT-091/092).</p>
+        <p>Login Google fonctionnel. Manque : invitation, whitelist SSO en libre-service (ACT-090/092).</p>
         <span class="badge partial">Partiel</span>
       </div>
 
@@ -331,22 +376,16 @@
   </section>
 
   <section>
-    <h2>Backlog <span class="count">15 domaines · 93 actions · 0 %</span></h2>
+    <h2>Backlog <span class="count">9 domaines · 55 actions · 0 %</span></h2>
     <table class="backlog-table">
       <thead><tr><th>Domaine</th><th class="n">Actions</th></tr></thead>
       <tbody>
-        <tr><td>RiskEvaluation</td><td class="n">11</td></tr>
         <tr><td>Dashboard</td><td class="n">10</td></tr>
-        <tr><td>KRI</td><td class="n">10</td></tr>
-        <tr><td>UserManagement</td><td class="n">8</td></tr>
         <tr><td>RiskOwnership</td><td class="n">8</td></tr>
-        <tr><td>RatingScale</td><td class="n">8</td></tr>
-        <tr><td>ActionPlan</td><td class="n">7</td></tr>
         <tr><td>Config</td><td class="n">7</td></tr>
+        <tr><td>ActionPlan</td><td class="n">7</td></tr>
         <tr><td>Reporting</td><td class="n">6</td></tr>
         <tr><td>Cartography</td><td class="n">5</td></tr>
-        <tr><td>KPI</td><td class="n">5</td></tr>
-        <tr><td>RiskAppetite</td><td class="n">4</td></tr>
         <tr><td>Notification (métier)</td><td class="n">4</td></tr>
         <tr><td>JournalGlobal</td><td class="n">4</td></tr>
         <tr><td>Governance</td><td class="n">4</td></tr>
@@ -357,29 +396,35 @@
   <section>
     <h2>Points de vigilance</h2>
     <div class="vigilance">
+      <div class="vig-item resolved"><b>Revue de sécurité effectuée sur le code déjà en production.</b> 6 vulnérabilités réelles corrigées (maker-checker contournable sur l'exécution de contrôle, surcharge client de champs sensibles, permissions héritées non filtrées, suppression Drive définitive au lieu d'une corbeille…) — suite couverte par 16 tests de régression dédiés.</div>
+      <div class="vig-item resolved"><b>Onboarding partiellement outillé.</b> Un admin peut désormais créer un utilisateur via <code>POST /users</code> (UserManagement) au lieu d'un <code>INSERT</code> SQL manuel. Reste : invitation / whitelist SSO en libre-service (ACT-090-092).</div>
       <div class="vig-item"><b>Un seul environnement.</b> La base Neon utilisée en développement est la base réelle — aucune séparation dev/prod aujourd'hui.</div>
       <div class="vig-item"><b>Rien n'est déployé.</b> La CI construit et teste, mais aucun Cloud Run n'est actif — l'app ne tourne qu'en local.</div>
       <div class="vig-item"><b>Secrets en clair localement.</b> Le token Telegram et <code>DATABASE_URL</code> vivent dans un <code>.env</code> non commité — à migrer vers un gestionnaire de secrets avant toute mise en production.</div>
-      <div class="vig-item"><b>Pas d'onboarding self-service.</b> Ajouter un utilisateur autorisé demande aujourd'hui un <code>INSERT</code> SQL manuel dans <code>users</code>.</div>
+      <div class="vig-item"><b>RiskEvaluation duplique sous-catégorie/entité depuis Risk.</b> <code>Risk</code> n'a pas encore de colonne <code>subCategory</code>/<code>entity</code> canonique ; l'évaluation les capture en snapshot à la création (cohérent avec le legacy Apps Script) — à trancher si ces champs doivent migrer sur <code>Risk</code>.</div>
+      <div class="vig-item"><b>KRI : ciblage d'alerte incomplet.</b> L'alerte automatique sur seuil dépassé n'a pas de journal persistant, et ne peut pas encore cibler un "Risk Owner" individuel — <code>Risk</code> ne porte qu'un département propriétaire, pas un utilisateur.</div>
       <div class="vig-item"><b>Divergence non tranchée.</b> Le modèle LLM de l'agent DevOps (A09) diffère entre la feuille Config et la feuille Model Registry du classeur ACF.</div>
       <div class="vig-item"><b>5 agents ACF sans prompt source.</b> A01 (Intake, actif), A11, A17, A19, A20 référencés dans la hiérarchie mais absents de la feuille System Prompts.</div>
+      <div class="vig-item"><b>Les 6 nouveaux modules n'ont pas encore d'interface frontend.</b> KPI, RiskAppetite, RatingScale, UserManagement, RiskEvaluation et KRI sont utilisables via API seulement — le frontend reste sur Risk/Admin/Feedback.</div>
     </div>
   </section>
 
   <section>
     <h2>Prochaines étapes recommandées</h2>
     <ol class="steps">
+      <li><div class="step-body"><b>Construire l'interface frontend des 6 nouveaux modules</b><span>KPI, RiskAppetite, RatingScale, UserManagement, RiskEvaluation, KRI n'existent qu'en API pour l'instant — le design system livré ce batch (Table, FormField, StatusBadge, Button) est prêt à les recevoir.</span></div></li>
+      <li><div class="step-body"><b>Reprendre le reste du backlog</b><span>Dashboard, RiskOwnership et ActionPlan sont les briques restantes les plus proches du cœur risque déjà construit.</span></div></li>
       <li><div class="step-body"><b>Décider et déployer un environnement de production</b><span>Cloud Run, séparé de la base de développement, secrets en Secret Manager.</span></div></li>
-      <li><div class="step-body"><b>Construire l'onboarding utilisateur</b><span>ACT-090 à 093 — sortir de l'ajout manuel en base pour whitelister un nouvel utilisateur.</span></div></li>
+      <li><div class="step-body"><b>Achever l'onboarding utilisateur en libre-service</b><span>ACT-090 à 092 — whitelist / invitation SSO, au-delà de la création admin déjà livrée.</span></div></li>
       <li><div class="step-body"><b>Rendre les permissions éditables</b><span>ACT-116/118 — une vraie matrice IAM en base plutôt qu'une énumération TypeScript figée.</span></div></li>
-      <li><div class="step-body"><b>Reprendre le backlog métier</b><span>RiskEvaluation, KRI et RiskAppetite sont les briques les plus proches du cœur risque déjà construit.</span></div></li>
-      <li><div class="step-body"><b>Revue de sécurité</b><span><code>/security-review</code> sur l'ensemble avant d'ouvrir l'accès à davantage d'utilisateurs.</span></div></li>
       <li><div class="step-body"><b>Décider de la suite Telegram</b><span>Phase B2 (transcription vocale, fournisseur à choisir) et Phase C (piloter GRC Tools depuis Telegram), ou s'arrêter à B1.</span></div></li>
     </ol>
   </section>
 
   <footer>
-    Méthodologie : couverture calculée à partir des 142 actions du backlog ACF (<code>.claude/backlog/grc-actions.yaml</code>), pondérée par domaine. Les pourcentages par module reflètent une estimation raisonnée du code existant, pas une mesure automatisée — à recalibrer si la définition d'une action change.
+    Méthodologie : couverture calculée à partir des 142 actions du backlog ACF (<code>.claude/backlog/grc-actions.yaml</code>), pondérée par domaine. Les pourcentages par module reflètent une estimation raisonnée du code existant, pas une mesure automatisée — à recalibrer si la définition d'une action change. Mis à jour après chaque batch de modules livré ou fusionné dans <code>main</code>.
   </footer>
 
 </div>
+
+</body></html>
