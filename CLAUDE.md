@@ -144,6 +144,29 @@ both a general update and an archive/close action.
   it, even though the product is currently single-tenant.
 - Secrets only via env vars (`backend/.env`, `frontend/.env.local`),
   never committed — see `.gitignore`.
+- **Never trust a client-supplied attribution field.** Any field naming
+  who did something — `recordedBy`, `evaluatorId`, `createdBy`,
+  `escalatedBy`, and anything shaped like it — must be forced
+  server-side to `actor.userId` in the service, never accepted from the
+  request body/`CreateXInput`, even as an optional override. This was
+  fixed once (SEC-001, `ControlExecutionService`) and then **reintroduced
+  independently in two later modules** (`KpiMeasureService`,
+  `KriMeasureService` — SEC-009) precisely because the rule lived only
+  in a test's comments, not here. If you're reviewing a new
+  `CreateXInput` type, grep it for any `...By`/`...ById` field and
+  confirm it's never client-settable.
+- **A terminal/archived-state transition needs its own dedicated
+  permission, never the generic `x.update`** — this applies to the
+  *permission gate*, not just the stored status value (see "A generic
+  `update()` must never allow a transition into the terminal/archived
+  state" above, which is the narrower DB-level version of this same
+  rule). Confirmed violated twice in already-shipped code
+  (`RatingScaleService.activateVersion` archiving the previous version
+  under `ratingscale.update`; `RiskAppetiteService.setThreshold`
+  retiring a threshold via `active: false` under `riskappetite.update`
+  — SEC-013/SEC-014). When a method's *side effect* is terminal even if
+  its own name/permission suggests a routine update, gate it like the
+  terminal action it actually is.
 
 ## Architecture Agentique ACF
 
