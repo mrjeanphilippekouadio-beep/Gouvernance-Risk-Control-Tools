@@ -4,6 +4,7 @@ import type { Feedback, FeedbackCategory, FeedbackStatus } from "../domain/entit
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 
 const VALID_TRANSITIONS: Record<FeedbackStatus, FeedbackStatus[]> = {
   NEW: ["ACKNOWLEDGED", "IN_PROGRESS", "RESOLVED", "DECLINED"],
@@ -17,6 +18,8 @@ export class FeedbackService {
   constructor(
     private readonly feedback: FeedbackRepository,
     private readonly audit: AuditRepository,
+    /** Optional so existing callers/tests built before this existed don't need to change. */
+    private readonly notifier?: Notifier,
   ) {}
 
   async create(
@@ -46,6 +49,12 @@ export class FeedbackService {
       reason: null,
       requestId,
     });
+
+    this.notifier
+      ?.notify(`Nouveau feedback [${entry.category}]${entry.page ? ` depuis ${entry.page}` : ""}: ${entry.message}`)
+      .catch(() => {
+        // Best-effort — a broken notification channel must never fail the actual feedback submission.
+      });
 
     return entry;
   }

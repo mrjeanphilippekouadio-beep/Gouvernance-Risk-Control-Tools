@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "migrate": "tsx src/infrastructure/database/postgres/runMigrations.ts"
+    "migrate": "tsx src/infrastructure/database/postgres/runMigrations.ts",
+    "agent:ask": "tsx src/scripts/telegramAsk.ts",
+    "agent:poll": "tsx src/scripts/telegramPoll.ts"
   },
   "dependencies": {
     "express": "^4.21.2",

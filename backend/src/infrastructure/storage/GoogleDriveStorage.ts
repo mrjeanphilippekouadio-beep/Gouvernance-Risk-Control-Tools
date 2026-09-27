@@ -70,8 +70,16 @@ export class GoogleDriveStorage implements DocumentStorage {
     return res.data.webViewLink ?? `https://drive.google.com/file/d/${storageFileId}/view`;
   }
 
+  /**
+   * SEC-008: moves the file to Drive's trash instead of permanently
+   * deleting it — GRC evidence is proof of a control having been
+   * performed, and CLAUDE.md's soft-delete-only rule applies to it too.
+   * A permanent `drive.files.delete` here made the underlying proof
+   * unrecoverable the moment `evidence.delete` was called, even though
+   * the Postgres row itself was only ever soft-deleted.
+   */
   async delete(storageFileId: string): Promise<void> {
     const drive = await this.drive();
-    await drive.files.delete({ fileId: storageFileId });
+    await drive.files.update({ fileId: storageFileId, requestBody: { trashed: true } });
   }
 }

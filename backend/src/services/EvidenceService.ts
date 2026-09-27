@@ -1,5 +1,6 @@
 import type { EvidenceRepository } from "../domain/repositories/EvidenceRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
+import type { ControlExecutionRepository } from "../domain/repositories/ControlExecutionRepository.js";
 import type { Evidence } from "../domain/entities/Evidence.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -20,6 +21,8 @@ export class EvidenceService {
     private readonly evidences: EvidenceRepository,
     private readonly storage: DocumentStorage,
     private readonly audit: AuditRepository,
+    /** SEC-004: optional so existing tests keep compiling — server.ts must wire the real repository. */
+    private readonly controlExecutions?: ControlExecutionRepository,
   ) {}
 
   async upload(
@@ -39,6 +42,14 @@ export class EvidenceService {
     if (params.content.byteLength === 0) throw new ValidationError("Uploaded file is empty");
     if (params.content.byteLength > MAX_UPLOAD_BYTES) {
       throw new ValidationError(`File exceeds the ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB limit`);
+    }
+
+    // SEC-004: don't attach evidence to another tenant's control execution.
+    if (params.controlExecutionId && this.controlExecutions) {
+      const execution = await this.controlExecutions.getById(actor.tenantId, params.controlExecutionId);
+      if (!execution) {
+        throw new ValidationError(`ControlExecution ${params.controlExecutionId} does not exist in this tenant`);
+      }
     }
 
     const uploaded = await this.storage.upload({
@@ -84,8 +95,13 @@ export class EvidenceService {
     requirePermission(actor, "evidence.delete");
     const evidence = await this.getOwnedOrThrow(actor, id);
 
-    await this.storage.delete(evidence.driveFileId);
+    // SEC-008: soft-delete the DB row first. If the Drive call below then
+    // fails, the record is already correctly marked deleted and the file
+    // is merely an orphan (recoverable, no proof lost) — the old order
+    // could otherwise leave the DB row "active" pointing at nothing were
+    // the DB write to fail after storage.delete had already succeeded.
     await this.evidences.markDeleted(actor.tenantId, id);
+    await this.storage.delete(evidence.driveFileId);
 
     await this.audit.record({
       tenantId: actor.tenantId,

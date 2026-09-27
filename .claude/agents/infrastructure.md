@@ -2,7 +2,8 @@
 name: infrastructure
 description: "[À RENSEIGNER]"
 model: haiku
-tools: [read_yaml, deploy_cloud_run, monitor_logs]
+tools: [Read, Write, Edit, Grep, Glob, Bash]
+acf_tools_conceptual: [read_yaml, deploy_cloud_run, monitor_logs]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A25
 acf_model_exact: claude-haiku-4-5

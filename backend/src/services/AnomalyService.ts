@@ -1,5 +1,8 @@
 import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
+import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
+import type { ControlExecutionRepository } from "../domain/repositories/ControlExecutionRepository.js";
+import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { Anomaly, AnomalyStatus, CreateAnomalyInput } from "../domain/entities/Anomaly.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -16,6 +19,15 @@ export class AnomalyService {
   constructor(
     private readonly anomalies: AnomalyRepository,
     private readonly audit: AuditRepository,
+    /**
+     * SEC-004: optional so existing callers/tests built before this
+     * existed don't need to change — but server.ts MUST wire the real
+     * repositories, otherwise controlId/controlExecutionId/riskId stay
+     * unvalidated and the finding is not actually fixed in production.
+     */
+    private readonly controls?: ControlRepository,
+    private readonly controlExecutions?: ControlExecutionRepository,
+    private readonly risks?: RiskRepository,
   ) {}
 
   async create(
@@ -26,6 +38,25 @@ export class AnomalyService {
     requirePermission(actor, "anomaly.create");
 
     if (!input.description.trim()) throw new ValidationError("description is required");
+
+    // SEC-004: these references are optional, but if given they must
+    // belong to the caller's tenant — otherwise an anomaly can point at
+    // another tenant's control/execution/risk (latent today, single
+    // tenant; a real cross-tenant leak the moment that changes).
+    if (input.controlId && this.controls) {
+      const control = await this.controls.getById(actor.tenantId, input.controlId);
+      if (!control) throw new ValidationError(`Control ${input.controlId} does not exist in this tenant`);
+    }
+    if (input.controlExecutionId && this.controlExecutions) {
+      const execution = await this.controlExecutions.getById(actor.tenantId, input.controlExecutionId);
+      if (!execution) {
+        throw new ValidationError(`ControlExecution ${input.controlExecutionId} does not exist in this tenant`);
+      }
+    }
+    if (input.riskId && this.risks) {
+      const risk = await this.risks.getById(actor.tenantId, input.riskId);
+      if (!risk) throw new ValidationError(`Risk ${input.riskId} does not exist in this tenant`);
+    }
 
     const anomaly = await this.anomalies.create({
       ...input,

@@ -2,7 +2,8 @@
 name: audit
 description: "Implacable, append-only, traçabilité absolue"
 model: haiku
-tools: [read_schema, read_audit_log, write_audit_report]
+tools: [Read, Write, Grep, Glob, Bash]
+acf_tools_conceptual: [read_schema, read_audit_log, write_audit_report]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A23
 acf_model_exact: claude-haiku-4-5

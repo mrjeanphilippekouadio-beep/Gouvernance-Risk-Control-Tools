@@ -43,7 +43,18 @@ export type Permission =
   | "role.assign"
   | "feedback.create"
   | "feedback.read"
-  | "feedback.update";
+  | "feedback.update"
+  | "kpi.read"
+  | "kpi.create"
+  | "kpi.update"
+  | "kpi.delete"
+  | "riskappetite.read"
+  | "riskappetite.update"
+  | "riskappetite.delete"
+  | "ratingscale.read"
+  | "ratingscale.create"
+  | "ratingscale.update"
+  | "ratingscale.delete";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -88,10 +99,34 @@ export const ALL_PERMISSIONS: Permission[] = [
   "feedback.create",
   "feedback.read",
   "feedback.update",
+  "kpi.read",
+  "kpi.create",
+  "kpi.update",
+  "kpi.delete",
+  "riskappetite.read",
+  "riskappetite.update",
+  "riskappetite.delete",
+  "ratingscale.read",
+  "ratingscale.create",
+  "ratingscale.update",
+  "ratingscale.delete",
 ];
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
   if (!actor.roles.includes(permission)) {
     throw new ForbiddenError(`Missing permission: ${permission}`);
   }
+}
+
+/**
+ * SEC-005: `users.roles` is a free-form legacy/bootstrap grant list
+ * (seeded or hand-edited via SQL, never validated) that server.ts unions
+ * with RBAC-role permissions to compute an actor's effective grants. A
+ * typo or stale/renamed string could otherwise sit there silently
+ * forever. Filters candidates down to real, current permissions before
+ * they're trusted — call this on `users.roles`, never on RBAC-derived
+ * permissions (those already came from RoleService.assertKnownPermissions).
+ */
+export function filterKnownPermissions(candidates: readonly string[]): Permission[] {
+  return candidates.filter((c): c is Permission => (ALL_PERMISSIONS as readonly string[]).includes(c));
 }

@@ -34,12 +34,19 @@ export interface CreateDepartmentInput {
   active?: boolean;
 }
 
+/**
+ * SEC-003: riskOwner/riskOwnerDesignatedBy are deliberately absent here
+ * (present on CreateDepartmentInput, not this one) — a generic update
+ * must never be able to change or forge the risk-owner designation
+ * without going through DepartmentService.designateRiskOwner, which
+ * stamps actor.userId and records an audited ASSIGN event. Changing the
+ * manager still auto-re-derives riskOwner when it was never explicitly
+ * designated — see PostgresDepartmentRepository.update.
+ */
 export interface UpdateDepartmentInput {
   name?: string;
   entity?: string | null;
   manager?: string;
-  riskOwner?: string | null;
-  riskOwnerDesignatedBy?: string | null;
   linkedProcesses?: string | null;
   active?: boolean;
 }

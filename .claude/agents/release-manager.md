@@ -2,7 +2,8 @@
 name: release-manager
 description: "Structuré, coordinateur, neutre vis-à-vis des fonctions de contrôle"
 model: haiku
-tools: [read_yaml, tag_release, write_changelog, deploy_cloud_run]
+tools: [Read, Write, Edit, Grep, Glob, Bash]
+acf_tools_conceptual: [read_yaml, tag_release, write_changelog, deploy_cloud_run]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A22
 acf_model_exact: claude-haiku-4-5

@@ -4,11 +4,14 @@ import type { ControlExecutionService } from "../../services/ControlExecutionSer
 
 const ExecutionStatus = z.enum(["DONE", "NOT_DONE", "NOT_APPLICABLE"]);
 
+// SEC-001: executedBy is intentionally NOT accepted from the client —
+// ControlExecutionService.create always stamps actor.userId. Accepting
+// it here let one user attribute an execution to a colleague and then
+// validate it themselves, defeating maker-checker.
 const CreateExecutionBody = z.object({
   controlId: z.string().min(1),
   plannedDate: z.coerce.date().nullish(),
   completedDate: z.coerce.date().nullish(),
-  executedBy: z.string().nullish(),
   result: z.string().nullish(),
   observedAnomalies: z.string().nullish(),
   justificationIfNotDone: z.string().nullish(),
@@ -46,11 +49,7 @@ export function executionsRouter(executionService: ControlExecutionService): Rou
   router.post("/", async (req, res, next) => {
     try {
       const body = CreateExecutionBody.parse(req.body);
-      const execution = await executionService.create(
-        req.user,
-        { ...body, executedBy: body.executedBy ?? undefined },
-        req.requestId,
-      );
+      const execution = await executionService.create(req.user, body, req.requestId);
       res.status(201).json({ data: execution });
     } catch (err) {
       next(err);

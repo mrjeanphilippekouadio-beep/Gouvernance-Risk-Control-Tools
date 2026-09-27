@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
+import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { CreateRiskInput, Risk, UpdateRiskInput } from "../domain/entities/Risk.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -15,12 +16,15 @@ export class RiskService {
   constructor(
     private readonly risks: RiskRepository,
     private readonly audit: AuditRepository,
+    /** SEC-004: optional so existing tests keep compiling — server.ts must wire the real repository. */
+    private readonly departments?: DepartmentRepository,
   ) {}
 
   async create(actor: AuthenticatedUser, input: Omit<CreateRiskInput, "tenantId">, requestId: string): Promise<Risk> {
     requirePermission(actor, "risk.create");
     if (!input.process.trim()) throw new ValidationError("process is required");
     if (!input.description.trim()) throw new ValidationError("description is required");
+    await this.assertDepartmentExists(actor.tenantId, input.ownerDepartmentId);
 
     const risk = await this.risks.create({ ...input, tenantId: actor.tenantId });
 
@@ -63,6 +67,7 @@ export class RiskService {
         throw new ValidationError(`Cannot transition risk from ${before.status} to ${input.status}`);
       }
     }
+    await this.assertDepartmentExists(actor.tenantId, input.ownerDepartmentId);
 
     const after = await this.risks.update(actor.tenantId, id, input);
 
@@ -99,6 +104,13 @@ export class RiskService {
       reason,
       requestId,
     });
+  }
+
+  /** SEC-004: an ownerDepartmentId, if given, must belong to the caller's tenant. */
+  private async assertDepartmentExists(tenantId: string, ownerDepartmentId: string | null | undefined): Promise<void> {
+    if (!ownerDepartmentId || !this.departments) return;
+    const department = await this.departments.getById(tenantId, ownerDepartmentId);
+    if (!department) throw new ValidationError(`Department ${ownerDepartmentId} does not exist in this tenant`);
   }
 }
 

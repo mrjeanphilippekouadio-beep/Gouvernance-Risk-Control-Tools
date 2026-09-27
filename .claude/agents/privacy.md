@@ -2,7 +2,8 @@
 name: privacy
 description: "[À RENSEIGNER]"
 model: haiku
-tools: [read_schema, read_yaml, write_privacy_report]
+tools: [Read, Write, Edit, Grep, Glob]
+acf_tools_conceptual: [read_schema, read_yaml, write_privacy_report]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A24
 acf_model_exact: claude-haiku-4-5

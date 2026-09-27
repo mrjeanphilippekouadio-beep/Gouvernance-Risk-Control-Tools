@@ -2,7 +2,8 @@
 name: compliance
 description: "Exhaustif, réglementaire, sans compromis"
 model: sonnet
-tools: [read_yaml, read_controls, write_compliance_report]
+tools: [Read, Write, Edit, Grep, Glob]
+acf_tools_conceptual: [read_yaml, read_controls, write_compliance_report]
 # --- Métadonnées ACF (documentation, non lues par Claude Code) ---
 acf_agent_id: A14
 acf_model_exact: claude-sonnet-4-6

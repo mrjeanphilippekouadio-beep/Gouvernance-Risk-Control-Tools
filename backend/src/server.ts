@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
+import { filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { pool } from "./infrastructure/database/pool.js";
 import { PostgresRiskRepository } from "./infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresAuditRepository } from "./infrastructure/database/postgres/PostgresAuditRepository.js";
@@ -15,6 +16,12 @@ import { PostgresDepartmentRepository } from "./infrastructure/database/postgres
 import { PostgresProcessRepository } from "./infrastructure/database/postgres/PostgresProcessRepository.js";
 import { PostgresRoleRepository } from "./infrastructure/database/postgres/PostgresRoleRepository.js";
 import { PostgresFeedbackRepository } from "./infrastructure/database/postgres/PostgresFeedbackRepository.js";
+import { PostgresKpiRepository } from "./infrastructure/database/postgres/PostgresKpiRepository.js";
+import { PostgresKpiMeasureRepository } from "./infrastructure/database/postgres/PostgresKpiMeasureRepository.js";
+import { PostgresRiskAppetiteRepository } from "./infrastructure/database/postgres/PostgresRiskAppetiteRepository.js";
+import { PostgresRatingScaleRepository } from "./infrastructure/database/postgres/PostgresRatingScaleRepository.js";
+import { TelegramNotifier } from "./infrastructure/notifications/TelegramNotifier.js";
+import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
@@ -28,6 +35,10 @@ import { ProcessService } from "./services/ProcessService.js";
 import { AuditLogService } from "./services/AuditLogService.js";
 import { RoleService } from "./services/RoleService.js";
 import { FeedbackService } from "./services/FeedbackService.js";
+import { KpiService } from "./services/KpiService.js";
+import { KpiMeasureService } from "./services/KpiMeasureService.js";
+import { RiskAppetiteService } from "./services/RiskAppetiteService.js";
+import { RatingScaleService } from "./services/RatingScaleService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { controlsRouter } from "./api/v1/controls.routes.js";
@@ -39,6 +50,10 @@ import { processesRouter } from "./api/v1/processes.routes.js";
 import { auditLogRouter } from "./api/v1/auditLog.routes.js";
 import { rolesRouter } from "./api/v1/roles.routes.js";
 import { feedbackRouter } from "./api/v1/feedback.routes.js";
+import { kpisRouter } from "./api/v1/kpis.routes.js";
+import { kpiMeasuresRouter } from "./api/v1/kpiMeasures.routes.js";
+import { riskAppetiteRouter } from "./api/v1/riskAppetite.routes.js";
+import { ratingScalesRouter } from "./api/v1/ratingScales.routes.js";
 import { permissionsRouter } from "./api/v1/permissions.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
@@ -67,8 +82,16 @@ const departmentRepository = new PostgresDepartmentRepository(pool);
 const processRepository = new PostgresProcessRepository(pool);
 const roleRepository = new PostgresRoleRepository(pool);
 const feedbackRepository = new PostgresFeedbackRepository(pool);
+const kpiRepository = new PostgresKpiRepository(pool);
+const kpiMeasureRepository = new PostgresKpiMeasureRepository(pool);
+const riskAppetiteRepository = new PostgresRiskAppetiteRepository(pool);
+const ratingScaleRepository = new PostgresRatingScaleRepository(pool);
+const notifier =
+  env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID
+    ? new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID)
+    : new NoopNotifier();
 
-const riskService = new RiskService(riskRepository, auditRepository);
+const riskService = new RiskService(riskRepository, auditRepository, departmentRepository);
 const departmentService = new DepartmentService(departmentRepository, auditRepository);
 const processService = new ProcessService(processRepository, auditRepository);
 const auditLogService = new AuditLogService(auditRepository);
@@ -79,15 +102,25 @@ const effectivenessService = new ControlEffectivenessService(
   controlRepository,
   auditRepository,
 );
-const anomalyService = new AnomalyService(anomalyRepository, auditRepository);
+const anomalyService = new AnomalyService(
+  anomalyRepository,
+  auditRepository,
+  controlRepository,
+  executionRepository,
+  riskRepository,
+);
 const roleService = new RoleService(roleRepository, auditRepository);
-const feedbackService = new FeedbackService(feedbackRepository, auditRepository);
+const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
+const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
+const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
+const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository);
+const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
   env.GOOGLE_DRIVE_CREDENTIALS_PATH,
 );
-const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository);
+const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository, executionRepository);
 
 // Granted to every authenticated user regardless of role — there's no
 // invite/onboarding flow yet (ACT-091) that could assign it per-user,
@@ -118,7 +151,20 @@ const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, 
     [row.tenant_id, row.id],
   );
 
-  const roles = Array.from(new Set([...BASE_PERMISSIONS, ...row.roles, ...rolePerms.map((r) => r.permission)]));
+  // SEC-005: users.roles is hand-edited/seeded, never validated — filter
+  // out anything that isn't a real, current permission before trusting
+  // it, and log what got dropped (a typo or a stale/renamed permission
+  // should be visible, not silently inert forever).
+  const legacyPermissions = filterKnownPermissions(row.roles);
+  const droppedLegacyPermissions = row.roles.filter((r) => !legacyPermissions.includes(r as Permission));
+  if (droppedLegacyPermissions.length > 0) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `users.roles for ${email} contains unknown permission string(s), ignored: ${droppedLegacyPermissions.join(", ")}`,
+    );
+  }
+
+  const roles = Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePerms.map((r) => r.permission)]));
   return { userId: row.id, tenantId: row.tenant_id, roles };
 });
 
@@ -149,6 +195,10 @@ app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(au
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
 app.use("/api/v1/feedback", authMiddleware(identityProvider), feedbackRouter(feedbackService));
 app.use("/api/v1/permissions", authMiddleware(identityProvider), permissionsRouter());
+app.use("/api/v1/kpis", authMiddleware(identityProvider), kpisRouter(kpiService));
+app.use("/api/v1/kpi-measures", authMiddleware(identityProvider), kpiMeasuresRouter(kpiMeasureService));
+app.use("/api/v1/appetite", authMiddleware(identityProvider), riskAppetiteRouter(riskAppetiteService));
+app.use("/api/v1/rating-scales", authMiddleware(identityProvider), ratingScalesRouter(ratingScaleService));
 
 app.use(errorHandler);
 

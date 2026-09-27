@@ -229,3 +229,56 @@ décision central.
   lecture-seule à l'audit trail, tenant-scopé, sans jamais pouvoir
   écrire (`RoleService` applique le maker-checker : un admin ne peut ni
   s'auto-assigner ni s'auto-révoquer un rôle).
+
+## Amorçage d'un agent ACF (onboarding)
+
+Les 16 fichiers `.claude/agents/*.md` portent un `tools:` en vrais noms
+d'outils Claude Code (`Read`, `Write`, `Edit`, `Grep`, `Glob`, `Bash`,
+`Agent` selon le rôle) — la liste ACF d'origine (`read_yaml`,
+`write_code`, `spawn_agent`, …) est conservée telle quelle dans
+`acf_tools_conceptual` pour traçabilité, mais n'est plus ce que Claude
+Code lit pour autoriser l'accès aux outils. Le corps de chaque fichier
+(le system prompt) reste le texte ACF verbatim — sacré, jamais
+reformulé — donc il ne contient aucune connaissance spécifique à ce
+repo. Un agent frais (spawné via l'outil `Agent`, pas un fork) démarre
+avec cette identité générique et rien d'autre : c'est à l'orchestrateur
+(toi ou moi jouant A02) de fournir le contexte repo dans le prompt de
+dispatch. Avant de dispatcher un travail réel à un agent frais :
+
+1. **Fais-le lire les sections déjà existantes** de ce fichier :
+   « Backend architecture » (les 4 couches), « Adding a new domain
+   module » (la recette en 9 étapes), « Security-sensitive
+   conventions » (tenant_id, soft-delete, maker-checker) — ne duplique
+   pas ce contenu dans le prompt de dispatch, pointe dessus.
+2. **Signale les fichiers partagés à haut risque de conflit** :
+   `backend/src/server.ts` et `backend/src/domain/permissions.ts` sont
+   modifiés par quasiment chaque nouveau module (wiring + permissions).
+   Deux agents qui les éditent en parallèle sans coordination
+   produisent des conflits garantis — soit un seul agent à la fois y
+   touche, soit l'orchestrateur fait la fusion après coup (voir le
+   pattern utilisé pour séparer les commits RBAC/Feedback/Telegram :
+   éditer temporairement le fichier pour isoler ce qui appartient à
+   chaque commit, tester, committer, ré-appliquer le reste).
+3. **Rappelle le pattern « paramètre optionnel »** pour ne jamais
+   casser un test existant : quand un service gagne une nouvelle
+   dépendance (ex. `Notifier` dans `FeedbackService`), elle doit être
+   un paramètre de constructeur optionnel avec garde (`this.dep?.x()`),
+   jamais un paramètre requis ajouté à un constructeur déjà utilisé par
+   des tests non modifiables.
+4. **Rappelle la numérotation séquentielle des migrations** — vérifier
+   le dernier numéro dans `database/postgresql/migrations/` avant d'en
+   créer une nouvelle, jamais réutiliser ou deviner un numéro.
+5. **Donne la tâche précise** depuis `.claude/backlog/grc-actions.yaml`
+   (un ou plusieurs `id: ACT-xxx`), pas juste un domaine — un agent
+   frais ne sait pas deviner quel sous-ensemble tu veux.
+6. **Demande une vérification avant de rapporter fini** :
+   `npm run typecheck && npm test` côté backend, `npm run build` côté
+   frontend, systématiquement avant de considérer une tâche terminée.
+
+Pour du travail répétitif sur ce même repo (ex. plusieurs modules du
+backlog en parallèle), un **fork** de la session en cours est presque
+toujours préférable à un agent frais : il hérite de tout ce contexte
+sans qu'il faille le rebriefer, et partage le cache de prompt. Réserve
+les 16 agents ACF aux cas où l'identité/le ton spécifique du rôle
+compte (ex. faire challenger une décision par `security.md` avec son
+ton "paranoïaque bienveillant, zero-trust").
