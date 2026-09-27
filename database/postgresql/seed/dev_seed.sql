@@ -13,7 +13,11 @@ VALUES (
   '00000000-0000-0000-0000-000000000001',
   'dev@example.com',
   'Dev User',
-  ARRAY['risk.read', 'risk.create', 'risk.update', 'risk.delete', 'feedback.create', 'feedback.read', 'feedback.update']
+  ARRAY[
+    'risk.read', 'risk.create', 'risk.update', 'risk.delete',
+    'feedback.read', 'feedback.update',
+    'role.read', 'role.create', 'role.update', 'role.delete', 'role.assign'
+  ]
 )
 ON CONFLICT DO NOTHING;
 
@@ -36,7 +40,7 @@ VALUES (
   '00000000-0000-0000-0000-000000000001',
   'auditeur@example.com',
   'Dev Auditeur',
-  ARRAY['feedback.create']
+  ARRAY[]::text[]
 )
 ON CONFLICT DO NOTHING;
 

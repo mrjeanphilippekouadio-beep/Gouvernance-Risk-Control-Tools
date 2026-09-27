@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { RisksPage } from "./features/risks/RisksPage";
+import { AdminPage } from "./features/admin/AdminPage";
 import { FeedbackWidget } from "./features/feedback/FeedbackWidget";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import "./App.css";
 
 const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
 
+type View = "risks" | "admin";
+
 function App() {
   const { idToken, error, buttonRef, signOut } = useGoogleSignIn(GOOGLE_CLIENT_ID);
   const [devToken, setDevToken] = useState("");
+  const [view, setView] = useState<View>("risks");
 
   const token = idToken ?? devToken;
 
@@ -17,10 +21,18 @@ function App() {
       <>
         <main>
           <h1>GRC Tools</h1>
-          <button type="button" onClick={idToken ? signOut : () => setDevToken("")}>
-            Déconnexion
-          </button>
-          <RisksPage token={token} />
+          <nav className="view-tabs">
+            <button type="button" disabled={view === "risks"} onClick={() => setView("risks")}>
+              Risques
+            </button>
+            <button type="button" disabled={view === "admin"} onClick={() => setView("admin")}>
+              Admin
+            </button>
+            <button type="button" onClick={idToken ? signOut : () => setDevToken("")}>
+              Déconnexion
+            </button>
+          </nav>
+          {view === "risks" ? <RisksPage token={token} /> : <AdminPage token={token} />}
         </main>
         {/* Rendered at the shell level, not per-page, so every
             authenticated page gets the feedback button for free. */}

@@ -39,6 +39,7 @@ import { processesRouter } from "./api/v1/processes.routes.js";
 import { auditLogRouter } from "./api/v1/auditLog.routes.js";
 import { rolesRouter } from "./api/v1/roles.routes.js";
 import { feedbackRouter } from "./api/v1/feedback.routes.js";
+import { permissionsRouter } from "./api/v1/permissions.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
@@ -88,6 +89,11 @@ const documentStorage = new GoogleDriveStorage(
 );
 const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository);
 
+// Granted to every authenticated user regardless of role — there's no
+// invite/onboarding flow yet (ACT-091) that could assign it per-user,
+// and feedback capture is meant to be frictionless, not gated.
+const BASE_PERMISSIONS = ["feedback.create"];
+
 const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, async (email) => {
   // Real lookup against the `users` table from migration 002 — one user
   // row per (tenant, email); tenant/roles are ours, never trusted from
@@ -112,7 +118,7 @@ const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, 
     [row.tenant_id, row.id],
   );
 
-  const roles = Array.from(new Set([...row.roles, ...rolePerms.map((r) => r.permission)]));
+  const roles = Array.from(new Set([...BASE_PERMISSIONS, ...row.roles, ...rolePerms.map((r) => r.permission)]));
   return { userId: row.id, tenantId: row.tenant_id, roles };
 });
 
@@ -142,6 +148,7 @@ app.use("/api/v1/processes", authMiddleware(identityProvider), processesRouter(p
 app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(auditLogService));
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
 app.use("/api/v1/feedback", authMiddleware(identityProvider), feedbackRouter(feedbackService));
+app.use("/api/v1/permissions", authMiddleware(identityProvider), permissionsRouter());
 
 app.use(errorHandler);
 
