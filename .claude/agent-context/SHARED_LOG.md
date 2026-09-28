@@ -1276,3 +1276,43 @@ sont désormais **alignés sur les 4 décisions du Product Owner du
 chantier est **prêt pour le démarrage du Lot 1 (RACI minimal)** — voir
 `GRC_Migration_Plan.md` §2 Lot A (`027_raci_assignments.sql`, numéro à
 reconfirmer au moment réel de l'écriture, protocole §1.2).
+
+---
+
+## 2026-09-28 — @documentation — ADR-002 publié : modèle GRC cible
+
+`docs/architecture/ADR-002-modele-grc-cible.md` créé, canevas et niveau
+de rigueur identiques à `ADR-001-cible-architecture.md`. Referme la
+recommandation restée sans suite depuis la consultation initiale des 15
+agents : un ADR dédié aux arbitrages structurants du nouveau cahier des
+charges GRC, à écrire avant tout travail DB réel — le Lot 1 (RACI
+minimal) démarre en parallèle de cette tâche.
+
+Contenu : Contexte (passage scoring de risques → plateforme GRC/ERM) ;
+Décision 1 (séparation Catalogue/Registre/Évaluation —
+`RiskCatalog`/`Risk`/`RiskEvaluation`, `RiskAssessment` déprécié) ;
+Décision 2 (moteur transverse polymorphe `objectType`/`objectId` pour
+Comments/RACI/Evidence, précédenté par `ActionPlan.sourceType`, injecté
+en paramètre optionnel de constructeur) ; Décision 3 (consolidation
+KPI/KRI en `Indicator`/`IndicatorMeasure`, revirement du Product Owner
+par rapport à l'hypothèse par défaut de la Gap Analysis, stratégie
+Expand → Migrate → Switch → Contract, jamais de `DROP`) ; Décision 4
+(`RiskCategory` canonique, 3 FK nullables) ; Décision 5 (`risk_processes`
+non créée pour ce lot) ; Conséquences (vocabulaire à respecter,
+généralisation du pattern polymorphe et de l'injection optionnelle,
+aucune refonte destructive, point de vigilance sur le pattern
+`if (!this.x) return;` qui peut réintroduire un trou de validation
+silencieux — déjà vécu avec SEC-012) ; Alternatives écartées (table par
+objet pour les commentaires, statu quo Kpi/Kri, fusion
+RiskAssessment/RiskEvaluation, suppression physique immédiate,
+`risk_processes` immédiate, moteur de workflow générique).
+
+Ne duplique pas le contenu technique des 3 documents de référence
+(`GRC_Target_Domain_Model.md`, `GRC_Database_Gap_Analysis.md`,
+`GRC_Migration_Plan.md`) — renvoie vers eux par lien relatif à chaque
+décision. Aucun fichier de code ni les 3 documents de référence
+existants n'ont été modifiés.
+
+**Sert d'intrant à** : le Lot 1 (RACI minimal) en cours et tous les lots
+suivants du Migration Plan (B à H), qui peuvent désormais s'y référer
+pour le « pourquoi » des 5 arbitrages plutôt que rouvrir le débat.
