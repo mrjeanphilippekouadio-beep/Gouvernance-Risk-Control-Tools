@@ -171,3 +171,42 @@ régression. `npm run typecheck` + `npm test` verts (34 fichiers, 366
 tests, dont les 23 de `SecurityBoundaries.test.ts`). Commit `23d09e3`.
 **Prêt pour retest @security** — même branche `main`, pas de PR séparée.
 SEC-012 à SEC-014 restent hors scope, non touchés.
+
+**2026-09-28 — @dev-backend @security** — SEC-012 (Medium) corrigé.
+`ActionPlanService.create()` validait soigneusement `sourceId` via
+`assertSourceExists` (Risk/Control/Kri dans le tenant de l'acteur) mais
+prenait `responsibleUserId`/`departmentId` sur la foi du client — le
+service n'avait ni `UserRepository` ni `DepartmentRepository` du tout.
+Correctif (skill `ponytail`, pattern déjà utilisé pour
+risks/controls/kris/anomalies/evidences dans ce même service, et par
+`RiskService.assertActiveUser`/`assertDepartmentExists`) : deux
+nouveaux paramètres de constructeur optionnels `users?: UserRepository`
+et `departments?: DepartmentRepository` (ajoutés **après** `notifier`,
+pas avant — `notifier` est déjà exercé positionnellement par plusieurs
+tests de `ActionPlanService.test.ts`, l'insérer avant aurait décalé ces
+tests silencieusement), plus deux méthodes privées
+`assertActiveUser`/`assertDepartmentExists` appelées dans `create()`
+juste après `assertSourceExists`. Aucune méthode `update()` générique
+n'existe sur ce service (seulement `updateProgress`, qui ne touche pas
+ces deux champs) donc `create()` est le seul point d'entrée à corriger.
+`server.ts` câble désormais `userRepository`/`departmentRepository`
+(instances déjà utilisées par `RiskService`, aucune nouvelle instance
+créée) aux positions 9 et 10 du constructeur `ActionPlanService`. Le
+test `it.fails` SEC-012 de `SecurityBoundaries.test.ts` (describe
+"SEC-012 ActionPlan cross-entity reference validation") est passé en
+`it()` actif **avec un ajustement nécessaire** (documenté dans la
+consigne de dispatch) : la construction d'origine
+(`new ActionPlanService(actions, inMemoryAuditRepository())`) laissait
+`this.users` à `undefined`, donc la garde `if (!this.users) return;`
+aurait fait passer le test sans jamais exercer le nouveau code — un
+faux `UserRepository` (`getById` renvoie `null`, simulant l'absence
+dans le tenant de l'acteur) a été ajouté à la position `users` (9e
+argument, `risks`/`controls`/`kris`/`anomalies`/`evidences`/`notifier`
+laissés `undefined`). Grep de `ActionPlanService` dans `backend/test/`
+: seul `ActionPlanService.test.ts` (son propre `buildService`, inchangé
+— ne passe jamais `users`/`departments`, donc validation no-op comme
+avant, aucune régression) construit aussi ce service. `npm run
+typecheck` + `npm test` verts (34 fichiers, 366 tests, dont les 23 de
+`SecurityBoundaries.test.ts`). Commit `e623ec6`.
+**Prêt pour retest @security** — même branche `main`, pas de PR
+séparée. SEC-013/SEC-014 restent hors scope, non touchés.
