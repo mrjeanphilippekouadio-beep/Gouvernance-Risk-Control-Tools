@@ -92,3 +92,21 @@ exactes de règles du round 1 jamais écrites dans `CLAUDE.md` (seulement
 en commentaire de test) — corrigé dans PR #11. Voir
 `ACTION_ITEMS.md` pour le détail et la priorisation des correctifs
 restants.
+
+**2026-09-28 — @dev-backend @security** — SEC-009 (High) corrigé.
+`KpiMeasureService.record`/`KriMeasureService.record` acceptaient
+`recordedBy` depuis le body client au lieu de le forcer à
+`actor.userId` — exact réintroduction de la classe SEC-001 sur des
+enregistrements append-only. Correctif : signature `record()` changée
+en `Omit<CreateKpiMeasureInput/CreateKriMeasureInput, "tenantId" |
+"recordedBy">`, `recordedBy: actor.userId` codé en dur dans les deux
+services ; le champ retiré des schémas Zod `CreateKriMeasureBody`/
+`CreateKpiMeasureBody` (`kriMeasures.routes.ts`/`kpiMeasures.routes.ts`).
+Grep de `recordedBy` sur tout `backend/src` confirme qu'aucun autre
+appelant ne le passe encore depuis le client sur ces deux chemins. Les
+2 tests `it.fails` du describe SEC-009 dans
+`SecurityBoundaries.test.ts` sont passés en `it()` actif (regression
+lock). `npm run typecheck` + `npm test` verts (34 fichiers, 366 tests).
+Commit `11b236a`. **Prêt pour retest @security** — même branche
+`main`, pas de PR séparée ouverte pour ce correctif ponctuel. SEC-010 à
+SEC-014 restent hors scope, non touchés.
