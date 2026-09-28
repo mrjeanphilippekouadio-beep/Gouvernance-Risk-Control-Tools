@@ -77,3 +77,18 @@ cours (Dashboard+Reporting, Config, Notification+Governance) et aux
 agents A08/A10 en cours pour tout test qu'ils ajoutent. Règle
 permanente, valable sur ce projet et tous les suivants — voir
 `CLAUDE.md` §Amorçage point 5bis.
+
+**2026-09-27 — @architect @security** — Découverte structurelle : aucun
+des 16 fichiers `.claude/agents/*.md` n'accordait l'outil `Skill` — un
+agent QA a reçu une instruction ("invoque ponytail") et a correctement
+refusé de fabriquer un appel d'outil inexistant, signalant le canal de
+livraison inhabituel. Corrigé : `Skill` ajouté aux 16 agents (PR #10).
+
+**2026-09-27 — @security @qa-engineer** — Round 2 (revue des 9 modules
+batches 1-3) : QA a trouvé 10 findings (6 corrigés directement, dont la
+validation croisée CONTROL/KRI d'ActionPlan jamais testée) ; Security a
+trouvé 6 nouveaux findings (SEC-009 à SEC-014), dont deux régressions
+exactes de règles du round 1 jamais écrites dans `CLAUDE.md` (seulement
+en commentaire de test) — corrigé dans PR #11. Voir
+`ACTION_ITEMS.md` pour le détail et la priorisation des correctifs
+restants.
