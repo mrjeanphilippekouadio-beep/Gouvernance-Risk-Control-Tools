@@ -1,9 +1,20 @@
 # GRC Target Domain Model
 
-Statut : Adopté (2026-09-28) — premier des 3 artefacts du gate posé par le
-Product Owner avant tout travail base de données (voir
-`.claude/agent-context/SHARED_LOG.md`, entrée « Arbitrage du Product
-Owner » du 2026-09-28).
+Statut : Adopté (2026-09-28), **révisé (2026-09-28)** — premier des 3
+artefacts du gate posé par le Product Owner avant tout travail base de
+données (voir `.claude/agent-context/SHARED_LOG.md`, entrée « Arbitrage
+du Product Owner » du 2026-09-28).
+
+**Révision** : cette version intègre les 4 décisions du Product Owner
+du 2026-09-28 sur les points laissés `ARBITRER` par la Database Gap
+Analysis (`docs/architecture/GRC_Database_Gap_Analysis.md`, commit
+`96b7949` — SHARED_LOG, entrée « Arbitrage des 4 points ouverts de la
+Gap Analysis ») : (1) `RiskEvaluation` confirmé unique implémentation
+technique du « Risk Assessment » métier (§5.1/§5.2) ; (2) `RiskCategory`
+confirmé canonique, 3 FK nullables proposées (§4.5) ; (3) `risk_processes`
+explicitement non créée pour ce lot (§4.2) ; (4) `Kpi`/`Kri` fusionnés en
+un modèle physique unique `Indicator`/`IndicatorMeasure` (§5.5 — le point
+le plus structurant du lot). Voir §12 pour la synthèse chiffrée à jour.
 
 Sert d'intrant à :
 - **Database Gap Analysis** (à produire) — compare ce modèle cible à
@@ -41,9 +52,9 @@ référencées — jamais dupliquées — par les sections de domaine.
 
 | # | Distinction | Où elle s'applique dans ce document |
 |---|---|---|
-| 1 | `Risk Catalog ≠ Risk ≠ Risk Assessment` | §4 Référentiel / §5 Risk Management — `RiskCatalog` (NOUVEAU) est le dictionnaire, `Risk` (EXISTANT_À_ÉTENDRE) est le registre, `RiskAssessment` (EXISTANT) est l'instantané daté. Jamais fusionnés. |
+| 1 | `Risk Catalog ≠ Risk ≠ Risk Assessment` | §4 Référentiel / §5 Risk Management — `RiskCatalog` (NOUVEAU) est le dictionnaire, `Risk` (EXISTANT_À_ÉTENDRE) est le registre, « Risk Assessment » (concept métier du cahier des charges §7.1.C) est incarné exclusivement par `RiskEvaluation` (EXISTANT) — voir §5.1/§5.2, tranché le 2026-09-28. `RiskAssessment` (l'entité technique de ce nom, scaffolding jamais câblé) est DÉPRÉCIÉE, pas une seconde implémentation du même concept. Jamais fusionnés. |
 | 2 | `Incident ≠ Anomaly ≠ Finding` | §6 Incidents / §7 Contrôle interne / §9 Audit — trois entités distinctes avec trois cycles de vie distincts : `Incident` (NOUVEAU) = événement réel, `Anomaly` (EXISTANT) = écart constaté lors d'un contrôle, `Finding` (NOUVEAU) = constat d'audit. |
-| 3 | `IAM ≠ RACI` | §2.2 — `Role`/`Permission`/`RoleAssignment` (EXISTANT, IAM technique = *peut faire*) restent strictement séparés de `RaciAssignment` (NOUVEAU, responsabilité métier = *doit faire*). Le champ `owner`/`ownerId` sur les objets métier (déjà présent sur `Risk`, `Control`, `Kpi`) reste un raccourci de requêtage — la vérité détaillée reste RACI, jamais l'inverse. |
+| 3 | `IAM ≠ RACI` | §2.2 — `Role`/`Permission`/`RoleAssignment` (EXISTANT, IAM technique = *peut faire*) restent strictement séparés de `RaciAssignment` (NOUVEAU, responsabilité métier = *doit faire*). Le champ `owner`/`ownerId` sur les objets métier (déjà présent sur `Risk`, `Control`, `Indicator`) reste un raccourci de requêtage — la vérité détaillée reste RACI, jamais l'inverse. |
 | 4 | `Evidence ≠ Document` | §2.3 vs §4.4 — `Evidence` (EXISTANT_À_ÉTENDRE) est une preuve d'exécution rattachée par le moteur polymorphe transverse ; `Document` (NOUVEAU) est une référence du dispositif documentaire (procédure, politique, manuel) rattachée au référentiel des risques. Deux objets, deux cycles de vie, jamais une même table. |
 | 5 | Événements temporels ≠ métriques calculées | §6.3 — `Incident` conserve les 4 timestamps sources (occurrence/détection/confinement/résolution) ; `Velocity`/`Persistence` sont des valeurs **calculées** à la lecture (à la manière de `computeKriStatus`/`computeActionPlanStatus`, déjà pratiqué dans ce backend), jamais des colonnes saisies manuellement sur l'incident. |
 
@@ -100,7 +111,8 @@ de risque et d'un manager.
   pilote/propriétaire quand plusieurs personnes doivent être
   co-responsables (cas non couvert par les deux champs texte actuels).
 - **Relations** : 1:N vers `Process` ; référencé par `Risk.ownerDepartmentId`,
-  `Kpi.departmentId`, `ActionPlan.departmentId`, `Control.departmentId`.
+  `Indicator.departmentId` (KPI uniquement, §5.5), `ActionPlan.departmentId`,
+  `Control.departmentId`.
 
 ### 1.3 `Process` — **EXISTANT_À_ÉTENDRE**
 Un processus (ou sous-processus, ou activité), hiérarchie
@@ -120,7 +132,8 @@ auto-référencée à 3 niveaux, rattaché à un département.
   par une nouvelle colonne sur `Process`.
 - **Relations** : self N:1 (`parentId`) ; N:1 vers `Department`
   (implicite aujourd'hui — voir Gap Analysis pour vérifier la présence
-  d'une FK `departmentId` réelle) ; 1:N vers `Kpi`/`Kri` (`processId`).
+  d'une FK `departmentId` réelle) ; 1:N vers `Indicator` (`processId`,
+  KPI uniquement — §5.5).
 
 ### 1.4 `User` — **EXISTANT**
 Identité applicative, une ligne par `(tenantId, email)`.
@@ -173,9 +186,10 @@ charges (« fonction transverse ≠ table par objet »).
 - **Relations** : N:1 vers `User` ; polymorphe vers tout objet GRC
   (`objectType`/`objectId`) — Risque, Contrôle, Plan d'action, Incident,
   Anomalie, Évaluation. Champ `owner`/`ownerId` déjà présent sur `Risk`,
-  `Control`, `Kpi`, `Kri`, `ActionPlan` reste un **raccourci de
-  requêtage** vers le `A` (ou le `R`) principal — jamais la source de
-  vérité, conformément à la Règle §25 du cahier des charges.
+  `Control`, `Indicator` (KPI : `owner` ; KRI : lien via `riskId`),
+  `ActionPlan` reste un **raccourci de requêtage** vers le `A` (ou le
+  `R`) principal — jamais la source de vérité, conformément à la Règle
+  §25 du cahier des charges.
 - **Conçu maintenant, exposé au Lot 7** (§0.2) — dépendance technique du
   moteur polymorphe déjà câblée dans ce document dès Lot 1 conceptuel.
 
@@ -269,9 +283,11 @@ charges (« fonction transverse ≠ table par objet »).
   `RiskCatalog` peut donner naissance à zéro, un ou plusieurs `Risk`
   (registre) dans différents départements/processus.
 - **Attributs clés** : `id`, `tenantId`, `reference` (ex. `R-OP-001`),
-  `name`, `definition`, `category` (ou `riskCategoryId` → `RiskCategory`,
-  §5.4), `status` (`ACTIVE`/`INACTIVE`), `regulatoryReferences` (texte
-  libre ou lien vers `RegulatoryFramework`, EXISTANT).
+  `name`, `definition`, `category` (texte libre, conservé) +
+  `riskCategoryId: string | null` (FK nullable vers `RiskCategory`,
+  §4.5 — décision Product Owner du 2026-09-28), `status`
+  (`ACTIVE`/`INACTIVE`), `regulatoryReferences` (texte libre ou lien
+  vers `RegulatoryFramework`, EXISTANT).
 - **Relations** : 1:N vers `Risk` (`Risk.riskCatalogId`, nouveau champ,
   voir §4.2) ; N:N vers `RiskCause` via `RiskCatalogCause` (§4.2) ; N:N
   vers `Document` via un lien polymorphe (§4.4/§2.3-2.4 pattern).
@@ -303,18 +319,29 @@ charges (« fonction transverse ≠ table par objet »).
     un instantané indépendant (design déjà documenté comme
     intentionnel dans le code) — décision Architecture explicitement
     laissée ouverte, à statuer en Gap Analysis.
-  - Table de liaison N:N `risk_processes` (NOUVEAU) si le point
-    d'arbitrage §37.A du cahier des charges (« un risque peut-il être
-    rattaché à plusieurs processus ? ») est tranché positivement — non
-    créée par ce document, seulement anticipée.
+
+> **`risk_processes` — tranché par le Product Owner le 2026-09-28**
+> (SHARED_LOG, « Arbitrage des 4 points ouverts de la Gap Analysis ») :
+> **pas de table de liaison N:N `Risk`↔`Process` pour le lot initial.**
+> Le point d'arbitrage §37.A du cahier des charges (« un risque
+> peut-il être rattaché à plusieurs processus ? ») n'est **pas** tranché
+> positivement à ce stade — la relation existante `Risk.process`
+> (colonne texte libre, `003_risks.sql`, une valeur par risque — 1:1
+> conceptuel avec le processus principal) reste **suffisante** pour ce
+> lot. C'est une décision explicite, pas un oubli : `risk_processes`
+> reste réévaluable plus tard si un besoin N:N réel se confirme, sans
+> remettre en cause le catalogue (`RiskCatalog`) ni le reste de ce
+> modèle. Aucune table `risk_processes` n'est donc créée par ce document
+> ni par la Gap Analysis/Migration Plan qui en découlent pour ce lot.
 - **Relations** : N:1 vers `RiskCatalog` (proposé) ; N:1 vers
   `Department` (`ownerDepartmentId`) ; N:1 vers `User` (`ownerId`,
   `superiorOwnerId`) ; 1:N vers `RiskAssessment` et `RiskEvaluation` ;
   N:N vers `RiskCause` (proposé, via table de liaison) ; N:N vers
   `Document` (proposé, via lien polymorphe) ; N:N vers `Control`
   (`Control.coveredRiskIds`, EXISTANT) ; N:N vers `Incident` (proposé,
-  §6.2) ; N:N vers `Indicator`/`Kri`/`Kpi` (EXISTANT via `Kri.riskId` +
-  table `kri_risks`) ; polymorphe vers RACI/Comments/Evidence (§2).
+  §6.2) ; N:N vers `Indicator` (§5.5, type KRI uniquement — via
+  `Indicator.riskId` obligatoire + table `indicator_risks`, remplace
+  `kri_risks`) ; polymorphe vers RACI/Comments/Evidence (§2).
 
 ### 4.3 `RiskCause` / `RiskCatalogCause` — **NOUVEAU**
 - **Définition** : une cause est un objet réutilisable, indépendant du
@@ -347,62 +374,101 @@ charges (« fonction transverse ≠ table par objet »).
   `Process`/`Control` de référencer aussi des documents sans dupliquer
   le mécanisme.
 
-### 4.5 `RiskCategory` — **EXISTANT**
+### 4.5 `RiskCategory` — **EXISTANT** — canonique, FK nullable en cours de câblage
+
+> **Tranché par le Product Owner le 2026-09-28** (SHARED_LOG, « Arbitrage
+> des 4 points ouverts de la Gap Analysis ») : `RiskCategory` (table
+> `risk_categories`, déjà en place) est confirmée comme le référentiel
+> **canonique** unique des catégories/sous-catégories de risque. Les
+> **3 tables** qui la référencent aujourd'hui en texte libre gagnent
+> chacune une FK nullable vers elle, migrée progressivement
+> (Expand/Contract complet : FK nullable → backfill → contrôle → bascule
+> applicative → dépréciation du texte libre — **jamais de `DROP` du
+> champ texte immédiat**) :
+> 1. `RiskCatalog.category` → `RiskCatalog.riskCategoryId` (§4.1) ;
+> 2. `RiskAppetite.subCategory` → `RiskAppetite.riskCategoryId` (§5.4) ;
+> 3. `RiskEvaluation.subCategory` → `RiskEvaluation.riskCategoryId` (§5.2).
+>
+> Le séquencement précis (ordre des 5 étapes ci-dessus par table, avec
+> quelle migration numérotée) relève du Migration Plan (prochain
+> artefact, Dev DB), pas de ce document — ce document fixe seulement la
+> forme cible : trois FK nullables vers `RiskCategory`, les trois champs
+> texte restant lisibles jusqu'à dépréciation actée.
+
 - **Définition** : taxonomie catégorie/sous-catégorie du risque,
   auto-référencée sur un niveau. Déjà conforme au besoin de
   configurabilité du cahier des charges (§34.1).
 - **Attributs clés** : `name`, `parentId`, `active`.
-- **Relations** : self N:1 (`parentId`). **Non encore liée par FK**
-  depuis `RiskAppetite.subCategory` ni `RiskEvaluation.subCategory`
-  (les deux restent en texte libre — écart déjà documenté dans le code
-  source lui-même comme suivi ouvert, non résolu par ce document).
-  Point de vigilance pour la Gap Analysis : décider si `RiskCatalog.category`
-  (§4.1) doit référencer cette table par FK dès sa création.
+- **Relations** : self N:1 (`parentId`) ; **cible** — 1:N vers
+  `RiskCatalog` (`riskCategoryId`, proposé), `RiskAppetite`
+  (`riskCategoryId`, proposé) et `RiskEvaluation` (`riskCategoryId`,
+  proposé). Aucune des trois FK n'est câblée par ce document — c'est
+  l'intrant que ce document fournit à la Gap Analysis/Migration Plan qui
+  suit, conformément à la décision Product Owner.
 
 ---
 
 ## 5. Risk Management
 
-### 5.1 `RiskAssessment` — **EXISTANT**
-- **Définition** : instantané **daté et versionné** de la cotation d'un
-  risque (distinction 1, le troisième maillon `Risk Catalog → Risk →
-  Risk Assessment`). Jamais réécrit — une nouvelle ligne par
-  réévaluation. Répond à « quelle était la cartographie du risque à la
-  date X ».
-- **Attributs clés** : `riskId`, `version`, `probability`, `impact`,
-  `inherentScore`, `residualProbability/Impact/Score`,
-  `scoringConfigVersion`, `effectiveFrom`/`effectiveUntil`.
-- **Relations** : N:1 vers `Risk`. Distinct de `RiskEvaluation`
-  (§5.2) — les deux entités coexistent aujourd'hui dans le code avec
-  des rôles qui se chevauchent partiellement ; point à trancher
-  explicitement en Gap Analysis (voir note ci-dessous), **pas fusionnées
-  ici par raccourci**.
+### 5.1 `RiskAssessment` — **EXISTANT, DÉPRÉCIÉ**
 
-> **Point de vigilance signalé à la Gap Analysis** : le code actuel a
-> *deux* entités qui scorent un risque — `RiskAssessment` (simple,
-> probability × impact, versionné par ligne) et `RiskEvaluation`
-> (workflow complet : axes d'impact multiples, maîtrise par ligne de
-> défense, appétence, brouillon → validé/rejeté/validé-comité). Ce
-> document ne tranche pas lequel est le « Risk Assessment » cible du
-> cahier des charges §7.1.C — c'est une décision d'Architecture
-> explicite à documenter dans la Gap Analysis (fusion progressive,
-> dépréciation de l'un au profit de l'autre, ou coexistence assumée
-> avec des rôles redéfinis). Ne pas la deviner ici.
+> **Tranché par le Product Owner le 2026-09-28** (voir
+> `.claude/agent-context/SHARED_LOG.md`, entrée « Arbitrage des 4 points
+> ouverts de la Gap Analysis ») : le point de vigilance ci-dessous, posé
+> par la première version de ce document, est **clos**. `RiskEvaluation`
+> (§5.2) est l'**unique implémentation technique** du concept métier
+> « Risk Assessment » du cahier des charges §7.1.C (troisième maillon
+> `Risk Catalog → Risk → Risk Assessment`). « Risk Assessment » n'est
+> **pas une entité séparée** du modèle physique — c'est le nom métier
+> que porte `RiskEvaluation` dans le cahier des charges. Aucune ambiguïté
+> ne doit subsister dans la suite du projet entre les deux usages du
+> terme.
 
-### 5.2 `RiskEvaluation` — **EXISTANT**
+- **Statut** : scaffolding mort — entité, interface repository et table
+  `risk_assessments` posées au tout début du projet (migration `003`,
+  la même que `risks`), jamais raccordées à un service ni une route
+  (voir investigation complète dans `GRC_Database_Gap_Analysis.md` §1).
+  Aucune implémentation Postgres concrète n'existe
+  (`PostgresRiskAssessmentRepository.ts` absent).
+- **Décision** : `RiskAssessment` (l'entité technique de ce nom) reste
+  **DÉPRÉCIÉE**, comme proposé par la Gap Analysis §1.2 — dépréciation,
+  jamais suppression brutale (Expand/Contract). La table `risk_assessments`
+  reste en place (coût de stockage nul, table vide) ; aucun nouveau
+  développement ne doit s'y raccorder ; sa suppression physique reste
+  soumise à un sign-off ultérieur explicite (Architecture + Product
+  Owner), hors périmètre de ce document.
+- **Ce que ce document ne fait pas** : il ne fusionne pas
+  `RiskAssessment` et `RiskEvaluation` en une seule table — les deux
+  modèles ne se recouvrent pas champ à champ et une fusion casserait le
+  contrat déjà stable de `RiskEvaluation`. Il n'y a simplement plus
+  qu'**un** chemin technique vivant : `RiskEvaluation`.
+- **Relations** : N:1 vers `Risk` (chemin mort, non alimenté).
+
+### 5.2 `RiskEvaluation` — **EXISTANT** — implémentation cible unique du « Risk Assessment » métier
 - **Définition** : évaluation périodique complète d'un risque selon une
   méthodologie versionnée (axes d'impact, maîtrise par ligne de
   défense L1/L2/L3, appétence, workflow de validation). Append-only,
-  immuable une fois `VALIDATED`/`REJECTED`/`VALIDE_COMITE`.
+  immuable une fois `VALIDATED`/`REJECTED`/`VALIDE_COMITE`. Constitue,
+  seule, le troisième maillon `Risk Catalog → Risk → Risk Assessment` du
+  cahier des charges §7.1.C (décision Product Owner du 2026-09-28,
+  §5.1) : toute évolution future du « scoring de risque », y compris un
+  besoin de cotation rapide hors workflow, se conçoit comme une
+  extension additive de `RiskEvaluation`, jamais comme un retour à
+  `RiskAssessment` ni comme une nouvelle entité parallèle.
 - **Attributs clés** : `evaluationType`, `status`, `evaluatorId`,
-  `subCategory`/`entity` (capturés en instantané, voir note ci-dessus),
+  `subCategory`/`entity` (capturés en instantané — voir §4.5/§5.4 sur
+  le passage progressif vers une FK `RiskCategory`),
   `ratingScaleId`/`ratingScaleVersion`, `inherentProbability`/
   `inherentImpacts`/`inherentScore`, `masteryLines`/`masteryGlobal`,
   `residualProbability`/`residualImpacts`/`residualScore`,
   `appetiteThresholdSuggested`/`Override`/`Applied`/`appetiteExceeded`.
-- **Relations** : N:1 vers `Risk`, `RatingScale` ; référence implicite
-  `RiskAppetite` (résolution par `subCategory`/`entity`, pas de FK
-  directe).
+- **Point d'extension proposé (additif, Expand)** : `riskCategoryId:
+  string | null` — FK nullable vers `RiskCategory` (§4.5), en
+  complément (pas en remplacement immédiat) du `subCategory` texte libre
+  existant, dans le cadre de la migration progressive décidée en §4.5.
+- **Relations** : N:1 vers `Risk`, `RatingScale` ; N:1 optionnel vers
+  `RiskCategory` (proposé) ; référence implicite `RiskAppetite`
+  (résolution par `subCategory`/`entity`, pas de FK directe à ce stade).
 
 ### 5.3 `RatingScale` — **EXISTANT**
 - **Définition** : le moteur de méthodologie externalisé du modèle
@@ -419,35 +485,102 @@ charges (« fonction transverse ≠ table par objet »).
   charges (« une autre organisation doit pouvoir utiliser d'autres
   niveaux sans modification du modèle métier »).
 
-### 5.4 `RiskAppetite` — **EXISTANT**
+### 5.4 `RiskAppetite` — **EXISTANT_À_ÉTENDRE**
 - **Définition** : seuil d'appétence par sous-catégorie de risque,
   optionnellement scopé par entité.
-- **Attributs clés** : `subCategory`, `entity`, `threshold`,
+- **Attributs clés existants** : `subCategory`, `entity`, `threshold`,
   `methodologyVersion`, `active`.
+- **Point d'extension proposé (additif, Expand)** : `riskCategoryId:
+  string | null` — FK nullable vers `RiskCategory` (§4.5), décision
+  Product Owner du 2026-09-28. `subCategory` reste en place tant que la
+  bascule applicative n'est pas actée (Expand/Contract, jamais de
+  suppression immédiate du champ texte).
 - **Relations** : résolu par `(subCategory, entity)` depuis
-  `RiskEvaluation` — pas de FK directe (texte libre des deux côtés,
-  écart documenté dans le code source).
+  `RiskEvaluation` (conservé) ; N:1 optionnel vers `RiskCategory`
+  (proposé) en complément, pas en remplacement, de la résolution texte
+  libre.
 
-### 5.5 `Indicator` (`Kpi`/`Kri`) — **EXISTANT**
+### 5.5 `Indicator` — **NOUVEAU (modèle physique unifié)** — remplace `Kpi`/`Kri`
+
+> **Revirement tranché par le Product Owner le 2026-09-28** (SHARED_LOG,
+> « Arbitrage des 4 points ouverts de la Gap Analysis ») : la Gap
+> Analysis avait, par défaut, proposé le statu quo (`Kpi`/`Kri` = deux
+> tables séparées, `kpis`/`kris` en production). **Le Product Owner
+> tranche l'inverse.** KPI et KRI restent **deux types métier
+> fonctionnellement distincts** (statuts, finalité, seuils — rien ne
+> change côté utilisateur ni côté vocabulaire produit) mais partagent
+> désormais **un seul modèle physique** : une entité `Indicator`
+> (table `indicators`), discriminée par `indicatorType: "KPI" | "KRI"`,
+> et une seule table de mesures `indicator_measures` (remplace
+> `KpiMeasure`/`KriMeasure`). C'est le point le plus structurant des 4
+> décisions de ce lot — il change la classification de la Gap Analysis
+> (`Kpi`/`Kri` sortent de RÉUTILISER) et doit suivre la même logique de
+> consolidation non destructive que la dépréciation de `RiskAssessment`
+> (§5.1) : création de la table unifiée, backfill depuis
+> `kpis`/`kris`/`kpi_measures`/`kri_measures`, période de coexistence,
+> dépréciation des anciennes tables seulement après validation — jamais
+> un `DROP` direct. Le séquencement précis relève du Migration Plan
+> (Dev DB), pas de ce document.
+
 - **Définition** : objet générique demandé par le cahier des charges
-  §11 (« Indicator » supportant KRI et KPI) — implémenté ici comme deux
-  entités distinctes `Kpi` et `Kri` plutôt qu'une seule table avec
-  discriminant `type`. **Choix jugé conforme** à l'esprit du cahier des
-  charges tant que les deux exposent des relations équivalentes vers
-  `Risk`/`Process` — à confirmer explicitement en Gap Analysis plutôt
-  que de forcer une fusion a posteriori.
-- **Attributs clés `Kri`** : `formula`, `thresholdGreen/Orange/Red`,
-  `frequency`, `riskId` (lien primaire obligatoire), `entity`,
-  `methodologyVersion`. Statut (`VERT`/`ORANGE`/`ROUGE`) **calculé**, non
-  stocké (`computeKriStatus`) — bon précédent pour la distinction 5.
-- **Attributs clés `Kpi`** : `targetValue`, `unit`, `frequency`, `owner`,
-  `departmentId`/`processId` (au moins un requis). Statut également
-  calculé (`computeKpiStatus`).
-- **`KriMeasure`/`KpiMeasure` — EXISTANT** : mesures append-only,
-  événements temporels sources (§0.1 distinction 5) à partir desquels
-  les statuts sont recalculés à la lecture — jamais l'inverse.
-- **Relations** : `Kri.riskId` (1 obligatoire) + `kri_risks` (N:N
-  additionnel, ACT-136) ; `Kpi.departmentId`/`processId` (N:1).
+  §11 (« Indicator » supportant KRI et KPI), désormais pris au pied de
+  la lettre au niveau du **stockage** : une seule table porte les deux
+  types. Le KRI porte une **logique de seuil/risque** que le KPI n'a
+  pas (seuils vert/orange/rouge, lien de risque obligatoire, calcul de
+  statut par comparaison à un seuil) ; le KPI porte une **logique de
+  cible** que le KRI n'a pas (valeur cible, unité, atteinte en %). Ces
+  deux logiques sont modélisées comme des **colonnes optionnelles dans
+  la même table**, jamais comme deux tables ni comme un JSONB
+  fourre-tout — chaque colonne reste typée et contrainte au niveau SQL.
+- **Attributs clés communs** (tous types) : `id`, `tenantId`,
+  `indicatorType` (`"KPI" | "KRI"`, discriminant, immuable après
+  création), `label`, `frequency`, `description`, `active`,
+  `createdAt`/`updatedAt`/`deletedAt`/`deletedBy`/`deletionReason`
+  (conventions déjà en place sur `Kpi`/`Kri`).
+- **Attributs spécifiques KPI** (nullable, requis uniquement si
+  `indicatorType = "KPI"`) : `targetValue`, `unit`, `owner` (texte
+  libre, comme aujourd'hui), `departmentId`/`processId` (au moins un
+  requis pour un KPI — même règle qu'aujourd'hui, portée par un `CHECK`
+  conditionné au type plutôt qu'inconditionnel).
+- **Attributs spécifiques KRI** (nullable, requis uniquement si
+  `indicatorType = "KRI"`) : `thresholdGreen`/`thresholdOrange`/
+  `thresholdRed` (contrainte `Green < Orange < Red`, comme aujourd'hui),
+  `formula` (texte libre, jamais évalué serveur), `riskId` (lien
+  primaire obligatoire pour un KRI, ACT-130), `entity` (scope
+  organisationnel texte libre), `methodologyVersion`.
+- **Contrainte d'intégrité proposée** : un `CHECK` SQL (ou une validation
+  service équivalente en attendant, comme pour `Kpi`/`Kri` aujourd'hui)
+  garantissant que les colonnes KPI sont `NOT NULL` seulement quand
+  `indicatorType = 'KPI'` et que les colonnes KRI sont `NOT NULL`
+  seulement quand `indicatorType = 'KRI'` — même patron que
+  « au moins un de departmentId/processId » déjà en place sur `Kpi`.
+- **Statut calculé, jamais stocké** — préserve la distinction 5 : le
+  statut KPI (`ACHIEVED`/`AT_RISK`/`NOT_ACHIEVED`/`NO_MEASURE`, via
+  `computeKpiStatus`) et le statut KRI (`VERT`/`ORANGE`/`ROUGE`/
+  `NO_MEASURE`, via `computeKriStatus`) restent deux fonctions pures
+  distinctes, sélectionnées à la lecture selon `indicatorType` — la
+  fusion du stockage ne fusionne pas la logique de calcul métier, qui
+  reste spécifique à chaque type.
+- **`IndicatorMeasure` — NOUVEAU** (remplace `KpiMeasure`/`KriMeasure`) :
+  mesures append-only, événements temporels sources (§0.1 distinction 5)
+  à partir desquels les statuts sont recalculés à la lecture — jamais
+  l'inverse. Une seule table `indicator_measures` (`id`, `tenantId`,
+  `indicatorId`, `value`, `measuredAt`, `recordedBy`), le type de
+  l'indicateur (donc la fonction de statut à appliquer) se résout par
+  jointure sur `indicators.indicatorType`, jamais dupliqué sur la
+  mesure elle-même.
+- **Relations** : `Indicator.riskId` (1 obligatoire, uniquement si
+  `indicatorType = "KRI"`) + `indicator_risks` (N:N additionnel,
+  remplace `kri_risks`, ACT-136, uniquement pertinent pour les KRI) ;
+  `Indicator.departmentId`/`processId` (N:1, uniquement pertinent pour
+  les KPI) ; 1:N vers `IndicatorMeasure`.
+- **Migration (rappel, détaillée dans le Migration Plan à venir)** :
+  `kpis`/`kris`/`kpi_measures`/`kri_measures` restent en place le temps
+  de la coexistence (Expand/Contract) ; `indicators`/
+  `indicator_measures` sont peuplées par backfill ; les services
+  applicatifs basculent progressivement ; les quatre anciennes tables ne
+  sont dépréciées qu'après validation explicite (même gouvernance que
+  §5.1 pour `RiskAssessment`).
 
 ---
 
@@ -693,7 +826,9 @@ transverse :
 - **État actuel** : chaque entité porte ses propres transitions
   validées côté service (`isValidTransition` pour `Risk`,
   `VALID_TRANSITIONS` pour `Anomaly`, calcul read-time pour
-  `ActionPlan`/`Kri`/`Kpi`). Le cahier des charges (§28) présente ces
+  `ActionPlan`/`Indicator` (KPI et KRI, deux fonctions de statut
+  distinctes sur la même table — §5.5). Le cahier des charges (§28)
+  présente ces
   statuts comme « une proposition de modèle, doivent rester
   configurables » — aujourd'hui les transitions sont codées en dur par
   service, pas un moteur de workflow générique piloté par
@@ -743,19 +878,22 @@ transverse :
    ┌─────────────┼───────────────┬───────────────┬───────────────┐
    │              │               │               │               │
    ▼              ▼               ▼               ▼               ▼
-RISK_ASSESSMENT RISK_EVALUATION CONTROL      KRI / KPI      RISK_INCIDENT
-(instantané      (workflow        │           (Indicator)         │
- versionné)       complet)        │                                ▼
-                     │            │                             INCIDENT
-                     │      ┌─────┼─────┐                    (occurredAt/
-                     │      ▼     ▼     ▼                     detectedAt/
-                     │  CHECKLIST_ITEM  │                     containedAt/
-                     │      │    CONTROL_EXECUTION             resolvedAt)
-                     │      ▼           │                          │
-                     │  CHECKLIST_      ▼                    Vélocité/
-                     │  RESULT     CONTROL_EFFECTIVENESS_     Persistance
-                     │      │        ASSESSMENT               (CALCULÉES,
-                     │      ▼                                  jamais stockées)
+RISK_ASSESSMENT RISK_EVALUATION CONTROL      INDICATOR      RISK_INCIDENT
+(DÉPRÉCIÉ,      (= « Risk          │       (indicator_type=      │
+ table morte,    Assessment »      │        KPI | KRI,           ▼
+ non alimentée)  métier cible,     │        table unique)     INCIDENT
+                 tranché 2026-     │             │            (occurredAt/
+                 09-28)            │             ▼             detectedAt/
+                     │            │      INDICATOR_MEASURE     containedAt/
+                     │      ┌─────┼─────┐  (append-only,       resolvedAt)
+                     │      ▼     ▼     ▼   remplace                │
+                     │  CHECKLIST_ITEM  │   KpiMeasure/         Vélocité/
+                     │      │    CONTROL_EXECUTION  KriMeasure) Persistance
+                     │      ▼           │                       (CALCULÉES,
+                     │  CHECKLIST_      ▼                        jamais
+                     │  RESULT     CONTROL_EFFECTIVENESS_        stockées)
+                     │      │        ASSESSMENT
+                     │      ▼
                      │   ANOMALY ◄──────────────────┐
                      │      │                        │
                      ▼      ▼                        │
@@ -773,10 +911,20 @@ RISK_ASSESSMENT RISK_EVALUATION CONTROL      KRI / KPI      RISK_INCIDENT
                         FINDING (NOUVEAU) ───────────────┘
                      (≠ Incident, ≠ Anomaly)
 
+   RISK ◄──riskCategoryId (proposé)──┐
+   RISK_CATALOG ◄──riskCategoryId────┼── RISK_CATEGORY (EXISTANT,
+   RISK_EVALUATION/RISK_APPETITE ◄───┘    canonique — 3 FK nullables
+   (subCategory encore texte libre         proposées, migration
+    jusqu'à bascule actée)                 progressive Expand/Contract)
+
    RISK_CATALOG / RISK / PROCESS
               │
               ▼  (lien polymorphe document_links)
            DOCUMENT (NOUVEAU, ≠ Evidence)
+
+   RISK ── process (texte libre, 1:1 conceptuel) ── pas de RISK_PROCESSES
+   (N:N Risk↔Process non créée pour ce lot — décision Product Owner
+    2026-09-28, réévaluable plus tard)
 
    TOUT OBJET GRC CI-DESSUS
         │
@@ -789,11 +937,18 @@ RISK_ASSESSMENT RISK_EVALUATION CONTROL      KRI / KPI      RISK_INCIDENT
 **Légende de statut** : `RISK_CATALOG`, `RISK_INCIDENT`, `INCIDENT`,
 `RaciAssignment`, `Comment`/`CommentableObjectConfig`, `evidence_links`,
 `ChecklistItem`/`ChecklistResult`, `Document`/`document_links`,
-`AuditMission`, `Finding` = **NOUVEAU**. `Risk`, `Department`, `Process`,
-`Control`, `Evidence` = **EXISTANT_À_ÉTENDRE** (extension additive
-documentée par entité ci-dessus). Tout le reste (`RiskAssessment`,
-`RiskEvaluation`, `RatingScale`, `RiskAppetite`, `RiskCategory`, `Kri`,
-`Kpi`, `KriMeasure`, `KpiMeasure`, `ControlExecution`,
+`AuditMission`, `Finding`, `Indicator`/`IndicatorMeasure` (modèle
+physique unifié, §5.5 — décision Product Owner du 2026-09-28) =
+**NOUVEAU**. `Risk` (+ `riskCatalogId`/`riskCategoryId`), `Department`,
+`Process`, `Control`, `Evidence`, `RiskAppetite` (+ `riskCategoryId`),
+`RiskEvaluation` (+ `riskCategoryId`) = **EXISTANT_À_ÉTENDRE** (extension
+additive documentée par entité ci-dessus). `RiskAssessment` (l'entité
+technique) = **EXISTANT, DÉPRÉCIÉ** (§5.1 — ne pas confondre avec le
+concept métier « Risk Assessment », incarné par `RiskEvaluation`).
+`Kpi`/`Kri`/`KpiMeasure`/`KriMeasure` = **EXISTANT, à consolider** vers
+`Indicator`/`IndicatorMeasure` (coexistence Expand/Contract, dépréciées
+seulement après validation — jamais un statut cible final). Tout le
+reste (`RatingScale`, `RiskCategory`, `ControlExecution`,
 `ControlEffectivenessAssessment`, `Anomaly`, `ActionPlan`, `ActionLink`,
 `Role`, `RoleAssignment`, `AuditEvent`, `Tenant`, `User`,
 `RegulatoryFramework`, `ModuleToggle`, `Config`, `Notification`,
@@ -804,13 +959,30 @@ documentée par entité ci-dessus). Tout le reste (`RiskAssessment`,
 
 ## 12. Synthèse pour la Gap Analysis (prochain artefact)
 
+> Cette synthèse intègre les 4 décisions du Product Owner du 2026-09-28
+> (SHARED_LOG, « Arbitrage des 4 points ouverts de la Gap Analysis ») :
+> `RiskAssessment` confirmé DÉPRÉCIÉ au profit de `RiskEvaluation` ;
+> `RiskCategory` confirmé canonique avec 3 FK nullables à câbler ;
+> `risk_processes` explicitement **non créée** pour ce lot ; `Kpi`/`Kri`
+> **consolidés** en un modèle physique unique `Indicator`/
+> `IndicatorMeasure` — le changement le plus structurant, qui déplace
+> 4 tables existantes (`kpis`, `kris`, `kpi_measures`, `kri_measures`)
+> d'EXISTANT vers une consolidation NOUVEAU/DÉPRÉCIÉ.
+
 | Statut | Nombre d'entités | Détail |
 |---|---|---|
-| EXISTANT (inchangé) | 24 | `Tenant`, `User`, `TenantBranding`, `Role`/`RoleAssignment`, `AuditEvent`, `RiskAssessment`, `RiskEvaluation`, `RatingScale`, `RiskAppetite`, `RiskCategory`, `Kpi`/`Kri`/`KpiMeasure`/`KriMeasure`, `Control`, `ControlExecution`, `ControlEffectivenessAssessment`, `Anomaly`, `ActionPlan`/`ActionLink`, `RegulatoryFramework`, `ModuleToggle`, `Config`, `Notification`/`NotificationSubscription`, `ReviewCycle`, `Feedback` |
-| EXISTANT_À_ÉTENDRE | 4 | `Department`, `Process`, `Risk` (+ `riskCatalogId`), `Evidence` (+ `evidence_links`), `Control` (+ `sampleSize`) — 5 entités listées, extensions toutes additives/nullables |
+| EXISTANT (inchangé) | 18 | `Tenant`, `User`, `TenantBranding`, `Role`/`RoleAssignment`, `AuditEvent`, `RatingScale`, `RiskCategory`, `Control`, `ControlExecution`, `ControlEffectivenessAssessment`, `Anomaly`, `ActionPlan`/`ActionLink`, `RegulatoryFramework`, `ModuleToggle`, `Config`, `Notification`/`NotificationSubscription`, `ReviewCycle`, `Feedback` |
+| EXISTANT_À_ÉTENDRE | 6 | `Department`, `Process`, `Risk` (+ `riskCatalogId`, + `riskCategoryId`), `Evidence` (+ `evidence_links`), `Control` (+ `sampleSize`), `RiskAppetite` (+ `riskCategoryId`), `RiskEvaluation` (+ `riskCategoryId`, confirmée implémentation cible unique du « Risk Assessment » métier) — extensions toutes additives/nullables |
+| EXISTANT, DÉPRÉCIÉ | 1 | `RiskAssessment` (entité + table `risk_assessments`) — scaffolding mort, dépréciation confirmée, suppression physique hors périmètre |
 | NOUVEAU | ~12 | `RiskCatalog`, `RiskCause`/`RiskCatalogCause`, `Document`/`document_links`, `Incident`, `RiskIncident`, `ChecklistItem`/`ChecklistResult`, `RaciAssignment`, `Comment`/`CommentableObjectConfig`, `AuditMission`, `Finding` |
+| NOUVEAU (consolidation) | 2 | `Indicator` (table `indicators`, discriminant `indicator_type = KPI \| KRI`), `IndicatorMeasure` (table `indicator_measures`) — remplacent à terme `Kpi`/`Kri`/`KpiMeasure`/`KriMeasure` (4 tables existantes, EXISTANT jusqu'à dépréciation actée après backfill et coexistence, Expand/Contract, même gouvernance que `RiskAssessment`) |
+| Non créée (décision explicite) | 1 | `risk_processes` (N:N `Risk`↔`Process`) — `Risk.process` (texte libre, 1:1 conceptuel) reste suffisant pour ce lot ; réévaluable plus tard |
 
-Ce comptage confirme l'ordre de grandeur cité par le Product Owner
+Ce comptage part de l'ordre de grandeur cité par le Product Owner
 (« ~15 objets sur 35 cibles sont déjà présents sous une forme proche » —
-SHARED_LOG, 2026-09-28) et donne à la Gap Analysis une liste fermée à
-vérifier champ par champ contre les 26 migrations existantes.
+SHARED_LOG, 2026-09-28) et l'affine à la lumière des 4 arbitrages du
+2026-09-28 : il donne à la mise à jour de la Gap Analysis / du Migration
+Plan une liste fermée à vérifier champ par champ contre les 26
+migrations existantes, en tenant compte en particulier de la
+consolidation `Kpi`/`Kri` → `Indicator`, la plus structurante des
+quatre.

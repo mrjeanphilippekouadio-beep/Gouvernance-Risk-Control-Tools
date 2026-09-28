@@ -1100,3 +1100,99 @@ Aucun fichier de code de production touché, aucune migration réelle
 sign-off Architecture/PO sur l'arbitrage `RiskAssessment`/`RiskEvaluation`
 et sur les 3 autres points ARBITRER, puis dispatch réel des migrations
 `027`+ par lot.
+
+---
+
+## 2026-09-28 — @architect @dev-db @product-manager — Arbitrage des 4 points ouverts de la Gap Analysis
+
+Le Product Owner a tranché les 4 points laissés en `ARBITRER` par la
+Database Gap Analysis (`docs/architecture/GRC_Database_Gap_Analysis.md`,
+commit `96b7949`) :
+
+1. **RiskAssessment / RiskEvaluation** — Confirmé : `RiskEvaluation` reste
+   l'implémentation technique unique. « Risk Assessment » est le concept
+   métier du cahier des charges, pas une seconde entité parallèle.
+   `RiskAssessment` (scaffolding mort) reste déprécié tel que proposé,
+   étendu pour porter le lien au catalogue.
+2. **RiskCategory** — Créer une table canonique `risk_categories` et
+   migrer progressivement les 3 références texte libre vers une FK
+   (Expand/Contract complet : référentiel → FK nullable → backfill →
+   contrôle → bascule applicative → dépréciation du texte, jamais de
+   `DROP` immédiat).
+3. **risk_processes** — Ne PAS créer cette table pour le lot initial.
+   `risks.process_id` (existant, relation 1:1) suffit — un risque du
+   registre est rattaché à un processus principal. Réévaluable plus tard
+   si un besoin N:N réel est confirmé, sans remettre en cause le
+   catalogue.
+4. **KPI / KRI** — **Revirement par rapport à l'hypothèse par défaut de
+   la Gap Analysis** : restent deux types métier distincts, mais
+   fusionnés en un seul modèle physique `indicators` (discriminant
+   `indicator_type = KPI | KRI`) plutôt que deux tables séparées comme
+   aujourd'hui (`kpis`/`kris`). Le KRI porte une logique de seuil/risque
+   que le KPI n'a pas — à préserver dans le modèle unifié (colonnes
+   optionnelles ou sous-structure spécifique au type).
+
+**Impact à traiter** : le point 4 change la classification Gap Analysis
+de Kpi/Kri (de `RÉUTILISER` vers une consolidation non destructive de 2
+tables déjà en production vers 1) et doit suivre la même logique que la
+dépréciation de `RiskAssessment` : création de la table unifiée,
+backfill depuis `kpis`/`kris`/`kpi_measures`/`kri_measures`, période de
+coexistence, dépréciation des anciennes tables seulement après
+validation — jamais un `DROP` direct. Les 3 documents de référence
+doivent être mis à jour en conséquence avant que la séquence de
+migrations ne soit considérée figée.
+
+---
+
+## 2026-09-28 — @architect — GRC Target Domain Model mis à jour suite à l'arbitrage du Product Owner
+
+`docs/architecture/GRC_Target_Domain_Model.md` révisé pour intégrer les
+4 décisions du Product Owner ci-dessus (entrée précédente). Sections
+modifiées :
+
+1. **§0.1 (distinction 1)** et **§5.1/§5.2** — l'ambiguïté
+   `RiskAssessment`/`RiskEvaluation` est levée explicitement :
+   `RiskEvaluation` est désormais documentée comme l'**unique**
+   implémentation technique du concept métier « Risk Assessment »
+   (cahier des charges §7.1.C) ; `RiskAssessment` (l'entité technique)
+   reste EXISTANT/DÉPRÉCIÉ, jamais réactivée ni fusionnée.
+2. **§4.1, §4.5, §5.2, §5.4** — `RiskCategory` confirmée canonique ; 3 FK
+   nullables proposées (`RiskCatalog.riskCategoryId`,
+   `RiskAppetite.riskCategoryId`, `RiskEvaluation.riskCategoryId`), les
+   3 champs texte libre correspondants restant en place jusqu'à bascule
+   actée (Expand/Contract).
+3. **§4.2** — `risk_processes` documentée comme **non créée** pour ce
+   lot, décision explicite (pas un oubli) ; `Risk.process` (texte libre,
+   1:1 conceptuel — pas une colonne `process_id` au sens strict du code
+   actuel, précision apportée par cohérence avec `003_risks.sql`) reste
+   la relation en place.
+4. **§5.5** (remplace l'ancienne section `Kpi`/`Kri`), **§11** (diagramme
+   texte), **§12** (synthèse chiffrée) — `Kpi`/`Kri` fusionnés en un
+   modèle physique unique `Indicator` (table `indicators`, discriminant
+   `indicatorType: "KPI" | "KRI"`) + `IndicatorMeasure` (table
+   `indicator_measures`, remplace `KpiMeasure`/`KriMeasure`). Modélisation
+   retenue : **colonnes optionnelles dans la même table** (pas de JSONB
+   fourre-tout, pas de sous-table par type) — colonnes communes
+   (`indicatorType`, `label`, `frequency`, `description`, `active`,
+   audit trail) + colonnes spécifiques KPI (`targetValue`, `unit`,
+   `owner`, `departmentId`/`processId`) + colonnes spécifiques KRI
+   (`thresholdGreen/Orange/Red`, `formula`, `riskId` obligatoire,
+   `entity`, `methodologyVersion`), toutes nullables et contraintes par
+   un `CHECK` conditionné à `indicatorType`. Les deux fonctions de calcul
+   de statut (`computeKpiStatus`/`computeKriStatus`) restent deux
+   fonctions pures distinctes, sélectionnées à la lecture — la fusion du
+   stockage ne fusionne pas la logique métier, les deux types restent
+   fonctionnellement distincts comme le Product Owner l'a exigé.
+
+**Aucun fichier de code de production touché** — uniquement le document
+d'architecture. Commit : voir historique git (message dédié).
+
+**Sert d'intrant à** : la mise à jour de
+`docs/architecture/GRC_Database_Gap_Analysis.md` par @dev-db, qui doit
+reclasser `Kpi`/`Kri` (sortie de `RÉUTILISER`), ajouter les 3 FK
+`RiskCategory`, confirmer `RiskAssessment` DÉPRÉCIÉ sans ambiguïté
+terminologique, et retirer `risk_processes` de la liste `ARBITRER` (déjà
+tranchée négativement pour ce lot) — ainsi qu'à la mise à jour du
+Migration Plan qui en découle (séquencement Expand/Contract détaillé,
+notamment pour la consolidation `Indicator`, la plus structurante des 4
+décisions).
