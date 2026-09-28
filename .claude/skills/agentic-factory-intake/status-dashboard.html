@@ -163,6 +163,7 @@
   .badge.done { background: var(--done-soft); color: var(--done); }
   .badge.partial { background: var(--progress-soft); color: var(--progress); }
   .badge.new { background: var(--accent-soft); color: var(--accent); }
+  .badge.risk { background: var(--risk-soft); color: var(--risk); }
 
   .backlog-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
   .backlog-table th {
@@ -220,7 +221,7 @@
   <header class="top">
     <div class="eyebrow">Rapport d'avancement</div>
     <h1>GRC Tools</h1>
-    <div class="sub">Outil de gouvernance, risques &amp; conformité pour Djamo — état des lieux du backend, du frontend et de l'intégration Telegram, au 27 septembre 2026.</div>
+    <div class="sub">Outil de gouvernance, risques &amp; conformité pour Djamo — état des lieux du backend, du frontend et de l'intégration Telegram, au 28 septembre 2026.</div>
     <div class="meta">
       <span><b>Tenant</b> Djamo</span>
       <span><b>Environnement</b> unique (pas de dev/prod séparés)</span>
@@ -229,14 +230,14 @@
   </header>
 
   <div class="stats">
-    <div class="stat"><div class="n">~62%</div><div class="l">du backlog fonctionnel ACF couvert (142 actions, 26 domaines)</div></div>
-    <div class="stat"><div class="n">17</div><div class="l">modules métier livrés (Risk, Control, RBAC, KPI, RiskEvaluation…)</div></div>
-    <div class="stat"><div class="n">268</div><div class="l">tests automatisés, 25 fichiers, tous verts</div></div>
-    <div class="stat"><div class="n">22</div><div class="l">migrations appliquées sur Neon</div></div>
+    <div class="stat"><div class="n">~82%</div><div class="l">du backlog fonctionnel ACF couvert (142 actions, 26 domaines)</div></div>
+    <div class="stat"><div class="n">20</div><div class="l">modules métier livrés — les 26 domaines ACF ont désormais au moins une implémentation</div></div>
+    <div class="stat"><div class="n">366</div><div class="l">tests automatisés, 34 fichiers, tous verts</div></div>
+    <div class="stat"><div class="n">26</div><div class="l">migrations appliquées sur Neon</div></div>
   </div>
 
   <section>
-    <h2>Livré <span class="count">17 modules · &ge; 80 %</span></h2>
+    <h2>Livré <span class="count">20 modules · &ge; 80 %</span></h2>
     <div class="modules">
 
       <div class="card">
@@ -326,7 +327,7 @@
       <div class="card">
         <div class="row1"><h3>RiskEvaluation</h3><span class="pct">85%</span></div>
         <div class="track"><div class="fill" style="width:85%"></div></div>
-        <p>Cotation inhérente → maîtrise → résiduelle, scores calculés serveur, comparaison à l'appétence, validation maker-checker, immuable une fois finalisée.</p>
+        <p>Cotation inhérente → maîtrise → résiduelle, scores calculés serveur, comparaison à l'appétence, validation maker-checker Risk Manager + validation Comité des Risques (ACT-253) pour les risques Majeur/Critique.</p>
         <span class="badge done">Livré</span>
       </div>
 
@@ -341,20 +342,41 @@
         <div class="row1"><h3>RiskOwnership</h3><span class="pct">85%</span></div>
         <div class="track"><div class="fill" style="width:85%"></div></div>
         <p>Owner individuel &amp; superior owner (utilisateur actif requis), escalade avec historique append-only, vue admin par owner.</p>
-        <span class="badge new">Nouveau</span>
+        <span class="badge done">Livré</span>
       </div>
 
       <div class="card">
         <div class="row1"><h3>ActionPlan</h3><span class="pct">85%</span></div>
         <div class="track"><div class="fill" style="width:85%"></div></div>
         <p>Actions correctives depuis risque/contrôle/KRI/audit, cycle de vie ticket, clôture avec preuve + maker-checker.</p>
-        <span class="badge new">Nouveau</span>
+        <span class="badge done">Livré</span>
       </div>
 
       <div class="card">
         <div class="row1"><h3>Cartography</h3><span class="pct">80%</span></div>
         <div class="track"><div class="fill" style="width:80%"></div></div>
-        <p>Heatmap P×I en lecture seule (inhérent/résiduel), filtres combinables. Manque : vélocité (non capturée par RiskEvaluation) et filtre par owner (à connecter).</p>
+        <p>Heatmap P×I en lecture seule (inhérent/résiduel), filtres combinables. Manque : vélocité (non capturée par RiskEvaluation) et filtre par owner (à connecter, <code>Risk.ownerId</code> existe désormais).</p>
+        <span class="badge done">Livré</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Dashboard / Reporting</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Vue consolidée des risques, anomalies ouvertes, dashboard Risk Owner/département/exécutif, rapports comité/consolidé/appétence-vs-résiduel/KRI. Une seule agrégation servie sous <code>/dashboard</code> et <code>/reports</code>.</p>
+        <span class="badge new">Nouveau</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Notification</h3><span class="pct">80%</span></div>
+        <div class="track"><div class="fill" style="width:80%"></div></div>
+        <p>Abonnements, centre de notifications (lu/non lu), journal persistant. Reste : brancher les 3 points d'alerte existants (KRI, escalade Risk, ActionPlan en retard) sur ce journal.</p>
+        <span class="badge new">Nouveau</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Governance</h3><span class="pct">85%</span></div>
+        <div class="track"><div class="fill" style="width:85%"></div></div>
+        <p>Cycles de revue de cartographie (annuelle/anticipée), clôture maker-checker Risk Manager → Direction, validation Comité des Risques pour les évaluations Majeur/Critique.</p>
         <span class="badge new">Nouveau</span>
       </div>
 
@@ -362,13 +384,20 @@
   </section>
 
   <section>
-    <h2>Partiel <span class="count">3 briques</span></h2>
+    <h2>Partiel <span class="count">5 briques</span></h2>
     <div class="modules">
 
       <div class="card">
-        <div class="row1"><h3>Audit trail</h3><span class="pct">75%</span></div>
-        <div class="track"><div class="fill" style="width:75%; background:var(--progress)"></div></div>
-        <p>Append-only strict, recherche filtrée (utilisateur / action / date). Manque : purge RGPD (ACT-072, Post-MVP).</p>
+        <div class="row1"><h3>Audit trail / Journal global</h3><span class="pct">82%</span></div>
+        <div class="track"><div class="fill" style="width:82%; background:var(--progress)"></div></div>
+        <p>Append-only strict, recherche filtrée (utilisateur / action / date / entité) — couvre aussi le "journal global" du backlog (même endpoint). Manque : export, purge RGPD (Post-MVP).</p>
+        <span class="badge partial">Partiel</span>
+      </div>
+
+      <div class="card">
+        <div class="row1"><h3>Config</h3><span class="pct">65%</span></div>
+        <div class="track"><div class="fill" style="width:65%; background:var(--progress)"></div></div>
+        <p>Stockage/CRUD versionné (formule de score, seuils, mode appétence, entités, cadres réglementaires, taxonomie, import Excel de risques). Délibérément pas encore branché : RatingScale/RiskEvaluation ne lisent pas encore ces valeurs, et les "modules désactivés" ne bloquent aucune route.</p>
         <span class="badge partial">Partiel</span>
       </div>
 
@@ -397,45 +426,32 @@
   </section>
 
   <section>
-    <h2>Backlog <span class="count">6 domaines · 35 actions · 0 %</span></h2>
-    <table class="backlog-table">
-      <thead><tr><th>Domaine</th><th class="n">Actions</th></tr></thead>
-      <tbody>
-        <tr><td>Dashboard</td><td class="n">10</td></tr>
-        <tr><td>Config</td><td class="n">7</td></tr>
-        <tr><td>Reporting</td><td class="n">6</td></tr>
-        <tr><td>Notification (métier)</td><td class="n">4</td></tr>
-        <tr><td>JournalGlobal</td><td class="n">4</td></tr>
-        <tr><td>Governance</td><td class="n">4</td></tr>
-      </tbody>
-    </table>
+    <h2>Backlog <span class="count">0 domaine à 0 % — jalon atteint</span></h2>
+    <p style="color:var(--muted); font-size:.9rem; margin:0;">Les 26 domaines du classeur ACF ont désormais au moins une implémentation partielle. La suite du travail est de la maturation (Config non branché, RBAC figé, Auth partiel) et du frontend (voir vigilance), plus les 6 findings de sécurité ouverts ci-dessous — pas de nouveau domaine à démarrer de zéro.</p>
   </section>
 
   <section>
     <h2>Points de vigilance</h2>
     <div class="vigilance">
-      <div class="vig-item resolved"><b>Revue de sécurité effectuée sur le code déjà en production.</b> 6 vulnérabilités réelles corrigées (maker-checker contournable sur l'exécution de contrôle, surcharge client de champs sensibles, permissions héritées non filtrées, suppression Drive définitive au lieu d'une corbeille…) — suite couverte par 16 tests de régression dédiés.</div>
-      <div class="vig-item resolved"><b>Onboarding partiellement outillé.</b> Un admin peut désormais créer un utilisateur via <code>POST /users</code> (UserManagement) au lieu d'un <code>INSERT</code> SQL manuel. Reste : invitation / whitelist SSO en libre-service (ACT-090-092).</div>
-      <div class="vig-item resolved"><b>KRI a maintenant un vrai ciblage d'alerte possible.</b> <code>Risk.ownerId</code> existe depuis RiskOwnership — reste à câbler l'alerte KRI dessus (elle notifie encore de façon best-effort, sans journal persistant).</div>
-      <div class="vig-item"><b>Cartography.ownerId n'est pas encore câblé.</b> Le module a été construit en parallèle de RiskOwnership et rejette explicitement ce filtre pour l'instant (<code>ValidationError</code> volontaire plutôt qu'un no-op silencieux) — petit patch de suivi maintenant que <code>Risk.ownerId</code> existe.</div>
-      <div class="vig-item"><b>ActionPlan.ACT-193 (auto-escalade) n'a pas de déclencheur périodique.</b> Aucun scheduler/cron n'existe dans ce backend — le statut "En retard" est calculé à la lecture (comme KRI), et la notification d'escalade n'est appelée qu'à des points précis (démarrage d'une action déjà en retard, appel manuel), jamais en tâche de fond.</div>
+      <div class="vig-item"><b>6 findings de sécurité ouverts (SEC-009 à SEC-014), 2 High.</b> Round 2 de revue sécurité sur les 9 modules livrés en batches 1-3 : <b>SEC-009</b> (High) — <code>KpiMeasureService</code>/<code>KriMeasureService</code> acceptent un <code>recordedBy</code> fourni par le client, régression exacte de SEC-001 ; <b>SEC-010</b> (High) — création de compte utilisateur qui échappe à la permission <code>role.assign</code> ; SEC-011/012 (Medium), SEC-013/014 (Low, permissions terminales contournées via <code>*.update</code>). Documentés en <code>it.fails()</code> dans <code>SecurityBoundaries.test.ts</code>, pas encore corrigés — à traiter un par un, High en premier.</div>
+      <div class="vig-item resolved"><b>Les deux régressions ci-dessus ont révélé un vrai trou de process, maintenant comblé.</b> Les règles "jamais de champ d'attribution fourni par le client" et "transition terminale = permission dédiée" n'existaient que dans des commentaires de test, jamais dans <code>CLAUDE.md</code> — désormais écrites noir sur blanc pour que le prochain agent les lise avant d'écrire du code, pas après avoir répété l'erreur.</div>
+      <div class="vig-item resolved"><b>10 findings QA sur les 9 modules livrés, 6 corrigés directement.</b> Le plus net : la validation croisée CONTROL/KRI d'<code>ActionPlanService</code> n'avait jamais été exercée par un test (seul RISK l'était). Voir <code>backend/QA_REVIEW_BATCHES_1_3.md</code> pour le détail des 4 findings restants (dont l'absence de maker-checker sur <code>RiskService.escalate</code>).</div>
+      <div class="vig-item"><b>Aucun des 16 agents ACF n'avait l'outil <code>Skill</code>.</b> Découvert quand un agent QA a reçu une instruction d'invoquer un skill et a correctement refusé de fabriquer un appel d'outil inexistant plutôt que d'halluciner. Corrigé : les 16 fichiers <code>.claude/agents/*.md</code> ont maintenant <code>Skill</code> dans leur <code>tools:</code>.</div>
+      <div class="vig-item"><b>Config n'est pas branché sur les services qui en ont besoin.</b> <code>RatingScaleService</code>/<code>RiskEvaluationService</code> continuent de coder en dur leur formule de score et leur règle d'impact retenu au lieu de lire <code>Config</code> — décision d'architecture à trancher (Architect/Risk Manager), pas un oubli.</div>
+      <div class="vig-item"><b>ActionPlan.ACT-193 (auto-escalade) et Notification n'ont pas de déclencheur périodique.</b> Aucun scheduler/cron n'existe dans ce backend — statuts calculés à la lecture, alertes best-effort à des points précis seulement.</div>
       <div class="vig-item"><b>RiskEvaluation ne capture toujours pas de score de vélocité.</b> Bloque la taille des bulles dans Cartography — décision à prendre sur qui possède ce champ.</div>
-      <div class="vig-item"><b>Un seul environnement.</b> La base Neon utilisée en développement est la base réelle — aucune séparation dev/prod aujourd'hui.</div>
-      <div class="vig-item"><b>Rien n'est déployé.</b> La CI construit et teste, mais aucun Cloud Run n'est actif — l'app ne tourne qu'en local.</div>
-      <div class="vig-item"><b>Secrets en clair localement.</b> Le token Telegram et <code>DATABASE_URL</code> vivent dans un <code>.env</code> non commité — à migrer vers un gestionnaire de secrets avant toute mise en production.</div>
-      <div class="vig-item"><b>RiskEvaluation duplique sous-catégorie/entité depuis Risk.</b> <code>Risk</code> n'a pas encore de colonne <code>subCategory</code>/<code>entity</code> canonique ; l'évaluation les capture en snapshot à la création (cohérent avec le legacy Apps Script) — à trancher si ces champs doivent migrer sur <code>Risk</code>.</div>
-      <div class="vig-item"><b>Divergence non tranchée.</b> Le modèle LLM de l'agent DevOps (A09) diffère entre la feuille Config et la feuille Model Registry du classeur ACF.</div>
-      <div class="vig-item"><b>5 agents ACF sans prompt source.</b> A01 (Intake, actif), A11, A17, A19, A20 référencés dans la hiérarchie mais absents de la feuille System Prompts.</div>
-      <div class="vig-item"><b>9 modules n'ont pas encore d'interface frontend.</b> KPI, RiskAppetite, RatingScale, UserManagement, RiskEvaluation, KRI, RiskOwnership, ActionPlan et Cartography sont utilisables via API seulement — le frontend reste sur Risk/Admin/Feedback.</div>
+      <div class="vig-item"><b>Un seul environnement, rien n'est déployé, secrets en <code>.env</code> local.</b> Aucune séparation dev/prod, aucun Cloud Run actif, pas de gestionnaire de secrets.</div>
+      <div class="vig-item"><b>20 modules n'ont pas encore d'interface frontend.</b> Seuls Risk/Admin/Roles/Feedback ont un écran — tout le reste (KPI, RiskAppetite, RatingScale, UserManagement, RiskEvaluation, KRI, RiskOwnership, ActionPlan, Cartography, Dashboard/Reporting, Config, Notification, Governance) est API-only. Le design system livré (Table, FormField, StatusBadge, Button, Tabs) est prêt à les recevoir.</div>
+      <div class="vig-item"><b>Divergence non tranchée / 5 agents ACF sans prompt source.</b> Modèle DevOps divergent entre feuilles Config et Model Registry ; A01/A11/A17/A19/A20 référencés sans system prompt dans le classeur.</div>
     </div>
   </section>
 
   <section>
     <h2>Prochaines étapes recommandées</h2>
     <ol class="steps">
-      <li><div class="step-body"><b>Câbler le filtre Risk Owner de Cartography</b><span>Petit patch : <code>Risk.ownerId</code> existe désormais (RiskOwnership) — il ne reste qu'à connecter le filtre déjà prévu côté Cartography.</span></div></li>
-      <li><div class="step-body"><b>Construire l'interface frontend des 9 nouveaux modules</b><span>KPI, RiskAppetite, RatingScale, UserManagement, RiskEvaluation, KRI, RiskOwnership, ActionPlan, Cartography n'existent qu'en API — le design system livré (Table, FormField, StatusBadge, Button) est prêt à les recevoir.</span></div></li>
-      <li><div class="step-body"><b>Reprendre le reste du backlog</b><span>Dashboard, Reporting et Config sont les briques restantes les plus transverses ; Governance/Notification/JournalGlobal restent à cadrer.</span></div></li>
+      <li><div class="step-body"><b>Corriger les 6 findings de sécurité SEC-009 à SEC-014</b><span>Priorité aux 2 High (attribution falsifiable, création de compte échappant à role.assign) — un par un, méthode déjà établie.</span></div></li>
+      <li><div class="step-body"><b>Construire l'interface frontend</b><span>20 modules sont API-only ; le design system est prêt, c'est maintenant le principal goulot d'étranglement produit.</span></div></li>
+      <li><div class="step-body"><b>Décider du branchement Config → RatingScale/RiskEvaluation</b><span>Avec Architect et Risk Manager, pas en solo développeur — c'est une décision de méthodologie, pas juste du câblage.</span></div></li>
       <li><div class="step-body"><b>Décider et déployer un environnement de production</b><span>Cloud Run, séparé de la base de développement, secrets en Secret Manager.</span></div></li>
       <li><div class="step-body"><b>Achever l'onboarding utilisateur en libre-service</b><span>ACT-090 à 092 — whitelist / invitation SSO, au-delà de la création admin déjà livrée.</span></div></li>
       <li><div class="step-body"><b>Rendre les permissions éditables</b><span>ACT-116/118 — une vraie matrice IAM en base plutôt qu'une énumération TypeScript figée.</span></div></li>
