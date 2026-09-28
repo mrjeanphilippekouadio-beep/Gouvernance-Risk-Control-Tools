@@ -1524,3 +1524,59 @@ et retesté par Security** — le câblage amplifierait directement
 l'impact de ce garde-fou (c'est lui qui, une fois RACI consommé par une
 vraie action métier, devient la seule protection contre l'auto-
 validation).
+
+---
+
+**2026-09-28 — @dev-backend** — Correctif SEC-016 (retest indépendant
+de Security sur le Lot 1 RACI, commit `21756e2`). Skill `ponytail`
+invoqué avant tout écrit — solution retenue est le rung le plus bas qui
+tient : ne pas coder deux branches symétriques `if role === "A" ...` /
+`if role === "R" ...`, mais dériver le rôle opposé du couple R/A d'une
+seule ligne (`otherRole = role === "A" ? "R" : role === "R" ? "A" :
+null`) et réutiliser la même recherche `listForEntity` déjà en place —
+même diff, une seule garde au lieu de deux.
+
+**Cause racine.** `assertNoSelfAccountableConflict`
+(`backend/src/services/RaciAssignmentService.ts`) sortait
+immédiatement (`if (role !== "A" || targetUserId !== actingUserId)
+return;`) dès que le rôle entrant n'était pas `"A"` — aucun chemin ne
+vérifiait jamais « rôle entrant `R`, `A` déjà détenu ». D'où le bypass
+exact décrit par Security : `A` d'abord (autorisé, rien à détecter),
+puis `R` (jamais vérifié) → cumul R+A obtenu par simple inversion de
+l'ordre des deux appels `assign()`.
+
+**Correctif.** Méthode renommée `assertNoSelfRaConflict` (le nom
+`...AccountableConflict` ne décrivait plus une garde bidirectionnelle).
+Un seul garde symétrique : pour un rôle entrant `"R"` ou `"A"`, calcule
+le rôle opposé du couple et rejette (`ForbiddenError`) si l'acteur
+détient déjà cet autre rôle sur la même entité — même chemin de code
+pour les deux sens, pas de duplication. Rôles `"C"`/`"I"` toujours hors
+scope (`otherRole` vaut `null`, sortie immédiate). Message d'erreur mis
+à jour pour ne plus présupposer un sens (« Cannot self-designate as
+Responsible and Accountable on the same entity... »). Docstring de
+classe et de méthode mises à jour en conséquence.
+
+**Tests.** Le test `it.fails` SEC-016 ajouté par Security dans
+`backend/test/SecurityBoundaries.test.ts` (describe « SEC-016 RACI
+self-Accountable guard bypassable via assignment order ») est passé à
+`it(...)` — aucune autre modification du test, il passe tel quel avec
+le correctif. Vérification demandée de
+`backend/test/RaciAssignmentService.test.ts` (grep
+`assertNoSelfAccountableConflict`/comportement à sens unique) : aucun
+test existant n'encodait l'asymétrie — les deux tests déjà présents
+(« blocks self-designation as Accountable when the actor already holds
+Responsible... » et « still allows a different actor to designate that
+same user as Accountable ») restent corrects avec la version
+bidirectionnelle, aucune régression à corriger.
+
+**Vérification.** `npm run typecheck && npm test` dans `backend/` :
+typecheck propre, **35 fichiers / 376 tests verts** (375 existants
+inchangés + SEC-016 désormais actif et vert, plus aucun `it.fails`).
+Aucun autre fichier touché hors du périmètre RACI (routes, repository,
+migration, entité inchangés).
+
+**Statut.** SEC-016 résolu côté `@dev-backend`. Commit local (pas de
+push) : voir historique git. **En attente de retest indépendant
+`@security`** avant de rouvrir le câblage RiskService/ControlService/
+ActionPlanService + écran frontend annoncé comme bloqué par Security
+ci-dessus. Voir `ACTION_ITEMS.md` pour le suivi.

@@ -1243,7 +1243,7 @@ function inMemoryRaciRepositoryForSec016(): RaciAssignmentRepository {
 }
 
 describe("SEC-016 RACI self-Accountable guard bypassable via assignment order", () => {
-  it.fails(
+  it(
     "SEC-016: a user must not end up Responsible AND Accountable on the same entity regardless of assignment order (A then R)",
     async () => {
       const risks = {

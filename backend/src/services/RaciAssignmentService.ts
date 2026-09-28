@@ -23,9 +23,9 @@ const ROLES: RaciRole[] = ["R", "A", "C", "I"];
  * the work — that combination lets the same person execute *and*
  * approve/own the same item with no second look, the exact shape
  * `assertIsEvaluator` (RiskEvaluationService) blocks for scoring
- * validation. `assertNoSelfAccountableConflict` below is the
- * RACI-scoped analogue: it fires in `assign()`, before the row is ever
- * written, not after the fact.
+ * validation. `assertNoSelfRaConflict` below is the RACI-scoped
+ * analogue: it fires in `assign()`, before the row is ever written, not
+ * after the fact — and checks both R→A and A→R directions (SEC-016).
  */
 export class RaciAssignmentService {
   constructor(
@@ -62,7 +62,7 @@ export class RaciAssignmentService {
     }
 
     await this.assertEntityExists(actor.tenantId, entityType, entityId);
-    await this.assertNoSelfAccountableConflict(actor.tenantId, entityType, entityId, actor.userId, userId, role);
+    await this.assertNoSelfRaConflict(actor.tenantId, entityType, entityId, actor.userId, userId, role);
 
     const assignment = await this.raci.create({
       tenantId: actor.tenantId,
@@ -143,19 +143,18 @@ export class RaciAssignmentService {
   }
 
   /**
-   * Security guard-rail (see class doc): a user assigning themselves as
-   * Accountable ("A") on an entity where they already hold Responsible
-   * ("R") — i.e. they are already the one actually doing the work — is
-   * rejected outright rather than allowed and validated later, since
-   * RACI has no separate "validate" step of its own to gate. This is
-   * deliberately narrower than a full "pending action" scan across
-   * Risk/Control/ActionPlan (out of this lot's scope, see task brief) —
-   * it blocks the one case this table can detect on its own: self-review
-   * within the RACI record itself. A different actor may still assign
-   * anyone (including a user who already holds "R") as Accountable —
-   * only *self*-designation while already Responsible is blocked.
+   * Security guard-rail (see class doc): a user must never hold both
+   * Responsible ("R") and Accountable ("A") on the same entity — that
+   * combination lets the same person execute *and* approve/own the same
+   * item with no second look. Checked symmetrically (SEC-016 fix): it
+   * fires for either incoming role ("R" or "A") and rejects if the actor
+   * already self-holds the *other* one of the pair, regardless of which
+   * order the two assignments happen in. "C"/"I" are unaffected — only
+   * R+A by the same person is forbidden. A different actor may still
+   * assign anyone (including a user who already holds "R") as
+   * Accountable — only *self*-designation is blocked.
    */
-  private async assertNoSelfAccountableConflict(
+  private async assertNoSelfRaConflict(
     tenantId: string,
     entityType: RaciEntityType,
     entityId: string,
@@ -163,13 +162,15 @@ export class RaciAssignmentService {
     targetUserId: string,
     role: RaciRole,
   ): Promise<void> {
-    if (role !== "A" || targetUserId !== actingUserId) return;
+    if (targetUserId !== actingUserId) return;
+    const otherRole = role === "A" ? "R" : role === "R" ? "A" : null;
+    if (!otherRole) return;
 
     const existing = await this.raci.listForEntity(tenantId, entityType, entityId);
-    const alreadyResponsible = existing.some((a) => a.userId === actingUserId && a.role === "R");
-    if (alreadyResponsible) {
+    const alreadyHolds = existing.some((a) => a.userId === actingUserId && a.role === otherRole);
+    if (alreadyHolds) {
       throw new ForbiddenError(
-        "Cannot self-designate as Accountable while already Responsible on the same entity — a second person must make this assignment",
+        "Cannot self-designate as Responsible and Accountable on the same entity — a second person must make this assignment",
       );
     }
   }
