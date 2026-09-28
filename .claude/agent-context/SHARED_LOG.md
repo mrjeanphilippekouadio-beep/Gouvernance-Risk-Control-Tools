@@ -414,3 +414,632 @@ SEC-010 (`f0f7fdf`), SEC-011 (`23d09e3`), SEC-012 (`e623ec6`), SEC-013
 (`88a5ede`), SEC-014 (`1918b82`), SEC-015 (`6179428`). Rappel : `CLOSED`
 au sens Security ne préjuge d'aucune décision Risk/Compliance/Privacy —
 voir `security.md` §50.
+
+---
+
+**2026-09-28 — @ux-designer @product-manager @dev-frontend @architect** —
+Point Figma/charte graphique (ouvert depuis le 27/09, RETEX §8.2)
+traité. **Figma** : outils MCP `mcp__figma__get_figma_data`/
+`download_figma_images` disponibles mais lecture seule, et surtout
+**aucun fichier Figma (URL/fileKey) n'a été fourni** dans le repo ni
+dans le contexte — impossible de "connecter le compte" sans un lien.
+Point reformulé plutôt que clos par contournement : reste `Ouvert`,
+mais la balle est côté Product Owner (fournir le lien de fichier),
+plus rien à faire côté agent tant qu'aucun fileKey n'existe.
+**Charte graphique** : statuée. Décision — garder les tokens de
+`frontend/src/design-system/tokens.css` tels quels (palette neutre,
+accent navire `#1F4B99`, sémantique de statut, échelle d'espacement :
+déjà implémentés, déjà appliqués aux 4 écrans existants, aucune raison
+de les jeter). Extension proposée, pas une révision : ajouter deux
+rôles typographiques empruntés à l'identité déjà en place dans nos
+propres artefacts de reporting (`status-dashboard.html` — Source
+Serif 4 + IBM Plex Mono) — un serif éditorial réservé aux titres de
+page/section (jamais au corps ni aux données), et une police mono à
+chiffres tabulaires pour les scores/dates/identifiants. Le corps de
+texte reste `system-ui` (raison DESIGN_NOTES.md inchangée : pas de
+dépendance réseau pour la lecture courante). Objectif : cohérence
+visuelle entre les artefacts de pilotage interne et le produit
+lui-même, sans toucher aux couleurs, à l'espacement ni aux composants
+déjà livrés (`Table`, `FormField`, `StatusBadge`, `Button`, `Tabs`).
+Rien dans `frontend/src/**` n'a été modifié — proposition uniquement.
+**Direction visuelle** — skill `taste__minimalist-ui` retenue (éditorial
+sobre, monochrome chaud, pas de gradient/ombre lourde/emoji) plutôt que
+les directions "high-end"/"brutalist"/"gpt-taste" — un outil GRC B2B
+dense en données pour une fintech réglementée UEMOA a besoin de
+crédibilité perçue et de lisibilité, pas d'un traitement flashy ; ce
+choix confirme et prolonge l'austérité déjà actée en section 4 de
+`DESIGN_NOTES.md`, jamais ne la contredit.
+**Livrable** : maquette haute-fidélité de 2 écrans (RiskEvaluation —
+cotation inhérent/maîtrise/résiduel + comparaison appétence +
+maker-checker + validation Comité ; Cartography — heatmap P×I,
+filtres, liste des risques en zone critique), avec coquille de
+navigation latérale par domaine (recommandation section 4.3/5 de
+DESIGN_NOTES.md, jamais implémentée) —
+**https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57**.
+**Priorisation des 20 modules sans frontend** (criticité métier, pas
+ordre alphabétique — voir rapport complet pour le détail) : 1.
+RiskEvaluation (coeur du dispositif, 11 actions, consommé par tout le
+reste) 2. Cartography (backend prêt à 80 %, forte visibilité Comité,
+meilleur ratio effort/impact) 3. Dashboard/Reporting (vue exécutive,
+reporting réglementaire) 4. ActionPlan (boucle de remédiation) 5. KRI
+(alertes déjà calculées côté backend, invisibles sans écran) 6.
+Governance (dépend de 1-2) 7. RiskOwnership 8. RatingScale 9.
+RiskAppetite 10. KPI 11. Notification 12. Config 13.
+UserManagement/RBAC (déjà partiellement couverts par `AdminPage`).
+Détail complet à donner à `@product-manager` pour arbitrage du prochain
+batch — cette liste est une recommandation UX, pas une décision produit
+(section 53 des principes ACF).
+
+---
+
+**2026-09-28 — @ux-designer @product-manager** — V2 de la maquette,
+itération sur le retour explicite du Product Owner (pas une refonte) —
+même lien : **https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57**
+(Version 2). Quatre points traités :
+
+1. **Thème clair engagé.** La V1 basculait en sombre selon
+   `prefers-color-scheme` du navigateur (viewer en thème système sombre
+   → l'artefact apparaissait sombre malgré une palette de base claire).
+   V2 fixe une seule palette claire, sans variante sombre — choix
+   délibéré et documenté dans le fichier (règle "single look" de la
+   skill `artifact-design`), pas un oubli.
+2. **Palette/typographie repensées pour évoquer l'IA.** Accent navire
+   `#1F4B99` (froid, corporate) remplacé par une argile mesurée
+   `#B5533A` sur fond crème chaud `#FAF8F3` et encre presque noire
+   `#221F1A` (jamais de gris pur froid) — chaleur plutôt que froideur,
+   dans l'esprit des outils IA actuels (Claude pris comme référence de
+   ton, pas copié : pas de violet, pas de gradient, pas de pastiche
+   littéral de la charte Anthropic). Trois rôles typographiques
+   conservés de la V1 mais réaccordés : Source Serif 4 (titres,
+   inchangé), **IBM Plex Sans** remplace `system-ui` pour le texte
+   d'interface (humaniste, ni géométrique dur type Space Grotesk ni
+   trop neutre type Inter — s'accorde en plus nativement avec IBM Plex
+   Mono déjà utilisé pour les données), IBM Plex Mono conservé pour les
+   valeurs tabulaires. Palette sémantique de statut (danger/warning/
+   success/neutral) **inchangée** — conserver ces 4 couleurs distinctes
+   de l'accent de marque est volontaire : dans un outil GRC, la
+   sévérité d'un risque doit rester la lecture la plus fiable de
+   l'écran, jamais concurrencée par la couleur de marque. Rien dans
+   `frontend/src/design-system/tokens.css` n'a été touché — cette
+   palette/typographie reste une proposition d'artefact, à porter dans
+   les tokens réels seulement après validation PO explicite (point non
+   demandé dans ce retour, à confirmer avant tout patch `frontend/`).
+3. **Sélecteur d'échelle avec description contextuelle** (le retour le
+   plus concret). Les champs « Probabilité résiduelle » / « Impact
+   résiduel » de l'écran RiskEvaluation, de simples `<select>` en V1,
+   sont maintenant un sélecteur de niveaux 1-5 (boutons) qui affiche
+   immédiatement le libellé et la description du niveau choisi sous le
+   sélecteur — jamais un chiffre nu. Principe reproduit très
+   précisément de `apps-script-legacy/UI_Evaluation.html` (fonction
+   `majLigne()` / `box.innerHTML`, lignes ~556-579 : sélection → boîte
+   de lecture immédiate, avec tableau par dimension quand plusieurs
+   axes existent) — l'habillage visuel (CSS plat, sans hiérarchie) n'a
+   **pas** été repris, seule l'interaction l'a été, comme demandé.
+   Composant fonctionnel dans l'artefact (JS vanilla inline, ~50
+   lignes) : cliquer sur un niveau met à jour la boîte de description en
+   direct, testable dans la page publiée elle-même.
+4. **Figma** : statut inchangé, toujours pas de fichier fourni. Accès
+   MCP confirmé lecture seule (`mcp__figma__get_figma_data` exige un
+   `fileKey` — aucun n'existe dans le repo ni n'a été communiqué par le
+   Product Owner ; aucun fileKey inventé). L'artefact HTML reste la
+   source de vérité tant que ce lien n'arrive pas — voir
+   `ACTION_ITEMS.md`, statut **non modifié** (toujours partiellement
+   résolu, pas clos).
+
+Navigation latérale par domaine de la V1 conservée telle quelle — rien
+dans le retour PO ne la remettait en cause, et le nouveau thème clair
+ne change rien à sa structure. Rien dans `frontend/src/**` n'a été
+modifié.
+
+---
+
+**2026-09-28 — @ux-designer @product-manager** — V3 de la maquette,
+itération explicite sur le retour du Product Owner : « ça commence à
+venir, inspire-toi du site public réel du client
+(https://www.djamo.com/en-ci) ». Toujours pas un redémarrage — même
+lien : **https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57** (Version
+3). Structure, navigation latérale par domaine et sélecteur d'échelle
+1-5 façon Apps Script (V2) **inchangés** ; seuls palette, typographie
+et formes des composants évoluent.
+
+Données de marque Djamo fournies par l'orchestrateur, déjà extraites du
+site public (pas re-scrapées ici) : accent CTA `rgb(42,63,255)` =
+`#2A3FFF` (bleu indigo franc, non dilué), sections de contraste noir
+quasi-pur alternées avec blocs de fond lavande pâle (~`#E4E0FB`), vert
+secondaire (épargne), touches jaune-orangé décoratives, boutons pilule
+à padding généreux, police de marque GT Walsheim Pro (Grilli Type,
+payante, hors allowlist CDN Artifacts — non chargée).
+
+**Synthèse ADN de marque → interface GRC dense** (ce qui est repris,
+ce qui est écarté, et pourquoi — détail complet dans le changelog de
+l'artefact lui-même, section « Ce qui a changé depuis la V2 ») :
+- **Repris** : le bleu `#2A3FFF` devient l'unique accent de marque et
+  d'action (boutons primaires, onglet actif, liens, focus du sélecteur
+  d'échelle) — remplace l'argile `#B5533A` de la V2, qui était un choix
+  « esprit IA » faute de charte connue, plus nécessaire maintenant que
+  la vraie charte est identifiée. Surfaces de carte/panneau légèrement
+  teintées lavande (`#F2EFFB`/`#EAE5F7`, dérivées de la palette
+  périwinkle du site) au lieu d'un blanc/crème plat — écho direct au
+  langage de surface Djamo, dilué pour rester lisible en tableau dense.
+  Boutons entièrement pilule (`border-radius: 999px`, padding
+  11px/22px, poids 500) — cohérent avec les CTA du site ; badges et
+  filtres segmentés étaient déjà en pilule depuis la V2, inchangés.
+  Radius des cartes légèrement augmenté (8px → 14px) pour des formes
+  plus généreuses.
+- **Écarté, avec raison** : pas de photo lifestyle (personnes
+  souriantes) — un écran RiskEvaluation affiche une décision de
+  gouvernance, pas une offre grand public ; pas d'accent vert
+  « épargne » ni de touches jaune-orangé décoratives — ce sont des
+  signaux marketing produit, et les introduire à côté du badge vert
+  sémantique « Faible/OK » créerait une ambiguïté dangereuse dans un
+  outil de cotation ; pas de sections à fond noir quasi-pur — la
+  neutralité claire déjà actée en V1/V2 est conservée, un outil de
+  travail quotidien consulté des heures ne doit pas fatiguer l'œil
+  comme une page marketing consultée une fois ; pas de traits
+  serpentins décoratifs — aucune place pour de l'illustration pure sur
+  un écran de travail dense en données. La palette sémantique de statut
+  (danger/warning/success/neutral, 4 couleurs) reste **inchangée** —
+  elle code la sévérité d'un risque, jamais concurrencée par la couleur
+  de marque, règle déjà posée en V2 et confirmée ici.
+- **Typographie** : Source Serif 4 (V1/V2) remplacée par **Plus Jakarta
+  Sans** (600/700/800) pour les titres — Google Font géométrique-
+  humaniste à terminaisons arrondies, l'équivalent le plus proche dans
+  l'esprit de GT Walsheim Pro sans la reproduire (elle-même hors
+  allowlist CDN Artifacts et payante). IBM Plex Sans (corps
+  d'interface) et IBM Plex Mono (données tabulaires) inchangés — trois
+  rôles typographiques, comme en V1/V2, seul le rôle « titre » change
+  de registre.
+
+Rien dans `frontend/src/design-system/tokens.css` n'a été modifié —
+cette palette/typo V3 reste une proposition d'artefact, comme la V2
+avant elle ; le portage dans les tokens réels attend toujours une
+validation PO explicite (même point ouvert qu'en V2, non résolu ici,
+hors périmètre de ce retour). **Figma** : statut inchangé, toujours
+aucun fileKey fourni ni inventé.
+
+---
+
+**2026-09-28 — @ux-designer @product-manager** — V4 de la maquette,
+correction directe du retour du Product Owner sur la V3 : « je
+m'attendais à être bluffé, je ne l'ai pas été ». Toujours pas un
+redémarrage — même lien :
+**https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57** (Version 4).
+Structure, navigation par domaine, palette de marque Djamo `#2A3FFF`
+et sélecteur d'échelle 1-5 issus de la V2/V3 **inchangés**. Quatre
+points précis corrigés, un par un :
+
+1. **Typographie des libellés de champ.** IBM Plex Mono était utilisée
+   pour des libellés textuels ("Efficacité", "Inhérent", "Prob.", les
+   en-têtes de colonne du tableau, les clés `dt` de l'identité du
+   risque — "Département", "Propriétaire"…) alors qu'elle est pensée
+   pour la donnée tabulaire/numérique. Plex Mono est désormais
+   **strictement réservée aux valeurs numériques/tabulaires** (scores,
+   dates, identifiants, cellules `td.num`, nombres de l'axe P×I) ; tous
+   les libellés de champ passent en IBM Plex Sans, graisse 700, petites
+   majuscules trackées (`letter-spacing:.03-.05em`). Un cas limite
+   traité au passage : "Modérée" (niveau qualitatif d'efficacité de
+   maîtrise) était à tort dans un `<b>` mono hérité du style des
+   valeurs numériques voisines — isolé dans une classe `.word` dédiée,
+   Plex Sans.
+2. **Navigation latérale.** Entrées passées de `--ink-soft` (couleur
+   diluée) à `--ink` plein, graisse 700, et chaque entrée reçoit un
+   pictogramme SVG inline avant le libellé — un jeu d'icônes trait
+   cohérent (24×24, `stroke-width:1.8`, arrondi), dessiné à la main
+   pour chaque domaine (Cartographie, Évaluations, Appétence, Grilles
+   de cotation, Contrôles, Exécutions, KRI, KPI, Plans d'action, Cycles
+   de revue) — aucune police d'icônes externe, hors allowlist CDN des
+   Artifacts de toute façon.
+3. **Cartographie — contraste des zones et couleur des points.** Les
+   bandes de criticité réutilisaient les teintes pastel des badges
+   sémantiques (`--success-soft`/`--warning-soft`/`--danger-soft`),
+   trop proches les unes des autres sur le fond lavande de la carte.
+   Trois nouvelles variables dédiées à la heatmap
+   (`--zone-safe`/`--zone-watch`/`--zone-crit`, plus saturées, chacune
+   avec sa propre couleur de bordure) rendent la grille 5×5 nettement
+   lisible. Les points de risque, qui portaient deux couleurs
+   (encre pour l'inhérent, bleu de marque pour le résiduel — une
+   confusion possible avec un codage de sévérité), passent à **une
+   couleur unique pour tous les points** (le bleu de marque `--accent`)
+   ; le point résiduel se distingue désormais uniquement par un anneau
+   encre autour du même point, jamais par une teinte différente — la
+   sévérité reste portée exclusivement par la zone de fond.
+4. **Animation des graphiques.** Demandée en V2/V3, jamais honorée
+   jusqu'ici — corrigée cette fois avec GSAP (CDN
+   `cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js`, version
+   épinglée, chargé avant le `<script>` inline qui l'utilise) : (i) les
+   3 scores (inhérent/maîtrise/résiduel) comptent jusqu'à leur valeur à
+   l'affichage (`gsap.fromTo` sur un objet numérique intermédiaire,
+   `onUpdate` formate signe/décimales/suffixe) ; (ii) le curseur et le
+   seuil de la barre d'appétence glissent/s'affichent en place ; (iii)
+   les points de la heatmap apparaissent en fondu+échelle
+   (`scale:0→1`, `back.out`) avec un léger décalage (`stagger:.035s`)
+   entre eux ; (iv) la zone de détail du sélecteur d'échelle
+   (`scale-box`) transitionne en douceur à chaque changement de niveau,
+   y compris à l'affichage initial ; (v) les lignes du tableau des
+   risques critiques s'annoncent en cascade rapide. Timing
+   volontairement bref (250-900ms selon l'élément) pour rester sobre
+   sur un dashboard dense, tout en étant réellement visible — pas un
+   fade quasi imperceptible.
+
+**Skills de design mobilisés, et ce qui en a été pris** (chargés et lus
+en entier avant d'écrire le code, pas invoqués par réflexe) :
+- `taste__high-end-visual-design` — pris : l'ombre de carte diffuse à
+  deux couches (`--shadow-card`, `0 1px 2px` + `0 10px 28px -18px`,
+  jamais un `box-shadow` lourd/gris générique) pour combler l'écart
+  avec l'attente "bluffé" sans sortir du registre sobre déjà acté ; la
+  logique de rythme/qualité d'exécution générale (cohérence des
+  micro-détails : anneaux, tracking des libellés, contraste des
+  bordures de zone). Explicitement écarté : le "Double-Bezel"
+  (double-cadre imbriqué), les boutons "bouton-dans-bouton", les
+  radius exagérés `rounded-[2rem]`, le glassmorphism/fond OLED — tout
+  ce registre "hero SaaS premium" est hors sujet pour un tableau de
+  bord GRC interne dense en données, et contredirait le minimalisme
+  déjà validé en V1-V3.
+- `taste__minimalist-ui` — pris : la discipline déjà en place depuis
+  V1 (pas de gradient, pas d'ombre lourde, bordures 1px, palette
+  monochrome tiède + touches pastel réservées au sens) est confirmée
+  et prolongée aux nouvelles variables de zone heatmap (saturées mais
+  toujours "muted pastel", pas de couleur primaire criarde). La
+  section "Subtle Motion" de ce skill (fade `translateY(12px)`,
+  `IntersectionObserver`, jamais `scroll` listener) a directement
+  informé le calibrage des durées GSAP — rester dans un registre
+  "présent mais jamais spectaculaire", cohérent avec l'esprit du skill
+  même si son mécanisme (CSS `@keyframes`+observer) diffère de GSAP.
+- `taste__gpt-taste` — pris **uniquement** les techniques de moteur
+  d'animation transférables à un dashboard : le compteur numérique
+  (`gsap.fromTo` sur un objet intermédiaire avec `onUpdate`), le
+  fondu+échelle échelonné (`stagger`) pour une collection d'éléments
+  similaires (points de heatmap, lignes de tableau), l'usage de
+  `transform`/`opacity` exclusivement pour rester GPU-safe. **Écarté
+  explicitement** : toute la structure de page (AIDA, nav "island"
+  flottante, hero cinématique 2-3 lignes), le `ScrollTrigger`
+  pinning/scrubbing/stacking, les bento grids "gapless" à densité
+  visuelle forte, le ton "agence de landing page" — aucun de ces
+  patterns n'a de sens sur un écran de travail interne consulté toute
+  la journée, où la stabilité et la lisibilité priment sur le
+  spectacle.
+
+Rien dans `frontend/src/**` n'a été modifié — cette itération V4 reste
+une proposition d'artefact, comme V1/V2/V3 avant elle ; le portage dans
+les tokens réels attend toujours une validation PO explicite (point
+ouvert non résolu ici, hors périmètre de ce retour). **Figma** : statut
+inchangé, toujours aucun fileKey fourni ni inventé.
+
+---
+
+**2026-09-28 — @ux-designer @product-manager** — V5 de la maquette,
+polish sur la V4 après le retour du Product Owner : « tu as monté le
+niveau mais tu peux mieux faire ». Explicitement un ajustement, pas un
+redémarrage — même lien :
+**https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57** (Version 5).
+Structure, navigation par domaine, palette de marque Djamo `#2A3FFF`,
+sélecteur d'échelle 1-5 avec description contextuelle, pictogrammes
+SVG de la nav bar et animations GSAP issus de la V2-V4 **inchangés**.
+Trois points précis corrigés, chacun diagnostiqué en relisant le HTML
+publié avant toute correction :
+
+1. **Zones et boutons — langage Material Design.** Ajout d'un système
+   d'élévation à 3 niveaux (`--elev-1/2/3`, tokens `box-shadow` repos/
+   survol/actif) appliqué à `.btn` (tous les boutons) et à `.hm-cell.
+   z-crit` (zone critique de la heatmap), en remplacement d'un aplat
+   de couleur plat sans état d'interaction visible. Rayon des boutons
+   ramené de la pilule (999px) à 10px (`--radius-btn`) — la pilule
+   redevient l'exception réservée au bouton d'action primaire
+   (`.btn-primary`), pas le traitement par défaut ; rayon des cellules
+   de heatmap resserré de 8px à 6px pour préserver la surface utile
+   sur une grille dense de 25 cellules. `:hover`/`:active` explicites
+   (montée/tassement d'ombre + léger `translateY`), jamais un simple
+   changement de teinte. Pas de ripple effect littéral, pas de palette
+   Google — seulement la logique de profondeur par l'ombre.
+
+2. **Typographie de 4 libellés/valeurs précis, diagnostic au cas par
+   cas** (relu dans le HTML publié, pas supposé) :
+   - **"Département"** (`.identity dt`) — la casse capitale trackée
+     héritée de la V4 fonctionne pour un libellé seul au-dessus de son
+     champ, mais ici, collée horizontalement à sa valeur sur la même
+     ligne d'une grille `dt`/`dd` dense à .7rem, elle compresse la
+     lecture. Fix : casse normale, poids 600 (au lieu de 700), taille
+     remontée à .76rem, plus de `text-transform`/`letter-spacing`.
+   - **"Maîtrise (L1/L2/L3)"** (`.score-cell .lbl`) — la casse capitale
+     trackée reste justifiée ici (libellé seul, comme "Inhérent" /
+     "Résiduel" que le PO n'a pas signalés), mais le `letter-spacing:
+     .05em` écartèle les parenthèses et les slashs de façon inégale
+     par rapport aux lettres. Fix ciblé : tracking réduit à `.02em`
+     pour ce sélecteur uniquement, casse et poids conservés.
+   - **"Prob. 4 · Impact 4"** (`.score-cell .pi b`) — les chiffres
+     inline étaient en IBM Plex Mono au sein d'une phrase en Plex
+     Sans ; la règle V4 ("Plex Mono réservée aux valeurs numériques/
+     tabulaires") visait des valeurs autonomes (scores, dates,
+     cellules de tableau), pas des chiffres insérés au fil d'une
+     phrase courte — le changement de police cassait le rythme de
+     lecture. Fix : ces chiffres repassent en Plex Sans, poids 600.
+   - **"−35%"** (`.score-cell .result .val`) — contrairement aux
+     trois cas ci-dessus, Plex Mono est ici légitime (valeur autonome
+     affichée en grand, comme "16" et "10,4"). Fix : `letter-spacing:
+     -.01em` ajouté à `.val` pour un rendu plus resserré, qui rattache
+     mieux visuellement le signe moins aux chiffres — appliqué aux 3
+     valeurs de la ligne de cotation pour rester cohérent, pas
+     seulement à celle qui posait problème.
+
+3. **Alignement vertical score / tags.** Bug localisé dans
+   `.score-cell .result` : un grand chiffre (`.val`, 1.5rem, Plex
+   Mono) et une pilule de statut (`.badge`, .72rem) partageaient
+   `align-items:baseline`. La baseline d'un badge `inline-flex` est
+   dérivée du texte de son propre contenu minuscule, pas d'un centre
+   optique — alignée sur la baseline du grand chiffre, la pilule
+   apparaissait décalée vers le bas par rapport à son centre visuel.
+   Comparé mentalement `baseline` vs `center` avant de trancher :
+   `center` est le bon choix car aucun des deux éléments n'est un
+   texte de paragraphe courant (`baseline` se justifie entre lignes de
+   texte de même nature). Fix : `align-items:center`. Vérifié en
+   parallèle que `table.risk-list td` utilisait déjà
+   `vertical-align:middle` — pas de second cas de désalignement
+   score/tag dans le tableau des risques critiques.
+
+Rien dans `frontend/src/**` n'a été modifié — cette itération V5 reste
+une proposition d'artefact, comme V1-V4 avant elle ; le portage dans
+les tokens réels attend toujours une validation PO explicite (point
+ouvert non résolu ici, hors périmètre de ce retour). **Figma** : statut
+inchangé, toujours aucun fileKey fourni ni inventé.
+
+---
+
+**2026-09-28 — @ux-designer @product-manager** — V6 de la maquette,
+deux directives distinctes du Product Owner sur la V5, traitées
+séparément. Même lien, pas un redémarrage :
+**https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57** (Version 6).
+Structure, navigation par domaine, palette de marque Djamo `#2A3FFF`,
+sélecteur d'échelle, pictogrammes SVG de la nav bar et animations GSAP
+issus de V2-V5 **inchangés**.
+
+**Directive 1 — purge d'une police mal employée, partout, pas
+seulement à l'endroit signalé.** Point de départ cité par le PO : « 38
+risques affichés » (le compteur de résultats de la Cartographie, `span
+class="count"` dans `.filters`). Localisé dans le HTML publié :
+`.filters .count{font-family:var(--font-mono);…}` — IBM Plex Mono
+posée sur une phrase-compteur, pas une valeur tabulaire autonome. Même
+défaut de fond que « Prob. 4 · Impact 4 », déjà corrigé en V5 mais
+alors traité comme un cas isolé, pas comme un principe appliqué à
+l'ensemble de l'artefact — c'est précisément ce que le PO reproche
+cette fois (« pas seulement à cet endroit précis »). Méthode : `grep
+"font-family:var(--font-mono)"` sur l'intégralité du fichier (13
+occurrences trouvées), chacune classée manuellement légitime
+(valeur numérique/tabulaire/identifiant autonome) ou fautive
+(texte-phrase). Sept occurrences fautives corrigées, en plus de
+l'exemple cité :
+- `.eyebrow` — "Direction visuelle V5 — UX Designer (A04)" (phrase).
+- `.intro .changelog b` — "LES 3 CORRECTIONS V5…" (libellé textuel).
+- `.intro .meta` — bande Thème/Typographie/Accent/Élévation/Animation
+  (descriptions en mots, même quand elles citent une valeur comme
+  `#2A3FFF`, toujours au fil d'une phrase).
+- `.jump a` — liens d'ancre "Écran 1 — Évaluation du risque" (phrases).
+- `.crumb` — fil d'Ariane. Cas le plus révélateur : l'écran
+  Cartographie affiche "Risques / Cartographie", un fil d'Ariane sans
+  aucun identifiant ni chiffre — la police mono n'y avait donc jamais
+  eu de justification, même par accident. Fix : le fil d'Ariane
+  repasse en Plex Sans ; sur l'écran RiskEvaluation, où le fil contient
+  un vrai identifiant ("RE-0142"), celui-ci est isolé dans un
+  `span.id` dédié qui reste en Mono (même logique que `td.num`) —
+  seul le mot "Évaluations" qui l'accompagne passe en Sans.
+- `.appetite-legend b` — "Seuil : 12", chiffre inséré dans une phrase
+  courte ("Seuil : …"). Diagnostiqué comme rigoureusement le même cas
+  que "Prob. 4 · Impact 4" (V5) : un chiffre au fil d'une phrase n'est
+  pas une valeur tabulaire autonome, même si c'est bien un nombre —
+  cette occurrence n'avait pas été vue en V5 car le signalement PO ne
+  portait alors que sur un exemple précis, pas sur une recherche
+  exhaustive.
+
+Six occurrences vérifiées et laissées en Mono (légitimes) : `.val`
+(scores affichés seuls, `.score-cell`), les boutons de l'échelle 1-5
+(chiffre seul par bouton), les nombres d'axe de la heatmap (`.hm-axis-y
+span`, `.hm-x span`), `td.num` (cellules tabulaires), et
+`.frame-bar .path` (chemin d'URL simulé dans la fausse barre de
+fenêtre — traité comme un identifiant technique, au même titre qu'une
+adresse, pas comme une phrase). Un cas explicitement laissé de côté et
+documenté comme tel : `.confirm-strip .ic`, le glyphe "!" seul — ni un
+mot, ni une valeur numérique, donc hors du périmètre de la règle
+Mono/Sans elle-même (pas un texte au sens de la règle). Résultat après
+purge : IBM Plex Mono ne sert plus, dans tout l'artefact, qu'à des
+valeurs numériques/tabulaires ou à des identifiants techniques
+autonomes — jamais à un mot ni à un chiffre cité dans une phrase.
+
+**Directive 2 — carte blanche créative, citation du PO : « essaie de
+me surprendre… je veux voir ce que tu serais capable d'apporter de
+nouveau ».** Trois apports UX réels ajoutés de ma propre initiative,
+au-delà de la palette/typo/alignement déjà traités V1-V5, chacun avec
+le raisonnement produit qui le justifie (pas seulement l'effet
+visuel) :
+
+1. **Prévisualisation au survol/focus d'une cellule de heatmap.**
+   Constat : un point sur la heatmap 5×5 n'était identifiable que par
+   devinette ou en cherchant, ligne par ligne, dans le tableau "Risques
+   en zone critique" en dessous — qui ne couvre de toute façon que les
+   4 risques en zone critique, pas les points en zone de vigilance ou
+   maîtrisée. Un utilisateur qui explore la carte pour comprendre la
+   distribution des risques n'avait aucun moyen de savoir *quel* risque
+   se cache derrière un point sans quitter l'écran ou deviner. Fix :
+   chaque cellule contenant au moins un point (`data-has-risk`,
+   `tabindex="0"` pour l'accès clavier) déclenche au survol ou au focus
+   une popover listant le(s) risque(s) de la cellule, leur nature
+   (Inhérent/Résiduel, déduite de la classe `.residual` déjà existante
+   — aucune donnée dupliquée) et la coordonnée Probabilité × Impact,
+   calculée depuis la position de la cellule dans la grille (pas codée
+   en dur). Détail de conception délibéré : le badge Inhérent/Résiduel
+   utilise les couleurs `neutral`/`info`, jamais `danger`/`success` —
+   ces deux dernières sont déjà réservées à la sévérité ailleurs dans
+   l'écran (`badge danger` = Critique, `badge success` = Maîtrisé) ;
+   les réutiliser ici pour coder autre chose (le type de score) aurait
+   produit un faux signal — un point résiduel encore en zone critique
+   affiché en vert aurait laissé croire, à tort, qu'il est maîtrisé.
+   Fermeture au clavier (Échap), `Escape` géré globalement. Noms de
+   risques : contenu représentatif du domaine Djamo (fraude
+   onboarding, indisponibilité API mobile money, non-conformité KYC,
+   dépendance fournisseur cloud, etc.), jamais de lorem ipsum ; les 4
+   risques déjà nommés dans le tableau du bas réapparaissent dans leurs
+   cellules de zone critique pour rester cohérent avec le reste de
+   l'écran, et le risque RE-0142 (écran 1) a sciemment un point
+   inhérent en zone critique et un point résiduel en zone de vigilance,
+   pour illustrer visuellement l'effet de la maîtrise dans la
+   heatmap elle-même. Limite assumée et documentée plutôt que cachée :
+   le survol reste un mécanisme souris/clavier basique, sans lien
+   `aria-describedby` dynamique vers le lecteur d'écran — acceptable
+   pour une proposition d'artefact qui démontre un pattern
+   d'interaction, mais à traiter comme un vrai correctif
+   d'accessibilité si ce composant est un jour porté dans
+   `frontend/src/**`.
+
+2. **« Pourquoi ce score résiduel ? » — dérivation du calcul, pas
+   seulement le résultat.** Constat : le score résiduel (10,4)
+   s'affichait comme une donnée reçue, jamais comme quelque chose que
+   l'utilisateur peut vérifier — exactement le point que la fiche agent
+   UX Designer (section 33, "UX pour le Risk Manager") demande de
+   traiter : *"L'interface doit faciliter l'analyse sans remplacer le
+   jugement du Risk Manager"*. Un chiffre qu'on ne peut ni recalculer
+   ni challenger sans sortir de l'écran affaiblit ce jugement au lieu
+   de l'outiller. Fix : un lien `Pourquoi ce score résiduel ?` (état
+   `aria-expanded`, fonctionne sans dépendance GSAP si le CDN échoue à
+   charger) déplie une dérivation en 3 étapes — 16 (Prob. 4 × Impact 4,
+   inhérent) × 0,65 (effet de la maîtrise, efficacité "Modérée" ≈
+   −35 %) = 10,4 (résiduel) — avec une phrase de contexte. Les 3
+   valeurs affichées seules (`.chip`) sont en Plex Mono, cohérent avec
+   la règle typographique tout juste renforcée par la directive 1 :
+   valeurs autonomes en Mono, texte d'accompagnement en Sans. Ceci
+   n'invente pas une nouvelle mécanique de calcul : le calcul
+   16 × 0,65 = 10,4 est celui déjà implicite dans les données
+   affichées en V4/V5 (score inhérent 16, effet −35 %, résultat 10,4)
+   — la nouveauté est de le rendre visible, pas de changer ce qui est
+   calculé.
+
+3. **Colonne "Tendance" dans le tableau des risques critiques.**
+   Constat : le tableau n'affichait qu'un état instantané (inhérent,
+   résiduel, statut) — aucune indication de trajectoire. Pour un écran
+   consulté quotidiennement par un Risk Manager qui doit prioriser son
+   attention parmi plusieurs dizaines de risques, savoir qu'un risque
+   *s'aggrave* pèse au moins autant que savoir son niveau actuel : un
+   score de 12,8 stable n'appelle pas la même urgence qu'un score de
+   12,8 qui vient de bondir de 4 points. Fix : mini-courbe SVG (4
+   points, tracé à la main, pas de librairie de graphiques) + delta
+   signé depuis le cycle de revue précédent, coloré par sens
+   (`--danger` en hausse = s'aggrave, `--success` en baisse =
+   s'améliore, `--muted` stable) — jamais la couleur seule : le texte
+   du delta ("+2,3", "−2,6") et la flèche (▲▼→) portent la même
+   information, conformément à la règle déjà en place pour les
+   badges de sévérité (section 32 de la fiche agent : *"Ne pas
+   utiliser uniquement des couleurs"*). En-tête de colonne avec `title`
+   explicatif natif plutôt qu'un tooltip supplémentaire — délibérément
+   sobre, pour ne pas surcharger un tableau déjà dense.
+
+Vérification post-écriture : relecture complète du HTML publié après
+modification (balises, accolades JS, gestionnaires d'évènements) —
+`explain-toggle`/`score-explain` fonctionnent sans GSAP si le CDN
+échoue (dégradation progressive) ; le positionnement du tooltip de
+heatmap est calculé après mesure du DOM (`offsetWidth`/`offsetHeight`)
+pour ne jamais entrer en conflit avec le `transform` CSS de la classe
+`.show` (piège identifié et corrigé avant publication, pas après). Rien
+dans `frontend/src/**` n'a été modifié — cette itération V6 reste une
+proposition d'artefact, comme V1-V5 avant elle ; le portage dans les
+tokens réels attend toujours une validation PO explicite. **Figma** :
+statut inchangé, toujours aucun fileKey fourni ni inventé.
+
+---
+
+## 2026-09-28 — @tous — Consultation générale : nouveau Cahier des charges GRC v0.1
+
+Le Product Owner a échangé avec le client (Djamo) et produit un nouveau
+cahier des charges qui élargit significativement la vision produit :
+passage d'un outil de scoring de risques à une plateforme GRC/ERM
+interconnectée (référentiel de risques catalogue/registre/évaluation
+séparés, RACI, commentaires génériques, évidences transverses, module
+Incidents entièrement nouveau, module Audit avec Findings/Recommandations,
+moteur de méthodologie versionné, lignes de défense L1/L2/L3
+configurables). Document copié dans le dépôt :
+`docs/Cahier_des_charges_GRC_v0.1.md`.
+
+Les 15 agents ACF (hors A02 orchestrateur) ont été consultés en parallèle
+(lecture intégrale du document + de leur propre périmètre de code/rôle),
+chacun a rendu un tableau `Prise de connaissance | Proposition |
+Observation | Difficulté potentielle`. Synthèse complète publiée en
+Artifact par l'orchestrateur (voir ACTION_ITEMS.md pour le lien).
+
+Points de contradiction interne au cahier des charges relevés
+indépendamment par plusieurs agents (à faire trancher par le Product
+Owner/le client avant spécification détaillée) :
+- **Vélocité/Persistance** : traitées comme dimensions de scoring du
+  risque en §10.1, mais comme métriques calculées d'un incident en §32.2
+  — deux natures d'objet différentes (Risk Manager A13).
+- **Chaîne Finding→ActionPlan (§21) vs Constats→Recommandations→Plans
+  d'action (§27)** : le parcours à 3 étapes n'a pas d'entité
+  `recommendations` dans l'annexe §40 (Audit A23).
+- **Dette silencieuse déjà présente dans le code** :
+  `ActionPlanService.SOURCE_TYPES` accepte déjà `"INCIDENT"` et `"AUDIT"`
+  en énumération sans qu'aucune entité `Incident`/`Finding` n'existe
+  derrière (Product Manager A03, Dev Backend A06).
+
+Prochaine étape : le Product Owner tranche la priorisation proposée par
+A03 (voir tableau dédié dans l'Artifact) et les points d'arbitrage
+signalés (§37 du cahier des charges + contradictions ci-dessus) avant le
+premier dispatch de code sur ce chantier.
+
+---
+
+## 2026-09-28 — @tous — Arbitrage du Product Owner sur la consultation CDC GRC v0.1
+
+Le Product Owner a validé la consultation multi-agents (15 rôles,
+https://claude.ai/artifact/7kg7EefZbaqyiW7RzCje1V) et donné des
+directives par rôle, sans changer le fond des propositions — surtout des
+raffinements et des garde-fous explicites. Points transverses actés,
+valables pour tous les agents à partir de maintenant sur ce chantier :
+
+1. **Ne pas confondre ordre de livraison et dépendances techniques** —
+   des fondations peuvent devoir être *conçues* en amont même si elles
+   sont *livrées* plus tard dans le séquencement (ex. le moteur transverse
+   polymorphe doit être pensé dès le Lot 1 même s'il n'est exposé
+   utilisateur qu'au Lot 6).
+2. **5 distinctions structurantes à préserver strictement dans tout le
+   modèle**, jamais fusionnées par raccourci d'implémentation :
+   `Risk Catalog ≠ Risk ≠ Risk Assessment` · `Incident ≠ Anomaly ≠
+   Finding` · `IAM ≠ RACI` · `Evidence ≠ Document` · `événements
+   temporels (Occurrence/Detection/Resolution) ≠ métriques calculées
+   (Velocity/Persistence)`.
+3. **Ne pas repartir de zéro côté DB** — 26 migrations existent déjà,
+   ~15 objets sur 35 cibles sont déjà présents sous une forme proche.
+   Toute nouvelle table doit être justifiée par une Gap Analysis, pas
+   supposée nécessaire par défaut.
+4. **Expand/Contract obligatoire** : ajout non destructif → colonne
+   nullable → backfill → validation → contrainte finale seulement quand
+   les données sont prêtes. Aucun `DROP`/refonte destructive.
+5. **Polymorphisme `object_type`/`object_id` avec whitelist maîtrisée**
+   pour les capacités transverses (Comments/Evidence/RACI), déjà
+   précédenté par `action_plans.source_type` — confirmé comme la bonne
+   approche par le PO.
+6. **Collision de numérotation de migration = vrai risque de processus**,
+   pas un détail — attribution centralisée des numéros ou plages
+   réservées, dépendances déclarées explicitement, migrations
+   backward-compatible.
+
+**Gate posé avant tout travail DB réel** (@product-manager) : produire 3
+artefacts de référence — *GRC Target Domain Model*, *Database Gap
+Analysis*, *Migration Plan / Migration Protocol* — pour faire converger
+le cahier des charges, le modèle métier cible et la base existante avant
+que les agents commencent les modifications de schéma. Dispatch en
+cours, voir `.claude/agent-context/ACTION_ITEMS.md`.
+
+**2026-09-28 — @architect** — Premier des 3 artefacts du gate livré :
+`docs/architecture/GRC_Target_Domain_Model.md`. Répertorie les 31
+entités déjà codées dans `backend/src/domain/entities/` + celles du
+cahier des charges (statut EXISTANT / EXISTANT_À_ÉTENDRE / NOUVEAU),
+préserve strictement les 5 distinctions imposées (`Risk Catalog ≠ Risk
+≠ Risk Assessment`, `Incident ≠ Anomaly ≠ Finding`, `IAM ≠ RACI`,
+`Evidence ≠ Document`, événements temporels ≠ métriques calculées), et
+conçoit dès maintenant le moteur transverse polymorphe
+(`RaciAssignment`, `Comment`/`CommentableObjectConfig`, `evidence_links`)
+même s'il n'est exposé utilisateur qu'au Lot 6/7 — conformément à la
+directive « ordre de livraison ≠ dépendances techniques ». Point de
+vigilance signalé pour la Gap Analysis : `RiskAssessment` et
+`RiskEvaluation` coexistent aujourd'hui avec des rôles qui se
+chevauchent partiellement — lequel est le « Risk Assessment » cible du
+cahier des charges §7.1.C n'est pas tranché dans ce document, décision
+Architecture explicite à prendre en Gap Analysis. Comptage : 24
+entités EXISTANT inchangées, 4 EXISTANT_À_ÉTENDRE (extensions
+additives/nullables uniquement), ~12 NOUVEAU. Sert d'intrant direct à
+la *Database Gap Analysis* à venir (@dev-db).
