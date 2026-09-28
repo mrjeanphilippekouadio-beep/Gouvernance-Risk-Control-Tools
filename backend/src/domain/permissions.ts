@@ -99,7 +99,13 @@ export type Permission =
   | "config.read"
   | "config.update"
   /** ACT-221/222/223/224/225: module toggles, tenant management, regulatory frameworks, risk categories, Excel import — super-admin-ish operations. */
-  | "config.manage";
+  | "config.manage"
+  | "notification.read"
+  | "governance.read"
+  | "governance.create"
+  | "governance.validate"
+  /** ACT-253: distinct from riskevaluation.validate — higher-stakes Comité des Risques / Direction gate. */
+  | "riskevaluation.validate.committee";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -181,6 +187,11 @@ export const ALL_PERMISSIONS: Permission[] = [
   "config.read",
   "config.update",
   "config.manage",
+  "notification.read",
+  "governance.read",
+  "governance.create",
+  "governance.validate",
+  "riskevaluation.validate.committee",
 ];
 
 /**
@@ -188,7 +199,7 @@ export const ALL_PERMISSIONS: Permission[] = [
  * invite/onboarding flow yet (ACT-091) that could assign it per-user,
  * and feedback capture is meant to be frictionless, not gated.
  */
-export const BASE_PERMISSIONS: Permission[] = ["feedback.create"];
+export const BASE_PERMISSIONS: Permission[] = ["feedback.create", "notification.read"];
 
 export function requirePermission(actor: AuthenticatedUser, permission: Permission): void {
   if (!actor.roles.includes(permission)) {

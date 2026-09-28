@@ -28,7 +28,8 @@
 
 export type RiskEvaluationType = "AD_HOC" | "ANNUELLE" | "ANTICIPEE";
 
-export type RiskEvaluationStatus = "BROUILLON" | "VALIDATED" | "REJECTED";
+/** ACT-253: VALIDE_COMITE is a distinct terminal status from VALIDATED — reachable only via RiskEvaluationService.validateByCommittee, never via validate(). */
+export type RiskEvaluationStatus = "BROUILLON" | "VALIDATED" | "REJECTED" | "VALIDE_COMITE";
 
 /** One impact axis score, keyed by the RatingScale.impactAxes code it answers. */
 export interface ImpactAxisScore {
