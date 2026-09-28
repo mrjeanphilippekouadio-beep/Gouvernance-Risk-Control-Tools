@@ -343,3 +343,26 @@ SEC-014, n'a aucun effet pratique). Test `it.fails` ajouté dans
 risk appetite threshold is still applied to residual scoring"),
 production code non touché — voir `ACTION_ITEMS.md` pour la tâche
 `@dev-backend`. Commit local (pas de push) : voir historique git.
+
+**2026-09-28 — @dev-backend @security** — SEC-015 (Medium, **dernier de
+la série SEC-009..015 du round 2**) corrigé. `RiskEvaluationService`
+traite désormais un seuil d'appétence `active === false` comme absent
+(`suggested: null`) dans `recordResidualScoring` et `suggestAppetite`,
+au lieu de continuer à l'appliquer au calcul de `appetiteExceeded`.
+Correctif volontairement placé au niveau du service, pas du repository :
+`RiskAppetiteRepository.getBySubCategory` (interface +
+`PostgresRiskAppetiteRepository`) reste inchangé — il est aussi utilisé
+par `RiskAppetiteService.setThreshold` pour retrouver un enregistrement
+existant (actif ou non) et décider CREATE vs UPDATE lors de l'upsert ;
+filtrer `active` dans le repository aurait cassé ce cas d'usage légitime
+et forcé une mise à jour de tous les doubles de test qui implémentent
+l'interface. Le test `it.fails` SEC-015 de `SecurityBoundaries.test.ts`
+(describe "SEC-015 retired risk appetite threshold is still applied to
+residual scoring") est passé à `it` sans modification du corps. Grep de
+`getBySubCategory`/`riskAppetites` dans `RiskEvaluationService.test.ts` :
+les 3 fixtures existantes qui exercent le calcul d'appétence utilisent
+toutes `active: true` — aucune régression. `npm run typecheck` + `npm
+test` verts (34 fichiers, 367 tests, plus aucun `it.fails` restant dans
+`SecurityBoundaries.test.ts`). Commit `6179428`. Clôt, sous réserve du
+retest @security, l'intégralité de la série SEC-009 à SEC-015 issue de
+la revue round 2. **Prêt pour retest @security.**
