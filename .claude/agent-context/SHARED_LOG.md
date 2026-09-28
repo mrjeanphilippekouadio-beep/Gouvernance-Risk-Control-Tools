@@ -366,3 +366,51 @@ test` verts (34 fichiers, 367 tests, plus aucun `it.fails` restant dans
 `SecurityBoundaries.test.ts`). Commit `6179428`. Clôt, sous réserve du
 retest @security, l'intégralité de la série SEC-009 à SEC-015 issue de
 la revue round 2. **Prêt pour retest @security.**
+
+**2026-09-28 — @security** — Retest final de SEC-015, clôture de la
+série round 2. `git show 6179428` relu intégralement : le filtre
+`appetite?.active !== false` est appliqué correctement aux deux sites
+d'appel identifiés (`recordResidualScoring` ligne 317-319 et
+`suggestAppetite` ligne 352-354 de `RiskEvaluationService.ts`). Grep
+`getBySubCategory` sur tout `backend/src` : exactement 3 occurrences —
+les 2 patchées plus `RiskAppetiteService.setThreshold` ligne 62,
+confirmé volontairement non touché (nécessaire pour que `setThreshold`
+retrouve un seuil désactivé et le réactive via `upsert` ; vérifié par
+lecture directe que `before` ne sert qu'à distinguer CREATE/UPDATE pour
+l'audit trail, jamais à décider si le seuil s'applique). `compareToAppetite`
+(ligne 364) lit uniquement les champs déjà persistés sur l'évaluation
+(`appetiteThresholdApplied`, `appetiteThresholdSuggested`,
+`appetiteExceeded`) — aucun appel direct à `getBySubCategory`, donc hérite
+automatiquement du correctif fait en amont, pas de fix supplémentaire
+nécessaire. Diff de test relu (`SecurityBoundaries.test.ts`, describe
+SEC-015) : seul `it.fails` → `it`, assertions inchangées (score 9 >
+seuil retiré 5, doit donner `appetiteThresholdApplied`/`appetiteExceeded`
+= `null`) — non affaiblies. `npm run typecheck && npm test` relancés
+indépendamment par @security (pas repris du journal dev-backend) :
+typecheck propre, 34 fichiers / 367 tests verts, plus aucun `it.fails`
+dans `SecurityBoundaries.test.ts`. **VERDICT SEC-015 : CONFIRMED_FIXED.**
+
+Balayage de cohérence d'ensemble sur les 7 fixes de la série (SEC-009 à
+SEC-015) : rien de notable. Le pattern « transition terminale ⇒
+permission `.delete` dédiée en plus de `.update` » est appliqué de façon
+identique et intentionnelle entre SEC-013 (`ratingscale.delete` pour
+`activateVersion`) et SEC-014 (`riskappetite.delete` pour la
+désactivation d'un seuil) — même famille de risque, même remède, pas de
+divergence à signaler. SEC-009 (fix au niveau du type plutôt que d'une
+vérification d'autorisation) et SEC-011 (liaison à l'évaluateur) traitent
+des familles de problèmes différentes de SEC-013/014/015 (autorisation
+mal bornée vs contrôle d'intégrité/logique métier) et appellent
+légitimement des remèdes différents — pas d'incohérence identifiée. Seul
+point structurel déjà documenté et non bloquant : le garde-fou
+`if (!this.users) return;` dans `ActionPlanService` (SEC-012)
+réintroduirait silencieusement le trou si un futur point de construction
+du service omettait les dépendances optionnelles — à surveiller à chaque
+nouveau point d'instanciation, ce n'est pas un finding actif. Aucun
+nouveau problème découvert pendant ce balayage final.
+
+**SÉRIE SEC-009 → SEC-015 (revue round 2) : CLOSED.** Les 7 findings,
+tous CONFIRMED_FIXED après retest indépendant : SEC-009 (`11b236a`),
+SEC-010 (`f0f7fdf`), SEC-011 (`23d09e3`), SEC-012 (`e623ec6`), SEC-013
+(`88a5ede`), SEC-014 (`1918b82`), SEC-015 (`6179428`). Rappel : `CLOSED`
+au sens Security ne préjuge d'aucune décision Risk/Compliance/Privacy —
+voir `security.md` §50.
