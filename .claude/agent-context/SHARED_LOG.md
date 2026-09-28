@@ -138,3 +138,36 @@ tests existants (même piège que celui documenté pour SEC-003 sur
 `SecurityBoundaries.test.ts`). Commit `f0f7fdf`. **Prêt pour retest
 @security** — même branche `main`, pas de PR séparée. SEC-011 à SEC-014
 restent hors scope, non touchés.
+
+**2026-09-28 — @dev-backend @security** — SEC-011 (Medium) corrigé.
+Les trois setters de scoring de `RiskEvaluationService`
+(`recordInherentScoring`, `recordMasteryAssessment`,
+`recordResidualScoring`) n'exigeaient que `riskevaluation.update` et ne
+vérifiaient jamais que l'acteur était bien le `evaluatorId` désigné sur
+l'évaluation — seuls `validate()`/`reject()` comparaient `actor.userId`
+à `evaluatorId`, mais trop tard : un tiers pouvait déjà avoir écrit
+l'intégralité du contenu de scoring (y compris `appetiteOverride`, qui
+détermine `appetiteExceeded`) sur un brouillon `BROUILLON` ouvert par
+quelqu'un d'autre, tant que `evaluatorId` restait au nom du créateur —
+le contrôle des quatre yeux (maker-checker) ne se déclenchait jamais.
+Correctif retenu (revue via skill `ponytail`, solution la plus simple) :
+nouvelle fonction privée `assertIsEvaluator(actor, evaluation)` qui
+réutilise exactement la même comparaison `evaluatorId === actor.userId`
+que `validate()`/`reject()` font déjà, appelée en amont — juste après
+`assertMutable(before)` — dans les trois setters de scoring. Aucun
+nouveau champ, aucun mécanisme de co-signature : uniquement le
+déplacement du contrôle d'identité déjà existant, plus tôt dans le
+flux. Le test `it.fails` SEC-011 de `SecurityBoundaries.test.ts`
+(describe "SEC-011 RiskEvaluation scoring is not bound to the
+evaluator") est passé en `it()` actif sans modifier son corps — son
+assertion (ForbiddenError levé pour un tiers appelant
+`recordResidualScoring` sur le brouillon d'un autre évaluateur)
+correspondait déjà exactement au comportement sécurisé obtenu. Grep de
+`RiskEvaluationService` dans `backend/test/` (`RiskEvaluationService.
+test.ts`, `GovernanceService.test.ts`) : tous les appels existants aux
+trois setters de scoring utilisent systématiquement le même acteur
+évaluateur que celui posé à la création du brouillon — aucune
+régression. `npm run typecheck` + `npm test` verts (34 fichiers, 366
+tests, dont les 23 de `SecurityBoundaries.test.ts`). Commit `23d09e3`.
+**Prêt pour retest @security** — même branche `main`, pas de PR séparée.
+SEC-012 à SEC-014 restent hors scope, non touchés.
