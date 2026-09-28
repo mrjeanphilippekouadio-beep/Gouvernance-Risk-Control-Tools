@@ -251,7 +251,7 @@ export class RatingScaleService {
    * to ARCHIVED.
    */
   async activateVersion(actor: AuthenticatedUser, id: string, requestId: string): Promise<RatingScale> {
-    requirePermission(actor, "ratingscale.update");
+    requirePermission(actor, "ratingscale.delete");
     const before = await this.get(actor, id);
     if (before.status === "ARCHIVED") {
       throw new ValidationError("Cannot re-activate an archived rating scale — create a new version instead");

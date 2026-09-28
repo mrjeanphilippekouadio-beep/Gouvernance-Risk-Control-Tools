@@ -1029,7 +1029,7 @@ describe("SEC-012 ActionPlan cross-entity reference validation", () => {
 // state" bypass CLAUDE.md documents for Risk/Control.
 
 describe("SEC-013 rating scale terminal transition via the update permission", () => {
-  it.fails("SEC-013: archiving the previously-active scale must require ratingscale.delete", async () => {
+  it("SEC-013: archiving the previously-active scale must require ratingscale.delete", async () => {
     let archivedPrevious = false;
     const ratingScales = {
       async getById() {
