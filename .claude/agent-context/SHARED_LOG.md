@@ -1357,3 +1357,170 @@ livre uniquement le module RACI autonome (CRUD + garde-fou), consultable
 via `GET /api/v1/raci?entityType=...&entityId=...`. Câblage UI/consommation
 croisée = itération suivante, hors périmètre annoncé pour cette tâche.
 Aucune revue Security/QA indépendante n'a encore eu lieu sur ce lot.
+
+---
+
+**2026-09-28 — @ux-designer** — Composant RACI compact, prolongement de
+la proposition faite en consultation multi-agents (artefact
+`7kg7EefZbaqyiW7RzCje1V`) en un composant concret, dans la continuité
+visuelle V1→V6 (`JBwqMEpRi8FSQqb6dmZy57`). Nouvel artefact indépendant,
+pas un ajout à la maquette V6 : **https://claude.ai/artifact/UJS4hW9f21gJSgfxvi7h89**
+(« Composant RACI »). Source : `.claude/agent-context/scratch/raci-component.html`.
+
+**Ce que montre l'artefact.** Le composant en situation sur l'écran
+RiskEvaluation RE-0142 (même risque que V6, « Retard de règlement
+fournisseurs critiques »), dans le panneau latéral rétractable
+Comments/RACI/Evidence déjà proposé en consultation (rail d'onglets à
+droite du cadre, compteur par onglet, un seul panneau générique
+jamais 3 blocs empilés). Onglet RACI ouvert par défaut : 4 groupes de
+rôles (Réalisateurs/Accountable/Consultés/Informés), avatars empilés
+avec chevauchement, débordement en « +N » sur le groupe Consultés (4
+personnes, 3 affichées + 1), tooltip au survol/focus reprenant le
+patron déjà posé pour la heatmap en V6 (`.hm-tooltip` → `.raci-tooltip`
+ici). Interactions réelles (pas de simulation figée) : bouton
+pointillé en fin de groupe ouvre une popover de personnes disponibles,
+sélection anime l'ajout (GSAP `back.out`) ; survol d'un avatar en mode
+édition fait apparaître un retrait rouge, clic anime la sortie (GSAP
+scale-out) puis retire réellement la personne de l'état JS et
+recalcule le compteur d'onglet. Un sélecteur « Peut modifier / Lecture
+seule » en tête de panneau simule la permission `raci.assign`/
+`raci.revoke` reçue du backend : en lecture seule, aucun bouton
+d'ajout ni de retrait n'est rendu, une note explicite l'indique.
+
+**Accountable visuellement distinct.** Avatar plus grand (36px contre
+32px), anneau de la couleur d'accent Djamo `#2A3FFF` (au lieu de la
+palette d'avatars à 6 teintes assourdies utilisée pour R/C/I, choisie
+pour rester hors des couleurs sémantiques danger/warning/success déjà
+réservées ailleurs dans le système), pastille « A » superposée. Le
+rôle Accountable est en outre plafonné à une seule personne dans le
+composant (bouton d'ajout masqué dès qu'un Accountable existe) —
+traduction visuelle directe de la cardinalité recommandée au §2.2 du
+modèle de données.
+
+**Garde-fou anti-auto-validation — traduction visuelle en 3 points
+liés, pas un seul badge isolé.** Utilisateur courant simulé : Fatou
+Bamba, Accountable sur ce risque, évaluation « En attente Comité ».
+(i) Petit point d'avertissement superposé sur son propre avatar dans
+le groupe Accountable ; (ii) le tooltip à son survol ajoute une ligne
+dédiée « Vous êtes Accountable — validation par un tiers requise » ;
+(iii) le bouton primaire « Valider et transmettre au Comité » de la
+carte Actions est désactivé avec une note explicative sous le bouton,
+citant explicitement le même principe maker-checker que
+`assertIsEvaluator` déjà protégé côté backend (relevé par Security en
+consultation : « RACI avec auto-désignation Accountable = même classe
+de faille »). Les trois éléments se recalculent en direct si
+l'Accountable est retiré/changé via le composant lui-même — pas figés
+en dur, dérivés de l'état RACI à chaque rendu.
+
+**Écart mineur assumé avec le Lot 1 déjà livré.** Le composant utilise
+le contrat conceptuel `{ userId, userName, role }` / `objectType`+
+`objectId` donné dans la mission et dans `GRC_Target_Domain_Model.md`
+§2.2 ; le commit Lot 1 réellement livré (entrée précédente de ce
+journal) a tranché en faveur de `entityType`/`entityId`/`createdBy`/
+`createdAt`/`deletedAt` (soft-delete, convention CLAUDE.md) plutôt que
+`objectType`/`objectId`/`assignedBy`/`assignedAt`/`revokedAt`
+(append-only). Purement une question de nommage de champs API/DB,
+sans impact sur la forme du composant ci-dessus — à aligner par
+Dev Frontend au moment du câblage réel plutôt que dans cet artefact de
+proposition.
+
+**Limite assumée.** Composant de démonstration en pur HTML/CSS/JS —
+pas de lien `aria-describedby` dynamique du tooltip vers le lecteur
+d'écran (même limite déjà documentée pour la heatmap en V6), et la
+liste de candidats pour l'ajout est une liste statique, pas un champ
+de recherche filtrant. À traiter comme un vrai correctif
+d'accessibilité et une vraie recherche serveur si ce composant est un
+jour porté dans `frontend/src/**`.
+
+---
+
+**2026-09-28 — @security** — Revue de sécurité indépendante du Lot 1
+RACI minimal (commit `8cf9fa2`, non poussé), demandée par le Product
+Owner avant tout câblage dans `RiskService`/`ControlService`/
+`ActionPlanService` et avant l'écran frontend. Vérification point par
+point de la règle posée par Security lors de la consultation CDC
+initiale (garde anti-auto-désignation Accountable, tenant-scoping avant
+tout write sur le moteur polymorphe) :
+
+1. **Tenant isolation : CONFIRMED_SAFE.** `assign()`/`revoke()` résolvent
+   l'entité cible via `assertEntityExists(actor.tenantId, ...)` et
+   `raci.getById(actor.tenantId, ...)` **avant** tout write — pattern
+   `EvidenceService` correctement répliqué. `server.ts` câble bien les
+   3 vraies instances `riskRepository`/`controlRepository`/
+   `actionPlanRepository` (pas des stubs) au constructeur de
+   `RaciAssignmentService`. Point de vigilance déjà documenté ailleurs
+   dans ce journal (SEC-012) et non nouveau : le pattern
+   `if (entityType === "Risk" && this.risks)` dans
+   `assertEntityExists` **ignore silencieusement** la validation si le
+   repository optionnel n'est pas injecté — non exploitable aujourd'hui
+   (server.ts injecte bien les 3), mais fragile si un futur point de
+   construction (tests, refactor) omet ces paramètres. Pas un finding
+   sur ce commit, juste rappelé pour vigilance au câblage RiskService/
+   ControlService/ActionPlanService à venir.
+2. **Garde anti-auto-désignation Accountable : FINDING réel — voir
+   SEC-016 ci-dessous.**
+3. **Permissions dédiées, défense en profondeur aux routes : CONFIRMED_SAFE
+   (conforme à la convention du dépôt, pas une régression).** `raci.routes.ts`
+   ne fait aucun contrôle de permission — mais aucune route de ce dépôt
+   ne le fait (`grep requirePermission backend/src/api/v1/` : 0
+   résultat), CLAUDE.md documente explicitement ce choix architectural
+   (« api/v1/*.routes.ts → ... No business rules » vs
+   « services/*Service.ts → ALL ... permission checks »). `raci.assign`/
+   `raci.revoke`/`raci.read` sont bien dédiées, jamais substituées par
+   une permission générique (`requirePermission(actor, "raci.assign")`
+   etc., aucune référence à `risk.update`/`control.update`/
+   `actionplan.update` dans `RaciAssignmentService`).
+4. **Attribution forcée serveur (`createdBy`) : CONFIRMED_SAFE.**
+   `AssignBody` (routes) n'expose aucun champ `createdBy`/`...By` ;
+   `RaciAssignmentService.assign` force `createdBy: actor.userId` dans
+   l'input passé au repository — jamais lu du body. Aucune régression
+   de la classe SEC-001/SEC-009.
+5. **Whitelist `entityType` en base : CONFIRMED_SAFE.**
+   `027_raci_assignments.sql` : `entity_type text NOT NULL CHECK
+   (entity_type IN ('Risk', 'Control', 'ActionPlan'))` — whitelist
+   fermée, pas une colonne texte libre. Même mécanisme que
+   `ActionPlan.sourceType`, conforme à ADR-002 Décision 2.
+6. **`npm run typecheck && npm test` relancés indépendamment (pas
+   repris du rapport dev-backend)** : typecheck propre, **35 fichiers /
+   376 tests verts** (375 existants + 1 nouveau `it.fails` SEC-016).
+
+**FINDING SEC-016 (Medium, CONFIRMED)** — `assertNoSelfAccountableConflict`
+ne s'exécute que quand le rôle **entrant** est `"A"` et ne regarde
+l'historique que dans ce sens (« l'acteur a-t-il déjà `R` ? »). Rien ne
+se déclenche quand le rôle entrant est `"R"`. Un acteur qui s'auto-
+désigne `A` en premier (autorisé — aucun `R` n'existe encore au moment
+du check) puis s'auto-désigne `R` juste après sur la même entité
+obtient exactement la combinaison R+A que le garde-fou prétend
+empêcher, en inversant simplement l'ordre des deux appels `assign()`.
+Bypass reproduit et confirmé par un test standalone hors suite avant
+l'ajout du test officiel (voir méthode complète dans l'historique de
+commande de cette session). Le rapport du dev-backend affirmait
+bloquer « l'auto-désignation Accountable quand l'acteur détient déjà
+Responsible » — exact, mais incomplet : le contrôle est asymétrique et
+n'examine qu'un seul des deux ordres possibles. Plus largement, le
+risque métier posé par Security en consultation (« RACI avec
+auto-désignation Accountable = même classe de faille » qu'
+`assertIsEvaluator`) est en réalité plus large que ce que ce garde-fou
+couvre dans les deux sens : un Accountable qui ne détient jamais `R`
+peut déjà s'auto-désigner librement aujourd'hui (documenté comme
+volontaire dans le code du service — hors scope explicite du Lot 1),
+et aucune étape de validation métier ne lit encore RACI pour y opposer
+un vrai maker-checker (RACI n'est pas câblé dans RiskService/
+ControlService/ActionPlanService dans ce commit). Ce point plus large
+n'est pas un finding technique sur ce commit précis (rien à exploiter
+tant que RACI ne gate aucune action), mais doit être explicitement
+tranché par Risk Manager/Architect **avant** le câblage prévu.
+Test `it.fails` ajouté : `backend/test/SecurityBoundaries.test.ts`,
+describe « SEC-016 RACI self-Accountable guard bypassable via
+assignment order ». Aucun code de production modifié (hors scope du
+rôle Security). Commit local (pas de push) : voir historique git.
+Voir `ACTION_ITEMS.md` pour le suivi.
+
+**Verdict global Lot 1** : 5 points sur 6 CONFIRMED_SAFE, 1 finding réel
+(SEC-016, Medium) sur le garde-fou anti-auto-désignation. **Le Lot 1
+n'est pas prêt pour le câblage RiskService/ControlService/
+ActionPlanService + écran frontend tant que SEC-016 n'est pas corrigé
+et retesté par Security** — le câblage amplifierait directement
+l'impact de ce garde-fou (c'est lui qui, une fois RACI consommé par une
+vraie action métier, devient la seule protection contre l'auto-
+validation).

@@ -53,6 +53,11 @@ import type { RatingScale } from "../src/domain/entities/RatingScale.js";
 import type { ActionPlan, CreateActionPlanInput } from "../src/domain/entities/ActionPlan.js";
 import type { RiskAppetite, SetRiskAppetiteInput } from "../src/domain/entities/RiskAppetite.js";
 
+// --- SEC-016 (Lot 1 RACI review) -------------------------------------------
+import { RaciAssignmentService } from "../src/services/RaciAssignmentService.js";
+import type { RaciAssignmentRepository } from "../src/domain/repositories/RaciAssignmentRepository.js";
+import type { RaciAssignment } from "../src/domain/entities/RaciAssignment.js";
+
 /**
  * Security boundary tests (agent A10 / Security review).
  *
@@ -1169,6 +1174,98 @@ describe("SEC-015 retired risk appetite threshold is still applied to residual s
       // keep enforcing a ceiling that was deliberately retired.
       expect((after as unknown as { appetiteThresholdApplied: number | null }).appetiteThresholdApplied).toBeNull();
       expect((after as unknown as { appetiteExceeded: boolean | null }).appetiteExceeded).toBeNull();
+    },
+  );
+});
+
+// --- SEC-016: RACI self-Accountable guard is bypassable by assignment order
+// `assertNoSelfAccountableConflict` (RaciAssignmentService) only inspects
+// existing assignments — and only runs at all — when the *incoming* role is
+// "A": `if (role !== "A" || targetUserId !== actingUserId) return;`. It
+// never re-checks anything when the incoming role is "R". So a user who
+// self-designates as Accountable *first* (no Responsible assignment exists
+// yet, so the guard's own `alreadyResponsible` lookup finds nothing and lets
+// it through), then calls `assign()` a second time to self-designate as
+// Responsible, ends up holding both R and A on the same entity — the exact
+// combination the guard exists to prevent — because the second call never
+// triggers the check at all (role is "R", so the function returns before
+// looking at anything). The stated goal ("a user must never be able to
+// execute *and* approve/own the same item with no second look") is not met;
+// only the specific call ORDER "R then A" is blocked, "A then R" is not.
+// Business risk raised in the original consultation ("RACI avec
+// auto-désignation Accountable = même classe de faille" — see SHARED_LOG,
+// same entry as the assertIsEvaluator precedent) is broader still: an
+// Accountable who never holds "R" at all can already self-designate freely
+// today (allowed by design, see class doc) and nothing in this lot gates a
+// validation step on RACI yet — RACI is not wired into any Service's
+// approve/validate flow (see the commit's own "Not done" note). This test
+// only proves the narrower, in-scope claim: the guard does not even
+// reliably enforce the R+A combination it explicitly documents itself as
+// blocking.
+
+function inMemoryRaciRepositoryForSec016(): RaciAssignmentRepository {
+  const store = new Map<string, RaciAssignment>();
+  return {
+    async create(input) {
+      const assignment: RaciAssignment = {
+        id: randomUUID(),
+        tenantId: input.tenantId,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        userId: input.userId,
+        role: input.role,
+        createdBy: input.createdBy,
+        createdAt: new Date(),
+        deletedAt: null,
+      };
+      store.set(assignment.id, assignment);
+      return assignment;
+    },
+    async getById(tenantId, id) {
+      const a = store.get(id);
+      return a && a.tenantId === tenantId ? a : null;
+    },
+    async listForEntity(tenantId, entityType, entityId) {
+      return [...store.values()].filter(
+        (a) => a.tenantId === tenantId && a.entityType === entityType && a.entityId === entityId && !a.deletedAt,
+      );
+    },
+    async remove(tenantId, id) {
+      const existing = store.get(id);
+      if (!existing || existing.tenantId !== tenantId || existing.deletedAt) {
+        throw new Error(`not found: ${id}`);
+      }
+      const updated: RaciAssignment = { ...existing, deletedAt: new Date() };
+      store.set(id, updated);
+      return updated;
+    },
+  };
+}
+
+describe("SEC-016 RACI self-Accountable guard bypassable via assignment order", () => {
+  it.fails(
+    "SEC-016: a user must not end up Responsible AND Accountable on the same entity regardless of assignment order (A then R)",
+    async () => {
+      const risks = {
+        async getById(tenantId: string, id: string) {
+          return tenantId === TENANT && id === "risk-1" ? ({ id, tenantId } as unknown as { id: string; tenantId: string }) : null;
+        },
+      } as unknown as RiskRepository;
+
+      const service = new RaciAssignmentService(inMemoryRaciRepositoryForSec016(), inMemoryAuditRepository(), risks);
+      const selfDesigner: AuthenticatedUser = { ...attacker, roles: ["raci.assign", "raci.read"] };
+
+      // Self-designate as Accountable FIRST — allowed today, since no
+      // Responsible assignment exists yet for this user on this entity.
+      await service.assign(selfDesigner, "Risk", "risk-1", selfDesigner.userId, "A", "REQ-SEC-016a");
+
+      // Then self-designate as Responsible — a secure implementation must
+      // reject this exactly as it rejects the reverse order (R then A),
+      // since the resulting state (same person R+A on the same entity) is
+      // identical either way.
+      await expect(
+        service.assign(selfDesigner, "Risk", "risk-1", selfDesigner.userId, "R", "REQ-SEC-016b"),
+      ).rejects.toThrow(ForbiddenError);
     },
   );
 });
