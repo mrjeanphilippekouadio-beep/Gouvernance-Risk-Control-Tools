@@ -232,7 +232,7 @@
   <div class="stats">
     <div class="stat"><div class="n">~82%</div><div class="l">du backlog fonctionnel ACF couvert (142 actions, 26 domaines)</div></div>
     <div class="stat"><div class="n">20</div><div class="l">modules métier livrés — les 26 domaines ACF ont désormais au moins une implémentation</div></div>
-    <div class="stat"><div class="n">366</div><div class="l">tests automatisés, 34 fichiers, tous verts</div></div>
+    <div class="stat"><div class="n">367</div><div class="l">tests automatisés, 34 fichiers, tous verts</div></div>
     <div class="stat"><div class="n">26</div><div class="l">migrations appliquées sur Neon</div></div>
   </div>
 
@@ -427,13 +427,13 @@
 
   <section>
     <h2>Backlog <span class="count">0 domaine à 0 % — jalon atteint</span></h2>
-    <p style="color:var(--muted); font-size:.9rem; margin:0;">Les 26 domaines du classeur ACF ont désormais au moins une implémentation partielle. La suite du travail est de la maturation (Config non branché, RBAC figé, Auth partiel) et du frontend (voir vigilance), plus les 6 findings de sécurité ouverts ci-dessous — pas de nouveau domaine à démarrer de zéro.</p>
+    <p style="color:var(--muted); font-size:.9rem; margin:0;">Les 26 domaines du classeur ACF ont désormais au moins une implémentation partielle. La suite du travail est de la maturation (Config non branché, RBAC figé, Auth partiel) et du frontend (voir vigilance) — pas de nouveau domaine à démarrer de zéro.</p>
   </section>
 
   <section>
     <h2>Points de vigilance</h2>
     <div class="vigilance">
-      <div class="vig-item"><b>6 findings de sécurité ouverts (SEC-009 à SEC-014), 2 High.</b> Round 2 de revue sécurité sur les 9 modules livrés en batches 1-3 : <b>SEC-009</b> (High) — <code>KpiMeasureService</code>/<code>KriMeasureService</code> acceptent un <code>recordedBy</code> fourni par le client, régression exacte de SEC-001 ; <b>SEC-010</b> (High) — création de compte utilisateur qui échappe à la permission <code>role.assign</code> ; SEC-011/012 (Medium), SEC-013/014 (Low, permissions terminales contournées via <code>*.update</code>). Documentés en <code>it.fails()</code> dans <code>SecurityBoundaries.test.ts</code>, pas encore corrigés — à traiter un par un, High en premier.</div>
+      <div class="vig-item resolved"><b>Série SEC-009 à SEC-015 (round 2, 7 findings) close — tous corrigés et retestés indépendamment.</b> SEC-009/010 (High), SEC-011/012 (Medium), SEC-013/014 (Low) corrigés un par un ; le retest sécurité de SEC-014 a lui-même révélé <b>SEC-015</b> (Medium) — le fix SEC-014 (exiger <code>riskappetite.delete</code> pour désactiver un seuil) n'avait aucun effet pratique tant que <code>RiskEvaluationService</code> continuait d'appliquer un seuil désactivé. Corrigé et retesté à son tour. Plus aucun <code>it.fails()</code> dans <code>SecurityBoundaries.test.ts</code>. PR <a href="https://github.com/mrjeanphilippekouadio-beep/Gouvernance-Risk-Control-Tools/pull/15">#15</a> ouverte, en attente de merge par le Product Owner.</div>
       <div class="vig-item resolved"><b>Les deux régressions ci-dessus ont révélé un vrai trou de process, maintenant comblé.</b> Les règles "jamais de champ d'attribution fourni par le client" et "transition terminale = permission dédiée" n'existaient que dans des commentaires de test, jamais dans <code>CLAUDE.md</code> — désormais écrites noir sur blanc pour que le prochain agent les lise avant d'écrire du code, pas après avoir répété l'erreur.</div>
       <div class="vig-item resolved"><b>10 findings QA sur les 9 modules livrés, 6 corrigés directement.</b> Le plus net : la validation croisée CONTROL/KRI d'<code>ActionPlanService</code> n'avait jamais été exercée par un test (seul RISK l'était). Voir <code>backend/QA_REVIEW_BATCHES_1_3.md</code> pour le détail des 4 findings restants (dont l'absence de maker-checker sur <code>RiskService.escalate</code>).</div>
       <div class="vig-item"><b>Aucun des 16 agents ACF n'avait l'outil <code>Skill</code>.</b> Découvert quand un agent QA a reçu une instruction d'invoquer un skill et a correctement refusé de fabriquer un appel d'outil inexistant plutôt que d'halluciner. Corrigé : les 16 fichiers <code>.claude/agents/*.md</code> ont maintenant <code>Skill</code> dans leur <code>tools:</code>.</div>
@@ -449,7 +449,7 @@
   <section>
     <h2>Prochaines étapes recommandées</h2>
     <ol class="steps">
-      <li><div class="step-body"><b>Corriger les 6 findings de sécurité SEC-009 à SEC-014</b><span>Priorité aux 2 High (attribution falsifiable, création de compte échappant à role.assign) — un par un, méthode déjà établie.</span></div></li>
+      <li><div class="step-body"><b>Merger la PR #15 (série SEC-009 à SEC-015)</b><span>Bloqué côté orchestrateur par le classificateur de permissions ("Merge Without Review") — le Product Owner merge lui-même, comme pour les PR précédentes.</span></div></li>
       <li><div class="step-body"><b>Construire l'interface frontend</b><span>20 modules sont API-only ; le design system est prêt, c'est maintenant le principal goulot d'étranglement produit.</span></div></li>
       <li><div class="step-body"><b>Décider du branchement Config → RatingScale/RiskEvaluation</b><span>Avec Architect et Risk Manager, pas en solo développeur — c'est une décision de méthodologie, pas juste du câblage.</span></div></li>
       <li><div class="step-body"><b>Décider et déployer un environnement de production</b><span>Cloud Run, séparé de la base de développement, secrets en Secret Manager.</span></div></li>
