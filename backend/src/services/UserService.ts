@@ -53,6 +53,15 @@ export class UserService {
    */
   async create(actor: AuthenticatedUser, input: CreateUserWithRoleInput, requestId: string): Promise<User> {
     requirePermission(actor, "user.create");
+    // SEC-010: role.assign is re-checked below by RoleService.assignToUser
+    // (the source of truth for that permission) — but it must also be
+    // checked *here*, before any row is inserted, otherwise an actor with
+    // user.create but not role.assign gets a 403 after the users row
+    // already exists: a login-capable, role-less account survives the
+    // refusal. No cross-repository transaction exists in this codebase to
+    // roll that insert back (see comment below), so the only fix is to
+    // fail before writing.
+    requirePermission(actor, "role.assign");
     if (!input.email.trim()) throw new ValidationError("email is required");
     if (!input.displayName.trim()) throw new ValidationError("displayName is required");
     if (!input.roleId?.trim()) throw new ValidationError("An initial role is required");

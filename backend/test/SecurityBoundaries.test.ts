@@ -863,15 +863,17 @@ describe("SEC-009 measure attribution (append-only recordedBy)", () => {
 });
 
 // --- SEC-010: account provisioning without role.assign -------------------
-// UserService.create inserts the users row FIRST, then calls
-// RoleService.assignToUser (which is what requires role.assign). An actor
-// holding only user.create gets a 403 back, but the account row survives —
-// and server.ts resolves identity with `SELECT ... FROM users WHERE email =
-// $1 AND deleted_at IS NULL`, so that orphan row is a login-capable account
-// nobody authorised and no role was ever attached to.
+// UserService.create now checks role.assign up front, before the users row
+// is inserted — an actor holding only user.create gets a 403 with no row
+// ever written. (Previously it inserted the users row first and only then
+// called RoleService.assignToUser, which is what actually required
+// role.assign — the 403 came back after the account already existed, and
+// server.ts resolves identity with `SELECT ... FROM users WHERE email = $1
+// AND deleted_at IS NULL`, so that orphan row was a login-capable account
+// nobody authorised and no role was ever attached to.)
 
 describe("SEC-010 user provisioning bypasses the role.assign gate", () => {
-  it.fails("SEC-010: a refused role grant must not leave a login-capable account behind", async () => {
+  it("SEC-010: a refused role grant must not leave a login-capable account behind", async () => {
     const inserted: string[] = [];
     const users = {
       async create(input: CreateUserInput) {
