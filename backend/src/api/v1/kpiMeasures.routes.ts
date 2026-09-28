@@ -7,7 +7,6 @@ const CreateKpiMeasureBody = z.object({
   period: z.coerce.date(),
   value: z.number().finite(),
   comment: z.string().nullish(),
-  recordedBy: z.string().nullish(),
 });
 
 export function kpiMeasuresRouter(kpiMeasureService: KpiMeasureService): Router {
@@ -30,11 +29,7 @@ export function kpiMeasuresRouter(kpiMeasureService: KpiMeasureService): Router 
   router.post("/", async (req, res, next) => {
     try {
       const body = CreateKpiMeasureBody.parse(req.body);
-      const measure = await kpiMeasureService.record(
-        req.user,
-        { ...body, recordedBy: body.recordedBy ?? undefined },
-        req.requestId,
-      );
+      const measure = await kpiMeasureService.record(req.user, body, req.requestId);
       res.status(201).json({ data: measure });
     } catch (err) {
       next(err);

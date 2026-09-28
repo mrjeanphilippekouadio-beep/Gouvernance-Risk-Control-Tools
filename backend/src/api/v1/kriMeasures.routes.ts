@@ -8,7 +8,6 @@ const CreateKriMeasureBody = z.object({
   value: z.number().finite(),
   source: z.string().min(1),
   comment: z.string().nullish(),
-  recordedBy: z.string().nullish(),
 });
 
 export function kriMeasuresRouter(kriMeasureService: KriMeasureService): Router {
@@ -37,11 +36,7 @@ export function kriMeasuresRouter(kriMeasureService: KriMeasureService): Router 
   router.post("/", async (req, res, next) => {
     try {
       const body = CreateKriMeasureBody.parse(req.body);
-      const measure = await kriMeasureService.record(
-        req.user,
-        { ...body, recordedBy: body.recordedBy ?? undefined },
-        req.requestId,
-      );
+      const measure = await kriMeasureService.record(req.user, body, req.requestId);
       res.status(201).json({ data: measure });
     } catch (err) {
       next(err);

@@ -20,7 +20,7 @@ export class KpiMeasureService {
 
   async record(
     actor: AuthenticatedUser,
-    input: Omit<CreateKpiMeasureInput, "tenantId" | "recordedBy"> & { recordedBy?: string },
+    input: Omit<CreateKpiMeasureInput, "tenantId" | "recordedBy">,
     requestId: string,
   ): Promise<KpiMeasure> {
     requirePermission(actor, "kpi.create");
@@ -38,7 +38,7 @@ export class KpiMeasureService {
     const measure = await this.measures.create({
       ...input,
       tenantId: actor.tenantId,
-      recordedBy: input.recordedBy ?? actor.userId,
+      recordedBy: actor.userId,
     });
 
     await this.audit.record({

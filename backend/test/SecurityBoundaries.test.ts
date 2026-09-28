@@ -808,7 +808,7 @@ describe("SEC-008 evidence deletion ordering (regression lock)", () => {
 describe("SEC-009 measure attribution (append-only recordedBy)", () => {
   const measureActor: AuthenticatedUser = { ...attacker, roles: ["kri.create", "kpi.create"] };
 
-  it.fails("SEC-009: KriMeasureService.record must ignore a client-supplied recordedBy", async () => {
+  it("SEC-009: KriMeasureService.record must ignore a client-supplied recordedBy", async () => {
     let recordedBy = "";
     const measures = {
       async create(input: CreateKriMeasureInput) {
@@ -831,14 +831,14 @@ describe("SEC-009 measure attribution (append-only recordedBy)", () => {
 
     await new KriMeasureService(measures, kris, inMemoryAuditRepository()).record(
       measureActor,
-      { kriId: "kri-1", measureDate: new Date(), value: 5, source: "manual", comment: null, recordedBy: "user-victim" },
+      { kriId: "kri-1", measureDate: new Date(), value: 5, source: "manual", comment: null },
       "REQ-SEC-009a",
     );
 
     expect(recordedBy).toBe(measureActor.userId);
   });
 
-  it.fails("SEC-009: KpiMeasureService.record must ignore a client-supplied recordedBy", async () => {
+  it("SEC-009: KpiMeasureService.record must ignore a client-supplied recordedBy", async () => {
     let recordedBy = "";
     const measures = {
       async create(input: CreateKpiMeasureInput) {
@@ -854,7 +854,7 @@ describe("SEC-009 measure attribution (append-only recordedBy)", () => {
 
     await new KpiMeasureService(measures, kpis, inMemoryAuditRepository()).record(
       measureActor,
-      { kpiId: "kpi-1", period: new Date(), value: 5, comment: null, recordedBy: "user-victim" },
+      { kpiId: "kpi-1", period: new Date(), value: 5, comment: null },
       "REQ-SEC-009b",
     );
 

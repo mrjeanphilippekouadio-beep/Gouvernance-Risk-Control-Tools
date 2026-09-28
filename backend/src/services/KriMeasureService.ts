@@ -37,7 +37,7 @@ export class KriMeasureService {
 
   async record(
     actor: AuthenticatedUser,
-    input: Omit<CreateKriMeasureInput, "tenantId" | "recordedBy"> & { recordedBy?: string },
+    input: Omit<CreateKriMeasureInput, "tenantId" | "recordedBy">,
     requestId: string,
   ): Promise<KriMeasure> {
     requirePermission(actor, "kri.create");
@@ -58,7 +58,7 @@ export class KriMeasureService {
     const measure = await this.measures.create({
       ...input,
       tenantId: actor.tenantId,
-      recordedBy: input.recordedBy ?? actor.userId,
+      recordedBy: actor.userId,
     });
 
     await this.audit.record({
