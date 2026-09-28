@@ -94,7 +94,12 @@ export type Permission =
   | "dashboard.executive"
   /** ACT-084: tenant logo. Read is only needed to display the current branding; update covers the upload itself. */
   | "branding.read"
-  | "branding.update";
+  | "branding.update"
+  /** ACT-220/226: methodology settings + appetite mode — "impact immédiat sur tous les calculs", kept distinct from config.read. */
+  | "config.read"
+  | "config.update"
+  /** ACT-221/222/223/224/225: module toggles, tenant management, regulatory frameworks, risk categories, Excel import — super-admin-ish operations. */
+  | "config.manage";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -173,6 +178,9 @@ export const ALL_PERMISSIONS: Permission[] = [
   "dashboard.executive",
   "branding.read",
   "branding.update",
+  "config.read",
+  "config.update",
+  "config.manage",
 ];
 
 /**
