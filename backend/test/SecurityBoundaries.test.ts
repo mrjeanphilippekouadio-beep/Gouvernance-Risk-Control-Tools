@@ -910,7 +910,7 @@ describe("SEC-010 user provisioning bypasses the role.assign gate", () => {
 // so the four-eyes guard never fires.
 
 describe("SEC-011 RiskEvaluation scoring is not bound to the evaluator", () => {
-  it.fails("SEC-011: a non-evaluator must not be able to record scoring on another evaluator's draft", async () => {
+  it("SEC-011: a non-evaluator must not be able to record scoring on another evaluator's draft", async () => {
     const draft = {
       id: "ev-1",
       tenantId: TENANT,

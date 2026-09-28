@@ -61,6 +61,18 @@ function assertMutable(evaluation: RiskEvaluation): void {
   }
 }
 
+/**
+ * SEC-011: the scoring setters must be gated to the designated evaluator, not
+ * just to `riskevaluation.update` — otherwise the maker-checker guard in
+ * validate()/reject() (comparing actor.userId to evaluatorId) fires too late,
+ * after a third party has already written the scoring content.
+ */
+function assertIsEvaluator(actor: AuthenticatedUser, evaluation: RiskEvaluation): void {
+  if (evaluation.evaluatorId !== actor.userId) {
+    throw new ForbiddenError("Only the designated evaluator can record scoring on this evaluation");
+  }
+}
+
 function assertIntegerInRange(value: number, min: number, max: number, fieldName: string): void {
   if (!Number.isInteger(value) || value < min || value > max) {
     throw new ValidationError(`${fieldName} must be an integer between ${min} and ${max}`);
@@ -197,6 +209,7 @@ export class RiskEvaluationService {
     requirePermission(actor, "riskevaluation.update");
     const before = await this.get(actor, id);
     assertMutable(before);
+    assertIsEvaluator(actor, before);
 
     const ratingScale = await this.resolveActiveRatingScale(actor.tenantId);
     const axesConfig = ratingScale.impactAxes;
@@ -231,6 +244,7 @@ export class RiskEvaluationService {
     requirePermission(actor, "riskevaluation.update");
     const before = await this.get(actor, id);
     assertMutable(before);
+    assertIsEvaluator(actor, before);
 
     if (before.inherentScore === null || !before.ratingScaleId) {
       throw new ValidationError("Inherent scoring must be recorded before mastery assessment");
@@ -279,6 +293,7 @@ export class RiskEvaluationService {
     requirePermission(actor, "riskevaluation.update");
     const before = await this.get(actor, id);
     assertMutable(before);
+    assertIsEvaluator(actor, before);
 
     if (before.masteryGlobal === null || !before.ratingScaleId) {
       throw new ValidationError("Mastery assessment must be recorded before residual scoring");
