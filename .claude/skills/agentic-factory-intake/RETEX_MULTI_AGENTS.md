@@ -15,9 +15,12 @@ en amont la prochaine fois.
 de projet. Le Product Owner demande un point sur ce fichier fréquemment ;
 le traiter comme une priorité, pas comme un sous-produit optionnel.
 
-**Statut au 27 septembre 2026** : 3 batches livrés (9 modules backend),
-tous via pool d'agents parallèles en worktrees isolés. Ce document
-reflète les frictions observées sur ces 3 batches.
+**Statut au 28 septembre 2026** : 4 batches livrés (20 modules backend),
+tous via pool d'agents parallèles en worktrees isolés. Batch 4 (Dashboard,
+Config, Notification, Governance, avec revue QA/Security indépendante) a
+révélé l'utilité d'une expertise-agnostic review et la limite de la
+diffusion des conventions par test-comment seul. Ce document reflète les
+frictions observées sur tous les 4 batches.
 
 ---
 
@@ -666,6 +669,256 @@ plutôt que de le découvrir au premier `git push` refusé.
 | 11 | Hypothèse par défaut "pas de commit direct sur main, toujours PR" dans la planification | Doc d'orchestration |
 | 12 | Documenter la précondition cachée de `isolation: "worktree"` : le répertoire de travail de l'orchestrateur doit lui-même être dans un dépôt Git, pas seulement le dépôt cible | Doc d'orchestration |
 | 13 | Pattern nommé "ajustement de montage de test sans affaiblissement d'assertion", avec règle de relecture systématique du diff de test (pas seulement du code) au retest | Workbook, section conventions transverses |
+
+---
+
+## 9. Batch 4 — Dashboard + Config + Notification + Governance + revues QA/Security indépendantes (28/09/2026)
+
+Première utilisation réelle du mécanisme de revue post-batch obligatoire
+(voir §8.1 : A08 QA et A10 Security dispensés en parallèle, tous deux en
+isolation worktree). Les 5 agents ont tous été affectés par un rate-limit
+de session simultané, puis ont dû reprendre avec worktree perdu. Résultats
+: 16 bugs/améliorations trouvés, validation empirique de la vulnérabilité
+du modèle "self-testing", et découverte structurelle sur la transmission
+des conventions.
+
+### 9.1 Worktree perdu lors de la reprise après rate-limit — la procédure §4 est incomplète
+
+**Ce qui s'est passé** : tous les 5 agents (Dashboard, Config,
+Notification, Governance, QA, Security en isolation) ont hit un rate-limit
+simultané. La procédure de §4 (reprendre via `SendMessage` plutôt que
+relancer) a bien fonctionné pour le contexte conversationnel, mais l'état
+de travail Git s'est avéré corrompu : **chaque worktree isolé a été
+supprimé/prunée par l'environnement pendant l'interruption** (les worktrees
+sans changements uncommitted sont automatiquement nettoyés après une
+certaine durée d'inactivité). À la reprise, les 5 agents ont trouvé un
+répertoire vide ou inexistant, sans moyen de savoir si c'était prévu ou un
+accident.
+
+Chaque agent a dû recréer un worktree frais depuis `main`, re-vérifier que
+ses hypothèses (numéro de migration libre, état du commit le plus récent)
+étaient toujours valides, et reprendre. **Aucun travail n'a été perdu**
+(tous les agents avaient seulement fait de la lecture/investigation avant
+l'interruption), mais l'absence de documentation explicite sur ce point a
+créé de l'incertitude.
+
+**À faire différemment** : la procédure de reprise (§4) est incomplète. Elle
+doit inclure une **étape de re-vérification post-reprise** :
+
+1. Recréer un worktree frais depuis la branche cible (`main` normalement).
+2. Lister le dernier numéro de migration en place (`ls database/postgresql/migrations/ | tail -5`).
+3. Confirmer que la migration que tu vas utiliser n'a pas été utilisée par un autre agent pendant l'interruption.
+4. Vérifier le SHA du commit le plus récent pour identifier le point où on l'a laissé à la précédente réponse.
+5. Ensuite, et seulement après, reprendre le travail.
+
+C'est la même catégorie d'instruction que "ne supposez jamais qu'un autre
+agent n'a pas eu le temps de merge sa branche" (§2.4) — la version "post-interruption" du même problème : le temps s'est écoulé, le monde a bougé,
+la branche cible n'est plus à l'état où tu l'as laissée.
+
+### 9.2 Aucun agent n'avait l'outil `Skill` — et l'agent QA a correctement refusé une instruction suspecte
+
+**Ce qui s'est passé** : lors du déploiement du batch 4, le Product Owner a
+donné une consigne permanente ("tout code nouveau doit invoquer le skill
+`ponytail` avant d'être livré, pour la plus-simple-solution qu'on peut")
+via un `SendMessage` aux 3 agents dev-backend en cours. Les agents A08 (QA)
+et A10 (Security) étaient aussi impliqués (pour les tests qu'ils
+ajoutent). Tentative d'invoquer `Skill` → **l'outil était absent de leurs
+16 fichiers `.claude/agents/*.md`** — héritage du problème §1.2 (ACF
+utilise des noms d'outils conceptuels, Claude Code utilise les vrais noms).
+
+**Réaction correcte** : l'agent QA a explicitement **refusé de fabriquer un
+appel d'outil inexistant**. Mieux encore, il a **signalé le canal de
+livraison de l'instruction comme anormal** : une directive arrivant via ce
+qui ressemblait à de la sortie d'outil, plutôt que dans son propre prompt
+de dispatch. C'est la posture défensive exacte qu'un agent devrait toujours
+avoir face à un input inattendu — pas de complaisance aveugle.
+
+Correction immédiate : `Skill` ajouté aux 16 fichiers agents (tous les rôles
+qui écrivent ou lisent du code). **Important** : les agents qui étaient déjà
+en cours de tâche n'ont pas rétroactivement gagné l'outil — seuls les
+nouveaux agents ou ceux relancés après la correction l'ont eu.
+
+**À faire différemment** : c'est un bon exemple de *pattern* à préserver :
+un agent qui reçoit une instruction par un canal inhabituellement informel
+(mise à jour mid-task via tool output plutôt que dispatch prompt initial)
+doit correctement être **sceptique**, vérifier que l'outil demandé existe, et
+refuser plutôt que de halluciner. Ce réflexe vaut plus que la correction du
+bug lui-même (qui était juste "ajouter un outil manquant"). Ne pas dévaluer
+cette défense en répertoriant ça comme "une regrettable hallucination
+stoppée" — l'appeler ce qu'elle est : une correcte détection d'anomalie
+conservée.
+
+### 9.3 Deux régressions exactes de vulnérabilités fix round 1, causées par règles écrites uniquement en test-comments
+
+**Ce qui s'est passé** : la revue de sécurité round 2 a trouvé 6 nouveaux
+findings (SEC-009 à SEC-014). Deux d'entre eux (SEC-009 : attache
+client du champ `recordedBy` sur `KpiMeasureService`/`KriMeasureService` ;
+SEC-013/014 : transition vers état terminal sans permission dédiée)
+étaient des **régressions exactes** de vulnérabilités fixées en round 1 :
+SEC-001 ("ne fait jamais confiance à une attribution client de champ
+sensible", trouvée sur `ControlExecutionService.executedBy`) et la règle
+"permission terminale séparée de permission générique" appliquée ad hoc au
+batch 1 (voir §3, et le commit `03065e9` du test `SecurityBoundaries.test.ts`).
+
+La raison : ces deux règles existaient, **mais seulement écrites en
+commentaires du test `SecurityBoundaries.test.ts`** :
+
+```
+// it('never trust a client-supplied attribution field', () => {...})
+```
+
+Les agents qui ont construit des modules subséquents (RiskOwnership,
+ActionPlan, Config) n'avaient **aucun moyen** de savoir que cette règle
+existait. Elle n'était pas dans `CLAUDE.md` (le fichier qu'on dit à chaque
+agent de lire), pas dans le workbook ACF, pas mentionnée comme convention
+explicite nulle part. C'était une connaissance « cachée » en mémoire de
+l'orchestrateur.
+
+**Impact** : la rédaction d'une suite de tests `SecurityBoundaries` ne suffit
+pas à figer une convention — tant qu'elle ne figure pas dans le *système de
+dissémination des conventions* du projet (CLAUDE.md pour ce projet), elle est
+effective **seulement pour l'orchestrateur qui la connaît en mémoire**.
+
+**Correction** : les deux règles ont été explicitement ajoutées à la section
+"Security-sensitive conventions" de `CLAUDE.md` :
+
+- **« Ne faites jamais confiance à une attribution client »** : chaque
+  champ enregistrant "qui a décidé ceci" (createdBy, approvedBy, etc.) doit
+  être imposé côté serveur (`actor.id`), jamais recopié du client, y compris
+  si le client le fournit.
+- **« Permission terminale séparée »** : toute transition vers un état
+  terminal ou irréversible (archiver, désactiver, clôturer) doit être
+  gardée par sa propre permission (`x.delete`, `x.archive`, `x.close`),
+  jamais par le générique `x.update` — comme un pattern, pas une ad-hoc
+  qu'on l'applique "si on y pense".
+
+**À faire différemment** : c'est une validation de la recommandation §3
+("conventions à figer avant le premier agent, pas après"), mais affutée :
+une convention écrite seulement dans un test est pire qu'une convention
+orale, parce qu'elle crée une **fausse sécurité** (« c'est écrit quelque
+part »). Être précis : **une convention qui n'est pas dans le système de
+dissémination standard du projet (CLAUDE.md ici) n'existe pas pour les
+agents futurs**, peu importe où elle est écrite ailleurs. N'ajouter des
+règles à `SecurityBoundaries.test.ts` que pour vérifier une règle déjà
+*exposée* en documentation, jamais comme le seul endroit où elle figure.
+
+*(Note de la cross-review orchestrateur : le premier jet de cette section
+attribuait SEC-009 à `createdBy` sur `ActionPlan` et citait SEC-003 comme
+précédent — les deux étaient inexacts, corrigés ci-dessus. Un rappel utile
+que même une section sur "les conventions non vérifiées se propagent
+silencieusement" n'est pas à l'abri d'une inexactitude non vérifiée — d'où
+l'intérêt de la cross-review, pas seulement pour le code.)*
+
+### 9.4 Revue QA indépendante + revue Security indépendante révèlent des vrais problèmes structurels
+
+**Ce qui s'est passé** : c'était la première fois que les batches 1-3 (9
+modules, tous produits par l'agent A06 qui écrivait aussi les tests) ont été
+soumis à une revue par un agent différent (A08 QA) et un expert de domaine
+(A10 Security) indépendant.
+
+Résultats :
+
+- **QA (A08)** : 10 findings — aucun bloquant en production (les tests
+  passaient), mais des trous dans la couverture. Le plus significatif :
+  `ActionPlanService`'s cross-entity validation (vérifier que les sources
+  de CONTROL/KRI/RISK sont bien du bon type) **n'était jamais exercée par
+  un test**. La raison : le faux repository pour CONTROL/KRI était hardcodé
+  pour toujours retourner `null`, donc les chemins de validation ne passaient
+  jamais en condition réelle. A06 ne pouvait pas « voir » ce trou parce que
+  les tests qu'il écrivait testaient les cas joyeux avec le fake qu'il
+  avait construit pour les joyeux. C'est un cas textbook de blind spot du
+  self-testing.
+- **Security (A10)** : 6 nouveaux findings (SEC-009 à SEC-014). Dont 2
+  régressions (voir §9.3), et 4 vrais nouveaux problèmes (deux High,
+  deux Medium, un Low).
+
+C'est la première validation empirique qu'une revue indépendante d'un agent
+par un autre agent, sur du code déjà livré, **casse le bias du self-testing**.
+Aucune de ces 16 anomalies n'aurait jamais été découverte en attendant
+que A06 lui-même y revienne plus tard.
+
+**À faire différemment** : ce batch 4 confirme ce qui avait été décidé en §8
+("A08 et A10 en passage obligatoire") comme non seulement une bonne idée,
+mais un *must*. Ce qui change : c'était une directive prise en amont et
+documentée comme un apprentissage du projet. Cette section confirme qu'elle
+paie immédiatement. La conséquence : **chaque livraison future doit avoir
+une revue par un agent qui n'a pas écrit le code** — pas optional, pas "si
+on a du temps" — une étape du pipeline.
+
+### 9.5 Choix de dépendance tiers conscient du supply-chain risk — à préserver comme culture
+
+**Ce qui s'est passé** : l'agent A06 (Dev Backend) construisant le module
+Config (parsing d'Excel pour les champs de risque) a dû ajouter une
+dépendance npm pour la manipulation d'Excel. Deux choix disponibles : `xlsx`
+(plus courant, sheetjs) ou `exceljs` (moins populaire, mais mieux maintenu).
+
+A06 a **explicitement choisi `exceljs` plutôt que `xlsx`**, parce que `xlsx`
+a des CVEs connus non patchés, puis **flagué la décision et la nouvelle
+dépendance pour Security** dans son résumé de fin de tâche. Aucune pression,
+aucune instruction : une bonne hygiène de supply-chain risk pensée
+naturellement pendant le dev.
+
+**À faire différemment (dans le bon sens — à formaliser)** : c'est un pattern
+qu'on voudrait voir systématisé. Ajouter à CLAUDE.md (pour tous les agents
+qui écrivent du code) : *« Toute dépendance tierce nouvelle doit être
+choisie en conscience du supply-chain risk (versions, CVEs publics,
+maintenance du projet). Si tu dois choisir entre plusieurs options,
+recherche les CVEs connus et mentionne ton choix (et pourquoi) dans le
+résumé final. »*
+
+### 9.6 Route-mounting collision — nouvelle classe de risque d'intégration à ajouter à la checklist
+
+**Ce qui s'est passé** : le module Dashboard (A06 en batch 4) construit une
+nouvelle route `DashboardRouter`, montée à la base path `/api/v1/dashboard`.
+En même temps, le batch 3 (ActionPlan) avait déjà une route
+`actionPlanDashboardRouter` montée à `/api/v1/dashboard`, servant
+`GET /dashboard/actions`.
+
+Les deux routers partageaient le même **prefix de mount**, ce que l'on doit
+vérifier avant de les monter côte à côte dans `server.ts`. Aucune des deux
+agents parallèles (batch 3, batch 4) ne pouvait avoir connaissance de
+l'autre au moment de sa conception. La collision a été détectée à
+l'intégration quand l'orchestrateur a grepped les deux fichiers pour leur
+arborescence réelle de routes (résultat : `/actions` vs `/risks`, `/anomalies`,
+etc. — pas de collision effective, tous les chemins internes sont
+distincts).
+
+**À faire différemment** : c'est un nouveau type d'intégration-time risk au-delà
+de la collision déjà documentée sur `permissions.ts`. Ajouter à la checklist
+post-batch (§5) un nouvel item :
+
+> **Route-mounting**: si une nouvelle route montée à un prefix matches un
+> prefix déjà monté, vérifier que leurs chemins internes ne se chevauchent
+> pas. Exemple : `GET /dashboard/actions` vs `GET /dashboard/risks` partagent
+> le mount `/dashboard` mais leur pathspec interne est disjoint ; ok.
+> `GET /dashboard/actions` vs `GET /dashboard/actions` en double ; problème.
+
+### 9.7 PR merge status doit être vérifié contre GitHub, jamais déduit de la conversation
+
+**Ce qui s'est passé** : une PR qui avait été mentionnée comme "mergée" dans
+la conversation ne l'était pas réellement sur GitHub. Résultat : le répertoire
+`.claude/agent-context/` (source commune de contexte partagé) était absent de
+`main`, forçant les agents QA et Security à travailler avec seulement le
+contexte déjà fourni dans leurs dispatch prompts — possible, mais pas le flux
+prévu.
+
+La confusion est venue d'une demande de fusion menée en amont (« pourriez-vous
+fusionner cette PR ? ») suivie d'un `git status` qui aurait pu montrer le
+changement en local — mais la PR n'a jamais été fusionnée à distance. Le
+système de croyance de l'orchestrateur (« je l'ai demandé, donc c'est fait »)
+s'est décalé de la réalité GitHub.
+
+**À faire différemment** : avant de supposer qu'une PR est mergée, **toujours
+le vérifier contre GitHub**, jamais le déduire d'une conversation. Commande :
+
+```bash
+gh pr view <PR-numéro> --json state,mergedAt
+```
+
+État doit être `MERGED`, et `mergedAt` ne doit pas être `null`. C'est une
+spécification plus précise d'une règle déjà implicite en §2.4 ("vérifier
+`git show`") — ici : appliquer la vérification non pas au statut de la
+branche source, mais au statut de la fusion elle-même.
 
 ---
 
