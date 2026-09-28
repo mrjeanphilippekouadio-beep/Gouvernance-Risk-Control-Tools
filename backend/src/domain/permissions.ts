@@ -74,7 +74,27 @@ export type Permission =
   | "actionplan.create"
   | "actionplan.update"
   | "actionplan.validate"
-  | "cartography.read";
+  | "cartography.read"
+  /**
+   * ACT-080/081/082/084/210/213/214/215/240/241: personal- and
+   * department-scoped read views (Dashboard's risk-owner/department
+   * views and Reporting's per-department/appetite-vs-residual/
+   * compliance reports) — the broad "any authenticated business user can
+   * see their own scope" tier.
+   */
+  | "dashboard.read"
+  /**
+   * ACT-211/212/242/243 (+ the tenant-wide flavors of 214/215): cross-
+   * entity / whole-tenant aggregation (executive dashboard, risk
+   * committee report, multi-entity consolidated report). Deliberately a
+   * separate, narrower permission from dashboard.read — broader scope
+   * needs its own grant, matching this codebase's existing convention
+   * (e.g. *.delete never implied by *.update).
+   */
+  | "dashboard.executive"
+  /** ACT-084: tenant logo. Read is only needed to display the current branding; update covers the upload itself. */
+  | "branding.read"
+  | "branding.update";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -149,6 +169,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "actionplan.update",
   "actionplan.validate",
   "cartography.read",
+  "dashboard.read",
+  "dashboard.executive",
+  "branding.read",
+  "branding.update",
 ];
 
 /**
