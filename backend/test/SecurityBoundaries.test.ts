@@ -1060,7 +1060,7 @@ describe("SEC-013 rating scale terminal transition via the update permission", (
 // residual score against) ignores `active` entirely and keeps applying it.
 
 describe("SEC-014 risk appetite retired via the update permission", () => {
-  it.fails("SEC-014: deactivating an appetite threshold must require riskappetite.delete", async () => {
+  it("SEC-014: deactivating an appetite threshold must require riskappetite.delete", async () => {
     const appetites = {
       async getBySubCategory() {
         return null;
