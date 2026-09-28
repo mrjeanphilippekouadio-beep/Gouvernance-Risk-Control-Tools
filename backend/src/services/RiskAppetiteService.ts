@@ -41,6 +41,12 @@ export class RiskAppetiteService {
     requestId: string,
   ): Promise<RiskAppetite> {
     requirePermission(actor, "riskappetite.update");
+    // SEC-014: deactivating a threshold is a terminal transition (same
+    // family as archive()'s riskappetite.delete gate), not a routine
+    // update — require the delete permission in addition, not instead.
+    if (input.active === false) {
+      requirePermission(actor, "riskappetite.delete");
+    }
 
     const trimmedSubCategory = subCategory.trim();
     if (!trimmedSubCategory) throw new ValidationError("sous_categorie is required");

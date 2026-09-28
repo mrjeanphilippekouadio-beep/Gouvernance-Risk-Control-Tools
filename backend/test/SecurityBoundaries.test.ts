@@ -808,7 +808,7 @@ describe("SEC-008 evidence deletion ordering (regression lock)", () => {
 describe("SEC-009 measure attribution (append-only recordedBy)", () => {
   const measureActor: AuthenticatedUser = { ...attacker, roles: ["kri.create", "kpi.create"] };
 
-  it.fails("SEC-009: KriMeasureService.record must ignore a client-supplied recordedBy", async () => {
+  it("SEC-009: KriMeasureService.record must ignore a client-supplied recordedBy", async () => {
     let recordedBy = "";
     const measures = {
       async create(input: CreateKriMeasureInput) {
@@ -831,14 +831,14 @@ describe("SEC-009 measure attribution (append-only recordedBy)", () => {
 
     await new KriMeasureService(measures, kris, inMemoryAuditRepository()).record(
       measureActor,
-      { kriId: "kri-1", measureDate: new Date(), value: 5, source: "manual", comment: null, recordedBy: "user-victim" },
+      { kriId: "kri-1", measureDate: new Date(), value: 5, source: "manual", comment: null },
       "REQ-SEC-009a",
     );
 
     expect(recordedBy).toBe(measureActor.userId);
   });
 
-  it.fails("SEC-009: KpiMeasureService.record must ignore a client-supplied recordedBy", async () => {
+  it("SEC-009: KpiMeasureService.record must ignore a client-supplied recordedBy", async () => {
     let recordedBy = "";
     const measures = {
       async create(input: CreateKpiMeasureInput) {
@@ -854,7 +854,7 @@ describe("SEC-009 measure attribution (append-only recordedBy)", () => {
 
     await new KpiMeasureService(measures, kpis, inMemoryAuditRepository()).record(
       measureActor,
-      { kpiId: "kpi-1", period: new Date(), value: 5, comment: null, recordedBy: "user-victim" },
+      { kpiId: "kpi-1", period: new Date(), value: 5, comment: null },
       "REQ-SEC-009b",
     );
 
@@ -863,15 +863,17 @@ describe("SEC-009 measure attribution (append-only recordedBy)", () => {
 });
 
 // --- SEC-010: account provisioning without role.assign -------------------
-// UserService.create inserts the users row FIRST, then calls
-// RoleService.assignToUser (which is what requires role.assign). An actor
-// holding only user.create gets a 403 back, but the account row survives —
-// and server.ts resolves identity with `SELECT ... FROM users WHERE email =
-// $1 AND deleted_at IS NULL`, so that orphan row is a login-capable account
-// nobody authorised and no role was ever attached to.
+// UserService.create now checks role.assign up front, before the users row
+// is inserted — an actor holding only user.create gets a 403 with no row
+// ever written. (Previously it inserted the users row first and only then
+// called RoleService.assignToUser, which is what actually required
+// role.assign — the 403 came back after the account already existed, and
+// server.ts resolves identity with `SELECT ... FROM users WHERE email = $1
+// AND deleted_at IS NULL`, so that orphan row was a login-capable account
+// nobody authorised and no role was ever attached to.)
 
 describe("SEC-010 user provisioning bypasses the role.assign gate", () => {
-  it.fails("SEC-010: a refused role grant must not leave a login-capable account behind", async () => {
+  it("SEC-010: a refused role grant must not leave a login-capable account behind", async () => {
     const inserted: string[] = [];
     const users = {
       async create(input: CreateUserInput) {
@@ -908,7 +910,7 @@ describe("SEC-010 user provisioning bypasses the role.assign gate", () => {
 // so the four-eyes guard never fires.
 
 describe("SEC-011 RiskEvaluation scoring is not bound to the evaluator", () => {
-  it.fails("SEC-011: a non-evaluator must not be able to record scoring on another evaluator's draft", async () => {
+  it("SEC-011: a non-evaluator must not be able to record scoring on another evaluator's draft", async () => {
     const draft = {
       id: "ev-1",
       tenantId: TENANT,
@@ -963,7 +965,7 @@ describe("SEC-011 RiskEvaluation scoring is not bound to the evaluator", () => {
 // pattern; this module skipped it.
 
 describe("SEC-012 ActionPlan cross-entity reference validation", () => {
-  it.fails("SEC-012: responsibleUserId must resolve to an active user in the actor's tenant", async () => {
+  it("SEC-012: responsibleUserId must resolve to an active user in the actor's tenant", async () => {
     const actions = {
       async create(input: CreateActionPlanInput) {
         return {
@@ -982,7 +984,25 @@ describe("SEC-012 ActionPlan cross-entity reference validation", () => {
       },
     } as unknown as ActionPlanRepository;
 
-    const service = new ActionPlanService(actions, inMemoryAuditRepository());
+    // Simulates the responsible user not existing in the actor's tenant
+    // (e.g. belongs to another tenant) — getById returns null.
+    const users = {
+      async getById() {
+        return null;
+      },
+    } as unknown as UserRepository;
+
+    const service = new ActionPlanService(
+      actions,
+      inMemoryAuditRepository(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      users,
+    );
     const actor: AuthenticatedUser = { ...attacker, roles: ["actionplan.create"] };
 
     await expect(
@@ -1009,7 +1029,7 @@ describe("SEC-012 ActionPlan cross-entity reference validation", () => {
 // state" bypass CLAUDE.md documents for Risk/Control.
 
 describe("SEC-013 rating scale terminal transition via the update permission", () => {
-  it.fails("SEC-013: archiving the previously-active scale must require ratingscale.delete", async () => {
+  it("SEC-013: archiving the previously-active scale must require ratingscale.delete", async () => {
     let archivedPrevious = false;
     const ratingScales = {
       async getById() {
@@ -1040,7 +1060,7 @@ describe("SEC-013 rating scale terminal transition via the update permission", (
 // residual score against) ignores `active` entirely and keeps applying it.
 
 describe("SEC-014 risk appetite retired via the update permission", () => {
-  it.fails("SEC-014: deactivating an appetite threshold must require riskappetite.delete", async () => {
+  it("SEC-014: deactivating an appetite threshold must require riskappetite.delete", async () => {
     const appetites = {
       async getBySubCategory() {
         return null;
@@ -1057,4 +1077,98 @@ describe("SEC-014 risk appetite retired via the update permission", () => {
       service.setThreshold(actor, "Fraude", { threshold: 10, methodologyVersion: "v1", active: false }, "REQ-SEC-014a"),
     ).rejects.toThrow(ForbiddenError);
   });
+});
+
+// --- SEC-015: retired appetite threshold still enforced (new, round-2 retest) --
+// Flagged by @dev-backend in the SEC-014 commit as "out of scope of that fix,
+// to be decided by @security/@architect" — confirmed here as a real gap.
+// SEC-014 correctly gates *deactivating* a threshold (`active: false`) behind
+// `riskappetite.delete`, on the theory that retiring a governance ceiling is a
+// terminal action. But retiring it has no actual effect anywhere except
+// RiskAppetiteService.list() (which filters `active = true`, hiding the row
+// from the ACT-168 oversight table). RiskEvaluationService.recordResidualScoring
+// and suggestAppetite/compareToAppetite all read through
+// RiskAppetiteRepository.getBySubCategory(), which — both in the interface
+// contract and in PostgresRiskAppetiteRepository's SQL — filters only
+// `deleted_at IS NULL`, never `active`. So a threshold an admin paid the
+// elevated `riskappetite.delete` permission to retire keeps being applied to
+// compute `appetiteExceeded` on every residual scoring going forward, silently
+// overriding the governance decision the permission gate was just added to
+// protect. Either getBySubCategory must filter `active = true` (matching
+// list()), or recordResidualScoring/suggestAppetite must treat an inactive
+// threshold as "no threshold available" (`suggested: null`) the same way an
+// absent `riskAppetites` repository already degrades today.
+
+describe("SEC-015 retired risk appetite threshold is still applied to residual scoring", () => {
+  it(
+    "SEC-015: a threshold deactivated via riskappetite.delete must not be used to compute appetiteExceeded",
+    async () => {
+      const draft = {
+        id: "ev-1",
+        tenantId: TENANT,
+        evaluatorId: "user-evaluator",
+        status: "BROUILLON",
+        ratingScaleId: "rs-1",
+        masteryGlobal: 2,
+        subCategory: "Fraude",
+        entity: null,
+        residualScore: null,
+      } as unknown as RiskEvaluation;
+
+      const evaluations = {
+        async getById() {
+          return draft;
+        },
+        async recordResidualScoring(_tenantId: string, _id: string, patch: Record<string, unknown>) {
+          return { ...draft, ...patch } as unknown as RiskEvaluation;
+        },
+      } as unknown as RiskEvaluationRepository;
+      const ratingScales = {
+        async getById() {
+          return {
+            id: "rs-1",
+            probabilityLevels: 5,
+            impactLevels: 5,
+            impactAxes: { axes: [{ code: "FIN", label: "Financier", order: 1 }], retainedImpactRule: "MAX" },
+          } as unknown as RatingScale;
+        },
+      } as unknown as RatingScaleRepository;
+      // Simulates a threshold an admin retired with riskappetite.delete: the
+      // row still exists (soft-deleted rows are excluded, this one isn't),
+      // `active` is false, and getBySubCategory returns it anyway — exactly
+      // what PostgresRiskAppetiteRepository.getBySubCategory does today.
+      const riskAppetites = {
+        async getBySubCategory() {
+          return { id: "ra-1", threshold: 5, active: false, methodologyVersion: "v1" } as unknown as RiskAppetite;
+        },
+      } as unknown as RiskAppetiteRepository;
+
+      const service = new RiskEvaluationService(
+        evaluations,
+        inMemoryAuditRepository(),
+        undefined,
+        ratingScales,
+        riskAppetites,
+      );
+      const evaluator: AuthenticatedUser = {
+        ...attacker,
+        userId: "user-evaluator",
+        roles: ["riskevaluation.read", "riskevaluation.update"],
+      };
+
+      const after = await service.recordResidualScoring(
+        evaluator,
+        "ev-1",
+        { probability: 3, impacts: [{ code: "FIN", value: 3 }], justification: "residual scoring" },
+        "REQ-SEC-015a",
+      );
+
+      // Score is 3 * 3 = 9, which exceeds the retired threshold of 5 — a
+      // secure implementation must treat the inactive threshold as absent
+      // (appetiteThresholdApplied: null, appetiteExceeded: null), not silently
+      // keep enforcing a ceiling that was deliberately retired.
+      expect((after as unknown as { appetiteThresholdApplied: number | null }).appetiteThresholdApplied).toBeNull();
+      expect((after as unknown as { appetiteExceeded: boolean | null }).appetiteExceeded).toBeNull();
+    },
+  );
 });
