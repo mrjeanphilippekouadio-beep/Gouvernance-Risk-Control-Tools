@@ -1043,3 +1043,60 @@ Architecture explicite à prendre en Gap Analysis. Comptage : 24
 entités EXISTANT inchangées, 4 EXISTANT_À_ÉTENDRE (extensions
 additives/nullables uniquement), ~12 NOUVEAU. Sert d'intrant direct à
 la *Database Gap Analysis* à venir (@dev-db).
+
+**2026-09-28 — @dev-db** — Derniers des 3 artefacts du gate livrés :
+`docs/architecture/GRC_Database_Gap_Analysis.md` et
+`docs/architecture/GRC_Migration_Plan.md`. **Le gate posé par le Product
+Owner est désormais complet (3/3 artefacts).**
+
+Point de vigilance prioritaire tranché par investigation de code
+(entités + repositories + services + routes + `server.ts`, pas
+seulement les entités TS) : `RiskAssessment` (`domain/entities/RiskAssessment.ts`,
+`RiskAssessmentRepository`, table `risk_assessments` créée en
+`003_risks.sql`) n'a **jamais** eu d'implémentation Postgres, de
+service, de route ni de câblage `server.ts` — c'est du scaffolding mort
+depuis l'origine. `RiskEvaluation` (`019_risk_evaluations.sql`, câblée,
+testée, retestée en sécurité SEC-011/SEC-015) est la chaîne réellement
+en production et couvre un sur-ensemble strict du besoin. Arbitrage
+proposé : **`RiskEvaluation` devient le « Risk Assessment » cible du
+cahier des charges §7.1.C ; `RiskAssessment` est DÉPRÉCIÉ** (table
+conservée, aucun `DROP`, code marqué `@deprecated` en attendant
+nettoyage) — suppression physique éventuelle **soumise à sign-off
+Architecture/Product Owner explicite**, non tranchée unilatéralement
+ici (`.claude/agents/dev-db.md` §1 : un agent Dev DB ne se déclare pas
+lui-même autorisé sur une décision d'architecture).
+
+Classification des ~40 entités du Domain Model confrontée aux 26
+migrations réelles (dernier numéro : `026`) : 22 RÉUTILISER (aucun
+changement de schéma), 4 ÉTENDRE (`Process.department_id`,
+`Risk.risk_catalog_id`, `Control.sample_size`/`sample_size_rule`,
+élargissement `action_plans.source_type`), 12 CRÉER (`RiskCatalog`,
+`RaciAssignment`, `evidence_links`, `Comment`/`CommentableObjectConfig`,
+`RiskCause`/`RiskCatalogCause`, `Document`/`document_links`, `Incident`,
+`RiskIncident`, `ChecklistItem`/`ChecklistResult`, `AuditMission`,
+`Finding`), 1 DÉPRÉCIER (`RiskAssessment`), 4 ARBITRER (le point
+`RiskAssessment`/`RiskEvaluation` ci-dessus, FK `RiskCategory` depuis 3
+tables encore en texte libre, création ou non de `risk_processes`,
+confirmation `Kpi`/`Kri` non fusionnés en `Indicator` unique).
+
+Migration Plan : confirme le format `NNN_description.sql` séquentiel
+existant (pas d'horodatage — casserait le tri déjà exploité par
+`npm run migrate`), fixe la règle anti-collision (relire
+`ls database/postgresql/migrations/` avant toute écriture, jamais de
+plage pré-réservée figée, `isolation: "worktree"` si plusieurs agents
+DB en parallèle). Séquence de 17 migrations indicatives (`027` à `043`)
+groupées en 7 lots alignés sur le séquencement déjà arbitré par
+@product-manager (RACI minimal → Checklist contrôles → Incident →
+Audit Findings → Référentiel → Commentaires → Gouvernance transverse),
+chacune avec ses dépendances explicites et confirmation Expand/Contract
+(nullable d'abord, aucune contrainte `NOT NULL`/`DROP` incluse). Règle
+de rétrocompatibilité explicite (code N-1 doit continuer à fonctionner
+avec chaque migration N appliquée). Rappel absolu : aucune opération
+destructive dans ce plan, y compris pour `risk_assessments` (marquage
+documentaire seulement, `043` optionnelle et conditionnée).
+
+Aucun fichier de code de production touché, aucune migration réelle
+écrite — ce sont des documents de planification. Prochaine étape logique :
+sign-off Architecture/PO sur l'arbitrage `RiskAssessment`/`RiskEvaluation`
+et sur les 3 autres points ARBITRER, puis dispatch réel des migrations
+`027`+ par lot.
