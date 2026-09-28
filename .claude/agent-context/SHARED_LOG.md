@@ -210,3 +210,39 @@ typecheck` + `npm test` verts (34 fichiers, 366 tests, dont les 23 de
 `SecurityBoundaries.test.ts`). Commit `e623ec6`.
 **Prêt pour retest @security** — même branche `main`, pas de PR
 séparée. SEC-013/SEC-014 restent hors scope, non touchés.
+
+**2026-09-28 — @dev-backend @security** — SEC-013 (Low) corrigé.
+`RatingScaleService.activateVersion` appelle
+`activateAndArchivePrevious`, qui pousse l'ancienne version ACTIVE vers
+ARCHIVED de façon irréversible ("Cannot re-activate an archived rating
+scale") — exactement le type de transition terminale que `disable()`
+protège correctement avec `ratingscale.delete` + une raison
+obligatoire, alors qu'`activateVersion` n'exigeait que
+`ratingscale.update`. Même règle que documentée dans CLAUDE.md ("A
+terminal/archived-state transition needs its own dedicated
+permission, never the generic x.update") et déjà appliquée à
+SEC-009/012. Correctif d'une seule ligne (skill `ponytail`) :
+`requirePermission(actor, "ratingscale.delete")` au lieu de
+`"ratingscale.update"`. Les deux permissions existaient déjà dans
+`domain/permissions.ts` — aucune nouvelle permission, aucun changement
+de route, aucune raison obligatoire ajoutée (le test SEC-013 n'en
+passe pas, contrairement à `disable()`, donc pas de contrainte
+supplémentaire à inventer). Le test `it.fails` SEC-013 de
+`SecurityBoundaries.test.ts` (describe "SEC-013 rating scale terminal
+transition via the update permission") est passé à `it` sans
+modification du corps — son acteur (`["ratingscale.read",
+"ratingscale.update"]`, sans `ratingscale.delete`) obtient désormais un
+`ForbiddenError` avant tout appel à `activateAndArchivePrevious`. Grep
+de `activateVersion` dans `backend/test/RatingScaleService.test.ts` :
+tous les appels existants utilisent l'acteur du fichier
+(`["ratingscale.read", "ratingscale.create", "ratingscale.update",
+"ratingscale.delete"]`), qui a déjà `ratingscale.delete` — aucun
+ajustement nécessaire, aucune régression. Grep frontend
+(`frontend/src`) sur `ratingscale.update`/`activateVersion`/
+`ratingscale.delete` : aucune correspondance, pas de bouton
+"activer une version" gaté par une permission côté UI pour le moment
+— rien à signaler à `@ux-designer` au-delà de cette absence. `npm run
+typecheck` + `npm test` verts (366 tests, 34 fichiers, dont les 23 de
+`SecurityBoundaries.test.ts`). Commit `88a5ede`.
+**Prêt pour retest @security** — même branche `main`, pas de PR
+séparée. SEC-014 reste hors scope, non touché.
