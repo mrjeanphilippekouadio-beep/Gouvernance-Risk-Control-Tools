@@ -315,7 +315,8 @@ export class RiskEvaluationService {
     let suggested: number | null = null;
     if (this.riskAppetites) {
       const appetite = await this.riskAppetites.getBySubCategory(actor.tenantId, before.subCategory, before.entity);
-      suggested = appetite?.threshold ?? null;
+      // SEC-015: a retired threshold (active: false) must be treated as absent, not applied.
+      suggested = appetite?.active !== false ? appetite?.threshold ?? null : null;
     }
 
     let override: number | null = input.appetiteOverride ?? null;
@@ -349,11 +350,13 @@ export class RiskEvaluationService {
       return { subCategory: evaluation.subCategory, entity: evaluation.entity, suggested: null, methodologyVersion: null };
     }
     const appetite = await this.riskAppetites.getBySubCategory(actor.tenantId, evaluation.subCategory, evaluation.entity);
+    // SEC-015: a retired threshold (active: false) must be treated as absent, not applied.
+    const active = appetite?.active !== false ? appetite : null;
     return {
       subCategory: evaluation.subCategory,
       entity: evaluation.entity,
-      suggested: appetite?.threshold ?? null,
-      methodologyVersion: appetite?.methodologyVersion ?? null,
+      suggested: active?.threshold ?? null,
+      methodologyVersion: active?.methodologyVersion ?? null,
     };
   }
 

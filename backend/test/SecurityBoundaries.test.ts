@@ -1100,7 +1100,7 @@ describe("SEC-014 risk appetite retired via the update permission", () => {
 // absent `riskAppetites` repository already degrades today.
 
 describe("SEC-015 retired risk appetite threshold is still applied to residual scoring", () => {
-  it.fails(
+  it(
     "SEC-015: a threshold deactivated via riskappetite.delete must not be used to compute appetiteExceeded",
     async () => {
       const draft = {
