@@ -1,0 +1,710 @@
+import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
+import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
+import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
+import type { KriRepository } from "../domain/repositories/KriRepository.js";
+import type { KriMeasureRepository } from "../domain/repositories/KriMeasureRepository.js";
+import type { ActionPlanRepository } from "../domain/repositories/ActionPlanRepository.js";
+import type { RiskAppetiteRepository } from "../domain/repositories/RiskAppetiteRepository.js";
+import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
+import type { ControlExecutionRepository } from "../domain/repositories/ControlExecutionRepository.js";
+import type { ControlEffectivenessRepository } from "../domain/repositories/ControlEffectivenessRepository.js";
+import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
+import type { KpiRepository } from "../domain/repositories/KpiRepository.js";
+import type { KpiMeasureRepository } from "../domain/repositories/KpiMeasureRepository.js";
+
+import type { Risk, RiskStatus } from "../domain/entities/Risk.js";
+import type { RiskEvaluation } from "../domain/entities/RiskEvaluation.js";
+import type { Anomaly, AnomalyStatus } from "../domain/entities/Anomaly.js";
+import { computeKriStatus, type Kri, type KriStatus } from "../domain/entities/Kri.js";
+import {
+  computeActionPlanPriority,
+  computeActionPlanStatus,
+  type ActionPlan,
+  type ActionPlanListFilters,
+  type ActionPlanView,
+} from "../domain/entities/ActionPlan.js";
+import type { Control } from "../domain/entities/Control.js";
+import type { Department } from "../domain/entities/Department.js";
+import { computeKpiStatus, type Kpi, type KpiStatus } from "../domain/entities/Kpi.js";
+
+import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { requirePermission } from "../domain/permissions.js";
+import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+
+// ---------------------------------------------------------------------
+// Shared read models
+// ---------------------------------------------------------------------
+
+/**
+ * Fixed fallback bands over the 1-25 score range, identical to
+ * CartographyService's DEFAULT_CRITICALITY_BANDS. Deliberately NOT
+ * wired to RatingScaleRepository here: CartographyService already owns
+ * the "resolve the tenant's configured, methodology-versioned bands"
+ * concern (ACT-181), and re-implementing that exact resolution here
+ * would be the kind of duplicated aggregation logic this batch's brief
+ * explicitly warns against. Dashboard/Reporting only need a rough
+ * qualitative label for ranking/highlighting, not the heatmap's
+ * methodology-accurate legend — if that ever changes, inject
+ * RatingScaleRepository and reuse the exact same resolution instead of
+ * hand-rolling a second one.
+ */
+const DEFAULT_CRITICALITY_BANDS: { label: string; min: number; max: number }[] = [
+  { label: "Faible", min: 1, max: 4 },
+  { label: "Modéré", min: 5, max: 9 },
+  { label: "Élevé", min: 10, max: 15 },
+  { label: "Critique", min: 16, max: 25 },
+];
+
+function deriveCriticality(score: number): string {
+  const match = DEFAULT_CRITICALITY_BANDS.find((b) => score >= b.min && score <= b.max);
+  if (match) return match.label;
+  const first = DEFAULT_CRITICALITY_BANDS[0]!;
+  const last = DEFAULT_CRITICALITY_BANDS[DEFAULT_CRITICALITY_BANDS.length - 1]!;
+  return score < first.min ? first.label : last.label;
+}
+
+function toActionPlanView(action: ActionPlan): ActionPlanView {
+  const computedStatus = computeActionPlanStatus(action);
+  return { ...action, computedStatus, priority: computeActionPlanPriority(computedStatus) };
+}
+
+export interface DashboardRiskSummary {
+  riskId: string;
+  process: string;
+  description: string;
+  status: RiskStatus;
+  ownerDepartmentId: string | null;
+  ownerId: string | null;
+  /** Most recent VALIDATED evaluation's residualScore (falling back to inherentScore), null if never validated. */
+  score: number | null;
+  criticality: string | null;
+  subCategory: string | null;
+  entity: string | null;
+  appetiteExceeded: boolean | null;
+}
+
+export interface DashboardKriSummary {
+  kri: Kri;
+  status: KriStatus;
+  latestValue: number | null;
+  latestMeasureDate: Date | null;
+}
+
+export interface KriTrendPoint {
+  measureDate: Date;
+  value: number;
+}
+
+export interface KriConsolidatedRow extends DashboardKriSummary {
+  /** Most recent first — same ordering as KriMeasureRepository.listForKri. */
+  trend: KriTrendPoint[];
+}
+
+export interface DashboardKpiSummary {
+  kpi: Kpi;
+  status: KpiStatus;
+  achievementRate: number | null;
+  latestValue: number | null;
+}
+
+interface ScoredRisk {
+  risk: Risk;
+  evaluation: RiskEvaluation;
+  score: number;
+}
+
+// ---------------------------------------------------------------------
+// Per-endpoint response shapes
+// ---------------------------------------------------------------------
+
+export interface DepartmentDashboard {
+  department: Department;
+  risks: DashboardRiskSummary[];
+  controls: Control[];
+  kpis: DashboardKpiSummary[];
+  kris: DashboardKriSummary[];
+  actions: ActionPlanView[];
+}
+
+export interface ExecutiveDashboard {
+  totalActiveRisks: number;
+  topRisks: DashboardRiskSummary[];
+  criticalKris: DashboardKriSummary[];
+  overdueActions: ActionPlanView[];
+  openAnomaliesCount: number;
+}
+
+export interface RiskCommitteeReport {
+  topRisks: DashboardRiskSummary[];
+  krisInAlert: DashboardKriSummary[];
+  overdueActions: ActionPlanView[];
+}
+
+export interface ConsolidatedEntityBreakdown {
+  /** RiskEvaluation.entity / Kri.entity free-text scope — "UNSPECIFIED" groups rows with no entity set. See getConsolidatedReport's doc comment for why this is NOT a cross-tenant view. */
+  entity: string;
+  riskCount: number;
+  topRisks: DashboardRiskSummary[];
+  criticalKriCount: number;
+}
+
+export interface ConsolidatedReport {
+  entities: ConsolidatedEntityBreakdown[];
+}
+
+export interface AppetiteVsResidualRow {
+  subCategory: string;
+  entity: string | null;
+  threshold: number | null;
+  maxResidualScore: number | null;
+  exceedanceCount: number;
+  exceeded: boolean;
+  riskIds: string[];
+}
+
+export interface KriConsolidatedReport {
+  kris: KriConsolidatedRow[];
+  activeAlerts: KriConsolidatedRow[];
+}
+
+export interface RiskOwnerAlert {
+  type: "APPETITE_EXCEEDED" | "KRI_THRESHOLD";
+  message: string;
+  riskId?: string;
+  kriId?: string;
+}
+
+export interface RiskOwnerDashboard {
+  ownerId: string;
+  risks: DashboardRiskSummary[];
+  kris: DashboardKriSummary[];
+  actions: ActionPlanView[];
+  alerts: RiskOwnerAlert[];
+}
+
+export interface ComplianceReportFilters {
+  framework: string;
+  entity?: string;
+  from?: Date;
+  to?: Date;
+}
+
+export interface ComplianceReport {
+  /**
+   * Echoed back verbatim, never validated against a table of known
+   * frameworks — see the class doc comment: there is no
+   * regulatory-framework entity in this codebase yet (that's Config's
+   * ACT-223), so `framework` has NO effect on which controls/executions
+   * are counted below. This is a placeholder pending that module, not a
+   * finished framework-aware compliance score.
+   */
+  framework: string;
+  entity: string | null;
+  period: { from: Date | null; to: Date | null };
+  totalControls: number;
+  /** DONE / (DONE + NOT_DONE) among matching ControlExecutions, null if there is no sample. */
+  controlExecutionPassRate: number | null;
+  /** EFFECTIVE / total among matching ControlEffectivenessAssessments, null if there is no sample. */
+  controlEffectivenessPassRate: number | null;
+  overdueControlActions: number;
+}
+
+// ---------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------
+
+/**
+ * ACT-080/081/082/084(partial: branding is its own BrandingService)/
+ * 210-215/240-243 — the single shared, read-only aggregation layer for
+ * both Dashboard and Reporting. Both domains overlap by design (per the
+ * task brief): a "top risks by criticality" query, a "KRIs in
+ * alert" query, and a "compliance signal" query are each computed here
+ * exactly once and reused by whichever route (dashboard.routes.ts or
+ * reports.routes.ts) needs that particular shape. There is deliberately
+ * no separate ReportingService class duplicating these queries under a
+ * different name — see the two thin route files for how the same
+ * methods are exposed under both `/dashboard/*` and `/reports/*`.
+ *
+ * Pure read-only aggregation, like CartographyService: no entity of its
+ * own, no migration, no writes, nothing to audit.
+ *
+ * N+1 by design in several places (most recent VALIDATED evaluation per
+ * risk, executions/assessments per control) — same acknowledged
+ * trade-off as CartographyService: none of the underlying repositories
+ * expose a bulk "most recent per parent" query, and this is not the
+ * place to add one speculatively to a neighboring, already-shipped
+ * module's interface.
+ */
+export class DashboardService {
+  constructor(
+    private readonly risks: RiskRepository,
+    private readonly evaluations: RiskEvaluationRepository,
+    private readonly anomalies: AnomalyRepository,
+    private readonly kris: KriRepository,
+    private readonly kriMeasures: KriMeasureRepository,
+    private readonly actionPlans: ActionPlanRepository,
+    private readonly riskAppetites: RiskAppetiteRepository,
+    private readonly controls: ControlRepository,
+    private readonly controlExecutions: ControlExecutionRepository,
+    private readonly controlEffectiveness: ControlEffectivenessRepository,
+    private readonly departments: DepartmentRepository,
+    private readonly kpis: KpiRepository,
+    private readonly kpiMeasures: KpiMeasureRepository,
+  ) {}
+
+  // -- ACT-080 ---------------------------------------------------------
+
+  /** GET /dashboard/risks — consolidated, tenant-filtered risk view. Includes risks with no validated evaluation yet (score/criticality null), unlike CartographyService which excludes them. */
+  async getRisksOverview(actor: AuthenticatedUser): Promise<DashboardRiskSummary[]> {
+    requirePermission(actor, "dashboard.read");
+    const risks = await this.risks.list(actor.tenantId);
+    return Promise.all(risks.map((risk) => this.toRiskSummaryOrNull(actor.tenantId, risk)));
+  }
+
+  // -- ACT-081 ---------------------------------------------------------
+
+  /**
+   * GET /dashboard/anomalies?status=open,in_progress — the backlog's
+   * literal query tokens ("open", "in_progress") aren't Anomaly's actual
+   * status enum (NEW/UNDER_ANALYSIS/ACTION_IN_PROGRESS/CLOSED); mapping
+   * those generic tokens to real AnomalyStatus values is done in the
+   * route layer (HTTP shaping), not here — this method just takes real
+   * AnomalyStatus values and defaults to "everything not CLOSED" when
+   * none are given.
+   */
+  async getOpenAnomalies(actor: AuthenticatedUser, statuses?: AnomalyStatus[]): Promise<Anomaly[]> {
+    requirePermission(actor, "dashboard.read");
+    const wanted: AnomalyStatus[] =
+      statuses && statuses.length > 0 ? statuses : ["NEW", "UNDER_ANALYSIS", "ACTION_IN_PROGRESS"];
+    const all = await this.anomalies.list(actor.tenantId);
+    return all.filter((a) => wanted.includes(a.status));
+  }
+
+  // -- ACT-082 / ACT-210 / ACT-243 -------------------------------------
+
+  /**
+   * GET /dashboard/compliance and GET /reports/compliance?framework=...
+   * — the SAME query, per the task brief, exposed under both paths by
+   * both route files calling this one method. See ComplianceReport's
+   * doc comment on `framework` for why it doesn't filter anything yet.
+   * `entity` filters via Control.departmentId -> Department.entity
+   * (Control itself has no entity field); `from`/`to` filter execution
+   * completedDate / assessment evalDate.
+   */
+  async getComplianceReport(actor: AuthenticatedUser, filters: ComplianceReportFilters): Promise<ComplianceReport> {
+    requirePermission(actor, "dashboard.read");
+    if (!filters.framework?.trim()) {
+      throw new ValidationError("framework is required (ACT-210: cadre obligatoire en paramètre)");
+    }
+
+    const controls = await this.controls.list(actor.tenantId, { includeArchived: false });
+    const scopedControls = filters.entity
+      ? await this.filterControlsByEntity(actor.tenantId, controls, filters.entity)
+      : controls;
+
+    let doneCount = 0;
+    let notDoneCount = 0;
+    let effectiveCount = 0;
+    let assessedCount = 0;
+
+    for (const control of scopedControls) {
+      const executions = await this.controlExecutions.listForControl(actor.tenantId, control.id);
+      for (const execution of executions) {
+        if (filters.from && execution.completedDate && execution.completedDate < filters.from) continue;
+        if (filters.to && execution.completedDate && execution.completedDate > filters.to) continue;
+        if (execution.status === "DONE") doneCount++;
+        else if (execution.status === "NOT_DONE") notDoneCount++;
+      }
+
+      const assessments = await this.controlEffectiveness.listForControl(actor.tenantId, control.id);
+      for (const assessment of assessments) {
+        if (filters.from && assessment.evalDate < filters.from) continue;
+        if (filters.to && assessment.evalDate > filters.to) continue;
+        assessedCount++;
+        if (assessment.operationalEffectiveness === "EFFECTIVE") effectiveCount++;
+      }
+    }
+
+    const overdueControlActions = (
+      await this.getOverdueActionViews(actor.tenantId, { sourceType: "CONTROL" })
+    ).length;
+
+    const executionSample = doneCount + notDoneCount;
+
+    return {
+      framework: filters.framework.trim(),
+      entity: filters.entity ?? null,
+      period: { from: filters.from ?? null, to: filters.to ?? null },
+      totalControls: scopedControls.length,
+      controlExecutionPassRate: executionSample > 0 ? doneCount / executionSample : null,
+      controlEffectivenessPassRate: assessedCount > 0 ? effectiveCount / assessedCount : null,
+      overdueControlActions,
+    };
+  }
+
+  // -- ACT-240 ----------------------------------------------------------
+
+  /** GET /dashboard/risk-owner?user_id=me — always the caller's own risks (RiskRepository.list's ownerId filter); there is no path here to view another user's owner dashboard. */
+  async getRiskOwnerView(actor: AuthenticatedUser): Promise<RiskOwnerDashboard> {
+    requirePermission(actor, "dashboard.read");
+
+    const ownedRisks = await this.risks.list(actor.tenantId, { ownerId: actor.userId });
+    const withEvaluations = await Promise.all(
+      ownedRisks.map(async (risk) => ({
+        risk,
+        evaluation: await this.getMostRecentValidatedEvaluation(actor.tenantId, risk.id),
+      })),
+    );
+    const riskSummaries = withEvaluations.map(({ risk, evaluation }) => this.buildRiskSummary(risk, evaluation));
+
+    const ownedRiskIds = new Set(ownedRisks.map((r) => r.id));
+    const allKris = await this.kris.list(actor.tenantId);
+    // Primary link only (Kri.riskId) — mirrors KriService.dashboard's own department resolution, which likewise only follows the primary link, not ACT-136's additional covered risks.
+    const ownedKris = allKris.filter((k) => ownedRiskIds.has(k.riskId));
+    const kriSummaries = await Promise.all(ownedKris.map((k) => this.toKriSummary(actor.tenantId, k)));
+
+    const actions = await this.actionPlans.list(actor.tenantId, { responsibleUserId: actor.userId });
+    const actionViews = actions.map(toActionPlanView);
+
+    const alerts: RiskOwnerAlert[] = [];
+    for (const { risk, evaluation } of withEvaluations) {
+      if (evaluation?.appetiteExceeded) {
+        alerts.push({
+          type: "APPETITE_EXCEEDED",
+          riskId: risk.id,
+          message: `Risk "${risk.process}" exceeds its risk appetite threshold (residual score ${evaluation.residualScore})`,
+        });
+      }
+    }
+    for (const kriSummary of kriSummaries) {
+      if (kriSummary.status === "ORANGE" || kriSummary.status === "ROUGE") {
+        alerts.push({
+          type: "KRI_THRESHOLD",
+          kriId: kriSummary.kri.id,
+          message: `KRI "${kriSummary.kri.label}" is ${kriSummary.status} (latest value ${kriSummary.latestValue})`,
+        });
+      }
+    }
+
+    return { ownerId: actor.userId, risks: riskSummaries, kris: kriSummaries, actions: actionViews, alerts };
+  }
+
+  // -- ACT-241 / ACT-213 -------------------------------------------------
+
+  /**
+   * GET /dashboard/department/:id and GET /reports/department/:id — same
+   * query, exposed under both paths. Access gate: the department's
+   * designated risk pilot (Department.riskOwner, matched case-
+   * insensitively against actor.email) OR dashboard.executive as a
+   * broader admin override.
+   *
+   * Judgment call flagged for Risk Manager/Architecture: Department.
+   * riskOwner is free text (a name or an email — see Department.ts's own
+   * doc comment), not a User foreign key like Risk.ownerId. Matching it
+   * against actor.email is a heuristic that works when the field
+   * actually holds an email, and silently fails closed (falls through to
+   * requiring dashboard.executive) when it holds a display name instead.
+   * A reliable version of this authorization check would need a real
+   * `riskPilotUserId` FK on Department, mirroring Risk.ownerId — that's a
+   * data-model change to an already-shipped module, not something to
+   * decide unilaterally here.
+   */
+  async getDepartmentView(actor: AuthenticatedUser, departmentId: string): Promise<DepartmentDashboard> {
+    requirePermission(actor, "dashboard.read");
+
+    const department = await this.departments.getById(actor.tenantId, departmentId);
+    if (!department) throw new NotFoundError("Department", departmentId);
+    this.assertDepartmentAccess(actor, department);
+
+    const [allRisks, allControls, kpis, actions] = await Promise.all([
+      this.risks.list(actor.tenantId),
+      this.controls.list(actor.tenantId),
+      this.kpis.list(actor.tenantId, { departmentId }),
+      this.actionPlans.list(actor.tenantId, { departmentId }),
+    ]);
+
+    const departmentRisks = allRisks.filter((r) => r.ownerDepartmentId === departmentId);
+    const riskSummaries = await Promise.all(
+      departmentRisks.map((risk) => this.toRiskSummaryOrNull(actor.tenantId, risk)),
+    );
+
+    const departmentControls = allControls.filter((c) => c.departmentId === departmentId);
+
+    const departmentRiskIds = new Set(departmentRisks.map((r) => r.id));
+    const allKris = await this.kris.list(actor.tenantId);
+    const departmentKris = allKris.filter((k) => departmentRiskIds.has(k.riskId));
+    const kriSummaries = await Promise.all(departmentKris.map((k) => this.toKriSummary(actor.tenantId, k)));
+
+    const kpiSummaries = await Promise.all(kpis.map((kpi) => this.toKpiSummary(actor.tenantId, kpi)));
+    const actionViews = actions.map(toActionPlanView);
+
+    return {
+      department,
+      risks: riskSummaries,
+      controls: departmentControls,
+      kpis: kpiSummaries,
+      kris: kriSummaries,
+      actions: actionViews,
+    };
+  }
+
+  // -- ACT-242 -----------------------------------------------------------
+
+  /** GET /dashboard/executive — cross-entity consolidated view, gated behind dashboard.executive. */
+  async getExecutiveView(actor: AuthenticatedUser, options?: { topN?: number }): Promise<ExecutiveDashboard> {
+    requirePermission(actor, "dashboard.executive");
+    const topN = options?.topN ?? 10;
+
+    const [allRisks, scored, kriSummaries, overdueActions, allAnomalies] = await Promise.all([
+      this.risks.list(actor.tenantId),
+      this.getScoredRisks(actor.tenantId),
+      this.getAllKriSummaries(actor.tenantId),
+      this.getOverdueActionViews(actor.tenantId),
+      this.anomalies.list(actor.tenantId),
+    ]);
+
+    const topRisks = [...scored].sort((a, b) => b.score - a.score).slice(0, topN).map((s) => this.buildRiskSummary(s.risk, s.evaluation));
+    const criticalKris = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
+    const openAnomaliesCount = allAnomalies.filter((a) => a.status !== "CLOSED").length;
+
+    return {
+      totalActiveRisks: allRisks.filter((r) => r.status !== "ARCHIVED").length,
+      topRisks,
+      criticalKris,
+      overdueActions,
+      openAnomaliesCount,
+    };
+  }
+
+  // -- ACT-211 -------------------------------------------------------------
+
+  /** GET /reports/risk-committee — board-pack view: top-N risks, KRIs in Orange/Rouge, overdue actions. Reuses the same helpers as getExecutiveView rather than re-querying. */
+  async getRiskCommitteeReport(actor: AuthenticatedUser, options?: { topN?: number }): Promise<RiskCommitteeReport> {
+    requirePermission(actor, "dashboard.executive");
+    const topN = options?.topN ?? 10;
+
+    const [scored, kriSummaries, overdueActions] = await Promise.all([
+      this.getScoredRisks(actor.tenantId),
+      this.getAllKriSummaries(actor.tenantId),
+      this.getOverdueActionViews(actor.tenantId),
+    ]);
+
+    const topRisks = [...scored].sort((a, b) => b.score - a.score).slice(0, topN).map((s) => this.buildRiskSummary(s.risk, s.evaluation));
+    const krisInAlert = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
+
+    return { topRisks, krisInAlert, overdueActions };
+  }
+
+  // -- ACT-212 ---------------------------------------------------------------
+
+  /**
+   * GET /reports/consolidated?entities=CI,SN,Finances — grouped by the
+   * free-text `entity` scope already present on RiskEvaluation/Kri (the
+   * same field CartographyService/RiskAppetiteService filter on), NOT by
+   * Postgres `tenant_id`.
+   *
+   * Design ambiguity flagged for Architecture/Risk Manager: the backlog
+   * text ("Multi-tenant view ; droits group-admin obligatoires",
+   * mentioning "Djamo CI + SN + Finances") reads as if it wants
+   * aggregation across separate tenants/deployments. This codebase is
+   * single-tenant-per-deployment by design (CLAUDE.md: "tenant_id... even
+   * though the product is currently single-tenant") and AuthenticatedUser
+   * only ever carries one tenantId — there is no mechanism here to read
+   * another tenant's data, and building one would cross the exact
+   * isolation boundary CLAUDE.md treats as sacred. I've implemented
+   * "entities" as filtering/grouping by the existing free-text
+   * entity/subsidiary scope WITHIN one tenant instead, which is the only
+   * multi-entity concept this codebase actually has today. If genuine
+   * cross-tenant group reporting is required, that's a real architecture
+   * decision (a group-level read replica/API, not a service-layer
+   * workaround) and needs A05/A13 sign-off, not a unilateral call here.
+   */
+  async getConsolidatedReport(actor: AuthenticatedUser, entityFilter?: string[]): Promise<ConsolidatedReport> {
+    requirePermission(actor, "dashboard.executive");
+
+    const [scored, kriSummaries] = await Promise.all([
+      this.getScoredRisks(actor.tenantId),
+      this.getAllKriSummaries(actor.tenantId),
+    ]);
+
+    const entityKey = (v: string | null) => v ?? "UNSPECIFIED";
+    const relevantEntities =
+      entityFilter && entityFilter.length > 0
+        ? entityFilter
+        : [...new Set([...scored.map((s) => entityKey(s.evaluation.entity)), ...kriSummaries.map((k) => entityKey(k.kri.entity))])];
+
+    const breakdown: ConsolidatedEntityBreakdown[] = relevantEntities.map((entity) => {
+      const entityScored = scored.filter((s) => entityKey(s.evaluation.entity) === entity);
+      const entityKris = kriSummaries.filter((k) => entityKey(k.kri.entity) === entity);
+      return {
+        entity,
+        riskCount: entityScored.length,
+        topRisks: [...entityScored]
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 5)
+          .map((s) => this.buildRiskSummary(s.risk, s.evaluation)),
+        criticalKriCount: entityKris.filter((k) => k.status === "ORANGE" || k.status === "ROUGE").length,
+      };
+    });
+
+    return { entities: breakdown.sort((a, b) => a.entity.localeCompare(b.entity)) };
+  }
+
+  // -- ACT-214 -----------------------------------------------------------------
+
+  /** GET /reports/appetite-vs-residual — per (subCategory, entity), max current residual score vs the active RiskAppetite threshold, exceedances highlighted. */
+  async getAppetiteVsResidual(actor: AuthenticatedUser): Promise<AppetiteVsResidualRow[]> {
+    requirePermission(actor, "dashboard.executive");
+
+    const [scored, appetites] = await Promise.all([
+      this.getScoredRisks(actor.tenantId),
+      this.riskAppetites.list(actor.tenantId, { activeOnly: true }),
+    ]);
+
+    interface Group {
+      subCategory: string;
+      entity: string | null;
+      scores: number[];
+      riskIds: string[];
+    }
+    const groups = new Map<string, Group>();
+    const keyOf = (subCategory: string, entity: string | null) => `${subCategory}::${entity ?? ""}`;
+
+    for (const s of scored) {
+      const key = keyOf(s.evaluation.subCategory, s.evaluation.entity);
+      let group = groups.get(key);
+      if (!group) {
+        group = { subCategory: s.evaluation.subCategory, entity: s.evaluation.entity, scores: [], riskIds: [] };
+        groups.set(key, group);
+      }
+      group.scores.push(s.score);
+      group.riskIds.push(s.risk.id);
+    }
+    for (const appetite of appetites) {
+      const key = keyOf(appetite.subCategory, appetite.entity);
+      if (!groups.has(key)) {
+        groups.set(key, { subCategory: appetite.subCategory, entity: appetite.entity, scores: [], riskIds: [] });
+      }
+    }
+
+    const rows: AppetiteVsResidualRow[] = [];
+    for (const group of groups.values()) {
+      const appetite = appetites.find(
+        (a) => a.subCategory === group.subCategory && (a.entity ?? null) === group.entity,
+      );
+      const threshold = appetite?.threshold ?? null;
+      const maxResidualScore = group.scores.length > 0 ? Math.max(...group.scores) : null;
+      const exceedanceCount = threshold !== null ? group.scores.filter((sc) => sc > threshold).length : 0;
+      rows.push({
+        subCategory: group.subCategory,
+        entity: group.entity,
+        threshold,
+        maxResidualScore,
+        exceedanceCount,
+        exceeded: threshold !== null && maxResidualScore !== null && maxResidualScore > threshold,
+        riskIds: group.riskIds,
+      });
+    }
+
+    return rows.sort((a, b) => a.subCategory.localeCompare(b.subCategory));
+  }
+
+  // -- ACT-215 -------------------------------------------------------------------
+
+  /** GET /reports/kri-consolidated — global KRI view, trend over N periods (default 6), active alerts. */
+  async getKriConsolidated(actor: AuthenticatedUser, options?: { periods?: number }): Promise<KriConsolidatedReport> {
+    requirePermission(actor, "dashboard.executive");
+    const periods = options?.periods ?? 6;
+
+    const kris = await this.kris.list(actor.tenantId);
+    const rows = await Promise.all(
+      kris.map(async (kri): Promise<KriConsolidatedRow> => {
+        const summary = await this.toKriSummary(actor.tenantId, kri);
+        const history = await this.kriMeasures.listForKri(actor.tenantId, kri.id, { page: 1, pageSize: periods });
+        return { ...summary, trend: history.items.map((m) => ({ measureDate: m.measureDate, value: m.value })) };
+      }),
+    );
+
+    const activeAlerts = rows.filter((r) => r.status === "ORANGE" || r.status === "ROUGE");
+    return { kris: rows, activeAlerts };
+  }
+
+  // ---------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------
+
+  private assertDepartmentAccess(actor: AuthenticatedUser, department: Department): void {
+    const isPilot = department.riskOwner.trim().toLowerCase() === actor.email.trim().toLowerCase();
+    if (isPilot) return;
+    requirePermission(actor, "dashboard.executive");
+  }
+
+  private async getMostRecentValidatedEvaluation(tenantId: string, riskId: string): Promise<RiskEvaluation | null> {
+    const results = await this.evaluations.listForRisk(tenantId, riskId, { status: "VALIDATED", limit: 1 });
+    return results[0] ?? null;
+  }
+
+  private buildRiskSummary(risk: Risk, evaluation: RiskEvaluation | null): DashboardRiskSummary {
+    const score = evaluation ? evaluation.residualScore ?? evaluation.inherentScore : null;
+    return {
+      riskId: risk.id,
+      process: risk.process,
+      description: risk.description,
+      status: risk.status,
+      ownerDepartmentId: risk.ownerDepartmentId,
+      ownerId: risk.ownerId,
+      score,
+      criticality: score !== null ? deriveCriticality(score) : null,
+      subCategory: evaluation?.subCategory ?? null,
+      entity: evaluation?.entity ?? null,
+      appetiteExceeded: evaluation?.appetiteExceeded ?? null,
+    };
+  }
+
+  private async toRiskSummaryOrNull(tenantId: string, risk: Risk): Promise<DashboardRiskSummary> {
+    const evaluation = await this.getMostRecentValidatedEvaluation(tenantId, risk.id);
+    return this.buildRiskSummary(risk, evaluation);
+  }
+
+  /** Only risks with a validated, scored evaluation — used by every "top risks by score" ranking (executive/committee/consolidated/appetite-vs-residual). */
+  private async getScoredRisks(tenantId: string, options?: { includeArchived?: boolean }): Promise<ScoredRisk[]> {
+    const risks = await this.risks.list(tenantId, options);
+    const scored: ScoredRisk[] = [];
+    for (const risk of risks) {
+      const evaluation = await this.getMostRecentValidatedEvaluation(tenantId, risk.id);
+      if (!evaluation) continue;
+      const score = evaluation.residualScore ?? evaluation.inherentScore;
+      if (score === null) continue;
+      scored.push({ risk, evaluation, score });
+    }
+    return scored;
+  }
+
+  private async toKriSummary(tenantId: string, kri: Kri): Promise<DashboardKriSummary> {
+    const latest = await this.kriMeasures.getLatest(tenantId, kri.id);
+    const status = computeKriStatus(kri, latest?.value ?? null);
+    return { kri, status, latestValue: latest?.value ?? null, latestMeasureDate: latest?.measureDate ?? null };
+  }
+
+  private async getAllKriSummaries(tenantId: string): Promise<DashboardKriSummary[]> {
+    const kris = await this.kris.list(tenantId);
+    return Promise.all(kris.map((kri) => this.toKriSummary(tenantId, kri)));
+  }
+
+  private async toKpiSummary(tenantId: string, kpi: Kpi): Promise<DashboardKpiSummary> {
+    const latest = await this.kpiMeasures.getLatest(tenantId, kpi.id);
+    const { status, achievementRate } = computeKpiStatus(kpi.targetValue, latest?.value ?? null);
+    return { kpi, status, achievementRate, latestValue: latest?.value ?? null };
+  }
+
+  private async getOverdueActionViews(tenantId: string, filters?: ActionPlanListFilters): Promise<ActionPlanView[]> {
+    const rows = await this.actionPlans.list(tenantId, filters);
+    return rows.map(toActionPlanView).filter((v) => v.computedStatus === "EN_RETARD");
+  }
+
+  private async filterControlsByEntity(tenantId: string, controls: Control[], entity: string): Promise<Control[]> {
+    const departments = await this.departments.list(tenantId, { includeInactive: true });
+    const entityByDepartmentId = new Map(departments.map((d) => [d.id, d.entity]));
+    return controls.filter((c) => c.departmentId !== null && entityByDepartmentId.get(c.departmentId) === entity);
+  }
+}

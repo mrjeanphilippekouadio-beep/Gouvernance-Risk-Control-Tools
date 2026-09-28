@@ -144,6 +144,20 @@ function inMemoryRiskEvaluationRepository(): RiskEvaluationRepository {
       store.set(id, updated);
       return updated;
     },
+    async recordCommitteeValidation(tenantId, id, validatedBy, comment) {
+      const existing = store.get(id);
+      if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
+      const updated: RiskEvaluation = {
+        ...existing,
+        status: "VALIDE_COMITE",
+        validatedBy,
+        validatedAt: new Date(),
+        comment,
+        updatedAt: new Date(),
+      };
+      store.set(id, updated);
+      return updated;
+    },
   };
 }
 

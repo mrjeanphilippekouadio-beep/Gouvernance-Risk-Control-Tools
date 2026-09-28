@@ -26,6 +26,14 @@ import { PostgresKriMeasureRepository } from "./infrastructure/database/postgres
 import { PostgresUserRepository } from "./infrastructure/database/postgres/PostgresUserRepository.js";
 import { PostgresRiskEscalationRepository } from "./infrastructure/database/postgres/PostgresRiskEscalationRepository.js";
 import { PostgresActionPlanRepository } from "./infrastructure/database/postgres/PostgresActionPlanRepository.js";
+import { PostgresBrandingRepository } from "./infrastructure/database/postgres/PostgresBrandingRepository.js";
+import { PostgresConfigRepository } from "./infrastructure/database/postgres/PostgresConfigRepository.js";
+import { PostgresModuleToggleRepository } from "./infrastructure/database/postgres/PostgresModuleToggleRepository.js";
+import { PostgresRegulatoryFrameworkRepository } from "./infrastructure/database/postgres/PostgresRegulatoryFrameworkRepository.js";
+import { PostgresRiskCategoryRepository } from "./infrastructure/database/postgres/PostgresRiskCategoryRepository.js";
+import { PostgresNotificationRepository } from "./infrastructure/database/postgres/PostgresNotificationRepository.js";
+import { PostgresNotificationSubscriptionRepository } from "./infrastructure/database/postgres/PostgresNotificationSubscriptionRepository.js";
+import { PostgresReviewCycleRepository } from "./infrastructure/database/postgres/PostgresReviewCycleRepository.js";
 import { TelegramNotifier } from "./infrastructure/notifications/TelegramNotifier.js";
 import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
@@ -52,6 +60,16 @@ import { UserService } from "./services/UserService.js";
 import { RiskOwnershipService } from "./services/RiskOwnershipService.js";
 import { ActionPlanService } from "./services/ActionPlanService.js";
 import { CartographyService } from "./services/CartographyService.js";
+import { DashboardService } from "./services/DashboardService.js";
+import { BrandingService } from "./services/BrandingService.js";
+import { ConfigService } from "./services/ConfigService.js";
+import { ModuleToggleService } from "./services/ModuleToggleService.js";
+import { TenantService } from "./services/TenantService.js";
+import { RegulatoryFrameworkService } from "./services/RegulatoryFrameworkService.js";
+import { RiskCategoryService } from "./services/RiskCategoryService.js";
+import { RiskImportService } from "./services/RiskImportService.js";
+import { NotificationService } from "./services/NotificationService.js";
+import { GovernanceService } from "./services/GovernanceService.js";
 import { risksRouter } from "./api/v1/risks.routes.js";
 import { evidencesRouter } from "./api/v1/evidences.routes.js";
 import { controlsRouter } from "./api/v1/controls.routes.js";
@@ -75,6 +93,18 @@ import { riskOwnersRouter } from "./api/v1/riskOwners.routes.js";
 import { actionPlansRouter } from "./api/v1/actionPlans.routes.js";
 import { actionPlanDashboardRouter } from "./api/v1/actionPlanDashboard.routes.js";
 import { cartographyRouter } from "./api/v1/cartography.routes.js";
+import { dashboardRouter } from "./api/v1/dashboard.routes.js";
+import { reportsRouter } from "./api/v1/reports.routes.js";
+import { brandingRouter } from "./api/v1/branding.routes.js";
+import { configRouter } from "./api/v1/config.routes.js";
+import { moduleTogglesRouter } from "./api/v1/moduleToggles.routes.js";
+import { tenantsRouter } from "./api/v1/tenants.routes.js";
+import { regulatoryFrameworksRouter } from "./api/v1/regulatoryFrameworks.routes.js";
+import { riskCategoriesRouter } from "./api/v1/riskCategories.routes.js";
+import { riskImportRouter } from "./api/v1/riskImport.routes.js";
+import { notificationsRouter } from "./api/v1/notifications.routes.js";
+import { notificationSubscriptionsRouter } from "./api/v1/notificationSubscriptions.routes.js";
+import { reviewCyclesRouter } from "./api/v1/reviewCycles.routes.js";
 import { permissionsRouter } from "./api/v1/permissions.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
@@ -113,6 +143,14 @@ const kriMeasureRepository = new PostgresKriMeasureRepository(pool);
 const userRepository = new PostgresUserRepository(pool);
 const riskEscalationRepository = new PostgresRiskEscalationRepository(pool);
 const actionPlanRepository = new PostgresActionPlanRepository(pool);
+const brandingRepository = new PostgresBrandingRepository(pool);
+const configRepository = new PostgresConfigRepository(pool);
+const moduleToggleRepository = new PostgresModuleToggleRepository(pool);
+const regulatoryFrameworkRepository = new PostgresRegulatoryFrameworkRepository(pool);
+const riskCategoryRepository = new PostgresRiskCategoryRepository(pool);
+const notificationRepository = new PostgresNotificationRepository(pool);
+const notificationSubscriptionRepository = new PostgresNotificationSubscriptionRepository(pool);
+const reviewCycleRepository = new PostgresReviewCycleRepository(pool);
 const notifier =
   env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID
     ? new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID)
@@ -177,6 +215,31 @@ const documentStorage = new GoogleDriveStorage(
   env.GOOGLE_DRIVE_CREDENTIALS_PATH,
 );
 const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository, executionRepository);
+
+const dashboardService = new DashboardService(
+  riskRepository,
+  riskEvaluationRepository,
+  anomalyRepository,
+  kriRepository,
+  kriMeasureRepository,
+  actionPlanRepository,
+  riskAppetiteRepository,
+  controlRepository,
+  executionRepository,
+  effectivenessRepository,
+  departmentRepository,
+  kpiRepository,
+  kpiMeasureRepository,
+);
+const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
+const configService = new ConfigService(configRepository, auditRepository);
+const moduleToggleService = new ModuleToggleService(moduleToggleRepository, auditRepository);
+const tenantService = new TenantService(tenantRepository, auditRepository);
+const regulatoryFrameworkService = new RegulatoryFrameworkService(regulatoryFrameworkRepository, auditRepository);
+const riskCategoryService = new RiskCategoryService(riskCategoryRepository, auditRepository);
+const riskImportService = new RiskImportService(riskService);
+const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
+const governanceService = new GovernanceService(reviewCycleRepository, auditRepository, notifier);
 
 const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, async (email) => {
   // Real lookup against the `users` table from migration 002 — one user
@@ -258,6 +321,26 @@ app.use("/api/v1/risk-owners", authMiddleware(identityProvider), riskOwnersRoute
 app.use("/api/v1/actions", authMiddleware(identityProvider), actionPlansRouter(actionPlanService));
 app.use("/api/v1/dashboard", authMiddleware(identityProvider), actionPlanDashboardRouter(actionPlanService));
 app.use("/api/v1/cartography", authMiddleware(identityProvider), cartographyRouter(cartographyService));
+app.use("/api/v1/dashboard", authMiddleware(identityProvider), dashboardRouter(dashboardService));
+app.use("/api/v1/reports", authMiddleware(identityProvider), reportsRouter(dashboardService));
+app.use("/api/v1/branding", authMiddleware(identityProvider), brandingRouter(brandingService));
+app.use("/api/v1/config", authMiddleware(identityProvider), configRouter(configService));
+app.use("/api/v1/modules", authMiddleware(identityProvider), moduleTogglesRouter(moduleToggleService));
+app.use("/api/v1/tenants", authMiddleware(identityProvider), tenantsRouter(tenantService));
+app.use(
+  "/api/v1/regulatory-frameworks",
+  authMiddleware(identityProvider),
+  regulatoryFrameworksRouter(regulatoryFrameworkService),
+);
+app.use("/api/v1/risk-categories", authMiddleware(identityProvider), riskCategoriesRouter(riskCategoryService));
+app.use("/api/v1/import/excel", authMiddleware(identityProvider), riskImportRouter(riskImportService));
+app.use("/api/v1/notifications", authMiddleware(identityProvider), notificationsRouter(notificationService));
+app.use(
+  "/api/v1/notification-subscriptions",
+  authMiddleware(identityProvider),
+  notificationSubscriptionsRouter(notificationService),
+);
+app.use("/api/v1/review-cycles", authMiddleware(identityProvider), reviewCyclesRouter(governanceService));
 
 app.use(errorHandler);
 

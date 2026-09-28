@@ -24,4 +24,6 @@ export interface RiskEvaluationRepository {
   recordValidation(tenantId: string, id: string, validatedBy: string, comment: string | null): Promise<RiskEvaluation>;
   /** ACT-157: terminal, mandatory comment. */
   recordRejection(tenantId: string, id: string, validatedBy: string, comment: string): Promise<RiskEvaluation>;
+  /** ACT-253: terminal, distinct from recordValidation — Comité des Risques / Direction validation for Majeur/Critique residual scores. */
+  recordCommitteeValidation(tenantId: string, id: string, validatedBy: string, comment: string | null): Promise<RiskEvaluation>;
 }

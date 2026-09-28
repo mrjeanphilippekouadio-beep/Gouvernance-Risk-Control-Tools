@@ -70,6 +70,9 @@ function inMemoryRiskEvaluationRepository(evaluations: RiskEvaluation[]): RiskEv
     async recordRejection() {
       throw new Error("not implemented");
     },
+    async recordCommitteeValidation() {
+      throw new Error("not implemented");
+    },
   };
 }
 
