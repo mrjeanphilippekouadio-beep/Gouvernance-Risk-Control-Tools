@@ -35,3 +35,6 @@ secrets/
 # Claude Code agent git worktrees (isolated copies for parallel subagents)
 .claude/worktrees/
 
+
+# graphify generated output (local knowledge-graph analysis, not source)
+graphify-out/

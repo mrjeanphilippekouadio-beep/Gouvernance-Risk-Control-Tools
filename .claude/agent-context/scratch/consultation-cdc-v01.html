@@ -1,0 +1,367 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Consultation CDC GRC v0.1</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --ink: #161a26;
+    --paper: #eeece6;
+    --paper-raised: #f9f8f4;
+    --line: #d9d6cb;
+    --muted: #6b6f78;
+    --accent: #1f6f66;
+    --accent-soft: #dce9e7;
+    --done: #3f8f5c;
+    --done-soft: #e1efe4;
+    --progress: #b8791e;
+    --progress-soft: #f5ead2;
+    --risk: #a83a3a;
+    --risk-soft: #f6dede;
+    --todo: #82868f;
+    --todo-soft: #e7e6e2;
+    --shadow: 0 1px 2px rgba(22,26,38,.06), 0 8px 24px -12px rgba(22,26,38,.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eae8e1; --paper: #12141b; --paper-raised: #1a1d26; --line: #2b2f3a;
+      --muted: #9a9ea8; --accent: #6fc0b4; --accent-soft: #1c3330;
+      --done: #74c28a; --done-soft: #1b3123; --progress: #e0ac52; --progress-soft: #392e19;
+      --risk: #e28080; --risk-soft: #3a2222; --todo: #767a84; --todo-soft: #23262f;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eae8e1; --paper: #12141b; --paper-raised: #1a1d26; --line: #2b2f3a;
+    --muted: #9a9ea8; --accent: #6fc0b4; --accent-soft: #1c3330;
+    --done: #74c28a; --done-soft: #1b3123; --progress: #e0ac52; --progress-soft: #392e19;
+    --risk: #e28080; --risk-soft: #3a2222; --todo: #767a84; --todo-soft: #23262f;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: "IBM Plex Sans", system-ui, sans-serif; margin: 0; padding: 0 20px; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding-block: 48px 80px; }
+  h1, h2, h3 { font-family: "Source Serif 4", Georgia, serif; text-wrap: balance; margin: 0; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+
+  header.top { margin-bottom: 40px; }
+  header.top h1 { font-size: clamp(1.9rem, 4.5vw, 2.4rem); font-weight: 700; margin-top: 8px; }
+  header.top .sub { color: var(--muted); font-size: 1rem; max-width: 68ch; margin-top: 10px; line-height: 1.6; }
+  header.top .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: .84rem; color: var(--muted); font-family: "IBM Plex Mono", monospace; }
+  header.top .meta b { color: var(--ink); font-weight: 600; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 26px 0 44px; box-shadow: var(--shadow); }
+  .stat { background: var(--paper-raised); padding: 18px 16px; }
+  .stat .n { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 1.7rem; color: var(--accent); line-height: 1; }
+  .stat .l { font-size: .76rem; color: var(--muted); margin-top: 7px; line-height: 1.4; }
+
+  section { margin-bottom: 44px; }
+  section > h2 { font-size: 1.28rem; font-weight: 600; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 18px; display: flex; align-items: baseline; gap: 10px; }
+  section > h2 .count { font-family: "IBM Plex Mono", monospace; font-size: .76rem; color: var(--muted); font-weight: 500; }
+  section > p.lead { color: var(--muted); font-size: .92rem; line-height: 1.6; max-width: 74ch; margin: 0 0 18px; }
+
+  /* Contradictions */
+  .contradictions { display: flex; flex-direction: column; gap: 12px; }
+  .contra { border-left: 3px solid var(--risk); background: var(--risk-soft); border-radius: 0 10px 10px 0; padding: 14px 18px; }
+  .contra .tag { font-family: "IBM Plex Mono", monospace; font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: var(--risk); font-weight: 600; }
+  .contra h3 { font-size: 1rem; font-weight: 600; margin: 5px 0 6px; font-family: "IBM Plex Sans", sans-serif; }
+  .contra p { margin: 0; font-size: .89rem; line-height: 1.55; color: var(--ink); }
+  .contra .who { display: block; margin-top: 8px; font-size: .78rem; color: var(--muted); font-family: "IBM Plex Mono", monospace; }
+
+  /* Priority table */
+  .prio-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+  table.prio { width: 100%; border-collapse: collapse; font-size: .86rem; background: var(--paper-raised); min-width: 760px; }
+  table.prio th { text-align: left; font-family: "IBM Plex Mono", monospace; font-weight: 500; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 1px solid var(--line); padding: 12px 14px; background: var(--paper); }
+  table.prio td { padding: 13px 14px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.5; }
+  table.prio tr:last-child td { border-bottom: none; }
+  table.prio .rank { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 1rem; color: var(--accent); width: 2.4em; }
+  table.prio .lot { font-weight: 600; }
+  table.prio .req { font-family: "IBM Plex Mono", monospace; font-size: .78rem; color: var(--muted); }
+  table.prio .status { font-size: .82rem; color: var(--muted); }
+
+  /* Agent cards */
+  .agents { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .agents { grid-template-columns: 1fr; } }
+  .agent-card { background: var(--paper-raised); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .agent-card .row1 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .agent-card h3 { font-size: 1.02rem; font-weight: 600; font-family: "IBM Plex Sans", sans-serif; }
+  .agent-card .code { font-family: "IBM Plex Mono", monospace; font-size: .74rem; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+  .agent-card dl { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  .agent-card dt { font-family: "IBM Plex Mono", monospace; font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
+  .agent-card dd { margin: 0; font-size: .87rem; line-height: 1.55; color: var(--ink); }
+  .agent-card dd.difficulty { color: var(--risk); }
+
+  footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--line); font-size: .78rem; color: var(--muted); line-height: 1.6; }
+  footer code { font-family: "IBM Plex Mono", monospace; background: var(--todo-soft); padding: 1px 5px; border-radius: 4px; }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow">Consultation multi-agents</div>
+    <h1>Cahier des charges GRC v0.1 — impacts et retours</h1>
+    <div class="sub">Synthèse des retours des 15 agents ACF (hors orchestrateur) consultés sur le nouveau cahier des charges issu de l'échange avec Djamo — passage d'un outil de scoring de risques à une plateforme GRC/ERM interconnectée (référentiel, RACI, commentaires, évidences transverses, module Incidents, module Audit, méthodologie versionnée).</div>
+    <div class="meta">
+      <span><b>Source</b> docs/Cahier_des_charges_GRC_v0.1.md</span>
+      <span><b>Date</b> 28 septembre 2026</span>
+      <span><b>Agents consultés</b> 15 / 15</span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="n">27</div><div class="l">exigences GRC-001 à GRC-027 dans le document</div></div>
+    <div class="stat"><div class="n">4</div><div class="l">capacités transverses totalement absentes du système (RACI, Commentaires, Évidences génériques, Incidents)</div></div>
+    <div class="stat"><div class="n">3</div><div class="l">contradictions internes au document relevées indépendamment par plusieurs agents</div></div>
+    <div class="stat"><div class="n">~18</div><div class="l">migrations estimées par Dev DB pour couvrir le delta net</div></div>
+  </div>
+
+  <section>
+    <h2>Contradictions internes détectées <span class="count">non demandées — remontées spontanément</span></h2>
+    <p class="lead">Plusieurs agents, en travaillant indépendamment, ont repéré les mêmes tensions internes au document. À trancher avec le client avant toute spécification détaillée.</p>
+    <div class="contradictions">
+      <div class="contra">
+        <span class="tag">Ambiguïté méthodologique</span>
+        <h3>Vélocité et Persistance : dimension de score ou métrique d'incident ?</h3>
+        <p>Le §10.1 les liste comme dimensions configurables du moteur de scoring (au même rang que Financial ou Regulatory), alors que le §32.2 énonce explicitement « événements sources ≠ métriques calculées » et les rattache aux incidents. Le code actuel (<code>RatingScaleService</code>) a déjà tranché correctement en les gardant comme échelles de qualification séparées du score inhérent/résiduel — à préserver, pas à remettre en cause par une lecture littérale du §10.1.</p>
+        <span class="who">Relevé par Risk Manager (A13)</span>
+      </div>
+      <div class="contra">
+        <span class="tag">Modèle incomplet</span>
+        <h3>Finding → Action Plan (§21) contredit Constats → Recommandations → Plans d'action (§27)</h3>
+        <p>Le parcours audit décrit en §27 place une étape « Recommandations » entre les constats et les plans d'action, mais aucune table <code>recommendations</code> n'existe dans l'annexe du modèle de données (§40) — seuls <code>findings</code> et <code>action_plans</code> y figurent. Le §22 confirme l'incohérence en citant « Audit Recommendation » comme objet commentable à part entière.</p>
+        <span class="who">Relevé par Audit (A23)</span>
+      </div>
+      <div class="contra">
+        <span class="tag">Dette silencieuse déjà en production</span>
+        <h3>ActionPlan accepte déjà des sources qui n'existent pas encore</h3>
+        <p><code>ActionPlanService.SOURCE_TYPES</code> accepte aujourd'hui <code>"INCIDENT"</code> et <code>"AUDIT"</code> comme sources valides d'un plan d'action, mais aucune entité <code>Incident</code> ni <code>Finding</code> n'existe derrière pour les justifier — un plan d'action « source=INCIDENT » passe la validation sans jamais pointer vers un objet réel.</p>
+        <span class="who">Relevé indépendamment par Product Manager (A03) et Dev Backend (A06)</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Priorisation proposée <span class="count">Product Manager (A03) — approche criticité / risque</span></h2>
+    <p class="lead">Révision du découpage en 7 lots du §36 du cahier des charges, réordonné par risque produit plutôt que par ordre de rédaction — et par le critère explicite du Product Owner : la complexité augmente, l'usage doit rester intuitif.</p>
+    <div class="prio-wrap">
+      <table class="prio">
+        <thead><tr><th>Rang</th><th>Lot</th><th>Exigences</th><th>Justification</th><th>Statut existant</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="rank">1</td>
+            <td class="lot">RACI minimal<br><span style="font-weight:400;color:var(--muted)">Risque, Contrôle, Plan d'action seulement</span></td>
+            <td class="req">GRC-022</td>
+            <td>Dette la plus dangereuse à différer — plus on attend, plus il faut retrofitter du code et des données déjà en place. Limité à 3 objets pour ne pas complexifier l'UX avant que la valeur soit visible.</td>
+            <td class="status">Rien n'existe ; <code>owner_id</code> compatible avec la coexistence prévue par le §25</td>
+          </tr>
+          <tr>
+            <td class="rank">2</td>
+            <td class="lot">Checklist des contrôles<br><span style="font-weight:400;color:var(--muted)">rattachement anomalie/évidence par item</span></td>
+            <td class="req">GRC-012</td>
+            <td>Bloque l'étape 7→8 du parcours cible (§38). Demande client explicite et concrète (§1, « rappel opérationnel ») — forte valeur visible pour un effort limité.</td>
+            <td class="status">ControlService/ControlExecutionService solides ; checklist_items/results = extension pure</td>
+          </tr>
+          <tr>
+            <td class="rank">3</td>
+            <td class="lot">Incident <span style="font-weight:400;color:var(--muted)">+ relation Risque↔Incident + vélocité/persistance</span></td>
+            <td class="req">GRC-016 · 017 · 018</td>
+            <td>Referme la dette silencieuse identifiée (ActionPlan accepte déjà "INCIDENT" sans backing). Bloque l'étape 9 du parcours §38.</td>
+            <td class="status">AnomalyService sert de patron direct ; Incident lui-même n'existe pas du tout</td>
+          </tr>
+          <tr>
+            <td class="rank">4</td>
+            <td class="lot">Audit — Findings &amp; Recommandations</td>
+            <td class="req">GRC-020</td>
+            <td>Referme la même dette côté "AUDIT". Nécessaire pour une vision transverse réelle de l'auditeur, pas un simple accès lecture module par module.</td>
+            <td class="status"><code>SOURCE_TYPES</code> inclut déjà "AUDIT" sans entité derrière</td>
+          </tr>
+          <tr>
+            <td class="rank">5</td>
+            <td class="lot">Référentiel <span style="font-weight:400;color:var(--muted)">catalogue/registre/évaluation, causes, documents</span></td>
+            <td class="req">GRC-003 · 004 · 005 · 006 · 007</td>
+            <td>Chantier structurant mais migration de données sur une table <code>risks</code> déjà peuplée en production — volontairement après les lots 1-4 pour ne pas fragiliser les modules déjà livrés en début de chantier.</td>
+            <td class="status"><code>RiskService</code> conflate aujourd'hui catalogue et registre</td>
+          </tr>
+          <tr>
+            <td class="rank">6</td>
+            <td class="lot">Commentaires configurables <span style="font-weight:400;color:var(--muted)">objets à fort trafic d'abord</span></td>
+            <td class="req">GRC-021</td>
+            <td>Après les fondations transverses — exposer des commentaires avant que les objets eux-mêmes (Incident, Finding) existent créerait de la complexité UI sans valeur.</td>
+            <td class="status">Rien n'existe ; aucun risque de régression à le construire maintenant</td>
+          </tr>
+          <tr>
+            <td class="rank">7</td>
+            <td class="lot">Gouvernance transverse finale <span style="font-weight:400;color:var(--muted)">généralisation RACI, lignes de défense</span></td>
+            <td class="req">GRC-027 · 026</td>
+            <td>Généralise ce qui a été validé en usage réel sur un périmètre restreint (lot 1) plutôt que de figer un modèle complet sans retour utilisateur.</td>
+            <td class="status">RatingScaleService gère déjà le versionnement méthodologique — GRC-026 quasi satisfait</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Retours détaillés par agent <span class="count">15 agents, prise de connaissance confirmée</span></h2>
+    <div class="agents">
+
+      <div class="agent-card">
+        <div class="row1"><h3>Architecte</h3><span class="code">A05</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>Document lu en entier. Le système bascule d'un outil mono-entité vers un socle où référentiel, évaluation, incidents, audit et gouvernance transverse sont des domaines séparés interconnectés.</dd>
+          <dt>Proposition</dt><dd>Extension additive, pas réécriture : catalogue au-dessus de <code>Risk</code> existant (FK nullable), moteur transverse polymorphe unique pour Comments/RACI/Evidence/Findings, injecté en paramètre optionnel de constructeur dans chaque service.</dd>
+          <dt>Observation</dt><dd>Le moteur de méthodologie versionné absorbe <code>RatingScaleService</code> sans le remplacer — éclater le JSONB en tables normalisées serait de la sur-ingénierie sans besoin cross-module démontré.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">RACI/Comments est le changement le plus risqué : touche <code>server.ts</code> et potentiellement chaque service existant, nécessite une coordination multi-agents.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Product Manager</h3><span class="code">A03</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>Document lu en entier, croisé avec le backlog et le code existant. Le socle actuel couvre déjà une bonne part du cahier des charges.</dd>
+          <dt>Proposition</dt><dd>Priorisation dédiée par criticité/risque (voir tableau ci-dessus), pas l'ordre de rédaction du document.</dd>
+          <dt>Observation</dt><dd>4 trous structurants totalement absents : RACI, Incident, Checklist, Commentaires génériques — c'est là que se concentre le vrai travail neuf.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">La séparation catalogue/registre touche une table <code>risks</code> déjà peuplée par l'import Excel en production Djamo.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Dev Backend</h3><span class="code">A06</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>Inventaire des 30 services existants confirmé — aucun Comments, RACI, Incident, Finding.</dd>
+          <dt>Proposition</dt><dd>Le pattern « paramètre optionnel constructeur » déjà en vigueur suffit à absorber les nouvelles dépendances transverses sans casser les 367 tests, si appliqué systématiquement. RACI reste lu, jamais utilisé comme condition de <code>requirePermission</code>.</dd>
+          <dt>Observation</dt><dd>Incident introduit un 4e pattern d'écriture (timestamps incrémentaux jamais réécrits + statut mutable) à documenter dès son introduction dans <code>CLAUDE.md</code>.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Explosion de constructeurs (10+ dépendances optionnelles à terme) — un oubli de wiring dans <code>server.ts</code> devient une feature silencieusement cassée sans erreur de compilation.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Dev DB</h3><span class="code">A07</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>26 migrations déjà en place inspectées. Sur ~35 tables proposées par le document, ~15 existent déjà sous une forme proche.</dd>
+          <dt>Proposition</dt><dd>Stratégie Expand/Contract stricte pour le catalogue (colonne <code>risk_catalog_id</code> nullable, jamais de refonte destructive). Polymorphe <code>object_type</code>/<code>object_id</code> avec <code>CHECK</code> whitelist plutôt qu'une table par objet — précédent déjà accepté (<code>action_plans.source_type</code>).</dd>
+          <dt>Observation</dt><dd>Estimation : ~15 à 20 nouvelles migrations selon regroupement logique par module.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Risque de collision de numérotation quasi certain si plusieurs agents dev-db travaillent en parallèle sans plage réservée à l'avance — déjà arrivé deux fois sur ce dépôt.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>QA Engineer</h3><span class="code">A08</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd><code>SecurityBoundaries.test.ts</code> (SEC-009 à SEC-015) et le rapport QA batches 1-3 relus comme référence de risque de régression.</dd>
+          <dt>Proposition</dt><dd>Un seul test de boundary générique paramétré par type d'objet plutôt que dupliqué par module — sinon 9 modules × 3 capacités transverses = 27 surfaces de fuite tenant potentielles.</dd>
+          <dt>Observation</dt><dd>Cas limites temporels d'Incident à anticiper dès la conception : événements dans le désordre, fuseaux horaires, séquence invalide (résolu avant contenu).</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Impossible de garantir l'absence de régression sur <code>RiskEvaluationService</code> sans d'abord figer la table de correspondance ancien/nouveau modèle.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Security</h3><span class="code">A10</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>Historique SEC-001 à SEC-015 connu par cœur — cette consultation cherche les mêmes classes de faille dans le nouveau périmètre.</dd>
+          <dt>Proposition</dt><dd>Généraliser le pattern déjà en place dans <code>EvidenceService</code> (lookup tenant-scopé avant tout write) au moteur polymorphe Comments/RACI/Evidence — sinon IDOR par construction. Timestamps d'incident : distinguer champs factuels déclaratifs de champs d'attribution forcés serveur.</dd>
+          <dt>Observation</dt><dd>RACI avec auto-désignation Accountable = même classe de faille que le maker-checker déjà protégé (<code>assertIsEvaluator</code>) — garde à écrire avant tout code, pas après.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">La configuration des objets commentables doit être protégée par une permission dédiée, jamais un <code>*.update</code> générique — même piège que SEC-013/SEC-014.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Risk Manager</h3><span class="code">A13</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>Méthodologie inhérent/maîtrise/résiduel déjà codée comparée point par point aux principes du document.</dd>
+          <dt>Proposition</dt><dd>La séparation catalogue/registre/évaluation est un standard ERM reconnu (proche COSO ERM) — à valider tel quel, la méthodologie actuelle n'a pas besoin d'évoluer dans son principe.</dd>
+          <dt>Observation</dt><dd>Contradiction interne repérée (Vélocité/Persistance, voir encadré ci-dessus) — le code actuel a déjà fait le bon choix, à ne pas remettre en cause.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Les lignes de défense dynamiques (§23) sont un risque de sur-ingénierie pour la maturité actuelle de Djamo — démarrer par un rattachement département simple avec override manuel.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>UX Designer</h3><span class="code">A04</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>Historique V1→V6 de la maquette RiskEvaluation/Cartography relu — cette consultation prolonge un travail de design déjà validé par le Product Owner.</dd>
+          <dt>Proposition</dt><dd>Panneau latéral rétractable unique et générique pour Comments/RACI/Evidence (rail d'onglets avec compteur), jamais affiché à plat sous le contenu métier — répond directement à la consigne « rester intuitif ».</dd>
+          <dt>Observation</dt><dd>Catalogue/registre/évaluation doivent rester une seule fiche à onglets internes, pas 3 écrans distincts — sinon rupture du sentiment de continuité pour l'utilisateur.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Le vocabulaire du document (« Catalogue/Registre/Évaluation ») est un vocabulaire d'architecte de données, pas un vocabulaire métier spontané — à retravailler avec le Product Manager avant tout écran.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Privacy</h3><span class="code">A15</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>RACI et Commentaires identifiés comme les deux capacités les plus exposantes en données personnelles du document.</dd>
+          <dt>Proposition</dt><dd>Champ de visibilité différenciée par sensibilité d'objet plutôt qu'une visibilité uniforme héritée du simple accès — le document ne prévoit aujourd'hui aucune notion de sensibilité.</dd>
+          <dt>Observation</dt><dd>Aucune règle de classification/rétention/purge pour les évidences dans le document (§37-G le pose déjà comme question ouverte) — à trancher avant de généraliser le moteur transverse.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Tension directe entre l'append-only strict déjà en place (audit trail) et le droit à la rectification si une donnée personnelle corrigée reste visible indéfiniment.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Compliance</h3><span class="code">A14</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>Modèle <code>Control</code> actuel comparé aux exigences de l'Instruction BCEAO 017-12-2010 sur le contrôle interne des SFD.</dd>
+          <dt>Proposition</dt><dd>Ajouter <code>sample_size</code>, <code>evidence_nature</code> typée au modèle Contrôle ; référentiels configurables plutôt que texte libre.</dd>
+          <dt>Observation</dt><dd>Les lignes de défense sont conformes à l'esprit Three Lines Model mais restent déclaratives sans contrainte RBAC couplée — ségrégation cosmétique tant qu'un utilisateur peut cumuler exécution et validation.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Aucune durée de rétention explicite (≥10 ans exigée par la réglementation SFD) n'est mentionnée dans le document — gap réglementaire potentiel à une inspection.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Audit</h3><span class="code">A23</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>Distinction confirmée entre le journal d'audit technique déjà existant (<code>AuditLog</code>) et le module Audit métier du document (Findings/Recommendations), entièrement nouveau.</dd>
+          <dt>Proposition</dt><dd>Nommer explicitement en code <code>audit_findings</code>/<code>audit_missions</code>, jamais <code>audit_log*</code>, pour éviter qu'un futur agent étende le mauvais objet.</dd>
+          <dt>Observation</dt><dd>Contradiction interne repérée (Finding→ActionPlan vs Constats→Recommandations, voir encadré ci-dessus) — à trancher avant le Lot 6.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Le skill <code>audit-mission</code> déjà présent dans le dépôt couvre une partie de ce périmètre sur fichiers Office — risque de deux sources de vérité divergentes sans point d'intégration explicite.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>DevOps</h3><span class="code">A09</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>CI actuelle (typecheck + tests + build) et absence totale de scheduler confirmées par lecture directe des commentaires du code (ACT-193).</dd>
+          <dt>Proposition</dt><dd>Répliquer le pattern déjà validé (calcul à la lecture) pour vélocité/persistance — aucune dette nouvelle. <code>ModuleToggle</code> existe déjà comme base de rollout progressif par lot.</dd>
+          <dt>Observation</dt><dd>Le moteur d'évidence transversal démultiplie les objets porteurs de pièces jointes (6-7 modules contre 1 aujourd'hui) — vérifier le quota du compte Drive partagé unique.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty"><code>ModuleToggle</code> n'a aujourd'hui aucun middleware d'application — un module « désactivé » resterait accessible via l'API tant que ce prérequis n'est pas posé.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Infrastructure</h3><span class="code">A16</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>Schéma tenant_id actuel confronté à la notion d'« organisation » du document — pas d'équivalence évidente.</dd>
+          <dt>Proposition</dt><dd>Traiter « organisation » comme un niveau métier interne au tenant (pas un remplacement de l'isolation technique existante) — à faire trancher explicitement par Architecte/Dev DB avant migration.</dd>
+          <dt>Observation</dt><dd>Volume de tables trivial pour Neon, mais aucune séparation dev/prod n'existe aujourd'hui — à créer avant ce chantier.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Aucune exigence de performance chiffrée dans le document — Infra ne peut pas dimensionner objectivement sans volumétrie cible.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Release Manager</h3><span class="code">A22</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>Flux branche+PR et conflits déjà connus sur <code>permissions.ts</code> pris comme référence pour évaluer le risque à cette échelle.</dd>
+          <dt>Proposition</dt><dd>5 PR séquentielles suivant la dépendance métier réelle, pas l'ordre du document. Un seul agent centralise les ajouts à <code>permissions.ts</code> par lot plutôt que plusieurs en parallèle.</dd>
+          <dt>Observation</dt><dd>Un changement de méthodologie de scoring change les résultats affichés aux utilisateurs — mérite un changelog fonctionnel séparé, pas seulement technique.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Aucun mécanisme de rollback de migration n'est documenté par convention sur ce dépôt — en faire un critère de Definition of Done ajoute un effort réel non budgété.</dd>
+        </dl>
+      </div>
+
+      <div class="agent-card">
+        <div class="row1"><h3>Documentation</h3><span class="code">A21</span></div>
+        <dl>
+          <dt>Prise de connaissance</dt><dd>RETEX §2.1/§3 relus — la leçon déjà tirée deux fois (SEC-001, SEC-009) : une règle documentée après coup se réintroduit.</dd>
+          <dt>Proposition</dt><dd>Publier une table de correspondance terminologique avant tout code (<code>Risk</code> actuel = « Registre » du document, pas « Risque » générique) — sinon collision de vocabulaire garantie entre agents.</dd>
+          <dt>Observation</dt><dd>Un ADR-002 dédié aux arbitrages structurants (séparation catalogue/registre, moteur transverse) est justifié, à écrire avant le Lot 2 — même logique qu'ADR-001 pour l'infrastructure.</dd>
+          <dt>Difficulté potentielle</dt><dd class="difficulty">Sans mise à jour effective de <code>CLAUDE.md</code> avant le premier commit du module Incident, le 4e pattern d'écriture sera réinventé différemment par le prochain agent.</dd>
+        </dl>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>
+    Consultation réalisée le 28 septembre 2026 par les 15 agents ACF du dépôt (hors A02 orchestrateur), chacun ayant lu le document en entier et son propre périmètre de code. Journalisée dans <code>.claude/agent-context/SHARED_LOG.md</code>. Aucun fichier de code n'a été modifié par cette consultation — c'est un livrable de cadrage, la décision d'arbitrage revient au Product Owner et au client.
+  </footer>
+
+</div>
+
+</body></html>
