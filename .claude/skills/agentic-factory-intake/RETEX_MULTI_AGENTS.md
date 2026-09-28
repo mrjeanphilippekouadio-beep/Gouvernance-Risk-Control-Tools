@@ -157,6 +157,73 @@ pour reprendre le fil sans avoir à tout redemander.
     entrée) enrichissement avec la vue d'ensemble complète de la session
     pour ne rien perdre si le contexte est réinitialisé.
 
+**Phase 8 — Sécurité round 2 : correctifs SEC-009 à SEC-015, clôture de série**
+
+27. Contexte : l'agent security dispatché en round 2 (commit `710ca5e`,
+    déjà couvert par ce document) avait trouvé 6 findings (SEC-009 à
+    SEC-014) sur les 9 modules du batch 4. L'orchestrateur tente d'abord
+    de dispatcher les 6 correctifs en parallèle avec
+    `isolation: "worktree"`, comme systématisé depuis §2.2 — refusé par
+    le système : le mode worktree exige que le **répertoire de travail
+    de l'orchestrateur lui-même** soit un dépôt Git, pas seulement le
+    dépôt cible, et ce n'était pas le cas dans ce contexte précis. Repli
+    immédiat sur un dispatch séquentiel, un agent `dev-backend` par
+    finding, sans perte (voir §2.6 pour la capitalisation).
+28. Chaque dispatch suit le gabarit d'amorçage établi (§2.1) :
+    `dev-backend.md` + sections `CLAUDE.md` pertinentes + grep
+    `@dev-backend` dans `SHARED_LOG.md`/`ACTION_ITEMS.md`, skill
+    `ponytail` obligatoire pour viser le correctif le plus minimal
+    possible, `npm run typecheck && npm test` systématique avant de
+    rapporter fini, commit atomique, mise à jour de
+    `ACTION_ITEMS.md`/`SHARED_LOG.md`. Ampleur très variable d'un
+    finding à l'autre : SEC-013 est un correctif d'une ligne
+    (`ratingscale.update` → `ratingscale.delete`) ; SEC-012 est le plus
+    lourd, nécessitant de câbler `UserRepository`/`DepartmentRepository`
+    dans `ActionPlanService` puis dans `server.ts` (instances déjà
+    existantes, réutilisées). Deux ajustements de montage de test notés
+    au passage (voir §3, nouveau pattern nommé) : SEC-009 (retrait d'une
+    propriété `recordedBy` devenue "excess property" côté TypeScript
+    après le changement de signature de `record()`) et SEC-012 (ajout
+    d'un faux `UserRepository` au montage du test — sans lui, la garde
+    `if (!this.users) return;` aurait laissé le test `it()` passer sans
+    jamais exercer le nouveau code).
+29. Une fois les 6 fixes committés (`11b236a`, `f0f7fdf`, `23d09e3`,
+    `e623ec6`, `88a5ede`, `1918b82`), un agent **security indépendant**
+    (pas celui qui avait écrit les correctifs) est dispatché pour un
+    retest complet : relecture diff par diff (code et tests), vérification
+    directe dans `server.ts` que les vraies instances repository sont
+    câblées pour SEC-012 (pas des stubs), relance indépendante de
+    `typecheck`/`test` plutôt qu'une simple lecture des rapports
+    `dev-backend`. Verdict : les 6 `CONFIRMED_FIXED` — mais en creusant
+    spécifiquement SEC-014 (un point que `dev-backend` avait lui-même
+    signalé en aparté, sans l'avoir approfondi), le retest découvre un
+    **7e finding réel, SEC-015** : exiger `riskappetite.delete` pour
+    désactiver un seuil (le fix SEC-014) n'avait aucun effet pratique,
+    car `RiskAppetiteRepository.getBySubCategory` ne filtrait jamais sur
+    `active` — un seuil "désactivé" continuait d'être appliqué par
+    `RiskEvaluationService.recordResidualScoring`/`suggestAppetite`. Même
+    famille de problème que celle documentée dans le commentaire du test
+    SEC-014 lui-même, mais jamais creusée jusqu'à l'exploitation réelle
+    lors de la découverte initiale round 2 — c'est le retest indépendant
+    qui l'a révélée (voir §2.7, capitalisation).
+30. Fix SEC-015 (`dev-backend`) contraint par une décision de conception
+    posée en amont par l'orchestrateur : ne **pas** changer l'interface
+    ou le comportement de `getBySubCategory` au niveau repository, parce
+    que `RiskAppetiteService.setThreshold` en dépend aussi pour retrouver
+    un seuil désactivé et le réactiver via upsert — un filtre `active`
+    au niveau repository aurait cassé ce cas d'usage légitime. Filtre
+    appliqué uniquement au niveau service, aux deux call sites concernés
+    (`recordResidualScoring`, `suggestAppetite`). Commit `6179428`.
+31. Dernier retest security, ciblé sur SEC-015 seul : `CONFIRMED_FIXED`,
+    plus balayage de cohérence d'ensemble sur les 7 fixes de la série
+    (rien de notable trouvé). Série SEC-009 → SEC-015 déclarée `CLOSED`.
+32. L'orchestrateur crée la branche `security/fix-sec-009-015` à partir
+    des 16 commits locaux accumulés sur `main` (jamais poussés
+    directement — conforme à la règle §6 "pas de commit direct sur
+    main"), ouvre la PR #15, puis met à jour le dashboard de statut
+    (Artifact + copie locale `status-dashboard.html`) pour refléter la
+    clôture de la série et le lien vers la PR.
+
 ### 0.2 Toutes les difficultés rencontrées (au-delà de la coordination multi-agents)
 
 Les difficultés spécifiques à la coordination du pool d'agents sont
@@ -223,6 +290,13 @@ est la source vivante. Au 27 septembre 2026, dernière mise à jour :
 ~62 % du backlog ACF couvert, 17 modules livrés, 268 tests automatisés,
 22 migrations appliquées, 3 batches de modules mergés dans `main` via
 pool d'agents.
+
+**Mise à jour au 28 septembre 2026** : série sécurité round 2 (SEC-009 à
+SEC-015, 7 findings au total) intégralement corrigée et retestée par un
+agent security indépendant — `CLOSED`. 367 tests automatisés (34
+fichiers), plus aucun `it.fails` dans `SecurityBoundaries.test.ts`. PR
+#15 (`security/fix-sec-009-015`) ouverte, dashboard de statut mis à jour
+en conséquence par l'orchestrateur.
 
 ---
 
@@ -396,6 +470,66 @@ tâche a besoin n'est pas encore présente dans ton checkout, n'invente
 jamais une forme de repli silencieuse — implémente un rejet explicite et
 signale-le clairement dans ton résumé."*
 
+### 2.6 `isolation: "worktree"` a une dépendance non anticipée : le répertoire de travail de l'orchestrateur lui-même
+
+**Ce qui s'est passé** : en voulant dispatcher les 6 correctifs de
+sécurité round 2 (SEC-009 à SEC-014) en parallèle, un par agent, avec
+`isolation: "worktree"` — devenu le mode par défaut depuis §2.2 pour
+tout agent touchant potentiellement un fichier central — la demande a
+été refusée par le système, avec une erreur claire (pas un échec
+silencieux) : le mode worktree suppose que le **répertoire de travail
+de l'orchestrateur lui-même** est un dépôt Git, condition qui n'était
+pas remplie dans ce contexte précis. Jusque-là, tous les worktrees
+utilisés dans ce projet (§2.2, batches 2 et 3) l'avaient été depuis un
+orchestrateur déjà positionné à l'intérieur du dépôt cible — l'angle
+mort n'avait donc jamais été exercé.
+
+**Impact** : repli immédiat sur un dispatch séquentiel des 6 correctifs
+(un agent `dev-backend` à la fois plutôt qu'en parallèle) — aucune perte
+de travail, mais un ralentissement mécanique évitable si la contrainte
+avait été connue avant de tenter le parallélisme.
+
+**À faire différemment** : documenter cette limite comme une **précondition
+explicite** de `isolation: "worktree"`, distincte de la précondition déjà
+connue "le dépôt cible doit être un dépôt Git" : le répertoire de travail
+de l'orchestrateur doit lui-même se trouver à l'intérieur d'un dépôt Git
+(typiquement le dépôt cible) pour que le mode worktree soit disponible.
+Pour le prochain projet, vérifier cette précondition **avant** de
+planifier un dispatch parallèle en worktree, pas après un premier refus
+— particulièrement utile si l'orchestrateur est un jour lancé depuis un
+répertoire hors du dépôt cible (ex. un répertoire de skill, comme c'est
+le cas pour l'agent qui documente ce retex).
+
+### 2.7 Le retest security indépendant obligatoire (§8.2) n'est pas une formalité — preuve concrète avec SEC-015
+
+**Ce qui s'est passé** : la règle "passage security obligatoire après
+chaque batch" (§8.2, décision du 27/09) était jusqu'ici justifiée en
+théorie. La série SEC-009 à SEC-015 en fournit une preuve concrète :
+l'agent security indépendant chargé de retester les 6 fixes de
+`dev-backend` (pas l'agent qui les avait écrits) a, en creusant
+spécifiquement SEC-014 au-delà de la seule vérification "le test passe",
+découvert que le correctif n'avait **aucun effet pratique** — un point
+que `dev-backend` avait lui-même signalé en aparté sans l'approfondir.
+Ce nouveau finding (SEC-015) n'aurait jamais été détecté par une simple
+relecture du rapport `dev-backend` ou une relance des tests déjà écrits
+par l'auteur du fix.
+
+**Impact** : un correctif de sécurité livré et considéré comme fermé
+(SEC-014) restait en réalité inefficace jusqu'à ce retest — resté ouvert
+un cycle de plus, mais détecté avant merge/déploiement grâce au
+retest obligatoire, pas après.
+
+**À faire différemment (bon réflexe à préserver, pas une erreur)** :
+maintenir la règle du retest par un agent security **différent** de
+celui qui a écrit le fix, comme non négociable, et l'illustrer désormais
+dans le workbook avec ce cas réel plutôt que seulement comme une règle
+abstraite. Généraliser l'attente donnée à l'agent retesteur : ne pas se
+contenter de vérifier que le test associé passe, mais creuser
+activement tout point signalé en aparté par le dev (comme
+`getBySubCategory` ignorant `active`, mentionné mais non tranché dans le
+commit SEC-014) — c'est précisément ce type de remarque non
+approfondie qui a produit SEC-015.
+
 ---
 
 ## 3. Conventions à figer avant le premier agent, pas après
@@ -425,13 +559,34 @@ un projet plus long, ou si l'orchestration change de main.
   devrait être présent dans le workbook comme un pattern nommé, au même
   titre que les 3 patterns d'écriture (append-only / in-place /
   ticket-lifecycle).
+- **Le pattern "ajustement de montage de test sans affaiblissement
+  d'assertion"** (nommé ici pour la première fois, appliqué à répétition
+  sans jamais avoir été formalisé — visible sur SEC-009/SEC-012 de la
+  série round 2, §0.1 Phase 8, et déjà sur SEC-003 en Phase 3). Quand un
+  correctif de sécurité ou de comportement change une signature ou
+  introduit une dépendance optionnelle, le test associé (souvent un
+  `it.fails` qui documentait le trou avant correction) a parfois besoin
+  d'un ajustement de son **montage** — retirer une propriété devenue
+  invalide au niveau du type (SEC-009 : `recordedBy` en "excess
+  property" TypeScript après le changement de signature de `record()`),
+  ou ajouter un faux repository au constructeur pour que la garde
+  optionnelle soit réellement exercée plutôt que court-circuitée (SEC-012 :
+  sans un faux `UserRepository`, `if (!this.users) return;` aurait laissé
+  le test passer sans jamais exercer le nouveau code). La règle
+  impérative associée : l'**assertion réelle** du test (ce qu'il attend
+  comme résultat, `expect(...)`) ne doit jamais changer pour faire
+  passer un test au vert — seul le montage (le "comment on construit
+  l'objet testé") peut bouger. Le retest security indépendant (§2.7)
+  doit systématiquement relire le diff du test, pas seulement le diff du
+  code de production, pour vérifier cette distinction.
 
 **À faire différemment** : le workbook doit inclure une section
 "conventions transverses non négociables" (permissions terminales,
-nommage des permissions, pattern paramètre optionnel, pattern de
-dégradation explicite du §2.5) comme point de départ de tout nouveau
-projet — pas comme un chapitre qu'on écrit après coup une fois qu'on a
-souffert.
+nommage des permissions, pattern paramètre optionnel, pattern
+d'ajustement de montage de test sans affaiblissement d'assertion,
+pattern de dégradation explicite du §2.5) comme point de départ de tout
+nouveau projet — pas comme un chapitre qu'on écrit après coup une fois
+qu'on a souffert.
 
 ---
 
@@ -509,6 +664,8 @@ plutôt que de le découvrir au premier `git push` refusé.
 | 9 | Procédure de reprise après rate-limit/erreur API (reprendre, ne jamais relancer) | Doc d'orchestration |
 | 10 | Checklist d'intégration post-batch (8 étapes) | Skill |
 | 11 | Hypothèse par défaut "pas de commit direct sur main, toujours PR" dans la planification | Doc d'orchestration |
+| 12 | Documenter la précondition cachée de `isolation: "worktree"` : le répertoire de travail de l'orchestrateur doit lui-même être dans un dépôt Git, pas seulement le dépôt cible | Doc d'orchestration |
+| 13 | Pattern nommé "ajustement de montage de test sans affaiblissement d'assertion", avec règle de relecture systématique du diff de test (pas seulement du code) au retest | Workbook, section conventions transverses |
 
 ---
 
