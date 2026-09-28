@@ -1580,3 +1580,185 @@ push) : voir historique git. **En attente de retest indépendant
 `@security`** avant de rouvrir le câblage RiskService/ControlService/
 ActionPlanService + écran frontend annoncé comme bloqué par Security
 ci-dessus. Voir `ACTION_ITEMS.md` pour le suivi.
+
+---
+
+**2026-09-28 — @security** — Retest indépendant de SEC-016 (correctif
+`@dev-backend`, commit `3db536`), sur `RaciAssignmentService.ts` +
+`SecurityBoundaries.test.ts` uniquement — pas une relecture du rapport
+dev-backend, code retracé ligne par ligne par Security.
+
+**Trace du code (`assertNoSelfRaConflict`).**
+`if (targetUserId !== actingUserId) return;` (hors self-désignation,
+sortie immédiate — cas tiers non concerné par cette règle) →
+`otherRole = role === "A" ? "R" : role === "R" ? "A" : null` →
+`if (!otherRole) return;` (rôles `C`/`I` hors scope, sortie immédiate)
+→ recherche dans `listForEntity` d'une assignation existante
+`actingUserId` + `otherRole` → `ForbiddenError` si trouvée.
+
+* **Sens A puis R** : 1er appel `assign(self, ..., "A")` →
+  `otherRole="R"`, aucune assignation existante → autorisé, crée `A`.
+  2e appel `assign(self, ..., "R")` → `otherRole="A"`, l'assignation
+  `A` créée au tour précédent est trouvée pour `actingUserId` →
+  `ForbiddenError`. **Bloqué.**
+* **Sens R puis A** (sens déjà couvert avant ce correctif) : même
+  raisonnement symétrique par construction du ternaire — 1er `R`
+  autorisé, 2e `A` trouve le `R` existant → `ForbiddenError`.
+  **Toujours bloqué**, confirmé par re-lecture, pas de régression
+  introduite par le renommage/la fusion des deux branches.
+* **Les deux sens passent par le même chemin de code** (un seul
+  `otherRole` calculé, pas deux branches `if role === ...`
+  dupliquées) — pas de risque de divergence future entre les deux
+  sens à corriger séparément.
+
+**Cas légitimes non bloqués à tort (vérifiés par trace, pas seulement
+par les tests existants).**
+* Tiers désigne une autre personne R et une autre personne A (deux
+  personnes différentes) : `targetUserId !== actingUserId` pour les
+  deux appels → sortie immédiate à chaque fois, jamais de check —
+  confirmé aussi par le test existant `RaciAssignmentService.test.ts`
+  (« still allows a different actor to designate that same user as
+  Accountable », L173-182) : un tiers peut même assigner `A` à un
+  utilisateur qui détient déjà `R` — cas légitime volontairement non
+  couvert par cette règle (seule l'auto-désignation est visée).
+* Rôles `C`/`I` : `otherRole` vaut `null` dès que le rôle entrant est
+  `C` ou `I` quel que soit l'historique de l'acteur sur l'entité —
+  jamais bloqués par cette garde, conforme au périmètre annoncé.
+* Un acteur qui détient déjà `C` ou `I` sur l'entité peut toujours
+  s'auto-désigner ensuite `R` ou `A` sans être bloqué à tort — la
+  recherche `existing.some(...role === otherRole)` ne matche que
+  `otherRole` (`R` ou `A`), jamais `C`/`I`.
+
+**Test `SEC-016` (`SecurityBoundaries.test.ts`, L1245-1271) : non
+affaibli.** Diff confirmé strictement limité à `it.fails(` →
+`it(` (retrait du seul marqueur de skip) — corps du test, assertion
+`.rejects.toThrow(ForbiddenError)`, ordre des deux appels (`A` puis
+`R`), acteur, entité et repositories in-memory tous inchangés
+caractère pour caractère. Aucun affaiblissement, aucun relâchement de
+l'assertion.
+
+**`npm run typecheck && npm test` relancés indépendamment dans
+`backend/`** (pas repris du rapport dev-backend) : typecheck propre,
+**35 fichiers / 376 tests verts**, y compris `SecurityBoundaries.test.ts`
+(25 tests) et `RaciAssignmentService.test.ts` (8 tests, dont les deux
+tests de garde R+A pré-existants toujours verts sans modification).
+
+**Verdict SEC-016 : CONFIRMED_FIXED.** Les deux sens (`A` puis `R`
+et `R` puis `A`) sont désormais bloqués par un chemin de code unique ;
+aucun des cas légitimes (tiers désignant deux personnes différentes,
+rôles `C`/`I`) n'est bloqué à tort ; le test de régression n'a pas été
+affaibli ; suite complète verte en retest indépendant.
+
+**Verdict global Lot 1 (les 6 points de la revue du 2026-09-28 +
+SEC-016)** : **6 points sur 6 désormais CONFIRMED_SAFE / CONFIRMED_FIXED.**
+Point de vigilance non-bloquant rappelé une nouvelle fois pour le
+câblage à venir (point 1 de la revue précédente, déjà noté SEC-012) :
+`assertEntityExists` ignore silencieusement la validation d'existence
+si un repository optionnel (`risks`/`controls`/`actionPlans`) n'est
+pas injecté au constructeur — non exploitable aujourd'hui (`server.ts`
+injecte bien les 3), mais à re-vérifier explicitement au moment du
+câblage `RiskService`/`ControlService`/`ActionPlanService` (tout futur
+point de construction du service, y compris en test, doit continuer
+à fournir les 3 repositories). Rappel également du risque métier plus
+large déjà signalé en consultation CDC (« RACI avec auto-désignation
+Accountable = même classe de faille » qu'`assertIsEvaluator`) et non
+traité par ce lot : RACI n'est câblé dans aucun flux d'approbation
+métier aujourd'hui, donc `assertNoSelfRaConflict` — même désormais
+correct dans les deux sens — reste la seule protection ; son
+insuffisance deviendra un vrai risque métier exploitable seulement une
+fois RACI consommé par RiskService/ControlService/ActionPlanService, à
+retester à ce moment-là et non supposé acquis du seul fait de ce
+correctif.
+
+**Feu vert Security pour la suite** : le module RACI minimal du Lot 1
+(entité, repository, service, routes, migration, garde SEC-016) est
+prêt pour le câblage dans `RiskService`/`ControlService`/
+`ActionPlanService` et l'écran frontend, sous réserve du point de
+vigilance ci-dessus (repositories optionnels toujours injectés) et
+d'un nouveau retest Security une fois RACI effectivement consommé par
+une action métier (approbation/validation), puisque c'est à ce
+moment-là que l'insuffisance plus large du modèle (Accountable seul,
+sans `R`, jamais gaté) devient exploitable en pratique. Aucun code de
+production modifié par `@security` (hors scope du rôle). Commit
+`3db536` non repoussé (déjà local). Voir `ACTION_ITEMS.md` pour la
+clôture de SEC-016.
+
+**2026-09-28 — @qa-engineer** — **Revue QA indépendante du Lot 1 RACI**
+(post-SEC-016, avant câblage `RiskService`/`ControlService`/
+`ActionPlanService` + écran frontend), 7 points cas limites
+inter-modules demandés par le Product Owner. Lecture complète de
+`RaciAssignmentService.ts`, `RaciAssignment.ts`,
+`RaciAssignmentService.test.ts`, `PostgresRaciAssignmentRepository.ts`,
+`PostgresRiskRepository.ts`/`PostgresControlRepository.ts`/
+`PostgresActionPlanRepository.ts` (pour vérifier `getById` côté
+production, pas seulement les doubles in-memory), `server.ts` (wiring),
+`backend/QA_REVIEW_BATCHES_1_3.md` (pattern QA-02/QA-07 de fuite
+inter-tenant sur d'autres modules, pour vérifier la non-répétition).
+
+**Verdict des 7 points — aucun bug réel trouvé, uniquement des trous de
+couverture, tous comblés en `it()` (pas d'`it.fails()` cette fois) :**
+
+1. **Entité inexistante** — OK, déjà correct et testé (`assign()` avec
+   `entityId` absent → `ValidationError` via `assertEntityExists`).
+2. **Entité soft-deleted** — OK, correct mais non testé explicitement.
+   `PostgresRiskRepository.getById`/`PostgresControlRepository.getById`
+   filtrent `deleted_at IS NULL` : un Risk/Control soft-deleted est
+   invisible à `assertEntityExists`, donc traité comme inexistant
+   (`ValidationError`), exactement le comportement souhaité. Note :
+   `PostgresActionPlanRepository.getById` ne filtre **aucun**
+   `deleted_at` — mais vérifié qu'`ActionPlan` n'a **aucune notion de
+   soft-delete** dans ce dépôt (aucun champ `deletedAt`, aucune méthode
+   `softDelete` sur l'entité ni le repository) : pas un trou, la
+   question ne se pose simplement pas pour ce type d'entité aujourd'hui.
+3. **Double `revoke()`** — OK, correct mais non testé. `getById` côté
+   Postgres filtre déjà `deleted_at IS NULL` → 2e `revoke()` échoue dès
+   `if (!before) throw new NotFoundError` ; côté double in-memory,
+   `getById` ne filtre pas `deletedAt` (léger écart avec la prod) mais
+   `remove()` rattrape via son propre check `existing.deletedAt` → même
+   `NotFoundError` au final. Résultat identique en pratique, mais écart
+   de fidélité du double in-memory noté pour vigilance future (pas un
+   bug exploitable aujourd'hui, un seul point d'appel à `getById`).
+4. **Cumul C+I / R+C par la même personne** — OK, confirmé non bloqué
+   par erreur. `assertNoSelfRaConflict` calcule
+   `otherRole = role === "A" ? "R" : role === "R" ? "A" : null` et sort
+   immédiatement si `otherRole` est `null` — seul R+A est concerné,
+   comme prévu et documenté dans le code.
+5. **`list()` sur entité sans affectation** — OK, retourne `[]`
+   proprement (`listForEntity` filtré tenant/type/id, jamais d'erreur).
+6. **Fuite inter-tenant sur `revoke()`** — OK, pas de trou. `revoke()`
+   appelle `this.raci.getById(actor.tenantId, assignmentId)` **avant**
+   `remove()`, les deux scopés par `actor.tenantId` (confirmé aussi côté
+   Postgres : `WHERE tenant_id = $1 AND id = $2`) — un acteur du tenant
+   B qui devine un `assignmentId` du tenant A obtient `NotFoundError`,
+   jamais l'affectation d'autrui, et ne peut pas la révoquer à sa place.
+7. **Cohérence avec `QA_REVIEW_BATCHES_1_3.md`** — le même trou
+   (« test tenant-scopé sur un seul tenant, jamais un vrai test à deux
+   tenants sur un repository partagé », pattern QA-02/QA-07) **existait
+   bien** sur le module RACI : aucun test à deux tenants n'existait
+   avant cette revue. Comblé par un nouveau test avec un seul
+   `RaciAssignmentRepository` in-memory partagé entre tenant-1 et
+   tenant-2 (pas deux instances séparées) — la forme forte déjà
+   recommandée dans le rapport batches 1-3.
+
+**6 nouveaux tests ajoutés** dans `backend/test/RaciAssignmentService.test.ts`
+(préfixés `QA-RACI:` dans leur titre, tous `it()` — comportement déjà
+correct, seule la couverture manquait) : revoke() sur assignmentId
+inexistant ; assign() sur Risk soft-deleted ; double revoke() ; cumul
+C+I et R+C par la même personne ; `list()` sur entité jamais assignée ;
+fuite inter-tenant (`list()` + `revoke()`) sur repository partagé.
+Suite passée de 8 à **14 tests**, tous verts.
+
+`npm run typecheck && npm test` relancés dans `backend/` : typecheck
+propre, **35 fichiers / 382 tests verts** (376 existants + 6 nouveaux),
+aucune régression.
+
+**Feu vert QA pour la suite** : les 7 points inter-modules demandés
+sont couverts, aucun défaut réel trouvé sur ce périmètre. `PASS` QA
+uniquement — ne vaut pas approbation Security/Compliance/Privacy/Risk
+(déjà données séparément pour ce lot, voir entrées `@security`
+ci-dessus). Aucun code de production modifié par `@qa-engineer` (hors
+scope du rôle) : le point 2 (fidélité du double in-memory sur
+`getById`/`deletedAt`) et le point de vigilance déjà noté par
+`@security` (repositories optionnels toujours injectés) restent des
+points d'attention non bloquants, pas des findings. Commit local (pas
+de push) : voir historique git.
