@@ -1196,3 +1196,83 @@ tranchée négativement pour ce lot) — ainsi qu'à la mise à jour du
 Migration Plan qui en découle (séquencement Expand/Contract détaillé,
 notamment pour la consolidation `Indicator`, la plus structurante des 4
 décisions).
+
+---
+
+## 2026-09-28 — @dev-db — Gap Analysis et Migration Plan alignés sur les 4 décisions du Product Owner
+
+`docs/architecture/GRC_Database_Gap_Analysis.md` et
+`docs/architecture/GRC_Migration_Plan.md` révisés pour intégrer les 4
+décisions du Product Owner (entrée « Arbitrage des 4 points ouverts de
+la Gap Analysis » ci-dessus), répercutées côté Domain Model par
+l'Architecte (`GRC_Target_Domain_Model.md`, commit `89c2be0`).
+
+**Gap Analysis** :
+1. **§1/§1.2** — `RiskAssessment` vs `RiskEvaluation` : ambiguïté
+   résiduelle retirée, décision confirmée sans réserve (a), suppression
+   physique de `risk_assessments` toujours soumise à sign-off ultérieur
+   distinct.
+2. **§2.3** — `RiskCategory` : passe de `RÉUTILISER` (usage en FK
+   compris) à confirmé canonique + **`CRÉER`** pour l'usage en FK
+   tranché (3 FK nullables depuis `RiskCatalog`, `RiskAppetite`,
+   `RiskEvaluation`).
+3. **§2.3** — `risk_processes` : passe d'`ARBITRER` à une entrée
+   explicite « non créée pour ce lot, décision documentée et
+   réversible » — trace conservée, pas de suppression du sujet.
+4. **§2.4/§2.4bis (nouvelle section)** — `Kpi`/`Kri`/`KpiMeasure`/
+   `KriMeasure`/`kri_risks` : reclassés de `RÉUTILISER` vers une
+   nouvelle catégorie **`CONSOLIDER`**, créée spécifiquement pour ce
+   changement car ni `RÉUTILISER` ni `CRÉER` ne rendaient compte
+   honnêtement d'une fusion non destructive de deux tables déjà en
+   production. Détaille `indicators`/`indicator_measures`/
+   `indicator_risks`, le backfill applicatif requis, la période de
+   coexistence (double-écriture ou vue de compatibilité) et la
+   confirmation qu'aucun `DROP` n'intervient dans ce lot.
+5. **§2.5** — les 4 lignes `ARBITRER` deviennent une section « Points
+   tranchés » historique (0 point encore ouvert), conservée pour la
+   traçabilité plutôt que supprimée.
+6. **§3** — synthèse quantitative recalculée : RÉUTILISER 22→15,
+   ÉTENDRE 4→6 (`RiskEvaluation`, `RiskAppetite` gagnent la FK
+   `RiskCategory`), nouvelle catégorie CONSOLIDER = 1 regroupement,
+   ARBITRER 4→0.
+
+**Migration Plan** :
+1. **Lot E** — migrations `038`/`039` ajoutées (`risk_appetites.risk_category_id`,
+   `risk_evaluations.risk_category_id`, nullables), plus les étapes non
+   numérotées backfill applicatif / contrôle / dépréciation
+   documentaire du texte libre — Expand/Contract complet, aucune
+   `NOT NULL` posée dans ce lot.
+2. **`risk_processes`** : aucune migration n'a jamais été proposée pour
+   cette table dans ce plan (cohérent avec la Gap Analysis initiale) —
+   confirmé explicitement différé, rien à retirer.
+3. **Nouveau Lot H** — remplace l'absence de migration Kpi/Kri du plan
+   initial (la Gap Analysis v1 classait `Kpi`/`Kri` `RÉUTILISER`, donc
+   aucune migration n'était prévue) par une séquence en 4 étapes :
+   (a) `046`-`048` `CREATE TABLE indicators`/`indicator_measures`/
+   `indicator_risks` (Expand) ; (b) backfill applicatif non numéroté,
+   explicitement pas du SQL brut en masse, même pattern que le backfill
+   `risk_catalog_id` (`037`) ; (c) période de coexistence
+   (double-écriture ou lecture croisée), non numérotée, requise avant
+   toute dépréciation ; (d) `049` dépréciation documentaire optionnelle
+   (`COMMENT ON TABLE`) de `kpis`/`kris`/`kpi_measures`/`kri_measures`,
+   conditionnée à un sign-off explicite — **aucun `DROP` dans ce lot**,
+   suppression physique hors périmètre.
+4. **Renumérotation** : `038`→`049` reconfirmés après relecture réelle
+   de `database/postgresql/migrations/` (dernier numéro appliqué
+   toujours `026` au moment de cette révision — aucune migration n'a été
+   appliquée entre-temps, donc la base indicative `027` reste valide).
+   Tous les numéros restent **indicatifs**, à reconfirmer au moment réel
+   de l'écriture (protocole §1.2, inchangé).
+
+**Aucun fichier de code de production touché, aucune migration SQL
+réelle écrite** — documents de planification uniquement, conforme au
+périmètre `.claude/agents/dev-db.md`.
+
+**État du chantier** : les 3 documents de référence du gate
+(`GRC_Target_Domain_Model.md` commit `89c2be0`,
+`GRC_Database_Gap_Analysis.md` et `GRC_Migration_Plan.md`, ce commit)
+sont désormais **alignés sur les 4 décisions du Product Owner du
+2026-09-28**. Aucun point ouvert ne subsiste dans ces 3 documents. Le
+chantier est **prêt pour le démarrage du Lot 1 (RACI minimal)** — voir
+`GRC_Migration_Plan.md` §2 Lot A (`027_raci_assignments.sql`, numéro à
+reconfirmer au moment réel de l'écriture, protocole §1.2).
