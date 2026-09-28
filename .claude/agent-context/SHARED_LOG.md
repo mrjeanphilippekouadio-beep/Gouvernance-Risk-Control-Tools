@@ -1316,3 +1316,44 @@ existants n'ont été modifiés.
 **Sert d'intrant à** : le Lot 1 (RACI minimal) en cours et tous les lots
 suivants du Migration Plan (B à H), qui peuvent désormais s'y référer
 pour le « pourquoi » des 5 arbitrages plutôt que rouvrir le débat.
+
+**2026-09-28 — @dev-backend @security** — Lot 1 (RACI minimal, RaciAssignment
+sur Risk/Control/ActionPlan) livré. Tranche verticale complète :
+`domain/entities/RaciAssignment.ts` (entityType union TS stricte
+`"Risk"|"Control"|"ActionPlan"`, createdBy forcé serveur, soft-delete
+`deletedAt`), `RaciAssignmentRepository` + `PostgresRaciAssignmentRepository`,
+`RaciAssignmentService` (permissions dédiées `raci.assign`/`raci.revoke`/
+`raci.read`, jamais génériques), `api/v1/raci.routes.ts` monté sous
+`/api/v1/raci`, migration `027_raci_assignments.sql` (numéro confirmé par
+relecture réelle du dossier — dernière migration réelle 026_governance.sql,
+pas celui indicatif du Migration Plan qui listait aussi 027 mais avec des
+noms de colonnes différents, voir note ci-dessous). Résolution de l'entité
+cible AVANT tout write via `risks?`/`controls?`/`actionPlans?` injectés en
+paramètre optionnel de constructeur (pattern ActionPlanService), jamais de
+confiance aveugle sur `entityId`. Garde-fou Security appliqué et documenté
+explicitement dans le code : `assertNoSelfAccountableConflict` bloque
+l'auto-désignation comme "A" (Accountable) quand l'acteur détient déjà "R"
+(Responsible) sur la même entité — analogue RACI de `assertIsEvaluator`
+(RiskEvaluationService). Testé (`RaciAssignmentService.test.ts`, 8 tests,
+happy path + le garde-fou explicitement + qu'un tiers reste libre
+d'assigner "A" à quelqu'un d'autre). `npm run typecheck && npm test` :
+375/375 verts (367 existants + 8 nouveaux).
+
+Écart assumé vs `GRC_Migration_Plan.md` §Lot A : ce document nommait les
+colonnes `object_type`/`object_id`/`assigned_by`/`assigned_at`/`revoked_at`
+(append-only, jamais réactivable) ; le brief de dispatch de cette tâche
+demandait explicitement `entity_type`/`entity_id`/`created_by`/`created_at`/
+`deleted_at` (soft-delete), aligné sur la convention globale "soft-delete
+only" de CLAUDE.md plutôt que sur le append-only strict décrit dans le
+Migration Plan pour ce cas précis. Choix tranché en faveur du brief de
+dispatch (plus récent, direct) — à signaler si le Migration Plan doit être
+corrigé en conséquence pour rester source de vérité.
+
+**Non fait dans ce commit, ouvert pour la suite du Lot 1** : RACI n'est PAS
+encore câblé en lecture/écriture dans `RiskService`/`ControlService`/
+`ActionPlanService` eux-mêmes (ex. pas de champ "accountable" affiché sur
+une fiche Risk, pas de blocage d'action métier basé sur RACI) — ce commit
+livre uniquement le module RACI autonome (CRUD + garde-fou), consultable
+via `GET /api/v1/raci?entityType=...&entityId=...`. Câblage UI/consommation
+croisée = itération suivante, hors périmètre annoncé pour cette tâche.
+Aucune revue Security/QA indépendante n'a encore eu lieu sur ce lot.

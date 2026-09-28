@@ -105,7 +105,11 @@ export type Permission =
   | "governance.create"
   | "governance.validate"
   /** ACT-253: distinct from riskevaluation.validate — higher-stakes Comité des Risques / Direction gate. */
-  | "riskevaluation.validate.committee";
+  | "riskevaluation.validate.committee"
+  /** Lot 1 RACI minimal (GRC_Migration_Plan.md Lot A) — dedicated permissions, never folded into risk/control/actionplan.update. */
+  | "raci.assign"
+  | "raci.revoke"
+  | "raci.read";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -192,6 +196,9 @@ export const ALL_PERMISSIONS: Permission[] = [
   "governance.create",
   "governance.validate",
   "riskevaluation.validate.committee",
+  "raci.assign",
+  "raci.revoke",
+  "raci.read",
 ];
 
 /**

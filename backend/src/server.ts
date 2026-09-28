@@ -26,6 +26,7 @@ import { PostgresKriMeasureRepository } from "./infrastructure/database/postgres
 import { PostgresUserRepository } from "./infrastructure/database/postgres/PostgresUserRepository.js";
 import { PostgresRiskEscalationRepository } from "./infrastructure/database/postgres/PostgresRiskEscalationRepository.js";
 import { PostgresActionPlanRepository } from "./infrastructure/database/postgres/PostgresActionPlanRepository.js";
+import { PostgresRaciAssignmentRepository } from "./infrastructure/database/postgres/PostgresRaciAssignmentRepository.js";
 import { PostgresBrandingRepository } from "./infrastructure/database/postgres/PostgresBrandingRepository.js";
 import { PostgresConfigRepository } from "./infrastructure/database/postgres/PostgresConfigRepository.js";
 import { PostgresModuleToggleRepository } from "./infrastructure/database/postgres/PostgresModuleToggleRepository.js";
@@ -59,6 +60,7 @@ import { KriMeasureService } from "./services/KriMeasureService.js";
 import { UserService } from "./services/UserService.js";
 import { RiskOwnershipService } from "./services/RiskOwnershipService.js";
 import { ActionPlanService } from "./services/ActionPlanService.js";
+import { RaciAssignmentService } from "./services/RaciAssignmentService.js";
 import { CartographyService } from "./services/CartographyService.js";
 import { DashboardService } from "./services/DashboardService.js";
 import { BrandingService } from "./services/BrandingService.js";
@@ -91,6 +93,7 @@ import { kriMeasuresRouter } from "./api/v1/kriMeasures.routes.js";
 import { usersRouter } from "./api/v1/users.routes.js";
 import { riskOwnersRouter } from "./api/v1/riskOwners.routes.js";
 import { actionPlansRouter } from "./api/v1/actionPlans.routes.js";
+import { raciRouter } from "./api/v1/raci.routes.js";
 import { actionPlanDashboardRouter } from "./api/v1/actionPlanDashboard.routes.js";
 import { cartographyRouter } from "./api/v1/cartography.routes.js";
 import { dashboardRouter } from "./api/v1/dashboard.routes.js";
@@ -143,6 +146,7 @@ const kriMeasureRepository = new PostgresKriMeasureRepository(pool);
 const userRepository = new PostgresUserRepository(pool);
 const riskEscalationRepository = new PostgresRiskEscalationRepository(pool);
 const actionPlanRepository = new PostgresActionPlanRepository(pool);
+const raciAssignmentRepository = new PostgresRaciAssignmentRepository(pool);
 const brandingRepository = new PostgresBrandingRepository(pool);
 const configRepository = new PostgresConfigRepository(pool);
 const moduleToggleRepository = new PostgresModuleToggleRepository(pool);
@@ -211,6 +215,7 @@ const actionPlanService = new ActionPlanService(
   departmentRepository,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository);
+const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
@@ -321,6 +326,7 @@ app.use("/api/v1/kri-measures", authMiddleware(identityProvider), kriMeasuresRou
 app.use("/api/v1/users", authMiddleware(identityProvider), usersRouter(userService));
 app.use("/api/v1/risk-owners", authMiddleware(identityProvider), riskOwnersRouter(riskOwnershipService));
 app.use("/api/v1/actions", authMiddleware(identityProvider), actionPlansRouter(actionPlanService));
+app.use("/api/v1/raci", authMiddleware(identityProvider), raciRouter(raciAssignmentService));
 app.use("/api/v1/dashboard", authMiddleware(identityProvider), actionPlanDashboardRouter(actionPlanService));
 app.use("/api/v1/cartography", authMiddleware(identityProvider), cartographyRouter(cartographyService));
 app.use("/api/v1/dashboard", authMiddleware(identityProvider), dashboardRouter(dashboardService));
