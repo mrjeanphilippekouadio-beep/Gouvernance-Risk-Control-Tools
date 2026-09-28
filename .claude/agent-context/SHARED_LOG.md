@@ -246,3 +246,40 @@ typecheck` + `npm test` verts (366 tests, 34 fichiers, dont les 23 de
 `SecurityBoundaries.test.ts`). Commit `88a5ede`.
 **Prêt pour retest @security** — même branche `main`, pas de PR
 séparée. SEC-014 reste hors scope, non touché.
+
+**2026-09-28 — @dev-backend @security** — SEC-014 (Low, **dernier des 6
+findings du round 2**) corrigé. `RiskAppetiteService.setThreshold`
+acceptait `active` directement depuis le body (`active:
+z.boolean().optional()` côté route) et l'upsertait tel quel, si bien
+qu'un acteur avec seulement `riskappetite.update` pouvait poser
+`active: false` et retirer un seuil de gouvernance — une transition
+terminale exactement au sens de la règle CLAUDE.md ("A
+terminal/archived-state transition needs its own dedicated permission"),
+au même titre que `archive()` juste en dessous dans le même fichier, qui
+exige lui `riskappetite.delete` + une raison obligatoire, mais sans
+raison et audité comme un simple `UPDATE`. Correctif (skill `ponytail`,
+garde d'une ligne) : `if (input.active === false)
+requirePermission(actor, "riskappetite.delete")`, ajoutée juste après
+la vérification existante `requirePermission(actor,
+"riskappetite.update")` qui reste inchangée et toujours nécessaire pour
+créer/modifier un seuil actif — garde additionnelle, pas un
+remplacement. Aucune nouvelle permission créée (les deux existaient déjà
+dans `domain/permissions.ts`), aucune exigence de "reason" ajoutée (le
+test ne teste que le gate de permission). Le test `it.fails` SEC-014 de
+`SecurityBoundaries.test.ts` (describe "SEC-014 risk appetite retired
+via the update permission") est passé à `it` sans modification du
+corps — **plus aucun `it.fails` dans tout le fichier**, les 6 findings
+SEC-009 à SEC-014 sont maintenant chacun un regression lock actif. Grep
+de `setThreshold` dans `RiskAppetiteService.test.ts` : l'acteur de test
+(`actor`, utilisé notamment par le test "lists active thresholds..."
+qui pose déjà `active: false`) possède déjà `riskappetite.delete` dans
+ses rôles — aucun ajustement nécessaire, aucune régression. `npm run
+typecheck` + `npm test` verts (366 tests, 34 fichiers). Commit
+`1918b82`. **Prêt pour retest @security — sur l'ensemble de la série
+SEC-009 à SEC-014, plus aucun correctif individuel restant côté dev.**
+Point signalé à part, hors scope de ce fix : `list()` filtre `active =
+true` (le seuil désactivé disparaît de la table de supervision
+ACT-168) alors que `getBySubCategory()` ignore `active` et continuerait
+de l'appliquer si une comparaison de risque résiduel l'utilisait un
+jour — incohérence réelle mais non testée par SEC-014, à trancher par
+`@security`/`@architect`, voir `ACTION_ITEMS.md`.
