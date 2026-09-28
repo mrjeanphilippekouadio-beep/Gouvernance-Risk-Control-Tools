@@ -110,3 +110,31 @@ lock). `npm run typecheck` + `npm test` verts (34 fichiers, 366 tests).
 Commit `11b236a`. **Prêt pour retest @security** — même branche
 `main`, pas de PR séparée ouverte pour ce correctif ponctuel. SEC-010 à
 SEC-014 restent hors scope, non touchés.
+
+**2026-09-28 — @dev-backend @security** — SEC-010 (High) corrigé.
+`UserService.create()` insérait la ligne `users` **avant** que
+`RoleService.assignToUser` ne vérifie `role.assign` en aval : un acteur
+avec `user.create` mais sans `role.assign` recevait bien un 403
+(`ForbiddenError`), mais la ligne `users` avait déjà été écrite — compte
+capable de se connecter (`server.ts` résout l'identité par email, sans
+vérifier de rôle), jamais autorisé, sans aucun rôle attaché. Aucune
+transaction cross-repository disponible dans ce repo (même limite déjà
+documentée pour `DepartmentService.create`), donc pas de rollback
+possible — la solution retenue (revue via skill `ponytail`, la plus
+simple qui ferme le trou) est de vérifier `role.assign` explicitement en
+tout début de `create()`, avant l'insert, en plus de la vérification
+existante dans `RoleService.assignToUser` qui reste inchangée et seule
+source de vérité sur cette permission en aval. Le test `it.fails`
+SEC-010 de `SecurityBoundaries.test.ts` (describe "SEC-010 user
+provisioning bypasses the role.assign gate") est passé en `it()` actif
+sans modifier son corps — son assertion (ForbiddenError levé, aucun
+insert dans `users`) correspondait déjà exactement au comportement
+sécurisé obtenu. Grep de `UserService`/`admin` dans
+`UserService.test.ts` : l'acteur `admin` de test possède déjà
+`role.assign` dans son tableau `roles`, donc aucune régression sur les
+tests existants (même piège que celui documenté pour SEC-003 sur
+`DepartmentService.test.ts`, vérifié absent ici). `npm run typecheck` +
+`npm test` verts (34 fichiers, 366 tests, dont les 23 de
+`SecurityBoundaries.test.ts`). Commit `f0f7fdf`. **Prêt pour retest
+@security** — même branche `main`, pas de PR séparée. SEC-011 à SEC-014
+restent hors scope, non touchés.
