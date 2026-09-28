@@ -965,7 +965,7 @@ describe("SEC-011 RiskEvaluation scoring is not bound to the evaluator", () => {
 // pattern; this module skipped it.
 
 describe("SEC-012 ActionPlan cross-entity reference validation", () => {
-  it.fails("SEC-012: responsibleUserId must resolve to an active user in the actor's tenant", async () => {
+  it("SEC-012: responsibleUserId must resolve to an active user in the actor's tenant", async () => {
     const actions = {
       async create(input: CreateActionPlanInput) {
         return {
@@ -984,7 +984,25 @@ describe("SEC-012 ActionPlan cross-entity reference validation", () => {
       },
     } as unknown as ActionPlanRepository;
 
-    const service = new ActionPlanService(actions, inMemoryAuditRepository());
+    // Simulates the responsible user not existing in the actor's tenant
+    // (e.g. belongs to another tenant) — getById returns null.
+    const users = {
+      async getById() {
+        return null;
+      },
+    } as unknown as UserRepository;
+
+    const service = new ActionPlanService(
+      actions,
+      inMemoryAuditRepository(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      users,
+    );
     const actor: AuthenticatedUser = { ...attacker, roles: ["actionplan.create"] };
 
     await expect(

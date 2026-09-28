@@ -207,6 +207,8 @@ const actionPlanService = new ActionPlanService(
   anomalyRepository,
   evidenceRepository,
   notifier,
+  userRepository,
+  departmentRepository,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository);
 

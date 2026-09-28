@@ -5,6 +5,8 @@ import type { ControlRepository } from "../domain/repositories/ControlRepository
 import type { KriRepository } from "../domain/repositories/KriRepository.js";
 import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
 import type { EvidenceRepository } from "../domain/repositories/EvidenceRepository.js";
+import type { UserRepository } from "../domain/repositories/UserRepository.js";
+import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import {
   computeActionPlanPriority,
   computeActionPlanStatus,
@@ -81,6 +83,15 @@ export class ActionPlanService {
     private readonly evidences?: EvidenceRepository,
     /** Best-effort only — see ACT-193 notes on start()/escalateIfOverdue() below. */
     private readonly notifier?: Notifier,
+    /**
+     * SEC-012: optional so existing callers/tests keep compiling — but
+     * server.ts MUST wire the real repositories, otherwise
+     * responsibleUserId/departmentId stay unvalidated (same shape as
+     * RiskService's users/departments — see assertActiveUser/
+     * assertDepartmentExists there).
+     */
+    private readonly users?: UserRepository,
+    private readonly departments?: DepartmentRepository,
   ) {}
 
   async create(actor: AuthenticatedUser, input: CreateActionPlanRequest, requestId: string): Promise<ActionPlanView> {
@@ -105,6 +116,8 @@ export class ActionPlanService {
     if (isEntityBacked && input.sourceId) {
       await this.assertSourceExists(actor.tenantId, input.sourceType, input.sourceId);
     }
+    await this.assertActiveUser(actor.tenantId, input.responsibleUserId);
+    await this.assertDepartmentExists(actor.tenantId, input.departmentId);
 
     const createInput: CreateActionPlanInput = {
       tenantId: actor.tenantId,
@@ -396,6 +409,21 @@ export class ActionPlanService {
       const kri = await this.kris.getById(tenantId, sourceId);
       if (!kri) throw new ValidationError(`Kri ${sourceId} does not exist in this tenant`);
     }
+  }
+
+  /** SEC-012: the responsible user, if validation is wired, must be an active user in the actor's tenant. */
+  private async assertActiveUser(tenantId: string, userId: string): Promise<void> {
+    if (!this.users) return;
+    const user = await this.users.getById(tenantId, userId);
+    if (!user) throw new ValidationError(`User ${userId} does not exist in this tenant`);
+    if (user.deletedAt) throw new ValidationError(`User ${userId} is suspended and cannot be a responsible user`);
+  }
+
+  /** SEC-012: a departmentId, if given, must belong to the actor's tenant. */
+  private async assertDepartmentExists(tenantId: string, departmentId: string | null | undefined): Promise<void> {
+    if (!departmentId || !this.departments) return;
+    const department = await this.departments.getById(tenantId, departmentId);
+    if (!department) throw new ValidationError(`Department ${departmentId} does not exist in this tenant`);
   }
 
   private async assertLinkTargetExists(tenantId: string, resourceType: ActionLinkResourceType, resourceId: string): Promise<void> {
