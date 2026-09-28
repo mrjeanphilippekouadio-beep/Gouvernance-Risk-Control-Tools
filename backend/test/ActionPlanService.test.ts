@@ -10,6 +10,8 @@ import type { AnomalyRepository } from "../src/domain/repositories/AnomalyReposi
 import type { EvidenceRepository } from "../src/domain/repositories/EvidenceRepository.js";
 import type { ActionLink, ActionPlan } from "../src/domain/entities/ActionPlan.js";
 import type { Risk } from "../src/domain/entities/Risk.js";
+import type { Control } from "../src/domain/entities/Control.js";
+import type { Kri } from "../src/domain/entities/Kri.js";
 import type { Evidence } from "../src/domain/entities/Evidence.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import type { Notifier } from "../src/infrastructure/notifications/Notifier.js";
@@ -134,10 +136,15 @@ function fakeRiskRepository(risks: Risk[]): RiskRepository {
   };
 }
 
-function fakeControlRepository(): ControlRepository {
+// QA-BATCH-1-3: previously always returned null regardless of args, so
+// ActionPlanService's CONTROL/KRI branches of assertSourceExists /
+// assertLinkTargetExists were never exercised by any test in this file
+// (only sourceType: "RISK" was) — parameterized the same way as
+// fakeRiskRepository so those branches can actually be reached.
+function fakeControlRepository(controls: Control[] = []): ControlRepository {
   return {
-    async getById() {
-      return null;
+    async getById(tenantId, id) {
+      return controls.find((c) => c.id === id && c.tenantId === tenantId) ?? null;
     },
     async list() {
       return [];
@@ -157,10 +164,10 @@ function fakeControlRepository(): ControlRepository {
   };
 }
 
-function fakeKriRepository(): KriRepository {
+function fakeKriRepository(kris: Kri[] = []): KriRepository {
   return {
-    async getById() {
-      return null;
+    async getById(tenantId, id) {
+      return kris.find((k) => k.id === id && k.tenantId === tenantId) ?? null;
     },
     async list() {
       return [];
@@ -244,6 +251,58 @@ function risk(overrides: Partial<Risk> = {}): Risk {
   };
 }
 
+function control(overrides: Partial<Control> = {}): Control {
+  return {
+    id: "control-1",
+    tenantId: "tenant-1",
+    label: "Contrôle 4 yeux",
+    objective: null,
+    coveredRiskIds: [],
+    process: null,
+    departmentId: null,
+    procedureDescription: null,
+    controlType: "PREVENTIVE",
+    nature: null,
+    defenseLine: null,
+    frequency: "Mensuel",
+    executor: "IT",
+    validator: null,
+    expectedEvidence: null,
+    complianceCriteria: "criteria",
+    status: "ACTIVE",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    deletedBy: null,
+    deletionReason: null,
+    ...overrides,
+  };
+}
+
+function kri(overrides: Partial<Kri> = {}): Kri {
+  return {
+    id: "kri-1",
+    tenantId: "tenant-1",
+    label: "Taux de fraude",
+    formula: "fraudes / transactions",
+    thresholdGreen: 1,
+    thresholdOrange: 5,
+    thresholdRed: 10,
+    frequency: "MONTHLY",
+    riskId: "risk-1",
+    entity: null,
+    methodologyVersion: null,
+    description: null,
+    active: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    deletedBy: null,
+    deletionReason: null,
+    ...overrides,
+  };
+}
+
 function evidence(overrides: Partial<Evidence> = {}): Evidence {
   return {
     id: "evidence-1",
@@ -275,6 +334,8 @@ const readOnlyActor: AuthenticatedUser = { ...creator, userId: "user-3", roles: 
 function buildService(overrides: {
   actions?: ActionPlanRepository;
   risks?: RiskRepository;
+  controls?: ControlRepository;
+  kris?: KriRepository;
   evidences?: EvidenceRepository;
   notifier?: Notifier;
 } = {}) {
@@ -282,8 +343,8 @@ function buildService(overrides: {
     overrides.actions ?? inMemoryActionPlanRepository(),
     inMemoryAuditRepository(),
     overrides.risks ?? fakeRiskRepository([risk()]),
-    fakeControlRepository(),
-    fakeKriRepository(),
+    overrides.controls ?? fakeControlRepository([control()]),
+    overrides.kris ?? fakeKriRepository([kri()]),
     fakeAnomalyRepository(),
     overrides.evidences ?? fakeEvidenceRepository([evidence()]),
     overrides.notifier,
@@ -366,6 +427,53 @@ describe("ActionPlanService.create (ACT-190) — polymorphic source validation",
     await expect(
       service.create(readOnlyActor, { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() }, "REQ-7"),
     ).rejects.toThrow(ForbiddenError);
+  });
+
+  // QA-BATCH-1-3: only sourceType "RISK" was ever exercised above (both the
+  // happy path and the "does not exist" rejection) — CONTROL and KRI share
+  // the exact same assertSourceExists branch shape but were never called at
+  // all, so a wiring bug (e.g. swapping the controls/kris constructor
+  // arguments in server.ts) would have gone undetected.
+  it("accepts an existing CONTROL sourceId", async () => {
+    const service = buildService();
+    const action = await service.create(
+      creator,
+      { title: "T", sourceType: "CONTROL", sourceId: "control-1", responsibleUserId: "user-2", dueDate: futureDate() },
+      "REQ-53",
+    );
+    expect(action.sourceId).toBe("control-1");
+  });
+
+  it("rejects a CONTROL sourceId that does not exist in this tenant", async () => {
+    const service = buildService({ controls: fakeControlRepository([]) });
+    await expect(
+      service.create(
+        creator,
+        { title: "T", sourceType: "CONTROL", sourceId: "missing-control", responsibleUserId: "user-2", dueDate: futureDate() },
+        "REQ-54",
+      ),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it("accepts an existing KRI sourceId", async () => {
+    const service = buildService();
+    const action = await service.create(
+      creator,
+      { title: "T", sourceType: "KRI", sourceId: "kri-1", responsibleUserId: "user-2", dueDate: futureDate() },
+      "REQ-55",
+    );
+    expect(action.sourceId).toBe("kri-1");
+  });
+
+  it("rejects a KRI sourceId that does not exist in this tenant", async () => {
+    const service = buildService({ kris: fakeKriRepository([]) });
+    await expect(
+      service.create(
+        creator,
+        { title: "T", sourceType: "KRI", sourceId: "missing-kri", responsibleUserId: "user-2", dueDate: futureDate() },
+        "REQ-56",
+      ),
+    ).rejects.toThrow(ValidationError);
   });
 });
 
@@ -660,5 +768,28 @@ describe("ActionPlanService.dashboard (ACT-196)", () => {
     const service = buildService();
     const noPerms = { ...creator, roles: [] };
     await expect(service.dashboard(noPerms, {})).rejects.toThrow(ForbiddenError);
+  });
+
+  // QA-BATCH-1-3: every other test in this file uses a single tenant —
+  // this is the only one that actually seeds two tenants' action plans
+  // into the same shared repository instance and asserts the leak-free
+  // read, rather than relying on two disjoint in-memory stores.
+  it("never leaks another tenant's action plans into the dashboard", async () => {
+    const repo = inMemoryActionPlanRepository();
+    const service = buildService({ actions: repo });
+    await service.create(
+      creator,
+      { title: "Tenant 1 action", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      "REQ-57",
+    );
+    const otherTenantCreator: AuthenticatedUser = { ...creator, tenantId: "tenant-2" };
+    await service.create(
+      otherTenantCreator,
+      { title: "Tenant 2 action", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      "REQ-58",
+    );
+
+    const tenant1Rows = await service.dashboard(creator, {});
+    expect(tenant1Rows.map((r) => r.title)).toEqual(["Tenant 1 action"]);
   });
 });
