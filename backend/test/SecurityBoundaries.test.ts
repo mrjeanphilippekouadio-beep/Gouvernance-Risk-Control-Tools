@@ -1078,3 +1078,97 @@ describe("SEC-014 risk appetite retired via the update permission", () => {
     ).rejects.toThrow(ForbiddenError);
   });
 });
+
+// --- SEC-015: retired appetite threshold still enforced (new, round-2 retest) --
+// Flagged by @dev-backend in the SEC-014 commit as "out of scope of that fix,
+// to be decided by @security/@architect" — confirmed here as a real gap.
+// SEC-014 correctly gates *deactivating* a threshold (`active: false`) behind
+// `riskappetite.delete`, on the theory that retiring a governance ceiling is a
+// terminal action. But retiring it has no actual effect anywhere except
+// RiskAppetiteService.list() (which filters `active = true`, hiding the row
+// from the ACT-168 oversight table). RiskEvaluationService.recordResidualScoring
+// and suggestAppetite/compareToAppetite all read through
+// RiskAppetiteRepository.getBySubCategory(), which — both in the interface
+// contract and in PostgresRiskAppetiteRepository's SQL — filters only
+// `deleted_at IS NULL`, never `active`. So a threshold an admin paid the
+// elevated `riskappetite.delete` permission to retire keeps being applied to
+// compute `appetiteExceeded` on every residual scoring going forward, silently
+// overriding the governance decision the permission gate was just added to
+// protect. Either getBySubCategory must filter `active = true` (matching
+// list()), or recordResidualScoring/suggestAppetite must treat an inactive
+// threshold as "no threshold available" (`suggested: null`) the same way an
+// absent `riskAppetites` repository already degrades today.
+
+describe("SEC-015 retired risk appetite threshold is still applied to residual scoring", () => {
+  it.fails(
+    "SEC-015: a threshold deactivated via riskappetite.delete must not be used to compute appetiteExceeded",
+    async () => {
+      const draft = {
+        id: "ev-1",
+        tenantId: TENANT,
+        evaluatorId: "user-evaluator",
+        status: "BROUILLON",
+        ratingScaleId: "rs-1",
+        masteryGlobal: 2,
+        subCategory: "Fraude",
+        entity: null,
+        residualScore: null,
+      } as unknown as RiskEvaluation;
+
+      const evaluations = {
+        async getById() {
+          return draft;
+        },
+        async recordResidualScoring(_tenantId: string, _id: string, patch: Record<string, unknown>) {
+          return { ...draft, ...patch } as unknown as RiskEvaluation;
+        },
+      } as unknown as RiskEvaluationRepository;
+      const ratingScales = {
+        async getById() {
+          return {
+            id: "rs-1",
+            probabilityLevels: 5,
+            impactLevels: 5,
+            impactAxes: { axes: [{ code: "FIN", label: "Financier", order: 1 }], retainedImpactRule: "MAX" },
+          } as unknown as RatingScale;
+        },
+      } as unknown as RatingScaleRepository;
+      // Simulates a threshold an admin retired with riskappetite.delete: the
+      // row still exists (soft-deleted rows are excluded, this one isn't),
+      // `active` is false, and getBySubCategory returns it anyway — exactly
+      // what PostgresRiskAppetiteRepository.getBySubCategory does today.
+      const riskAppetites = {
+        async getBySubCategory() {
+          return { id: "ra-1", threshold: 5, active: false, methodologyVersion: "v1" } as unknown as RiskAppetite;
+        },
+      } as unknown as RiskAppetiteRepository;
+
+      const service = new RiskEvaluationService(
+        evaluations,
+        inMemoryAuditRepository(),
+        undefined,
+        ratingScales,
+        riskAppetites,
+      );
+      const evaluator: AuthenticatedUser = {
+        ...attacker,
+        userId: "user-evaluator",
+        roles: ["riskevaluation.read", "riskevaluation.update"],
+      };
+
+      const after = await service.recordResidualScoring(
+        evaluator,
+        "ev-1",
+        { probability: 3, impacts: [{ code: "FIN", value: 3 }], justification: "residual scoring" },
+        "REQ-SEC-015a",
+      );
+
+      // Score is 3 * 3 = 9, which exceeds the retired threshold of 5 — a
+      // secure implementation must treat the inactive threshold as absent
+      // (appetiteThresholdApplied: null, appetiteExceeded: null), not silently
+      // keep enforcing a ceiling that was deliberately retired.
+      expect((after as unknown as { appetiteThresholdApplied: number | null }).appetiteThresholdApplied).toBeNull();
+      expect((after as unknown as { appetiteExceeded: boolean | null }).appetiteExceeded).toBeNull();
+    },
+  );
+});

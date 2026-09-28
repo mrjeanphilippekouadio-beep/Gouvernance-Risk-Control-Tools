@@ -283,3 +283,63 @@ ACT-168) alors que `getBySubCategory()` ignore `active` et continuerait
 de l'appliquer si une comparaison de risque résiduel l'utilisait un
 jour — incohérence réelle mais non testée par SEC-014, à trancher par
 `@security`/`@architect`, voir `ACTION_ITEMS.md`.
+
+**2026-09-28 — @security** — Retest complet de la série SEC-009 à
+SEC-014 effectué en tant que reviewer indépendant (pas l'agent qui a
+écrit les fixes). Verdict pour chacun : **CONFIRMED_FIXED**, aucun
+contournement trouvé.
+
+- SEC-009 : fermé au niveau du type (`recordedBy` retiré de
+  `Omit<CreateXMeasureInput, ...>` accepté par `record()`), pas
+  seulement d'un test — le compilateur empêche désormais toute
+  réintroduction accidentelle. Aucun autre point d'entrée n'écrit une
+  mesure KPI/KRI.
+- SEC-010 : `role.assign` vérifié avant l'insert `users`, en plus de la
+  vérification déjà existante dans `RoleService.assignToUser` (gardée
+  comme seule source de vérité). Aucun autre chemin de création
+  d'utilisateur trouvé dans le repo.
+- SEC-011 : `assertIsEvaluator` appelé dans les 3 setters de scoring.
+  Vérifié que `create()` fixe déjà `evaluatorId: actor.userId` sans
+  possibilité pour le client de désigner un autre évaluateur — pas de
+  détournement possible via une réassignation.
+- SEC-012 (le plus complexe) : lecture directe de `server.ts` — les
+  vraies instances `PostgresUserRepository`/`PostgresDepartmentRepository`
+  sont câblées (réutilisées, pas des stubs). Seul `ActionPlanService.create()`
+  écrit `responsibleUserId`/`departmentId` ; aucune méthode de mise à
+  jour ne les touche hors validation. Point de vigilance structurel
+  documenté (pas un trou actif aujourd'hui) : le pattern
+  `if (!this.users) return;` réintroduirait silencieusement SEC-012 si
+  un futur point d'instanciation du service omettait ces dépendances —
+  à surveiller à chaque nouveau call site.
+- SEC-013/SEC-014 : permissions `.delete` correctement exigées avant
+  la transition terminale ; un seul call site pour chaque méthode
+  (`ratingScales.routes.ts`/`riskAppetite.routes.ts`), pas de route
+  alternative qui contourne la garde.
+
+Relecture des diffs de test (pas seulement du code) pour SEC-009 et
+SEC-012 : aucun affaiblissement d'assertion — SEC-009 retire juste
+`recordedBy` du literal d'input (le type ne l'accepte plus, l'assertion
+`expect(recordedBy).toBe(actor.userId)` est inchangée) ; SEC-012 ajoute
+un vrai faux `UserRepository` nécessaire pour exercer la garde
+optionnelle, sans toucher à l'assertion `rejects.toThrow`.
+
+Retest indépendant de la suite : `npm run typecheck && npm test`
+relancés moi-même dans `backend/` (pas seulement les rapports
+`@dev-backend`) — 34 fichiers, 367 tests verts.
+
+**1 nouveau finding réel découvert** pendant la passe de recherche
+ciblée sur les zones touchées (pas une revue complète du repo) : le
+point signalé par `@dev-backend` dans le commit SEC-014
+(`getBySubCategory()` ignore `active`) est confirmé exploitable — un
+seuil d'appétence désactivé via `riskappetite.delete` (SEC-014)
+continue d'être appliqué par `RiskEvaluationService.recordResidualScoring`/
+`suggestAppetite`/`compareToAppetite`, qui lisent tous
+`getBySubCategory()`. Vérifié aussi côté SQL
+(`PostgresRiskAppetiteRepository.getBySubCategory` ne filtre que
+`deleted_at IS NULL`). Tracké comme **SEC-015** (Medium — la
+désactivation, qui nécessite désormais une permission élevée depuis
+SEC-014, n'a aucun effet pratique). Test `it.fails` ajouté dans
+`backend/test/SecurityBoundaries.test.ts` (describe "SEC-015 retired
+risk appetite threshold is still applied to residual scoring"),
+production code non touché — voir `ACTION_ITEMS.md` pour la tâche
+`@dev-backend`. Commit local (pas de push) : voir historique git.
