@@ -1,0 +1,825 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Composant RACI</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  /*
+    Composant RACI — dérivé du principe posé en consultation multi-agents
+    (proposition UX Designer A04 : chips/avatars empilés par rôle, +N au
+    delà du débordement, tooltip au survol, Accountable visuellement
+    distinct — cf. SHARED_LOG.md et l'artefact de consultation
+    7kg7EefZbaqyiW7RzCje1V) et du panneau latéral rétractable générique
+    Comments/RACI/Evidence proposé au même moment. Tokens, polices,
+    élévation et langage de composants repris à l'identique de la
+    maquette V6 (artefact JBwqMEpRi8FSQqb6dmZy57) pour rester dans la
+    continuité visuelle déjà validée par le Product Owner — fichier
+    séparé car le composant est indépendant de cette maquette, pas un
+    ajout dedans.
+  */
+  :root{
+    --ink:#1b1a2c; --ink-soft:#54536d;
+    --paper:#f8f7fc; --surface:#f2effb; --surface-sunk:#eae5f7;
+    --line:#e0dbf1; --line-soft:#eae5f7;
+    --muted:#716f8a; --muted-2:#9995ae;
+
+    --accent:#2a3fff; --accent-hover:#1f2fd6; --accent-soft:#e3e5ff;
+    --danger:#b3261e;  --danger-soft:#fbeae9;
+    --warning:#8a5a00; --warning-soft:#fcf1d9;
+    --success:#1e7a46; --success-soft:#e7f5ec;
+    --neutral:#5a6472; --neutral-soft:#eef0f2;
+
+    /* Palette d'avatars — distincte des couleurs sémantiques
+       (danger/warning/success/accent déjà réservées ailleurs), 6 teintes
+       assourdies dans la même famille froide/violette que --accent,
+       jamais un arc-en-ciel non choisi. Utilisée pour tout rôle sauf
+       Accountable, qui a son propre traitement (voir .raci-avatar.is-a). */
+    --av-1:#5b6bd6; --av-1-soft:#e4e6fb;
+    --av-2:#7a5bc7; --av-2-soft:#eae2f9;
+    --av-3:#3f8f8a; --av-3-soft:#dcf0ee;
+    --av-4:#a3693f; --av-4-soft:#f4e6da;
+    --av-5:#4a7a3f; --av-5-soft:#e3edde;
+    --av-6:#8a5a7e; --av-6-soft:#f2e2ef;
+
+    --sp-1:4px; --sp-2:8px; --sp-3:16px; --sp-4:24px; --sp-5:32px; --sp-6:48px;
+    --radius:8px; --radius-card:14px; --radius-pill:999px; --radius-btn:10px;
+
+    --font-display:"Plus Jakarta Sans","IBM Plex Sans",system-ui,sans-serif;
+    --font-ui:"IBM Plex Sans",system-ui,"Segoe UI",Roboto,sans-serif;
+    --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+
+    --elev-1: 0 1px 2px rgba(27,26,44,.09), 0 1px 1px rgba(27,26,44,.05);
+    --elev-2: 0 2px 4px rgba(27,26,44,.10), 0 6px 14px -6px rgba(27,26,44,.20);
+    --elev-3: 0 3px 6px rgba(27,26,44,.12), 0 12px 22px -8px rgba(27,26,44,.26);
+    --shadow-card: 0 1px 2px rgba(27,26,44,.05), 0 10px 28px -18px rgba(27,26,44,.22);
+  }
+
+  *{box-sizing:border-box;}
+  body{background:var(--paper); color:var(--ink); font-family:var(--font-ui); margin:0; padding:0 18px;}
+  .wrap{max-width:1120px; margin:0 auto; padding-block:36px 80px;}
+
+  .intro{margin-bottom:30px;}
+  .eyebrow{font-family:var(--font-ui); font-weight:700; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--accent);}
+  .intro h1{font-family:var(--font-display); font-weight:800; font-size:clamp(1.6rem,3.2vw,2.05rem); margin:8px 0 10px; text-wrap:balance; letter-spacing:-.01em;}
+  .intro p{color:var(--ink-soft); font-size:.94rem; line-height:1.65; max-width:78ch; margin:0 0 10px;}
+  .intro .meta{display:flex; gap:14px; flex-wrap:wrap; margin-top:14px; font-family:var(--font-ui); font-size:.76rem; color:var(--muted);}
+  .intro .meta span b{color:var(--ink);}
+
+  .legend-strip{border:1px solid var(--line); background:var(--surface); border-radius:var(--radius-card); padding:14px 16px; margin:16px 0 4px; font-size:.85rem; color:var(--ink-soft); line-height:1.6;}
+  .legend-strip b{color:var(--ink); font-weight:700;}
+
+  /* ---- faux window frame, identique au patron V6 ---- */
+  .frame{border:1px solid var(--line); border-radius:16px; background:var(--surface); box-shadow:0 8px 28px -18px rgba(27,26,44,.28); overflow:hidden; margin-top:26px; position:relative;}
+  .frame-bar{display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--surface-sunk);}
+  .frame-bar .dot{width:8px; height:8px; border-radius:50%; background:var(--line);}
+  .frame-bar .path{margin-left:8px; font-family:var(--font-mono); font-size:.72rem; color:var(--muted);}
+  .frame-body{display:grid; grid-template-columns:188px 1fr; position:relative; min-height:640px;}
+  @media (max-width:760px){ .frame-body{grid-template-columns:1fr;} }
+
+  .side{background:var(--surface-sunk); border-right:1px solid var(--line); padding:16px 0;}
+  @media (max-width:760px){ .side{border-right:none; border-bottom:1px solid var(--line);} }
+  .side .brand{font-family:var(--font-display); font-weight:800; font-size:.96rem; padding:0 14px 14px; border-bottom:1px solid var(--line); margin-bottom:8px; letter-spacing:-.01em;}
+  .side .grp{padding:10px 14px 4px; font-family:var(--font-ui); font-size:.64rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted-2); font-weight:700;}
+  .side nav a{display:flex; align-items:center; gap:9px; padding:7px 14px; font-size:.83rem; font-weight:700; color:var(--ink); text-decoration:none; border-left:2px solid transparent;}
+  .side nav a svg{width:15px; height:15px; flex-shrink:0; stroke:var(--ink); stroke-width:1.8; fill:none; stroke-linecap:round; stroke-linejoin:round;}
+  .side nav a[aria-current="page"]{color:var(--accent); background:var(--accent-soft); border-left-color:var(--accent);}
+  .side nav a[aria-current="page"] svg{stroke:var(--accent);}
+
+  .main{padding:20px 24px 26px; min-width:0; transition:padding-right .32s cubic-bezier(.22,1,.36,1);}
+  .main.panel-open{padding-right:calc(min(360px,86vw) + 60px);}
+  @media (max-width:760px){ .main.panel-open{padding-right:24px;} }
+
+  .pagehead{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:16px; flex-wrap:wrap;}
+  .pagehead .titles h2{font-family:var(--font-display); font-weight:700; font-size:1.24rem; margin:0 0 4px; letter-spacing:-.005em;}
+  .crumb{font-size:.78rem; color:var(--muted); font-family:var(--font-ui); font-weight:500;}
+  .crumb .id{font-family:var(--font-mono); color:var(--ink-soft); font-weight:600;}
+
+  .badge{display:inline-flex; align-items:center; gap:5px; font-size:.72rem; font-weight:600; padding:3px 9px; border-radius:var(--radius-pill); letter-spacing:.01em; line-height:1.4;}
+  .badge::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0;}
+  .badge.danger{background:var(--danger-soft); color:var(--danger);}
+  .badge.warning{background:var(--warning-soft); color:var(--warning);}
+  .badge.success{background:var(--success-soft); color:var(--success);}
+  .badge.neutral{background:var(--neutral-soft); color:var(--neutral);}
+  .badge.info{background:var(--accent-soft); color:var(--accent-hover);}
+
+  .card{background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-card); padding:18px 20px; box-shadow:var(--shadow-card);}
+  .card + .card{margin-top:16px;}
+  .card h3{font-family:var(--font-display); font-size:.9rem; font-weight:700; margin:0 0 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .card h3 .n{font-family:var(--font-ui); font-size:.72rem; color:var(--muted); font-weight:500;}
+
+  .identity{display:flex; gap:18px; flex-wrap:wrap; align-items:baseline;}
+  .identity dl{display:grid; grid-template-columns:auto 1fr; gap:6px 10px; font-size:.84rem;}
+  .identity dt{color:var(--muted); font-size:.76rem; font-family:var(--font-ui); font-weight:600; align-self:center;}
+  .identity dd{margin:0; color:var(--ink); font-weight:500;}
+
+  .score-row{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;}
+  @media (max-width:640px){ .score-row{grid-template-columns:1fr;} }
+  .score-cell{border:1px solid var(--line-soft); border-radius:var(--radius); padding:14px; background:var(--surface);}
+  .score-cell .lbl{font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; font-family:var(--font-ui); font-weight:700; margin-bottom:8px;}
+  .score-cell .pi{font-size:.82rem; color:var(--ink-soft); margin-bottom:10px;}
+  .score-cell .pi b{color:var(--ink); font-weight:600;}
+  .score-cell .result{display:flex; align-items:center; gap:8px;}
+  .score-cell .val{font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:1.4rem; font-weight:600; letter-spacing:-.01em; line-height:1;}
+  .score-cell.inherent .val{color:var(--danger);}
+  .score-cell.control .val{color:var(--warning);}
+  .score-cell.residual .val{color:var(--success);}
+
+  .btn{font-family:var(--font-ui); font-size:.83rem; font-weight:500; padding:11px 22px; border-radius:var(--radius-btn); border:1px solid transparent; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:var(--elev-1); transition:box-shadow .15s ease, transform .1s ease, background-color .15s ease, opacity .15s ease;}
+  .btn:hover{box-shadow:var(--elev-2);}
+  .btn:active{box-shadow:var(--elev-1); transform:translateY(1px);}
+  .btn-primary{background:var(--accent); color:#fff; border-radius:var(--radius-pill); box-shadow:var(--elev-2);}
+  .btn-primary:hover{background:var(--accent-hover); box-shadow:var(--elev-3);}
+  .btn-primary[disabled]{background:var(--muted-2); box-shadow:none; cursor:not-allowed; opacity:.7;}
+  .btn-primary[disabled]:hover{background:var(--muted-2); box-shadow:none;}
+  .btn-secondary{background:var(--surface); color:var(--ink); border-color:var(--line);}
+  .btn-secondary:hover{background:#fff; border-color:var(--muted-2);}
+  .actions{display:flex; gap:8px; flex-wrap:wrap;}
+
+  .guard-note{margin-top:10px; display:flex; gap:9px; align-items:flex-start; padding:10px 12px; border:1px solid var(--warning); background:var(--warning-soft); border-radius:var(--radius); font-size:.78rem; color:var(--ink-soft); line-height:1.5;}
+  .guard-note svg{flex-shrink:0; width:15px; height:15px; stroke:var(--warning); stroke-width:2; fill:none; margin-top:1px;}
+  .guard-note b{color:var(--ink);}
+
+  /* ==================================================================
+     RAIL — bande d'onglets Comments / RACI / Evidence, toujours visible
+     à droite du cadre, principe posé en consultation (panneau latéral
+     rétractable générique, jamais 3 blocs empilés à plat).
+     ================================================================== */
+  .rail{position:absolute; top:0; right:0; bottom:0; width:52px; border-left:1px solid var(--line); background:var(--surface-sunk); display:flex; flex-direction:column; align-items:center; padding-top:14px; gap:6px; z-index:5;}
+  @media (max-width:760px){ .rail{width:44px;} }
+  .rail-tab{position:relative; width:38px; height:38px; border-radius:var(--radius-btn); border:1px solid transparent; background:transparent; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--muted); transition:background .15s,color .15s,border-color .15s;}
+  .rail-tab svg{width:18px; height:18px; stroke:currentColor; stroke-width:1.8; fill:none; stroke-linecap:round; stroke-linejoin:round;}
+  .rail-tab:hover{background:var(--surface); color:var(--ink);}
+  .rail-tab[aria-selected="true"]{background:var(--paper); color:var(--accent); border-color:var(--line); box-shadow:var(--elev-1);}
+  .rail-tab .count{position:absolute; top:-4px; right:-4px; min-width:16px; height:16px; padding:0 3px; border-radius:var(--radius-pill); background:var(--accent); color:#fff; font-family:var(--font-mono); font-size:.6rem; font-weight:600; display:flex; align-items:center; justify-content:center; line-height:1; box-shadow:0 0 0 2px var(--surface-sunk);}
+  .rail-tab .count.zero{background:var(--muted-2);}
+  .rail-tab .tlabel{position:absolute; right:calc(100% + 8px); top:50%; transform:translateY(-50%); background:var(--ink); color:var(--paper); font-size:.7rem; font-weight:600; padding:4px 8px; border-radius:6px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .12s;}
+  .rail-tab:hover .tlabel{opacity:1;}
+
+  /* ---- PANEL ---- */
+  .panel{position:absolute; top:0; bottom:0; right:52px; width:min(360px,86vw); background:var(--paper); border-left:1px solid var(--line); box-shadow:-8px 0 24px -16px rgba(27,26,44,.3); display:flex; flex-direction:column; transform:translateX(100%); opacity:0; pointer-events:none;}
+  .panel.is-open{pointer-events:auto;}
+  .panel-head{padding:16px 18px 12px; border-bottom:1px solid var(--line); flex-shrink:0;}
+  .panel-head .ph-top{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .panel-head h4{font-family:var(--font-display); font-size:.98rem; font-weight:700; margin:0;}
+  .panel-close{width:26px; height:26px; border-radius:7px; border:none; background:transparent; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center;}
+  .panel-close:hover{background:var(--surface); color:var(--ink);}
+  .panel-close svg{width:15px; height:15px; stroke:currentColor; stroke-width:2;}
+  .panel-body{padding:14px 18px 20px; overflow-y:auto; flex:1;}
+
+  /* permission toggle (démo) */
+  .perm-toggle{display:flex; border:1px solid var(--line); border-radius:var(--radius-btn); overflow:hidden; margin-bottom:4px;}
+  .perm-toggle button{flex:1; border:none; background:var(--surface); font-family:var(--font-ui); font-size:.72rem; font-weight:600; padding:7px 6px; color:var(--muted); cursor:pointer; transition:background .12s,color .12s;}
+  .perm-toggle button[aria-pressed="true"]{background:var(--accent); color:#fff;}
+  .perm-hint{font-size:.71rem; color:var(--muted); margin:6px 0 16px; line-height:1.5;}
+  .perm-hint code{font-family:var(--font-mono); background:var(--surface); padding:1px 4px; border-radius:4px;}
+
+  .readonly-note{display:flex; align-items:center; gap:7px; font-size:.72rem; color:var(--muted); background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:7px 10px; margin-bottom:16px;}
+  .readonly-note svg{width:13px; height:13px; stroke:currentColor; stroke-width:2; flex-shrink:0;}
+
+  /* ---- groupes de rôles RACI ---- */
+  .raci-group{margin-bottom:20px;}
+  .raci-group:last-child{margin-bottom:4px;}
+  .raci-ghead{display:flex; align-items:center; gap:8px; margin-bottom:9px;}
+  .raci-letter{width:22px; height:22px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:.72rem; font-weight:700; flex-shrink:0;}
+  .raci-letter.r{background:var(--neutral-soft); color:var(--neutral);}
+  .raci-letter.a{background:var(--accent); color:#fff;}
+  .raci-letter.c{background:var(--av-3-soft); color:var(--av-3);}
+  .raci-letter.i{background:var(--surface-sunk); color:var(--muted);}
+  .raci-gname{font-size:.82rem; font-weight:700; color:var(--ink);}
+  .raci-gdesc{font-size:.68rem; color:var(--muted); font-weight:500;}
+
+  .avatar-stack{display:flex; align-items:center; flex-wrap:wrap; gap-row:8px;}
+  .raci-avatar{position:relative; width:32px; height:32px; border-radius:50%; margin-right:-9px; display:flex; align-items:center; justify-content:center; font-family:var(--font-ui); font-size:.68rem; font-weight:700; color:#fff; border:2.5px solid var(--paper); flex-shrink:0; cursor:default; transition:transform .12s ease, z-index 0s;}
+  .raci-avatar:hover, .raci-avatar:focus-visible{transform:translateY(-3px); z-index:20; outline:none;}
+  .raci-avatar.is-a{width:36px; height:36px; margin-right:-10px; border:2.5px solid var(--accent); box-shadow:0 0 0 2px var(--paper);}
+  .raci-avatar .crown{position:absolute; bottom:-3px; right:-3px; width:14px; height:14px; border-radius:50%; background:var(--accent); border:2px solid var(--paper); display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:.52rem; font-weight:700; color:#fff;}
+  .raci-avatar.is-me{box-shadow:0 0 0 2px var(--paper), 0 0 0 3.5px var(--warning);}
+  .raci-avatar .warn-dot{position:absolute; top:-3px; right:-3px; width:12px; height:12px; border-radius:50%; background:var(--warning); border:2px solid var(--paper); display:flex; align-items:center; justify-content:center; color:#fff;}
+  .raci-avatar .warn-dot svg{width:6px; height:6px; stroke:#fff; stroke-width:3;}
+  .raci-more{width:32px; height:32px; border-radius:50%; margin-right:-9px; display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:.66rem; font-weight:700; color:var(--ink-soft); background:var(--surface-sunk); border:2.5px solid var(--paper); flex-shrink:0; cursor:pointer; transition:transform .12s ease;}
+  .raci-more:hover{transform:translateY(-3px); background:var(--line-soft);}
+  .raci-add{width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:1.5px dashed var(--muted-2); background:transparent; color:var(--muted); cursor:pointer; flex-shrink:0; margin-left:6px; transition:border-color .12s,color .12s,background .12s;}
+  .raci-add:hover{border-color:var(--accent); color:var(--accent); background:var(--accent-soft);}
+  .raci-add svg{width:14px; height:14px; stroke:currentColor; stroke-width:2.2;}
+
+  .raci-avatar .rm{position:absolute; top:-4px; right:-4px; width:15px; height:15px; border-radius:50%; background:var(--danger); border:2px solid var(--paper); display:none; align-items:center; justify-content:center; cursor:pointer; z-index:30;}
+  .raci-avatar .rm svg{width:7px; height:7px; stroke:#fff; stroke-width:3;}
+  .can-edit .raci-avatar:hover .rm{display:flex;}
+
+  .raci-self-note{margin-top:10px; display:flex; gap:8px; align-items:flex-start; padding:9px 11px; background:var(--warning-soft); border:1px solid var(--warning); border-radius:var(--radius); font-size:.74rem; color:var(--ink-soft); line-height:1.5;}
+  .raci-self-note svg{flex-shrink:0; width:14px; height:14px; stroke:var(--warning); stroke-width:2; margin-top:1px;}
+
+  /* tooltip custom (survol/focus avatar), même patron que V6 .hm-tooltip */
+  .raci-tooltip{position:fixed; z-index:200; max-width:230px; background:var(--ink); color:var(--paper); border-radius:8px; box-shadow:var(--elev-3); padding:9px 11px; font-size:.75rem; line-height:1.45; pointer-events:none; opacity:0; transform:translateY(4px); transition:opacity .12s ease, transform .12s ease;}
+  .raci-tooltip.show{opacity:1; transform:translateY(0);}
+  .raci-tooltip b{display:block; font-size:.78rem; margin-bottom:1px;}
+  .raci-tooltip .role-line{color:var(--muted-2); font-size:.7rem;}
+  .raci-tooltip .warn-line{margin-top:5px; padding-top:5px; border-top:1px solid rgba(255,255,255,.18); color:#f5c667; font-size:.7rem; font-weight:600;}
+
+  /* popover d'ajout */
+  .add-pop{position:absolute; z-index:100; width:236px; background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-card); box-shadow:var(--elev-3); padding:10px; opacity:0; transform:translateY(-6px) scale(.98); pointer-events:none;}
+  .add-pop.show{pointer-events:auto;}
+  .add-pop .ap-title{font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding:2px 4px 8px;}
+  .add-pop ul{list-style:none; margin:0; padding:0; max-height:220px; overflow-y:auto;}
+  .add-pop li button{width:100%; display:flex; align-items:center; gap:8px; padding:7px 6px; border:none; background:transparent; border-radius:7px; cursor:pointer; text-align:left; font-family:var(--font-ui);}
+  .add-pop li button:hover{background:var(--surface);}
+  .add-pop .ap-av{width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:.6rem; font-weight:700; flex-shrink:0;}
+  .add-pop .ap-name{font-size:.79rem; font-weight:600; color:var(--ink); display:block; line-height:1.3;}
+  .add-pop .ap-title{font-size:.68rem; color:var(--muted); font-weight:500;}
+  .add-pop .ap-empty{padding:10px 6px; font-size:.76rem; color:var(--muted); line-height:1.5;}
+
+  /* placeholders Comments / Evidence — même patron de panneau, contenu minimal */
+  .stub-item{display:flex; gap:10px; padding:11px 0; border-bottom:1px solid var(--line-soft);}
+  .stub-item:last-child{border-bottom:none;}
+  .stub-av{width:28px; height:28px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:.64rem; font-weight:700;}
+  .stub-body b{display:block; font-size:.8rem; color:var(--ink);}
+  .stub-body span.meta{font-size:.68rem; color:var(--muted);}
+  .stub-body p{margin:5px 0 0; font-size:.79rem; color:var(--ink-soft); line-height:1.5;}
+  .ev-row{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line-soft);}
+  .ev-row:last-child{border-bottom:none;}
+  .ev-ic{width:30px; height:30px; border-radius:8px; background:var(--accent-soft); color:var(--accent-hover); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .ev-ic svg{width:15px; height:15px; stroke:currentColor; stroke-width:1.8; fill:none;}
+  .ev-body b{display:block; font-size:.79rem; color:var(--ink);}
+  .ev-body span{font-size:.68rem; color:var(--muted); font-family:var(--font-mono);}
+
+  footer.note{margin-top:34px; padding-top:18px; border-top:1px solid var(--line); font-size:.78rem; color:var(--muted); line-height:1.6;}
+  footer.note code{font-family:var(--font-mono); background:var(--surface); padding:1px 5px; border-radius:4px;}
+</style>
+
+<div class="wrap">
+
+  <div class="intro">
+    <div class="eyebrow">Composant — UX Designer (A04)</div>
+    <h1>RACI compact — panneau latéral Comments / RACI / Evidence</h1>
+    <p>Composant issu de la proposition faite en consultation multi-agents sur le nouveau cahier des charges GRC/ERM (<a href="https://claude.ai/artifact/7kg7EefZbaqyiW7RzCje1V" style="color:var(--accent)">artefact de consultation</a>) : groupes d'avatars empilés par rôle, débordement en « +N », tooltip au survol, Accountable visuellement distinct — mis en situation sur l'écran d'évaluation de risque RE-0142 déjà maquetté en V6 (<a href="https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57" style="color:var(--accent)">artefact V6</a>). Fichier indépendant : le Lot 1 backend (RACI minimal — Risk/Control/ActionPlan) démarre en parallèle, ce composant en anticipe le contrat de données.</p>
+    <div class="meta">
+      <span><b>Contrat de données</b> <code style="font-family:var(--font-mono)">{ userId, userName, role: R|A|C|I }</code> par objet</span>
+      <span><b>Permissions</b> <code style="font-family:var(--font-mono)">raci.assign</code> / <code style="font-family:var(--font-mono)">raci.revoke</code></span>
+      <span><b>Cible Lot 1</b> Risk · Control · ActionPlan</span>
+    </div>
+    <div class="legend-strip">
+      <b>Ce que montre cet artefact.</b> Le panneau RACI, ouvert par défaut sur l'onglet du même nom dans le rail à droite du cadre. Ajoutez une personne (bouton en pointillé en fin de groupe), retirez-en une (survolez un avatar, cliquez le retrait rouge). Le sélecteur « Vue » en tête de panneau simule la permission <code style="font-family:var(--font-mono)">raci.assign/revoke</code> renvoyée par le backend — en lecture seule, aucune action d'édition n'est exposée. L'utilisateur courant simulé, <b>Fatou Bamba</b>, est Accountable sur ce risque et l'évaluation est en attente de validation : le garde-fou anti-auto-validation (§ Security, consultation multi-agents — même classe de faille que le maker-checker déjà protégé côté backend) est visible à trois endroits liés — badge d'avertissement discret sur son propre avatar, note dans le groupe Accountable, et action « Valider » désactivée avec explication.
+    </div>
+  </div>
+
+  <div class="frame" id="frame">
+    <div class="frame-bar">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <div class="path">grc-tools.djamo.internal/risk-evaluations/RE-0142</div>
+    </div>
+    <div class="frame-body" id="frameBody">
+      <aside class="side">
+        <div class="brand">GRC Tools</div>
+        <div class="grp">Risques</div>
+        <nav>
+          <a href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Cartographie</a>
+          <a href="#" aria-current="page"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10"/></svg>Évaluations</a>
+        </nav>
+        <div class="grp">Contrôles</div>
+        <nav>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9.5 12l1.8 1.8 3.2-3.6"/></svg>Contrôles</a>
+        </nav>
+        <div class="grp">Gouvernance</div>
+        <nav>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M6 21V4"/><path d="M6 4h11l-2.5 3.5L17 11H6"/></svg>Plans d'action</a>
+        </nav>
+      </aside>
+
+      <main class="main panel-open" id="main">
+        <div class="pagehead">
+          <div class="titles">
+            <div class="crumb">Évaluations <b>/</b> <span class="id">RE-0142</span></div>
+            <h2>Retard de règlement fournisseurs critiques</h2>
+          </div>
+          <div class="actions">
+            <span class="badge warning" style="align-self:center;">En attente Comité</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Identité du risque <span class="n">Processus Trésorerie</span></h3>
+          <div class="identity">
+            <dl>
+              <dt>Département</dt><dd>Finance &amp; Trésorerie</dd>
+              <dt>Propriétaire</dt><dd>Aïssatou Diallo — Trésorière</dt>
+              <dt>Catégorie</dt><dd>Opérationnel — Liquidité</dt>
+            </dl>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Cotation <span class="n">Grille 7 axes — v3, active</span></h3>
+          <div class="score-row">
+            <div class="score-cell inherent">
+              <div class="lbl">Inhérent</div>
+              <div class="pi">Prob. <b>4</b> · Impact <b>4</b></div>
+              <div class="result"><span class="val">16</span><span class="badge danger">Critique</span></div>
+            </div>
+            <div class="score-cell control">
+              <div class="lbl">Maîtrise (L1/L2/L3)</div>
+              <div class="pi">Efficacité <b>Modérée</b></div>
+              <div class="result"><span class="val">−35%</span><span class="badge warning">Partielle</span></div>
+            </div>
+            <div class="score-cell residual">
+              <div class="lbl">Résiduel</div>
+              <div class="pi">Prob. <b>3</b> · Impact <b>4</b></div>
+              <div class="result"><span class="val">10,4</span><span class="badge danger">Élevé</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Actions</h3>
+          <div class="actions" style="flex-direction:column; align-items:stretch;">
+            <button class="btn btn-primary" id="validateBtn">Valider et transmettre au Comité</button>
+            <button class="btn btn-secondary">Enregistrer le brouillon</button>
+          </div>
+          <div class="guard-note" id="guardNote">
+            <svg viewBox="0 0 24 24"><path d="M12 9v4"/><circle cx="12" cy="16.2" r=".4" fill="currentColor" stroke="none"/><path d="M10.3 3.9L2.6 17.5a1.8 1.8 0 0 0 1.6 2.7h15.6a1.8 1.8 0 0 0 1.6-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0z"/></svg>
+            <span><b>Fatou Bamba</b> (vous) est <b>Accountable</b> sur ce risque et l'évaluation est en attente de validation. Un Accountable ne peut pas valider sa propre évaluation en attente — transmettez à un tiers valideur du Comité des Risques (même garde-fou maker-checker que côté Risk Manager).</span>
+          </div>
+        </div>
+      </main>
+
+      <!-- ============ RAIL ============ -->
+      <div class="rail" id="rail" role="tablist" aria-label="Panneau contextuel">
+        <button class="rail-tab" data-tab="comments" role="tab" aria-selected="false" title="Commentaires">
+          <svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-8.9 8.4 8.6 8.6 0 0 1-3.7-.8L3 20l1.2-5.1A8.4 8.4 0 1 1 21 11.5z"/></svg>
+          <span class="count" id="countComments">4</span>
+          <span class="tlabel">Commentaires</span>
+        </button>
+        <button class="rail-tab" data-tab="raci" role="tab" aria-selected="true" title="RACI">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="18" cy="7" r="2.3"/><path d="M15.5 13.2a5 5 0 0 1 4.5 5"/></svg>
+          <span class="count" id="countRaci">9</span>
+          <span class="tlabel">RACI</span>
+        </button>
+        <button class="rail-tab" data-tab="evidence" role="tab" aria-selected="false" title="Évidences">
+          <svg viewBox="0 0 24 24"><path d="M21 11V6.5A2.5 2.5 0 0 0 18.5 4h-13A2.5 2.5 0 0 0 3 6.5v13A2.5 2.5 0 0 0 5.5 22H12"/><path d="M17 22l4-4-4-4v3.2c-4 0-5.4 1.4-6 4.8 1.8-2.3 3-2.7 6-2.7V22z"/></svg>
+          <span class="count" id="countEvidence">2</span>
+          <span class="tlabel">Évidences</span>
+        </button>
+      </div>
+
+      <!-- ============ PANEL — Comments ============ -->
+      <section class="panel" data-panel="comments" aria-hidden="true">
+        <div class="panel-head">
+          <div class="ph-top"><h4>Commentaires</h4><button class="panel-close" data-close><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+        </div>
+        <div class="panel-body">
+          <div class="stub-item">
+            <div class="stub-av" style="background:var(--av-1)">MK</div>
+            <div class="stub-body"><b>Moussa Koné</b> <span class="meta">18/09 · 09:12</span><p>Contrôle CTRL-088 revu ce matin, efficacité confirmée « Modérée » — pas d'automatisation du rapprochement à ce jour.</p></div>
+          </div>
+          <div class="stub-item">
+            <div class="stub-av" style="background:var(--accent)">FB</div>
+            <div class="stub-body"><b>Fatou Bamba</b> <span class="meta">19/09 · 14:47</span><p>D'accord pour transmission au Comité, score proche du seuil d'appétence.</p></div>
+          </div>
+          <div class="stub-item">
+            <div class="stub-av" style="background:var(--av-3)">AT</div>
+            <div class="stub-body"><b>Awa Traoré</b> <span class="meta">22/09 · 08:03</span><p>Avis juridique : aucune clause pénale déclenchée à ce stade, à surveiller au-delà de 45 jours de retard.</p></div>
+          </div>
+          <div class="stub-item">
+            <div class="stub-av" style="background:var(--av-4)">IS</div>
+            <div class="stub-body"><b>Ibrahim Sanogo</b> <span class="meta">24/09 · 16:20</span><p>Conformité : pas d'impact réglementaire BCEAO direct, dossier à classer opérationnel.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ PANEL — RACI ============ -->
+      <section class="panel is-open" data-panel="raci" aria-hidden="false">
+        <div class="panel-head">
+          <div class="ph-top"><h4>RACI</h4><button class="panel-close" data-close><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+          <div class="perm-toggle" role="group" aria-label="Vue de permission (démonstration)">
+            <button type="button" data-perm="edit" aria-pressed="true">Peut modifier</button>
+            <button type="button" data-perm="view" aria-pressed="false">Lecture seule</button>
+          </div>
+          <div class="perm-hint" id="permHint">Vue simulant <code>raci.assign</code> / <code>raci.revoke</code> accordés à l'utilisateur courant sur cet objet.</div>
+        </div>
+        <div class="panel-body can-edit" id="raciBody">
+          <div class="readonly-note" id="readonlyNote" hidden>
+            <svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            Lecture seule — permission <code style="font-family:var(--font-mono)">raci.assign</code> requise pour modifier.
+          </div>
+
+          <div class="raci-group" data-role="R">
+            <div class="raci-ghead">
+              <div class="raci-letter r">R</div>
+              <div><div class="raci-gname">Réalisateurs</div><div class="raci-gdesc">Exécutent la cotation et la maîtrise</div></div>
+            </div>
+            <div class="avatar-stack" data-stack="R"></div>
+          </div>
+
+          <div class="raci-group" data-role="A">
+            <div class="raci-ghead">
+              <div class="raci-letter a">A</div>
+              <div><div class="raci-gname">Accountable</div><div class="raci-gdesc">Validation finale — un seul par objet</div></div>
+            </div>
+            <div class="avatar-stack" data-stack="A"></div>
+          </div>
+
+          <div class="raci-group" data-role="C">
+            <div class="raci-ghead">
+              <div class="raci-letter c">C</div>
+              <div><div class="raci-gname">Consultés</div><div class="raci-gdesc">Avis sollicité avant décision</div></div>
+            </div>
+            <div class="avatar-stack" data-stack="C"></div>
+          </div>
+
+          <div class="raci-group" data-role="I">
+            <div class="raci-ghead">
+              <div class="raci-letter i">I</div>
+              <div><div class="raci-gname">Informés</div><div class="raci-gdesc">Tenus au courant de l'issue</div></div>
+            </div>
+            <div class="avatar-stack" data-stack="I"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ PANEL — Evidence ============ -->
+      <section class="panel" data-panel="evidence" aria-hidden="true">
+        <div class="panel-head">
+          <div class="ph-top"><h4>Évidences</h4><button class="panel-close" data-close><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+        </div>
+        <div class="panel-body">
+          <div class="ev-row">
+            <div class="ev-ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg></div>
+            <div class="ev-body"><b>Rapprochement_bancaire_sept2026.xlsx</b><span>Google Drive · déposé par A. Diallo · 18/09/2026</span></div>
+          </div>
+          <div class="ev-row">
+            <div class="ev-ic"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg></div>
+            <div class="ev-body"><b>Relance_fournisseur_CTRL-088.pdf</b><span>Google Drive · déposé par M. Koné · 20/09/2026</span></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <footer class="note">
+    Composant conçu par <code>@ux-designer</code> (A04) à partir de la proposition faite en consultation multi-agents sur le cahier des charges GRC/ERM. Le contrat de données (<code>objectType</code>/<code>objectId</code> polymorphe, whitelist maîtrisée) suit <code>docs/architecture/GRC_Target_Domain_Model.md</code> §2.2. Aucun fichier de <code>frontend/src/**</code> n'a été modifié — artefact de proposition, indépendant de la maquette V1-V6.
+  </footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var CURRENT_USER = { id:"u-fbamba", name:"Fatou Bamba" };
+  var PENDING_VALIDATION = true;
+
+  // Palette d'avatars (hors Accountable, traité à part)
+  var AV_COLORS = ["--av-1","--av-2","--av-3","--av-4","--av-5","--av-6"];
+  function colorFor(name){
+    var h = 0;
+    for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return "var(" + AV_COLORS[h % AV_COLORS.length] + ")";
+  }
+  function initials(name){
+    var parts = name.replace(/\(.*?\)/g,"").trim().split(/\s+/);
+    var a = parts[0] ? parts[0][0] : "";
+    var b = parts.length > 1 ? parts[parts.length - 1][0] : "";
+    return (a + b).toUpperCase();
+  }
+
+  // État RACI — reflète le contrat backend { userId, userName, role }
+  var RACI = {
+    R: [
+      { id:"u1", name:"Aïssatou Diallo", title:"Trésorière" },
+      { id:"u2", name:"Moussa Koné", title:"Contrôleur interne" },
+      { id:"u3", name:"Serge Yao", title:"Analyste Trésorerie" }
+    ],
+    A: [
+      { id:"u-fbamba", name:"Fatou Bamba", title:"Directrice Financière" }
+    ],
+    C: [
+      { id:"u4", name:"Awa Traoré", title:"Juridique" },
+      { id:"u5", name:"Ibrahim Sanogo", title:"Conformité" },
+      { id:"u6", name:"Chinwe Okafor", title:"Sécurité IT" },
+      { id:"u7", name:"Cabinet KPMG (externe)", title:"Audit externe" }
+    ],
+    I: [
+      { id:"u8", name:"Yves N'Guessan", title:"Directeur Général" },
+      { id:"u9", name:"Comité des Risques", title:"Organe collégial" },
+      { id:"u10", name:"Salimata Koné", title:"Audit interne" }
+    ]
+  };
+  var VISIBLE_MAX = { R:3, A:4, C:3, I:3 };
+
+  var CANDIDATE_POOL = [
+    { id:"u11", name:"Kwame Asante", title:"Risk Manager" },
+    { id:"u12", name:"Marième Fall", title:"Contrôle de gestion" },
+    { id:"u13", name:"David Owusu", title:"Opérations" },
+    { id:"u14", name:"Fatoumata Cissé", title:"Juridique" },
+    { id:"u15", name:"Comité d'Audit", title:"Organe collégial" }
+  ];
+
+  var canEdit = true;
+  var openTab = "raci";
+  var activePopover = null;
+
+  function totalCount(){
+    return RACI.R.length + RACI.A.length + RACI.C.length + RACI.I.length;
+  }
+
+  function isAccountableSelf(){
+    return RACI.A.some(function(p){ return p.id === CURRENT_USER.id; });
+  }
+
+  // ---- rendu d'un groupe de rôle ----
+  function renderStack(role){
+    var stack = document.querySelector('.avatar-stack[data-stack="' + role + '"]');
+    stack.innerHTML = "";
+    var people = RACI[role];
+    var max = VISIBLE_MAX[role];
+    var visible = people.slice(0, max);
+    var overflow = people.length - visible.length;
+
+    visible.forEach(function(person){
+      stack.appendChild(makeAvatar(person, role));
+    });
+
+    if (overflow > 0){
+      var more = document.createElement("button");
+      more.type = "button";
+      more.className = "raci-more";
+      more.textContent = "+" + overflow;
+      more.title = people.slice(max).map(function(p){ return p.name; }).join(", ");
+      more.addEventListener("mouseenter", function(e){ showTooltip(e.currentTarget, "+" + overflow + " de plus", people.slice(max).map(function(p){return p.name;}).join(" · "), false); });
+      more.addEventListener("mouseleave", hideTooltip);
+      stack.appendChild(more);
+    }
+
+    if (canEdit && role !== "A_disabled"){
+      var canAddMore = !(role === "A" && people.length >= 1); // A: cardinalité 1
+      if (canAddMore){
+        var add = document.createElement("button");
+        add.type = "button";
+        add.className = "raci-add";
+        add.setAttribute("aria-label", "Ajouter à " + role);
+        add.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
+        add.addEventListener("click", function(e){ openAddPopover(e.currentTarget, role); });
+        stack.appendChild(add);
+      }
+    }
+  }
+
+  function makeAvatar(person, role){
+    var el = document.createElement("div");
+    el.className = "raci-avatar";
+    el.tabIndex = 0;
+    var isA = role === "A";
+    var isMe = person.id === CURRENT_USER.id;
+    if (isA) el.classList.add("is-a");
+    if (isMe) el.classList.add("is-me");
+    el.style.background = isA ? "var(--accent)" : colorFor(person.name);
+    el.textContent = initials(person.name);
+
+    if (isA){
+      var crown = document.createElement("span");
+      crown.className = "crown";
+      crown.textContent = "A";
+      el.appendChild(crown);
+    }
+    if (isMe && isA && PENDING_VALIDATION){
+      var warn = document.createElement("span");
+      warn.className = "warn-dot";
+      warn.innerHTML = '<svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg>';
+      el.appendChild(warn);
+      el.title = "";
+    }
+
+    if (canEdit){
+      var rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "rm";
+      rm.setAttribute("aria-label", "Retirer " + person.name);
+      rm.innerHTML = '<svg viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8"/></svg>';
+      rm.addEventListener("click", function(ev){
+        ev.stopPropagation();
+        removePerson(role, person.id, el);
+      });
+      el.appendChild(rm);
+    }
+
+    el.addEventListener("mouseenter", function(e){
+      var warnLine = (isMe && isA && PENDING_VALIDATION)
+        ? "Vous êtes Accountable — validation par un tiers requise"
+        : null;
+      showTooltip(e.currentTarget, person.name + (isMe ? " (vous)" : ""), roleLabel(role) + " · " + person.title, warnLine);
+    });
+    el.addEventListener("focus", function(e){
+      var warnLine = (isMe && isA && PENDING_VALIDATION)
+        ? "Vous êtes Accountable — validation par un tiers requise"
+        : null;
+      showTooltip(e.currentTarget, person.name + (isMe ? " (vous)" : ""), roleLabel(role) + " · " + person.title, warnLine);
+    });
+    el.addEventListener("mouseleave", hideTooltip);
+    el.addEventListener("blur", hideTooltip);
+
+    return el;
+  }
+
+  function roleLabel(role){
+    return { R:"Réalisateur", A:"Accountable", C:"Consulté", I:"Informé" }[role];
+  }
+
+  // ---- tooltip ----
+  var tooltipEl = document.createElement("div");
+  tooltipEl.className = "raci-tooltip";
+  document.body.appendChild(tooltipEl);
+  function showTooltip(anchor, title, sub, warnLine){
+    var rect = anchor.getBoundingClientRect();
+    tooltipEl.innerHTML = "<b>" + title + "</b><span class='role-line'>" + sub + "</span>" + (warnLine ? "<div class='warn-line'>⚠ " + warnLine + "</div>" : "");
+    tooltipEl.style.left = Math.min(rect.left, window.innerWidth - 250) + "px";
+    tooltipEl.style.top = (rect.bottom + 8) + "px";
+    tooltipEl.classList.add("show");
+  }
+  function hideTooltip(){ tooltipEl.classList.remove("show"); }
+
+  // ---- ajout ----
+  var popEl = document.createElement("div");
+  popEl.className = "add-pop";
+  document.body.appendChild(popEl);
+
+  function openAddPopover(anchor, role){
+    if (activePopover === role){ closeAddPopover(); return; }
+    activePopover = role;
+    var assignedIds = RACI[role].map(function(p){ return p.id; });
+    var candidates = CANDIDATE_POOL.filter(function(p){ return assignedIds.indexOf(p.id) === -1; });
+
+    var html = '<div class="ap-title">Ajouter — ' + roleLabel(role) + '</div><ul>';
+    if (candidates.length === 0){
+      html += '<li class="ap-empty">Aucune autre personne disponible dans l\'organisation pour ce rôle.</li>';
+    } else {
+      candidates.forEach(function(c){
+        html += '<li><button type="button" data-cid="' + c.id + '"><span class="ap-av" style="background:' + colorFor(c.name) + '">' + initials(c.name) + '</span><span><span class="ap-name">' + c.name + '</span><br><span class="ap-title">' + c.title + '</span></span></button></li>';
+      });
+    }
+    html += '</ul>';
+    popEl.innerHTML = html;
+
+    var rect = anchor.getBoundingClientRect();
+    popEl.style.left = Math.min(rect.left - 90, window.innerWidth - 250) + "px";
+    popEl.style.top = (rect.bottom + window.scrollY + 8) + "px";
+    popEl.classList.add("show");
+
+    popEl.querySelectorAll("button[data-cid]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var cid = btn.getAttribute("data-cid");
+        var person = CANDIDATE_POOL.find(function(p){ return p.id === cid; });
+        addPerson(role, person);
+        closeAddPopover();
+      });
+    });
+
+    if (window.gsap){
+      gsap.fromTo(popEl, { opacity:0, y:-6, scale:.98 }, { opacity:1, y:0, scale:1, duration:.16, ease:"power2.out" });
+    } else {
+      popEl.style.opacity = 1;
+    }
+
+    setTimeout(function(){ document.addEventListener("click", onDocClick); }, 0);
+  }
+  function onDocClick(e){
+    if (!popEl.contains(e.target)) closeAddPopover();
+  }
+  function closeAddPopover(){
+    if (!activePopover) return;
+    activePopover = null;
+    document.removeEventListener("click", onDocClick);
+    if (window.gsap){
+      gsap.to(popEl, { opacity:0, y:-6, scale:.98, duration:.12, onComplete:function(){ popEl.classList.remove("show"); } });
+    } else {
+      popEl.classList.remove("show");
+    }
+  }
+
+  function addPerson(role, person){
+    RACI[role].push(person);
+    renderStack(role);
+    renderCount();
+    var newAv = document.querySelector('.avatar-stack[data-stack="' + role + '"] .raci-avatar:nth-last-child(' + (role === "A" || true ? 2 : 1) + ')');
+    // Animer le dernier avatar réellement ajouté (avant le bouton +)
+    var stack = document.querySelector('.avatar-stack[data-stack="' + role + '"]');
+    var avatars = stack.querySelectorAll(".raci-avatar, .raci-more");
+    var target = avatars[avatars.length - 1];
+    if (target && window.gsap){
+      gsap.fromTo(target, { scale:0, opacity:0 }, { scale:1, opacity:1, duration:.32, ease:"back.out(2.4)" });
+    }
+    refreshGuard();
+  }
+
+  function removePerson(role, id, el){
+    var idx = RACI[role].findIndex(function(p){ return p.id === id; });
+    if (idx === -1) return;
+    var finish = function(){
+      RACI[role].splice(idx, 1);
+      renderStack(role);
+      renderCount();
+      refreshGuard();
+    };
+    if (window.gsap){
+      gsap.to(el, { scale:0, opacity:0, duration:.2, ease:"power2.in", onComplete:finish });
+    } else {
+      finish();
+    }
+    hideTooltip();
+  }
+
+  function renderCount(){
+    document.getElementById("countRaci").textContent = totalCount();
+  }
+
+  // ---- garde-fou anti-auto-validation ----
+  function refreshGuard(){
+    var self = isAccountableSelf();
+    var guard = self && PENDING_VALIDATION;
+    var btn = document.getElementById("validateBtn");
+    var note = document.getElementById("guardNote");
+    btn.disabled = guard;
+    btn.title = guard ? "Un Accountable ne peut pas valider sa propre évaluation en attente." : "";
+    note.style.display = guard ? "flex" : "none";
+  }
+
+  // ---- rendu complet ----
+  function renderAll(){
+    ["R","A","C","I"].forEach(renderStack);
+    renderCount();
+    refreshGuard();
+  }
+
+  // ---- toggle permission (démo) ----
+  document.querySelectorAll(".perm-toggle button").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      document.querySelectorAll(".perm-toggle button").forEach(function(b){ b.setAttribute("aria-pressed", "false"); });
+      btn.setAttribute("aria-pressed", "true");
+      canEdit = btn.getAttribute("data-perm") === "edit";
+      var body = document.getElementById("raciBody");
+      var hint = document.getElementById("permHint");
+      var ro = document.getElementById("readonlyNote");
+      if (canEdit){
+        body.classList.add("can-edit");
+        ro.hidden = true;
+        hint.innerHTML = "Vue simulant <code>raci.assign</code> / <code>raci.revoke</code> accordés à l'utilisateur courant sur cet objet.";
+      } else {
+        body.classList.remove("can-edit");
+        ro.hidden = false;
+        hint.innerHTML = "Vue simulant l'absence de <code>raci.assign</code> / <code>raci.revoke</code> — composant en lecture seule.";
+      }
+      closeAddPopover();
+      renderAll();
+    });
+  });
+
+  // ---- rail + panel ----
+  var main = document.getElementById("main");
+  var rail = document.getElementById("rail");
+  function setTab(tab){
+    openTab = tab;
+    rail.querySelectorAll(".rail-tab").forEach(function(t){
+      t.setAttribute("aria-selected", t.getAttribute("data-tab") === tab ? "true" : "false");
+    });
+    document.querySelectorAll(".panel").forEach(function(p){
+      var active = p.getAttribute("data-panel") === tab;
+      p.setAttribute("aria-hidden", active ? "false" : "true");
+      if (active){
+        p.classList.add("is-open");
+        if (window.gsap) gsap.to(p, { x:0, opacity:1, duration:.32, ease:"power3.out" });
+        else { p.style.transform = "translateX(0)"; p.style.opacity = 1; }
+      } else {
+        if (window.gsap) gsap.to(p, { x:"6%", opacity:0, duration:.2, ease:"power2.in", onComplete:function(){ p.classList.remove("is-open"); } });
+        else { p.classList.remove("is-open"); }
+      }
+    });
+    main.classList.add("panel-open");
+  }
+  rail.querySelectorAll(".rail-tab").forEach(function(t){
+    t.addEventListener("click", function(){ setTab(t.getAttribute("data-tab")); });
+  });
+  document.querySelectorAll("[data-close]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      document.querySelectorAll(".panel").forEach(function(p){
+        p.setAttribute("aria-hidden", "true");
+        if (window.gsap) gsap.to(p, { x:"6%", opacity:0, duration:.2, onComplete:function(){ p.classList.remove("is-open"); } });
+        else p.classList.remove("is-open");
+      });
+      rail.querySelectorAll(".rail-tab").forEach(function(t){ t.setAttribute("aria-selected","false"); });
+      main.classList.remove("panel-open");
+    });
+  });
+
+  // état initial du panneau RACI ouvert (déjà .is-open dans le HTML)
+  gsapReady();
+  function gsapReady(){
+    var raciPanel = document.querySelector('.panel[data-panel="raci"]');
+    if (window.gsap){
+      gsap.set(raciPanel, { x:0, opacity:1 });
+    }
+  }
+
+  renderAll();
+})();
+</script>
+
+</body></html>
