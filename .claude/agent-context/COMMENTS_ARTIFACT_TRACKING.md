@@ -48,6 +48,9 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `6f893859` | Badges "Réduire Validé" sans titre, illisibles | resolved (v30) — en-têtes de colonnes ajoutés |
 | `33c084d8` | Ordre des colonnes : Statut avant Traitement | resolved (v31) |
 | `91b9756d` | Choix direct (pas de variantes) pour les graphiques 3/4 | resolved (v32) — barres horizontales pour les deux, même échelle |
+| `6f893859` (v30), `33c084d8` (v31) | Voir plus haut | resolved |
+| — (v33-36) | Style heatmap 1/2 restauré (grille CSS, points bleus/bordure blanche), légende par carte centrée, scrollbar bleue | resolved |
+| `ced89476` | Treemap possible ? | resolved (v37) — graphique 5 ajouté, treemap CSS pur par processus, taille = poids de criticité cumulé |
 
 Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
