@@ -54,8 +54,8 @@ export interface MasteryScaleConfig {
   levels: ScaleLevel[];
   /** The 3 lines of defense the mastery score is assessed per (L1/L2/L3). */
   defenseLines: string[];
-  /** Fixed by methodology (ACT-175: "maîtrise globale = moyenne") — always "AVERAGE" today. */
-  aggregation: "AVERAGE";
+  /** CHALLENGE-001 (PO decision, 2026-09-29): "on prend le max de tous les axes" — always "MAX" today. Supersedes ACT-175's original "maîtrise globale = moyenne". */
+  aggregation: "MAX";
   /** CONFIG.SEUILS_MAITRISE — optional until configured. */
   thresholds: ScoreThreshold[] | null;
 }

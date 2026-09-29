@@ -44,6 +44,26 @@ export type Permission =
    * grant widely held by anyone who can rename a process).
    */
   | "process.evaluationmode.set"
+  /**
+   * DECISION-006 (2026-09-29, PO-confirmed Option A): the process-owner
+   * path of DECISION-006 — proposing a Classique/Participatif change on
+   * a process (`ProcessEvaluationModeRequestService.propose`). Deliberately
+   * separate from `process.evaluationmode.set` (the direct Risk-Manager
+   * path, which skips the requests table entirely) — a proposal alone
+   * never changes `Process.evaluationMode`.
+   */
+  | "process.evaluationmode.propose"
+  /**
+   * DECISION-006 (2026-09-29, PO-confirmed Option A): the sole source of
+   * validator authority for a pending evaluation-mode request — never
+   * `Risk.ownerId` (nullable, multi-valued in practice, mutable via the
+   * widely-held `risk.update`, same hazard class as SEC-011/SEC-013/
+   * SEC-014). A holder of this permission can still never validate their
+   * own proposal (`assertNotSelfValidated` in
+   * ProcessEvaluationModeRequestService) — no exception, even for a Risk
+   * Manager.
+   */
+  | "evaluationmode.validate"
   | "audit.read"
   | "role.read"
   | "role.create"
@@ -155,6 +175,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   "process.update",
   "process.delete",
   "process.evaluationmode.set",
+  "process.evaluationmode.propose",
+  "evaluationmode.validate",
   "audit.read",
   "role.read",
   "role.create",
