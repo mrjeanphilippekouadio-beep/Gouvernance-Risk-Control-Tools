@@ -4,6 +4,7 @@ import type { ProcessService } from "../../services/ProcessService.js";
 
 const Level = z.enum(["PROCESS", "SUBPROCESS", "ACTIVITY"]);
 const DocumentType = z.enum(["CHARTER", "POLICY", "PROCEDURES_MANUAL", "PROCEDURE", "WORK_INSTRUCTION"]);
+const EvaluationMode = z.enum(["CLASSIQUE", "PARTICIPATIF"]);
 
 const CreateProcessBody = z.object({
   parentId: z.string().nullish(),
@@ -14,10 +15,19 @@ const CreateProcessBody = z.object({
   documentReference: z.string().nullish(),
   owner: z.string().nullish(),
   active: z.boolean().optional(),
+  /** DIV-06: null means "inherit" — see resolveInheritedEvaluationMode in Process.ts. */
+  evaluationMode: EvaluationMode.nullish(),
 });
 
-const UpdateProcessBody = CreateProcessBody.partial();
+/**
+ * Governance finding (2026-09-29 architect review, DECISION-006):
+ * evaluationMode must never be reachable through the generic update body
+ * — omitted here, not just left unused, so it can never silently regain
+ * a route. See SetEvaluationModeBody / the dedicated route below.
+ */
+const UpdateProcessBody = CreateProcessBody.omit({ evaluationMode: true }).partial();
 const ArchiveProcessBody = z.object({ reason: z.string().min(1) });
+const SetEvaluationModeBody = z.object({ evaluationMode: EvaluationMode.nullable() });
 
 export function processesRouter(processService: ProcessService): Router {
   const router = Router();
@@ -55,6 +65,26 @@ export function processesRouter(processService: ProcessService): Router {
     try {
       const body = UpdateProcessBody.parse(req.body);
       const process = await processService.update(req.user, req.params["id"] as string, body, req.requestId);
+      res.json({ data: process });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * DECISION-006 governance finding: dedicated route for
+   * Process.evaluationMode, gated by process.evaluationmode.set (reserved
+   * to the Risk Manager) instead of the generic PATCH above.
+   */
+  router.put("/:id/evaluation-mode", async (req, res, next) => {
+    try {
+      const body = SetEvaluationModeBody.parse(req.body);
+      const process = await processService.setEvaluationMode(
+        req.user,
+        req.params["id"] as string,
+        body.evaluationMode,
+        req.requestId,
+      );
       res.json({ data: process });
     } catch (err) {
       next(err);

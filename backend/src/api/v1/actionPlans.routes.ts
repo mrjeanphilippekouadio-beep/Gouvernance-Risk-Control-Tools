@@ -1,11 +1,17 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { ActionPlanService } from "../../services/ActionPlanService.js";
-import type { ActionLinkResourceType, ActionPlanSourceType, ActionPlanStatus } from "../../domain/entities/ActionPlan.js";
+import {
+  ACTION_LINK_RESOURCE_TYPES,
+  ACTION_PLAN_SOURCE_TYPES,
+  type ActionLinkResourceType,
+  type ActionPlanSourceType,
+  type ActionPlanStatus,
+} from "../../domain/entities/ActionPlan.js";
 
-const SourceType = z.enum(["RISK", "CONTROL", "KRI", "AUDIT", "INCIDENT", "MANAGEMENT"]);
+const SourceType = z.enum(ACTION_PLAN_SOURCE_TYPES);
 const Status = z.enum(["PLANIFIEE", "EN_COURS", "TERMINEE"]);
-const LinkResourceType = z.enum(["RISK", "CONTROL", "KRI", "ANOMALY"]);
+const LinkResourceType = z.enum(ACTION_LINK_RESOURCE_TYPES);
 
 const CreateActionPlanBody = z.object({
   title: z.string().min(1),

@@ -9,6 +9,15 @@ export interface Risk {
   id: string;
   tenantId: string;
   process: string;
+  /**
+   * DIV-05 (.claude/agent-context/ACTION_ITEMS.md, @architect audit
+   * 2026-09-29): real FK to `processes`, added alongside the free-text
+   * `process` field above — not replacing it. Nullable, never
+   * backfilled: `process` free text doesn't reliably match an existing
+   * `processes.name`, so a migration would have to guess. Left null
+   * until a caller explicitly links a risk to a real Process row.
+   */
+  processId: string | null;
   description: string;
   ownerDepartmentId: string | null;
   /**
@@ -41,6 +50,7 @@ export interface CreateRiskInput {
   process: string;
   description: string;
   ownerDepartmentId?: string | null;
+  processId?: string | null;
 }
 
 export interface UpdateRiskInput {
@@ -48,4 +58,5 @@ export interface UpdateRiskInput {
   description?: string;
   ownerDepartmentId?: string | null;
   status?: RiskStatus;
+  processId?: string | null;
 }

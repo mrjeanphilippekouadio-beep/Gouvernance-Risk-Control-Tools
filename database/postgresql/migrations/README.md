@@ -81,3 +81,16 @@ Rejouer `027 → 028 → down(028) → down(027)` restitue l'état d'avant 027
 d'autres migrations ou tables ne dépendent de `raci_assignments` — ce qui
 est le cas aujourd'hui (aucune FK entrante, `entity_id` est une référence
 polymorphe non contrainte, cf. commentaire de tête de 027).
+
+- `029_risks_process_id.down.sql` — `DROP INDEX risks_tenant_process_idx`
+  puis `ALTER TABLE risks DROP COLUMN process_id`. Non destructif tant
+  qu'aucun code applicatif n'a encore écrit de valeur dans cette colonne
+  (nullable, jamais backfillée par la migration forward elle-même).
+- `030_evaluation_mode.down.sql` — `ALTER TABLE processes/configs DROP
+  COLUMN evaluation_mode` (les `CHECK` constraints partent avec la
+  colonne). Non destructif pour `processes.evaluation_mode` (nullable,
+  jamais backfillée) ; pour `configs.evaluation_mode` (NOT NULL DEFAULT
+  'CLASSIQUE'), le rollback perd uniquement la distinction explicite
+  d'un tenant qui aurait basculé sur 'PARTICIPATIF' — à vérifier avant
+  d'exécuter en environnement partagé si `ConfigService.updateEvaluationMode`
+  a déjà été appelé en production.

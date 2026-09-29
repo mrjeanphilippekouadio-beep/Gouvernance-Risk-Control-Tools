@@ -30,7 +30,27 @@
  * than one that was never started. Flagged explicitly as a design
  * decision in the handoff summary rather than silently picking one.
  */
-export type ActionPlanSourceType = "RISK" | "CONTROL" | "KRI" | "AUDIT" | "INCIDENT" | "MANAGEMENT";
+import type { GrcObjectType } from "../GrcObjectType.js";
+
+/**
+ * Subset of GrcObjectType meaningful as an ActionPlan source (DIV-01,
+ * .claude/agent-context/ACTION_ITEMS.md, @architect audit 2026-09-29).
+ * ANOMALY is deliberately excluded here (an anomaly triggers an action
+ * plan indirectly today, never as a direct sourceType) — asymmetric with
+ * ActionLinkResourceType below on purpose, see the module comment above.
+ * `satisfies` ties every value back to GrcObjectType so a typo or a
+ * renamed GrcObjectType member fails to compile here.
+ */
+export const ACTION_PLAN_SOURCE_TYPES = [
+  "RISK",
+  "CONTROL",
+  "KRI",
+  "AUDIT",
+  "INCIDENT",
+  "MANAGEMENT",
+] as const satisfies readonly GrcObjectType[];
+
+export type ActionPlanSourceType = (typeof ACTION_PLAN_SOURCE_TYPES)[number];
 
 /** Stored statuses only — EN_RETARD is never one of these, see above. */
 export type ActionPlanStatus = "PLANIFIEE" | "EN_COURS" | "TERMINEE";
@@ -41,8 +61,20 @@ export type ActionPlanComputedStatus = ActionPlanStatus | "EN_RETARD";
 /** ACT-193: computed, never stored — HIGH exactly when computedStatus is EN_RETARD. */
 export type ActionPlanPriority = "NORMAL" | "HIGH";
 
-/** ACT-194: resource kinds an action can link to, beyond its own (optional) source. */
-export type ActionLinkResourceType = "RISK" | "CONTROL" | "KRI" | "ANOMALY";
+/**
+ * ACT-194: resource kinds an action can link to, beyond its own (optional)
+ * source. AUDIT/INCIDENT/MANAGEMENT deliberately excluded — asymmetric
+ * with ActionPlanSourceType above on purpose (DIV-01): links target
+ * existing entity rows, and those three source kinds never have one.
+ */
+export const ACTION_LINK_RESOURCE_TYPES = [
+  "RISK",
+  "CONTROL",
+  "KRI",
+  "ANOMALY",
+] as const satisfies readonly GrcObjectType[];
+
+export type ActionLinkResourceType = (typeof ACTION_LINK_RESOURCE_TYPES)[number];
 
 export interface ActionPlan {
   id: string;

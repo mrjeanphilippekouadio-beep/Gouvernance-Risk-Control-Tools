@@ -2170,3 +2170,237 @@ fait — `@ux-designer` sur DECISION-003 elle-même, `@infrastructure`,
 `@devops` sur la décision elle-même). Aucun code de production modifié
 par ce balayage (revue uniquement), sauf `ADR-003-conventions-
 transverses.md` créé par `@architect` sur tâche dédiée.
+
+---
+
+**2026-09-29 — @tous — DECISION-005 : les 10 actions rapides exécutées
+(Lots A/B/C), PR #16 mergée par le PO**
+
+Suite au classement des 10 actions issues du balayage DECISION-004 par
+urgence/parallélisabilité, exécution en 3 lots :
+
+**Lot A (7 agents en parallèle, aucun conflit de fichiers)** :
+1. `@release-manager` — organise les 27 commits + le travail en cours
+   de session en 5 commits cohérents, ouvre PR #16 (push direct sur
+   `main` bloqué par un hook de protection — workflow branche+PR suivi
+   correctement, pas de contournement).
+2. `@dev-backend` — corrige PRIV-CH-DASH-001 côté service
+   (`RiskOwnershipService.listOwners` masque un owner suspendu) plutôt
+   que de toucher `PostgresUserRepository.getById` (~70 appelants,
+   risque de casse SEC-001/SEC-009 réévité par un scope minimal —
+   raisonnement ponytail explicite).
+3. `@architect` — tranche la casse canonique de `GrcObjectType`
+   (SNAKE_CASE majuscule) et son périmètre (`NotificationResourceType`
+   inclus), crée `backend/src/domain/GrcObjectType.ts`.
+4. `@dev-backend` — middleware `moduleGuard.ts` (ACT-221), câblé sur
+   `/api/v1/risks`, `ModuleToggle` n'est plus purement déclaratif.
+5. `@qa-engineer` — 20 tests pour `BrandingService` (zéro avant).
+6. `@documentation` — `CLAUDE.md` §8 étendu à Compliance,
+   `RETEX_MULTI_AGENTS.md` mis à jour (section "Mise à jour 2026-09-29").
+
+**Lot B (séquentiel, débloqué par #3)** : `@dev-backend` migre
+`RaciEntityType` (PascalCase) vers `GrcObjectType` (SNAKE_CASE) —
+backend, frontend, et migration `028_raci_entity_type_snake_case.sql`
+(gère aussi les données déjà en base, pas seulement la contrainte).
+
+**Lot C** : `@dev-db` découvre que le trou de rollback signalé sur
+`027_raci_assignments.sql` est **structurel** — aucune des 28
+migrations du projet n'avait de rollback documenté. Établit une
+convention (`database/postgresql/migrations/README.md`, un
+`NNN_nom.down.sql` par migration) plutôt que de ne traiter que RACI,
+crée les rollbacks 027/028, et corrige au passage `runMigrations.ts`
+qui aurait exécuté les futurs `.down.sql` comme des migrations
+forward — sans ce correctif, la convention qu'il venait de créer
+aurait été dangereuse dès son premier usage.
+
+Chaque lot committé et poussé indépendamment par `@release-manager`
+(même agent repris à chaque fois, contexte de la PR conservé), avec
+vérification indépendante de `typecheck`/`test`/`build` avant chaque
+commit — jamais un simple "l'agent précédent a dit que c'était vert".
+**Résultat final** : PR #16, 22 commits, 405 tests verts, working tree
+propre. **Mergée par le PO le 2026-09-29.**
+
+Aucun conflit git rencontré malgré l'absence d'isolation worktree dans
+cet environnement (la session elle-même n'est pas un dépôt git — le
+mécanisme d'isolation par worktree n'est pas utilisable ici) : les
+agents qui éditent des fichiers sans faire d'opérations git eux-mêmes
+ne se sont jamais marché dessus (fichiers distincts), et un seul agent
+(`@release-manager`) a fait les opérations git, en série, jamais en
+parallèle avec lui-même.
+
+---
+
+**2026-09-29 — @tous — DECISION-006 : 5 actions rapides restantes,
+toutes exécutées en parallèle**
+
+Après DECISION-005, un nouveau passage léger (pas un balayage complet
+des 15 — aucun événement déclencheur, cf. `CLAUDE.md` §8bis) a identifié
+5 vraies actions rapides restantes dans `ACTION_ITEMS.md`. Dispatchées
+en parallèle (aucun conflit de fichiers, un seul touche `server.ts`) :
+
+1. `@dev-backend` — dérive `NotificationResourceType` de `GrcObjectType`
+   (via `satisfies`). **Corrige une erreur dans le commentaire de
+   l'architecte** : celui-ci recommandait de remplacer directement par
+   `GrcObjectType`, mais ça aurait silencieusement élargi l'API de
+   notifications de 7 à 10 valeurs acceptées sans justification
+   métier — contraire au principe deny-by-default. Garde le périmètre
+   métier actuel (7 valeurs), juste dérivé de la source canonique.
+2. `@dev-backend` — étend `moduleGuard` aux 9 modules réels (câblé sur
+   `/risks` seulement avant). 18 tests (`it.each`). Point signalé pour
+   suite : `/api/v1/reports` partage `DashboardService` avec le module
+   `DASHBOARD` gardé mais n'est pas lui-même gardé (pas un module
+   déclaré) — à confirmer si un comportement de garde y est attendu.
+3. `@dev-db` — cross-review des migrations 016-022 : propre, zéro
+   écart. Valide la règle "pas de spawn pour cas simples", avec
+   réserve explicite pour les cas destructifs ou touchant une
+   rétention légale.
+4. `@compliance` — proposition de cadrage ACT-072
+   (`docs/architecture/ACT-072-cadrage-propose.md`), 3 options
+   rédigées, recommandation assumée (Option C : restriction de
+   visibilité, pas de purge automatisée) — reste à confirmer par le
+   PO/juridique, statut `EVIDENCE_REQUIRED` en attendant.
+5. `@audit` — conformité append-only/soft-delete/tenant_id sur les 9
+   modules livrés : conforme, aucun écart.
+
+En parallèle, nettoyage de `ACTION_ITEMS.md` : 4 items déjà résolus
+mais jamais marqués fermés (2 par absorption confirmée par l'agent
+lui-même, 2 déjà livrés dans DECISION-005 sans mise à jour de la
+ligne d'origine) — leçon directe de la règle §7bis : une résolution
+non tracée reste un item "ouvert" indéfiniment.
+
+**Reste à faire** : committer/pousser le travail de code des points 1
+et 2 (points 3-5 sont des revues/propositions, pas de code produit).
+
+---
+
+**2026-09-29 — @orchestrator** — Premier module métier maquetté :
+Évaluation des risques
+
+Premier des 29 modules à passer en maquette, choisi sur recommandation
+convergente des 4 agents consultés (backend déjà prêt, aucune
+contradiction de modélisation, dépendance technique confirmée par
+`@architect` — Cartographie dépend d'Évaluations, pas l'inverse).
+Ajouté comme nouvel onglet dans l'artefact de revue
+(`https://claude.ai/artifact/9kExAKw22AmH71rh59bdq4`, v15), composé
+exclusivement à partir des atomes déjà validés (sidebar à l'échelle —
+premier usage réel, pas juste la démo Design System —, breadcrumb,
+card, badges, boutons, panneau générique Comments/RACI/Evidence).
+
+Deux exigences déjà tranchées intégrées dès la première version, pas
+ajoutées après coup :
+- **RISK_BLOCK de `@risk-manager`** (2026-09-29) : le score résiduel
+  n'est jamais affiché sans le statut de l'évaluation source à côté —
+  bandeau dédié qui le rappelle explicitement sur l'écran lui-même.
+- **DECISION-003** : "Risk 360" = registre enrichi — le lien "Registre"
+  de la sidebar porte une note "(inclut Risk 360)", pas d'entrée de
+  navigation séparée.
+
+Contenu représentatif (pas de lorem), cohérence délibérée avec les
+personae déjà utilisées ailleurs dans l'artefact (Aïssatou Diallo,
+Kouadio N'Guessan, CTRL-088) pour que Risk 360 (futur) puisse
+plausiblement relier les mêmes objets entre écrans.
+
+Pas encore statué — en attente des commentaires du PO avant de passer
+au module suivant, conforme au rythme "un écran à la fois" (DECISION-002
+point 6).
+
+---
+
+**2026-09-29 — @architect** — Cotation brute (mode Participatif) :
+implication modèle de données, réponse à une question soulevée par le
+PO en revue de l'écran Évaluation
+
+Le PO a demandé, sur l'écran maquetté : où est traitée la distinction
+"brut" (exécutant de contrôle, mode Participatif) vs "inhérent"
+(équipe risque, mode Classique) ? Le champ "brut" n'existe dans aucun
+champ backend actuel — question envoyée à Risk Manager (méthodologie)
+et Architect (modèle de données) en parallèle plutôt que devinée dans
+la maquette.
+
+**Où porter le mode Classique/Participatif** : sur `Config`
+(tenant-wide), pas sur `Risk` ni un futur objet `Dispositif` séparé.
+Preuve : `Config.appetiteMode` est déjà exactement ce schéma
+(`AUTO`/`MANUEL`/`AUTO_AVEC_SURCHARGE_MANUELLE`), et
+`ConfigService.ts:55` anticipe déjà que `RiskEvaluationService` s'y
+branchera un jour. `RiskEvaluation` devra capturer un snapshot du mode
+appliqué à la création (même garde-fou que `ratingScaleId`/
+`ratingScaleVersion`, `RiskEvaluation.ts:60`), pour qu'un changement de
+mode tenant ne réinterprète jamais une évaluation déjà finalisée.
+
+**Pattern d'écriture** : pas de nouveau pattern — la cotation brute est
+un setter étroit de plus dans la séquence progressive déjà en place
+(`RiskEvaluation.ts:5-9`), alimentant un champ distinct (`rawScore`
+ou équivalent) pendant que `status` reste `BROUILLON`, jamais une
+écriture directe sur `inherentScore`/`residualScore`.
+
+**Permissions** : nouvelle permission dédiée requise (ex.
+`riskevaluation.submit-raw`), jamais réutiliser `riskevaluation.update`
+— même raisonnement que SEC-011 (`assertIsEvaluator`) : sans gate
+dédié, le maker-checker de `validate`/`reject` protège trop tard, après
+que l'écriture a déjà eu lieu. Précédent direct : `riskevaluation.
+validate.committee` (ACT-253), déjà construit sur ce schéma additif.
+
+**Risque concret si non tranché avant Cartographie/Registre** : ces
+deux écrans supposeraient une seule paire inhérent/résiduel par
+évaluation (comme aujourd'hui, `RiskEvaluationService.ts:364-378`) — en
+mode Participatif, plusieurs cotations brutes non consolidées peuvent
+coexister avant validation. Maquetter Cartographie/Registre avant ce
+tranchage produirait des écrans qui cassent au premier tenant en mode
+Participatif — risque analogue déjà documenté pour `subCategory`/
+`entity` dans `RiskEvaluation.ts:10-26`.
+
+En attente de la réponse `@risk-manager` (méthodologie : brut =
+synonyme d'inhérent, ou étape distincte ?) avant synthèse et mise à
+jour de la maquette.
+
+---
+
+**2026-09-29 — @risk-manager** — Réponse méthodologique, convergente
+avec `@architect`
+
+Confirmé par lecture du code (`RiskEvaluation.ts`, `RiskEvaluationService.ts`)
+et de la méthodologie ISO 31000/COSO ERM (mandat §10) : **"brut" n'est
+pas un champ manquant, c'est mathématiquement le même risque inhérent**
+(même formule, même échelle) — ce qui diffère en mode Participatif,
+c'est *qui* le saisit et *à quel moment* il devient opposable, pas le
+calcul lui-même.
+
+**Ce qui manque réellement** : un point de maker-checker **intermédiaire**,
+pas un nouveau champ. Aujourd'hui `assertIsEvaluator` impose un seul
+`evaluatorId` pour toute l'évaluation (inhérent+maîtrise+résiduel), et
+le seul maker-checker existant est en bout de chaîne (`validate`/
+`reject` interdisent l'auto-validation). Il manque un cran à l'intérieur
+de l'étape inhérente : L1 (exécutant de contrôle) soumet, L2 (équipe
+risque) endosse ou amende avant que le chiffre ne devienne l'inhérent
+officiel. Précédent direct dans le code pour ce genre d'extension :
+`VALIDE_COMITE` (ACT-253), un cran de maker-checker supplémentaire
+ajouté via un nouveau statut + une permission dédiée, pas un objet
+séparé.
+
+**Risque de gouvernance confirmé, explicitement dans le mandat (§43)** :
+un exécutant de contrôle qui note seul le risque que son propre
+contrôle est censé maîtriser réintroduit un biais d'auto-évaluation —
+le même acteur ne doit jamais cumuler soumission brute ET endossement,
+ni endossement ET validation finale.
+
+**Où porter le mode Classique/Participatif — léger désaccord de niveau
+avec `@architect`** : Risk Manager recommande le **Dispositif** (pas
+`Config` tenant-wide) — une organisation a des maturités différentes
+par direction/processus, un seul mode global empêcherait une
+coexistence légitime (dispositifs sensibles restant en Classique
+pendant que d'autres passent en Participatif). `@architect` recommandait
+`Config` par analogie avec `appetiteMode`. **Les deux convergent** sur
+le principe : jamais au niveau du Risque individuel — seul le niveau
+exact (Dispositif vs Config avec un défaut hérité) reste à trancher,
+et il dépend directement de DECISION-003bis déjà en réserve (« Dispositif
+de risque » = service de lecture composée, pas d'entité persistée —
+si le Dispositif n'est qu'une vue, porter une configuration dessus
+demande une réflexion supplémentaire que ni l'un ni l'autre agent n'a
+eu à trancher seul).
+
+**Verdict** : question posée par le PO en revue d'écran résolue sur le
+fond (brut = inhérent + maker-checker manquant, pas un nouveau champ),
+un point de niveau (Dispositif vs Config) reste à arbitrer par le PO
+avant tout code — aucun des deux agents ne peut le trancher seul sans
+rouvrir DECISION-003bis. Aucun code de production modifié (revue
+uniquement).

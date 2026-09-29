@@ -7,6 +7,7 @@ import type {
   ProcessLevel,
   UpdateProcessInput,
 } from "../../../domain/entities/Process.js";
+import type { EvaluationMode } from "../../../domain/entities/Config.js";
 import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 
@@ -21,6 +22,7 @@ interface ProcessRow {
   document_reference: string | null;
   owner: string | null;
   active: boolean;
+  evaluation_mode: EvaluationMode | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -40,6 +42,7 @@ function toDomain(row: ProcessRow): Process {
     documentReference: row.document_reference,
     owner: row.owner,
     active: row.active,
+    evaluationMode: row.evaluation_mode,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -73,8 +76,8 @@ export class PostgresProcessRepository implements ProcessRepository {
   async create(input: CreateProcessInput): Promise<Process> {
     const { rows } = await this.pool.query<ProcessRow>(
       `INSERT INTO processes
-         (tenant_id, parent_id, level, name, description, document_type, document_reference, owner, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (tenant_id, parent_id, level, name, description, document_type, document_reference, owner, active, evaluation_mode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         input.tenantId,
@@ -86,6 +89,7 @@ export class PostgresProcessRepository implements ProcessRepository {
         input.documentReference ?? null,
         input.owner ?? null,
         input.active ?? true,
+        input.evaluationMode ?? null,
       ],
     );
     const row = rows[0];
@@ -104,6 +108,7 @@ export class PostgresProcessRepository implements ProcessRepository {
         document_reference: input.documentReference,
         owner: input.owner,
         active: input.active,
+        evaluation_mode: input.evaluationMode,
       },
       3,
     );

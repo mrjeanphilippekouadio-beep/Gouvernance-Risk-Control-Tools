@@ -4,7 +4,7 @@ import { moduleGuard } from "../src/api/middleware/moduleGuard.js";
 import { ModuleToggleService } from "../src/services/ModuleToggleService.js";
 import type { ModuleToggleRepository } from "../src/domain/repositories/ModuleToggleRepository.js";
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
-import type { ModuleToggle } from "../src/domain/entities/ModuleToggle.js";
+import { MODULE_NAMES, type ModuleToggle } from "../src/domain/entities/ModuleToggle.js";
 import { ForbiddenError } from "../src/domain/errors/DomainErrors.js";
 
 function inMemoryModuleToggleRepository(seed: ModuleToggle[] = []): ModuleToggleRepository {
@@ -45,12 +45,14 @@ function inMemoryAuditRepository(): AuditRepository {
 }
 
 describe("moduleGuard", () => {
-  it("blocks the request with a ForbiddenError when the module is disabled for the tenant", async () => {
+  // Every MODULE_NAMES entry is wired to moduleGuard in server.ts (ACT-221)
+  // — one test per module confirms each is actually enforced, not just RISK.
+  it.each(MODULE_NAMES)("blocks the request with a ForbiddenError when %s is disabled for the tenant", async (moduleName) => {
     const repo = inMemoryModuleToggleRepository([
       {
         id: "t1",
         tenantId: "tenant-1",
-        moduleName: "RISK",
+        moduleName,
         enabled: false,
         updatedBy: "admin",
         createdAt: new Date(),
@@ -58,7 +60,7 @@ describe("moduleGuard", () => {
       },
     ]);
     const service = new ModuleToggleService(repo, inMemoryAuditRepository());
-    const guard = moduleGuard(service, "RISK");
+    const guard = moduleGuard(service, moduleName);
 
     const req = { user: { tenantId: "tenant-1", userId: "u1", email: "a@b.c", displayName: "A", roles: [] } } as Request;
     let nextArg: unknown;
@@ -69,9 +71,9 @@ describe("moduleGuard", () => {
     expect(nextArg).toBeInstanceOf(ForbiddenError);
   });
 
-  it("lets the request through when the module is enabled (or never toggled)", async () => {
+  it.each(MODULE_NAMES)("lets the request through when %s is enabled (or never toggled)", async (moduleName) => {
     const service = new ModuleToggleService(inMemoryModuleToggleRepository(), inMemoryAuditRepository());
-    const guard = moduleGuard(service, "RISK");
+    const guard = moduleGuard(service, moduleName);
 
     const req = { user: { tenantId: "tenant-1", userId: "u1", email: "a@b.c", displayName: "A", roles: [] } } as Request;
     let called = false;

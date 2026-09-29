@@ -1,6 +1,6 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
-import type { Config, AppetiteMode, UpdateMethodologyInput } from "../domain/entities/Config.js";
+import type { Config, AppetiteMode, EvaluationMode, UpdateMethodologyInput } from "../domain/entities/Config.js";
 import { ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
@@ -8,6 +8,7 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 const SCORE_FORMULAS = ["P_X_I", "WEIGHTED_SUM"] as const;
 const IMPACT_RETENU_RULES = ["MAX", "AVERAGE", "WEIGHTED_SUM"] as const;
 const APPETITE_MODES = ["AUTO", "MANUEL", "AUTO_AVEC_SURCHARGE_MANUELLE"] as const;
+const EVALUATION_MODES = ["CLASSIQUE", "PARTICIPATIF"] as const;
 
 /**
  * Default shown to a tenant that has never explicitly saved a config row
@@ -25,6 +26,7 @@ function defaultConfig(tenantId: string): Config {
     levelThresholds: [],
     impactRetenuRule: "MAX",
     appetiteMode: "AUTO_AVEC_SURCHARGE_MANUELLE",
+    evaluationMode: "CLASSIQUE",
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),
@@ -130,6 +132,37 @@ export class ConfigService {
 
     const before = await this.get(actor);
     const after = await this.configs.upsert(actor.tenantId, { appetiteMode: mode }, actor.userId);
+
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Config",
+      entityId: after.id,
+      action: "UPDATE",
+      oldValue: before,
+      newValue: after,
+      reason,
+      requestId,
+    });
+
+    return after;
+  }
+
+  /** PUT /config/evaluation-mode — DIV-06. Same permission/reason bar as updateAppetiteMode; shares the same underlying row. */
+  async updateEvaluationMode(
+    actor: AuthenticatedUser,
+    mode: EvaluationMode,
+    reason: string,
+    requestId: string,
+  ): Promise<Config> {
+    requirePermission(actor, "config.update");
+    if (!reason.trim()) {
+      throw new ValidationError("A reason is required to change the evaluation mode — this affects the default risk evaluation methodology tenant-wide");
+    }
+    if (!EVALUATION_MODES.includes(mode)) throw new ValidationError(`Unknown evaluation mode: ${mode}`);
+
+    const before = await this.get(actor);
+    const after = await this.configs.upsert(actor.tenantId, { evaluationMode: mode }, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,

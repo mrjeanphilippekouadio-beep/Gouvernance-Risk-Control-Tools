@@ -6,6 +6,7 @@ const CreateRiskBody = z.object({
   process: z.string().min(1),
   description: z.string().min(1),
   ownerDepartmentId: z.string().nullish(),
+  processId: z.string().nullish(),
 });
 
 const UpdateRiskBody = z.object({
@@ -13,6 +14,7 @@ const UpdateRiskBody = z.object({
   description: z.string().min(1).optional(),
   ownerDepartmentId: z.string().nullish(),
   status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]).optional(),
+  processId: z.string().nullish(),
 });
 
 const ArchiveRiskBody = z.object({

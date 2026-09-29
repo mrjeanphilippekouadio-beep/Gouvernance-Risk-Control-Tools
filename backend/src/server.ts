@@ -168,6 +168,7 @@ const riskService = new RiskService(
   userRepository,
   notifier,
   riskEscalationRepository,
+  processRepository,
 );
 const departmentService = new DepartmentService(departmentRepository, auditRepository);
 const processService = new ProcessService(processRepository, auditRepository);
@@ -305,39 +306,84 @@ app.get("/ready", async (_req, res) => {
 });
 
 // --- Authenticated API ---
-// moduleGuard wired first for RISK (ACT-221) as the first real test of enforcement; the
-// other MODULE_NAMES (CONTROL, KRI, KPI, ...) can get the same one-line treatment as needed.
+// moduleGuard wired per MODULE_NAMES (ACT-221): each togglable module's main
+// resource route(s) get the same one-line treatment as /risks.
 app.use(
   "/api/v1/risks",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "RISK"),
   risksRouter(riskService),
 );
-app.use("/api/v1/evidences", authMiddleware(identityProvider), evidencesRouter(evidenceService));
-app.use("/api/v1/controls", authMiddleware(identityProvider), controlsRouter(controlService));
+app.use(
+  "/api/v1/evidences",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "EVIDENCE"),
+  evidencesRouter(evidenceService),
+);
+app.use(
+  "/api/v1/controls",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "CONTROL"),
+  controlsRouter(controlService),
+);
 app.use("/api/v1/executions", authMiddleware(identityProvider), executionsRouter(executionService));
 app.use("/api/v1/effectiveness", authMiddleware(identityProvider), effectivenessRouter(effectivenessService));
-app.use("/api/v1/anomalies", authMiddleware(identityProvider), anomaliesRouter(anomalyService));
+app.use(
+  "/api/v1/anomalies",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "ANOMALY"),
+  anomaliesRouter(anomalyService),
+);
 app.use("/api/v1/departments", authMiddleware(identityProvider), departmentsRouter(departmentService));
 app.use("/api/v1/processes", authMiddleware(identityProvider), processesRouter(processService));
 app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(auditLogService));
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
 app.use("/api/v1/feedback", authMiddleware(identityProvider), feedbackRouter(feedbackService));
 app.use("/api/v1/permissions", authMiddleware(identityProvider), permissionsRouter());
-app.use("/api/v1/kpis", authMiddleware(identityProvider), kpisRouter(kpiService));
+app.use(
+  "/api/v1/kpis",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "KPI"),
+  kpisRouter(kpiService),
+);
 app.use("/api/v1/kpi-measures", authMiddleware(identityProvider), kpiMeasuresRouter(kpiMeasureService));
 app.use("/api/v1/appetite", authMiddleware(identityProvider), riskAppetiteRouter(riskAppetiteService));
 app.use("/api/v1/rating-scales", authMiddleware(identityProvider), ratingScalesRouter(ratingScaleService));
 app.use("/api/v1/risk-evaluations", authMiddleware(identityProvider), riskEvaluationsRouter(riskEvaluationService));
-app.use("/api/v1/kris", authMiddleware(identityProvider), krisRouter(kriService));
+app.use(
+  "/api/v1/kris",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "KRI"),
+  krisRouter(kriService),
+);
 app.use("/api/v1/kri-measures", authMiddleware(identityProvider), kriMeasuresRouter(kriMeasureService));
 app.use("/api/v1/users", authMiddleware(identityProvider), usersRouter(userService));
 app.use("/api/v1/risk-owners", authMiddleware(identityProvider), riskOwnersRouter(riskOwnershipService));
-app.use("/api/v1/actions", authMiddleware(identityProvider), actionPlansRouter(actionPlanService));
+app.use(
+  "/api/v1/actions",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "ACTION_PLAN"),
+  actionPlansRouter(actionPlanService),
+);
 app.use("/api/v1/raci", authMiddleware(identityProvider), raciRouter(raciAssignmentService));
-app.use("/api/v1/dashboard", authMiddleware(identityProvider), actionPlanDashboardRouter(actionPlanService));
-app.use("/api/v1/cartography", authMiddleware(identityProvider), cartographyRouter(cartographyService));
-app.use("/api/v1/dashboard", authMiddleware(identityProvider), dashboardRouter(dashboardService));
+app.use(
+  "/api/v1/dashboard",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "DASHBOARD"),
+  actionPlanDashboardRouter(actionPlanService),
+);
+app.use(
+  "/api/v1/cartography",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "CARTOGRAPHY"),
+  cartographyRouter(cartographyService),
+);
+app.use(
+  "/api/v1/dashboard",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "DASHBOARD"),
+  dashboardRouter(dashboardService),
+);
 app.use("/api/v1/reports", authMiddleware(identityProvider), reportsRouter(dashboardService));
 app.use("/api/v1/branding", authMiddleware(identityProvider), brandingRouter(brandingService));
 app.use("/api/v1/config", authMiddleware(identityProvider), configRouter(configService));

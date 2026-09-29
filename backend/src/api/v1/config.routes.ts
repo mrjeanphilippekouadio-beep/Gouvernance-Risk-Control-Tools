@@ -20,7 +20,12 @@ const UpdateAppetiteModeBody = z.object({
   reason: z.string().min(1),
 });
 
-/** ACT-220 (PUT /config) and ACT-226 (PUT /config/appetite-mode) — see ConfigService for what's deliberately not wired yet. */
+const UpdateEvaluationModeBody = z.object({
+  mode: z.enum(["CLASSIQUE", "PARTICIPATIF"]),
+  reason: z.string().min(1),
+});
+
+/** ACT-220 (PUT /config), ACT-226 (PUT /config/appetite-mode) and DIV-06 (PUT /config/evaluation-mode) — see ConfigService for what's deliberately not wired yet. */
 export function configRouter(configService: ConfigService): Router {
   const router = Router();
 
@@ -48,6 +53,16 @@ export function configRouter(configService: ConfigService): Router {
     try {
       const body = UpdateAppetiteModeBody.parse(req.body);
       const config = await configService.updateAppetiteMode(req.user, body.mode, body.reason, req.requestId);
+      res.json({ data: config });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/evaluation-mode", async (req, res, next) => {
+    try {
+      const body = UpdateEvaluationModeBody.parse(req.body);
+      const config = await configService.updateEvaluationMode(req.user, body.mode, body.reason, req.requestId);
       res.json({ data: config });
     } catch (err) {
       next(err);

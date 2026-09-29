@@ -4,6 +4,7 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { RiskEscalationRepository } from "../domain/repositories/RiskEscalationRepository.js";
+import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { CreateRiskInput, Risk, UpdateRiskInput } from "../domain/entities/Risk.js";
 import type { RiskEscalation } from "../domain/entities/RiskEscalation.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
@@ -33,6 +34,15 @@ export class RiskService {
     private readonly notifier?: Notifier,
     /** ACT-125: optional so existing tests keep compiling — server.ts must wire the real repository for escalate() to work in production. */
     private readonly escalations?: RiskEscalationRepository,
+    /**
+     * DIV-05: optional so existing tests keep compiling, but if a caller
+     * actually supplies `processId`, `assertProcessExists` throws rather
+     * than silently skipping validation when this is unwired — the
+     * SEC-012 lesson (never `if (!this.x) return;` on a dependency the
+     * current call is actually trying to use). server.ts must wire the
+     * real repository for `processId` to ever be accepted.
+     */
+    private readonly processes?: ProcessRepository,
   ) {}
 
   async create(actor: AuthenticatedUser, input: Omit<CreateRiskInput, "tenantId">, requestId: string): Promise<Risk> {
@@ -40,6 +50,7 @@ export class RiskService {
     if (!input.process.trim()) throw new ValidationError("process is required");
     if (!input.description.trim()) throw new ValidationError("description is required");
     await this.assertDepartmentExists(actor.tenantId, input.ownerDepartmentId);
+    await this.assertProcessExists(actor.tenantId, input.processId);
 
     const risk = await this.risks.create({ ...input, tenantId: actor.tenantId });
 
@@ -84,6 +95,7 @@ export class RiskService {
       }
     }
     await this.assertDepartmentExists(actor.tenantId, input.ownerDepartmentId);
+    await this.assertProcessExists(actor.tenantId, input.processId);
 
     const after = await this.risks.update(actor.tenantId, id, input);
 
@@ -280,6 +292,23 @@ export class RiskService {
     if (!ownerDepartmentId || !this.departments) return;
     const department = await this.departments.getById(tenantId, ownerDepartmentId);
     if (!department) throw new ValidationError(`Department ${ownerDepartmentId} does not exist in this tenant`);
+  }
+
+  /**
+   * DIV-05: a processId, if given, must belong to the caller's tenant.
+   * Unlike assertDepartmentExists, a missing repository here does NOT
+   * silently skip validation when a processId was actually supplied —
+   * that would reintroduce the SEC-012 class of bug (a field accepted
+   * and stored with no validation ever having run). It's only safe to
+   * no-op when the caller didn't ask to set processId at all.
+   */
+  private async assertProcessExists(tenantId: string, processId: string | null | undefined): Promise<void> {
+    if (processId === undefined || processId === null) return;
+    if (!this.processes) {
+      throw new ValidationError("Risk process validation is not available: ProcessRepository is not configured");
+    }
+    const process = await this.processes.getById(tenantId, processId);
+    if (!process) throw new ValidationError(`Process ${processId} does not exist in this tenant`);
   }
 }
 
