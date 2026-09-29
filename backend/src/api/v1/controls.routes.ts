@@ -10,6 +10,7 @@ const CreateControlBody = z.object({
   objective: z.string().nullish(),
   coveredRiskIds: z.array(z.string()).min(1),
   process: z.string().nullish(),
+  processId: z.string().nullish(),
   departmentId: z.string().nullish(),
   procedureDescription: z.string().nullish(),
   controlType: ControlType,

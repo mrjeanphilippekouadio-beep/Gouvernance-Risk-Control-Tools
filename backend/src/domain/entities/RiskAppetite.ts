@@ -15,6 +15,18 @@ export interface RiskAppetite {
   tenantId: string;
   /** "sous_categorie" in the backlog — the risk sub-category this threshold applies to. */
   subCategory: string;
+  /**
+   * DIV-08 (.claude/agent-context/ACTION_ITEMS.md, @architect audit
+   * 2026-09-29): real FK to `risk_categories`, added alongside the
+   * free-text `subCategory` field above — not replacing it. Nullable,
+   * never backfilled: `subCategory` free text doesn't reliably match an
+   * existing `risk_categories.name`, so a migration would have to
+   * guess. Left null until a caller explicitly links a threshold to a
+   * real RiskCategory row. Do not confuse with RiskEvaluation.subCategory
+   * (a different entity's field, deliberately kept free text — see that
+   * entity's file header) — this FK touches RiskAppetite only.
+   */
+  subCategoryId: string | null;
   /** Optional scope: null means the threshold applies across all entities. */
   entity: string | null;
   /** "seuil" — score ceiling, 1-25 per the backlog's regle_critique. */
@@ -33,6 +45,7 @@ export interface RiskAppetite {
 export interface SetRiskAppetiteInput {
   tenantId: string;
   subCategory: string;
+  subCategoryId?: string | null;
   entity?: string | null;
   threshold: number;
   methodologyVersion: string;

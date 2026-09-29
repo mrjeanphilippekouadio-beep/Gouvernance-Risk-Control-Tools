@@ -4,8 +4,10 @@ import { ControlService } from "../src/services/ControlService.js";
 import type { ControlRepository } from "../src/domain/repositories/ControlRepository.js";
 import type { RiskRepository } from "../src/domain/repositories/RiskRepository.js";
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
+import type { ProcessRepository } from "../src/domain/repositories/ProcessRepository.js";
 import type { Control } from "../src/domain/entities/Control.js";
 import type { Risk } from "../src/domain/entities/Risk.js";
+import type { Process } from "../src/domain/entities/Process.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ValidationError } from "../src/domain/errors/DomainErrors.js";
 
@@ -32,6 +34,7 @@ function inMemoryControlRepository(): ControlRepository {
         objective: input.objective ?? null,
         coveredRiskIds: input.coveredRiskIds,
         process: input.process ?? null,
+        processId: input.processId ?? null,
         departmentId: input.departmentId ?? null,
         procedureDescription: input.procedureDescription ?? null,
         controlType: input.controlType,
@@ -100,6 +103,49 @@ function fakeRiskRepository(existingRiskIds: string[]): RiskRepository {
     async softDelete() {
       throw new Error("not used in this test");
     },
+  };
+}
+
+function inMemoryProcessRepository(processes: Process[]): ProcessRepository {
+  return {
+    async getById(tenantId, id) {
+      const p = processes.find((x) => x.tenantId === tenantId && x.id === id && !x.deletedAt);
+      return p ?? null;
+    },
+    async list() {
+      throw new Error("not implemented");
+    },
+    async create() {
+      throw new Error("not implemented");
+    },
+    async update() {
+      throw new Error("not implemented");
+    },
+    async softDelete() {
+      throw new Error("not implemented");
+    },
+  };
+}
+
+function stubProcess(overrides: Partial<Process> = {}): Process {
+  return {
+    id: randomUUID(),
+    tenantId: "tenant-1",
+    parentId: null,
+    level: "PROCESS",
+    name: "Onboarding",
+    description: null,
+    documentType: null,
+    documentReference: null,
+    owner: null,
+    active: true,
+    evaluationMode: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    deletedBy: null,
+    deletionReason: null,
+    ...overrides,
   };
 }
 
@@ -185,5 +231,76 @@ describe("ControlService", () => {
     await expect(
       service.update(actor, control.id, { coveredRiskIds: [] }, "REQ-11"),
     ).rejects.toThrow(ValidationError);
+  });
+
+  describe("processId (DIV-05)", () => {
+    it("creates a control with a valid processId when ProcessRepository is wired", async () => {
+      const process = stubProcess();
+      const service = new ControlService(
+        inMemoryControlRepository(),
+        fakeRiskRepository(["risk-1"]),
+        inMemoryAuditRepository(),
+        inMemoryProcessRepository([process]),
+      );
+
+      const control = await service.create(actor, { ...validInput, processId: process.id }, "REQ-12");
+      expect(control.processId).toBe(process.id);
+    });
+
+    it("creates a control with processId omitted (null), without needing ProcessRepository", async () => {
+      const service = new ControlService(inMemoryControlRepository(), fakeRiskRepository(["risk-1"]), inMemoryAuditRepository());
+      const control = await service.create(actor, validInput, "REQ-13");
+      expect(control.processId).toBeNull();
+    });
+
+    it("rejects a processId that does not resolve to a process in the tenant", async () => {
+      const service = new ControlService(
+        inMemoryControlRepository(),
+        fakeRiskRepository(["risk-1"]),
+        inMemoryAuditRepository(),
+        inMemoryProcessRepository([]),
+      );
+
+      await expect(
+        service.create(actor, { ...validInput, processId: randomUUID() }, "REQ-14"),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("throws (does not silently skip validation) when processId is supplied but ProcessRepository is not configured", async () => {
+      const service = new ControlService(inMemoryControlRepository(), fakeRiskRepository(["risk-1"]), inMemoryAuditRepository());
+
+      await expect(
+        service.create(actor, { ...validInput, processId: randomUUID() }, "REQ-15"),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("updates a control's processId when valid", async () => {
+      const processA = stubProcess();
+      const processB = stubProcess();
+      const service = new ControlService(
+        inMemoryControlRepository(),
+        fakeRiskRepository(["risk-1"]),
+        inMemoryAuditRepository(),
+        inMemoryProcessRepository([processA, processB]),
+      );
+      const control = await service.create(actor, { ...validInput, processId: processA.id }, "REQ-16");
+
+      const updated = await service.update(actor, control.id, { processId: processB.id }, "REQ-17");
+      expect(updated.processId).toBe(processB.id);
+    });
+
+    it("rejects a processId belonging to another tenant", async () => {
+      const otherTenantProcess = stubProcess({ tenantId: "tenant-2" });
+      const service = new ControlService(
+        inMemoryControlRepository(),
+        fakeRiskRepository(["risk-1"]),
+        inMemoryAuditRepository(),
+        inMemoryProcessRepository([otherTenantProcess]),
+      );
+
+      await expect(
+        service.create(actor, { ...validInput, processId: otherTenantProcess.id }, "REQ-18"),
+      ).rejects.toThrow(ValidationError);
+    });
   });
 });

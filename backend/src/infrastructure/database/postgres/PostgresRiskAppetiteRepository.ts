@@ -11,6 +11,7 @@ interface RiskAppetiteRow {
   id: string;
   tenant_id: string;
   sub_category: string;
+  sub_category_id: string | null;
   entity: string | null;
   threshold: number;
   methodology_version: string;
@@ -28,6 +29,7 @@ function toDomain(row: RiskAppetiteRow): RiskAppetite {
     id: row.id,
     tenantId: row.tenant_id,
     subCategory: row.sub_category,
+    subCategoryId: row.sub_category_id,
     entity: row.entity,
     threshold: row.threshold,
     methodologyVersion: row.methodology_version,
@@ -90,10 +92,11 @@ export class PostgresRiskAppetiteRepository implements RiskAppetiteRepository {
     const entity = input.entity ?? null;
     const { rows } = await this.pool.query<RiskAppetiteRow>(
       `INSERT INTO risk_appetites
-         (tenant_id, sub_category, entity, threshold, methodology_version, description, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (tenant_id, sub_category, sub_category_id, entity, threshold, methodology_version, description, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (tenant_id, sub_category, (COALESCE(entity, ''))) WHERE deleted_at IS NULL
        DO UPDATE SET
+         sub_category_id = EXCLUDED.sub_category_id,
          threshold = EXCLUDED.threshold,
          methodology_version = EXCLUDED.methodology_version,
          description = EXCLUDED.description,
@@ -103,6 +106,7 @@ export class PostgresRiskAppetiteRepository implements RiskAppetiteRepository {
       [
         input.tenantId,
         input.subCategory,
+        input.subCategoryId ?? null,
         entity,
         input.threshold,
         input.methodologyVersion,

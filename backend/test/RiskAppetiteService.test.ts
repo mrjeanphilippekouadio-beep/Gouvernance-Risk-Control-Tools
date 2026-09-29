@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import { RiskAppetiteService } from "../src/services/RiskAppetiteService.js";
 import type { RiskAppetiteRepository } from "../src/domain/repositories/RiskAppetiteRepository.js";
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
+import type { RiskCategoryRepository } from "../src/domain/repositories/RiskCategoryRepository.js";
 import type { RiskAppetite } from "../src/domain/entities/RiskAppetite.js";
+import type { RiskCategory } from "../src/domain/entities/RiskCategory.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 
@@ -44,6 +46,7 @@ function inMemoryRiskAppetiteRepository(): RiskAppetiteRepository {
         id: existing?.id ?? randomUUID(),
         tenantId: input.tenantId,
         subCategory: input.subCategory,
+        subCategoryId: input.subCategoryId ?? null,
         entity,
         threshold: input.threshold,
         methodologyVersion: input.methodologyVersion,
@@ -64,6 +67,37 @@ function inMemoryRiskAppetiteRepository(): RiskAppetiteRepository {
       if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
       byId.set(id, { ...existing, deletedAt: new Date(), deletedBy, deletionReason: reason });
     },
+  };
+}
+
+function inMemoryRiskCategoryRepository(categories: RiskCategory[]): RiskCategoryRepository {
+  return {
+    async getById(tenantId, id) {
+      const c = categories.find((x) => x.tenantId === tenantId && x.id === id);
+      return c ?? null;
+    },
+    async list() {
+      throw new Error("not implemented");
+    },
+    async create() {
+      throw new Error("not implemented");
+    },
+    async update() {
+      throw new Error("not implemented");
+    },
+  };
+}
+
+function stubRiskCategory(overrides: Partial<RiskCategory> = {}): RiskCategory {
+  return {
+    id: randomUUID(),
+    tenantId: "tenant-1",
+    name: "Fraude interne",
+    parentId: null,
+    active: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
   };
 }
 
@@ -214,5 +248,83 @@ describe("RiskAppetiteService", () => {
 
     await service.archive(actor, appetite.id, "Sous-catégorie fusionnée avec une autre", "REQ-3");
     await expect(service.get(actor, appetite.id)).rejects.toThrow(NotFoundError);
+  });
+
+  describe("subCategoryId (DIV-08)", () => {
+    it("sets a threshold with a valid subCategoryId when RiskCategoryRepository is wired", async () => {
+      const category = stubRiskCategory();
+      const service = new RiskAppetiteService(
+        inMemoryRiskAppetiteRepository(),
+        inMemoryAuditRepository(),
+        inMemoryRiskCategoryRepository([category]),
+      );
+
+      const appetite = await service.setThreshold(
+        actor,
+        "Fraude interne",
+        { threshold: 12, methodologyVersion: "v1", subCategoryId: category.id },
+        "REQ-10",
+      );
+      expect(appetite.subCategoryId).toBe(category.id);
+    });
+
+    it("sets a threshold with subCategoryId omitted (null), without needing RiskCategoryRepository", async () => {
+      const service = new RiskAppetiteService(inMemoryRiskAppetiteRepository(), inMemoryAuditRepository());
+      const appetite = await service.setThreshold(
+        actor,
+        "Fraude interne",
+        { threshold: 12, methodologyVersion: "v1" },
+        "REQ-11",
+      );
+      expect(appetite.subCategoryId).toBeNull();
+    });
+
+    it("rejects a subCategoryId that does not resolve to a risk category in the tenant", async () => {
+      const service = new RiskAppetiteService(
+        inMemoryRiskAppetiteRepository(),
+        inMemoryAuditRepository(),
+        inMemoryRiskCategoryRepository([]),
+      );
+
+      await expect(
+        service.setThreshold(
+          actor,
+          "Fraude interne",
+          { threshold: 12, methodologyVersion: "v1", subCategoryId: randomUUID() },
+          "REQ-12",
+        ),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("throws (does not silently skip validation) when subCategoryId is supplied but RiskCategoryRepository is not configured", async () => {
+      const service = new RiskAppetiteService(inMemoryRiskAppetiteRepository(), inMemoryAuditRepository());
+
+      await expect(
+        service.setThreshold(
+          actor,
+          "Fraude interne",
+          { threshold: 12, methodologyVersion: "v1", subCategoryId: randomUUID() },
+          "REQ-13",
+        ),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("rejects a subCategoryId belonging to another tenant", async () => {
+      const otherTenantCategory = stubRiskCategory({ tenantId: "tenant-2" });
+      const service = new RiskAppetiteService(
+        inMemoryRiskAppetiteRepository(),
+        inMemoryAuditRepository(),
+        inMemoryRiskCategoryRepository([otherTenantCategory]),
+      );
+
+      await expect(
+        service.setThreshold(
+          actor,
+          "Fraude interne",
+          { threshold: 12, methodologyVersion: "v1", subCategoryId: otherTenantCategory.id },
+          "REQ-14",
+        ),
+      ).rejects.toThrow(ValidationError);
+    });
   });
 });
