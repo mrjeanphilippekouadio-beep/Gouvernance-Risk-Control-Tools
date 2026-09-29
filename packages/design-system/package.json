@@ -3,8 +3,13 @@
   "version": "0.1.0",
   "description": "Djamo design system — React components and design tokens, reusable across projects.",
   "type": "module",
-  "sideEffects": ["*.css"],
-  "files": ["dist", "src/tokens.css"],
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "dist",
+    "src/tokens.css"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -23,6 +28,7 @@
   },
   "dependencies": {
     "chart.js": "^4.5.0",
+    "gridstack": "^14.0.0",
     "lucide-react": "^0.545.0",
     "react-chartjs-2": "^5.3.0"
   },

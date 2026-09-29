@@ -17,7 +17,7 @@ Peer deps: `react` / `react-dom` >= 18.
 import "@djamo/design-system/tokens.css"; // theme: colors, fonts, spacing, radius
 import "@djamo/design-system/styles.css"; // component styles
 
-import { Button, FormField, StatusBadge, Table, Tabs, TrendChart } from "@djamo/design-system";
+import { Button, FormField, LineChart, StatusBadge, Table, Tabs } from "@djamo/design-system";
 ```
 
 Theming: override any `--gs-*` custom property after importing `tokens.css`.

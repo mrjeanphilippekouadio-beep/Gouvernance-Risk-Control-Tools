@@ -1,0 +1,27 @@
+/* Chrome around GridStack's own layout CSS (imported by DashboardGrid.tsx).
+   Only the widget shell is styled here — the widget's own content is the
+   caller's business. */
+
+.gs-dashboard .grid-stack-item-content {
+  background: var(--gs-bg-page);
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius-card);
+  box-shadow: var(--gs-shadow-card);
+  overflow: auto;
+  font-family: var(--gs-font-ui);
+  color: var(--gs-text);
+}
+
+.gs-dashboard--editable .grid-stack-item-content {
+  cursor: grab;
+}
+
+.gs-dashboard--editable .grid-stack-item-content:active {
+  cursor: grabbing;
+}
+
+.gs-dashboard .grid-stack-placeholder > .placeholder-content {
+  border: 2px dashed var(--gs-primary);
+  border-radius: var(--gs-radius-card);
+  background: var(--gs-primary-bg);
+}
