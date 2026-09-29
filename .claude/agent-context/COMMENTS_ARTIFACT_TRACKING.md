@@ -36,6 +36,12 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `787b4e53` | Points mal centrés dans les cellules | resolved (v26) — résolu de fait par les vraies coordonnées Chart.js |
 | `91b9756d` | 4 graphiques : ajouter répartition par processus + par département, proposer plusieurs variantes A/B/C | **open — 3 variantes livrées (v26), attente validation PO sur laquelle garder** |
 | `6131a28a` | Fond des cases à cocher en blanc (Admin·Rôles) | resolved (v26) |
+| `85d640e2` | Bandeau "Dépend d'Évaluation" doit refléter les états des évaluations | resolved (v27) — résumé badges ajouté (3 Validé/1 En attente/1 Brouillon/1 Rejetée) |
+| `33664e00` | Description du risque manquante dans la liste | resolved (v27) |
+| `a3e10b3d` | Colonnes de tags non alignées (largeur du mot le plus long) | resolved (v27) — liste passée en vraie grille CSS |
+| `bc9cba92` (rouvert) | Teintes des points de criticité trop pâles, difficiles à distinguer | resolved (v27) — palette saturée dédiée aux points, distincte du fond pâle de la heatmap |
+| `927e753a` (rouvert) | Panneau Comments/RACI/Evidence/Occurrence : déplacer de bas de page vers la colonne droite (au-dessus Historique/Actions), redimensionner | resolved (v27) — écran Évaluation |
+| `faa01c24` | Panneau Commentaires sur Cartographie — ambigu, clarification demandée | **open — attente précision PO** |
 
 Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
