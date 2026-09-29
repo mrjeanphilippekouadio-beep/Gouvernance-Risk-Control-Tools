@@ -55,6 +55,8 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `23e7baee` | **Vraie nomenclature Djamo reçue (9 processus, 15 directions)** — remplace les listes illustratives ; case-par-criticité (span CSS) au lieu de teinte seule | **open (v39) — attente validation PO comme référence définitive, pas encore propagée au registre/évaluation** |
 | `95f13578` | "Retire ce bloc" — ambigu, proposé et retiré graphique 5 (treemap, redondant avec 3/4) | **open (v40) — attente confirmation que c'était le bon bloc** |
 | `7fe0e5a8` | Graphiques 3/4 : couleurs vert→rouge (mêmes teintes que heatmap 1/2) + visualiser la "surface" quand plusieurs risques/nombres différents | resolved (v41) — palette `#a6e0ba→#e0483a` reprise, cases passées de `grid-column:span N` à taille explicite largeur+hauteur (44px/86px), côté ∝ √(nb risques) donc surface réellement proportionnelle |
+| `fbc778f5` | Décalage horizontal (regression v41) sur graphiques 3/4 — cases pas alignées | resolved (v42) — repassé de flex-wrap à grille CSS à colonnes fixes (4/5), taille variable déplacée dans un `.swatch` interne centré, alignement propre conservé avec surface toujours ∝ risques |
+| `69a001f2` | Heatmap façon ECharts treemap-show-parent (zoom/drill-down + breadcrumb) | **open — clarification demandée : charts 3/4 ou 1/2 ? et confirmation du périmètre interaction (2 niveaux seulement pour l'instant)** |
 
 Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
