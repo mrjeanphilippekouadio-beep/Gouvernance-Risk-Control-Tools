@@ -57,6 +57,8 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `7fe0e5a8` | Graphiques 3/4 : couleurs vert→rouge (mêmes teintes que heatmap 1/2) + visualiser la "surface" quand plusieurs risques/nombres différents | resolved (v41) — palette `#a6e0ba→#e0483a` reprise, cases passées de `grid-column:span N` à taille explicite largeur+hauteur (44px/86px), côté ∝ √(nb risques) donc surface réellement proportionnelle |
 | `fbc778f5` | Décalage horizontal (regression v41) sur graphiques 3/4 — cases pas alignées | resolved (v42) — repassé de flex-wrap à grille CSS à colonnes fixes (4/5), taille variable déplacée dans un `.swatch` interne centré, alignement propre conservé avec surface toujours ∝ risques |
 | `69a001f2` | Heatmap façon ECharts treemap-show-parent (zoom/drill-down + breadcrumb) | **open — clarification demandée : charts 3/4 ou 1/2 ? et confirmation du périmètre interaction (2 niveaux seulement pour l'instant)** |
+| `7c5f4a8e` | Graphique 3 : matrice 3×3 taille uniforme (nom le plus long), nombre+couleur | resolved (v43) — annule/remplace la logique "surface ∝ risques" du fil `7fe0e5a8`, retour à une grille uniforme |
+| `f0009f21` | Graphique 4 : matrice 3×5 taille uniforme (nom le plus long), nombre+couleur | resolved (v43) — idem, grille uniforme |
 
 Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
