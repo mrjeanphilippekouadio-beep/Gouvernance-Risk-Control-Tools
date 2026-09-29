@@ -113,7 +113,7 @@ export function RisksPage({ token }: RisksPageProps) {
         ]}
       />
 
-      {raciRiskId && <RaciPanel token={token} entityType="Risk" entityId={raciRiskId} />}
+      {raciRiskId && <RaciPanel token={token} entityType="RISK" entityId={raciRiskId} />}
     </section>
   );
 }

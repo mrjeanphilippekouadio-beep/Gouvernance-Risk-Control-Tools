@@ -1257,14 +1257,14 @@ describe("SEC-016 RACI self-Accountable guard bypassable via assignment order", 
 
       // Self-designate as Accountable FIRST — allowed today, since no
       // Responsible assignment exists yet for this user on this entity.
-      await service.assign(selfDesigner, "Risk", "risk-1", selfDesigner.userId, "A", "REQ-SEC-016a");
+      await service.assign(selfDesigner, "RISK", "risk-1", selfDesigner.userId, "A", "REQ-SEC-016a");
 
       // Then self-designate as Responsible — a secure implementation must
       // reject this exactly as it rejects the reverse order (R then A),
       // since the resulting state (same person R+A on the same entity) is
       // identical either way.
       await expect(
-        service.assign(selfDesigner, "Risk", "risk-1", selfDesigner.userId, "R", "REQ-SEC-016b"),
+        service.assign(selfDesigner, "RISK", "risk-1", selfDesigner.userId, "R", "REQ-SEC-016b"),
       ).rejects.toThrow(ForbiddenError);
     },
   );

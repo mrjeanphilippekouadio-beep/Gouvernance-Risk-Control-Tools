@@ -1,3 +1,5 @@
+import type { GrcObjectType } from "../GrcObjectType.js";
+
 /**
  * Lot 1 (RACI minimal, GRC_Migration_Plan.md §Lot A): business
  * responsibility on a GRC object — who is Responsible/Accountable/
@@ -8,6 +10,11 @@
  * a deliberate later change to both this union and the DB CHECK, not an
  * open string.
  *
+ * Derived from the canonical GrcObjectType (see GrcObjectType.ts) rather
+ * than its own literal union — migration 028_raci_entity_type_snake_case.sql
+ * renamed the previous PascalCase values ("Risk"/"Control"/"ActionPlan")
+ * to match GrcObjectType's SNAKE_CASE upper convention.
+ *
  * `entityId` is a polymorphic reference validated by the service against
  * the real Risk/Control/ActionPlan repositories before any write — same
  * "never trust entityId blindly" rule EvidenceService applies to file
@@ -15,7 +22,10 @@
  * target tables, so the DB migration whitelists `entity_type` via CHECK
  * and leaves existence checking to the service.
  */
-export type RaciEntityType = "Risk" | "Control" | "ActionPlan";
+export type RaciEntityType = Extract<GrcObjectType, "RISK" | "CONTROL" | "ACTION_PLAN">;
+
+/** Runtime mirror of RaciEntityType, for the Zod enum / service whitelist. */
+export const RACI_ENTITY_TYPES: readonly RaciEntityType[] = ["RISK", "CONTROL", "ACTION_PLAN"];
 
 export type RaciRole = "R" | "A" | "C" | "I";
 

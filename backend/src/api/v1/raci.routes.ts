@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { RaciAssignmentService } from "../../services/RaciAssignmentService.js";
-import type { RaciEntityType, RaciRole } from "../../domain/entities/RaciAssignment.js";
+import { RACI_ENTITY_TYPES, type RaciEntityType, type RaciRole } from "../../domain/entities/RaciAssignment.js";
 
-const EntityType = z.enum(["Risk", "Control", "ActionPlan"]);
+const EntityType = z.enum(RACI_ENTITY_TYPES as [RaciEntityType, ...RaciEntityType[]]);
 const RaciRoleSchema = z.enum(["R", "A", "C", "I"]);
 
 const AssignBody = z.object({

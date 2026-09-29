@@ -3,12 +3,12 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
 import type { ActionPlanRepository } from "../domain/repositories/ActionPlanRepository.js";
-import type { RaciAssignment, RaciEntityType, RaciRole } from "../domain/entities/RaciAssignment.js";
+import { RACI_ENTITY_TYPES, type RaciAssignment, type RaciEntityType, type RaciRole } from "../domain/entities/RaciAssignment.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
-const ENTITY_TYPES: RaciEntityType[] = ["Risk", "Control", "ActionPlan"];
+const ENTITY_TYPES: RaciEntityType[] = [...RACI_ENTITY_TYPES];
 const ROLES: RaciRole[] = ["R", "A", "C", "I"];
 
 /**
@@ -130,13 +130,13 @@ export class RaciAssignmentService {
 
   /** Never trust entityId blindly (EvidenceService pattern, CLAUDE.md) — resolve the target row in the actor's tenant before any write. */
   private async assertEntityExists(tenantId: string, entityType: RaciEntityType, entityId: string): Promise<void> {
-    if (entityType === "Risk" && this.risks) {
+    if (entityType === "RISK" && this.risks) {
       const risk = await this.risks.getById(tenantId, entityId);
       if (!risk) throw new ValidationError(`Risk ${entityId} does not exist in this tenant`);
-    } else if (entityType === "Control" && this.controls) {
+    } else if (entityType === "CONTROL" && this.controls) {
       const control = await this.controls.getById(tenantId, entityId);
       if (!control) throw new ValidationError(`Control ${entityId} does not exist in this tenant`);
-    } else if (entityType === "ActionPlan" && this.actionPlans) {
+    } else if (entityType === "ACTION_PLAN" && this.actionPlans) {
       const action = await this.actionPlans.getById(tenantId, entityId);
       if (!action) throw new ValidationError(`ActionPlan ${entityId} does not exist in this tenant`);
     }

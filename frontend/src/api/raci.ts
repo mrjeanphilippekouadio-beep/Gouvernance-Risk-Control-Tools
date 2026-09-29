@@ -1,6 +1,6 @@
 import { apiRequest } from "./client";
 
-export type RaciEntityType = "Risk" | "Control" | "ActionPlan";
+export type RaciEntityType = "RISK" | "CONTROL" | "ACTION_PLAN";
 export type RaciRole = "R" | "A" | "C" | "I";
 
 export interface RaciAssignment {
