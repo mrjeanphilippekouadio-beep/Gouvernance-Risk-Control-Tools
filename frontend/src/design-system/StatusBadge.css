@@ -1,12 +1,23 @@
 .status-badge {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   font-family: var(--gs-font-ui);
-  font-size: var(--gs-font-size-body);
-  font-weight: 500;
-  padding: 2px var(--gs-space-2);
-  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 3px 9px;
+  border-radius: var(--gs-radius-pill);
   white-space: nowrap;
+}
+
+.status-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
 }
 
 .status-badge-danger {

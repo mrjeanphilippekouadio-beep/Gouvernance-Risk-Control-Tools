@@ -2,7 +2,7 @@
 
 :root {
   font: var(--gs-font-size-body)/145% var(--gs-font-ui);
-  color-scheme: light dark;
+  color-scheme: light;
   color: var(--gs-text);
   background: var(--gs-bg-page);
   font-synthesis: none;
@@ -33,8 +33,8 @@ body {
 
 h1,
 h2 {
-  font-family: var(--gs-font-ui);
-  font-weight: 600;
+  font-family: var(--gs-font-display);
+  font-weight: 700;
   color: var(--gs-text);
 }
 
@@ -58,7 +58,7 @@ p {
 }
 
 code {
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: var(--gs-font-mono);
   font-size: 13px;
   line-height: 135%;
   padding: 4px 8px;

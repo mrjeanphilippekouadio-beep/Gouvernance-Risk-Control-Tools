@@ -1,27 +1,43 @@
 /**
  * Unified design tokens — replaces the two disconnected systems that
  * coexisted before (index.css custom properties vs. hardcoded values in
- * App.css). See frontend/DESIGN_NOTES.md section 4 for the rationale
- * behind each value; this file is the single source of truth they
- * describe. No Djamo brand chart was found in the repo — this is a
- * neutral, professional direction pending validation, not a brand
- * decision (see DESIGN_NOTES.md intro).
+ * App.css). See frontend/DESIGN_NOTES.md section 4 for the original
+ * rationale, superseded on the points below by the validated Djamo
+ * brand chart.
+ *
+ * PO validation 2026-09-28 (see .claude/agent-context/ACTION_ITEMS.md,
+ * decision log entry for the artifact-to-tokens port): the palette/
+ * typography/radius proposed and iterated V1→V6 in
+ * https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57 (SHARED_LOG.md,
+ * @ux-designer entries) is now ported here. Only VALUES change — every
+ * `--gs-*` name is unchanged, so no component (Table, FormField,
+ * StatusBadge, Button, Tabs, RaciPanel, …) needed any edit to pick up
+ * the new charter.
+ *
+ * Known deviation from DESIGN_NOTES.md 4.2 ("system font stack only,
+ * no network dependency"): the validated charter loads 3 Google Fonts.
+ * That original constraint was explicitly traded off by the PO go-ahead
+ * on the artifact; flagged here rather than silently dropped.
  */
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap");
+
 :root {
-  /* Neutrals */
-  --gs-bg-page: #f7f8fa;
-  --gs-bg-surface: #ffffff;
-  --gs-border: #dde1e6;
-  --gs-text: #1a2027;
-  --gs-text-secondary: #5a6472;
-  --gs-text-disabled: #9aa3ae;
+  /* Neutrals (Djamo periwinkle-tinted paper/surface, artifact V6 --ink/--paper/--surface/--line) */
+  --gs-bg-page: #f8f7fc;
+  --gs-bg-surface: #f2effb;
+  --gs-border: #e0dbf1;
+  --gs-text: #1b1a2c;
+  --gs-text-secondary: #54536d;
+  --gs-text-disabled: #9995ae;
 
-  /* Brand accent (neutral direction — see DESIGN_NOTES.md 4.1) */
-  --gs-primary: #1f4b99;
-  --gs-primary-hover: #173b7a;
-  --gs-primary-bg: #e7eef9;
+  /* Brand accent — Djamo CTA blue rgb(42,63,255), validated V1→V6 */
+  --gs-primary: #2a3fff;
+  --gs-primary-hover: #1f2fd6;
+  --gs-primary-bg: #e3e5ff;
 
-  /* Status semantics — always paired with a text label, never color alone */
+  /* Status semantics — unchanged from the neutral direction: never
+     concurrenced by the brand color (see DESIGN_NOTES.md 4.1, confirmed
+     as still correct in every artifact iteration). */
   --gs-danger: #b3261e;
   --gs-danger-bg: #fbeae9;
   --gs-warning: #8a5a00;
@@ -30,8 +46,8 @@
   --gs-success-bg: #e7f5ec;
   --gs-neutral: #5a6472;
   --gs-neutral-bg: #eef0f2;
-  --gs-info: #1f4b99;
-  --gs-info-bg: #e7eef9;
+  --gs-info: #2a3fff;
+  --gs-info-bg: #e3e5ff;
 
   /* Spacing scale — every margin/padding in the design system draws from this */
   --gs-space-1: 4px;
@@ -40,38 +56,33 @@
   --gs-space-4: 24px;
   --gs-space-5: 32px;
 
-  /* Typography — 3 roles, system font stack only (see DESIGN_NOTES.md 4.2) */
-  --gs-font-ui: system-ui, "Segoe UI", Roboto, sans-serif;
+  /* Typography — 3 roles, per the validated charter (artifact V6 .meta):
+     Plus Jakarta Sans for titles, IBM Plex Sans for UI/body/labels,
+     IBM Plex Mono strictly for standalone numeric/tabular values. */
+  --gs-font-display: "Plus Jakarta Sans", "IBM Plex Sans", system-ui, sans-serif;
+  --gs-font-ui: "IBM Plex Sans", system-ui, "Segoe UI", Roboto, sans-serif;
+  --gs-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
   --gs-font-size-title: 20px;
   --gs-font-size-subtitle: 16px;
   --gs-font-size-body: 14px;
   --gs-font-size-data: 14px;
 
-  --gs-radius: 6px;
+  --gs-radius: 8px;
+  --gs-radius-btn: 10px;
+  --gs-radius-card: 14px;
+  --gs-radius-pill: 999px;
+
+  /* Elevation — depth via shadow, never a flat color change, per the
+     validated charter (artifact V5 Material-like system: repos/survol/
+     actif). Used on buttons and card-like surfaces (Table, RaciPanel). */
+  --gs-elev-1: 0 1px 2px rgba(27, 26, 44, 0.09), 0 1px 1px rgba(27, 26, 44, 0.05);
+  --gs-elev-2: 0 2px 4px rgba(27, 26, 44, 0.1), 0 6px 14px -6px rgba(27, 26, 44, 0.2);
+  --gs-elev-3: 0 3px 6px rgba(27, 26, 44, 0.12), 0 12px 22px -8px rgba(27, 26, 44, 0.26);
+  --gs-shadow-card: 0 1px 2px rgba(27, 26, 44, 0.05), 0 10px 28px -18px rgba(27, 26, 44, 0.22);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --gs-bg-page: #16171d;
-    --gs-bg-surface: #1f2028;
-    --gs-border: #2e303a;
-    --gs-text: #f3f4f6;
-    --gs-text-secondary: #9ca3af;
-    --gs-text-disabled: #6b7280;
-
-    --gs-primary: #6f9ce8;
-    --gs-primary-hover: #8fb2ec;
-    --gs-primary-bg: rgba(111, 156, 232, 0.15);
-
-    --gs-danger: #f2887f;
-    --gs-danger-bg: rgba(179, 38, 30, 0.2);
-    --gs-warning: #e0b34d;
-    --gs-warning-bg: rgba(138, 90, 0, 0.2);
-    --gs-success: #6fd19b;
-    --gs-success-bg: rgba(30, 122, 70, 0.2);
-    --gs-neutral: #9ca3af;
-    --gs-neutral-bg: rgba(90, 100, 114, 0.2);
-    --gs-info: #6f9ce8;
-    --gs-info-bg: rgba(31, 75, 153, 0.2);
-  }
-}
+/* No dark variant: PO decision 2026-09-28 (DECISION-001 addendum,
+   ACTION_ITEMS.md) — thème clair uniquement, conforme à la charte
+   validée (artifact V1-V6, changelog .meta: "Thème clair uniquement").
+   Dark-mode support intentionally removed, not just left unstyled —
+   see index.css `color-scheme: light`. */

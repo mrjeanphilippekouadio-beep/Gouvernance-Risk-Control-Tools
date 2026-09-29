@@ -24,5 +24,6 @@
 
 .gs-tab-active {
   color: var(--gs-primary);
+  font-weight: 700;
   border-bottom-color: var(--gs-primary);
 }
