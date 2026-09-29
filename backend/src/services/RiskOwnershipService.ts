@@ -85,7 +85,11 @@ export class RiskOwnershipService {
       if (!ownersInGroup.has(risk.ownerId)) {
         if (!userCache.has(risk.ownerId)) {
           const user = await this.users.getById(actor.tenantId, risk.ownerId);
-          userCache.set(risk.ownerId, user ? { displayName: user.displayName, email: user.email } : null);
+          // PRIV-CH-DASH-001: getById doesn't filter deleted_at (unlike getByEmail/list),
+          // so a suspended owner must be treated the same as "not found" here — same
+          // fallback path as an unresolved user, never their real name/email.
+          const activeUser = user && !user.deletedAt ? user : null;
+          userCache.set(risk.ownerId, activeUser ? { displayName: activeUser.displayName, email: activeUser.email } : null);
         }
         const cached = userCache.get(risk.ownerId) ?? null;
         ownersInGroup.set(risk.ownerId, {
