@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { raciApi, type RaciAssignment, type RaciEntityType, type RaciRole } from "../api/raci";
 import { usersApi, type UserSummary } from "../api/users";
 import { ApiError } from "../api/client";
-import { Button, FormField, StatusBadge } from "@djamo/design-system";
+import { Button, Card, FormField, MessageBanner, StatusBadge } from "@djamo/design-system";
 import "./RaciPanel.css";
 
 interface RaciPanelProps {
@@ -89,14 +89,12 @@ export function RaciPanel({ token, entityType, entityId }: RaciPanelProps) {
   }
 
   return (
-    <div className="raci-panel">
+    <Card className="raci-panel">
       <h3>RACI</h3>
-      {error && (
-        <p role="alert" className="raci-error">
-          {error}
-        </p>
+      {error && <MessageBanner tone="danger">{error}</MessageBanner>}
+      {readOnly && (
+        <MessageBanner tone="info">Lecture seule — droits insuffisants pour modifier le RACI.</MessageBanner>
       )}
-      {readOnly && <p className="raci-readonly-note">Lecture seule — droits insuffisants pour modifier le RACI.</p>}
 
       {loading ? (
         <p>Chargement…</p>
@@ -182,7 +180,7 @@ export function RaciPanel({ token, entityType, entityId }: RaciPanelProps) {
           </Button>
         </form>
       )}
-    </div>
+    </Card>
   );
 }
 

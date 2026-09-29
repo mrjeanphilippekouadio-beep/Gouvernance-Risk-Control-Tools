@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { feedbackApi, type FeedbackCategory } from "../../api/feedback";
 import { ApiError } from "../../api/client";
-import { Button, FormField } from "@djamo/design-system";
+import { Button, Card, FormField, MessageBanner } from "@djamo/design-system";
 
 interface FeedbackWidgetProps {
   /** Google ID token — see AuthContext TODO in App.tsx. */
@@ -56,7 +56,7 @@ export function FeedbackWidget({ token }: FeedbackWidgetProps) {
       </Button>
 
       {open && (
-        <div className="feedback-widget__panel">
+        <Card className="feedback-widget__panel">
           {sent ? (
             <>
               <p>Merci, c'est transmis.</p>
@@ -87,13 +87,13 @@ export function FeedbackWidget({ token }: FeedbackWidgetProps) {
                   placeholder="Un bug, une idée, une recommandation…"
                 />
               </FormField>
-              {error && <p role="alert">{error}</p>}
+              {error && <MessageBanner tone="danger">{error}</MessageBanner>}
               <Button type="submit" variant="primary" disabled={sending || !message.trim()}>
                 {sending ? "Envoi…" : "Envoyer"}
               </Button>
             </form>
           )}
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { feedbackApi, type Feedback, type FeedbackStatus } from "../../api/feedback";
 import { ApiError } from "../../api/client";
-import { FormField, StatusBadge, Table, type StatusTone } from "@djamo/design-system";
+import { FormField, MessageBanner, StatusBadge, Table, type StatusTone } from "@djamo/design-system";
 
 interface FeedbackAdminProps {
   token: string;
@@ -78,7 +78,7 @@ export function FeedbackAdmin({ token }: FeedbackAdminProps) {
         </select>
       </FormField>
 
-      {error && <p role="alert">{error}</p>}
+      {error && <MessageBanner tone="danger">{error}</MessageBanner>}
 
       <Table
         loading={loading}

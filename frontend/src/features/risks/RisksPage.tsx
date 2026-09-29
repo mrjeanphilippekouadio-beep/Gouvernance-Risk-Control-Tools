@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { risksApi, type Risk, type RiskStatus } from "../../api/risks";
 import { ApiError } from "../../api/client";
-import { Button, FormField, StatusBadge, Table, type StatusTone } from "@djamo/design-system";
+import { Button, FormField, MessageBanner, StatusBadge, Table, type StatusTone } from "@djamo/design-system";
 import { RaciPanel } from "../../design-system";
 
 interface RisksPageProps {
@@ -87,7 +87,7 @@ export function RisksPage({ token }: RisksPageProps) {
         </Button>
       </form>
 
-      {error && <p role="alert">{error}</p>}
+      {error && <MessageBanner tone="danger">{error}</MessageBanner>}
 
       <Table
         loading={loading}
