@@ -111,6 +111,7 @@ import { reviewCyclesRouter } from "./api/v1/reviewCycles.routes.js";
 import { permissionsRouter } from "./api/v1/permissions.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
+import { moduleGuard } from "./api/middleware/moduleGuard.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
 
 const app = express();
@@ -304,7 +305,14 @@ app.get("/ready", async (_req, res) => {
 });
 
 // --- Authenticated API ---
-app.use("/api/v1/risks", authMiddleware(identityProvider), risksRouter(riskService));
+// moduleGuard wired first for RISK (ACT-221) as the first real test of enforcement; the
+// other MODULE_NAMES (CONTROL, KRI, KPI, ...) can get the same one-line treatment as needed.
+app.use(
+  "/api/v1/risks",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "RISK"),
+  risksRouter(riskService),
+);
 app.use("/api/v1/evidences", authMiddleware(identityProvider), evidencesRouter(evidenceService));
 app.use("/api/v1/controls", authMiddleware(identityProvider), controlsRouter(controlService));
 app.use("/api/v1/executions", authMiddleware(identityProvider), executionsRouter(executionService));

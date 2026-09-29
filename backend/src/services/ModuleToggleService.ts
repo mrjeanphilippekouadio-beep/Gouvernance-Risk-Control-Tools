@@ -11,12 +11,9 @@ function isModuleName(value: string): value is ModuleName {
 
 /**
  * ACT-221 — storage for which modules are toggled off, plus the audit
- * trail for that decision. Does NOT enforce anything: no middleware here
- * actually blocks a request to a disabled module's routes. That's a
- * separate change touching server.ts and every route file (each route
- * file would need to check this before running), explicitly out of
- * scope for this batch per the dispatch brief. Treat GET as informational
- * only until that follow-up exists.
+ * trail for that decision, and the enforcement check (isEnabled) used by
+ * moduleGuard middleware (see api/middleware/moduleGuard.ts) to actually
+ * block requests to a disabled module's routes.
  */
 export class ModuleToggleService {
   constructor(
@@ -66,5 +63,11 @@ export class ModuleToggleService {
     });
 
     return after;
+  }
+
+  /** Used by moduleGuard — no permission check: every authenticated user is subject to the toggle, not just config admins. */
+  async isEnabled(tenantId: string, moduleName: ModuleName): Promise<boolean> {
+    const toggle = await this.toggles.getByName(tenantId, moduleName);
+    return toggle?.enabled ?? true;
   }
 }
