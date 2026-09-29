@@ -2404,3 +2404,148 @@ un point de niveau (Dispositif vs Config) reste à arbitrer par le PO
 avant tout code — aucun des deux agents ne peut le trancher seul sans
 rouvrir DECISION-003bis. Aucun code de production modifié (revue
 uniquement).
+
+---
+
+**2026-09-29 — @dev-frontend** — DECISION-008, `@djamo/design-system` (PR #18)
+
+Extraction en package npm réutilisable hors de ce projet, demande
+explicite du PO. 18 atomes UI (5 portés depuis l'artefact validé + 13
+nouveaux : Breadcrumb, Card, Menu, MessageBanner, Pagination, Panel,
+FileUpload, Grid, Slider, DatePicker, SegmentedControl, Timeline,
+Modal), 6 composants Chart.js (LineChart, BarChart, BubbleChart,
+DoughnutChart, ScatterChart, ProgressBar), `DashboardGrid` (wrapper
+GridStack écrit à la main — le wrapper officiel v14 suppose des
+widgets sérialisables incompatibles avec une prop `content: ReactNode`
+sans remount, `gridstack-react` est dépublié), icônes `lucide-react`
+(libre choix). Aucun typage de domaine GRC dans le package (confirmé
+par grep lors de l'audit "objet imbricable" du même jour) — surface
+sécurité nulle, composants génériques par construction. CI corrigée
+(3 itérations, root cause réelle npm/cli#4828 : lockfile Windows sans
+entrée résolue pour `@rolldown/binding-linux-x64-gnu`). PR #18 mergée.
+
+---
+
+**2026-09-29 — @dev-backend** — DIV-07 + outillage backfill + remplacement atomes (PR #19)
+
+`RiskEvaluationViewService.getEvaluationContext` compose les contrôles
+couvrant un risque évalué + leur dernière efficacité — garde-fou
+explicite et testé : jamais de dérivation automatique de la maîtrise
+depuis l'efficacité des contrôles (la maîtrise reste un jugement
+humain par ligne de défense, ACT-152). Zéro écriture, zéro SQL brut,
+3 `requirePermission` avant toute lecture (conforme ADR-003 sur les
+`*ViewService`). Outillage `backfillRiskProcessId.ts` livré dry-run
+par défaut, classification unique/ambigu/non-matché, `--apply` gardé
+derrière un flag explicite — exécuté séparément le même jour sur la
+base réelle sur confirmation PO, résultat : 0 correspondance unique
+(le seul risque réel en base a un texte processus sans correspondance
+dans les `processes` encore génériques). `MessageBanner`/`Card`
+remplacent 6 patterns codés à la main côté frontend. PR #19 mergée.
+
+---
+
+**2026-09-29 — @dev-backend** — FK Control.processId + RiskAppetite.subCategoryId (PR #20)
+
+DIV-05 (Control) et DIV-08, go PO explicite. Migrations 031/032,
+pattern Expand-only identique à la 029 (`risks.process_id`) : FK
+nullable, colonne texte d'origine conservée en parallèle, aucun
+backfill automatique. `RiskEvaluation.subCategory` volontairement non
+touché (instantané délibéré, `RiskEvaluation.ts:12-26`). 12 nouveaux
+tests, 476/476 verts au moment du commit. **Collision d'environnement
+réelle** : pas d'isolation worktree disponible ici, agent en parallèle
+(garde-fou de validation) écrivant dans le même répertoire de travail
+au même moment, y compris un changement de branche HEAD en cours de
+tâche. Géré par diff/staging sélectif (seuls les fichiers du périmètre
+propre committés) plutôt que par un `git checkout` qui aurait écrasé
+le travail non commité de l'autre agent. PR #20 mergée, migrations
+appliquées sur la base de dev réelle et vérifiées via
+`information_schema`.
+
+---
+
+**2026-09-29 — @dev-backend** — Garde-fou validation mode Processus (DECISION-006) + CHALLENGE-001 maîtrise MAX (PR #21)
+
+Table append-only `process_evaluation_mode_requests` (migration 033,
+index partiel unique 1 demande `PENDING_VALIDATION` par processus),
+permissions dédiées `process.evaluationmode.propose`/
+`evaluationmode.validate`, `ProcessEvaluationModeRequestService`
+(`propose`/`validate`/`reject`/`setMode` — chemin direct Risk Manager
+réellement séparé, pas un raccourci interne sur `propose`+`validate`).
+Garde anti-auto-validation `assertNotSelfValidated`, même famille que
+`assertIsEvaluator`/SEC-011 : le validateur ne peut jamais être
+l'auteur de la proposition, aucune dérogation même pour un Risk
+Manager. Propriétaires de risques du processus visibles/audités à la
+validation, jamais autoritatifs (conforme à l'arbitrage PO Option A).
+**2 trous de gouvernance trouvés par un audit dispatché en parallèle,
+corrigés avant commit dans ce même lot** (pas un ticket séparé) :
+`evaluationMode` retiré de `CreateProcessBody`/`ProcessService.create`
+(était contournable via la simple permission `process.create`, plus
+large que `process.evaluationmode.set`) ; contrainte `level ===
+"PROCESS"` ajoutée dans `setMode`/`propose`/`validate` (DECISION-006
+réserve le réglage au niveau PROCESS, rien ne l'imposait). Maîtrise
+globale : `Math.max(...allValues)` remplace la moyenne — décision PO
+explicite et assumée, retient l'axe le PLUS favorable parmi les
+lignes de défense (barème 1..3, Inadéquat→Adéquat), pas le plus
+défavorable. 19 nouveaux tests, 484/484 verts. Même collision
+d'environnement que PR #20, récupérée via `git stash`/checkout vers
+sa propre branche/`stash pop`, vérifié par diff qu'aucun fichier de
+l'autre agent n'a été entraîné dans le commit. PR #21 mergée,
+migration appliquée sur la base de dev réelle et vérifiée.
+
+---
+
+**2026-09-29 — @architect** — Audit de rafraîchissement "objet imbricable", 2e passage
+
+Demandé par le PO en complément du premier audit (DIV-01 à DIV-08,
+même journée). Conclusion confirmée et renforcée, aucune nouvelle
+divergence dans le code ajouté depuis (Lot 1 RACI, `@djamo/design-
+system`, `RiskEvaluationViewService`) : le polymorphisme `GrcObjectType`
+est fini, pas à moitié fait — les 4 consommateurs réels (ActionPlan,
+Notification, RACI, + les CHECK SQL correspondants) dérivent tous du
+type canonique, compilateur (`satisfies`) et contraintes SQL alignés
+sans dérive. DIV-01/05(Risk)/06/07 confirmés conformes par lecture
+directe du code mergé, pas seulement des descriptions de PR. Les 2
+seules divergences trouvées (création de processus contournant la
+permission dédiée, niveau PROCESS non contraint) sont des trous de
+gouvernance locaux dans DIV-06, pas des divergences d'architecture
+d'objets — transmises directement à l'agent du chantier garde-fou en
+cours (branche déjà ouverte sur les mêmes fichiers) plutôt que
+rouvertes comme chantier séparé, et corrigées avant la PR #21.
+Reconfirme au PO que la refonte transverse "par objet imbricable"
+qu'il évoquait n'est pas nécessaire.
+
+---
+
+**2026-09-29 — @orchestrator** — Process gap signalé par le PO : 5 PR (#17-#21) closes sans triptyque de clôture de batch
+
+**Constat, pas auto-détecté — signalé explicitement par le PO** ("tu ne
+fais plus les retex... grc status pas à jour... tout le travail fait
+pas de vérification de sécurité"), vérifié ensuite par lecture directe
+de l'historique git : `RETEX_MULTI_AGENTS.md` et `status-dashboard.html`
+étaient tous deux figés à l'état de la PR #15/#16, alors que 5 PR (#17
+à #21) avaient été mergées dans la même session sans qu'aucune des 3
+étapes de clôture de batch (revue sécurité indépendante, entrée RETEX,
+rafraîchissement dashboard — `CLAUDE.md` §8) ne soit faite ni même
+mentionnée comme restant à faire.
+
+**Root cause assumée** : sous le volume d'une session dense (revue
+continue de commentaires d'artefact, plusieurs agents backend
+dispatchés en parallèle, arbitrages à tracer), le critère de "fini"
+utilisé implicitement a glissé de "batch clôturé selon le process du
+projet" vers "CI verte + PR mergée" — sans qu'aucun signal du système
+ne force à revérifier le triptyque avant de passer à la demande
+suivante.
+
+**Correctif appliqué dans l'heure du signalement, même session** :
+revue sécurité indépendante rétroactive dispatchée sur les 5 PR non
+couvertes (agent Reviewer dédié, verdict à suivre) ; entrées RETEX
+rédigées pour les 5 batches + une entrée méta sur le gap lui-même
+(`RETEX_MULTI_AGENTS.md` §9.3/§9.4) ; `status-dashboard.html`
+rafraîchi. Mémoire persistante ajoutée côté agent orchestrateur pour
+ne pas répéter cette dérive sur une session future.
+
+**À reporter dans le workbook** (déjà écrit en détail dans
+`RETEX_MULTI_AGENTS.md` §9.4, résumé ici pour la trace partagée) : la
+clôture d'un batch ne doit jamais être déclarée sur la seule base de
+"PR mergée, CI verte" — les 3 étapes doivent être un item explicite du
+plan de travail, pas une convention implicite.

@@ -1081,6 +1081,61 @@ désormais ce pattern aux seuls services d'écriture, précisément à cause
 de ce risque de trou de validation silencieux à l'échelle des vues
 agrégées (Risk 360, Dashboards).
 
+### 9.3 Batches DIV-05/06/07/08 + design system + garde-fou de validation (5 PR #17-#21, 2026-09-29)
+
+Un seul PO en session a produit, coup sur coup, 5 PR mergées : évaluation-mode/FK
+process sur Risk (#17), package `@djamo/design-system` externe (#18), DIV-07
+(`RiskEvaluationViewService`) + outillage backfill (#19), FK Control/RiskAppetite
+(#20), garde-fou de validation du mode Processus + agrégation maîtrise MAX (#21).
+Deux points utiles au-delà du contenu fonctionnel (déjà dans `ACTION_ITEMS.md`) :
+
+- **Le pattern Expand-only "FK + colonne texte gardée en parallèle" (migration
+  029) s'est répliqué sans friction sur 2 nouveaux cas (#20)** — preuve que
+  documenter un pattern une fois avec sa justification (jamais de backfill
+  automatique implicite, `assertXExists` levant plutôt que dégradant
+  silencieusement) suffit à un agent frais pour le reproduire correctement à
+  l'identique, sans repasser par une nouvelle décision d'architecture.
+- **Un audit de rafraîchissement dispatché en parallèle des agents d'implémentation
+  a trouvé 2 trous de gouvernance réels sur du code en cours d'écriture (pas
+  encore mergé) et les a fait corriger avant la PR, via un message direct à
+  l'agent concerné plutôt qu'un nouveau chantier séparé** — évite le double
+  travail et le risque d'un correctif qui arrive après coup sur du code déjà
+  figé. **À reporter dans le workbook** : quand un audit tombe sur du code en
+  cours d'écriture par un autre agent du même lot, la bonne adresse est cet
+  agent lui-même (message direct), pas un nouveau ticket générique.
+
+### 9.4 Les 3 PR suivantes (#17-#21) sont parties sans sécurité indépendante, sans RETEX, sans dashboard — la clôture PR ≠ clôture batch
+
+**Constat, signalé par le PO, pas auto-détecté.** Le process établi (§8.2,
+`CLAUDE.md` §8) veut qu'un batch de modules fusionné dans `main` déclenche
+systématiquement 3 choses : revue sécurité indépendante (jamais l'agent qui a
+écrit le code), une entrée ici, un rafraîchissement de
+`status-dashboard.html`. Les PR #17 à #21 (5 PR, un seul après-midi de
+session) ont toutes été déclarées "prêtes/mergées" sur la seule base de
+"typecheck + tests verts", sans qu'aucune des 3 étapes ne soit ni faite ni
+même mentionnée comme restant à faire — jusqu'à ce que le PO le relève
+explicitement.
+
+**Root cause** : sous la pression d'un flux dense de demandes en une seule
+session (revue de commentaires d'artefact en continu, dispatch de plusieurs
+agents en parallèle, arbitrages à tracer), le critère de "fini" utilisé
+implicitement a glissé de "batch clôturé selon le process du projet" à "CI
+verte + PR mergée" — une confusion déjà nommée en substance au §9.1
+(conclusion narrative confondue avec item trackable), mais ici appliquée à
+la définition même de "terminé", pas à une simple ligne de suivi.
+
+**Correctif appliqué a posteriori (2026-09-29)** : dispatch d'une revue
+sécurité indépendante rétroactive sur les 5 PR non couvertes, rédaction de
+cette entrée, rafraîchissement de `status-dashboard.html` — tous faits dans
+la foulée du signalement PO, pas différés.
+
+**À reporter dans le workbook** : la clôture d'un batch ne doit jamais être
+déclarée sur la seule base de "PR mergée, CI verte" — les 3 étapes du §8.2
+doivent être un item explicite du plan de travail de l'orchestrateur, coché
+un par un, pas une convention implicite censée survivre à la pression d'une
+session chargée. Si plusieurs PR s'accumulent sans que ces étapes soient
+faites, rattraper tout le lot d'un coup plutôt que seulement la dernière PR.
+
 ---
 
 *Document vivant — mis à jour après chaque batch de modules livré ou
