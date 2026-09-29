@@ -23,7 +23,16 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `927e753a` | idem (doublon de 5e29fd18) | Même demande, fil dupliqué | **resolved (2026-09-29, v21)** — renvoyé vers 5e29fd18 | — |
 | `6ee89a11` | Évaluation des risques | Brut/inhérent selon mode Classique/Participatif — **DECISION-006 tranchée par le PO** : mode réglé au niveau Processus (badge sur futur écran Processus, backlog, pas construit maintenant), gouvernance = Risk Manager direct ou propriétaire-processus+validation propriétaire-risque. Arbitrage `risk_processes` rouvert (prémisse fausse corrigée). **Volet encore ouvert, pas couvert par ce fil** : le PO veut aussi qu'on reprenne le backend d'évaluation entier via le principe "objet imbricable" (composition/héritage, DECISION-003/CHALLENGE-002) et qu'on détecte systématiquement les divergences avec le backend existant — action séparée, pas encore lancée. | **resolved (2026-09-29)** | `ACTION_ITEMS.md` DECISION-006, DECISION-003/CHALLENGE-002 |
 
-**Tous les fils de commentaires sont actuellement résolus (24/24, vérifié le 2026-09-29).** Écran **« Évaluation des risques » déclaré STATUÉ** (zéro commentaire ouvert, mode Classique/Participatif tranché DECISION-006). Prochain écran : Cartographie des risques. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
+**Cartographie des risques — 4 nouveaux fils reçus le 2026-09-29 (démarrage de l'écran) :**
+| Thread | Sujet | Statut |
+|---|---|---|
+| `f22ccabd` | Séparer Inhérent/Résiduel en 2 cartes distinctes | resolved (v24) |
+| `bc9cba92` | Couleur des points = criticité (pas statut) + filtre | resolved (v25) |
+| `5e3eedcf` | 3e info "décision de traitement" + liste défilable | resolved (v25) |
+| `85d640e2` | Bandeau réutilisé pour les états — ambigu, clarification demandée | **open — attente précision PO** |
+| `faa01c24` | Déplacer un élément pour faire place au panneau Commentaires — ambigu, clarification demandée | **open — attente précision PO** |
+
+Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
 - Audit systématique des divergences backend vs principe "objet imbricable" (composition/héritage), demandé par le PO le 2026-09-29 — pas encore lancé.
 
