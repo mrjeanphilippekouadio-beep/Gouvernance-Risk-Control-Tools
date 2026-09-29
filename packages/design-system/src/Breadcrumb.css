@@ -1,0 +1,27 @@
+.gs-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: var(--gs-font-ui);
+  font-size: 0.82rem;
+}
+
+.gs-breadcrumb-link {
+  color: var(--gs-text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.gs-breadcrumb-link:hover {
+  color: var(--gs-primary);
+}
+
+.gs-breadcrumb-sep {
+  color: var(--gs-text-disabled);
+}
+
+.gs-breadcrumb-current {
+  color: var(--gs-text);
+  font-weight: 700;
+}
