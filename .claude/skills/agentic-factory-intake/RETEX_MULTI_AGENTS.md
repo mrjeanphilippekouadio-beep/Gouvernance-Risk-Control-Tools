@@ -771,6 +771,65 @@ faisables, ni l'un ni l'autre n'est encore automatisé.
 
 ---
 
+## 9. Mise à jour 2026-09-29
+
+**Contexte depuis la dernière mise à jour (27/09)** : batch 4 livré
+(Dashboard/Reporting, Notification/Governance, Config), série sécurité
+round 2 complète SEC-009 à SEC-016 (7 findings de la revue initiale +
+1 découvert pendant le Lot 1 RACI), DECISION-001 à DECISION-004,
+ADR-002 et ADR-003 rédigés, Lot 1 RACI minimal livré et retesté
+QA+Security. Les deux frictions ci-dessous sont déjà documentées et
+corrigées ailleurs dans le dépôt — cette section ne fait que les
+capitaliser pour le prochain projet, sans dupliquer leur détail complet.
+
+### 9.1 Une conclusion "en attente de validation PO" n'est pas un item trackable tant qu'elle reste dans un journal narratif
+
+**Root cause documentée dans `ACTION_ITEMS.md`, entrée `@orchestrator`
+du 2026-09-28.** La charte graphique Djamo a été proposée et itérée
+6 fois (V1→V6) dans `SHARED_LOG.md` par `@ux-designer`, chaque itération
+concluant « portage dans les tokens réels attend une validation PO
+explicite » — jamais transformée en ligne `ACTION_ITEMS.md` avec owner
+et statut. Le "go" donné plus tard par le PO n'a donc pas pu se
+rattacher à une décision identifiée, et un dispatch ultérieur (Lot 1
+RACI frontend) est parti sans rouvrir le point. Correctif déjà en place
+(pas à refaire) : règle ajoutée à `CLAUDE.md` § onboarding, point 7bis —
+toute mention "attend validation PO/HUMAN explicite" dans `SHARED_LOG.md`
+doit immédiatement générer une ligne dans `ACTION_ITEMS.md` (statut
+`Ouvert`, owner `HUMAN`), et tout "go" verbal du PO doit être journalisé
+comme entrée de Decision Log (`ACTION_ITEMS.md`, format `product-manager.md`
+§47) référençant l'item qu'il ferme. **À reporter dans le workbook** :
+une conclusion narrative dans un journal chronologique n'est jamais un
+substitut à un item de suivi structuré — la distinction doit être
+enseignée aux agents dès l'intake, pas redécouverte projet après projet.
+
+### 9.2 Le pattern "garde silencieuse" — le même trou de validation réapparu 3 fois indépendamment
+
+**Pattern SEC-001 → SEC-009 → SEC-012**, tous liés au pattern
+"paramètre optionnel constructeur" (§3 ci-dessus) : une dépendance ou
+une règle de validation ajoutée en paramètre optionnel de service
+finit, à répétition et dans des modules différents, par être contournée
+ou jamais exercée faute de garde explicite ou de câblage réel — SEC-001
+(maker-checker contournable sur l'exécution de contrôle, Phase 3),
+SEC-009 (`recordedBy` client-supplied au lieu d'être forcé serveur,
+`KpiMeasureService`/`KriMeasureService`), SEC-012 (`ActionPlanService`
+gagnant deux dépendances optionnelles sans garde correctement exercée
+en test — voir `if (!this.users) return;`, capitalisé au §2.6/§3
+ci-dessus). Trois occurrences indépendantes du même trou de conception,
+jamais généralisées en règle avant d'être retrouvées à chaque fois par
+une revue security ponctuelle. **À reporter dans le workbook** : le
+pattern paramètre optionnel doit être documenté avec son risque
+structurel associé dès l'intake (pas seulement son bénéfice — ne pas
+casser les tests existants), avec l'instruction explicite qu'une
+dépendance optionnelle porteuse d'une règle de sécurité/validation doit
+systématiquement être accompagnée d'un test qui l'exerce réellement, pas
+seulement d'un test qui vérifie que le constructeur ne casse rien.
+Cohérent avec DECISION-003 (`ACTION_ITEMS.md`, 2026-09-29) qui restreint
+désormais ce pattern aux seuls services d'écriture, précisément à cause
+de ce risque de trou de validation silencieux à l'échelle des vues
+agrégées (Risk 360, Dashboards).
+
+---
+
 *Document vivant — mis à jour après chaque batch de modules livré ou
 fusionné dans `main`. Ne pas archiver en fin de projet : c'est
 l'intrant direct de la prochaine révision du workbook ACF et du skill
