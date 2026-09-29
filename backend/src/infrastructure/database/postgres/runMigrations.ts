@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const applied = await appliedMigrations();
 
   const files = readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith(".sql"))
+    .filter((f) => f.endsWith(".sql") && !f.endsWith(".down.sql"))
     .sort();
 
   for (const file of files) {
