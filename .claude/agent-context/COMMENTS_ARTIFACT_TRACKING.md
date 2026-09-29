@@ -52,6 +52,7 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | — (v33-36) | Style heatmap 1/2 restauré (grille CSS, points bleus/bordure blanche), légende par carte centrée, scrollbar bleue | resolved |
 | `ced89476` | Treemap possible ? | resolved (v37) — graphique 5 ajouté, treemap CSS pur par processus, taille = poids de criticité cumulé |
 | `4e0daba1` | Graphiques 3/4 repensés en heatmap (grille), tous processus/départements, teinte→rouge selon concentration | resolved (v38) |
+| `23e7baee` | **Vraie nomenclature Djamo reçue (9 processus, 15 directions)** — remplace les listes illustratives ; case-par-criticité (span CSS) au lieu de teinte seule | **open (v39) — attente validation PO comme référence définitive, pas encore propagée au registre/évaluation** |
 
 Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
