@@ -59,6 +59,7 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `69a001f2` | Heatmap façon ECharts treemap-show-parent (zoom/drill-down + breadcrumb) | **open — clarification demandée : charts 3/4 ou 1/2 ? et confirmation du périmètre interaction (2 niveaux seulement pour l'instant)** |
 | `7c5f4a8e` | Graphique 3 : matrice 3×3 taille uniforme (nom le plus long), nombre+couleur | resolved (v43) — annule/remplace la logique "surface ∝ risques" du fil `7fe0e5a8`, retour à une grille uniforme |
 | `f0009f21` | Graphique 4 : matrice 3×5 taille uniforme (nom le plus long), nombre+couleur | resolved (v43) — idem, grille uniforme |
+| `1c22291e` | Déséquilibre visuel 3×3 vs 3×5 (graphique 3 plus court que 4) — composant ajustable demandé | resolved (v44) — légende vert→rouge ajoutée sous le graphique 3, comble l'écart et reste valable si le nombre de processus augmente |
 
 Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
