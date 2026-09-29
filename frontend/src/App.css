@@ -91,11 +91,9 @@ main {
   right: 0;
   bottom: 3rem;
   width: 280px;
-  padding: var(--gs-space-3);
-  background: var(--gs-bg-surface);
-  border: 1px solid var(--gs-border);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.feedback-widget__panel .gs-card-body {
   display: flex;
   flex-direction: column;
   gap: var(--gs-space-2);

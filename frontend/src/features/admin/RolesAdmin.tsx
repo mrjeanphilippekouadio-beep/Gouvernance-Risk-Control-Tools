@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { rolesApi, type Role } from "../../api/roles";
 import { permissionsApi } from "../../api/permissions";
 import { ApiError } from "../../api/client";
-import { Button, FormField, StatusBadge, Table } from "@djamo/design-system";
+import { Button, FormField, MessageBanner, StatusBadge, Table } from "@djamo/design-system";
 
 interface RolesAdminProps {
   token: string;
@@ -127,7 +127,7 @@ export function RolesAdmin({ token }: RolesAdminProps) {
         </Button>
       </form>
 
-      {error && <p role="alert">{error}</p>}
+      {error && <MessageBanner tone="danger">{error}</MessageBanner>}
 
       <Table
         loading={loading}
