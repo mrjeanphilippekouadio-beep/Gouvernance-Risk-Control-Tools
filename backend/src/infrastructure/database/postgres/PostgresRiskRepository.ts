@@ -8,6 +8,7 @@ interface RiskRow {
   id: string;
   tenant_id: string;
   process: string;
+  process_id: string | null;
   description: string;
   owner_department_id: string | null;
   owner_id: string | null;
@@ -25,6 +26,7 @@ function toDomain(row: RiskRow): Risk {
     id: row.id,
     tenantId: row.tenant_id,
     process: row.process,
+    processId: row.process_id,
     description: row.description,
     ownerDepartmentId: row.owner_department_id,
     ownerId: row.owner_id,
@@ -77,10 +79,10 @@ export class PostgresRiskRepository implements RiskRepository {
 
   async create(input: CreateRiskInput): Promise<Risk> {
     const { rows } = await this.pool.query<RiskRow>(
-      `INSERT INTO risks (tenant_id, process, description, owner_department_id, status)
-       VALUES ($1, $2, $3, $4, 'DRAFT')
+      `INSERT INTO risks (tenant_id, process, description, owner_department_id, status, process_id)
+       VALUES ($1, $2, $3, $4, 'DRAFT', $5)
        RETURNING *`,
-      [input.tenantId, input.process, input.description, input.ownerDepartmentId ?? null],
+      [input.tenantId, input.process, input.description, input.ownerDepartmentId ?? null, input.processId ?? null],
     );
     const row = rows[0];
     if (!row) throw new Error("Insert into risks returned no row");
@@ -97,6 +99,7 @@ export class PostgresRiskRepository implements RiskRepository {
         description: input.description,
         owner_department_id: input.ownerDepartmentId,
         status: input.status,
+        process_id: input.processId,
       },
       3,
     );

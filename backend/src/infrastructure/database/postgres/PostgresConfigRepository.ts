@@ -4,6 +4,7 @@ import type {
   AppetiteMode,
   Config,
   ConfigPatch,
+  EvaluationMode,
   LevelThreshold,
   RetainedImpactRule,
   ScoreFormula,
@@ -17,6 +18,7 @@ interface ConfigRow {
   level_thresholds: LevelThreshold[];
   impact_retenu_rule: RetainedImpactRule;
   appetite_mode: AppetiteMode;
+  evaluation_mode: EvaluationMode;
   version: number;
   updated_by: string | null;
   created_at: Date;
@@ -31,6 +33,7 @@ function toDomain(row: ConfigRow): Config {
     levelThresholds: row.level_thresholds ?? [],
     impactRetenuRule: row.impact_retenu_rule,
     appetiteMode: row.appetite_mode,
+    evaluationMode: row.evaluation_mode,
     version: row.version,
     updatedBy: row.updated_by,
     createdAt: row.created_at,
@@ -52,8 +55,8 @@ export class PostgresConfigRepository implements ConfigRepository {
     // NOTHING so a concurrent first write never errors, then the UPDATE
     // below always applies the actual patch on top of whichever row won.
     await this.pool.query(
-      `INSERT INTO configs (tenant_id, score_formula, level_thresholds, impact_retenu_rule, appetite_mode, version)
-       VALUES ($1, 'P_X_I', '[]'::jsonb, 'MAX', 'AUTO_AVEC_SURCHARGE_MANUELLE', 0)
+      `INSERT INTO configs (tenant_id, score_formula, level_thresholds, impact_retenu_rule, appetite_mode, evaluation_mode, version)
+       VALUES ($1, 'P_X_I', '[]'::jsonb, 'MAX', 'AUTO_AVEC_SURCHARGE_MANUELLE', 'CLASSIQUE', 0)
        ON CONFLICT (tenant_id) DO NOTHING`,
       [tenantId],
     );
@@ -64,6 +67,7 @@ export class PostgresConfigRepository implements ConfigRepository {
         level_thresholds: patch.levelThresholds ? JSON.stringify(patch.levelThresholds) : undefined,
         impact_retenu_rule: patch.impactRetenuRule,
         appetite_mode: patch.appetiteMode,
+        evaluation_mode: patch.evaluationMode,
       },
       3,
     );

@@ -1,6 +1,7 @@
 # GRC Database Gap Analysis
 
-Statut : Adopté (2026-09-28), **révisé (2026-09-28)** — deuxième des 3
+Statut : Adopté (2026-09-28), **révisé (2026-09-28)**, **corrigé
+(2026-09-29)** — deuxième des 3
 artefacts du gate posé par le Product Owner avant tout travail base de
 données (voir `.claude/agent-context/SHARED_LOG.md`, entrée « Arbitrage
 du Product Owner » du 2026-09-28). Révision : les 4 points laissés
@@ -9,6 +10,18 @@ par le Product Owner le même jour (`.claude/agent-context/SHARED_LOG.md`,
 entrée « Arbitrage des 4 points ouverts de la Gap Analysis ») et
 répercutés ici, à la suite de la mise à jour du Domain Model par
 l'Architecte (`GRC_Target_Domain_Model.md`, commit `89c2be0`).
+
+**Correction du 2026-09-29 (Architecte)** : la version précédente de ce
+document affirmait, en §2.3 et en §2.5, que `risks.process_id` existait
+déjà « en relation 1:1 ». **Cette affirmation était fausse** — vérifiée
+par lecture directe des migrations : `003_risks.sql:4` déclare
+`process text NOT NULL` et aucune migration `001` → `028` n'ajoute
+jamais de colonne `process_id` sur `risks`. L'arbitrage `risk_processes`
+du 2026-09-28, qui s'appuyait sur cette prémisse, a été **rouvert par le
+Product Owner puis refait le 2026-09-29** : le verdict reste « ne pas
+créer `risk_processes` », mais il repose désormais sur les faits
+corrects (voir **§2.5bis**), et une FK 1:1 **réelle**
+(`risks.process_id`) est créée par DECISION-006.
 
 Intrant : `docs/architecture/GRC_Target_Domain_Model.md` (Architecte,
 commit `54b20f0`). Confronté ici à l'état réel de
@@ -154,7 +167,7 @@ points laissés ouverts par la première version de ce document ont tous
 | Entité | Classification | Détail |
 |---|---|---|
 | `RiskCatalog` | **CRÉER** | `risk_catalogs` : `id`, `tenant_id`, `reference`, `name`, `definition`, `risk_category_id` (FK nullable vers `risk_categories`), `status`, `regulatory_references`. |
-| `Risk` | **ÉTENDRE** | `risks` (003, étendue en `011`/`021` pour ownership) : ajout `risk_catalog_id uuid REFERENCES risk_catalogs (id)` **nullable** (Expand — FK posée avant tout backfill, jamais `NOT NULL` immédiat vu que `risk_catalogs` est une table neuve et vide au départ). Table `risk_processes` (N:N `Risk`↔`Process`) : **non créée pour ce lot — décision explicite du Product Owner, pas un oubli** (voir §2.5). `risks.process_id` (existant, relation 1:1) reste la relation en place ; réévaluable plus tard si un besoin N:N réel est confirmé, sans remettre en cause le catalogue. |
+| `Risk` | **ÉTENDRE** | `risks` (003, étendue en `011`/`021` pour ownership) : **(1)** ajout `risk_catalog_id uuid REFERENCES risk_catalogs (id)` **nullable** (Expand — FK posée avant tout backfill, jamais `NOT NULL` immédiat vu que `risk_catalogs` est une table neuve et vide au départ) ; **(2)** ajout `process_id uuid REFERENCES processes (id)` **nullable** (Expand, **requis par DECISION-006** — le mode d'évaluation Classique/Participatif est porté par le `Process`, ce qui suppose une référence réelle et non un libellé). **Correction factuelle du 2026-09-29** : la version précédente de cette ligne affirmait que `risks.process_id` existait déjà « en relation 1:1 » — **c'est faux**. `003_risks.sql:4` déclare `process text NOT NULL`, aucune migration `001` → `028` n'ajoute de colonne `process_id` sur `risks`, et `backend/src/domain/entities/Risk.ts:11` type `process: string` (texte libre, sans intégrité référentielle, affiché tel quel par `CartographyService`/`DashboardService`). La colonne texte `risks.process` est **conservée en parallèle** jusqu'au backfill (Expand/Contract, aucun `DROP` dans ce lot). Table `risk_processes` (N:N `Risk`↔`Process`) : **non créée** — arbitrage **refait le 2026-09-29 par l'Architecte** sur la prémisse corrigée, verdict inchangé mais motivé autrement : la FK 1:1 `risks.process_id` **suffit** à tous les besoins identifiés dans ce document et dans le Migration Plan ; le N:N n'est pas « différé faute de temps », il est **écarté faute de besoin métier confirmé**. Motivation complète et critère de réouverture : **§2.5bis**. |
 | `RiskCause` / `RiskCatalogCause` | **CRÉER** | `risk_causes` (`id`, `tenant_id`, `label`, `description`) + `risk_catalog_causes` (`risk_catalog_id`, `risk_cause_id`, clé composite). |
 | `Document` / `document_links` | **CRÉER** | `documents` (`id`, `tenant_id`, `reference`, `title`, `type`, `version`, `status`, `location`, `effective_from`, `effective_until`) + `document_links` (`id`, `tenant_id`, `object_type` whitelist, `object_id`, `document_id`). |
 | `RiskCategory` | **RÉUTILISER** (table elle-même) — **CRÉER** (usage en FK, tranché) | `risk_categories` (024) déjà auto-référencée (`parent_id`), `name`, `active` — aucun changement de schéma requis sur la table elle-même. **Tranché par le Product Owner le 2026-09-28** : `risk_categories` est confirmée référentiel **canonique**, et **3 FK nullables** sont créées vers elle depuis `RiskCatalog.riskCategoryId`, `RiskAppetite.riskCategoryId` et `RiskEvaluation.riskCategoryId` (voir §2.3 `RiskCatalog`, §2.4 `RiskAppetite`/`RiskEvaluation`), chacune en Expand/Contract complet : FK nullable → backfill applicatif → contrôle → bascule applicative → dépréciation du champ texte libre correspondant — **jamais de `DROP` immédiat** des colonnes `category`/`subCategory` texte. Détail du séquencement : `GRC_Migration_Plan.md` §2 Lot E. |
@@ -259,14 +272,122 @@ Les 4 points laissés ouverts par la première version de ce document
 ouverts de la Gap Analysis », 2026-09-28) et répercutés dans le Domain
 Model (`GRC_Target_Domain_Model.md`, commit `89c2be0`). Cette section
 est conservée à titre de trace historique — aucun de ces points ne
-reste ouvert.
+reste ouvert. **Un de ces arbitrages (`risk_processes`) reposait sur une
+prémisse factuellement fausse ; il a été rouvert par le Product Owner et
+refait le 2026-09-29 — voir §2.5bis.**
 
 | Sujet | Options envisagées | Décision retenue (Product Owner, 2026-09-28) |
 |---|---|---|
 | **`RiskAssessment` vs `RiskEvaluation`** (voir §1) | (a) Déprécier `RiskAssessment` au profit de `RiskEvaluation` [recommandé par dev-db] · (b) Réactiver `RiskAssessment` en lui donnant un rôle distinct · (c) Supprimer physiquement `RiskAssessment` immédiatement | **(a) confirmé.** `RiskEvaluation` est l'implémentation technique unique. `RiskAssessment` reste déprécié (table conservée, aucun `DROP`) ; sa suppression physique reste soumise à un sign-off ultérieur distinct. |
 | **FK `RiskCategory` depuis `RiskCatalog.category` / `RiskAppetite.subCategory` / `RiskEvaluation.subCategory`** | (a) Ajouter les FK nullables maintenant (Expand) [recommandé par dev-db] · (b) Garder en texte libre tant qu'aucun besoin de reporting croisé ne l'exige | **(a) retenu.** `risk_categories` confirmée canonique ; 3 FK nullables créées (voir §2.3 `RiskCatalog`, §2.4 `RiskAppetite`/`RiskEvaluation`), Expand/Contract complet, jamais de `DROP` immédiat du texte libre. |
-| **`risk_processes` (N:N `Risk`↔`Process`)** | (a) Créer la table de liaison (cahier des charges §37.A) · (b) Ne pas la créer, `Risk.process`/`risks.process_id` (1:1) suffit | **(b) retenu — non créée pour ce lot.** Décision explicite, pas un oubli : `risks.process_id` (existant, relation 1:1) couvre le besoin d'un risque rattaché à un processus principal. **Réversible** : réévaluable plus tard si un besoin N:N réel est confirmé par le métier, sans remettre en cause le catalogue ni aucune migration de ce lot — aucune trace du sujet n'est supprimée, seulement actée comme différée. |
+| **`risk_processes` (N:N `Risk`↔`Process`)** | (a) Créer la table de liaison (cahier des charges §37.A) · (b) Ne pas la créer | **(b) retenu — mais sur une prémisse fausse, arbitrage REFAIT le 2026-09-29.** La justification d'origine (« `risks.process_id` existe déjà en 1:1 ») était **erronée** : cette colonne n'a jamais existé, `risks.process` est du texte libre (`003_risks.sql:4`). Le Product Owner a rouvert le point le 2026-09-29 ; l'Architecte l'a rejugé sur les faits corrects et **confirme (b)** — motivation entièrement réécrite en **§2.5bis**, qui fait désormais foi sur ce sujet. |
 | **`Kpi`/`Kri` séparés vs `Indicator` unifié** | (a) Statu quo (deux tables) [recommandé par dev-db] · (b) Fusionner en un modèle physique unique avec discriminant `indicatorType` | **(b) retenu — revirement par rapport à la recommandation dev-db.** KPI et KRI restent deux types métier distincts mais partagent désormais un seul modèle physique `indicators`/`indicator_measures`. Traité en détail, avec toute la prudence d'une consolidation de tables en production, en §2.4bis ci-dessus. |
+
+### 2.5bis `risk_processes` — arbitrage refait le 2026-09-29 (Architecte)
+
+**Verdict : la FK 1:1 `risks.process_id` suffit. `risk_processes`
+(N:N) n'est pas créée — écartée faute de besoin métier, pas différée
+faute de temps.**
+
+**Fait corrigé** : `risks.process_id` **n'existait pas**
+(`003_risks.sql:4` = `process text NOT NULL` ; aucune migration `001` →
+`028` ne l'ajoute). Il n'y avait donc aucune « relation 1:1 existante »
+à préserver — le champ était pire que ce que le document supposait :
+du texte libre sans aucune intégrité référentielle. DECISION-006
+(2026-09-29, PO) crée la vraie FK `risks.process_id → processes(id)`,
+nullable, `risks.process` texte conservé en parallèle jusqu'au backfill.
+**La correction de la prémisse ne change pas le verdict, elle change sa
+motivation** : ce qui manquait n'était pas le N:N, c'était toute
+intégrité référentielle — et c'est exactement ce que la FK 1:1 apporte.
+
+**Pourquoi le 1:1 suffit** (preuves) :
+
+1. **Aucun besoin N:N confirmé nulle part.** Le cahier des charges
+   v0.1 §37.A pose « un risque peut-il être rattaché à plusieurs
+   processus ? » comme une **question ouverte**, et sa table de
+   cardinalités (§31) écrit « Processus → Risque : **1:N ou N:N selon le
+   modèle retenu** » — le CDC délègue la décision, il ne l'impose pas.
+   Aucune autre ligne d'aucun document (UX Brief, Migration Plan,
+   Domain Model) n'exprime un cas d'usage multi-processus.
+2. **Les données réelles sont mono-valuées.** `RiskImportService`
+   (import des `Suivi_Risques` legacy) calque
+   `apps-script-legacy/02_Colonnes.gs` : une seule colonne `PROCESSUS`
+   (`PROCESS_ALIASES`, schéma Zod `process: z.string().min(1)`). Toutes
+   les lignes existantes et importables portent exactement un processus.
+   Une table N:N serait créée et backfillée avec une seule ligne par
+   risque.
+3. **Le besoin « un même risque touche plusieurs processus » est déjà
+   absorbé par la séparation Catalogue/Registre déjà actée.**
+   `GRC_Target_Domain_Model.md` §4.1 : « un `RiskCatalog` peut donner
+   naissance à zéro, un ou plusieurs `Risk` (registre) dans différents
+   départements/processus ». Le même risque générique instancié sur 5
+   processus = 1 `RiskCatalog` → 5 `Risk`, chacun avec son propriétaire,
+   ses évaluations et son appétence. Ajouter `risk_processes`
+   créerait un **second mécanisme concurrent pour le même besoin** —
+   exactement la pathologie diagnostiquée par DECISION-003 (5 whitelists
+   polymorphes divergentes décrivant toutes « quels objets GRC
+   existent »).
+4. **La hiérarchie `processes` répond déjà au cas « risque à cheval sur
+   plusieurs sous-processus ».** `012_processes.sql` : `parent_id` +
+   `level CHECK IN ('PROCESS','SUBPROCESS','ACTIVITY')`. Un risque
+   transverse se rattache au nœud parent `PROCESS`, pas à N activités.
+   DECISION-006 s'appuie déjà sur cette même hiérarchie (mode réglé au
+   niveau `PROCESS`, hérité vers `SUBPROCESS`/`ACTIVITY`).
+5. **Le N:N casserait DECISION-006.** Le mode Classique/Participatif est
+   un **scalaire**, résolu une seule fois à la création d'une
+   `RiskEvaluation` et figé en instantané (`RiskEvaluation.evaluationMode`).
+   Avec N processus par risque, « quel mode s'applique ? » devient
+   indécidable sans un drapeau `is_primary` — c'est-à-dire une FK 1:1
+   déguisée, plus un invariant supplémentaire (« exactement un principal
+   par risque ») qu'aucune contrainte SQL n'exprime proprement. Coût
+   ajouté, bénéfice nul.
+6. **Le N:N fausserait les agrégations de lecture existantes.**
+   `CartographyService` expose `CartographyDataPoint.process: string` et
+   pousse un point par risque (`points.push({ ..., process: risk.process })`) ;
+   `DashboardService.DashboardRiskSummary.process: string` de même. Avec
+   un N:N, soit un risque est tracé une fois par processus — il compte
+   3 fois dans la heatmap et dans la distribution de criticité, donnant
+   une exposition fausse au Comité/BCEAO — soit on choisit un processus
+   principal, et on est revenu au 1:1.
+7. **Cohérence avec la chaîne de responsabilité déjà en place.**
+   `Risk.ownerDepartmentId` est N:1 et `RiskOwnership` désigne un
+   propriétaire + un propriétaire supérieur. Un risque de registre a
+   **une** chaîne d'imputabilité ; le rattacher à N processus
+   (potentiellement de départements différents) contredirait ce modèle
+   sans qu'aucun besoin ne le demande.
+8. **Asymétrie de coût et réversibilité totale.** Ne pas créer
+   `risk_processes` coûte zéro : c'est une table neuve, ajoutable plus
+   tard en pur Expand, `risks.process_id` devenant alors le raccourci
+   « processus principal » sans réécriture ni migration destructive. La
+   créer maintenant coûte une migration + repository + service +
+   permissions + entrées de whitelist + écran, **plus** la résolution des
+   ambiguïtés (5) et (6), pour des données aujourd'hui mono-valuées.
+
+**Critère de réouverture (à exiger, ne pas rouvrir sans)** : une
+expression métier explicite du Product Owner ou du Risk Manager décrivant
+un cas réel où **un même risque de registre** doit être piloté sur
+plusieurs processus **avec une seule évaluation partagée** (si les
+évaluations sont distinctes, la réponse reste Catalogue → N `Risk`).
+Même règle que DECISION-003 pour le moteur polymorphe : un **second cas
+d'usage réel confirmé**, jamais un cas anticipé.
+
+**Points de vigilance ouverts par la FK 1:1 (à ne pas perdre)** :
+
+- **Backfill partiel attendu** : `risks.process` est du texte libre ;
+  rien ne garantit qu'une valeur corresponde à un `processes.name`
+  existant. `process_id` reste nullable, et
+  `CartographyService`/`DashboardService` doivent continuer à afficher le
+  libellé texte tant que la requête de contrôle post-backfill n'a pas
+  été revue (même séquencement Expand/Contract que les 3 FK
+  `RiskCategory`, §2.3).
+- **Pas de double source de vérité durable** : une fois le backfill
+  validé, `risks.process` doit cesser d'être écrit par l'application
+  (phase Contract), sans quoi les deux champs divergeront.
+- **`Control.process` est du texte libre lui aussi**
+  (`backend/src/domain/entities/Control.ts:15`) : même lacune
+  référentielle, **hors périmètre de cet arbitrage**, mais la même
+  logique de FK 1:1 s'appliquera le jour où le sujet sera ouvert — à
+  tracer, pas à traiter ici.
 
 ### 2.6 Incidents (Domain Model §6)
 
@@ -314,11 +435,11 @@ reste ouvert.
 | Catégorie | Nombre d'entités/tables | Liste |
 |---|---|---|
 | **RÉUTILISER** | 15 | `Tenant`, `Department`, `User`, `Role`/`RoleAssignment`, `AuditEvent`, `RiskCategory` (table elle-même), `RatingScale`, `ControlExecution`, `ControlEffectivenessAssessment`, `Anomaly`, `ActionLink`, `RegulatoryFramework`/`ModuleToggle`/`Config`, `Notification`/`NotificationSubscription`, `ReviewCycle`, `Feedback`/`TenantBranding` |
-| **ÉTENDRE** | 6 | `Process` (+`department_id`), `Risk` (+`risk_catalog_id`), `Control` (+`sample_size`/`sample_size_rule`), `ActionPlan` (élargissement `CHECK source_type`), `RiskEvaluation` (+`risk_category_id`, tranché 2026-09-28), `RiskAppetite` (+`risk_category_id`, tranché 2026-09-28) |
+| **ÉTENDRE** | 6 | `Process` (+`department_id`), `Risk` (+`risk_catalog_id`, +`process_id` — DECISION-006, 2026-09-29), `Control` (+`sample_size`/`sample_size_rule`), `ActionPlan` (élargissement `CHECK source_type`), `RiskEvaluation` (+`risk_category_id`, tranché 2026-09-28), `RiskAppetite` (+`risk_category_id`, tranché 2026-09-28) |
 | **CRÉER** | 12 (regroupements de tables) | `RiskCatalog` (incl. FK `risk_category_id`), `RaciAssignment`, `evidence_links`, `Comment`/`CommentableObjectConfig`, `RiskCause`/`RiskCatalogCause`, `Document`/`document_links`, `Incident`, `RiskIncident`, `ChecklistItem`/`ChecklistResult`, `AuditMission`, `Finding` |
 | **CONSOLIDER** | 1 (regroupement de 5 objets vers 3) | `Kpi`/`Kri`/`KpiMeasure`/`KriMeasure`/`kri_risks` → `indicators`/`indicator_measures`/`indicator_risks` (tranché 2026-09-28, revirement PO — voir §2.4bis) |
 | **DÉPRÉCIER** | 1 | `RiskAssessment` (table `risk_assessments`) au profit de `RiskEvaluation` |
-| **ARBITRER** | 0 (historique : 4) | Les 4 points ouverts de la première version de ce document sont tous tranchés — voir §2.5 pour la trace des décisions. |
+| **ARBITRER** | 0 (historique : 4) | Les 4 points ouverts de la première version de ce document sont tous tranchés — voir §2.5 pour la trace des décisions, et §2.5bis pour l'arbitrage `risk_processes` refait le 2026-09-29 sur prémisse corrigée. |
 
 Ce comptage part de la base « 24 EXISTANT + 4 EXISTANT_À_ÉTENDRE + ~12
 NOUVEAU » du Domain Model (§12) et l'affine au niveau schéma réel : `Evidence`
@@ -337,3 +458,8 @@ nullable ajoutée à chacune) ; `Kpi`/`Kri`/`KpiMeasure`/`KriMeasure`/
 indépendante — c'est le remplacement contrôlé de deux tables en
 production) ne rendaient compte honnêtement de la nature de ce
 changement ; les 4 points ARBITRER passent à 0, tous tranchés.
+**Mise à jour du 2026-09-29** (correction factuelle + arbitrage refait,
+Architecte) : `Risk` gagne `process_id` (FK réelle vers `processes`,
+requise par DECISION-006) — la colonne n'existait pas, contrairement à
+ce que ce document affirmait ; `risk_processes` (N:N) reste non créée,
+verdict confirmé sur les faits corrects (§2.5bis).

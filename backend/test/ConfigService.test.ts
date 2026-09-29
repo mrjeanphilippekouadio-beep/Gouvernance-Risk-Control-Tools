@@ -16,6 +16,7 @@ function defaultRow(tenantId: string): Config {
     levelThresholds: [],
     impactRetenuRule: "MAX",
     appetiteMode: "AUTO_AVEC_SURCHARGE_MANUELLE",
+    evaluationMode: "CLASSIQUE",
     version: 0,
     updatedBy: null,
     createdAt: new Date(),
@@ -181,5 +182,47 @@ describe("ConfigService", () => {
     expect(events).toHaveLength(1);
     expect((events[0]!.oldValue as Config).appetiteMode).toBe("AUTO_AVEC_SURCHARGE_MANUELLE");
     expect((events[0]!.newValue as Config).appetiteMode).toBe("MANUEL");
+  });
+
+  describe("updateEvaluationMode (DIV-06)", () => {
+    it("defaults to CLASSIQUE when no config row has ever been saved", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      const config = await service.get(actor);
+      expect(config.evaluationMode).toBe("CLASSIQUE");
+    });
+
+    it("rejects for an actor without config.update", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      await expect(
+        service.updateEvaluationMode(readOnlyActor, "PARTICIPATIF", "reason", "REQ-1"),
+      ).rejects.toThrow(ForbiddenError);
+    });
+
+    it("requires a reason", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      await expect(service.updateEvaluationMode(actor, "PARTICIPATIF", "", "REQ-1")).rejects.toThrow(
+        ValidationError,
+      );
+    });
+
+    it("rejects an unknown evaluation mode", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      await expect(
+        service.updateEvaluationMode(actor, "NOT_A_MODE" as never, "because", "REQ-1"),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("updates the evaluation mode and audits old/new without touching other fields", async () => {
+      const { repo: auditRepo, events } = inMemoryAuditRepository();
+      const service = new ConfigService(inMemoryConfigRepository(), auditRepo);
+
+      const after = await service.updateEvaluationMode(actor, "PARTICIPATIF", "Pilote Q1 2027", "REQ-1");
+
+      expect(after.evaluationMode).toBe("PARTICIPATIF");
+      expect(after.scoreFormula).toBe("P_X_I");
+      expect(events).toHaveLength(1);
+      expect((events[0]!.oldValue as Config).evaluationMode).toBe("CLASSIQUE");
+      expect((events[0]!.newValue as Config).evaluationMode).toBe("PARTICIPATIF");
+    });
   });
 });

@@ -34,6 +34,17 @@ export type RetainedImpactRule = "MAX" | "AVERAGE" | "WEIGHTED_SUM";
 
 export type AppetiteMode = "AUTO" | "MANUEL" | "AUTO_AVEC_SURCHARGE_MANUELLE";
 
+/**
+ * DIV-06 (.claude/agent-context/ACTION_ITEMS.md, @architect audit
+ * 2026-09-29): tenant-wide default for the risk evaluation methodology
+ * (Classique = single evaluator, Participatif = multi-contributor).
+ * `Process.evaluationMode` (nullable) can override this per process —
+ * see `resolveInheritedEvaluationMode` in Process.ts for the resolution
+ * order. Not read yet by RiskEvaluationService — storage + resolution
+ * function only, wiring is a follow-up batch (the Évaluation screen).
+ */
+export type EvaluationMode = "CLASSIQUE" | "PARTICIPATIF";
+
 /** One band of the SEUILS_NIVEAU (score -> level label) mapping, e.g. { label: "Critique", min: 16, max: 25 }. */
 export interface LevelThreshold {
   label: string;
@@ -48,6 +59,7 @@ export interface Config {
   levelThresholds: LevelThreshold[];
   impactRetenuRule: RetainedImpactRule;
   appetiteMode: AppetiteMode;
+  evaluationMode: EvaluationMode;
   /** 0 means "default, never explicitly saved" — see DEFAULT_CONFIG in ConfigService. */
   version: number;
   updatedBy: string | null;
@@ -67,4 +79,5 @@ export interface ConfigPatch {
   levelThresholds?: LevelThreshold[];
   impactRetenuRule?: RetainedImpactRule;
   appetiteMode?: AppetiteMode;
+  evaluationMode?: EvaluationMode;
 }

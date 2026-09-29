@@ -23,14 +23,26 @@
  * avoid a migration churn cycle once the real taxonomy is settled.
  */
 
-export type NotificationResourceType =
-  | "RISK"
-  | "KRI"
-  | "ACTION_PLAN"
-  | "CONTROL"
-  | "ANOMALY"
-  | "RISK_EVALUATION"
-  | "REVIEW_CYCLE";
+import type { GrcObjectType } from "../GrcObjectType.js";
+
+/**
+ * Subset of GrcObjectType currently meaningful for notifications (NOT the
+ * full union — AUDIT/INCIDENT/MANAGEMENT don't originate notifications
+ * today; widen this list, not GrcObjectType, if/when they do).
+ * `satisfies` ties every value back to GrcObjectType so a typo or a
+ * renamed GrcObjectType member fails to compile here.
+ */
+export const NOTIFICATION_RESOURCE_TYPES = [
+  "RISK",
+  "KRI",
+  "ACTION_PLAN",
+  "CONTROL",
+  "ANOMALY",
+  "RISK_EVALUATION",
+  "REVIEW_CYCLE",
+] as const satisfies readonly GrcObjectType[];
+
+export type NotificationResourceType = (typeof NOTIFICATION_RESOURCE_TYPES)[number];
 
 export interface Notification {
   id: string;

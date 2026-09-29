@@ -8,6 +8,8 @@ import type { EvidenceRepository } from "../domain/repositories/EvidenceReposito
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import {
+  ACTION_LINK_RESOURCE_TYPES,
+  ACTION_PLAN_SOURCE_TYPES,
   computeActionPlanPriority,
   computeActionPlanStatus,
   type ActionLink,
@@ -23,8 +25,8 @@ import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 
-const SOURCE_TYPES: ActionPlanSourceType[] = ["RISK", "CONTROL", "KRI", "AUDIT", "INCIDENT", "MANAGEMENT"];
-const LINK_RESOURCE_TYPES: ActionLinkResourceType[] = ["RISK", "CONTROL", "KRI", "ANOMALY"];
+const SOURCE_TYPES: readonly ActionPlanSourceType[] = ACTION_PLAN_SOURCE_TYPES;
+const LINK_RESOURCE_TYPES: readonly ActionLinkResourceType[] = ACTION_LINK_RESOURCE_TYPES;
 /** ACT-190: only these three source types are tied to an existing entity row that can be validated. */
 const ENTITY_BACKED_SOURCE_TYPES: ActionPlanSourceType[] = ["RISK", "CONTROL", "KRI"];
 

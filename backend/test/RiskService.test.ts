@@ -5,8 +5,10 @@ import type { RiskRepository } from "../src/domain/repositories/RiskRepository.j
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
 import type { UserRepository } from "../src/domain/repositories/UserRepository.js";
 import type { RiskEscalationRepository } from "../src/domain/repositories/RiskEscalationRepository.js";
+import type { ProcessRepository } from "../src/domain/repositories/ProcessRepository.js";
 import type { Risk } from "../src/domain/entities/Risk.js";
 import type { RiskEscalation } from "../src/domain/entities/RiskEscalation.js";
+import type { Process } from "../src/domain/entities/Process.js";
 import type { User } from "../src/domain/entities/User.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import type { Notifier } from "../src/infrastructure/notifications/Notifier.js";
@@ -37,6 +39,7 @@ function inMemoryRiskRepository(): RiskRepository {
         id: randomUUID(),
         tenantId: input.tenantId,
         process: input.process,
+        processId: input.processId ?? null,
         description: input.description,
         ownerDepartmentId: input.ownerDepartmentId ?? null,
         ownerId: null,
@@ -149,6 +152,49 @@ function inMemoryRiskEscalationRepository(): RiskEscalationRepository & { events
     async listForRisk(tenantId, riskId) {
       return events.filter((e) => e.tenantId === tenantId && e.riskId === riskId);
     },
+  };
+}
+
+function inMemoryProcessRepository(processes: Process[]): ProcessRepository {
+  return {
+    async getById(tenantId, id) {
+      const p = processes.find((x) => x.tenantId === tenantId && x.id === id && !x.deletedAt);
+      return p ?? null;
+    },
+    async list() {
+      throw new Error("not implemented");
+    },
+    async create() {
+      throw new Error("not implemented");
+    },
+    async update() {
+      throw new Error("not implemented");
+    },
+    async softDelete() {
+      throw new Error("not implemented");
+    },
+  };
+}
+
+function stubProcess(overrides: Partial<Process> = {}): Process {
+  return {
+    id: randomUUID(),
+    tenantId: "tenant-1",
+    parentId: null,
+    level: "PROCESS",
+    name: "Onboarding",
+    description: null,
+    documentType: null,
+    documentReference: null,
+    owner: null,
+    active: true,
+    evaluationMode: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    deletedBy: null,
+    deletionReason: null,
+    ...overrides,
   };
 }
 
@@ -470,6 +516,95 @@ describe("RiskService", () => {
 
       const results = await service.list(actor, false, randomUUID());
       expect(results).toHaveLength(0);
+    });
+  });
+
+  describe("processId (DIV-05)", () => {
+    it("creates a risk with a valid processId when ProcessRepository is wired", async () => {
+      const repo = inMemoryRiskRepository();
+      const process = stubProcess();
+      const service = new RiskService(
+        repo,
+        inMemoryAuditRepository(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        inMemoryProcessRepository([process]),
+      );
+
+      const risk = await service.create(actor, { process: "P", description: "D", processId: process.id }, "REQ-60");
+      expect(risk.processId).toBe(process.id);
+    });
+
+    it("creates a risk with processId omitted (null), without needing ProcessRepository", async () => {
+      const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository());
+      const risk = await service.create(actor, { process: "P", description: "D" }, "REQ-61");
+      expect(risk.processId).toBeNull();
+    });
+
+    it("rejects a processId that does not resolve to a process in the tenant", async () => {
+      const service = new RiskService(
+        inMemoryRiskRepository(),
+        inMemoryAuditRepository(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        inMemoryProcessRepository([]),
+      );
+
+      await expect(
+        service.create(actor, { process: "P", description: "D", processId: randomUUID() }, "REQ-62"),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("throws (does not silently skip validation) when processId is supplied but ProcessRepository is not configured", async () => {
+      const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository());
+
+      await expect(
+        service.create(actor, { process: "P", description: "D", processId: randomUUID() }, "REQ-63"),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("updates a risk's processId when valid", async () => {
+      const repo = inMemoryRiskRepository();
+      const processA = stubProcess();
+      const processB = stubProcess();
+      const service = new RiskService(
+        repo,
+        inMemoryAuditRepository(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        inMemoryProcessRepository([processA, processB]),
+      );
+      const risk = await service.create(actor, { process: "P", description: "D", processId: processA.id }, "REQ-64");
+
+      const updated = await service.update(actor, risk.id, { processId: processB.id }, "REQ-65");
+      expect(updated.processId).toBe(processB.id);
+    });
+
+    it("rejects a processId belonging to another tenant", async () => {
+      const otherTenantProcess = stubProcess({ tenantId: "tenant-2" });
+      const service = new RiskService(
+        inMemoryRiskRepository(),
+        inMemoryAuditRepository(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        inMemoryProcessRepository([otherTenantProcess]),
+      );
+
+      await expect(
+        service.create(
+          actor,
+          { process: "P", description: "D", processId: otherTenantProcess.id },
+          "REQ-66",
+        ),
+      ).rejects.toThrow(ValidationError);
     });
   });
 });

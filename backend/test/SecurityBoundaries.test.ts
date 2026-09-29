@@ -34,6 +34,9 @@ import { RiskEvaluationService } from "../src/services/RiskEvaluationService.js"
 import { ActionPlanService } from "../src/services/ActionPlanService.js";
 import { RatingScaleService } from "../src/services/RatingScaleService.js";
 import { RiskAppetiteService } from "../src/services/RiskAppetiteService.js";
+import { ProcessService } from "../src/services/ProcessService.js";
+import type { ProcessRepository } from "../src/domain/repositories/ProcessRepository.js";
+import type { Process } from "../src/domain/entities/Process.js";
 import type { KriMeasureRepository } from "../src/domain/repositories/KriMeasureRepository.js";
 import type { KriRepository } from "../src/domain/repositories/KriRepository.js";
 import type { KpiMeasureRepository } from "../src/domain/repositories/KpiMeasureRepository.js";
@@ -1268,4 +1271,58 @@ describe("SEC-016 RACI self-Accountable guard bypassable via assignment order", 
       ).rejects.toThrow(ForbiddenError);
     },
   );
+});
+
+// --- SEC-017: Process.evaluationMode reachable via the generic update ----
+// permission (found by @architect in review, 2026-09-29, DECISION-006 —
+// same family as SEC-013/SEC-014: a governance-relevant transition
+// (Classique/Participatif) must never be gated by the generic .update
+// permission that anyone able to rename a process already holds. Fixed by
+// removing evaluationMode from ProcessService.update()'s input type/the
+// PATCH route body entirely, and adding a dedicated
+// setEvaluationMode()/PUT :id/evaluation-mode gated on
+// process.evaluationmode.set.
+
+describe("SEC-017 process evaluationMode governed by a dedicated permission", () => {
+  it("SEC-017: setEvaluationMode must require process.evaluationmode.set, not process.update alone", async () => {
+    const process: Process = {
+      id: "proc-1",
+      tenantId: TENANT,
+      parentId: null,
+      level: "PROCESS",
+      name: "Onboarding",
+      description: null,
+      documentType: null,
+      documentReference: null,
+      owner: null,
+      active: true,
+      evaluationMode: "CLASSIQUE",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+      deletedBy: null,
+      deletionReason: null,
+    };
+
+    const processes = {
+      async getById() {
+        return process;
+      },
+      async update() {
+        throw new Error("update() must not be reached without process.evaluationmode.set");
+      },
+    } as unknown as ProcessRepository;
+
+    const service = new ProcessService(processes, inMemoryAuditRepository());
+    const actor: AuthenticatedUser = { ...attacker, roles: ["process.read", "process.update"] };
+
+    await expect(
+      service.setEvaluationMode(actor, "proc-1", "PARTICIPATIF", "REQ-SEC-017a"),
+    ).rejects.toThrow(ForbiddenError);
+  });
+
+  it("SEC-017: process.update alone (no process.evaluationmode.set) is not sufficient", async () => {
+    const actor: AuthenticatedUser = { ...attacker, roles: ["process.read", "process.update"] };
+    expect(() => requirePermission(actor, "process.evaluationmode.set")).toThrow(ForbiddenError);
+  });
 });

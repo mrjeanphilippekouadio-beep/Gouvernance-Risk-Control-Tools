@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { NotificationService } from "../../services/NotificationService.js";
-import type { NotificationResourceType } from "../../domain/entities/Notification.js";
+import { NOTIFICATION_RESOURCE_TYPES, type NotificationResourceType } from "../../domain/entities/Notification.js";
 
-const ResourceType = z.enum(["RISK", "KRI", "ACTION_PLAN", "CONTROL", "ANOMALY", "RISK_EVALUATION", "REVIEW_CYCLE"]);
+const ResourceType = z.enum(NOTIFICATION_RESOURCE_TYPES);
 
 /** ACT-202: mounted at /api/v1/notifications by server.ts. */
 export function notificationsRouter(notificationService: NotificationService): Router {

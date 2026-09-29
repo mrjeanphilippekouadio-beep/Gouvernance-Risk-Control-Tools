@@ -35,6 +35,15 @@ export type Permission =
   | "process.create"
   | "process.update"
   | "process.delete"
+  /**
+   * DECISION-006 governance finding (2026-09-29 architect review, not yet
+   * committed): Process.evaluationMode (Classique/Participatif) must never
+   * be gated by the generic process.update — same family as SEC-013/
+   * SEC-014 (a governance-relevant transition gated by a dedicated
+   * permission, reserved to the Risk Manager, not the generic .update
+   * grant widely held by anyone who can rename a process).
+   */
+  | "process.evaluationmode.set"
   | "audit.read"
   | "role.read"
   | "role.create"
@@ -145,6 +154,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "process.create",
   "process.update",
   "process.delete",
+  "process.evaluationmode.set",
   "audit.read",
   "role.read",
   "role.create",

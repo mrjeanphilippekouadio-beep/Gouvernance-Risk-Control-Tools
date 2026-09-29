@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { NotificationService } from "../../services/NotificationService.js";
+import { NOTIFICATION_RESOURCE_TYPES } from "../../domain/entities/Notification.js";
 
-const ResourceType = z.enum(["RISK", "KRI", "ACTION_PLAN", "CONTROL", "ANOMALY", "RISK_EVALUATION", "REVIEW_CYCLE"]);
+const ResourceType = z.enum(NOTIFICATION_RESOURCE_TYPES);
 
 const SubscribeBody = z.object({
   resourceType: ResourceType,
