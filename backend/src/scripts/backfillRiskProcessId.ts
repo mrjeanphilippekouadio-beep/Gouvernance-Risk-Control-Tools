@@ -1,8 +1,5 @@
 import "dotenv/config";
 import { writeFileSync } from "node:fs";
-import { pool } from "../infrastructure/database/pool.js";
-import { PostgresRiskRepository } from "../infrastructure/database/postgres/PostgresRiskRepository.js";
-import { PostgresProcessRepository } from "../infrastructure/database/postgres/PostgresProcessRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { Risk } from "../domain/entities/Risk.js";
@@ -259,6 +256,19 @@ function parseArgs(argv: string[]): { tenantId: string; apply: boolean; out: str
 
 async function main(): Promise<void> {
   const { tenantId, apply, out } = parseArgs(process.argv.slice(2));
+
+  // Dynamic import: pool.ts validates required env vars (DATABASE_URL etc.)
+  // at module load and exits if they're missing. Keeping it out of this
+  // file's static imports means importing this module for its pure/testable
+  // exports (see the unit test) never triggers that validation — only
+  // actually running the CLI (this function) does.
+  const { pool } = await import("../infrastructure/database/pool.js");
+  const { PostgresRiskRepository } = await import(
+    "../infrastructure/database/postgres/PostgresRiskRepository.js"
+  );
+  const { PostgresProcessRepository } = await import(
+    "../infrastructure/database/postgres/PostgresProcessRepository.js"
+  );
 
   const riskRepository = new PostgresRiskRepository(pool);
   const processRepository = new PostgresProcessRepository(pool);
