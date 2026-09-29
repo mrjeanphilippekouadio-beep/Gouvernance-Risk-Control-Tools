@@ -43,7 +43,10 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `927e753a` (rouvert) | Panneau Comments/RACI/Evidence/Occurrence : déplacer de bas de page vers la colonne droite (au-dessus Historique/Actions), redimensionner | resolved (v27) — écran Évaluation |
 | `faa01c24` | Panneau Commentaires sur Cartographie — ambigu, clarification demandée | **open — attente précision PO** |
 | `d0942768` | Teintes de la heatmap trop claires, rendre plus vives | resolved (v28) — palette de fond saturée |
-| `68461ff8`, `1862344a`, `f22ccabd` (rouvert), `787b4e53` (rouvert) | **BUG RÉEL trouvé via "je ne vois rien" (PO)** : URL Chart.js publiée en v26-28 pointait vers une version inexistante sur cdnjs (404) — la lib ne chargeait jamais, aucun graphique ne s'affichait côté navigateur malgré un code JS valide. Corrigé (version vérifiée par requête HTTP avant publication) v29. | **open — attente confirmation PO que ça s'affiche maintenant** |
+| `68461ff8`, `1862344a`, `f22ccabd` (rouvert), `787b4e53` (rouvert) | **BUG RÉEL "je ne vois rien" (PO), persistant même après correctif d'URL v29.** Décision (2026-09-29) : abandon complet de Chart.js/GridStack (ne s'affichaient pas de façon fiable malgré une URL valide) — les 4 graphiques (inhérent/résiduel/processus/département) reconstruits en SVG/HTML statique pur, zéro dépendance externe, rendu garanti. v32. | **open — attente confirmation PO que ça s'affiche enfin** |
+| `6f893859` | Badges "Réduire Validé" sans titre, illisibles | resolved (v30) — en-têtes de colonnes ajoutés |
+| `33c084d8` | Ordre des colonnes : Statut avant Traitement | resolved (v31) |
+| `91b9756d` | Choix direct (pas de variantes) pour les graphiques 3/4 | resolved (v32) — barres horizontales pour les deux, même échelle |
 
 Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
