@@ -31,6 +31,9 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: package-lock.json
-      - run: npm ci
+      # npm ci (npm/cli#4828): optional platform-specific deps (rolldown's
+      # native binding for vite 8) can be dropped from a workspace lockfile
+      # generated on a different OS. npm install re-resolves them correctly.
+      - run: npm install
       - run: npm run build --workspace=@djamo/design-system
       - run: npm run build --workspace=@grc-tools/frontend
