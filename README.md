@@ -60,53 +60,91 @@ Détails complets dans [docs/architecture/ADR-001-cible-architecture.md](docs/ar
 
 ## État actuel
 
+*(Dernière vérification : 2026-09-29, contre le code réel — pas un résumé de session.)*
+
 - ✅ Apps Script legacy : fonctionnel, inchangé, toujours en production pour Djamo.
-- ✅ Backend : squelette en couches posé, **9 vertical slices** complets
-  (domaine → service → repository Postgres → API), tous testés
-  (54 tests unitaires), build et audit de sécurité des dépendances verts :
-  - **Risks** (`/api/v1/risks`) — CRUD, transitions d'état, archivage avec raison.
-  - **Evidence** (`/api/v1/evidences`) — upload/lecture/suppression via Google
-    Drive, isolation stricte par tenant (voir la revue de sécurité qui a
-    identifié et corrigé ce point).
-  - **Controls** (`/api/v1/controls`) — catalogue, lien many-to-many avec
-    les risques couverts.
-  - **ControlExecutions** (`/api/v1/executions`) — historisé (append-only),
-    validation maker-checker.
-  - **ControlEffectivenessAssessments** (`/api/v1/effectiveness`) — distinct
-    des exécutions ("exécuté ne veut pas dire efficace"), même circuit
-    maker-checker.
-  - **Anomalies** (`/api/v1/anomalies`) — ticket avec cycle de vie
-    (NEW → UNDER_ANALYSIS → ACTION_IN_PROGRESS → CLOSED), clôture avec
-    commentaire obligatoire.
-  - **Departments** (`/api/v1/departments`) — pilote de risque avec
-    désignation par défaut (manager) ou explicite.
-  - **Processes** (`/api/v1/processes`) — hiérarchie à 3 niveaux
-    auto-référencée (Processus > Sous-processus > Activité).
-  - **Audit log global** (`/api/v1/audit-log`) — le "journal global" que
-    l'Apps Script legacy décrivait sans jamais le raccorder
-    automatiquement ; ici c'est automatique par construction, chaque
-    service écrit déjà dans `audit_log`.
-- ✅ Frontend : squelette React + Vite posé, page Risks reliée à l'API,
-  connexion Google Identity Services réelle (avec repli dev si
+- ✅ Backend : architecture en couches (domaine → service → repository
+  Postgres → API) sur **33 services** (`backend/src/services/`) et
+  **37 groupes de routes** (`backend/src/api/v1/`), **37 fichiers de
+  tests / 446 tests unitaires verts** (`npm test`), build et audit de
+  sécurité des dépendances verts.
+  Regroupés par domaine fonctionnel :
+  - **Risques & évaluation** — `Risk` (`/api/v1/risks`, CRUD, transitions
+    d'état, archivage avec raison), **moteur de cotation**
+    `RiskEvaluation` (`/api/v1/risk-evaluations`, axes d'impact multiples,
+    seuils d'appétence, cycle brouillon → validation), `RiskCategory`,
+    `RiskAppetite`, `RiskOwnership` (propriétaires affichés/audités,
+    jamais autoritatifs pour l'instant), import de masse
+    (`RiskImportService`, mode dry-run).
+  - **Contrôles** — `Control` (catalogue, lien many-to-many avec les
+    risques couverts), `ControlExecution` (historisé append-only,
+    maker-checker), `ControlEffectivenessAssessment` (distinct de
+    l'exécution — "exécuté ne veut pas dire efficace" —, même circuit
+    maker-checker).
+  - **Gouvernance** — `RaciAssignment` (matrice RACI par objet métier,
+    reliée au frontend), `GrcObjectType` (type d'objet unifié partagé par
+    RACI/ActionPlan/Notification, pensé pour éviter la prolifération
+    d'enums ad hoc), `GovernanceService` (revue/cycles), `RoleService`
+    (permissions scopées par rôle).
+  - **Référentiels** — `RatingScale`, `Department`, `Process` (hiérarchie
+    à 3 niveaux auto-référencée), `RegulatoryFramework`, `Config`
+    (dont le mode Classique/Participatif par défaut tenant, voir
+    ci-dessous).
+  - **KPI/KRI/Dashboard/Cartography/Reporting** — `Kpi`/`KpiMeasure`,
+    `Kri`/`KriMeasure` (calcul de statut automatique), `DashboardService`,
+    `CartographyService`, génération de rapports (`reports.routes.ts`).
+  - **Notification/Governance/ModuleToggle/Branding/AuditLog** —
+    `NotificationService` (+ abonnements), `ModuleToggleService`
+    (activation de modules par tenant), `BrandingService`
+    (personnalisation tenant), `AuditLogService` (journal global
+    automatique — chaque service y écrit déjà, avec recherche dédiée).
+  - **Anomalies/ActionPlan** — `Anomaly` (cycle de vie NEW →
+    UNDER_ANALYSIS → ACTION_IN_PROGRESS → CLOSED, clôture avec commentaire
+    obligatoire), `ActionPlan` (+ dashboard dédié
+    `actionPlanDashboard.routes.ts`).
+  - **Evidence** (`/api/v1/evidences`) — upload/lecture/suppression via
+    Google Drive, isolation stricte par tenant.
+- ✅ Mode d'évaluation **Classique/Participatif** (DECISION-006) : FK
+  `risks.process_id` posée (migration 029, pas encore backfillée — voir
+  ci-dessous), `Config.evaluationMode` (défaut tenant) et
+  `Process.evaluationMode` (résolution héritée à la lecture, jamais
+  dénormalisée) posés et testés (migration 030). Le garde-fou de
+  validation propriétaire (permission dédiée `evaluationmode.validate`,
+  table `process_evaluation_mode_requests`) est spécifié (PO tranché) mais
+  **pas encore codé** — non bloquant, prévu au lot Processus.
+- ✅ Frontend : React + Vite, périmètre encore volontairement réduit —
+  `features/risks` (page Risks reliée à l'API), `features/admin`
+  (rôles, feedback), `features/feedback` (widget), plus un panneau RACI
+  (`design-system/RaciPanel.tsx`) déjà câblé au vrai backend RACI.
+  Connexion Google Identity Services réelle (avec repli dev si
   `VITE_GOOGLE_CLIENT_ID` n'est pas encore configuré).
+- ✅ Bibliothèque **`@djamo/design-system`** (`packages/design-system/`) —
+  système de design séparé du frontend applicatif, pensé pour être
+  réutilisable **hors GRC Tools** : 18 atomes (Button, Card, Table, Modal,
+  Tabs, Menu, FormField, DatePicker, FileUpload, etc.) et 6 composants
+  graphiques Chart.js (BarChart, LineChart, DoughnutChart, ScatterChart,
+  BubbleChart, ProgressBar), plus `DashboardGrid` (grille de widgets
+  réordonnable via GridStack). Publié comme package `@djamo/design-system`
+  distinct, tokens CSS exportés séparément (`./tokens.css`).
 - ✅ `CLAUDE.md` à la racine pour les futures sessions Claude Code.
-- ✅ Infrastructure configurée : projet Neon (12 migrations appliquées),
-  client OAuth Google. `GET /health` et `GET /ready` répondent OK contre
-  la vraie base. Guide dans `docs/SETUP.md`.
-- ⬜ Service account Drive : pas encore de clé JSON en place localement
-  (`GOOGLE_DRIVE_CREDENTIALS_PATH` pointe vers un fichier qui n'existe pas
-  encore) — l'upload d'evidences échouera tant que ce n'est pas fait,
-  le reste de l'API n'en dépend pas.
-- ⬜ **Moteur de cotation des risques** (`10_Evaluation.gs` /
-  `20_Validation.gs`) — volontairement pas encore porté. C'est le module
-  le plus complexe du legacy : axes d'impact multiples et configurables,
-  seuils d'appétence, notation de maîtrise par ligne de défense, moteur
-  de champs obligatoires piloté par `CONFIG`. Mérite une conception
-  dédiée (le modèle `RiskAssessment` déjà posé dans `domain/entities/`
-  est un point de départ simplifié, pas le modèle final) plutôt qu'un
-  portage mécanique comme les 9 slices ci-dessus.
-- ⬜ Reste du périmètre Apps Script (IAM/RBAC — modèle différent
-  maintenant que les permissions sont scopées par rôle plutôt que RACI —,
-  cartographie image, visualisations) à évaluer au cas par cas : tout ne
-  se porte pas 1:1.
+- ✅ Infrastructure configurée : projet Neon, client OAuth Google, **service
+  account Drive** (`GOOGLE_DRIVE_CREDENTIALS_PATH`) en place et requis au
+  démarrage. **30 migrations appliquées** (`database/postgresql/migrations/`,
+  001 à 030), convention de rollback `.down.sql` établie depuis la
+  migration 027 (RACI) — les migrations 027 à 030 ont chacune leur
+  `.down.sql`, les précédentes n'en ont pas. `GET /health` et `GET /ready`
+  répondent OK contre la vraie base. Guide dans `docs/SETUP.md`.
+- ⬜ Backfill `risks.process_id` : la colonne existe (migration 029) mais
+  n'est pas peuplée — en données réelles, quasi aucun risque n'a
+  aujourd'hui de `processId`. Chantier réel, non planifié.
+- ⬜ Écran Processus : pas encore maquetté ni construit côté frontend —
+  c'est là que le garde-fou de validation Classique/Participatif sera câblé.
+- ⬜ Panneau latéral générique Comments/RACI/Evidence (brief UX
+  restructuration plateforme, 2026-09-28) : RACI existe déjà et est câblé
+  au vrai backend ; Evidence a un backend complet mais rien côté
+  frontend ; Comments n'existe pas du tout en base pour l'instant. Le
+  rail d'onglets rétractable unique qui doit les regrouper reste à
+  construire.
+- ⬜ Reste du périmètre Apps Script (cartographie image, visualisations)
+  à évaluer au cas par cas : tout ne se porte pas 1:1.
 - ⬜ Export Apps Script → import backend (pont de migration des données Djamo).
