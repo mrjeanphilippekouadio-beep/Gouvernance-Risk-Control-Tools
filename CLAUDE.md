@@ -319,10 +319,61 @@ dispatch. Avant de dispatcher un travail réel à un agent frais :
    de ce seul projet (une convention, une règle d'autorisation) se
    reporte en plus dans `~/.agentic-framework/agents/<rôle>/LEARNINGS.md`
    (en dehors du dépôt — survit au projet, alimente le suivant).
-8. **Passages QA (A08) et sécurité (A10) après chaque batch livré/mergé**
-   — non optionnels, pas seulement en début de projet. Voir
+7bis. **Toute décision "en attente de validation PO/HUMAN explicite"
+   est un item trackable, pas une phrase de conclusion.** Incident du
+   2026-09-28 (root cause dans `ACTION_ITEMS.md`, entrée
+   `@orchestrator`) : la charte graphique Djamo a été proposée et
+   itérée 6 fois (V1→V6) dans `SHARED_LOG.md` par `@ux-designer`, avec
+   à chaque fois la conclusion « portage dans les tokens réels attend
+   une validation PO explicite » — jamais transformée en ligne
+   `ACTION_ITEMS.md` avec owner/statut. Le "go" donné plus tard par le
+   PO n'a donc pas pu se rattacher à une décision identifiée, et un
+   dispatch ultérieur (Lot 1 RACI frontend) est parti sans rouvrir le
+   point. Règle : dès qu'un agent conclut « en attente de PO/HUMAN »,
+   **l'orchestrateur ajoute immédiatement une ligne dans
+   `ACTION_ITEMS.md`** (statut `Ouvert`, owner `HUMAN`) — jamais
+   seulement une mention dans `SHARED_LOG.md`. Avant tout dispatch dont
+   le périmètre touche un item ouvert non résolu, bloquer et
+   redemander confirmation explicite, même si un "go" a été donné
+   ailleurs. Tout "go" verbal du PO doit être immédiatement journalisé
+   comme entrée de Decision Log (`ACTION_ITEMS.md`, section « Decision
+   Log », format `product-manager.md` §47) référençant l'item qu'il
+   ferme — sinon il se perd dès que la conversation change de sujet.
+8. **Passages QA (A08), sécurité (A10) et compliance (A14) après chaque
+   batch livré/mergé** — non optionnels, pas seulement en début de
+   projet. Le passage Compliance n'est pas systématique comme QA/Security :
+   il est requis quand le batch déclenche au moins une ligne de la GRC
+   Trigger Matrix (`product-manager.md` §64) — vérifier la matrice avant
+   de décider si ce passage s'applique au batch en cours. Voir
    `.claude/agent-context/ACTION_ITEMS.md` pour les passages déjà en
    retard sur ce projet.
+8bis. **Mécanisme de balayage des items en attente — déclenché par
+   événement, jamais par calendrier fixe** (décidé le 2026-09-29,
+   suite au premier balayage complet des 15 agents — voir
+   `SHARED_LOG.md`, "DECISION-004"). Un balayage à date fixe
+   gaspillerait des dispatches sur du "rien de nouveau" la plupart du
+   temps — contraire à la consigne ponytail permanente. Deux niveaux :
+   - **Léger (orchestrateur seul, quasi gratuit)** : à chaque
+     transition de module ("un écran statué, on passe au suivant" —
+     rythme du PO), relire `ACTION_ITEMS.md`, l'état git
+     (`git status`, commits non poussés), l'état des tests. C'est ce
+     niveau qui aurait détecté plus tôt le premier incident réel
+     trouvé par ce mécanisme : 27 commits jamais poussés sur `origin`
+     malgré un Lot RACI validé QA+Security.
+   - **Complet (dispatch réel des 15 agents ACF, pas un résumé de
+     l'orchestrateur)** : déclenché par (a) une nouvelle décision
+     d'architecture transverse (type DECISION-002/003), ou (b) tous
+     les 5 modules livrés — selon ce qui arrive en premier, jamais une
+     date fixe. Chaque agent doit pouvoir répondre "rien de nouveau"
+     honnêtement — ne jamais inventer un point pour justifier le
+     dispatch (règle déjà appliquée au premier balayage : 3 agents sur
+     15 ont répondu "rien de nouveau" sans se forcer).
+   Pour un déclenchement automatique indépendant de la session en
+   cours (ex. rappel hebdomadaire de vérifier si un balayage complet
+   est dû), utiliser le skill `schedule` (cron réel, cloud) — pas
+   `graphify` (outil d'exploration de code/relations, pas de
+   planification) ni `loop` (adapté à une phase de travail active dans
+   la session, pas à un mécanisme qui doit survivre entre sessions).
 
 Pour du travail répétitif sur ce même repo (ex. plusieurs modules du
 backlog en parallèle), un **fork** de la session en cours est presque

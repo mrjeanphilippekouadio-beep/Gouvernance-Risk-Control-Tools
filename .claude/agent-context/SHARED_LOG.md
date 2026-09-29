@@ -1762,3 +1762,411 @@ scope du rôle) : le point 2 (fidélité du double in-memory sur
 `@security` (repositories optionnels toujours injectés) restent des
 points d'attention non bloquants, pas des findings. Commit local (pas
 de push) : voir historique git.
+
+---
+
+**2026-09-28 — @orchestrator @ux-designer @product-manager** — Portage
+de la charte Djamo dans `tokens.css` : go du PO, DECISION-001, et
+correctif de processus
+
+Après avoir testé l'écran RACI/RisksPage livré ce jour, le PO a
+constaté que la charte n'était visuellement pas appliquée et a demandé
+pourquoi, malgré son "go" déjà donné. Root cause identifiée : les 6
+itérations `@ux-designer` de l'artefact
+(**https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57**, V1→V6)
+concluaient chacune « portage attend une validation PO explicite » —
+mais cette conclusion n'a jamais été transformée en ligne trackable
+dans `ACTION_ITEMS.md` avec un owner. Un "go" verbal ne pouvait donc se
+rattacher à aucune décision identifiée, et le dispatch du Lot 1 RACI
+frontend est parti sans revérifier ce point (violation de la propre
+règle de `CLAUDE.md` § onboarding point 7, jamais appliquée ici).
+
+**P0 identifié** : A02 Orchestrator (escalade + vérification
+pré-dispatch), A03 Product Manager en second (Decision Log jamais
+utilisé pour ce sujet). Règle ajoutée à `CLAUDE.md` (nouveau point
+7bis) : toute conclusion "en attente PO/HUMAN" génère immédiatement une
+ligne `ACTION_ITEMS.md` ; tout "go" verbal se journalise comme entrée
+de Decision Log (`ACTION_ITEMS.md`, nouvelle section, format
+`product-manager.md` §47 — voir **DECISION-001**).
+
+**Portage effectué** : `frontend/src/design-system/tokens.css` —
+valeurs des tokens `--gs-*` remplacées par la charte V6 (accent
+`#2a3fff`, surfaces/bordures teintées lavande, Plus Jakarta Sans pour
+les titres, IBM Plex Sans pour l'UI, IBM Plex Mono réservée aux valeurs
+tabulaires, radius 8px) — **aucun nom de variable changé, aucun
+composant `.tsx` modifié** (`RisksPage`, `RaciPanel`, `Table`,
+`FormField`, `StatusBadge`, `Button`, `Tabs` consomment déjà uniquement
+`var(--gs-*)`, héritent donc automatiquement). Seul `index.css` a reçu
+une modification hors tokens : `h1`/`h2` passent de
+`var(--gs-font-ui)` à `var(--gs-font-display)` (rôle titre vs corps,
+tel que défini par la charte), et `code` utilise désormais
+`var(--gs-font-mono)` au lieu d'une pile codée en dur — deux lignes,
+aucune logique touchée. `npm run typecheck` (frontend) et `npx oxlint`
+relancés après coup : propres, aucune régression, aucun nouveau
+warning.
+
+**Écart assumé, signalé plutôt que silencieusement accepté** (détail
+complet dans DECISION-001) : le portage réintroduit une dépendance
+réseau (Google Fonts) que `DESIGN_NOTES.md` 4.2 excluait explicitement
+à l'origine pour un outil interne. Le mode sombre existant de l'app a
+été conservé (recoloré autour du nouvel accent) plutôt que supprimé,
+la charte V1-V6 étant documentée "thème clair uniquement" sans
+trancher explicitement le sort du dark mode du produit — à
+reconfirmer si une vraie variante sombre de la charte est un jour
+voulue.
+
+---
+
+**2026-09-28 — @orchestrator** — Réponse au §14 du brief PO (« pourquoi
+le UX Designer ne produit pas de maquettes Figma »)
+
+Vérifié directement en session, pas déduit : les deux seuls outils
+`mcp__figma__*` disponibles sont `get_figma_data` (lecture d'un fichier
+Figma existant) et `download_figma_images` (export d'images depuis un
+fichier existant) — **aucun outil d'écriture/création n'existe dans
+cette intégration MCP**. `get_figma_data` exige un `fileKey` en
+paramètre obligatoire, sans mécanisme de découverte (pas de "lister
+mes fichiers Figma").
+
+**Deux blocages distincts, pas un seul** :
+1. **Processus (déjà connu)** : aucun `fileKey` n'a jamais été fourni
+   par le PO ni trouvé dans le dépôt — bloque même la *lecture*.
+2. **Technique, plus fondamental, jamais énoncé aussi explicitement
+   avant** : même avec un `fileKey`, cette intégration ne permet que de
+   **lire/exporter** un fichier Figma existant, jamais d'y **créer**
+   des frames ou des composants. Aucun agent (UX Designer inclus) ne
+   peut donc "produire des maquettes Figma" via les outils disponibles
+   dans cette session, quel que soit le fileKey fourni — ce n'est pas
+   un manque de Design System (`frontend/src/design-system/tokens.css`
+   existe et est à jour) ni un manque de composants.
+
+**Solution de déblocage proposée** (3 options, à trancher par le PO,
+pas par un agent) :
+- **A.** Le PO (ou un designer humain) crée le fichier Figma et
+  transcrit manuellement les tokens déjà normalisés
+  (`tokens.css`, `docs/UX_Brief_Restructuration_Plateforme_v1.md`) —
+  les agents peuvent ensuite *lire* ce fichier via `get_figma_data`
+  pour vérifier la cohérence, jamais l'inverse.
+- **B.** Les maquettes HTML/CSS déjà produites (mécanisme de revue par
+  zone commentable, voir artefact `9kExAKw22AmH71rh59bdq4`) deviennent
+  le référentiel UX/UI vivant à la place de Figma — cohérent avec le
+  process déjà en place (charte portée dans `tokens.css`, DECISION-001),
+  mais ne satisfait pas littéralement l'exigence §14 ("un véritable
+  référentiel **dans Figma**").
+- **C.** Un futur outil MCP Figma en écriture (si Anthropic/Figma en
+  publie un) débloquerait la production directe — non disponible à ce
+  jour dans cette session, à ne pas supposer.
+
+Aucune des trois n'est appliquée par cette entrée : décision PO
+requise avant d'agir (voir `ACTION_ITEMS.md`).
+
+---
+
+**2026-09-28 — @tous — Arbitrage du PO sur la restructuration UX/UI (5
+décisions) + consultation des agents concernés**
+
+Le PO a tranché sur `docs/UX_Brief_Restructuration_Plateforme_v1.md` et
+sur les 7 difficultés soulevées par l'orchestrateur :
+
+1. **Figma — option B retenue** : les maquettes HTML/CSS commentables
+   (artefact `9kExAKw22AmH71rh59bdq4`) deviennent le référentiel UX/UI
+   vivant, pas Figma.
+2. **Composantes atomiques d'abord** : construire les atomes
+   (boutons, badges, card, modale, filtre, panneau latéral) avant les
+   écrans — les écrans deviennent de l'emboîtement, pas de la
+   conception répétée. Consigne permanente pour la suite du chantier.
+3. **Panneau latéral générique Comments/RACI/Evidence en premier**,
+   dans l'artefact — les autres composantes s'ajoutent une fois
+   chacune accordée par le PO.
+4. **Risk 360 = registre des risques enrichi** (pas un nouvel objet
+   séparé) — contrôles, évaluations, KRI, etc. viennent en extension
+   du registre, allège l'hypothèse de modélisation retenue dans
+   `UX_Impact_Analysis_v1.md`.
+5. **Un seul dashboard consolidé**, pas un par rôle — son contenu
+   (fond et forme) doit être arbitré par UX Designer, Risk Manager,
+   Compliance et Privacy ensemble, pas décidé unilatéralement par le
+   design.
+6. **Rythme par maturité** : un écran statué avant de passer au
+   suivant, jamais les 29 en parallèle.
+7. **Consigne de collaboration** : les composantes atomiques
+   réutilisables réduisent la charge de revue du PO dans la durée
+   (pas de refonte répétée) — le style/goût du PO doit être appris et
+   partagé à tous les agents, pas reredécouvert à chaque module.
+
+**Consultation des agents concernés sur ces 5 décisions** (identité de
+chaque agent relue avant réponse, même méthode que la consultation CDC
+v0.1) :
+
+| Agent | Avis / Observation | Difficulté potentielle signalée |
+|---|---|---|
+| `@ux-designer` (A04) | Le composant-first est déjà dans son mandat (§ conception UX cohérente/accessible) — accueille favorablement. | Demande un inventaire écrit des atomes (nom, variantes, états) au fur et à mesure, sinon la dérive déjà documentée deux fois (`DESIGN_NOTES.md` §2) se reproduit dès le 2e ou 3e module. |
+| `@architect` (A05) | Risk 360 "registre enrichi" est une bonne nouvelle architecturale — pas de nouvel agrégat, juste des jointures/lectures étendues sur `Risk`. Dashboard consolidé, en revanche, réclame un modèle de composition (quels widgets, alimentés par quelles requêtes) — sinon il devient un écran monolithique difficile à faire évoluer. | Recommande un ADR court sur le "modèle de composition du dashboard" avant que le premier widget ne soit codé, pour ne pas coder 5 widgets avec 5 logiques d'agrégation différentes. |
+| `@product-manager` (A03) | Le rythme "un écran statué, on passe au suivant" correspond à sa recommandation Definition of Ready/Done (§53/54 de son system prompt) — chaque écran doit avoir ses acceptance criteria avant validation, pas seulement "ça plaît visuellement". | Demande que "statué" soit défini explicitement par écran (qui valide : PO seul, ou PO + Risk/Compliance/Privacy quand le contenu les concerne, comme pour le dashboard) — sinon le mot "statué" devient ambigu module après module. |
+| `@risk-manager` (A13) | Fonction indépendante de challenge, pas de production — accepte de revoir le contenu du dashboard, mais rappelle qu'il ne co-conçoit pas, il challenge après coup ; le design ne doit pas présumer son accord. | Signale un risque méthodologique : si "Risk 360" enrichit librement le registre sans repasser par une revue de la méthodologie de scoring (déjà un point ouvert non traité, `ACTION_ITEMS.md` ligne `@risk-manager` du 2026-09-27), l'écran pourrait afficher des scores dérivés non encore validés comme définitifs. |
+| `@compliance` (A14) | Fonction de 2e ligne — même remarque que Risk : challenge le contenu du dashboard une fois proposé, ne le conçoit pas. Rappelle la GRC Trigger Matrix (`product-manager.md` §64) : un nouveau module "Nouveau traitement de données"/"Workflow financier" déclenche systématiquement une revue Compliance, atomique ou pas. | Le passage "par maturité" ne doit pas sauter la revue Compliance pour les modules qui la déclenchent (Audit notamment) simplement parce qu'ils arrivent tard dans la séquence. |
+| `@privacy` (A24) | Un dashboard "avec toutes les informations jugées utiles" est exactement le genre de formulation qui a déjà produit une fuite (voir `ACTION_ITEMS.md` ligne `@privacy` du 2026-09-27 : `RiskOwnershipService.listOwners` expose un utilisateur suspendu). Demande une définition par widget de qui voit quoi, pas un dashboard "tout visible par défaut" puis restreint après coup. | Risque concret si le dashboard consolidé est mocké avec des données richement détaillées avant que la visibilité par permission ne soit définie widget par widget. |
+| `@security` (A10) | Le composant-first réduit la surface à auditer (un `Modal`/`Form` revu une fois vs 29 fois) — favorable. Rappelle que l'artefact de revue reste un stockage de données d'exemple qui doit rester manifestement fictif et organisation-interne (déjà le cas : déclaration `comments` complète = non partageable publiquement). | Aucune difficulté bloquante signalée à ce stade — juste une vigilance à maintenir sur le caractère fictif des données d'exemple à mesure que les écrans se multiplient. |
+| `@qa-engineer` (A08) | Le composant-first est testable en isolation, favorable. Le rythme "un écran à la fois" permet de tester la bibliothèque d'atomes progressivement plutôt qu'en bloc à la fin. | Demande que chaque atome documente ses états (défaut/survol/erreur/désactivé/chargement) dès sa première version — lacune déjà notée pour `RisksPage` (`DESIGN_NOTES.md` §3, jamais d'état vide dédié) à ne pas reproduire dans les nouveaux atomes. |
+| `@dev-backend` (A06) | Aucune implication code à ce stade (phase maquette pure) — mais signale que la validation d'un écran par le PO ne doit pas être lue comme "prêt à coder" pour les modules sans aucun backend (Audit, référentiels) : la séquence recommandée reste de statuer d'abord les modules dont le backend existe déjà (Évaluations, KRI, KPI, Plans d'action, Contrôles/Exécutions), pour ne pas accumuler des écrans validés en attente d'un backend qui n'existe pas encore. | Aucune, tant que la priorisation proposée dans `UX_Impact_Analysis_v1.md` reste respectée. |
+
+**Mémoire durable** : les préférences de collaboration du PO (§7 ci-
+dessus — composant-first pour réduire la charge de revue, rythme par
+maturité, apprentissage du goût du PO à partager avec tous les agents)
+sont enregistrées dans la mémoire long-terme de l'orchestrateur en plus
+de ce log, pour survivre au-delà de cette conversation.
+
+---
+
+**2026-09-28 — @risk-manager @privacy @compliance @architect** — Consultation
+INDÉPENDANTE réelle (4 agents dispatchés séparément, pas un résumé
+orchestrateur) sur DECISION-002, suite à un retour explicite du PO :
+« j'espère que tu délègues car tu n'es pas outillé pour répondre au
+mieux à toutes les questions ». Chaque agent a lu son propre system
+prompt + le code/les docs pertinents avant de répondre — voir
+`ACTION_ITEMS.md` pour le détail complet par agent. Synthèse :
+
+- **Privacy** : reconfirme et approfondit le finding du 27/09
+  (`RiskOwnershipService`/`PostgresUserRepository.getById` sans filtre
+  `deleted_at`) — l'anomalie est dans le repository lui-même, pas
+  seulement le service. Émet **PRIV-CH-DASH-001** : matrice widget ×
+  donnée × permission requise avant tout code de production sur le
+  dashboard, non bloquant en phase maquette.
+- **Risk Manager** : corrige une hypothèse erronée de l'orchestrateur
+  (le score résiduel n'est pas une dérivation mécanique, c'est une
+  recotation humaine — bonne conception). Trouve un vrai
+  **RISK_BLOCK** pour Risk 360 : le statut de l'évaluation
+  (BROUILLON/VALIDATED/REJECTED/VALIDE_COMITE) n'est filtré nulle
+  part, donc un score non validé pourrait s'afficher avec la même
+  autorité qu'un score validé par le Comité. Émet aussi
+  **CHALLENGE-001** (non bloquant) sur la règle de moyenne pour la
+  maîtrise globale, jamais validée par un référentiel métier écrit.
+- **Compliance** : trouve un gap process réel — `CLAUDE.md` point 8 ne
+  nomme que QA/Security pour les revues après chaque lot, jamais
+  Compliance. Pas de blocage positionnel sur l'ordre des 29 modules,
+  mais deux conditions avant que le premier écran Audit soit "statué" :
+  trancher la contradiction de modélisation du CDC v0.1, et cadrer a
+  minima ACT-072 avant de maquetter un bouton "purger".
+- **Architect** : confirme un vrai risque N+1 sur Risk 360 (5-6 repos
+  à croiser, `ActionPlan` n'a même pas de `listForRisk`) — recommande
+  une méthode d'orchestration dédiée. Resserre sa propre recommandation
+  d'ADR dashboard (short, avant le premier widget **backend**, pas
+  avant la maquette) avec 3 questions structurantes concrètes.
+  Confirme une dépendance d'ordre réelle : Cartographie dépend
+  techniquement d'Évaluation (pas l'inverse) pour le passage "statué →
+  prêt à coder", même si la maquette HTML/CSS peut se faire dans
+  n'importe quel ordre.
+
+Aucun de ces 4 avis ne bloque le travail de maquette en cours
+(panneau latéral, atomes) — toutes les conditions posées portent sur
+le moment où Risk 360/Dashboard/Audit passeront au code, pas sur la
+phase actuelle. Aucun code de production modifié par ces 4 agents
+(hors périmètre — consultation uniquement).
+
+---
+
+**2026-09-29 — @architect** — CHALLENGE-002 : objets de domaine
+"emboîtables par référence" (analogie composants UI), verdict accepté
+avec conditions
+
+Le PO a demandé un dispatch réel avec instruction explicite de
+challenger sa propre proposition, pas de la valider. Proposition : la
+logique appliquée côté frontend (bibliothèque d'atomes UI réutilisables
+— Bouton, Badge, Card, Panel générique) devrait s'appliquer côté
+backend — des objets de domaine "emboîtables", son exemple : un
+"Dispositif de risque" composé par référence d'une Échelle de cotation,
+d'un mécanisme d'impact, de Risques, de Contrôles.
+
+**Sources lues intégralement** : `.claude/agents/architect.md`,
+`CLAUDE.md` (§Backend architecture, pattern paramètre optionnel
+constructeur), `docs/architecture/ADR-002-modele-grc-cible.md`,
+`docs/architecture/GRC_Target_Domain_Model.md`,
+`docs/UX_Impact_Analysis_v1.md`, et le code réel :
+`RiskRepository.ts`, `ControlRepository.ts`,
+`RiskEvaluationRepository.ts`, `KriRepository.ts`,
+`ActionPlanRepository.ts`, `RiskService.ts`, `RiskEvaluationService.ts`,
+`ActionPlanService.ts`.
+
+**Où l'analogie tient** : pour les référentiels stables sans cycle de
+vie propre (`RatingScale`, `RiskCategory`) — déjà la doctrine actée
+dans ADR-002, avant même la demande du PO aujourd'hui.
+
+**Où elle casse** : un composant UI n'a pas d'invariants métier ni de
+cycle de vie ; un `Risk`/`Control`/`ActionPlan` en a (transitions
+d'état validées en service, permissions, maker-checker). "Composer par
+référence" un Risque pose une question qu'un Bouton ne pose jamais :
+qui garantit la cohérence de l'ensemble composé quand un élément change
+de statut ? Deuxième point de rupture : le "Dispositif de risque" du
+PO n'est probablement pas un problème de *stockage composable* mais
+d'*agrégation de lecture* — un service qui assemble des repositories
+déjà existants (comme `ActionPlanService` le fait déjà), pas une
+nouvelle entité persistée qui référencerait tout.
+
+**Le principe est déjà appliqué, mais sélectivement, pas
+dogmatiquement** — preuve la plus forte : `RiskEvaluation.subCategory`/
+`entity` sont capturés **en instantané** (dupliqués), pas référencés
+depuis `Risk`, précisément pour préserver l'immuabilité d'une
+évaluation validée dans le temps si la catégorie change ensuite après
+coup — un besoin métier réel que la composition pure aurait cassé.
+Deuxième preuve, la plus révélatrice : la consolidation KRI/KPI en
+`Indicator` (ADR-002 Décision 3) est une fusion **physique** mais les
+deux restent des concepts métier **distincts** — l'inverse exact d'une
+composition par référence unique, tranché par le PO lui-même un jour
+avant cette demande.
+
+**Recommandation (3 options pesées, verdict tranché, pas une liste
+passive)** :
+- (a) composition par référence stricte partout — **rejetée** : ignore
+  la distinction déjà actée référentiel-stable vs instantané-d'audit,
+  sur-ingénierie anticipée contraire à ADR-001 et à la consigne
+  ponytail permanente du PO (`CLAUDE.md` §5bis).
+- (b) polymorphisme ciblé façon `ActionLink`, seulement quand un
+  **2e cas d'usage réel confirmé** existe (pas anticipé) — **retenue**,
+  déjà la politique du projet (Comments/RACI/Evidence/Audit trail, 4
+  précédents validés avant généralisation).
+- (c) ajout de l'architecte : la vraie friction à venir sur 29 modules
+  n'est pas duplication-vs-référence, c'est la confusion entre
+  composition de *stockage* et agrégation de *lecture* — un
+  `RiskDeviceViewService` (ou équivalent) qui compose des repositories
+  existants par injection de constructeur (le mécanisme déjà validé et
+  testé sur 9 modules) répond au besoin sans inventer de nouveau
+  concept d'entité.
+
+**Risque concret si imposé rigidement, avec preuve** : sur Audit
+(aucun backend existant), imposer la composition par référence avant
+un 2e cas d'usage réel généraliserait prématurément la table de liaison
+polymorphe de `Finding` à des types d'objets peut-être jamais
+consommés — dette de migration pour un besoin imaginé, pas confirmé.
+Sur Indicator, la règle rentrerait en tension directe avec une décision
+déjà actée par le PO lui-même (Décision 3), révélant que la règle
+brute n'était pas la bonne formulation du problème.
+
+**Verdict : accepté avec conditions.** (1) le mécanisme à généraliser
+est le paramètre optionnel de constructeur + moteur polymorphe réservé
+au 2e cas d'usage confirmé — pas un nouveau mécanisme ; (2) service de
+lecture composée plutôt que nouvelle entité persistée pour "Dispositif
+de risque", sauf besoin confirmé de persister l'assemblage lui-même ;
+(3) duplication/instantané reste légitime quand l'immuabilité d'audit
+l'exige ; (4) aucune whitelist polymorphe étendue par anticipation sur
+un module sans backend.
+
+**Point structurant à faire trancher explicitement par le PO** (règle
+§7bis `CLAUDE.md` — pas laissé en item narratif) : service de lecture
+composée vs nouvelle entité persistée pour "Dispositif de risque",
+avant qu'un agent ne commence à construire cet écran — voir
+`ACTION_ITEMS.md`. Aucun code de production modifié (revue
+d'architecture, hors périmètre d'implémentation).
+
+---
+
+**2026-09-29 — @architect** — DECISION-003 : recommandation assumée,
+projetée sur les 29 modules restants (round 2 de CHALLENGE-002, même
+agent repris avec son contexte déjà chargé, pas une nouvelle revue)
+
+Le PO a demandé d'aller plus loin que "voici les options" : quelle
+architecture évite vraiment de devoir modifier plusieurs objets à
+chaque changement, et un choix tranché sur "Dispositif de risque".
+
+**Friction n°1, déjà visible aujourd'hui, pas hypothétique** : le
+moteur polymorphe n'a pas une whitelist, il en a déjà cinq qui
+divergent — `ActionPlanSourceType` (RISK/CONTROL/KRI/AUDIT/INCIDENT/
+MANAGEMENT) et `ActionLinkResourceType` (RISK/CONTROL/KRI/ANOMALY) dans
+`ActionPlanService.ts` se recoupent partiellement sans être identiques,
+et ADR-002 prévoit de répliquer le même schéma pour RACI, Comments,
+Evidence-links et Finding — 5 listes indépendantes qui décrivent
+chacune "quels objets GRC existent". Projection concrète : le jour où
+`Incident` doit devenir consultable/commentable/RACI-able/lié à des
+Evidence (son cas d'usage prévu), il faudra modifier 5 unions de types
+dans 5 fichiers différents plus les `CHECK` SQL correspondants — le
+symptôme exact demandé ("toucher plusieurs objets pour un seul
+changement"), déjà visible à 2 whitelists sur 9 modules livrés.
+
+**Correctif proposé** : un `GrcObjectType` canonique unique (un seul
+fichier), adopté avant que RACI/Comments/Evidence-links/Finding ne
+soient exposés — pas une nouvelle abstraction, juste arrêter de retaper
+la même liste à 5 endroits qui divergent inévitablement. Coût
+maintenant : une refacto de type, zéro migration DB. Coût dans 12 mois,
+5 whitelists déjà en prod et déjà divergentes : chantier de correction
+avec non-régression sur chaque module consommateur.
+
+**Friction n°2** : Risk 360 et Dashboards sont documentés dans le
+backlog UX comme dépendant explicitement de *tous* les autres modules
+— le pattern "paramètre optionnel constructeur" (5-8 dépendances
+aujourd'hui) ne va pas bien scaler à 10-15 dépendances pour une seule
+fiche agrégée : constructeur illisible, et surtout un risque multiplié
+de trou de validation silencieux (`this.x?.y()`), déjà matérialisé deux
+fois indépendamment en production (SEC-001, SEC-009).
+
+**Correctif proposé** : pas une 5e couche, pas de CQRS formel — une
+convention de nommage à l'intérieur de `services/` existant : séparer
+les services d'écriture (règles métier, transitions, permissions) des
+services de lecture agrégée (`*ViewService`/`*DashboardService`), qui
+composent les mêmes repositories mais ne portent aucune transition
+d'état ni audit d'écriture. Le patron existe déjà à petite échelle :
+`ActionPlanService.dashboard()` assemble et calcule un statut dérivé
+sans jamais le stocker.
+
+**"Dispositif de risque" — tranché sans réserve** : service de lecture
+composée, point final. Persister l'assemblage recréerait exactement la
+friction n°1 en pire — toute évolution d'un Risk/Control/Indicator
+source poserait la question de la synchronisation du "Dispositif",
+l'inverse de "code stable dans la durée". Le patron proposé
+(`RiskDeviceViewService`, injection des repositories déjà existants,
+zéro nouvelle table/migration/permission) sert directement de gabarit
+pour Risk 360 et Dashboards ensuite — généraliser l'entité persistée
+à la place coûterait, sur 29 modules, l'écart entre "ajouter une vue =
+un service + une méthode" et "ajouter une vue = migration + entité +
+repository + service + route" (la recette en 9 étapes de `CLAUDE.md`,
+pensée pour des objets métier, pas des vues) à chaque fois. Seule
+réserve non provisionnée, jamais exprimée par le PO à ce jour : figer
+un dispositif à un instant T pour l'opposer plus tard exigerait un
+nouvel objet métier à part entière avec sa propre justification
+d'audit — pas anticipé tant que ce besoin n'est pas exprimé.
+
+Aucun code de production modifié (revue d'architecture). Points restant
+à planifier, non bloquants pour le travail en cours : créer
+`GrcObjectType` avant le Lot RACI/Comments/Evidence, adopter la
+convention `*ViewService` avant le premier écran d'agrégation.
+
+---
+
+**2026-09-29 — @tous — Balayage complet des 15 agents, réellement
+dispatchés (DECISION-004)**
+
+Sur demande explicite du PO (« les autres agents doivent être informés
+et doivent nous faire un retour... tous sans exception »), les 15
+rôles ACF (architect inclus, sur une tâche différente : formaliser
+`ADR-003`) ont été dispatchés indépendamment — chacun lit son propre
+mandat, ses propres lignes ouvertes dans `ACTION_ITEMS.md`, et scanne
+son périmètre pour un point non encore tracké. Détail complet par
+agent dans `ACTION_ITEMS.md` (nouvelles lignes du 2026-09-29).
+
+**Le plus important, par ordre de priorité réelle** :
+
+1. **@release-manager — URGENT** : `main` a 27 commits jamais poussés,
+   aucune PR pour le Lot 1 RACI malgré un feu vert QA/Security complet.
+   Travail validé en interne, jamais soumis au canal de release.
+2. **Confirmation croisée du problème central de DECISION-003 par 7
+   agents indépendants**, chacun depuis son angle propre, sans se
+   copier : la divergence de whitelists polymorphes est plus large que
+   documenté (7, pas 5-6 — `RaciEntityType` et `NotificationResourceType`
+   trouvées en plus, avec une divergence de **casse** en sus de la
+   couverture). `@security` ajoute une dimension non couverte par
+   l'architecte : centraliser aussi le résolveur, pas seulement le
+   type. `@compliance` la qualifie de `REGULATORY_GAP` mineur.
+3. **@privacy** élargit la portée de PRIV-CH-DASH-001 à tout futur
+   `*ViewService`, pas seulement au Dashboard.
+4. **@qa-engineer** trouve un vrai trou de couverture jamais tracké :
+   `BrandingService`, zéro test.
+5. Plusieurs items déjà ouverts sont fermés avec preuve fraîche
+   (`@architect` §20 via ADR-003, `@audit` contradiction Finding déjà
+   arbitrée) ou reconfirmés avec preuve fraîche sans changement
+   (`@devops` ModuleToggle/quota Drive, `@documentation` RETEX
+   toujours obsolète, `@risk-manager` CHALLENGE-001/RISK_BLOCK
+   toujours ouverts, `@compliance` ACT-072 inchangé).
+
+Aucune ligne fermée par complaisance : chaque agent a été instruit de
+dire "rien de nouveau" si c'était honnêtement le cas (plusieurs l'ont
+fait — `@ux-designer` sur DECISION-003 elle-même, `@infrastructure`,
+`@devops` sur la décision elle-même). Aucun code de production modifié
+par ce balayage (revue uniquement), sauf `ADR-003-conventions-
+transverses.md` créé par `@architect` sur tâche dédiée.
