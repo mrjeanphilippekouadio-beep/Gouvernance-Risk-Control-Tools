@@ -145,3 +145,13 @@ l'applicabilité RGPD/loi n°2013-450 à ce SFD — elle fixe seulement l'hypoth
 pas bloquer le maquettage en attendant cet arbitrage. Tant que cet arbitrage n'a pas eu lieu, le
 statut d'ACT-072 doit rester `EVIDENCE_REQUIRED` (pas `NOT_APPLICABLE`, pas `COMPLIANT`) et
 aucun bouton de suppression physique ne doit être maquetté.
+
+## Confirmation PO (2026-09-29)
+
+Le Product Owner a donné le go pour adopter l'**Option C comme hypothèse de travail par défaut**
+(restriction de visibilité par masquage, pas de purge automatisée). Ce "go" couvre le déblocage du
+maquettage/du module Audit sur cette base — **ce n'est pas** un arbitrage juridique formel sur
+l'applicabilité RGPD/loi n°2013-450 à ce SFD, qui reste à faire séparément avec le
+juridique/conformité avant de considérer ACT-072 réellement clos. Statut ACT-072 inchangé :
+`EVIDENCE_REQUIRED`. Aucun bouton de suppression physique ne doit être maquetté ou codé tant que
+cet arbitrage juridique formel n'a pas eu lieu.
