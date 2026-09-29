@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { feedbackApi, type FeedbackCategory } from "../../api/feedback";
 import { ApiError } from "../../api/client";
-import { Button, FormField } from "../../design-system";
+import { Button, FormField } from "@djamo/design-system";
 
 interface FeedbackWidgetProps {
   /** Google ID token — see AuthContext TODO in App.tsx. */

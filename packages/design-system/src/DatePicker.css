@@ -1,0 +1,172 @@
+.gs-datepicker {
+  position: relative;
+  display: inline-block;
+  font-family: var(--gs-font-ui);
+}
+
+.gs-datepicker-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--gs-text-secondary);
+  margin-bottom: var(--gs-space-1);
+}
+
+.gs-datepicker-field {
+  position: relative;
+  max-width: 220px;
+}
+
+.gs-datepicker-field input {
+  width: 100%;
+  font-family: var(--gs-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gs-font-size-body);
+  color: var(--gs-text);
+  background: var(--gs-bg-page);
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius);
+  padding: 8px 32px 8px 10px;
+  cursor: pointer;
+}
+
+.gs-datepicker-field input:focus-visible {
+  outline: 2px solid var(--gs-primary);
+  outline-offset: 1px;
+}
+
+.gs-datepicker-field input:disabled {
+  color: var(--gs-text-disabled);
+  background: var(--gs-bg-surface);
+  cursor: not-allowed;
+}
+
+.gs-datepicker-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--gs-text-secondary);
+  pointer-events: none;
+}
+
+.gs-datepicker-popover {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  width: 260px;
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius-card);
+  box-shadow: var(--gs-elev-3);
+  background: var(--gs-bg-page);
+  padding: 14px;
+  margin-top: var(--gs-space-2);
+}
+
+.gs-datepicker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.gs-datepicker-head b {
+  font-family: var(--gs-font-display);
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  color: var(--gs-text);
+}
+
+.gs-datepicker-head button {
+  border: none;
+  background: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--gs-radius);
+  color: var(--gs-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.gs-datepicker-head button:hover {
+  background: var(--gs-bg-surface);
+}
+
+.gs-datepicker-head svg {
+  width: 15px;
+  height: 15px;
+}
+
+.gs-datepicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+
+.gs-datepicker-dow {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--gs-text-disabled);
+  padding-bottom: var(--gs-space-1);
+}
+
+.gs-datepicker-day {
+  border: none;
+  background: none;
+  height: 28px;
+  border-radius: 50%;
+  font-family: var(--gs-font-mono);
+  font-size: 0.76rem;
+  color: var(--gs-text);
+  cursor: pointer;
+}
+
+.gs-datepicker-day:hover {
+  background: var(--gs-bg-surface);
+}
+
+.gs-datepicker-day-outside {
+  color: var(--gs-text-disabled);
+}
+
+.gs-datepicker-day-today {
+  box-shadow: inset 0 0 0 1.5px var(--gs-primary);
+  font-weight: 700;
+}
+
+.gs-datepicker-day-selected,
+.gs-datepicker-day-selected:hover {
+  background: var(--gs-primary);
+  color: #fff;
+  font-weight: 700;
+}
+
+.gs-datepicker-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gs-border);
+}
+
+.gs-datepicker-foot button {
+  background: none;
+  border: none;
+  font-family: var(--gs-font-ui);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--gs-primary);
+  cursor: pointer;
+}
+
+.gs-datepicker-foot button:hover {
+  color: var(--gs-primary-hover);
+  text-decoration: underline;
+}

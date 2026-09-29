@@ -1,0 +1,64 @@
+.gs-pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--gs-space-1);
+  font-family: var(--gs-font-ui);
+  font-size: 0.8rem;
+}
+
+.gs-pagination-page,
+.gs-pagination-nav {
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid var(--gs-border);
+  background: var(--gs-bg-page);
+  border-radius: var(--gs-radius);
+  color: var(--gs-text-secondary);
+  font-family: var(--gs-font-mono);
+  font-size: 0.8rem;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.gs-pagination-page:hover:not(:disabled),
+.gs-pagination-nav:hover:not(:disabled) {
+  background: var(--gs-bg-surface);
+  color: var(--gs-text);
+}
+
+.gs-pagination-page-active {
+  background: var(--gs-primary);
+  border-color: var(--gs-primary);
+  color: #fff;
+  font-weight: 700;
+}
+
+.gs-pagination-page-active:hover {
+  background: var(--gs-primary-hover);
+  border-color: var(--gs-primary-hover);
+  color: #fff;
+}
+
+.gs-pagination-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gs-space-1);
+  font-family: var(--gs-font-ui);
+  padding: 0 12px;
+  width: auto;
+}
+
+.gs-pagination-nav:disabled {
+  color: var(--gs-text-disabled);
+  cursor: not-allowed;
+}
+
+.gs-pagination-nav svg {
+  width: 14px;
+  height: 14px;
+}
+
+.gs-pagination-ellipsis {
+  color: var(--gs-text-disabled);
+  padding: 0 2px;
+}

@@ -1,0 +1,34 @@
+.gs-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 360px;
+  font-family: var(--gs-font-ui);
+}
+
+.gs-slider-label {
+  font-size: 0.8rem;
+  color: var(--gs-text-secondary);
+  white-space: nowrap;
+}
+
+.gs-slider input[type="range"] {
+  flex: 1;
+  accent-color: var(--gs-primary);
+  height: 4px;
+  cursor: pointer;
+}
+
+.gs-slider input[type="range"]:disabled {
+  accent-color: var(--gs-text-disabled);
+  cursor: not-allowed;
+}
+
+.gs-slider-value {
+  font-family: var(--gs-font-mono);
+  font-weight: 700;
+  font-size: 0.85rem;
+  min-width: 34px;
+  text-align: right;
+  color: var(--gs-text);
+}

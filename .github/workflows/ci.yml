@@ -24,15 +24,20 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run build
+          cache-dependency-path: package-lock.json
+      # package-lock.json is generated on Windows and, per npm/cli#4828,
+      # its resolved-package entries for OS-specific optionalDependencies
+      # (rolldown's native binding for vite 8) don't carry over to other
+      # platforms. Re-resolving fresh on the Linux runner avoids replaying
+      # that stale lockfile; --package-lock=false stops it from being
+      # rewritten in the workspace (kept as-is for local/Windows use).
+      - run: rm -f package-lock.json
+      - run: npm install --package-lock=false
+      - run: npm run build --workspace=@djamo/design-system
+      - run: npm run build --workspace=@grc-tools/frontend

@@ -1,0 +1,35 @@
+.gs-modal {
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: var(--gs-bg-page);
+  color: var(--gs-text);
+  border-radius: var(--gs-radius-card);
+  box-shadow: var(--gs-elev-2);
+  border: 1px solid var(--gs-border);
+  padding: var(--gs-space-4);
+  font-family: var(--gs-font-ui);
+}
+
+.gs-modal::backdrop {
+  background: rgba(27, 26, 44, 0.42);
+}
+
+.gs-modal-title {
+  font-family: var(--gs-font-display);
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.gs-modal-body {
+  font-size: 0.82rem;
+  color: var(--gs-text-secondary);
+  margin-bottom: var(--gs-space-3);
+  line-height: 1.5;
+}
+
+.gs-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--gs-space-2);
+}

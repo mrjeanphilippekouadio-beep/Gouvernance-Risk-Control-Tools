@@ -1,0 +1,76 @@
+.gs-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-left: 3px solid var(--gs-text-secondary);
+  border-radius: 0 var(--gs-radius) var(--gs-radius) 0;
+  background: var(--gs-neutral-bg);
+  padding: 12px 14px;
+  font-family: var(--gs-font-ui);
+  font-size: 0.83rem;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.gs-msg-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--gs-text-secondary);
+}
+
+.gs-msg-content {
+  min-width: 0;
+}
+
+.gs-msg-head {
+  font-weight: 700;
+  color: var(--gs-text);
+  margin-bottom: 2px;
+}
+
+.gs-msg p {
+  color: var(--gs-text-secondary);
+  margin: 0;
+}
+
+.gs-msg-warning {
+  border-color: var(--gs-warning);
+  background: var(--gs-warning-bg);
+}
+
+.gs-msg-warning .gs-msg-head,
+.gs-msg-warning .gs-msg-icon {
+  color: var(--gs-warning);
+}
+
+.gs-msg-danger {
+  border-color: var(--gs-danger);
+  background: var(--gs-danger-bg);
+}
+
+.gs-msg-danger .gs-msg-head,
+.gs-msg-danger .gs-msg-icon {
+  color: var(--gs-danger);
+}
+
+.gs-msg-success {
+  border-color: var(--gs-success);
+  background: var(--gs-success-bg);
+}
+
+.gs-msg-success .gs-msg-head,
+.gs-msg-success .gs-msg-icon {
+  color: var(--gs-success);
+}
+
+.gs-msg-info {
+  border-color: var(--gs-primary);
+  background: var(--gs-primary-bg);
+}
+
+.gs-msg-info .gs-msg-head,
+.gs-msg-info .gs-msg-icon {
+  color: var(--gs-primary-hover);
+}

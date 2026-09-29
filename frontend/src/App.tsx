@@ -3,7 +3,7 @@ import { RisksPage } from "./features/risks/RisksPage";
 import { AdminPage } from "./features/admin/AdminPage";
 import { FeedbackWidget } from "./features/feedback/FeedbackWidget";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
-import { Button, FormField, Tabs } from "./design-system";
+import { Button, FormField, Tabs } from "@djamo/design-system";
 import "./App.css";
 
 const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;

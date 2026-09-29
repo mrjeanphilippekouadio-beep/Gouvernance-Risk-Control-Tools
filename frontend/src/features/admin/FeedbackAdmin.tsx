@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { feedbackApi, type Feedback, type FeedbackStatus } from "../../api/feedback";
 import { ApiError } from "../../api/client";
-import { FormField, StatusBadge, Table, type StatusTone } from "../../design-system";
+import { FormField, StatusBadge, Table, type StatusTone } from "@djamo/design-system";
 
 interface FeedbackAdminProps {
   token: string;

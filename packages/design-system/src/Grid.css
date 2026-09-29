@@ -1,0 +1,15 @@
+.gs-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--gs-grid-columns, 4), minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gs-grid-item {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .gs-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "grc-tools",
+  "private": true,
+  "workspaces": ["frontend", "packages/*"]
+}

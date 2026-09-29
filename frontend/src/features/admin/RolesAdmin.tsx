@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { rolesApi, type Role } from "../../api/roles";
 import { permissionsApi } from "../../api/permissions";
 import { ApiError } from "../../api/client";
-import { Button, FormField, StatusBadge, Table } from "../../design-system";
+import { Button, FormField, StatusBadge, Table } from "@djamo/design-system";
 
 interface RolesAdminProps {
   token: string;

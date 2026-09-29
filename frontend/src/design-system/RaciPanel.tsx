@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { raciApi, type RaciAssignment, type RaciEntityType, type RaciRole } from "../api/raci";
 import { usersApi, type UserSummary } from "../api/users";
 import { ApiError } from "../api/client";
-import { Button } from "./Button";
-import { FormField } from "./FormField";
-import { StatusBadge } from "./StatusBadge";
+import { Button, FormField, StatusBadge } from "@djamo/design-system";
 import "./RaciPanel.css";
 
 interface RaciPanelProps {

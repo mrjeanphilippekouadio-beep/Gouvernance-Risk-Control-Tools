@@ -1,0 +1,27 @@
+.gs-seg {
+  display: inline-flex;
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius-btn);
+  overflow: hidden;
+}
+
+.gs-seg-btn {
+  border: none;
+  background: var(--gs-bg-page);
+  font-family: var(--gs-font-ui);
+  font-size: 0.8rem;
+  padding: 7px 14px;
+  color: var(--gs-text-secondary);
+  cursor: pointer;
+}
+
+.gs-seg-btn:hover:not(.gs-seg-btn-active) {
+  background: var(--gs-bg-surface);
+  color: var(--gs-text);
+}
+
+.gs-seg-btn-active {
+  background: var(--gs-primary);
+  color: #fff;
+  font-weight: 600;
+}

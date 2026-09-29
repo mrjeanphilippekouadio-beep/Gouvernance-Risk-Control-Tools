@@ -1,0 +1,52 @@
+.gs-file-upload {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--gs-font-ui);
+}
+
+.gs-file-upload input[type="file"] {
+  /* Hidden, not `display:none` — keeps it reachable by the keyboard. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.gs-file-upload label {
+  cursor: pointer;
+}
+
+.gs-file-upload input[type="file"]:focus-visible + label {
+  outline: 2px solid var(--gs-primary);
+  outline-offset: 2px;
+}
+
+.gs-file-upload-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.gs-file-upload-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--gs-text-secondary);
+  font-family: var(--gs-font-mono);
+  background: var(--gs-bg-surface);
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius);
+  padding: 6px 10px;
+}
+
+.gs-file-upload-name svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
