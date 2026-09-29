@@ -12,7 +12,9 @@ Analysis (`docs/architecture/GRC_Database_Gap_Analysis.md`, commit
 Gap Analysis ») : (1) `RiskEvaluation` confirmé unique implémentation
 technique du « Risk Assessment » métier (§5.1/§5.2) ; (2) `RiskCategory`
 confirmé canonique, 3 FK nullables proposées (§4.5) ; (3) `risk_processes`
-explicitement non créée pour ce lot (§4.2) ; (4) `Kpi`/`Kri` fusionnés en
+explicitement écartée, pas différée (§4.2 — arbitrage refait le
+2026-09-29, DECISION-007, sur la base de la FK 1:1 réelle
+`risks.process_id` ajoutée par DECISION-006, migration 029) ; (4) `Kpi`/`Kri` fusionnés en
 un modèle physique unique `Indicator`/`IndicatorMeasure` (§5.5 — le point
 le plus structurant du lot). Voir §12 pour la synthèse chiffrée à jour.
 
@@ -320,19 +322,30 @@ charges (« fonction transverse ≠ table par objet »).
     intentionnel dans le code) — décision Architecture explicitement
     laissée ouverte, à statuer en Gap Analysis.
 
-> **`risk_processes` — tranché par le Product Owner le 2026-09-28**
-> (SHARED_LOG, « Arbitrage des 4 points ouverts de la Gap Analysis ») :
-> **pas de table de liaison N:N `Risk`↔`Process` pour le lot initial.**
+> **`risk_processes` — écartée définitivement, pas différée (arbitrage
+> refait le 2026-09-29, DECISION-007).** Tranché une première fois par
+> le Product Owner le 2026-09-28 (SHARED_LOG, « Arbitrage des 4 points
+> ouverts de la Gap Analysis ») sur une prémisse alors erronée (une FK
+> 1:1 supposée déjà existante) ; rouvert et rejugé sur les faits
+> corrects le 2026-09-29 — le verdict **ne change pas**, seule sa
+> motivation change. **Pas de table de liaison N:N `Risk`↔`Process`.**
+> La relation retenue est la FK 1:1 réelle **`risks.process_id →
+> processes(id)`** (nullable, migration `029_risks_process_id.sql`,
+> ajoutée par DECISION-006), en complément de `Risk.process` (colonne
+> texte libre historique, `003_risks.sql`, conservée jusqu'au backfill).
 > Le point d'arbitrage §37.A du cahier des charges (« un risque
 > peut-il être rattaché à plusieurs processus ? ») n'est **pas** tranché
-> positivement à ce stade — la relation existante `Risk.process`
-> (colonne texte libre, `003_risks.sql`, une valeur par risque — 1:1
-> conceptuel avec le processus principal) reste **suffisante** pour ce
-> lot. C'est une décision explicite, pas un oubli : `risk_processes`
-> reste réévaluable plus tard si un besoin N:N réel se confirme, sans
-> remettre en cause le catalogue (`RiskCatalog`) ni le reste de ce
-> modèle. Aucune table `risk_processes` n'est donc créée par ce document
-> ni par la Gap Analysis/Migration Plan qui en découlent pour ce lot.
+> positivement — aucun besoin métier N:N n'est confirmé (8 preuves,
+> détail complet : `GRC_Database_Gap_Analysis.md` §2.5bis). **Écartée**
+> signifie ici : ce n'est pas un report faute de temps, c'est l'absence
+> de besoin métier qui motive la décision. **Critère de réouverture
+> explicite** (à exiger, ne pas rouvrir sans) : une expression métier
+> explicite du Product Owner ou du Risk Manager décrivant un cas réel où
+> un même risque de registre doit être piloté sur plusieurs processus
+> **avec une seule évaluation partagée** — un **2e cas d'usage réel
+> confirmé**, jamais anticipé. Aucune table `risk_processes` n'est donc
+> créée par ce document ni par la Gap Analysis/Migration Plan qui en
+> découlent.
 - **Relations** : N:1 vers `RiskCatalog` (proposé) ; N:1 vers
   `Department` (`ownerDepartmentId`) ; N:1 vers `User` (`ownerId`,
   `superiorOwnerId`) ; 1:N vers `RiskAssessment` et `RiskEvaluation` ;
@@ -922,9 +935,11 @@ RISK_ASSESSMENT RISK_EVALUATION CONTROL      INDICATOR      RISK_INCIDENT
               ▼  (lien polymorphe document_links)
            DOCUMENT (NOUVEAU, ≠ Evidence)
 
-   RISK ── process (texte libre, 1:1 conceptuel) ── pas de RISK_PROCESSES
-   (N:N Risk↔Process non créée pour ce lot — décision Product Owner
-    2026-09-28, réévaluable plus tard)
+   RISK ──process_id (FK 1:1 réelle, migration 029, DECISION-006)──► PROCESS
+   (process texte libre conservé en parallèle jusqu'au backfill)
+   pas de RISK_PROCESSES (N:N Risk↔Process écarté définitivement,
+    pas différé — DECISION-007, 2026-09-29 ; réouverture seulement sur
+    un 2e cas d'usage réel confirmé)
 
    TOUT OBJET GRC CI-DESSUS
         │
@@ -963,7 +978,9 @@ reste (`RatingScale`, `RiskCategory`, `ControlExecution`,
 > (SHARED_LOG, « Arbitrage des 4 points ouverts de la Gap Analysis ») :
 > `RiskAssessment` confirmé DÉPRÉCIÉ au profit de `RiskEvaluation` ;
 > `RiskCategory` confirmé canonique avec 3 FK nullables à câbler ;
-> `risk_processes` explicitement **non créée** pour ce lot ; `Kpi`/`Kri`
+> `risk_processes` explicitement **écartée, pas différée** (arbitrage
+> refait le 2026-09-29, DECISION-007, sur la base de la FK 1:1 réelle
+> `risks.process_id`, migration 029) ; `Kpi`/`Kri`
 > **consolidés** en un modèle physique unique `Indicator`/
 > `IndicatorMeasure` — le changement le plus structurant, qui déplace
 > 4 tables existantes (`kpis`, `kris`, `kpi_measures`, `kri_measures`)
@@ -976,7 +993,7 @@ reste (`RatingScale`, `RiskCategory`, `ControlExecution`,
 | EXISTANT, DÉPRÉCIÉ | 1 | `RiskAssessment` (entité + table `risk_assessments`) — scaffolding mort, dépréciation confirmée, suppression physique hors périmètre |
 | NOUVEAU | ~12 | `RiskCatalog`, `RiskCause`/`RiskCatalogCause`, `Document`/`document_links`, `Incident`, `RiskIncident`, `ChecklistItem`/`ChecklistResult`, `RaciAssignment`, `Comment`/`CommentableObjectConfig`, `AuditMission`, `Finding` |
 | NOUVEAU (consolidation) | 2 | `Indicator` (table `indicators`, discriminant `indicator_type = KPI \| KRI`), `IndicatorMeasure` (table `indicator_measures`) — remplacent à terme `Kpi`/`Kri`/`KpiMeasure`/`KriMeasure` (4 tables existantes, EXISTANT jusqu'à dépréciation actée après backfill et coexistence, Expand/Contract, même gouvernance que `RiskAssessment`) |
-| Non créée (décision explicite) | 1 | `risk_processes` (N:N `Risk`↔`Process`) — `Risk.process` (texte libre, 1:1 conceptuel) reste suffisant pour ce lot ; réévaluable plus tard |
+| Écartée (décision définitive, pas différée) | 1 | `risk_processes` (N:N `Risk`↔`Process`) — écartée le 2026-09-28, arbitrage refait le 2026-09-29 (DECISION-007) sur la base de la FK 1:1 réelle `risks.process_id` (migration 029) ; réouverture seulement sur un 2e cas d'usage réel confirmé (registre piloté sur plusieurs processus avec une seule évaluation partagée), jamais anticipé |
 
 Ce comptage part de l'ordre de grandeur cité par le Product Owner
 (« ~15 objets sur 35 cibles sont déjà présents sous une forme proche » —

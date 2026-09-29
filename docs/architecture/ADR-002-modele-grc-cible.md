@@ -201,22 +201,45 @@ Référence détaillée : `GRC_Target_Domain_Model.md` §4.5 ;
 `GRC_Database_Gap_Analysis.md` §2.3, §2.5 ; `GRC_Migration_Plan.md` Lot E
 (`038`, `039`).
 
-## Décision 5 — `risk_processes` non créée pour ce lot
+## Décision 5 — `risk_processes` écartée (pas de table N:N)
 
-**Décision** : pas de table de liaison N:N `Risk`↔`Process` pour le lot
-initial. `Risk.process` (colonne texte libre, relation 1:1 conceptuelle
-avec le processus principal, déjà en place depuis `003_risks.sql`) reste
-suffisante.
+**Décision** : pas de table de liaison N:N `Risk`↔`Process`. La relation
+retenue est la FK 1:1 `risks.process_id → processes(id)` (nullable,
+migration `029_risks_process_id.sql`, ajoutée par DECISION-006), en
+parallèle de `Risk.process` (colonne texte libre historique, conservée
+jusqu'au backfill).
 
-**Pourquoi** (résumé) : décision explicite, pas un oubli — le point
-d'arbitrage §37.A du cahier des charges (« un risque peut-il être
-rattaché à plusieurs processus ? ») n'est pas tranché positivement à ce
-stade faute de besoin métier confirmé. Réévaluable plus tard sans
-remettre en cause le catalogue ni aucune migration de ce lot ; aucune
-trace du sujet n'est supprimée, seulement actée comme différée.
+**Pourquoi** : arbitrage initial du 2026-09-28, **rouvert et refait le
+2026-09-29** (DECISION-007) après correction d'une prémisse fausse — la
+première version de ce document et de la Gap Analysis supposaient à tort
+qu'une FK 1:1 existait déjà ; en réalité `risks.process` était du texte
+libre sans aucune intégrité référentielle avant la migration `029`. La
+correction de la prémisse **ne change pas le verdict, elle change sa
+motivation** : ce qui manquait n'était pas le N:N, c'était l'intégrité
+référentielle tout court, désormais apportée par la FK 1:1. DECISION-007
+apporte 8 preuves contre le N:N (aucun besoin métier exprimé — le
+cahier des charges §37.A pose la question sans trancher ; données
+réelles mono-valuées ; le besoin multi-processus est déjà couvert par
+Catalogue → N `Risk` ; la hiérarchie `processes` couvre déjà le
+rattachement transverse ; le N:N casserait DECISION-006 (mode
+indécidable sans `is_primary`) ; fausserait Cartography/Dashboard ;
+incohérent avec l'imputabilité N:1 déjà en place ; asymétrie de coût).
+Détail complet : `GRC_Database_Gap_Analysis.md` §2.5bis.
+
+**`risk_processes` est écartée, pas différée** : ce n'est pas une
+question de temps ou de priorité, c'est l'absence de besoin métier
+confirmé qui motive la décision, aujourd'hui comme le 2026-09-28.
+**Critère de réouverture explicite** (à exiger, ne pas rouvrir sans) :
+une expression métier explicite du Product Owner ou du Risk Manager
+décrivant un cas réel où un même risque de registre doit être piloté
+sur plusieurs processus **avec une seule évaluation partagée** (si les
+évaluations sont distinctes, la réponse reste Catalogue → N `Risk`) —
+même règle que Décision 2/DECISION-003 pour le moteur polymorphe : un
+**second cas d'usage réel confirmé**, jamais un cas anticipé.
 
 Référence détaillée : `GRC_Target_Domain_Model.md` §4.2 ;
-`GRC_Database_Gap_Analysis.md` §2.1, §2.5.
+`GRC_Database_Gap_Analysis.md` §2.1, §2.5, §2.5bis ; `.claude/agent-context/ACTION_ITEMS.md`,
+entrée `@architect` DECISION-007 du 2026-09-29.
 
 ## Conséquences
 
@@ -283,8 +306,10 @@ supposé correct par défaut.**
   KPI/KRI legacy** — écartée dans ce lot : contraire à la directive
   Expand/Contract obligatoire du Product Owner ; reportée à un sign-off
   explicite ultérieur, hors périmètre.
-- **Création immédiate de `risk_processes`** — écartée pour ce lot faute
-  de besoin métier confirmé (Décision 5) ; reste réévaluable.
+- **Création de `risk_processes`** — écartée définitivement (Décision 5,
+  DECISION-007) faute de besoin métier confirmé, pas différée faute de
+  temps ; réouverture conditionnée à un 2e cas d'usage réel confirmé
+  (jamais anticipé).
 - **Moteur de workflow générique piloté par configuration** — écarté :
   les statuts par entité (transitions codées en dur côté service)
   restent la source de vérité, cohérent avec ADR-001 (« pas
