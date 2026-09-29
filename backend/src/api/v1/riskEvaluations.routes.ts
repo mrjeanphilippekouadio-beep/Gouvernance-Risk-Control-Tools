@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { RiskEvaluationService } from "../../services/RiskEvaluationService.js";
+import type { RiskEvaluationViewService } from "../../services/RiskEvaluationViewService.js";
 
 const EvaluationType = z.enum(["AD_HOC", "ANNUELLE", "ANTICIPEE"]);
 const EvaluationStatus = z.enum(["BROUILLON", "VALIDATED", "REJECTED", "VALIDE_COMITE"]);
@@ -43,8 +44,23 @@ const ResidualScoringBody = z.object({
 const ValidateBody = z.object({ comment: z.string().nullish() });
 const RejectBody = z.object({ comment: z.string().min(1) });
 
-export function riskEvaluationsRouter(riskEvaluationService: RiskEvaluationService): Router {
+export function riskEvaluationsRouter(
+  riskEvaluationService: RiskEvaluationService,
+  riskEvaluationViewService: RiskEvaluationViewService,
+): Router {
   const router = Router();
+
+  // DIV-07: read-only composition — the covering controls and their last
+  // known effectiveness, to inform the human mastery rating. Never a
+  // computed mastery score.
+  router.get("/:id/context", async (req, res, next) => {
+    try {
+      const context = await riskEvaluationViewService.getEvaluationContext(req.user, req.params["id"] as string);
+      res.json({ data: context });
+    } catch (err) {
+      next(err);
+    }
+  });
 
   // ACT-159: full history for a risk, most recent first, paginated, optional status filter.
   router.get("/", async (req, res, next) => {

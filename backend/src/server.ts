@@ -55,6 +55,7 @@ import { KpiMeasureService } from "./services/KpiMeasureService.js";
 import { RiskAppetiteService } from "./services/RiskAppetiteService.js";
 import { RatingScaleService } from "./services/RatingScaleService.js";
 import { RiskEvaluationService } from "./services/RiskEvaluationService.js";
+import { RiskEvaluationViewService } from "./services/RiskEvaluationViewService.js";
 import { KriService } from "./services/KriService.js";
 import { KriMeasureService } from "./services/KriMeasureService.js";
 import { UserService } from "./services/UserService.js";
@@ -199,6 +200,13 @@ const riskEvaluationService = new RiskEvaluationService(
   riskRepository,
   ratingScaleRepository,
   riskAppetiteRepository,
+);
+// DIV-07: read-only companion of riskEvaluationService — composes only, never scores.
+const riskEvaluationViewService = new RiskEvaluationViewService(
+  riskEvaluationRepository,
+  riskRepository,
+  controlRepository,
+  effectivenessRepository,
 );
 const kriService = new KriService(kriRepository, kriMeasureRepository, riskRepository, auditRepository);
 const kriMeasureService = new KriMeasureService(kriMeasureRepository, kriRepository, auditRepository, notifier);
@@ -349,7 +357,7 @@ app.use(
 app.use("/api/v1/kpi-measures", authMiddleware(identityProvider), kpiMeasuresRouter(kpiMeasureService));
 app.use("/api/v1/appetite", authMiddleware(identityProvider), riskAppetiteRouter(riskAppetiteService));
 app.use("/api/v1/rating-scales", authMiddleware(identityProvider), ratingScalesRouter(ratingScaleService));
-app.use("/api/v1/risk-evaluations", authMiddleware(identityProvider), riskEvaluationsRouter(riskEvaluationService));
+app.use("/api/v1/risk-evaluations", authMiddleware(identityProvider), riskEvaluationsRouter(riskEvaluationService, riskEvaluationViewService));
 app.use(
   "/api/v1/kris",
   authMiddleware(identityProvider),
