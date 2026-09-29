@@ -54,6 +54,7 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `4e0daba1` | Graphiques 3/4 repensés en heatmap (grille), tous processus/départements, teinte→rouge selon concentration | resolved (v38) |
 | `23e7baee` | **Vraie nomenclature Djamo reçue (9 processus, 15 directions)** — remplace les listes illustratives ; case-par-criticité (span CSS) au lieu de teinte seule | **open (v39) — attente validation PO comme référence définitive, pas encore propagée au registre/évaluation** |
 | `95f13578` | "Retire ce bloc" — ambigu, proposé et retiré graphique 5 (treemap, redondant avec 3/4) | **open (v40) — attente confirmation que c'était le bon bloc** |
+| `7fe0e5a8` | Graphiques 3/4 : couleurs vert→rouge (mêmes teintes que heatmap 1/2) + visualiser la "surface" quand plusieurs risques/nombres différents | resolved (v41) — palette `#a6e0ba→#e0483a` reprise, cases passées de `grid-column:span N` à taille explicite largeur+hauteur (44px/86px), côté ∝ √(nb risques) donc surface réellement proportionnelle |
 
 Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
