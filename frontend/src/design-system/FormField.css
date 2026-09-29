@@ -6,9 +6,11 @@
 }
 
 .form-field label {
-  font-size: var(--gs-font-size-body);
-  font-weight: 500;
-  color: var(--gs-text);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--gs-text-secondary);
 }
 
 .form-field input,
@@ -17,10 +19,18 @@
   font-family: var(--gs-font-ui);
   font-size: var(--gs-font-size-body);
   color: var(--gs-text);
-  background: var(--gs-bg-surface);
+  background: var(--gs-bg-page);
   border: 1px solid var(--gs-border);
   border-radius: var(--gs-radius);
-  padding: var(--gs-space-2);
+  padding: var(--gs-space-2) 10px;
+}
+
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  outline: 2px solid var(--gs-primary);
+  outline-offset: 1px;
+  border-color: var(--gs-primary);
 }
 
 .form-field__help {

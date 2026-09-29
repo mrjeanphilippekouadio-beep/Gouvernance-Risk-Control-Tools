@@ -3,27 +3,45 @@
   font-size: var(--gs-font-size-body);
   font-weight: 500;
   line-height: 1.2;
-  padding: var(--gs-space-2) var(--gs-space-3);
-  border-radius: var(--gs-radius);
+  padding: 11px var(--gs-space-4);
+  border-radius: var(--gs-radius-btn);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background-color 120ms, border-color 120ms;
+  box-shadow: var(--gs-elev-1);
+  transition: box-shadow 150ms ease, transform 100ms ease, background-color 150ms ease, border-color 150ms ease;
+}
+
+.btn:not(:disabled):hover {
+  box-shadow: var(--gs-elev-2);
+}
+
+.btn:not(:disabled):active {
+  box-shadow: var(--gs-elev-1);
+  transform: translateY(1px);
 }
 
 .btn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+  box-shadow: none;
 }
 
 .btn-primary {
   background: var(--gs-primary);
   border-color: var(--gs-primary);
   color: #ffffff;
+  border-radius: var(--gs-radius-pill);
+  box-shadow: var(--gs-elev-2);
 }
 
 .btn-primary:not(:disabled):hover {
   background: var(--gs-primary-hover);
   border-color: var(--gs-primary-hover);
+  box-shadow: var(--gs-elev-3);
+}
+
+.btn-primary:not(:disabled):active {
+  box-shadow: var(--gs-elev-1);
 }
 
 .btn-secondary {
@@ -33,15 +51,18 @@
 }
 
 .btn-secondary:not(:disabled):hover {
-  background: var(--gs-bg-page);
+  background: #ffffff;
+  border-color: var(--gs-text-disabled);
 }
 
 .btn-destructive {
-  background: var(--gs-bg-surface);
+  background: transparent;
   border-color: var(--gs-danger);
   color: var(--gs-danger);
+  box-shadow: none;
 }
 
 .btn-destructive:not(:disabled):hover {
   background: var(--gs-danger-bg);
+  box-shadow: var(--gs-elev-1);
 }

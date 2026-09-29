@@ -7,3 +7,4 @@ export type { TableColumn } from "./Table";
 export { FormField } from "./FormField";
 export { Tabs } from "./Tabs";
 export type { TabItem } from "./Tabs";
+export { RaciPanel } from "./RaciPanel";

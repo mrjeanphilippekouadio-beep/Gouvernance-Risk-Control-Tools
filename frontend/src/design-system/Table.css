@@ -1,12 +1,16 @@
 .table-scroll {
   overflow-x: auto;
   margin-top: var(--gs-space-3);
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius-card);
+  box-shadow: var(--gs-shadow-card);
+  background: var(--gs-bg-page);
 }
 
 .gs-table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--gs-bg-surface);
+  background: var(--gs-bg-page);
 }
 
 .gs-table thead th {
@@ -14,10 +18,12 @@
   top: 0;
   background: var(--gs-bg-surface);
   text-align: left;
-  font-size: var(--gs-font-size-body);
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--gs-text-secondary);
-  padding: var(--gs-space-2) var(--gs-space-3);
+  padding: var(--gs-space-3);
   border-bottom: 1px solid var(--gs-border);
   white-space: nowrap;
 }
@@ -26,9 +32,17 @@
   font-size: var(--gs-font-size-data);
   font-variant-numeric: tabular-nums;
   color: var(--gs-text);
-  padding: var(--gs-space-2) var(--gs-space-3);
+  padding: var(--gs-space-3);
   border-bottom: 1px solid var(--gs-border);
-  vertical-align: top;
+  vertical-align: middle;
+}
+
+.gs-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.gs-table tbody tr:hover td {
+  background: var(--gs-bg-surface);
 }
 
 .table-status {

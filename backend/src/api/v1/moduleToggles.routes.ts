@@ -4,7 +4,7 @@ import type { ModuleToggleService } from "../../services/ModuleToggleService.js"
 
 const ToggleBody = z.object({ enabled: z.boolean() });
 
-/** ACT-221 — see ModuleToggleService for why this is storage-only (no route-blocking middleware yet). */
+/** ACT-221 — CRUD for the toggle itself; enforcement lives in api/middleware/moduleGuard.ts, wired per-module in server.ts. */
 export function moduleTogglesRouter(moduleToggleService: ModuleToggleService): Router {
   const router = Router();
 

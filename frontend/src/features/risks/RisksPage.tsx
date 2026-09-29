@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { risksApi, type Risk, type RiskStatus } from "../../api/risks";
 import { ApiError } from "../../api/client";
-import { Button, FormField, StatusBadge, Table, type StatusTone } from "../../design-system";
+import { Button, FormField, RaciPanel, StatusBadge, Table, type StatusTone } from "../../design-system";
 
 interface RisksPageProps {
   /** Google ID token — see AuthContext TODO in App.tsx. */
@@ -30,6 +30,10 @@ export function RisksPage({ token }: RisksPageProps) {
   const [loading, setLoading] = useState(true);
   const [process, setProcess] = useState("");
   const [description, setDescription] = useState("");
+  // No detail/edit screen exists yet for a risk — RACI is exposed as a
+  // per-row toggle rather than a new route (DESIGN_NOTES.md: don't build
+  // a screen ahead of one being needed elsewhere).
+  const [raciRiskId, setRaciRiskId] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -97,8 +101,19 @@ export function RisksPage({ token }: RisksPageProps) {
             header: "Statut",
             render: (risk) => <StatusBadge label={STATUS_LABELS[risk.status]} tone={STATUS_TONES[risk.status]} />,
           },
+          {
+            key: "raci",
+            header: "RACI",
+            render: (risk) => (
+              <Button onClick={() => setRaciRiskId((current) => (current === risk.id ? null : risk.id))}>
+                {raciRiskId === risk.id ? "Masquer" : "RACI"}
+              </Button>
+            ),
+          },
         ]}
       />
+
+      {raciRiskId && <RaciPanel token={token} entityType="RISK" entityId={raciRiskId} />}
     </section>
   );
 }

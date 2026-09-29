@@ -1,8 +1,7 @@
 /**
- * ACT-221 — per-tenant on/off switch for a functional module. Storage
- * only: this batch does NOT add route-blocking middleware that checks
- * this table on every request (that touches server.ts and every route
- * file — out of scope here, see ModuleToggleService's file header).
+ * ACT-221 — per-tenant on/off switch for a functional module, enforced
+ * by api/middleware/moduleGuard.ts on the routes it's wired to in
+ * server.ts.
  *
  * Fixed set of real, already-shipped modules rather than an open
  * string, matching Config's "small set of known keys" choice — no

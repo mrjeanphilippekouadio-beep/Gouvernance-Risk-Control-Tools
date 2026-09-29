@@ -1,0 +1,901 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Cotation &amp; Cartographie</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  /*
+    V5 — polish sur la V4 après retour du Product Owner (« tu as monté
+    le niveau mais tu peux mieux faire »). Pas un redémarrage : la V4
+    est le socle (structure, palette de marque Djamo #2A3FFF, sélecteur
+    d'échelle Apps-Script-like, pictogrammes nav bar, animations GSAP)
+    et reste intacte. Trois corrections ciblées, documentées dans le
+    bandeau de changelog ci-dessous et dans SHARED_LOG.md (entrée
+    @ux-designer 2026-09-28, V5).
+  */
+  :root{
+    --ink:#1b1a2c; --ink-soft:#54536d;
+    --paper:#f8f7fc; --surface:#f2effb; --surface-sunk:#eae5f7;
+    --line:#e0dbf1; --line-soft:#eae5f7;
+    --muted:#716f8a; --muted-2:#9995ae;
+
+    --accent:#2a3fff; --accent-hover:#1f2fd6; --accent-soft:#e3e5ff;
+    --danger:#b3261e;  --danger-soft:#fbeae9;
+    --warning:#8a5a00; --warning-soft:#fcf1d9;
+    --success:#1e7a46; --success-soft:#e7f5ec;
+    --neutral:#5a6472; --neutral-soft:#eef0f2;
+
+    /* Zones de criticité de la heatmap — plus saturées / plus
+       contrastées que les badges sémantiques ci-dessus, spécifiquement
+       pour que les 5x5 bandes P×I se distinguent nettement les unes
+       des autres (retour PO V3 : "trop clair/pâle"). */
+    --zone-safe:#c2e8d3; --zone-safe-line:#8fd0ac;
+    --zone-watch:#f6dc98; --zone-watch-line:#e9bd52;
+    --zone-crit:#f0b0a2; --zone-crit-line:#df8266;
+
+    --sp-1:4px; --sp-2:8px; --sp-3:16px; --sp-4:24px; --sp-5:32px; --sp-6:48px;
+    --radius:8px; --radius-card:14px; --radius-pill:999px;
+    /* Correction PO V5 #1 : rayon dédié aux boutons "surface" (tous
+       sauf l'action primaire), plus modéré que la pilule — logique
+       Material Design (4-12px sur les surfaces, pilule réservée à
+       l'action principale). */
+    --radius-btn:10px;
+    --font-display:"Plus Jakarta Sans","IBM Plex Sans",system-ui,sans-serif;
+    --font-ui:"IBM Plex Sans",system-ui,"Segoe UI",Roboto,sans-serif;
+    --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+
+    /* Correction PO V5 #1 — système d'élévation à 3 niveaux (repos /
+       survol / actif), emprunté à la logique Material Design (ombre =
+       profondeur, jamais un simple aplat de couleur) sans copier
+       littéralement son identité (pas de ripple, pas de palette
+       Google). Utilisé sur les boutons et les zones de criticité de
+       la heatmap. */
+    --elev-1: 0 1px 2px rgba(27,26,44,.09), 0 1px 1px rgba(27,26,44,.05);
+    --elev-2: 0 2px 4px rgba(27,26,44,.10), 0 6px 14px -6px rgba(27,26,44,.20);
+    --elev-3: 0 3px 6px rgba(27,26,44,.12), 0 12px 22px -8px rgba(27,26,44,.26);
+    --shadow-1: 0 1px 2px rgba(27,26,44,.06);
+    --shadow-card: 0 1px 2px rgba(27,26,44,.05), 0 10px 28px -18px rgba(27,26,44,.22);
+  }
+
+  *{box-sizing:border-box;}
+  body{background:var(--paper); color:var(--ink); font-family:var(--font-ui); margin:0; padding:0 18px;}
+  .wrap{max-width:1180px; margin:0 auto; padding-block:36px 80px;}
+
+  /* ---- intro strip ---- */
+  .intro{margin-bottom:34px;}
+  /* Correction PO V6 : IBM Plex Mono était posée ici sur une phrase
+     ("Direction visuelle V5 — UX Designer (A04)"), pas une valeur
+     numérique/tabulaire autonome — même défaut que "38 risques
+     affichés" ci-dessous (.filters .count), racine du signalement PO.
+     Plex Sans, petites majuscules trackées, comme les autres libellés
+     du système. */
+  .eyebrow{font-family:var(--font-ui); font-weight:700; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--accent);}
+  .intro h1{font-family:var(--font-display); font-weight:800; font-size:clamp(1.7rem,3.4vw,2.2rem); margin:8px 0 10px; text-wrap:balance; letter-spacing:-.01em;}
+  .intro p{color:var(--ink-soft); font-size:.95rem; line-height:1.65; max-width:76ch; margin:0 0 10px;}
+  .intro .changelog{border:1px solid var(--line); background:var(--surface); border-radius:var(--radius-card); padding:14px 16px; margin:16px 0 4px;}
+  /* Correction PO V6 : même purge — "LES 3 CORRECTIONS V5..." est un
+     libellé textuel, pas une donnée. */
+  .intro .changelog b{font-family:var(--font-ui); font-weight:700; font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:8px;}
+  .intro .changelog ul{margin:0; padding-left:18px; font-size:.85rem; color:var(--ink-soft); line-height:1.7;}
+  .intro .changelog li b{display:inline; font-size:inherit; letter-spacing:normal; text-transform:none; color:var(--ink); font-family:var(--font-ui); font-weight:600;}
+  /* Correction PO V6 : la bande "Thème / Typographie / Accent /
+     Élévation / Animation" est faite de mots (même quand elle décrit
+     une valeur, comme "#2A3FFF" ou "3 niveaux", elle le fait au fil
+     d'une phrase, pas comme cellule de donnée autonome). */
+  .intro .meta{display:flex; gap:14px; flex-wrap:wrap; margin-top:14px; font-family:var(--font-ui); font-size:.76rem; color:var(--muted);}
+  .intro .meta span b{color:var(--ink);}
+  .jump{display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;}
+  /* Correction PO V6 : liens d'ancre ("Écran 1 — Évaluation du
+     risque") — phrases, pas des données. */
+  .jump a{font-family:var(--font-ui); font-weight:600; font-size:.75rem; text-decoration:none; color:var(--accent); border:1px solid var(--line); background:var(--surface); padding:7px 12px; border-radius:var(--radius-pill); transition:box-shadow .15s,border-color .15s;}
+  .jump a:hover{border-color:var(--accent); box-shadow:var(--elev-1);}
+
+  /* ---- faux window frame around each mockup ---- */
+  .frame{border:1px solid var(--line); border-radius:16px; background:var(--surface); box-shadow: 0 8px 28px -18px rgba(27,26,44,.28); overflow:hidden; margin-bottom:56px; scroll-margin-top:20px;}
+  .frame-bar{display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--surface-sunk);}
+  .frame-bar .dot{width:8px; height:8px; border-radius:50%; background:var(--line);}
+  .frame-bar .path{margin-left:8px; font-family:var(--font-mono); font-size:.72rem; color:var(--muted);}
+  .frame-body{display:grid; grid-template-columns:212px 1fr;}
+  @media (max-width:760px){ .frame-body{grid-template-columns:1fr;} }
+
+  /* ---- shared app sidebar ---- */
+  .side{background:var(--surface-sunk); border-right:1px solid var(--line); padding:18px 0;}
+  @media (max-width:760px){ .side{border-right:none; border-bottom:1px solid var(--line);} }
+  .side .brand{font-family:var(--font-display); font-weight:800; font-size:1.02rem; padding:0 16px 16px; border-bottom:1px solid var(--line); margin-bottom:10px; letter-spacing:-.01em;}
+  .side .grp{padding:12px 16px 4px; font-family:var(--font-ui); font-size:.66rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted-2); font-weight:700;}
+  .side nav a{display:flex; align-items:center; gap:10px; padding:8px 16px; font-size:.86rem; font-weight:700; color:var(--ink); text-decoration:none; border-left:2px solid transparent; border-radius:0 var(--radius-btn) var(--radius-btn) 0; transition:background .12s;}
+  .side nav a svg{width:16px; height:16px; flex-shrink:0; stroke:var(--ink); stroke-width:1.8; fill:none; stroke-linecap:round; stroke-linejoin:round;}
+  .side nav a:hover{background:var(--surface);}
+  .side nav a[aria-current="page"]{color:var(--accent); background:var(--accent-soft); border-left-color:var(--accent);}
+  .side nav a[aria-current="page"] svg{stroke:var(--accent);}
+
+  .main{padding:22px 26px 30px;}
+  .pagehead{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:18px; flex-wrap:wrap;}
+  .pagehead .titles h2{font-family:var(--font-display); font-weight:700; font-size:1.32rem; margin:0 0 4px; letter-spacing:-.005em;}
+  /* Correction PO V6 : le fil d'Ariane mélangeait un mot ("Évaluations",
+     "Risques", "Cartographie") et parfois un identifiant ("RE-0142")
+     sous la même police mono — le cas "Risques / Cartographie" (écran
+     Cartographie) n'a même pas d'identifiant, donc le mono n'y avait
+     aucune justification. Le fil d'Ariane repasse en Plex Sans ; seul
+     l'identifiant reste en Mono, isolé dans .crumb .id (comme un id de
+     ligne de tableau — même logique que td.num). */
+  .crumb{font-size:.78rem; color:var(--muted); font-family:var(--font-ui); font-weight:500;}
+  .crumb b{color:var(--ink-soft); font-weight:500;}
+  .crumb .id{font-family:var(--font-mono); color:var(--ink-soft); font-weight:600;}
+
+  /* ---- Correction PO V5 #1 — boutons, langage Material Design ----
+     Élévation à l'état de repos, montée au survol, tassement (ombre
+     réduite + léger déplacement) au clic — jamais un simple aplat de
+     couleur pour signaler l'interaction. Rayon modéré (--radius-btn,
+     10px) sur tous les boutons de surface ; la pilule (--radius-pill)
+     est réservée au bouton d'action primaire, comme un FAB/bouton
+     d'action Material, pas comme traitement par défaut. */
+  .btn{font-family:var(--font-ui); font-size:.83rem; font-weight:500; padding:11px 22px; border-radius:var(--radius-btn); border:1px solid transparent; cursor:default; display:inline-flex; align-items:center; gap:6px; box-shadow:var(--elev-1); transition:box-shadow .15s ease, transform .1s ease, background-color .15s ease;}
+  .btn:hover{box-shadow:var(--elev-2);}
+  .btn:active{box-shadow:var(--elev-1); transform:translateY(1px);}
+  .btn-primary{background:var(--accent); color:#fff; border-radius:var(--radius-pill); box-shadow:var(--elev-2);}
+  .btn-primary:hover{background:var(--accent-hover); box-shadow:var(--elev-3);}
+  .btn-primary:active{box-shadow:var(--elev-1); transform:translateY(1px);}
+  .btn-secondary{background:var(--surface); color:var(--ink); border-color:var(--line);}
+  .btn-secondary:hover{background:#fff; border-color:var(--muted-2);}
+  .btn-ghost{background:transparent; color:var(--ink-soft); border-color:var(--line); box-shadow:none;}
+  .btn-ghost:hover{background:var(--surface); box-shadow:var(--elev-1);}
+  .btn-danger-ghost{background:transparent; color:var(--danger); border-color:var(--danger); box-shadow:none;}
+  .btn-danger-ghost:hover{background:var(--danger-soft); box-shadow:var(--elev-1);}
+  .actions{display:flex; gap:8px; flex-wrap:wrap;}
+
+  .badge{display:inline-flex; align-items:center; gap:5px; font-size:.72rem; font-weight:600; padding:3px 9px; border-radius:var(--radius-pill); letter-spacing:.01em; line-height:1.4;}
+  .badge::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0;}
+  .badge.danger{background:var(--danger-soft); color:var(--danger);}
+  .badge.warning{background:var(--warning-soft); color:var(--warning);}
+  .badge.success{background:var(--success-soft); color:var(--success);}
+  .badge.neutral{background:var(--neutral-soft); color:var(--neutral);}
+  .badge.info{background:var(--accent-soft); color:var(--accent-hover);}
+
+  /* ---- RiskEvaluation screen ---- */
+  .re-grid{display:grid; grid-template-columns:1fr 300px; gap:20px;}
+  @media (max-width:900px){ .re-grid{grid-template-columns:1fr;} }
+  .card{background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-card); padding:18px 20px; box-shadow:var(--shadow-card);}
+  .card + .card{margin-top:16px;}
+  .card h3{font-family:var(--font-display); font-size:.92rem; font-weight:700; margin:0 0 14px; display:flex; align-items:center; justify-content:space-between;}
+  .card h3 .n{font-family:var(--font-ui); font-size:.74rem; color:var(--muted); font-weight:500;}
+
+  .identity{display:flex; gap:18px; flex-wrap:wrap; align-items:baseline;}
+  .identity dl{display:grid; grid-template-columns:auto 1fr; gap:6px 10px; font-size:.84rem;}
+  /* Correction PO V5 #2 (point 2/4) : "Département" — dt inline dans
+     une grille dt/dd dense (grid-template-columns:auto 1fr, une paire
+     par ligne). Le traitement petites majuscules trackées hérité de
+     la V4 (uppercase + letter-spacing .05em) fonctionne bien pour un
+     libellé isolé au-dessus de son champ (ex. .score-cell .lbl), mais
+     ici, collé horizontalement à sa valeur sur la même ligne à .7rem,
+     il compresse et durcit la lecture — diagnostic (c) de la
+     consigne. On abandonne la casse capitale trackée pour ce contexte
+     précis : casse normale, poids 600 (au lieu de 700), taille
+     légèrement remontée (.76rem) pour rester lisible sans l'aide de
+     la capitale, couleur muted inchangée. */
+  .identity dt{color:var(--muted); font-size:.76rem; text-transform:none; letter-spacing:normal; font-family:var(--font-ui); font-weight:600; align-self:center;}
+  .identity dd{margin:0; color:var(--ink); font-weight:500;}
+
+  .score-row{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;}
+  @media (max-width:640px){ .score-row{grid-template-columns:1fr;} }
+  .score-cell{border:1px solid var(--line-soft); border-radius:var(--radius); padding:14px; background:var(--surface);}
+  /* Correction PO V5 #2 (point 1/4) : "Maîtrise (L1/L2/L3)" — même
+     traitement capitales trackées que ci-dessus, mais ici le problème
+     est différent : le libellé est bien seul au-dessus de son contenu
+     (contexte où la capitale trackée reste justifiée, cf. "Inhérent"
+     / "Résiduel" non signalés par le PO), mais la ponctuation dense
+     (parenthèses + slashs : "(L1/L2/L3)") est écartée de façon inégale
+     par le letter-spacing .05em — les slashs et parenthèses héritent
+     du même espacement que les lettres, ce qui casse visuellement la
+     chaîne. Fix ciblé : tracking réduit à .02em pour ce sélecteur
+     (on garde la majuscule + le poids 700, qui eux fonctionnent). */
+  .score-cell .lbl{font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; font-family:var(--font-ui); font-weight:700; margin-bottom:8px;}
+  /* Correction PO V5 #2 (point 3/4) : "Prob. 4 · Impact 4" — en V4,
+     les chiffres inline (4, 4) étaient posés en IBM Plex Mono au sein
+     d'une phrase en Plex Sans. La règle même énoncée en V4 ("Plex Mono
+     réservée aux valeurs numériques/tabulaires : scores, dates,
+     identifiants, cellules de tableau") ne couvre pas ce cas : "4"
+     ici n'est pas une valeur tabulaire autonome, c'est un chiffre
+     inséré au fil d'une phrase descriptive courte, entre un point
+     médian. Le changement de police au milieu d'un groupe de mots
+     casse le rythme de lecture et fait "sauter" les chiffres hors de
+     la phrase. Fix : ces chiffres inline repassent en Plex Sans
+     (poids 600, couleur ink) comme le reste de la phrase — Plex Mono
+     reste réservé aux valeurs affichées seules et en grand (.val),
+     conformément à l'intention initiale de la règle V4. */
+  .score-cell .pi{display:flex; gap:14px; font-size:.82rem; color:var(--ink-soft); margin-bottom:10px;}
+  .score-cell .pi b{font-family:var(--font-ui); font-variant-numeric:normal; color:var(--ink); font-weight:600;}
+  .score-cell .result{display:flex; align-items:center; gap:8px;}
+  /* Correction PO V5 #3 : "le score et les tags ne sont pas alignés
+     verticalement" — localisé ici. .result mélangeait un très grand
+     nombre (.val, 1.5rem, Plex Mono) et un badge/tag (.badge, pilule
+     inline-flex, .72rem) avec align-items:baseline. La baseline d'un
+     conteneur flex comme .badge est dérivée du texte de son propre
+     contenu (donc de sa toute petite taille de police), pas d'un
+     centre optique : alignée sur la baseline du grand chiffre, la
+     pilule se retrouvait décalée vers le bas par rapport au centre
+     visuel du nombre. align-items passe de baseline à center : les
+     deux éléments sont désormais centrés sur leur boîte, alignement
+     nettement plus propre pour un gros chiffre + une pilule courte
+     (testé mentalement contre baseline : center est le bon choix ici
+     car aucun des deux éléments n'est un texte de paragraphe courant
+     — baseline se justifie entre lignes de texte de même nature, pas
+     entre un chiffre d'affichage et un badge). */
+  .score-cell .val{font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:1.5rem; font-weight:600; letter-spacing:-.01em; line-height:1;}
+  .score-cell.inherent .val{color:var(--danger);}
+  .score-cell.control .val{color:var(--warning);}
+  .score-cell.residual .val{color:var(--success);}
+  .arrow{align-self:center; color:var(--muted-2); font-size:1.1rem; padding:0 2px;}
+
+  /* ---- Nouveauté V6 #2 — explication du calcul du score résiduel.
+     Voir SHARED_LOG.md pour le raisonnement produit : le score
+     résiduel s'affichait comme une valeur donnée, jamais dérivée —
+     le Risk Manager devait faire confiance au chiffre sans pouvoir
+     le vérifier ni le challenger sans recalculer à la main. */
+  .explain-toggle{background:none; border:none; padding:0; margin-top:12px; font-family:var(--font-ui); font-size:.78rem; font-weight:600; color:var(--accent); cursor:default; display:inline-flex; align-items:center; gap:5px;}
+  .explain-toggle:hover{color:var(--accent-hover); text-decoration:underline;}
+  .explain-toggle svg{width:13px; height:13px; stroke:currentColor; stroke-width:2; fill:none; stroke-linecap:round; stroke-linejoin:round; transition:transform .18s ease;}
+  .explain-toggle[aria-expanded="true"] svg{transform:rotate(180deg);}
+  .score-explain{margin-top:10px; border:1px solid var(--line-soft); border-radius:var(--radius); background:var(--surface); padding:12px 14px;}
+  .score-explain .formula{display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:.82rem; color:var(--ink-soft); font-family:var(--font-ui);}
+  .score-explain .formula .chip{font-family:var(--font-mono); font-variant-numeric:tabular-nums; background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:4px 9px; font-weight:600; color:var(--ink); font-size:.82rem;}
+  .score-explain .formula .op{color:var(--muted-2); font-size:.78rem;}
+  .score-explain p{margin:10px 0 0; font-size:.78rem; color:var(--ink-soft); line-height:1.55;}
+
+  .field{margin-bottom:14px;}
+  .field > label, .field > .glabel{display:block; font-family:var(--font-ui); font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft); margin-bottom:6px;}
+  .field .help{font-size:.75rem; color:var(--muted); margin-top:4px; text-transform:none; font-weight:400; letter-spacing:normal;}
+  .field textarea{width:100%; font-family:var(--font-ui); font-size:.85rem; padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius); background:var(--paper); color:var(--ink);}
+  .field textarea{resize:vertical; min-height:56px;}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start;}
+  @media (max-width:640px){ .field-row{grid-template-columns:1fr;} }
+
+  /* ---- scale picker : sélection de niveau + description contextuelle
+     immédiate — principe repris de apps-script-legacy/UI_Evaluation.html
+     (fonction majLigne / box.innerHTML autour des lignes 556-579) : on
+     n'affiche jamais un chiffre nu, le libellé et le détail du niveau
+     choisi restent visibles en permanence sous le sélecteur.
+     Correction PO V5 #1 : boutons de niveau désormais élevés (ombre)
+     à l'état sélectionné, plutôt qu'un simple aplat de couleur. ---- */
+  .scale{display:flex; gap:4px; flex-wrap:wrap;}
+  .scale button{flex:1; min-width:38px; font-family:var(--font-mono); font-size:.8rem; font-weight:600; padding:8px 4px; border:1px solid var(--line); background:var(--paper); color:var(--muted); border-radius:var(--radius); cursor:default; transition:background .12s,color .12s,border-color .12s,box-shadow .12s;}
+  .scale button:hover{border-color:var(--muted-2); box-shadow:var(--elev-1);}
+  .scale button[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:var(--elev-2);}
+  .scale-box{margin-top:10px; border:1px solid var(--line-soft); border-left:3px solid var(--accent); border-radius:0 var(--radius) var(--radius) 0; background:var(--surface); padding:10px 14px;}
+  .scale-box .ttl{font-size:.84rem; font-weight:600; color:var(--ink); margin-bottom:4px;}
+  .scale-box p{margin:0; font-size:.8rem; color:var(--ink-soft); line-height:1.55;}
+  .scale-box table{width:100%; border-collapse:collapse; margin-top:8px;}
+  .scale-box table td{font-size:.78rem; color:var(--ink-soft); padding:4px 0; border-top:1px solid var(--line-soft); vertical-align:top;}
+  .scale-box table td:first-child{width:34%; color:var(--ink); font-weight:700; font-family:var(--font-ui); padding-right:10px;}
+
+  .appetite-bar{position:relative; height:10px; border-radius:6px; background:linear-gradient(90deg,var(--success-soft) 0 55%, var(--warning-soft) 55% 80%, var(--danger-soft) 80% 100%); margin:10px 0 8px;}
+  .appetite-bar .thr{position:absolute; top:-3px; width:2px; height:16px; background:var(--ink); opacity:0;}
+  .appetite-bar .cur{position:absolute; top:-5px; left:0; width:12px; height:12px; border-radius:50%; background:var(--danger); border:2px solid var(--paper); box-shadow:0 0 0 1px var(--danger); opacity:0;}
+  .appetite-legend{display:flex; justify-content:space-between; font-size:.7rem; color:var(--muted); font-family:var(--font-ui);}
+  /* Correction PO V6 : "Seuil : 12" — chiffre inséré au fil d'une
+     phrase courte, exactement le cas déjà tranché en V5 pour "Prob. 4
+     · Impact 4" (règle : Mono réservée aux valeurs autonomes, pas aux
+     chiffres cités dans une phrase). Repasse en Plex Sans. */
+  .appetite-legend b{font-family:var(--font-ui); color:var(--ink-soft); font-weight:600;}
+
+  .timeline{display:flex; flex-direction:column; gap:0;}
+  .tl-item{display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--line-soft);}
+  .tl-item:last-child{border-bottom:none;}
+  .tl-item .dot{width:8px; height:8px; border-radius:50%; margin-top:5px; flex-shrink:0; background:var(--muted-2);}
+  .tl-item.done .dot{background:var(--success);}
+  .tl-item.current .dot{background:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
+  .tl-item.pending .dot{background:var(--line);}
+  .tl-item .body b{display:block; font-size:.82rem;}
+  .tl-item .body span{font-size:.74rem; color:var(--muted);}
+  .tl-item.pending .body b, .tl-item.pending .body span{color:var(--muted);}
+
+  .confirm-strip{margin-top:18px; padding:14px 16px; border:1px solid var(--warning); background:var(--warning-soft); border-radius:var(--radius); display:flex; gap:12px; align-items:flex-start;}
+  .confirm-strip .ic{color:var(--warning); font-family:var(--font-mono); font-weight:700; font-size:.9rem; flex-shrink:0;}
+  .confirm-strip p{margin:0; font-size:.83rem; color:var(--ink-soft); line-height:1.5;}
+  .confirm-strip p b{color:var(--ink);}
+
+  /* ---- Cartography screen ----
+     Correction PO V5 #1 : zones de criticité — rayon un peu plus
+     modéré (6px au lieu de 8px, pour une grille dense de 25 cellules
+     où un rayon trop généreux mangeait la surface utile) + élévation
+     très légère uniquement sur la zone critique (la plus haute
+     priorité de lecture), pour donner une hiérarchie de profondeur
+     plutôt qu'un aplat identique sur les 3 bandes. */
+  .filters{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; align-items:center;}
+  .filters select{font-family:var(--font-ui); font-size:.8rem; padding:6px 10px; border:1px solid var(--line); border-radius:var(--radius-btn); background:var(--paper); color:var(--ink-soft);}
+  .filters .seg{display:flex; border:1px solid var(--line); border-radius:var(--radius-btn); overflow:hidden;}
+  .filters .seg button{border:none; background:var(--paper); font-family:var(--font-ui); font-size:.8rem; padding:6px 14px; color:var(--muted); cursor:default; transition:background .12s,color .12s;}
+  .filters .seg button:hover{background:var(--surface);}
+  .filters .seg button[aria-pressed="true"]{background:var(--accent); color:#fff; font-weight:600;}
+  /* Correction PO V6 (point signalé) : "38 risques affichés" est une
+     phrase de compteur, pas une valeur tabulaire autonome — même bug
+     de fond que "Prob. 4 · Impact 4" en V4 (un texte-phrase hérite de
+     la police réservée aux données). Repasse en Plex Sans, poids 600
+     pour rester visible comme repère de fin de barre de filtres. */
+  .filters .count{margin-left:auto; font-family:var(--font-ui); font-weight:600; font-size:.76rem; color:var(--muted);}
+
+  .heatmap-wrap{display:grid; grid-template-columns:auto 1fr; gap:10px;}
+  .hm-axis-y{display:flex; flex-direction:column-reverse; justify-content:space-between; align-items:flex-end; padding:4px 0;}
+  .hm-axis-y span{font-size:.7rem; color:var(--muted); font-family:var(--font-mono); height:64px; display:flex; align-items:center;}
+  .heatmap{display:grid; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(5,64px); gap:3px;}
+  .hm-cell{position:relative; border-radius:6px; display:flex; align-items:center; justify-content:center; gap:4px; border:1px solid rgba(27,26,44,.06); transition:box-shadow .15s;}
+  .hm-cell.z-safe{background:var(--zone-safe); border-color:var(--zone-safe-line);}
+  .hm-cell.z-watch{background:var(--zone-watch); border-color:var(--zone-watch-line);}
+  .hm-cell.z-crit{background:var(--zone-crit); border-color:var(--zone-crit-line); box-shadow:var(--elev-1);}
+  .hm-cell:hover{box-shadow:var(--elev-2);}
+  .hm-cell .b{width:10px; height:10px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px var(--paper);}
+  .hm-cell .b.residual{box-shadow:0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink);}
+  .hm-x{grid-column:2; display:grid; grid-template-columns:repeat(5,1fr); gap:3px; margin-top:4px;}
+  .hm-x span{text-align:center; font-size:.7rem; color:var(--muted); font-family:var(--font-mono);}
+  .hm-caption{grid-column:2; text-align:center; font-size:.7rem; color:var(--muted); font-family:var(--font-ui); font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin-top:2px;}
+
+  /* ---- Nouveauté V6 #1 — prévisualisation au survol d'une cellule de
+     heatmap. Voir SHARED_LOG.md (entrée @ux-designer V6) pour le
+     raisonnement produit complet : un point sur la heatmap n'était
+     jusqu'ici identifiable qu'en devinant ou en cherchant la ligne
+     correspondante dans le tableau du bas — aucun moyen de savoir à
+     quel risque correspond un point sans quitter l'écran. */
+  .hm-cell[data-has-risk]{cursor:default;}
+  .hm-cell[data-has-risk]:hover,
+  .hm-cell[data-has-risk]:focus-visible{box-shadow:var(--elev-2);}
+  .hm-cell[data-has-risk]:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  .hm-tooltip{position:fixed; z-index:80; max-width:250px; background:var(--paper); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--elev-3); padding:10px 12px; font-size:.78rem; color:var(--ink-soft); pointer-events:none; opacity:0; transform:translateY(4px); transition:opacity .12s ease, transform .12s ease;}
+  .hm-tooltip.show{opacity:1; transform:translateY(0);}
+  .hm-tooltip .hmt-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:4px 0;}
+  .hm-tooltip .hmt-row + .hmt-row{border-top:1px solid var(--line-soft); margin-top:3px; padding-top:6px;}
+  .hm-tooltip .hmt-row b{color:var(--ink); font-weight:600; font-family:var(--font-ui); font-size:.78rem; line-height:1.3;}
+  .hm-tooltip .coord{font-size:.7rem; color:var(--muted); margin-top:2px; padding-top:6px; border-top:1px solid var(--line-soft); font-family:var(--font-ui);}
+
+  .legend{display:flex; gap:18px; flex-wrap:wrap; margin-top:20px; padding-top:16px; border-top:1px solid var(--line-soft); font-size:.78rem; color:var(--ink-soft);}
+  .legend .li{display:flex; align-items:center; gap:7px;}
+  .legend .b{width:10px; height:10px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px var(--paper);}
+  .legend .b.residual{box-shadow:0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink);}
+  .legend .z{width:10px; height:10px; border-radius:3px;}
+  .legend .z.z-safe{background:var(--zone-safe); border:1px solid var(--zone-safe-line);}
+  .legend .z.z-watch{background:var(--zone-watch); border:1px solid var(--zone-watch-line);}
+  .legend .z.z-crit{background:var(--zone-crit); border:1px solid var(--zone-crit-line);}
+
+  .cart-lower{display:grid; grid-template-columns:1.3fr 1fr; gap:20px; margin-top:22px;}
+  @media (max-width:900px){ .cart-lower{grid-template-columns:1fr;} }
+  table.risk-list{width:100%; border-collapse:collapse; font-size:.82rem;}
+  table.risk-list th{text-align:left; font-family:var(--font-ui); font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:var(--muted); border-bottom:1px solid var(--line); padding:0 8px 8px 0;}
+  table.risk-list td{padding:9px 8px 9px 0; border-bottom:1px solid var(--line-soft); vertical-align:middle;}
+  table.risk-list tr:last-child td{border-bottom:none;}
+  table.risk-list td.num{font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--ink-soft);}
+
+  /* ---- Nouveauté V6 #3 — tendance du score résiduel depuis le cycle
+     de revue précédent. Voir SHARED_LOG.md pour le raisonnement
+     produit : le tableau des risques critiques n'affichait qu'un état
+     instantané, sans indiquer si la situation s'aggrave ou s'améliore
+     — information de premier ordre pour un utilisateur qui consulte
+     cet écran quotidiennement et doit prioriser son attention. */
+  .trend-cell{display:flex; align-items:center; gap:6px; color:var(--muted);}
+  .trend-cell svg{flex-shrink:0; color:inherit;}
+  .trend-cell.up{color:var(--danger);}
+  .trend-cell.down{color:var(--success);}
+  .trend-cell.flat{color:var(--muted);}
+  .trend-delta{font-family:var(--font-ui); font-size:.74rem; font-weight:600; display:inline-flex; align-items:center; gap:2px; white-space:nowrap; color:inherit;}
+
+  /* Le statut en dernière colonne (badge) partage déjà
+     vertical-align:middle avec les cellules numériques de la même
+     ligne (règle table.risk-list td ci-dessus) : pas de second cas
+     de score/tag désaligné ici, c'était bien la carte de cotation
+     (.score-cell .result) qui portait le bug. */
+
+  .quadrant-note{display:flex; flex-direction:column; gap:10px;}
+  .qn-item{display:flex; gap:10px; align-items:flex-start; border:1px solid var(--line-soft); border-radius:var(--radius); padding:12px 14px; background:var(--surface);}
+  .qn-item .badge{flex-shrink:0; margin-top:1px;}
+  .qn-item p{margin:0; font-size:.8rem; color:var(--ink-soft); line-height:1.5;}
+</style>
+
+<div class="wrap">
+
+  <div class="intro">
+    <div class="eyebrow">Direction visuelle V6 — UX Designer (A04)</div>
+    <h1>Cotation &amp; Cartographie des risques</h1>
+    <p>Sixième itération sur le même écran (<a href="https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57" style="color:var(--accent)">même lien</a>), avec deux directives distinctes du Product Owner sur la V5 : purger une police mal employée partout où elle traîne encore, et proposer librement de vraies améliorations UX au-delà de la palette/typo déjà stabilisées. Structure, navigation par domaine, palette de marque Djamo, pictogrammes de nav, sélecteur d'échelle et animations GSAP restent ceux validés en V2-V5. Contenu représentatif du domaine — cadre inhérent/maîtrise/résiduel, seuils d'appétence, heatmap probabilité × impact — jamais de <i>lorem ipsum</i>.</p>
+    <div class="changelog">
+      <b>V6 — deux directives, traitées séparément</b>
+      <ul>
+        <li><b>1. Purge typographique — IBM Plex Mono hors de tout texte-phrase.</b> Point d'origine : « 38 risques affichés » (<code>.filters .count</code>), un compteur-phrase posé en Plex Mono, même défaut de fond que « Prob. 4 · Impact 4 » corrigé en V5 (une police réservée aux valeurs tabulaires héritée par un texte). Recherche exhaustive de tous les usages de <code>--font-mono</code> dans l'artefact : six autres endroits portaient le même défaut — l'eyebrow d'en-tête, le libellé du bandeau de changelog, la bande méta (Thème/Typographie/…), les liens d'ancre « Écran 1/2 », le fil d'Ariane (y compris « Risques / Cartographie », qui ne contient même pas d'identifiant), et « Seuil : 12 » dans la légende d'appétence (chiffre inséré dans une phrase courte, même cas que « Prob. 4 »). Tous repassent en IBM Plex Sans. Ce qui reste en Mono après la purge — <code>.score-cell .val</code>, les boutons d'échelle 1-5, les nombres d'axe de la heatmap, <code>td.num</code>, le chemin d'URL de la barre de fenêtre — ne sert plus qu'à des valeurs numériques/tabulaires autonomes ou des identifiants techniques ; l'identifiant « RE-0142 » du fil d'Ariane est d'ailleurs isolé dans un <code>span.id</code> dédié pour le garder en Mono sans y entraîner le reste du libellé.</li>
+        <li><b>2. Carte blanche UX — 3 apports, avec le raisonnement produit qui les justifie</b> (détail complet dans <code>SHARED_LOG.md</code>, entrée <code>@ux-designer</code> V6) : <b>(i)</b> prévisualisation au survol/focus d'une cellule de heatmap — jusqu'ici un point n'était identifiable qu'en devinant ou en cherchant la ligne correspondante dans le tableau du bas ; <b>(ii)</b> un lien « Pourquoi ce score résiduel ? » qui déplie la dérivation du calcul (inhérent × effet de la maîtrise = résiduel) — le score s'affichait comme une donnée reçue, jamais comme quelque chose qu'un Risk Manager peut vérifier ; <b>(iii)</b> une colonne Tendance dans le tableau des risques critiques (mini-courbe + delta signé depuis le cycle précédent) — l'écran ne montrait qu'un état instantané, sans dire si la situation s'aggrave, alors que c'est un écran consulté quotidiennement où la priorisation dépend de la trajectoire, pas seulement du niveau actuel.</li>
+      </ul>
+    </div>
+    <div class="meta">
+      <span><b>Thème</b> clair uniquement</span>
+      <span><b>Typographie</b> Plus Jakarta Sans (titres) / IBM Plex Sans (UI, libellés) / IBM Plex Mono (valeurs numériques autonomes)</span>
+      <span><b>Accent de marque</b> #2A3FFF (Djamo)</span>
+      <span><b>Élévation</b> Material-like, 3 niveaux (repos/survol/actif)</span>
+      <span><b>Animation</b> GSAP — entrées de graphiques, comptage, transitions de valeur</span>
+    </div>
+    <div class="jump">
+      <a href="#screen-re">Écran 1 — Évaluation du risque</a>
+      <a href="#screen-cart">Écran 2 — Cartographie</a>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 1 — RiskEvaluation ============ -->
+  <div class="frame" id="screen-re">
+    <div class="frame-bar">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <div class="path">grc-tools.djamo.internal/risk-evaluations/RE-0142</div>
+    </div>
+    <div class="frame-body">
+      <aside class="side">
+        <div class="brand">GRC Tools</div>
+        <div class="grp">Risques</div>
+        <nav>
+          <a href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Cartographie</a>
+          <a href="#" aria-current="page"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10"/></svg>Évaluations</a>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0 0-18"/><path d="M12 21a9 9 0 1 1 0-18"/><path d="M12 3v18"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>Appétence</a>
+          <a href="#"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M9 10v10"/></svg>Grilles de cotation</a>
+        </nav>
+        <div class="grp">Contrôles</div>
+        <nav>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9.5 12l1.8 1.8 3.2-3.6"/></svg>Contrôles</a>
+          <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/></svg>Exécutions</a>
+        </nav>
+        <div class="grp">Indicateurs</div>
+        <nav>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 5-7 4 5"/></svg>KRI</a>
+          <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>KPI</a>
+        </nav>
+        <div class="grp">Gouvernance</div>
+        <nav>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M6 21V4"/><path d="M6 4h11l-2.5 3.5L17 11H6"/></svg>Plans d'action</a>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M20 11A8 8 0 1 0 6.5 17.5"/><path d="M20 5v6h-6"/></svg>Cycles de revue</a>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <div class="pagehead">
+          <div class="titles">
+            <div class="crumb">Évaluations <b>/</b> <span class="id">RE-0142</span></div>
+            <h2>Retard de règlement fournisseurs critiques</h2>
+          </div>
+          <div class="actions">
+            <span class="badge warning" style="align-self:center;">En attente Comité</span>
+          </div>
+        </div>
+
+        <div class="re-grid">
+          <div class="col-main">
+
+            <div class="card">
+              <h3>Identité du risque <span class="n">Processus Trésorerie</span></h3>
+              <div class="identity">
+                <dl>
+                  <dt>Département</dt><dd>Finance &amp; Trésorerie</dd>
+                  <dt>Propriétaire</dt><dd>Aïssatou Diallo — Trésorière</dt>
+                  <dt>Catégorie</dt><dd>Opérationnel — Liquidité</dt>
+                  <dt>Créé le</dt><dd>03/06/2026</dd>
+                </dl>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Cotation <span class="n">Grille 7 axes — v3, active</span></h3>
+              <div class="score-row">
+                <div class="score-cell inherent">
+                  <div class="lbl">Inhérent</div>
+                  <div class="pi">Prob. <b>4</b> · Impact <b>4</b></div>
+                  <div class="result"><span class="val" data-count="16" data-decimals="0" data-delay="0">0</span><span class="badge danger">Critique</span></div>
+                </div>
+                <div class="score-cell control">
+                  <div class="lbl">Maîtrise (L1/L2/L3)</div>
+                  <div class="pi">Efficacité <b class="word">Modérée</b></div>
+                  <div class="result"><span class="val" data-count="-35" data-decimals="0" data-suffix="%" data-delay="0.1">0%</span><span class="badge warning">Partielle</span></div>
+                </div>
+                <div class="score-cell residual">
+                  <div class="lbl">Résiduel</div>
+                  <div class="pi">Prob. <b>3</b> · Impact <b>4</b></div>
+                  <div class="result"><span class="val" data-count="10.4" data-decimals="1" data-delay="0.2">0.0</span><span class="badge danger">Élevé</span></div>
+                </div>
+              </div>
+
+              <button type="button" class="explain-toggle" id="explain-toggle" aria-expanded="false" aria-controls="score-explain">
+                Pourquoi ce score résiduel ?
+                <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <div class="score-explain" id="score-explain" hidden>
+                <div class="formula">
+                  <span class="chip">16</span><span class="op">(Prob. 4 × Impact 4, score inhérent)</span>
+                  <span class="op">×</span>
+                  <span class="chip">0,65</span><span class="op">(effet de la maîtrise — efficacité « Modérée » ≈ −35 %)</span>
+                  <span class="op">=</span>
+                  <span class="chip">10,4</span><span class="op">score résiduel</span>
+                </div>
+                <p>Le score résiduel n'est jamais saisi directement : il se déduit du score inhérent, réduit par l'effet mesuré des maîtrises en place. Cette dérivation reste visible pour que le Risk Manager et le Comité puissent vérifier ou challenger un chiffre sans avoir à le recalculer à la main.</p>
+              </div>
+
+              <div class="field-row" style="margin-top:18px;">
+                <div class="field">
+                  <span class="glabel" id="lbl-prob">Probabilité résiduelle</span>
+                  <div class="scale" role="group" aria-labelledby="lbl-prob" id="scale-prob"></div>
+                  <div class="scale-box" id="box-prob"></div>
+                </div>
+                <div class="field">
+                  <span class="glabel" id="lbl-impact">Impact résiduel</span>
+                  <div class="scale" role="group" aria-labelledby="lbl-impact" id="scale-impact"></div>
+                  <div class="scale-box" id="box-impact"></div>
+                </div>
+              </div>
+              <div class="field">
+                <label for="just">Justification de la cotation <span class="help">(obligatoire au-dessus du seuil d'appétence)</span></label>
+                <textarea id="just">Deux retards de règlement &gt; 30 jours constatés sur le trimestre auprès de fournisseurs classés critiques ; contrôle L1 de rapprochement mensuel existant mais non systématique.</textarea>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Comparaison à l'appétence <span class="n">Sous-catégorie « Liquidité »</span></h3>
+              <div class="appetite-bar" id="appetite-bar">
+                <div class="thr" id="appetite-thr" style="left:62%;" title="Seuil d'appétence"></div>
+                <div class="cur" id="appetite-cur" data-target-left="74" title="Score résiduel actuel"></div>
+              </div>
+              <div class="appetite-legend"><span>0</span><span>Seuil : <b>12</b></span><span>25</span></div>
+              <div class="confirm-strip">
+                <span class="ic">!</span>
+                <p><b>Score résiduel (10,4) proche du seuil d'appétence (12)</b> — au-dessus de la limite fixée pour Majeur/Critique, la validation du <b>Comité des Risques</b> est requise avant clôture, en plus du maker-checker Risk Manager.</p>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="col-side">
+            <div class="card">
+              <h3>Historique</h3>
+              <div class="timeline">
+                <div class="tl-item done"><div class="dot"></div><div class="body"><b>Cotation inhérente saisie</b><span>A. Diallo — 12/09/2026</span></div></div>
+                <div class="tl-item done"><div class="dot"></div><div class="body"><b>Maîtrises liées évaluées</b><span>Contrôle CTRL-088 — 18/09/2026</span></div></div>
+                <div class="tl-item current"><div class="dot"></div><div class="body"><b>Soumis au Risk Manager</b><span>En revue — depuis 2 jours</span></div></div>
+                <div class="tl-item pending"><div class="dot"></div><div class="body"><b>Validation Comité des Risques</b><span>Requise — score proche du seuil</span></div></div>
+                <div class="tl-item pending"><div class="dot"></div><div class="body"><b>Clôture</b><span>—</span></div></div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Actions</h3>
+              <div class="actions" style="flex-direction:column; align-items:stretch;">
+                <button class="btn btn-primary">Valider et transmettre au Comité</button>
+                <button class="btn btn-secondary">Enregistrer le brouillon</button>
+                <button class="btn btn-danger-ghost">Rejeter la cotation</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 2 — Cartography ============ -->
+  <div class="frame" id="screen-cart">
+    <div class="frame-bar">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <div class="path">grc-tools.djamo.internal/cartography</div>
+    </div>
+    <div class="frame-body">
+      <aside class="side">
+        <div class="brand">GRC Tools</div>
+        <div class="grp">Risques</div>
+        <nav>
+          <a href="#" aria-current="page"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Cartographie</a>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10"/></svg>Évaluations</a>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0 0-18"/><path d="M12 21a9 9 0 1 1 0-18"/><path d="M12 3v18"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>Appétence</a>
+          <a href="#"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M9 10v10"/></svg>Grilles de cotation</a>
+        </nav>
+        <div class="grp">Contrôles</div>
+        <nav>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9.5 12l1.8 1.8 3.2-3.6"/></svg>Contrôles</a>
+          <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/></svg>Exécutions</a>
+        </nav>
+        <div class="grp">Indicateurs</div>
+        <nav>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 5-7 4 5"/></svg>KRI</a>
+          <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>KPI</a>
+        </nav>
+        <div class="grp">Gouvernance</div>
+        <nav>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M6 21V4"/><path d="M6 4h11l-2.5 3.5L17 11H6"/></svg>Plans d'action</a>
+          <a href="#"><svg viewBox="0 0 24 24"><path d="M20 11A8 8 0 1 0 6.5 17.5"/><path d="M20 5v6h-6"/></svg>Cycles de revue</a>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <div class="pagehead">
+          <div class="titles">
+            <div class="crumb">Risques <b>/</b> Cartographie</div>
+            <h2>Cartographie des risques</h2>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary">Exporter</button>
+          </div>
+        </div>
+
+        <div class="filters">
+          <div class="seg" role="group" aria-label="Vue">
+            <button aria-pressed="true">Inhérent</button>
+            <button aria-pressed="false">Résiduel</button>
+          </div>
+          <select aria-label="Département"><option>Tous les départements</option><option>Finance &amp; Trésorerie</option><option>Opérations</option></select>
+          <select aria-label="Propriétaire"><option>Tous les propriétaires</option><option>Aïssatou Diallo</option></select>
+          <span class="count">38 risques affichés</span>
+        </div>
+
+        <div class="heatmap-wrap">
+          <div class="hm-axis-y">
+            <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+          </div>
+          <div class="heatmap" id="heatmap">
+            <!-- row 5 (impact=5) -->
+            <div class="hm-cell z-watch" tabindex="0" data-has-risk><span class="b" data-risk="Concentration de trésorerie sur une seule banque partenaire"></span></div>
+            <div class="hm-cell z-crit" tabindex="0" data-has-risk><span class="b" data-risk="Fraude par usurpation d'identité (onboarding)"></span><span class="b" data-risk="Indisponibilité de l'API partenaire mobile money"></span></div>
+            <div class="hm-cell z-crit"></div>
+            <div class="hm-cell z-crit" tabindex="0" data-has-risk><span class="b" data-risk="Non-conformité KYC sur dossiers legacy"></span></div>
+            <div class="hm-cell z-crit"></div>
+            <!-- row 4 -->
+            <div class="hm-cell z-safe"></div>
+            <div class="hm-cell z-watch" tabindex="0" data-has-risk><span class="b" data-risk="Rupture du prestataire d'envoi de SMS OTP"></span></div>
+            <div class="hm-cell z-crit" tabindex="0" data-has-risk><span class="b" data-risk="Retard de règlement fournisseurs critiques"></span><span class="b residual" data-risk="Écart de rapprochement comptable mensuel"></span></div>
+            <div class="hm-cell z-crit" tabindex="0" data-has-risk><span class="b" data-risk="Dépendance à un fournisseur cloud unique"></span></div>
+            <div class="hm-cell z-crit"></div>
+            <!-- row 3 -->
+            <div class="hm-cell z-safe" tabindex="0" data-has-risk><span class="b residual" data-risk="Concentration de trésorerie sur une seule banque partenaire"></span></div>
+            <div class="hm-cell z-safe"></div>
+            <div class="hm-cell z-watch" tabindex="0" data-has-risk><span class="b" data-risk="Retard de mise à jour du dossier KYC périodique"></span><span class="b residual" data-risk="Retard de règlement fournisseurs critiques"></span></div>
+            <div class="hm-cell z-watch" tabindex="0" data-has-risk><span class="b" data-risk="Sous-effectif temporaire de l'équipe support client"></span></div>
+            <div class="hm-cell z-crit"></div>
+            <!-- row 2 -->
+            <div class="hm-cell z-safe"></div>
+            <div class="hm-cell z-safe" tabindex="0" data-has-risk><span class="b residual" data-risk="Dépendance à un fournisseur cloud unique"></span></div>
+            <div class="hm-cell z-safe"></div>
+            <div class="hm-cell z-watch" tabindex="0" data-has-risk><span class="b" data-risk="Rotation élevée des agents en centre d'appel"></span></div>
+            <div class="hm-cell z-watch"></div>
+            <!-- row 1 -->
+            <div class="hm-cell z-safe"></div>
+            <div class="hm-cell z-safe"></div>
+            <div class="hm-cell z-safe" tabindex="0" data-has-risk><span class="b residual" data-risk="Rupture du prestataire d'envoi de SMS OTP"></span></div>
+            <div class="hm-cell z-safe"></div>
+            <div class="hm-cell z-watch"></div>
+          </div>
+          <div class="hm-x"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+          <div class="hm-caption">Probabilité</div>
+        </div>
+        <div class="hm-tooltip" id="hm-tooltip" role="tooltip" hidden></div>
+
+        <div class="legend">
+          <div class="li"><span class="b"></span>Point de risque (inhérent)</div>
+          <div class="li"><span class="b residual"></span>Même risque, en résiduel (anneau)</div>
+          <div class="li"><span class="z z-crit"></span><span style="color:var(--danger);">Zone critique — au-dessus de l'appétence</span></div>
+          <div class="li"><span class="z z-watch"></span><span style="color:var(--warning);">Zone de vigilance</span></div>
+          <div class="li"><span class="z z-safe"></span><span style="color:var(--success);">Dans l'appétence</span></div>
+        </div>
+
+        <div class="cart-lower">
+          <div class="card">
+            <h3>Risques en zone critique <span class="n">4 résultats</span></h3>
+            <table class="risk-list" id="risk-table">
+              <thead><tr><th>Risque</th><th>Département</th><th class="num">Inhérent</th><th class="num">Résiduel</th><th title="Évolution du score résiduel depuis le cycle de revue précédent">Tendance</th><th>Statut</th></tr></thead>
+              <tbody>
+                <tr><td>Retard de règlement fournisseurs critiques</td><td>Finance</td><td class="num">16</td><td class="num">10,4</td><td><div class="trend-cell up"><svg width="40" height="16" viewBox="0 0 40 16"><polyline points="0,14 12,10 24,7 40,2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="trend-delta">▲ +2,3</span></div></td><td><span class="badge warning">Comité</span></td></tr>
+                <tr><td>Indisponibilité de l'API partenaire mobile money</td><td>Opérations</td><td class="num">20</td><td class="num">15,0</td><td><div class="trend-cell down"><svg width="40" height="16" viewBox="0 0 40 16"><polyline points="0,2 12,6 24,10 40,14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="trend-delta">▼ −2,6</span></div></td><td><span class="badge danger">Escaladé</span></td></tr>
+                <tr><td>Non-conformité KYC sur dossiers legacy</td><td>Conformité</td><td class="num">16</td><td class="num">12,8</td><td><div class="trend-cell flat"><svg width="40" height="16" viewBox="0 0 40 16"><polyline points="0,8 12,7 24,9 40,8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="trend-delta">→ +0,3</span></div></td><td><span class="badge warning">Comité</span></td></tr>
+                <tr><td>Fraude par usurpation d'identité (onboarding)</td><td>Risque</td><td class="num">20</td><td class="num">14,2</td><td><div class="trend-cell up"><svg width="40" height="16" viewBox="0 0 40 16"><polyline points="0,14 12,11 24,6 40,2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="trend-delta">▲ +3,2</span></div></td><td><span class="badge danger">Escaladé</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="quadrant-note">
+            <div class="qn-item"><span class="badge danger">Critique</span><p>Score résiduel au-dessus du seuil d'appétence de la sous-catégorie : validation Comité des Risques déjà déclenchée ou requise.</p></div>
+            <div class="qn-item"><span class="badge warning">Vigilance</span><p>Proche du seuil (moins de 20 % d'écart) : à surveiller au prochain cycle de revue de cartographie.</p></div>
+            <div class="qn-item"><span class="badge success">Maîtrisé</span><p>Sous le seuil d'appétence : aucune action requise, revue à la cadence annuelle standard.</p></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+  // Sélecteur d'échelle 1-5 avec description contextuelle — principe
+  // repris de apps-script-legacy/UI_Evaluation.html (majLigne()) : la
+  // sélection d'un niveau affiche immédiatement son libellé + son détail,
+  // jamais un chiffre nu. Transition douce (GSAP) à chaque changement de
+  // niveau, conservée depuis la V4.
+  var PROB = [
+    {n:1, libelle:"Rare", texte:"Évènement jamais observé sur ce processus ; plausible en théorie uniquement."},
+    {n:2, libelle:"Peu probable", texte:"Un seul cas observé sur les 3 dernières années, cause déjà corrigée."},
+    {n:3, libelle:"Possible", texte:"Quelques occurrences isolées par an, sans caractère répétitif sur le trimestre."},
+    {n:4, libelle:"Probable", texte:"Occurrences répétées au cours des 12 derniers mois, tendance à la hausse constatée."},
+    {n:5, libelle:"Quasi certain", texte:"Évènement déjà survenu plusieurs fois ce trimestre, ou actuellement en cours."}
+  ];
+  var IMPACT = [
+    {n:1, libelle:"Mineur", axes:{Financier:"Perte < 1 M FCFA, absorbée sans arbitrage.", "Réglementaire":"Aucune notification requise auprès du régulateur.", Opérationnel:"Aucune interruption de service perceptible.", "Réputationnel":"Aucun signalement client, aucune couverture médiatique."}},
+    {n:2, libelle:"Modéré", axes:{Financier:"Perte entre 1 et 10 M FCFA.", "Réglementaire":"Signalement interne, pas de notification BCEAO.", Opérationnel:"Dégradation de service < 2h, périmètre limité.", "Réputationnel":"Quelques plaintes clients isolées, sans écho public."}},
+    {n:3, libelle:"Significatif", axes:{Financier:"Perte entre 10 et 50 M FCFA.", "Réglementaire":"Notification BCEAO requise sous délai réglementaire.", Opérationnel:"Interruption de service 2 à 8h sur un canal.", "Réputationnel":"Plaintes en hausse, mention sur les réseaux sociaux."}},
+    {n:4, libelle:"Majeur", axes:{Financier:"Perte entre 50 et 200 M FCFA.", "Réglementaire":"Notification BCEAO + CENTIF, action corrective exigée.", Opérationnel:"Interruption > 8h ou plusieurs canaux affectés.", "Réputationnel":"Couverture médiatique négative, perte de confiance mesurable."}},
+    {n:5, libelle:"Critique", axes:{Financier:"Perte > 200 M FCFA ou mise en jeu de la licence.", "Réglementaire":"Sanction ou mise sous surveillance renforcée du régulateur.", Opérationnel:"Indisponibilité totale du service mobile money.", "Réputationnel":"Crise de confiance généralisée, risque de départ massif de clients."}}
+  ];
+
+  function buildScale(containerId, boxId, levels, selected, withTable){
+    var scale = document.getElementById(containerId);
+    var box = document.getElementById(boxId);
+    levels.forEach(function(lvl){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = lvl.n;
+      b.setAttribute('aria-pressed', String(lvl.n === selected));
+      b.title = lvl.libelle;
+      b.onclick = function(){
+        scale.querySelectorAll('button').forEach(function(x){ x.setAttribute('aria-pressed','false'); });
+        b.setAttribute('aria-pressed','true');
+        render(lvl);
+      };
+      scale.appendChild(b);
+    });
+    function render(lvl){
+      var html = '<div class="ttl">' + lvl.n + ' — ' + lvl.libelle + '</div>';
+      if (withTable){
+        html += '<table>' + Object.keys(lvl.axes).map(function(k){
+          return '<tr><td>' + k + '</td><td>' + lvl.axes[k] + '</td></tr>';
+        }).join('') + '</table>';
+      } else {
+        html += '<p>' + lvl.texte + '</p>';
+      }
+      box.innerHTML = html;
+      if (window.gsap){
+        gsap.fromTo(box, {opacity:0, y:5}, {opacity:1, y:0, duration:.28, ease:'power2.out'});
+      }
+    }
+    render(levels.filter(function(l){ return l.n === selected; })[0]);
+  }
+
+  buildScale('scale-prob', 'box-prob', PROB, 3, false);
+  buildScale('scale-impact', 'box-impact', IMPACT, 4, true);
+
+  // ---- Animation des graphiques (GSAP), conservée depuis la V4 ----
+  // Sobre dans le timing (250-900ms), mais réellement visible : compteurs
+  // de score, curseur d'appétence, points de heatmap échelonnés, lignes
+  // de tableau en cascade rapide.
+  if (window.gsap){
+
+    // 1) Scores qui comptent jusqu'à leur valeur.
+    document.querySelectorAll('.val[data-count]').forEach(function(el){
+      var target = parseFloat(el.dataset.count);
+      var decimals = parseInt(el.dataset.decimals || '0', 10);
+      var suffix = el.dataset.suffix || '';
+      var delay = parseFloat(el.dataset.delay || '0');
+      var obj = {v:0};
+      gsap.fromTo(obj, {v:0}, {
+        v:target, duration:0.9, delay:delay, ease:'power2.out',
+        onUpdate:function(){
+          var v = obj.v;
+          var sign = v < 0 ? '−' : '';
+          el.textContent = sign + Math.abs(v).toFixed(decimals) + suffix;
+        }
+      });
+    });
+
+    // 2) Barre d'appétence : seuil et curseur glissent en place.
+    var thr = document.getElementById('appetite-thr');
+    var cur = document.getElementById('appetite-cur');
+    if (thr && cur){
+      gsap.to(thr, {opacity:1, duration:.4, delay:.15, ease:'power1.out'});
+      gsap.fromTo(cur, {opacity:0, left:'0%'}, {
+        opacity:1, left:cur.dataset.targetLeft + '%', duration:.7, delay:.2, ease:'power2.out'
+      });
+    }
+
+    // 3) Points de la heatmap : fondu + échelle, léger décalage entre eux.
+    var dots = document.querySelectorAll('#heatmap .b');
+    if (dots.length){
+      gsap.fromTo(dots, {opacity:0, scale:0}, {
+        opacity:1, scale:1, duration:.35, stagger:.035, ease:'back.out(2)', transformOrigin:'center center'
+      });
+    }
+
+    // 4) Tableau des risques critiques : lignes en cascade rapide.
+    var rows = document.querySelectorAll('#risk-table tbody tr');
+    if (rows.length){
+      gsap.fromTo(rows, {opacity:0, y:8}, {opacity:1, y:0, duration:.35, stagger:.06, delay:.1, ease:'power2.out'});
+    }
+  }
+
+  // ---- Nouveauté V6 #2 — explication du calcul du score résiduel ----
+  // Simple divulgation progressive (aria-expanded + hidden), pas de
+  // dépendance GSAP obligatoire : reste utilisable même si le CDN GSAP
+  // échoue à charger.
+  var explainBtn = document.getElementById('explain-toggle');
+  var explainPanel = document.getElementById('score-explain');
+  if (explainBtn && explainPanel){
+    explainBtn.addEventListener('click', function(){
+      var open = explainBtn.getAttribute('aria-expanded') === 'true';
+      explainBtn.setAttribute('aria-expanded', String(!open));
+      if (open){
+        explainPanel.hidden = true;
+      } else {
+        explainPanel.hidden = false;
+        if (window.gsap){
+          gsap.fromTo(explainPanel, {opacity:0, y:-4}, {opacity:1, y:0, duration:.22, ease:'power2.out'});
+        }
+      }
+    });
+  }
+
+  // ---- Nouveauté V6 #1 — prévisualisation au survol d'une cellule de
+  // heatmap. Chaque cellule marquée data-has-risk contient un ou
+  // plusieurs points (.b[data-risk]) ; au survol ou au focus clavier,
+  // affiche le(s) nom(s) de risque, leur nature (inhérent/résiduel,
+  // déduite de la classe .residual) et la coordonnée P×I déduite de la
+  // position de la cellule dans la grille 5x5 (pas besoin de la
+  // stocker en dur : ligne = impact, colonne = probabilité).
+  var hmTooltip = document.getElementById('hm-tooltip');
+  var hmCells = document.querySelectorAll('.hm-cell[data-has-risk]');
+  if (hmTooltip && hmCells.length){
+    var allCells = Array.prototype.slice.call(document.querySelectorAll('#heatmap .hm-cell'));
+
+    function cellCoord(cell){
+      var idx = allCells.indexOf(cell);
+      var row = Math.floor(idx / 5);
+      var col = idx % 5;
+      return { prob: col + 1, impact: 5 - row };
+    }
+
+    function showTooltip(cell){
+      var dots = cell.querySelectorAll('.b[data-risk]');
+      if (!dots.length) return;
+      var coord = cellCoord(cell);
+      // Le badge Inhérent/Résiduel utilise "neutral"/"info", jamais
+      // "danger"/"success" : ces deux couleurs sont déjà réservées à la
+      // sévérité (badge danger = Critique, badge success = Maîtrisé,
+      // cf. .qn-item) ailleurs dans l'écran — les réutiliser ici pour
+      // coder autre chose (le type de score) créerait un faux signal
+      // de sévérité (ex. un point résiduel encore en zone critique
+      // affiché en vert "success" laisserait croire, à tort, qu'il est
+      // maîtrisé).
+      var rowsHtml = Array.prototype.map.call(dots, function(dot){
+        var type = dot.classList.contains('residual') ? 'Résiduel' : 'Inhérent';
+        var badgeClass = type === 'Résiduel' ? 'info' : 'neutral';
+        return '<div class="hmt-row"><b>' + dot.dataset.risk + '</b>' +
+          '<span class="badge ' + badgeClass + '" style="flex-shrink:0;">' + type + '</span></div>';
+      }).join('');
+      hmTooltip.innerHTML = rowsHtml + '<div class="coord">Probabilité ' + coord.prob + ' · Impact ' + coord.impact + '</div>';
+      hmTooltip.hidden = false;
+      positionTooltip(cell);
+      requestAnimationFrame(function(){ hmTooltip.classList.add('show'); });
+    }
+
+    function positionTooltip(cell){
+      // Mesuré après pose du contenu (élément déjà démasqué) : pas de
+      // transform de centrage inline, pour ne jamais entrer en
+      // conflit avec le translateY géré par la classe .show (fondu +
+      // léger glissement défini en CSS).
+      var r = cell.getBoundingClientRect();
+      var tw = hmTooltip.offsetWidth;
+      var th = hmTooltip.offsetHeight;
+      var left = r.left + r.width / 2 - tw / 2;
+      var top = r.top - th - 8;
+      left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+      top = Math.max(8, top);
+      hmTooltip.style.left = left + 'px';
+      hmTooltip.style.top = top + 'px';
+    }
+
+    function hideTooltip(){
+      hmTooltip.classList.remove('show');
+      hmTooltip.hidden = true;
+    }
+
+    hmCells.forEach(function(cell){
+      cell.addEventListener('mouseenter', function(){ showTooltip(cell); });
+      cell.addEventListener('mouseleave', hideTooltip);
+      cell.addEventListener('focus', function(){ showTooltip(cell); });
+      cell.addEventListener('blur', hideTooltip);
+    });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape') hideTooltip();
+    });
+  }
+})();
+</script>
+
+</body></html>

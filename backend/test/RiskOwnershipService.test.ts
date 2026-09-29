@@ -261,6 +261,24 @@ describe("RiskOwnershipService (ACT-127)", () => {
     expect(groups[0]?.owners[0]?.maxScore).toBeNull();
   });
 
+  it("PRIV-CH-DASH-001: never exposes a suspended owner's real name/email", async () => {
+    const suspended = user({
+      id: "owner-1",
+      displayName: "Alice",
+      email: "alice@example.com",
+      deletedAt: new Date(),
+    });
+    const r = risk({ id: "risk-1", ownerId: suspended.id });
+
+    const service = new RiskOwnershipService(inMemoryRiskRepository([r]), inMemoryUserRepository([suspended]));
+
+    const groups = await service.listOwners(actor);
+    const summary = groups[0]?.owners[0];
+    expect(summary?.ownerName).not.toBe("Alice");
+    expect(summary?.ownerEmail).not.toBe("alice@example.com");
+    expect(summary?.ownerEmail).toBe("");
+  });
+
   it("rejects an actor without risk.read permission", async () => {
     const service = new RiskOwnershipService(inMemoryRiskRepository([]), inMemoryUserRepository([]));
     const noReadActor = { ...actor, roles: [] };
