@@ -31,6 +31,11 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `5e3eedcf` | 3e info "décision de traitement" + liste défilable | resolved (v25) |
 | `85d640e2` | Bandeau réutilisé pour les états — ambigu, clarification demandée | **open — attente précision PO** |
 | `faa01c24` | Déplacer un élément pour faire place au panneau Commentaires — ambigu, clarification demandée | **open — attente précision PO** |
+| `ac1bf7c2` | Cartes animées via Chart.js + déplaçables via GridStack | resolved (v26) — vraies libs chargées (Chart.js 4.4.7, GridStack 14.0.0, CDN cdnjs, CSS GridStack inlinée) |
+| `f2fdacb0` | Détails du risque au survol | resolved (v26) — tooltip Chart.js riche (processus/département/statut/traitement/zone) |
+| `787b4e53` | Points mal centrés dans les cellules | resolved (v26) — résolu de fait par les vraies coordonnées Chart.js |
+| `91b9756d` | 4 graphiques : ajouter répartition par processus + par département, proposer plusieurs variantes A/B/C | **open — 3 variantes livrées (v26), attente validation PO sur laquelle garder** |
+| `6131a28a` | Fond des cases à cocher en blanc (Admin·Rôles) | resolved (v26) |
 
 Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
