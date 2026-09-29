@@ -42,6 +42,8 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `bc9cba92` (rouvert) | Teintes des points de criticité trop pâles, difficiles à distinguer | resolved (v27) — palette saturée dédiée aux points, distincte du fond pâle de la heatmap |
 | `927e753a` (rouvert) | Panneau Comments/RACI/Evidence/Occurrence : déplacer de bas de page vers la colonne droite (au-dessus Historique/Actions), redimensionner | resolved (v27) — écran Évaluation |
 | `faa01c24` | Panneau Commentaires sur Cartographie — ambigu, clarification demandée | **open — attente précision PO** |
+| `d0942768` | Teintes de la heatmap trop claires, rendre plus vives | resolved (v28) — palette de fond saturée |
+| `68461ff8`, `1862344a`, `f22ccabd` (rouvert), `787b4e53` (rouvert) | **BUG RÉEL trouvé via "je ne vois rien" (PO)** : URL Chart.js publiée en v26-28 pointait vers une version inexistante sur cdnjs (404) — la lib ne chargeait jamais, aucun graphique ne s'affichait côté navigateur malgré un code JS valide. Corrigé (version vérifiée par requête HTTP avant publication) v29. | **open — attente confirmation PO que ça s'affiche maintenant** |
 
 Écran **« Évaluation des risques » STATUÉ** (24/24 résolus, DECISION-006). Cartographie en cours de revue. 2 chantiers issus de commentaires restent ouverts en dehors du mécanisme de fils (suivis dans `ACTION_ITEMS.md`, pas des threads à répondre) :
 - Arbitrage `risk_processes` à refaire (@dev-db + @architect, prémisse fausse corrigée) — DECISION-006/ligne @architect.
