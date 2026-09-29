@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { RolesAdmin } from "./RolesAdmin";
 import { FeedbackAdmin } from "./FeedbackAdmin";
-import { Tabs } from "../../design-system";
+import { Tabs } from "@djamo/design-system";
 
 interface AdminPageProps {
   token: string;

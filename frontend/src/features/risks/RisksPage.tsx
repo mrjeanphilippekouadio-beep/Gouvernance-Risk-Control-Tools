@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { risksApi, type Risk, type RiskStatus } from "../../api/risks";
 import { ApiError } from "../../api/client";
-import { Button, FormField, RaciPanel, StatusBadge, Table, type StatusTone } from "../../design-system";
+import { Button, FormField, StatusBadge, Table, type StatusTone } from "@djamo/design-system";
+import { RaciPanel } from "../../design-system";
 
 interface RisksPageProps {
   /** Google ID token — see AuthContext TODO in App.tsx. */
