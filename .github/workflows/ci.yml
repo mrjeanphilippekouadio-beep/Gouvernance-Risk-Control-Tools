@@ -31,9 +31,13 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: package-lock.json
-      # npm ci (npm/cli#4828): optional platform-specific deps (rolldown's
-      # native binding for vite 8) can be dropped from a workspace lockfile
-      # generated on a different OS. npm install re-resolves them correctly.
-      - run: npm install
+      # package-lock.json is generated on Windows and, per npm/cli#4828,
+      # its resolved-package entries for OS-specific optionalDependencies
+      # (rolldown's native binding for vite 8) don't carry over to other
+      # platforms. Re-resolving fresh on the Linux runner avoids replaying
+      # that stale lockfile; --package-lock=false stops it from being
+      # rewritten in the workspace (kept as-is for local/Windows use).
+      - run: rm -f package-lock.json
+      - run: npm install --package-lock=false
       - run: npm run build --workspace=@djamo/design-system
       - run: npm run build --workspace=@grc-tools/frontend
