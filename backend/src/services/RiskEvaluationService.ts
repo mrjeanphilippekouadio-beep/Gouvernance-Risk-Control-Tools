@@ -271,8 +271,15 @@ export class RiskEvaluationService {
       assertIntegerInRange(line.effectiveness, bounds.min, bounds.max, `${line.line} effectiveness`);
     }
 
+    // CHALLENGE-001 (PO decision, 2026-09-29): "on prend le max de tous
+    // les axes" — global mastery is the MAX across all lines of defense
+    // (adequacy/execution/effectiveness), not their average. Levels run
+    // 1..3, Inadéquat -> Adéquat, so a higher score is more favorable:
+    // MAX retains the single most favorable axis/line, not the most
+    // conservative one. That is the explicit PO decision, not a
+    // conservative aggregation choice.
     const allValues = input.lines.flatMap((l) => [l.adequacy, l.execution, l.effectiveness]);
-    const masteryGlobal = allValues.reduce((sum, v) => sum + v, 0) / allValues.length;
+    const masteryGlobal = Math.max(...allValues);
 
     const after = await this.evaluations.recordMasteryAssessment(actor.tenantId, id, {
       lines: input.lines,

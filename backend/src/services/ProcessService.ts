@@ -25,9 +25,20 @@ export class ProcessService {
     private readonly audit: AuditRepository,
   ) {}
 
+  /**
+   * Governance finding (gouvernance refresh audit, 2026-09-29, DIV-06
+   * scope): `evaluationMode` must never travel through creation either —
+   * `process.create` is a much wider grant than `process.evaluationmode.
+   * set`, and accepting it here would let any creator originate a
+   * process directly in PARTICIPATIF, bypassing the dedicated permission
+   * enforced everywhere else (update, the requests workflow). Excluded
+   * from the input type, same gesture as `update`'s exclusion — a new
+   * process's `evaluationMode` is always null (inherited) until
+   * `setEvaluationMode`/the validated-request path sets it explicitly.
+   */
   async create(
     actor: AuthenticatedUser,
-    input: Omit<CreateProcessInput, "tenantId">,
+    input: Omit<CreateProcessInput, "tenantId" | "evaluationMode">,
     requestId: string,
   ): Promise<Process> {
     requirePermission(actor, "process.create");
@@ -113,8 +124,13 @@ export class ProcessService {
    * update, and SEC-013/SEC-014's "terminal/governance transition needs
    * its own permission" convention (ADR-003). This is the direct
    * Risk-Manager path only; the propose/validate workflow for the
-   * process-owner path (ACTION_ITEMS.md DECISION-006 point gouvernance)
-   * is specified but not yet built and is out of scope here.
+   * process-owner path lives in ProcessEvaluationModeRequestService.
+   *
+   * Governance finding (gouvernance refresh audit, 2026-09-29): DECISION-006
+   * reserves the mode setting to the PROCESS level only (inherited down
+   * to SUBPROCESS/ACTIVITY by resolveInheritedEvaluationMode) — setting
+   * it directly on a SUBPROCESS/ACTIVITY would silently win over its
+   * ancestor PROCESS's mode. Enforced here, not just documented.
    */
   async setEvaluationMode(
     actor: AuthenticatedUser,
@@ -124,6 +140,11 @@ export class ProcessService {
   ): Promise<Process> {
     requirePermission(actor, "process.evaluationmode.set");
     const before = await this.get(actor, id);
+    if (before.level !== "PROCESS") {
+      throw new ValidationError(
+        `evaluationMode can only be set on a PROCESS-level item (this is a ${before.level}) — DECISION-006 reserves the setting to the PROCESS level, inherited down to SUBPROCESS/ACTIVITY`,
+      );
+    }
 
     const after = await this.processes.update(actor.tenantId, id, { evaluationMode });
 

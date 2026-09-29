@@ -94,3 +94,11 @@ polymorphe non contrainte, cf. commentaire de tête de 027).
   d'un tenant qui aurait basculé sur 'PARTICIPATIF' — à vérifier avant
   d'exécuter en environnement partagé si `ConfigService.updateEvaluationMode`
   a déjà été appelé en production.
+- `033_process_evaluation_mode_requests.down.sql` — `DROP TABLE
+  process_evaluation_mode_requests` (les deux index partent avec la
+  table). Destructif : supprime tout l'historique des demandes de
+  changement de mode Classique/Participatif. Non destructif pour le
+  reste du schéma : aucune table n'a de FK entrante vers celle-ci, et
+  `processes.evaluation_mode` (030) n'est jamais écrit qu'indirectement
+  par cette table — le rollback n'affecte pas le mode actuellement en
+  vigueur sur un `Process`, seulement l'historique des propositions.

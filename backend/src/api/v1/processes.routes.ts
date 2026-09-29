@@ -6,6 +6,16 @@ const Level = z.enum(["PROCESS", "SUBPROCESS", "ACTIVITY"]);
 const DocumentType = z.enum(["CHARTER", "POLICY", "PROCEDURES_MANUAL", "PROCEDURE", "WORK_INSTRUCTION"]);
 const EvaluationMode = z.enum(["CLASSIQUE", "PARTICIPATIF"]);
 
+/**
+ * Governance finding (2026-09-29 architect review, DECISION-006; widened
+ * to creation by the 2026-09-29 gouvernance refresh audit): evaluationMode
+ * must never be reachable through the generic create/update bodies —
+ * omitted here, not just left unused, so it can never silently regain a
+ * route. `process.create` is a much wider grant than
+ * `process.evaluationmode.set`; a created process's evaluationMode is
+ * always null (inherited) until set through the dedicated route/service
+ * below.
+ */
 const CreateProcessBody = z.object({
   parentId: z.string().nullish(),
   level: Level,
@@ -15,17 +25,9 @@ const CreateProcessBody = z.object({
   documentReference: z.string().nullish(),
   owner: z.string().nullish(),
   active: z.boolean().optional(),
-  /** DIV-06: null means "inherit" — see resolveInheritedEvaluationMode in Process.ts. */
-  evaluationMode: EvaluationMode.nullish(),
 });
 
-/**
- * Governance finding (2026-09-29 architect review, DECISION-006):
- * evaluationMode must never be reachable through the generic update body
- * — omitted here, not just left unused, so it can never silently regain
- * a route. See SetEvaluationModeBody / the dedicated route below.
- */
-const UpdateProcessBody = CreateProcessBody.omit({ evaluationMode: true }).partial();
+const UpdateProcessBody = CreateProcessBody.partial();
 const ArchiveProcessBody = z.object({ reason: z.string().min(1) });
 const SetEvaluationModeBody = z.object({ evaluationMode: EvaluationMode.nullable() });
 

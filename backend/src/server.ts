@@ -35,6 +35,7 @@ import { PostgresRiskCategoryRepository } from "./infrastructure/database/postgr
 import { PostgresNotificationRepository } from "./infrastructure/database/postgres/PostgresNotificationRepository.js";
 import { PostgresNotificationSubscriptionRepository } from "./infrastructure/database/postgres/PostgresNotificationSubscriptionRepository.js";
 import { PostgresReviewCycleRepository } from "./infrastructure/database/postgres/PostgresReviewCycleRepository.js";
+import { PostgresProcessEvaluationModeRequestRepository } from "./infrastructure/database/postgres/PostgresProcessEvaluationModeRequestRepository.js";
 import { TelegramNotifier } from "./infrastructure/notifications/TelegramNotifier.js";
 import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
@@ -47,6 +48,7 @@ import { ControlEffectivenessService } from "./services/ControlEffectivenessServ
 import { AnomalyService } from "./services/AnomalyService.js";
 import { DepartmentService } from "./services/DepartmentService.js";
 import { ProcessService } from "./services/ProcessService.js";
+import { ProcessEvaluationModeRequestService } from "./services/ProcessEvaluationModeRequestService.js";
 import { AuditLogService } from "./services/AuditLogService.js";
 import { RoleService } from "./services/RoleService.js";
 import { FeedbackService } from "./services/FeedbackService.js";
@@ -81,6 +83,7 @@ import { effectivenessRouter } from "./api/v1/effectiveness.routes.js";
 import { anomaliesRouter } from "./api/v1/anomalies.routes.js";
 import { departmentsRouter } from "./api/v1/departments.routes.js";
 import { processesRouter } from "./api/v1/processes.routes.js";
+import { processEvaluationModeRequestsRouter } from "./api/v1/processEvaluationModeRequests.routes.js";
 import { auditLogRouter } from "./api/v1/auditLog.routes.js";
 import { rolesRouter } from "./api/v1/roles.routes.js";
 import { feedbackRouter } from "./api/v1/feedback.routes.js";
@@ -157,6 +160,7 @@ const riskCategoryRepository = new PostgresRiskCategoryRepository(pool);
 const notificationRepository = new PostgresNotificationRepository(pool);
 const notificationSubscriptionRepository = new PostgresNotificationSubscriptionRepository(pool);
 const reviewCycleRepository = new PostgresReviewCycleRepository(pool);
+const processEvaluationModeRequestRepository = new PostgresProcessEvaluationModeRequestRepository(pool);
 const notifier =
   env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID
     ? new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID)
@@ -173,6 +177,12 @@ const riskService = new RiskService(
 );
 const departmentService = new DepartmentService(departmentRepository, auditRepository);
 const processService = new ProcessService(processRepository, auditRepository);
+const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
+  processEvaluationModeRequestRepository,
+  processRepository,
+  riskRepository,
+  auditRepository,
+);
 const auditLogService = new AuditLogService(auditRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository);
@@ -344,6 +354,11 @@ app.use(
 );
 app.use("/api/v1/departments", authMiddleware(identityProvider), departmentsRouter(departmentService));
 app.use("/api/v1/processes", authMiddleware(identityProvider), processesRouter(processService));
+app.use(
+  "/api/v1/process-evaluation-mode-requests",
+  authMiddleware(identityProvider),
+  processEvaluationModeRequestsRouter(processEvaluationModeRequestService),
+);
 app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(auditLogService));
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
 app.use("/api/v1/feedback", authMiddleware(identityProvider), feedbackRouter(feedbackService));

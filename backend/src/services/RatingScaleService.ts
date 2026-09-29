@@ -235,9 +235,9 @@ export class RatingScaleService {
     const after = await this.ratingScales.updateMastery(actor.tenantId, id, {
       levels: input.levels,
       defenseLines: input.defenseLines,
-      // Fixed by methodology (ACT-175: "maîtrise globale = moyenne") —
-      // not caller-configurable today.
-      aggregation: "AVERAGE",
+      // CHALLENGE-001 (PO decision, 2026-09-29): "on prend le max de tous
+      // les axes" — not caller-configurable today.
+      aggregation: "MAX",
       thresholds: input.thresholds ?? null,
     });
     await this.recordUpdate(actor, id, before, after, requestId);
