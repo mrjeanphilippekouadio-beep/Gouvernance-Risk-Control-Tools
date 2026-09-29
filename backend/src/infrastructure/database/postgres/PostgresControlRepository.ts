@@ -16,6 +16,7 @@ interface ControlRow {
   label: string;
   objective: string | null;
   process: string | null;
+  process_id: string | null;
   department_id: string | null;
   procedure_description: string | null;
   control_type: ControlType;
@@ -42,6 +43,7 @@ function toDomain(row: ControlRow, coveredRiskIds: string[]): Control {
     objective: row.objective,
     coveredRiskIds,
     process: row.process,
+    processId: row.process_id,
     departmentId: row.department_id,
     procedureDescription: row.procedure_description,
     controlType: row.control_type,
@@ -150,16 +152,17 @@ export class PostgresControlRepository implements ControlRepository {
       await client.query("BEGIN");
       const { rows } = await client.query<ControlRow>(
         `INSERT INTO controls
-           (tenant_id, label, objective, process, department_id, procedure_description,
+           (tenant_id, label, objective, process, process_id, department_id, procedure_description,
             control_type, nature, defense_line, frequency, executor, validator,
             expected_evidence, compliance_criteria, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'DRAFT')
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'DRAFT')
          RETURNING *`,
         [
           input.tenantId,
           input.label,
           input.objective ?? null,
           input.process ?? null,
+          input.processId ?? null,
           input.departmentId ?? null,
           input.procedureDescription ?? null,
           input.controlType,
@@ -200,6 +203,7 @@ export class PostgresControlRepository implements ControlRepository {
           label: input.label,
           objective: input.objective,
           process: input.process,
+          process_id: input.processId,
           department_id: input.departmentId,
           procedure_description: input.procedureDescription,
           control_type: input.controlType,

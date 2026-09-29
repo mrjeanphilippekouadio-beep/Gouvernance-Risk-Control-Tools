@@ -174,7 +174,7 @@ const riskService = new RiskService(
 const departmentService = new DepartmentService(departmentRepository, auditRepository);
 const processService = new ProcessService(processRepository, auditRepository);
 const auditLogService = new AuditLogService(auditRepository);
-const controlService = new ControlService(controlRepository, riskRepository, auditRepository);
+const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository);
 const effectivenessService = new ControlEffectivenessService(
   effectivenessRepository,
@@ -192,7 +192,7 @@ const roleService = new RoleService(roleRepository, auditRepository, userReposit
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
-const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository);
+const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository, riskCategoryRepository);
 const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository);
 const riskEvaluationService = new RiskEvaluationService(
   riskEvaluationRepository,

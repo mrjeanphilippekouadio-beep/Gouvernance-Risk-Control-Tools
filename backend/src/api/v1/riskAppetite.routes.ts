@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { RiskAppetiteService } from "../../services/RiskAppetiteService.js";
 
 const SetRiskAppetiteBody = z.object({
+  subCategoryId: z.string().nullish(),
   entity: z.string().trim().min(1).nullish(),
   threshold: z.number().int().min(1).max(25),
   methodologyVersion: z.string().min(1),

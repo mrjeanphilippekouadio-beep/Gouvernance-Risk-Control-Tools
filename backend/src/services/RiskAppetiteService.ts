@@ -1,5 +1,6 @@
 import type { RiskAppetiteRepository } from "../domain/repositories/RiskAppetiteRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
+import type { RiskCategoryRepository } from "../domain/repositories/RiskCategoryRepository.js";
 import type {
   ListRiskAppetiteOptions,
   RiskAppetite,
@@ -26,6 +27,15 @@ export class RiskAppetiteService {
   constructor(
     private readonly appetites: RiskAppetiteRepository,
     private readonly audit: AuditRepository,
+    /**
+     * DIV-08: optional so existing tests keep compiling, but if a caller
+     * actually supplies `subCategoryId`, `assertSubCategoryExists` throws
+     * rather than silently skipping validation when this is unwired —
+     * same pattern as RiskService.processes / ControlService.processes
+     * (SEC-012 lesson). server.ts must wire the real repository for
+     * `subCategoryId` to ever be accepted.
+     */
+    private readonly riskCategories?: RiskCategoryRepository,
   ) {}
 
   /**
@@ -59,11 +69,13 @@ export class RiskAppetiteService {
     }
 
     const entity = input.entity?.trim() || null;
+    await this.assertSubCategoryExists(actor.tenantId, input.subCategoryId);
     const before = await this.appetites.getBySubCategory(actor.tenantId, trimmedSubCategory, entity);
 
     const after = await this.appetites.upsert({
       tenantId: actor.tenantId,
       subCategory: trimmedSubCategory,
+      subCategoryId: input.subCategoryId ?? null,
       entity,
       threshold: input.threshold,
       methodologyVersion: input.methodologyVersion,
@@ -128,5 +140,22 @@ export class RiskAppetiteService {
       reason,
       requestId,
     });
+  }
+
+  /**
+   * DIV-08: a subCategoryId, if given, must belong to the caller's
+   * tenant. A missing RiskCategoryRepository here does NOT silently skip
+   * validation when a subCategoryId was actually supplied — see
+   * RiskService.assertProcessExists for the same reasoning.
+   */
+  private async assertSubCategoryExists(tenantId: string, subCategoryId: string | null | undefined): Promise<void> {
+    if (subCategoryId === undefined || subCategoryId === null) return;
+    if (!this.riskCategories) {
+      throw new ValidationError(
+        "Risk appetite sub-category validation is not available: RiskCategoryRepository is not configured",
+      );
+    }
+    const category = await this.riskCategories.getById(tenantId, subCategoryId);
+    if (!category) throw new ValidationError(`Risk category ${subCategoryId} does not exist in this tenant`);
   }
 }
