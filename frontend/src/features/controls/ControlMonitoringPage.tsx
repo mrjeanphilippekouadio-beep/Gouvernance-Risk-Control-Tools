@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Button, Card, DatePicker, FormField, Grid, GridItem, MessageBanner, Modal, StatusBadge, Table, Tabs, type TableColumn } from "@djamo/design-system";
 import { ApiError } from "../../api/client";
 import { controlsApi, type Control } from "../../api/controls";
 import { executionsApi, effectivenessApi, type ControlExecution, type EffectivenessAssessment, type ExecutionStatus, type EffectivenessRating, type EffectivenessResult } from "../../api/controlMonitoring";
-import "../core/CorePages.css";
+import "../core/WorkflowPages.css";
 
 type Mode = "executions" | "effectiveness";
 const executionLabels: Record<ExecutionStatus, string> = { DONE: "Réalisé", NOT_DONE: "Non réalisé", NOT_APPLICABLE: "Non applicable" };
@@ -10,8 +11,8 @@ const ratingLabels: Record<EffectivenessRating, string> = { EFFECTIVE: "Efficace
 const resultLabels: Record<EffectivenessResult, string> = { ...ratingLabels, INCONCLUSIVE: "Non concluant" };
 const dateLabel = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString("fr-FR") : "—";
 const errorMessage = (err: unknown) => err instanceof ApiError ? `${err.message}${err.requestId ? ` (réf. ${err.requestId})` : ""}` : err instanceof Error ? err.message : "Une erreur inattendue est survenue.";
-
 interface Props { token: string; }
+interface PendingValidation { kind: Mode; id: string; label: string; }
 
 export function ControlMonitoringPage({ token }: Props) {
   const [mode, setMode] = useState<Mode>("executions");
@@ -21,13 +22,14 @@ export function ControlMonitoringPage({ token }: Props) {
   const [assessments, setAssessments] = useState<EffectivenessAssessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [validatingId, setValidatingId] = useState("");
+  const [busyId, setBusyId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-
+  const [pendingValidation, setPendingValidation] = useState<PendingValidation | null>(null);
+  const [validationComment, setValidationComment] = useState("");
   const [status, setStatus] = useState<ExecutionStatus>("DONE");
-  const [plannedDate, setPlannedDate] = useState("");
-  const [completedDate, setCompletedDate] = useState("");
+  const [plannedDate, setPlannedDate] = useState<string | null>(null);
+  const [completedDate, setCompletedDate] = useState<string | null>(null);
   const [result, setResult] = useState("");
   const [observedAnomalies, setObservedAnomalies] = useState("");
   const [justification, setJustification] = useState("");
@@ -55,11 +57,8 @@ export function ControlMonitoringPage({ token }: Props) {
     if (!controlId) { setExecutions([]); setAssessments([]); return; }
     setError(null);
     try {
-      if (mode === "executions") {
-        setExecutions(await executionsApi.list(token, controlId));
-      } else {
-        setAssessments(await effectivenessApi.list(token, controlId));
-      }
+      if (mode === "executions") setExecutions(await executionsApi.list(token, controlId));
+      else setAssessments(await effectivenessApi.list(token, controlId));
     } catch (err) { setError(errorMessage(err)); }
   }, [token, controlId, mode]);
 
@@ -69,17 +68,30 @@ export function ControlMonitoringPage({ token }: Props) {
   const activeControl = controls.find((item) => item.id === controlId);
   const doneCount = executions.filter((item) => item.status === "DONE").length;
   const pendingValidationCount = executions.filter((item) => !item.validatedAt).length;
+  const executionColumns = useMemo<TableColumn<ControlExecution>[]>(() => [
+    { key: "planned", header: "Date prévue", render: (row) => dateLabel(row.plannedDate) },
+    { key: "completed", header: "Date réalisée", render: (row) => dateLabel(row.completedDate) },
+    { key: "status", header: "Statut", render: (row) => <StatusBadge label={executionLabels[row.status]} tone={row.status === "DONE" ? "success" : row.status === "NOT_DONE" ? "danger" : "warning"} /> },
+    { key: "result", header: "Résultat / anomalies", render: (row) => row.result || row.observedAnomalies || row.justificationIfNotDone || "—" },
+    { key: "actor", header: "Exécutant", render: (row) => row.executedBy },
+    { key: "validation", header: "Validation", render: (row) => row.validatedAt ? <StatusBadge label={`Validée le ${dateLabel(row.validatedAt)}`} tone="success" /> : <StatusBadge label="En attente" tone="warning" /> },
+    { key: "actions", header: "Action", render: (row) => !row.validatedAt ? <Button disabled={busyId === row.id} onClick={() => { setValidationComment(""); setPendingValidation({ kind: "executions", id: row.id, label: "cette exécution" }); }}>{busyId === row.id ? "Validation…" : "Valider"}</Button> : "—" },
+  ], [busyId]);
+  const assessmentColumns = useMemo<TableColumn<EffectivenessAssessment>[]>(() => [
+    { key: "date", header: "Date", render: (row) => dateLabel(row.evalDate) },
+    { key: "type", header: "Type", render: (row) => row.evalType || "—" },
+    { key: "rating", header: "Efficacité", render: (row) => <StatusBadge label={ratingLabels[row.operationalEffectiveness]} tone={row.operationalEffectiveness === "EFFECTIVE" ? "success" : row.operationalEffectiveness === "INEFFECTIVE" ? "danger" : "warning"} /> },
+    { key: "result", header: "Résultat", render: (row) => row.result ? resultLabels[row.result] : "—" },
+    { key: "actor", header: "Évaluateur", render: (row) => row.evaluatedBy },
+    { key: "status", header: "Statut", render: (row) => row.validatedAt ? <StatusBadge label="Validée" tone="success" /> : <StatusBadge label={row.status === "PROVISIONAL" ? "Provisoire" : "En attente de validation"} tone="warning" /> },
+    { key: "actions", header: "Action", render: (row) => !row.validatedAt ? <Button disabled={busyId === row.id} onClick={() => { setValidationComment(""); setPendingValidation({ kind: "effectiveness", id: row.id, label: "cette évaluation" }); }}>{busyId === row.id ? "Validation…" : "Valider"}</Button> : "—" },
+  ], [busyId]);
 
   async function submitExecution(event: FormEvent) {
-    event.preventDefault();
-    if (!controlId) return;
+    event.preventDefault(); if (!controlId) return;
     setSaving(true); setError(null); setNotice(null);
     try {
-      await executionsApi.create(token, {
-        controlId, status, plannedDate: plannedDate || null, completedDate: completedDate || null,
-        result: result.trim() || null, observedAnomalies: observedAnomalies.trim() || null,
-        justificationIfNotDone: justification.trim() || null,
-      });
+      await executionsApi.create(token, { controlId, status, plannedDate, completedDate, result: result.trim() || null, observedAnomalies: observedAnomalies.trim() || null, justificationIfNotDone: justification.trim() || null });
       setResult(""); setObservedAnomalies(""); setJustification("");
       setNotice("Exécution enregistrée. Elle reste en attente de validation indépendante.");
       await loadRecords();
@@ -88,17 +100,10 @@ export function ControlMonitoringPage({ token }: Props) {
   }
 
   async function submitAssessment(event: FormEvent) {
-    event.preventDefault();
-    if (!controlId) return;
+    event.preventDefault(); if (!controlId) return;
     setSaving(true); setError(null); setNotice(null);
     try {
-      await effectivenessApi.create(token, {
-        controlId, evalType: evalType.trim() || null, designAdequacy: designAdequacy.trim() || null,
-        executionQuality: executionQuality.trim() || null, operationalEffectiveness: rating,
-        result: assessmentResult, limitations: limitations.trim() || null,
-        compensatingControls: compensatingControls.trim() || null, conclusion: conclusion.trim() || null,
-        justification: assessmentJustification.trim(), status: "COMPLETED",
-      });
+      await effectivenessApi.create(token, { controlId, evalType: evalType.trim() || null, designAdequacy: designAdequacy.trim() || null, executionQuality: executionQuality.trim() || null, operationalEffectiveness: rating, result: assessmentResult, limitations: limitations.trim() || null, compensatingControls: compensatingControls.trim() || null, conclusion: conclusion.trim() || null, justification: assessmentJustification.trim(), status: "COMPLETED" });
       setDesignAdequacy(""); setExecutionQuality(""); setLimitations(""); setCompensatingControls(""); setConclusion(""); setAssessmentJustification("");
       setNotice("Évaluation d'efficacité enregistrée. La validation reste indépendante.");
       await loadRecords();
@@ -106,100 +111,79 @@ export function ControlMonitoringPage({ token }: Props) {
     finally { setSaving(false); }
   }
 
-  async function validateRecord(kind: Mode, id: string) {
-    const comment = window.prompt("Commentaire de validation (facultatif) :");
-    if (comment === null) return;
-    setValidatingId(id); setError(null); setNotice(null);
+  async function validateRecord() {
+    if (!pendingValidation) return;
+    setBusyId(pendingValidation.id); setError(null); setNotice(null);
     try {
-      if (kind === "executions") await executionsApi.validate(token, id, comment.trim());
-      else await effectivenessApi.validate(token, id, comment.trim());
-      setNotice("Validation enregistrée.");
-      await loadRecords();
+      if (pendingValidation.kind === "executions") await executionsApi.validate(token, pendingValidation.id, validationComment.trim());
+      else await effectivenessApi.validate(token, pendingValidation.id, validationComment.trim());
+      setNotice("Validation enregistrée."); setPendingValidation(null); await loadRecords();
     } catch (err) { setError(errorMessage(err)); }
-    finally { setValidatingId(""); }
+    finally { setBusyId(""); }
   }
 
-  return <section className="core-page">
-    <div className="core-page__heading">
-      <div><p className="core-page__eyebrow">CONTRÔLE INTERNE · SUIVI</p><h1>Exécutions & efficacité</h1>
-        <p className="core-page__subtitle">Tracer la réalisation des contrôles, puis évaluer séparément leur efficacité. L'exécution et l'évaluation sont historisées et soumises à une validation indépendante.</p></div>
-    </div>
-
-    {error && <div className="core-alert core-alert--error" role="alert">{error}</div>}
-    {notice && <div className="core-alert core-alert--info" role="status">{notice}</div>}
-
-    <div className="core-page__stats">
-      <div className="core-stat"><span>Exécutions enregistrées</span><strong>{executions.length}</strong></div>
-      <div className="core-stat"><span>En attente de validation</span><strong>{pendingValidationCount}</strong></div>
-      <div className="core-stat"><span>Exécutions réalisées</span><strong>{doneCount}</strong></div>
-    </div>
-
-    <section className="core-panel">
-      <div className="core-panel__head"><div><h2>Contrôle concerné</h2><p>Les opérations affichées sont limitées au contrôle sélectionné.</p></div></div>
-      <div className="core-panel__body">
-        {loading ? <p className="muted">Chargement des contrôles…</p> : controls.length === 0 ?
-          <div className="core-empty">Aucun contrôle actif ou brouillon disponible. Créez d'abord un contrôle dans le référentiel.</div> :
-          <div className="core-field"><label htmlFor="monitor-control">Contrôle</label>
-            <select id="monitor-control" value={controlId} onChange={(event) => setControlId(event.target.value)}>
-              {controls.map((control) => <option key={control.id} value={control.id}>{control.label} · {control.status}</option>)}
-            </select>
-            {activeControl && <small>{activeControl.objective || "Aucun objectif renseigné"} · Fréquence : {activeControl.frequency}</small>}
-          </div>}
-      </div>
-    </section>
-
-    <div className="core-filter" role="tablist" aria-label="Type de suivi">
-      <button type="button" role="tab" aria-selected={mode === "executions"} className={mode === "executions" ? "core-tab core-tab--active" : "core-tab"} onClick={() => setMode("executions")}>Exécutions</button>
-      <button type="button" role="tab" aria-selected={mode === "effectiveness"} className={mode === "effectiveness" ? "core-tab core-tab--active" : "core-tab"} onClick={() => setMode("effectiveness")}>Efficacité des contrôles</button>
-    </div>
-
+  return <section className="workflow-page">
+    <header className="workflow-heading">
+      <p className="workflow-eyebrow">CONTRÔLE INTERNE · SUIVI</p>
+      <h1>Exécutions & efficacité</h1>
+      <p>Tracer la réalisation des contrôles, puis évaluer séparément leur efficacité. L'exécution et l'évaluation sont historisées et soumises à une validation indépendante.</p>
+    </header>
+    {error && <MessageBanner tone="danger" title="Une erreur est survenue">{error}</MessageBanner>}
+    {notice && <MessageBanner tone="success">{notice}</MessageBanner>}
+    <Grid columns={3} className="workflow-stats">
+      <GridItem><Card><span className="workflow-stat-label">Exécutions enregistrées</span><strong className="workflow-stat-value">{loading ? "—" : executions.length}</strong></Card></GridItem>
+      <GridItem><Card><span className="workflow-stat-label">En attente de validation</span><strong className="workflow-stat-value">{loading ? "—" : pendingValidationCount}</strong></Card></GridItem>
+      <GridItem><Card><span className="workflow-stat-label">Exécutions réalisées</span><strong className="workflow-stat-value">{loading ? "—" : doneCount}</strong></Card></GridItem>
+    </Grid>
+    <Card header={<div><h2>Contrôle concerné</h2><p>Les opérations affichées sont limitées au contrôle sélectionné.</p></div>}>
+      {loading ? <p>Chargement des contrôles…</p> : controls.length === 0 ? <MessageBanner tone="info">Aucun contrôle actif ou brouillon disponible. Créez d'abord un contrôle dans le référentiel.</MessageBanner> :
+        <FormField label="Contrôle" htmlFor="monitor-control" help={activeControl ? `${activeControl.objective || "Aucun objectif renseigné"} · Fréquence : ${activeControl.frequency}` : undefined}>
+          <select id="monitor-control" value={controlId} onChange={(event) => setControlId(event.target.value)}>{controls.map((control) => <option key={control.id} value={control.id}>{control.label} · {control.status}</option>)}</select>
+        </FormField>}
+    </Card>
+    <Tabs items={[{ value: "executions", label: "Exécutions" }, { value: "effectiveness", label: "Efficacité des contrôles" }]} active={mode} onChange={setMode} />
     {mode === "executions" ? <>
-      <section className="core-panel">
-        <div className="core-panel__head"><div><h2>Enregistrer une exécution</h2><p>Une ligne par occurrence. Une justification est obligatoire si le contrôle n'a pas été réalisé ou n'est pas applicable.</p></div></div>
-        <div className="core-panel__body">
-          <form className="core-form" onSubmit={submitExecution}>
-            <div className="core-field"><label htmlFor="execution-status">Statut *</label><select id="execution-status" value={status} onChange={(e) => setStatus(e.target.value as ExecutionStatus)}><option value="DONE">Réalisé</option><option value="NOT_DONE">Non réalisé</option><option value="NOT_APPLICABLE">Non applicable</option></select></div>
-            <div className="core-field"><label htmlFor="planned-date">Date prévue</label><input id="planned-date" type="date" value={plannedDate} onChange={(e) => setPlannedDate(e.target.value)} /></div>
-            <div className="core-field"><label htmlFor="completed-date">Date de réalisation</label><input id="completed-date" type="date" value={completedDate} onChange={(e) => setCompletedDate(e.target.value)} /></div>
-            <div className="core-field"><label htmlFor="execution-result">Résultat / référence</label><input id="execution-result" value={result} onChange={(e) => setResult(e.target.value)} placeholder="Ex. échantillon contrôlé, période couverte…" /></div>
-            <div className="core-field core-span-2"><label htmlFor="execution-anomalies">Anomalies observées</label><textarea id="execution-anomalies" value={observedAnomalies} onChange={(e) => setObservedAnomalies(e.target.value)} /></div>
-            <div className="core-field core-span-2"><label htmlFor="execution-justification">Justification si non réalisé / non applicable {status !== "DONE" ? "*" : ""}</label><textarea id="execution-justification" value={justification} onChange={(e) => setJustification(e.target.value)} required={status !== "DONE"} /></div>
-            <div className="core-form-actions core-span-2"><button className="core-button core-button--primary" type="submit" disabled={saving || !controlId}>{saving ? "Enregistrement…" : "Enregistrer l'exécution"}</button></div>
-          </form>
-        </div>
-      </section>
-
-      <section className="core-panel">
-        <div className="core-panel__head"><div><h2>Historique des exécutions</h2><p>{executions.length} occurrence(s) pour ce contrôle · {doneCount} réalisée(s).</p></div></div>
-        <div className="core-table-wrap"><table className="core-table"><thead><tr><th>Date prévue</th><th>Date réalisée</th><th>Statut</th><th>Résultat / anomalies</th><th>Exécutant</th><th>Validation</th><th>Action</th></tr></thead>
-          <tbody>{executions.map((item) => <tr key={item.id}><td>{dateLabel(item.plannedDate)}</td><td>{dateLabel(item.completedDate)}</td><td><span className={`core-badge ${item.status === "DONE" ? "core-badge--success" : item.status === "NOT_DONE" ? "core-badge--danger" : "core-badge--warning"}`}>{executionLabels[item.status]}</span></td><td>{item.result || item.observedAnomalies || item.justificationIfNotDone || "—"}</td><td>{item.executedBy}</td><td>{item.validatedAt ? <span className="core-badge core-badge--success">Validée le {dateLabel(item.validatedAt)}</span> : <span className="core-badge core-badge--warning">En attente</span>}</td><td>{!item.validatedAt && <button type="button" className="core-button" disabled={validatingId === item.id} onClick={() => void validateRecord("executions", item.id)}>{validatingId === item.id ? "Validation…" : "Valider"}</button>}</td></tr>)}
-          {executions.length === 0 && <tr><td colSpan={7} className="core-empty">Aucune exécution enregistrée pour ce contrôle.</td></tr>}</tbody></table></div>
-      </section>
+      <Card header={<div><h2>Enregistrer une exécution</h2><p>Une ligne par occurrence. Une justification est obligatoire si le contrôle n'a pas été réalisé ou n'est pas applicable.</p></div>}>
+        <form className="workflow-form" onSubmit={submitExecution}>
+          <div className="workflow-form-grid">
+            <FormField label="Statut *" htmlFor="execution-status"><select id="execution-status" value={status} onChange={(e) => setStatus(e.target.value as ExecutionStatus)}><option value="DONE">Réalisé</option><option value="NOT_DONE">Non réalisé</option><option value="NOT_APPLICABLE">Non applicable</option></select></FormField>
+            <DatePicker label="Date prévue" value={plannedDate} onChange={setPlannedDate} />
+            <DatePicker label="Date de réalisation" value={completedDate} onChange={setCompletedDate} />
+            <FormField label="Résultat / référence" htmlFor="execution-result"><input id="execution-result" value={result} onChange={(e) => setResult(e.target.value)} placeholder="Échantillon contrôlé, période couverte…" /></FormField>
+            <div className="workflow-field-span"><FormField label="Anomalies observées" htmlFor="execution-anomalies"><textarea id="execution-anomalies" value={observedAnomalies} onChange={(e) => setObservedAnomalies(e.target.value)} rows={3} /></FormField></div>
+            <div className="workflow-field-span"><FormField label={`Justification si non réalisé / non applicable ${status !== "DONE" ? "*" : ""}`} htmlFor="execution-justification"><textarea id="execution-justification" value={justification} onChange={(e) => setJustification(e.target.value)} required={status !== "DONE"} rows={3} /></FormField></div>
+          </div>
+          <div className="workflow-actions"><Button variant="primary" type="submit" disabled={saving || !controlId}>{saving ? "Enregistrement…" : "Enregistrer l'exécution"}</Button></div>
+        </form>
+      </Card>
+      <Card header={<div><h2>Historique des exécutions</h2><p>{executions.length} occurrence(s) pour ce contrôle · {doneCount} réalisée(s).</p></div>}>
+        <Table columns={executionColumns} rows={executions} rowKey={(row) => row.id} loading={loading} emptyMessage="Aucune exécution enregistrée pour ce contrôle." />
+      </Card>
     </> : <>
-      <section className="core-panel">
-        <div className="core-panel__head"><div><h2>Évaluer l'efficacité du contrôle</h2><p>Cette évaluation ne remplace pas l'exécution : elle documente la conception et l'efficacité opérationnelle du contrôle.</p></div></div>
-        <div className="core-panel__body">
-          <form className="core-form" onSubmit={submitAssessment}>
-            <div className="core-field"><label htmlFor="eval-type">Type d'évaluation</label><select id="eval-type" value={evalType} onChange={(e) => setEvalType(e.target.value)}><option>Périodique</option><option>À la suite d'un incident</option><option>Revue annuelle</option><option>Après action corrective</option></select></div>
-            <div className="core-field"><label htmlFor="operational-rating">Efficacité opérationnelle *</label><select id="operational-rating" value={rating} onChange={(e) => setRating(e.target.value as EffectivenessRating)}><option value="EFFECTIVE">Efficace</option><option value="PARTIALLY_EFFECTIVE">Partiellement efficace</option><option value="INEFFECTIVE">Inefficace</option></select></div>
-            <div className="core-field"><label htmlFor="assessment-result">Conclusion de l'évaluation *</label><select id="assessment-result" value={assessmentResult} onChange={(e) => setAssessmentResult(e.target.value as EffectivenessResult)}><option value="EFFECTIVE">Efficace</option><option value="PARTIALLY_EFFECTIVE">Partiellement efficace</option><option value="INEFFECTIVE">Inefficace</option><option value="INCONCLUSIVE">Non concluant</option></select></div>
-            <div className="core-field"><label htmlFor="design-adequacy">Adéquation de la conception</label><textarea id="design-adequacy" value={designAdequacy} onChange={(e) => setDesignAdequacy(e.target.value)} /></div>
-            <div className="core-field"><label htmlFor="execution-quality">Qualité d'exécution observée</label><textarea id="execution-quality" value={executionQuality} onChange={(e) => setExecutionQuality(e.target.value)} /></div>
-            <div className="core-field"><label htmlFor="limitations">Limites constatées</label><textarea id="limitations" value={limitations} onChange={(e) => setLimitations(e.target.value)} /></div>
-            <div className="core-field"><label htmlFor="compensating-controls">Contrôles compensatoires</label><textarea id="compensating-controls" value={compensatingControls} onChange={(e) => setCompensatingControls(e.target.value)} /></div>
-            <div className="core-field core-span-2"><label htmlFor="assessment-conclusion">Conclusion détaillée</label><textarea id="assessment-conclusion" value={conclusion} onChange={(e) => setConclusion(e.target.value)} /></div>
-            <div className="core-field core-span-2"><label htmlFor="assessment-justification">Justification documentée * </label><textarea id="assessment-justification" value={assessmentJustification} onChange={(e) => setAssessmentJustification(e.target.value)} required /></div>
-            <div className="core-form-actions core-span-2"><button className="core-button core-button--primary" type="submit" disabled={saving || !controlId}>{saving ? "Enregistrement…" : "Enregistrer l'évaluation"}</button></div>
-          </form>
-        </div>
-      </section>
-
-      <section className="core-panel">
-        <div className="core-panel__head"><div><h2>Historique des évaluations</h2><p>{assessments.length} évaluation(s) pour ce contrôle.</p></div></div>
-        <div className="core-table-wrap"><table className="core-table"><thead><tr><th>Date</th><th>Type</th><th>Efficacité</th><th>Résultat</th><th>Évaluateur</th><th>Statut</th><th>Action</th></tr></thead>
-          <tbody>{assessments.map((item) => <tr key={item.id}><td>{dateLabel(item.evalDate)}</td><td>{item.evalType || "—"}</td><td><span className={`core-badge ${item.operationalEffectiveness === "EFFECTIVE" ? "core-badge--success" : item.operationalEffectiveness === "INEFFECTIVE" ? "core-badge--danger" : "core-badge--warning"}`}>{ratingLabels[item.operationalEffectiveness]}</span></td><td>{item.result ? resultLabels[item.result] : "—"}</td><td>{item.evaluatedBy}</td><td>{item.validatedAt ? <span className="core-badge core-badge--success">Validée</span> : <span className="core-badge core-badge--warning">{item.status === "PROVISIONAL" ? "Provisoire" : "En attente de validation"}</span>}</td><td>{!item.validatedAt && <button type="button" className="core-button" disabled={validatingId === item.id} onClick={() => void validateRecord("effectiveness", item.id)}>{validatingId === item.id ? "Validation…" : "Valider"}</button>}</td></tr>)}
-          {assessments.length === 0 && <tr><td colSpan={7} className="core-empty">Aucune évaluation d'efficacité pour ce contrôle.</td></tr>}</tbody></table></div>
-      </section>
+      <Card header={<div><h2>Évaluer l'efficacité du contrôle</h2><p>Cette évaluation ne remplace pas l'exécution : elle documente la conception et l'efficacité opérationnelle du contrôle.</p></div>}>
+        <form className="workflow-form" onSubmit={submitAssessment}>
+          <div className="workflow-form-grid">
+            <FormField label="Type d'évaluation" htmlFor="eval-type"><select id="eval-type" value={evalType} onChange={(e) => setEvalType(e.target.value)}><option>Périodique</option><option>À la suite d'un incident</option><option>Revue annuelle</option><option>Après action corrective</option></select></FormField>
+            <FormField label="Efficacité opérationnelle *" htmlFor="operational-rating"><select id="operational-rating" value={rating} onChange={(e) => setRating(e.target.value as EffectivenessRating)}><option value="EFFECTIVE">Efficace</option><option value="PARTIALLY_EFFECTIVE">Partiellement efficace</option><option value="INEFFECTIVE">Inefficace</option></select></FormField>
+            <FormField label="Conclusion de l'évaluation *" htmlFor="assessment-result"><select id="assessment-result" value={assessmentResult} onChange={(e) => setAssessmentResult(e.target.value as EffectivenessResult)}><option value="EFFECTIVE">Efficace</option><option value="PARTIALLY_EFFECTIVE">Partiellement efficace</option><option value="INEFFECTIVE">Inefficace</option><option value="INCONCLUSIVE">Non concluant</option></select></FormField>
+            <FormField label="Adéquation de la conception" htmlFor="design-adequacy"><textarea id="design-adequacy" value={designAdequacy} onChange={(e) => setDesignAdequacy(e.target.value)} rows={3} /></FormField>
+            <FormField label="Qualité d'exécution observée" htmlFor="execution-quality"><textarea id="execution-quality" value={executionQuality} onChange={(e) => setExecutionQuality(e.target.value)} rows={3} /></FormField>
+            <FormField label="Limites constatées" htmlFor="limitations"><textarea id="limitations" value={limitations} onChange={(e) => setLimitations(e.target.value)} rows={3} /></FormField>
+            <FormField label="Contrôles compensatoires" htmlFor="compensating-controls"><textarea id="compensating-controls" value={compensatingControls} onChange={(e) => setCompensatingControls(e.target.value)} rows={3} /></FormField>
+            <div className="workflow-field-span"><FormField label="Conclusion détaillée" htmlFor="assessment-conclusion"><textarea id="assessment-conclusion" value={conclusion} onChange={(e) => setConclusion(e.target.value)} rows={3} /></FormField></div>
+            <div className="workflow-field-span"><FormField label="Justification documentée *" htmlFor="assessment-justification"><textarea id="assessment-justification" value={assessmentJustification} onChange={(e) => setAssessmentJustification(e.target.value)} required rows={3} /></FormField></div>
+          </div>
+          <div className="workflow-actions"><Button variant="primary" type="submit" disabled={saving || !controlId}>{saving ? "Enregistrement…" : "Enregistrer l'évaluation"}</Button></div>
+        </form>
+      </Card>
+      <Card header={<div><h2>Historique des évaluations</h2><p>{assessments.length} évaluation(s) pour ce contrôle.</p></div>}>
+        <Table columns={assessmentColumns} rows={assessments} rowKey={(row) => row.id} loading={loading} emptyMessage="Aucune évaluation d'efficacité pour ce contrôle." />
+      </Card>
     </>}
+    <Modal open={!!pendingValidation} onClose={() => setPendingValidation(null)} title="Valider l'enregistrement">
+      <p>Vous êtes sur le point de valider {pendingValidation?.label}. Cette validation doit rester indépendante de l'enregistrement initial.</p>
+      <FormField label="Commentaire de validation (facultatif)" htmlFor="validation-comment"><textarea id="validation-comment" value={validationComment} onChange={(e) => setValidationComment(e.target.value)} rows={3} /></FormField>
+      <div className="workflow-actions"><Button onClick={() => setPendingValidation(null)}>Annuler</Button><Button variant="primary" disabled={!pendingValidation || !!busyId} onClick={() => void validateRecord()}>{busyId ? "Validation…" : "Confirmer la validation"}</Button></div>
+    </Modal>
   </section>;
 }
