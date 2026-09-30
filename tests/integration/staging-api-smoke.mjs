@@ -69,9 +69,9 @@ await check("Action plans API (read-only list)", "/api/v1/actions", [200], { req
 await check("Controls API (read-only list)", "/api/v1/controls", [200], { requireDataEnvelope: true });
 await check("Audit missions API (read-only list)", "/api/v1/audit-missions", [200], { requireDataEnvelope: true });
 await check("Audit findings API (read-only list)", "/api/v1/findings", [200], { requireDataEnvelope: true });
-await check("Control executions API (read-only list)", "/api/v1/executions", [200]);
-await check("Control effectiveness API (read-only list)", "/api/v1/effectiveness", [200]);
-await check("Evidence API (read-only list)", "/api/v1/evidences", [200]);
+await check("Control executions API (read-only list)", `/api/v1/executions?controlId=${encodeURIComponent(controlId)}`, [200], { requireDataEnvelope: true });
+await check("Control effectiveness API (read-only list)", `/api/v1/effectiveness?controlId=${encodeURIComponent(controlId)}`, [200], { requireDataEnvelope: true });
+await check("Evidence URL API (read-only lookup)", `/api/v1/evidences/${encodeURIComponent(evidenceId)}/url`, [200], { requireDataEnvelope: true });
 
 // Authentication negative test: must not expose the protected action-plan list without a token.
 await check("Action plans reject missing authentication", "/api/v1/actions", [401, 403], { authenticated: false });
