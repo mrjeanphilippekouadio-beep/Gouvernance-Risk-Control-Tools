@@ -6,13 +6,16 @@ import { RolesAdmin } from "./features/admin/RolesAdmin";
 import { FeedbackAdmin } from "./features/admin/FeedbackAdmin";
 import { FeedbackWidget } from "./features/feedback/FeedbackWidget";
 import { CartographyPage } from "./features/cartography/CartographyPage";
+import { AppetitePage } from "./features/appetite/AppetitePage";
+import { RatingScalesPage } from "./features/scales/RatingScalesPage";
+import { ControlsPage } from "./features/controls/ControlsPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import "./App.css";
 
 const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls";
 type NavItem = { id: View; label: string; icon: string; available?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -20,13 +23,13 @@ const NAV_GROUPS: NavGroup[] = [
   { label: "Risques", items: [
     { id: "cartography", label: "Cartographie", icon: "grid", available: true },
     { id: "evaluation", label: "Évaluations", icon: "check", available: true },
-    { id: "placeholder", label: "Appétence", icon: "scale" },
-    { id: "placeholder", label: "Grilles de cotation", icon: "table" },
+    { id: "appetite", label: "Appétence", icon: "scale", available: true },
+    { id: "scales", label: "Grilles de cotation", icon: "table", available: true },
     { id: "risks", label: "Registre", icon: "table", available: true },
     { id: "placeholder", label: "Dispositif de risque", icon: "shield" },
   ] },
   { label: "Contrôle interne", items: [
-    { id: "placeholder", label: "Contrôles", icon: "check" },
+    { id: "controls", label: "Contrôles", icon: "check", available: true },
     { id: "placeholder", label: "Exécutions", icon: "play" },
     { id: "placeholder", label: "Plan de contrôle", icon: "panel" },
     { id: "placeholder", label: "Lignes de défense", icon: "shield" },
@@ -58,6 +61,9 @@ const PAGE_TITLES: Record<View, string> = {
   roles: "Rôles (RBAC)",
   feedback: "Feedback",
   placeholder: "Module en préparation",
+  appetite: "Appétence au risque",
+  scales: "Grilles de cotation",
+  controls: "Contrôles",
 };
 
 function App() {
@@ -121,6 +127,9 @@ function App() {
         <div className="workspace-grid">
           <main className="app-content">
             {view === "cartography" && <CartographyPage token={token} />}
+            {view === "appetite" && <AppetitePage token={token} />}
+            {view === "scales" && <RatingScalesPage token={token} />}
+            {view === "controls" && <ControlsPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} initialRiskId={evaluationRiskId} />}
             {view === "risks" && <RisksPage token={token} onEvaluate={(riskId) => { setEvaluationRiskId(riskId); setView("evaluation"); }} />}
             {view === "roles" && <RolesAdmin token={token} />}
