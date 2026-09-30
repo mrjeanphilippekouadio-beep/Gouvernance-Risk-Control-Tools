@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = resolve(fileURLToPath(import.meta.url), "../..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const migrationPath = resolve(
   repoRoot,
   "database/postgresql/migrations/038_audit_log_append_only.sql",
