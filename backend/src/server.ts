@@ -64,6 +64,7 @@ import { UserService } from "./services/UserService.js";
 import { RiskOwnershipService } from "./services/RiskOwnershipService.js";
 import { ActionPlanService } from "./services/ActionPlanService.js";
 import { RaciAssignmentService } from "./services/RaciAssignmentService.js";
+import { RaciEnrichmentViewService } from "./services/RaciEnrichmentViewService.js";
 import { CartographyService } from "./services/CartographyService.js";
 import { DashboardService } from "./services/DashboardService.js";
 import { BrandingService } from "./services/BrandingService.js";
@@ -244,6 +245,15 @@ const actionPlanService = new ActionPlanService(
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository);
 const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository);
+// RACI read-side wiring (PO-confirmed follow-up to Lot 1, see RaciEnrichmentViewService
+// doc comment): composes risk/control/actionPlan services with raciAssignmentService,
+// read-only, never a condition for a write.
+const raciEnrichmentViewService = new RaciEnrichmentViewService(
+  riskService,
+  controlService,
+  actionPlanService,
+  raciAssignmentService,
+);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
@@ -339,7 +349,7 @@ app.use(
   "/api/v1/risks",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "RISK"),
-  risksRouter(riskService),
+  risksRouter(riskService, raciEnrichmentViewService),
 );
 app.use(
   "/api/v1/evidences",
@@ -351,7 +361,7 @@ app.use(
   "/api/v1/controls",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "CONTROL"),
-  controlsRouter(controlService),
+  controlsRouter(controlService, raciEnrichmentViewService),
 );
 app.use("/api/v1/executions", authMiddleware(identityProvider), executionsRouter(executionService));
 app.use("/api/v1/effectiveness", authMiddleware(identityProvider), effectivenessRouter(effectivenessService));
@@ -395,7 +405,7 @@ app.use(
   "/api/v1/actions",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "ACTION_PLAN"),
-  actionPlansRouter(actionPlanService),
+  actionPlansRouter(actionPlanService, raciEnrichmentViewService),
 );
 app.use("/api/v1/raci", authMiddleware(identityProvider), raciRouter(raciAssignmentService));
 app.use(

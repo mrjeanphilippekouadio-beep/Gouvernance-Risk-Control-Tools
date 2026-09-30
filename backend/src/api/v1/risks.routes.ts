@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { RiskService } from "../../services/RiskService.js";
+import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
 
 const CreateRiskBody = z.object({
   process: z.string().min(1),
@@ -37,7 +38,7 @@ const EscalateRiskBody = z.object({
  * Thin HTTP layer: parse/validate input, call the service, shape the
  * response. No business rule lives here — see RiskService.
  */
-export function risksRouter(riskService: RiskService): Router {
+export function risksRouter(riskService: RiskService, raciEnrichmentViewService: RaciEnrichmentViewService): Router {
   const router = Router();
 
   router.get("/", async (req, res, next) => {
@@ -60,6 +61,17 @@ export function risksRouter(riskService: RiskService): Router {
     try {
       const risk = await riskService.get(req.user, req.params["id"] as string);
       res.json({ data: risk });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // RACI read-side wiring (PO-confirmed follow-up to Lot 1): who is R/A/C/I
+  // on this risk. Display only — never a condition for any write below.
+  router.get("/:id/raci", async (req, res, next) => {
+    try {
+      const context = await raciEnrichmentViewService.getRiskWithRaci(req.user, req.params["id"] as string);
+      res.json({ data: context });
     } catch (err) {
       next(err);
     }
