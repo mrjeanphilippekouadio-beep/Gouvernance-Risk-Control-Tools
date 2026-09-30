@@ -117,8 +117,8 @@ function OccurrencePanel() {
       <div className="rail-panel-head"><h3>Occurrence</h3><span>2 faits</span></div>
       <div className="rail-panel-body">
         <Timeline items={[
-          { id: "1", title: "Incident déclaré", description: "14/09/2026 · Opérations", state: "done" },
-          { id: "2", title: "Constat sectoriel référencé", description: "22/09/2026 · Veille réglementaire", state: "done" },
+          { label: "Incident déclaré", detail: "14/09/2026 · Opérations", state: "done" },
+          { label: "Constat sectoriel référencé", detail: "22/09/2026 · Veille réglementaire", state: "done" },
         ]} />
       </div>
     </div>
