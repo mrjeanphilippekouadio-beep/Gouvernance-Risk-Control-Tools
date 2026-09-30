@@ -68,6 +68,19 @@ describe("SEC: dependency management", () => {
     expect(workflow).toMatch(/permissions:\s*\n\s+contents:\s+read/);
   });
 
+  it("keeps Dependency Review configured for PRs at high severity", () => {
+    const dependencyReview = readFileSync(
+      resolve(root, ".github/workflows/dependency-review.yml"),
+      "utf8",
+    );
+    expect(dependencyReview).toMatch(/pull_request:/);
+    expect(dependencyReview).toMatch(/contents:\s+read/);
+    expect(dependencyReview).toMatch(/fail-on-severity:\s*high/);
+    expect(dependencyReview).toMatch(
+      /actions\/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294/,
+    );
+  });
+
   it("keeps automatic update coverage for npm, Docker, Actions, and pip", () => {
     expect(dependabot).toContain('package-ecosystem: "npm"');
     expect(dependabot).toContain('package-ecosystem: "docker"');
