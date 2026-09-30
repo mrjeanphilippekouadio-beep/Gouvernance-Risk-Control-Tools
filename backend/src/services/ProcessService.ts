@@ -1,5 +1,8 @@
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
+import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
+import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
+import type { ProcessEvaluationModeRequestRepository } from "../domain/repositories/ProcessEvaluationModeRequestRepository.js";
 import {
   PROCESS_LEVEL_BY_RANK,
   PROCESS_LEVEL_RANK,
@@ -23,6 +26,23 @@ export class ProcessService {
   constructor(
     private readonly processes: ProcessRepository,
     private readonly audit: AuditRepository,
+    /**
+     * Architect audit finding (2026-09-30): `risks.process_id`/
+     * `controls.process_id` are `NO ACTION` FKs and `getById` filters
+     * `deleted_at IS NULL` — soft-deleting a referenced Process (what
+     * `archive()` does) previously left those FKs silently unresolvable,
+     * no error anywhere. These three are guard-only dependencies for
+     * `archive()`'s referential check, same optional-degrade posture as
+     * `ActionPlanService`'s SEC-012 guards: if absent, the check is
+     * skipped rather than throwing — accepted because only `server.ts`
+     * (always fully wired) and tests (explicit fakes to exercise the
+     * guard) construct this service, so there is no active production
+     * hole, only a documented structural risk if a future construction
+     * site ever omits them.
+     */
+    private readonly risks?: RiskRepository,
+    private readonly controls?: ControlRepository,
+    private readonly evaluationModeRequests?: ProcessEvaluationModeRequestRepository,
   ) {}
 
   /**
@@ -163,10 +183,22 @@ export class ProcessService {
     return after;
   }
 
+  /**
+   * Architect audit finding (2026-09-30): refuses the archive (a hard
+   * soft-delete — `deleted_at`, invisible to `getById`/`list` from then
+   * on) when a live risk, control, or pending evaluation-mode request
+   * still points at this process, since `risks.process_id`/
+   * `controls.process_id` are `NO ACTION` FKs that would otherwise dangle
+   * silently. Same family as `ActionPlanService.assertDepartmentExists`
+   * (SEC-012): a "still referenced" check before a destructive write,
+   * not a new architectural layer.
+   */
   async archive(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<void> {
     requirePermission(actor, "process.delete");
     if (!reason.trim()) throw new ValidationError("A reason is required to archive a process");
     const before = await this.get(actor, id);
+
+    await this.assertNoActiveReferences(actor.tenantId, id);
 
     await this.processes.softDelete(actor.tenantId, id, actor.userId, reason);
 
@@ -210,6 +242,34 @@ export class ProcessService {
     }
 
     return resolveInheritedEvaluationMode(chain, tenantDefault);
+  }
+
+  /** See `archive()`'s doc comment — checks live (non-archived, non-soft-deleted) references only, mirroring `list()`'s own default scoping for each repository. */
+  private async assertNoActiveReferences(tenantId: string, processId: string): Promise<void> {
+    if (this.risks) {
+      const risks = await this.risks.list(tenantId);
+      if (risks.some((r) => r.processId === processId)) {
+        throw new ValidationError(
+          "Cannot archive this process: it is still referenced by risks.processId — unlink those risks first, or the FK would silently dangle",
+        );
+      }
+    }
+    if (this.controls) {
+      const controls = await this.controls.list(tenantId);
+      if (controls.some((c) => c.processId === processId)) {
+        throw new ValidationError(
+          "Cannot archive this process: it is still referenced by controls.processId — unlink those controls first, or the FK would silently dangle",
+        );
+      }
+    }
+    if (this.evaluationModeRequests) {
+      const pending = await this.evaluationModeRequests.list(tenantId, { processId, status: "PENDING_VALIDATION" });
+      if (pending.length > 0) {
+        throw new ValidationError(
+          "Cannot archive this process: it has a pending evaluation-mode request awaiting validation",
+        );
+      }
+    }
   }
 
   private async validateHierarchy(
