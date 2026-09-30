@@ -64,12 +64,12 @@ export function AuditFindingsPage({ token }: Props) {
     finally { setSaving(false); }
   }
 
-  async function startTreatment(row: Finding) {
+  const startTreatment = useCallback(async (row: Finding) => {
     setBusyId(row.id); setError(null); setNotice(null);
     try { await findingsApi.startTreatment(token, row.id); setNotice("Le constat est passé en traitement."); await refresh(); }
     catch (err) { setError(errorMessage(err)); }
     finally { setBusyId(""); }
-  }
+  }, [token, refresh]);
 
   async function closeFinding() {
     if (!closeTarget) return;
@@ -91,7 +91,7 @@ export function AuditFindingsPage({ token }: Props) {
       {row.status === "OUVERT" && <Button disabled={busyId === row.id} onClick={() => void startTreatment(row)}>{busyId === row.id ? "Traitement…" : "Démarrer"}</Button>}
       {row.status !== "CLOS" && <Button variant="destructive" disabled={busyId === row.id} onClick={() => { setClosureComment(""); setCloseTarget(row); }}>{busyId === row.id ? "Clôture…" : "Clôturer"}</Button>}
     </div> },
-  ], [missionById, busyId]);
+  ], [missionById, busyId, startTreatment]);
 
   return <section className="workflow-page">
     <header className="workflow-heading">
