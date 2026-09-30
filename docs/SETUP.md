@@ -104,11 +104,19 @@ l'email correspond à un utilisateur créé dans `users` (le seed dev crée
 `dev@example.com` — pas un vrai compte Google, donc remplacez-le par une
 vraie adresse Djamo avant de tester la connexion réelle).
 
-## Ce qui n'est pas encore fait
+## Séparation runtime / migrations
 
-- Rôle Postgres dédié avec privilèges restreints (pas de `UPDATE`/`DELETE`
-  sur `audit_log`) — voir l'item ouvert dans `database/README.md`.
-- Pas de script automatisé pour ces étapes (volontairement — voir
-  ADR-001 §8.14, la génération de scripts d'installation vérifie la
-  sécurité de la config avant de s'exécuter, ce qui n'est pas encore
-  construit).
+En production, le backend Cloud Run utilise uniquement `DATABASE_URL`.
+Les migrations utilisent séparément `MIGRATION_DATABASE_URL`, avec un rôle
+PostgreSQL distinct et plus privilégié, exécuté dans un job de migration ou
+une opération de maintenance contrôlée.
+
+Le runner vérifie que les deux URLs ne sont pas identiques et que les rôles
+PostgreSQL réellement connectés sont différents. Le backend refuse par
+ailleurs de démarrer si `MIGRATION_DATABASE_URL` est injecté dans son
+environnement production.
+
+La création des rôles et la distribution des secrets restent des opérations
+d'infrastructure : le rôle runtime doit rester sans privilèges DDL, tandis
+que le rôle de migration reçoit uniquement les privilèges nécessaires aux
+migrations et n'est jamais utilisé par Cloud Run.

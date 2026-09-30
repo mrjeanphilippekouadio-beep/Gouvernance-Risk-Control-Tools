@@ -34,6 +34,15 @@ const EnvSchema = z.object({
 
 const parsed = EnvSchema.safeParse(process.env);
 
+if (process.env.NODE_ENV === "production" && process.env.MIGRATION_DATABASE_URL) {
+  // Migration credentials must never be injected into the long-running
+  // Cloud Run runtime. They belong only to the short-lived migration job.
+  console.error(
+    "Invalid production configuration: MIGRATION_DATABASE_URL must not be present in the runtime environment.",
+  );
+  process.exit(1);
+}
+
 if (!parsed.success) {
   // Fail fast and loudly — never start the server with a half-valid config.
   // eslint-disable-next-line no-console
