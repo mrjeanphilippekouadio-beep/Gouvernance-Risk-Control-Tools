@@ -1,9 +1,12 @@
 import { OAuth2Client } from "google-auth-library";
 import type { AuthenticatedUser, IdentityProvider } from "./IdentityProvider.js";
+import type { DashboardScopeMode } from "../../domain/entities/DashboardScope.js";
 import { ForbiddenError } from "../../domain/errors/DomainErrors.js";
 
 export interface TenantMembershipLookup {
-  (email: string): Promise<{ userId: string; tenantId: string; roles: string[] } | null>;
+  (email: string): Promise<
+    { userId: string; tenantId: string; roles: string[]; dashboardScopeMode: DashboardScopeMode } | null
+  >;
 }
 
 /**
@@ -43,6 +46,7 @@ export class GoogleIdentityProvider implements IdentityProvider {
       email: payload.email,
       displayName: payload.name ?? payload.email,
       roles: membership.roles,
+      dashboardScopeMode: membership.dashboardScopeMode,
     };
   }
 }

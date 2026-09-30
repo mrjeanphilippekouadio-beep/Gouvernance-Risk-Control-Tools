@@ -36,6 +36,8 @@ import { computeKpiStatus, type Kpi, type KpiStatus } from "../domain/entities/K
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import type { DashboardScopeMode, RiskScope } from "../domain/entities/DashboardScope.js";
+import type { DashboardScopeResolver } from "./DashboardScopeResolver.js";
 
 // ---------------------------------------------------------------------
 // Shared read models
@@ -142,18 +144,32 @@ export interface DepartmentDashboard {
   actions: ActionPlanView[];
 }
 
+/**
+ * @architect design 2026-09-30: surfaced on every dashboard.executive
+ * response so the UI can render "périmètre : 2 départements" instead of
+ * a silently empty page when a DEPARTMENT/PROCESS-scoped actor's
+ * perimeter is genuinely empty (rule: empty perimeter -> empty
+ * dashboard, never a fallback to GLOBAL).
+ */
+export interface DashboardScopeSummary {
+  mode: DashboardScopeMode;
+  departmentCount: number;
+}
+
 export interface ExecutiveDashboard {
   totalActiveRisks: number;
   topRisks: DashboardRiskSummary[];
   criticalKris: DashboardKriSummary[];
   overdueActions: ActionPlanView[];
   openAnomaliesCount: number;
+  scope: DashboardScopeSummary;
 }
 
 export interface RiskCommitteeReport {
   topRisks: DashboardRiskSummary[];
   krisInAlert: DashboardKriSummary[];
   overdueActions: ActionPlanView[];
+  scope: DashboardScopeSummary;
 }
 
 export interface ConsolidatedEntityBreakdown {
@@ -166,6 +182,7 @@ export interface ConsolidatedEntityBreakdown {
 
 export interface ConsolidatedReport {
   entities: ConsolidatedEntityBreakdown[];
+  scope: DashboardScopeSummary;
 }
 
 export interface AppetiteVsResidualRow {
@@ -181,6 +198,7 @@ export interface AppetiteVsResidualRow {
 export interface KriConsolidatedReport {
   kris: KriConsolidatedRow[];
   activeAlerts: KriConsolidatedRow[];
+  scope: DashboardScopeSummary;
 }
 
 export interface RiskOwnerAlert {
@@ -274,6 +292,13 @@ export class DashboardService {
      * flagged via `resolvedVia`, never silently.
      */
     private readonly processes?: ProcessRepository,
+    /**
+     * @architect design 2026-09-30 (dashboard.executive scope): optional,
+     * same degrade-never-throw posture as `processes` above — when
+     * absent, every scope resolves to GLOBAL (today's unscoped
+     * behavior), so existing construction sites keep working unchanged.
+     */
+    private readonly scopeResolver?: DashboardScopeResolver,
   ) {}
 
   // -- ACT-080 ---------------------------------------------------------
@@ -446,7 +471,7 @@ export class DashboardService {
       this.risks.list(actor.tenantId),
       this.controls.list(actor.tenantId),
       this.kpis.list(actor.tenantId, { departmentId }),
-      this.actionPlans.list(actor.tenantId, { departmentId }),
+      this.actionPlans.list(actor.tenantId, { departmentIds: [departmentId] }),
     ]);
 
     const departmentRisks = allRisks.filter((r) => r.ownerDepartmentId === departmentId);
@@ -476,17 +501,25 @@ export class DashboardService {
 
   // -- ACT-242 -----------------------------------------------------------
 
-  /** GET /dashboard/executive — cross-entity consolidated view, gated behind dashboard.executive. */
+  /** GET /dashboard/executive — cross-entity consolidated view, gated behind dashboard.executive, scoped per DashboardScopeResolver. */
   async getExecutiveView(actor: AuthenticatedUser, options?: { topN?: number }): Promise<ExecutiveDashboard> {
     requirePermission(actor, "dashboard.executive");
     const topN = options?.topN ?? 10;
+    const scope = await this.resolveScope(actor);
+    const scopeSummary = this.scopeSummary(scope);
 
-    const [allRisks, scored, kriSummaries, overdueActions, allAnomalies] = await Promise.all([
-      this.risks.list(actor.tenantId),
-      this.getScoredRisks(actor.tenantId),
+    if (this.scopeIsEmpty(scope)) {
+      return { totalActiveRisks: 0, topRisks: [], criticalKris: [], overdueActions: [], openAnomaliesCount: 0, scope: scopeSummary };
+    }
+
+    const riskListOptions = this.riskListOptionsForScope(scope);
+    const [allRisks, scored, kriSummaries, overdueActions, allAnomalies, scopedRiskIds] = await Promise.all([
+      this.risks.list(actor.tenantId, riskListOptions),
+      this.getScoredRisks(actor.tenantId, riskListOptions),
       this.getAllKriSummaries(actor.tenantId),
-      this.getOverdueActionViews(actor.tenantId),
+      this.getOverdueActionViewsScoped(actor.tenantId, scope),
       this.anomalies.list(actor.tenantId),
+      this.getScopedRiskIds(actor.tenantId, scope),
     ]);
 
     const topRisks = await Promise.all(
@@ -496,7 +529,7 @@ export class DashboardService {
         .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation)),
     );
     const criticalKris = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
-    const openAnomaliesCount = allAnomalies.filter((a) => a.status !== "CLOSED").length;
+    const openAnomaliesCount = this.countOpenAnomalies(allAnomalies, scope, scopedRiskIds);
 
     return {
       totalActiveRisks: allRisks.filter((r) => r.status !== "ARCHIVED").length,
@@ -504,6 +537,7 @@ export class DashboardService {
       criticalKris,
       overdueActions,
       openAnomaliesCount,
+      scope: scopeSummary,
     };
   }
 
@@ -513,11 +547,18 @@ export class DashboardService {
   async getRiskCommitteeReport(actor: AuthenticatedUser, options?: { topN?: number }): Promise<RiskCommitteeReport> {
     requirePermission(actor, "dashboard.executive");
     const topN = options?.topN ?? 10;
+    const scope = await this.resolveScope(actor);
+    const scopeSummary = this.scopeSummary(scope);
 
+    if (this.scopeIsEmpty(scope)) {
+      return { topRisks: [], krisInAlert: [], overdueActions: [], scope: scopeSummary };
+    }
+
+    const riskListOptions = this.riskListOptionsForScope(scope);
     const [scored, kriSummaries, overdueActions] = await Promise.all([
-      this.getScoredRisks(actor.tenantId),
+      this.getScoredRisks(actor.tenantId, riskListOptions),
       this.getAllKriSummaries(actor.tenantId),
-      this.getOverdueActionViews(actor.tenantId),
+      this.getOverdueActionViewsScoped(actor.tenantId, scope),
     ]);
 
     const topRisks = await Promise.all(
@@ -528,7 +569,7 @@ export class DashboardService {
     );
     const krisInAlert = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
 
-    return { topRisks, krisInAlert, overdueActions };
+    return { topRisks, krisInAlert, overdueActions, scope: scopeSummary };
   }
 
   // -- ACT-212 ---------------------------------------------------------------
@@ -557,9 +598,16 @@ export class DashboardService {
    */
   async getConsolidatedReport(actor: AuthenticatedUser, entityFilter?: string[]): Promise<ConsolidatedReport> {
     requirePermission(actor, "dashboard.executive");
+    const scope = await this.resolveScope(actor);
+    const scopeSummary = this.scopeSummary(scope);
 
+    if (this.scopeIsEmpty(scope)) {
+      return { entities: [], scope: scopeSummary };
+    }
+
+    const riskListOptions = this.riskListOptionsForScope(scope);
     const [scored, kriSummaries] = await Promise.all([
-      this.getScoredRisks(actor.tenantId),
+      this.getScoredRisks(actor.tenantId, riskListOptions),
       this.getAllKriSummaries(actor.tenantId),
     ]);
 
@@ -588,17 +636,29 @@ export class DashboardService {
       }),
     );
 
-    return { entities: breakdown.sort((a, b) => a.entity.localeCompare(b.entity)) };
+    return { entities: breakdown.sort((a, b) => a.entity.localeCompare(b.entity)), scope: scopeSummary };
   }
 
   // -- ACT-214 -----------------------------------------------------------------
 
   /** GET /reports/appetite-vs-residual — per (subCategory, entity), max current residual score vs the active RiskAppetite threshold, exceedances highlighted. */
+  /**
+   * Return shape stays a bare array on purpose (pre-existing API
+   * contract, unlike the 4 other dashboard.executive endpoints which
+   * already returned an object) — see the class-level scope wiring note.
+   * The underlying risk set IS scoped (empty perimeter -> `[]`), only
+   * the `DashboardScopeSummary` metadata isn't surfaced here, since
+   * doing so would mean breaking this one endpoint's response shape for
+   * a purely informational addition.
+   */
   async getAppetiteVsResidual(actor: AuthenticatedUser): Promise<AppetiteVsResidualRow[]> {
     requirePermission(actor, "dashboard.executive");
+    const scope = await this.resolveScope(actor);
+    if (this.scopeIsEmpty(scope)) return [];
 
+    const riskListOptions = this.riskListOptionsForScope(scope);
     const [scored, appetites] = await Promise.all([
-      this.getScoredRisks(actor.tenantId),
+      this.getScoredRisks(actor.tenantId, riskListOptions),
       this.riskAppetites.list(actor.tenantId, { activeOnly: true }),
     ]);
 
@@ -653,9 +713,23 @@ export class DashboardService {
   // -- ACT-215 -------------------------------------------------------------------
 
   /** GET /reports/kri-consolidated — global KRI view, trend over N periods (default 6), active alerts. */
+  /**
+   * KRI aggregation is NOT filtered by the RACI-derived RiskScope: the
+   * @architect design (2026-09-30) only specifies scoping for
+   * risks/actions/anomalies (RiskRepository/ActionPlanListFilters
+   * extended, KriRepository deliberately not touched) — Kri has no
+   * department/process dimension to filter on in this lot. `scope` is
+   * still resolved and surfaced here so a DEPARTMENT/PROCESS-scoped
+   * actor's UI can show the same perimeter banner as the other 4
+   * dashboard.executive endpoints; it just doesn't change which KRIs
+   * come back. Flagged explicitly rather than silently scoping only
+   * some endpoints under one umbrella response shape.
+   */
   async getKriConsolidated(actor: AuthenticatedUser, options?: { periods?: number }): Promise<KriConsolidatedReport> {
     requirePermission(actor, "dashboard.executive");
     const periods = options?.periods ?? 6;
+    const scope = await this.resolveScope(actor);
+    const scopeSummary = this.scopeSummary(scope);
 
     const kris = await this.kris.list(actor.tenantId);
     const rows = await Promise.all(
@@ -667,7 +741,7 @@ export class DashboardService {
     );
 
     const activeAlerts = rows.filter((r) => r.status === "ORANGE" || r.status === "ROUGE");
-    return { kris: rows, activeAlerts };
+    return { kris: rows, activeAlerts, scope: scopeSummary };
   }
 
   // ---------------------------------------------------------------------
@@ -747,8 +821,18 @@ export class DashboardService {
     return this.buildRiskSummary(tenantId, risk, evaluation);
   }
 
-  /** Only risks with an authoritative (VALIDATED/VALIDE_COMITE), scored evaluation — used by every "top risks by score" ranking (executive/committee/consolidated/appetite-vs-residual). */
-  private async getScoredRisks(tenantId: string, options?: { includeArchived?: boolean }): Promise<ScoredRisk[]> {
+  /**
+   * Only risks with an authoritative (VALIDATED/VALIDE_COMITE), scored
+   * evaluation — used by every "top risks by score" ranking
+   * (executive/committee/consolidated/appetite-vs-residual). `options`
+   * accepts the same scope filters as RiskRepository.list — callers pass
+   * `riskListOptionsForScope(scope)` to apply the dashboard.executive
+   * perimeter as a real SQL filter, never a post-fetch one.
+   */
+  private async getScoredRisks(
+    tenantId: string,
+    options?: { includeArchived?: boolean; ownerDepartmentIds?: string[]; processIds?: string[]; ids?: string[] },
+  ): Promise<ScoredRisk[]> {
     const risks = await this.risks.list(tenantId, options);
     const scored: ScoredRisk[] = [];
     for (const risk of risks) {
@@ -787,5 +871,88 @@ export class DashboardService {
     const departments = await this.departments.list(tenantId, { includeInactive: true });
     const entityByDepartmentId = new Map(departments.map((d) => [d.id, d.entity]));
     return controls.filter((c) => c.departmentId !== null && entityByDepartmentId.get(c.departmentId) === entity);
+  }
+
+  // -- dashboard.executive scope (@architect design, 2026-09-30) --------
+
+  /** GLOBAL when no resolver is wired (degrade-never-throw, same posture as `processes`). */
+  private async resolveScope(actor: AuthenticatedUser): Promise<RiskScope> {
+    if (!this.scopeResolver) return { mode: "GLOBAL" };
+    return this.scopeResolver.resolve(actor);
+  }
+
+  /** Rule 5 (PO): empty perimeter -> empty dashboard, never a fallback to GLOBAL. GLOBAL itself is never "empty". */
+  private scopeIsEmpty(scope: RiskScope): boolean {
+    if (scope.mode === "GLOBAL") return false;
+    if (scope.mode === "DEPARTMENT") return scope.departmentIds.length === 0 && scope.processIds.length === 0;
+    return scope.processIds.length === 0;
+  }
+
+  private scopeSummary(scope: RiskScope): DashboardScopeSummary {
+    return { mode: scope.mode, departmentCount: scope.mode === "DEPARTMENT" ? scope.departmentIds.length : 0 };
+  }
+
+  /** Translates a RiskScope into RiskRepository.list's real SQL filter options — never applied as a post-fetch, in-memory filter. */
+  private riskListOptionsForScope(
+    scope: RiskScope,
+    base: { includeArchived?: boolean } = {},
+  ): { includeArchived?: boolean; ownerDepartmentIds?: string[]; processIds?: string[] } {
+    if (scope.mode === "GLOBAL") return base;
+    if (scope.mode === "DEPARTMENT") return { ...base, ownerDepartmentIds: scope.departmentIds, processIds: scope.processIds };
+    return { ...base, processIds: scope.processIds };
+  }
+
+  /**
+   * The full set of risk ids in scope (including archived — an archived
+   * risk's still-open anomalies counted under the old GLOBAL behavior
+   * too), used only for anomaly-membership checks. `null` for GLOBAL —
+   * callers must treat `null` as "no filtering needed", not "empty".
+   */
+  private async getScopedRiskIds(tenantId: string, scope: RiskScope): Promise<Set<string> | null> {
+    if (scope.mode === "GLOBAL") return null;
+    if (this.scopeIsEmpty(scope)) return new Set();
+    const risks = await this.risks.list(tenantId, this.riskListOptionsForScope(scope, { includeArchived: true }));
+    return new Set(risks.map((r) => r.id));
+  }
+
+  /**
+   * Rule 3 (PO): orphan anomalies (`riskId IS NULL`) are excluded from
+   * any scoped count (fail-closed) — they only ever show up in GLOBAL
+   * mode, same as before this feature.
+   */
+  private countOpenAnomalies(anomalies: Anomaly[], scope: RiskScope, scopedRiskIds: Set<string> | null): number {
+    if (scope.mode === "GLOBAL") return anomalies.filter((a) => a.status !== "CLOSED").length;
+    return anomalies.filter((a) => a.status !== "CLOSED" && a.riskId !== null && (scopedRiskIds?.has(a.riskId) ?? false))
+      .length;
+  }
+
+  /**
+   * ActionPlan has a `departmentId` dimension but no `processId` one —
+   * DEPARTMENT-mode R/A widening maps onto it directly; DEPARTMENT-mode
+   * C/I widening (process-only) and PROCESS mode itself have no
+   * department to filter action plans by, so both yield `null` (no
+   * action plans visible) rather than either an unfiltered list or a
+   * fabricated department match.
+   */
+  private actionPlanFiltersForScope(
+    scope: RiskScope,
+    base: ActionPlanListFilters = {},
+  ): ActionPlanListFilters | null {
+    if (scope.mode === "GLOBAL") return base;
+    if (scope.mode === "DEPARTMENT") {
+      if (scope.departmentIds.length === 0) return null;
+      return { ...base, departmentIds: scope.departmentIds };
+    }
+    return null;
+  }
+
+  private async getOverdueActionViewsScoped(
+    tenantId: string,
+    scope: RiskScope,
+    filters?: ActionPlanListFilters,
+  ): Promise<ActionPlanView[]> {
+    const scopedFilters = this.actionPlanFiltersForScope(scope, filters);
+    if (scopedFilters === null) return [];
+    return this.getOverdueActionViews(tenantId, scopedFilters);
   }
 }

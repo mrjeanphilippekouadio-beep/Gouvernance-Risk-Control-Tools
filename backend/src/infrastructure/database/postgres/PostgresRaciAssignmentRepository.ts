@@ -62,6 +62,22 @@ export class PostgresRaciAssignmentRepository implements RaciAssignmentRepositor
     return rows.map(toDomain);
   }
 
+  async listForUser(tenantId: string, userId: string, options?: { roles?: RaciRole[] }): Promise<RaciAssignment[]> {
+    const params: unknown[] = [tenantId, userId];
+    let roleFilter = "";
+    if (options?.roles && options.roles.length > 0) {
+      params.push(options.roles);
+      roleFilter = `AND role = ANY($${params.length})`;
+    }
+    const { rows } = await this.pool.query<RaciAssignmentRow>(
+      `SELECT * FROM raci_assignments
+       WHERE tenant_id = $1 AND user_id = $2 AND deleted_at IS NULL ${roleFilter}
+       ORDER BY created_at ASC`,
+      params,
+    );
+    return rows.map(toDomain);
+  }
+
   async remove(tenantId: string, id: string): Promise<RaciAssignment> {
     const { rows } = await this.pool.query<RaciAssignmentRow>(
       `UPDATE raci_assignments

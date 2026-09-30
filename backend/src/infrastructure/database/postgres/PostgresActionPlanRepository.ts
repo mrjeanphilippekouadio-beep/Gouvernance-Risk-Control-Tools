@@ -92,9 +92,9 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
       params.push(filters.responsibleUserId);
       conditions.push(`responsible_user_id = $${params.length}`);
     }
-    if (filters?.departmentId) {
-      params.push(filters.departmentId);
-      conditions.push(`department_id = $${params.length}`);
+    if (filters?.departmentIds && filters.departmentIds.length > 0) {
+      params.push(filters.departmentIds);
+      conditions.push(`department_id = ANY($${params.length})`);
     }
     if (filters?.dueFrom) {
       params.push(filters.dueFrom);

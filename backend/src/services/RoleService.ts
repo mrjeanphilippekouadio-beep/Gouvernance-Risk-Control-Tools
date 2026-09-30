@@ -11,12 +11,32 @@ import {
 } from "../domain/permissions.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import type { DashboardScopeMode } from "../domain/entities/DashboardScope.js";
 
 function assertKnownPermissions(permissions: Permission[]): void {
   if (permissions.length === 0) throw new ValidationError("A role needs at least one permission");
   const unknown = permissions.filter((p) => !ALL_PERMISSIONS.includes(p));
   if (unknown.length > 0) {
     throw new ValidationError(`Unknown permission(s): ${unknown.join(", ")}`);
+  }
+}
+
+/**
+ * @architect design 2026-09-30: PROCESS is a valid stored
+ * dashboard_scope_mode value (kept in the DB CHECK / TS enum so the
+ * column and the application-level type never drift) but rejected here,
+ * at the write boundary — `risks.process_id` (029_risks_process_id.sql)
+ * has never been backfilled in real data (0 unique matches in the PO's
+ * cited dry-run), so a role holding PROCESS today would see an empty
+ * dashboard.executive regardless of its actual RACI/ownership.
+ */
+function assertDashboardScopeModeWritable(mode: DashboardScopeMode | undefined): void {
+  if (mode === "PROCESS") {
+    throw new ValidationError(
+      "dashboardScopeMode: PROCESS is not yet usable — risks.process_id has not been backfilled " +
+        "(0 unique matches found in the dry-run), so a PROCESS-scoped role would see an empty dashboard.executive. " +
+        "Use GLOBAL or DEPARTMENT until that backfill is done.",
+    );
   }
 }
 
@@ -42,6 +62,7 @@ export class RoleService {
     requirePermission(actor, "role.create");
     if (!input.name.trim()) throw new ValidationError("name is required");
     assertKnownPermissions(input.permissions);
+    assertDashboardScopeModeWritable(input.dashboardScopeMode);
 
     const existing = await this.roles.getByName(actor.tenantId, input.name);
     if (existing) throw new ValidationError(`A role named "${input.name}" already exists`);
@@ -97,6 +118,7 @@ export class RoleService {
 
     if (input.name !== undefined && !input.name.trim()) throw new ValidationError("name cannot be empty");
     if (input.permissions !== undefined) assertKnownPermissions(input.permissions);
+    assertDashboardScopeModeWritable(input.dashboardScopeMode);
 
     const after = await this.roles.update(actor.tenantId, id, input);
 

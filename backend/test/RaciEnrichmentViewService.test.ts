@@ -131,6 +131,15 @@ function inMemoryRaciRepository(assignments: RaciAssignment[] = []): RaciAssignm
         (a) => a.tenantId === tenantId && a.entityType === entityType && a.entityId === entityId && !a.deletedAt,
       );
     },
+    async listForUser(tenantId, userId, options) {
+      return store.filter(
+        (a) =>
+          a.tenantId === tenantId &&
+          a.userId === userId &&
+          !a.deletedAt &&
+          (!options?.roles || options.roles.includes(a.role)),
+      );
+    },
     async remove(tenantId, id) {
       const existing = store.find((a) => a.tenantId === tenantId && a.id === id);
       if (!existing) throw new NotFoundError("RaciAssignment", id);

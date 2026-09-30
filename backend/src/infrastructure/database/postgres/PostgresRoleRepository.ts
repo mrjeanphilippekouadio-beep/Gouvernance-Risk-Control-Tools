@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import type { RoleRepository } from "../../../domain/repositories/RoleRepository.js";
 import type { CreateRoleInput, Role, RoleAssignment, UpdateRoleInput } from "../../../domain/entities/Role.js";
 import type { Permission } from "../../../domain/permissions.js";
+import type { DashboardScopeMode } from "../../../domain/entities/DashboardScope.js";
 import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 
@@ -11,6 +12,7 @@ interface RoleRow {
   name: string;
   description: string | null;
   permissions: string[];
+  dashboard_scope_mode: DashboardScopeMode;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -33,6 +35,7 @@ function toDomain(row: RoleRow): Role {
     name: row.name,
     description: row.description,
     permissions: row.permissions as Permission[],
+    dashboardScopeMode: row.dashboard_scope_mode,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -81,10 +84,16 @@ export class PostgresRoleRepository implements RoleRepository {
 
   async create(input: CreateRoleInput): Promise<Role> {
     const { rows } = await this.pool.query<RoleRow>(
-      `INSERT INTO roles (tenant_id, name, description, permissions)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO roles (tenant_id, name, description, permissions, dashboard_scope_mode)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [input.tenantId, input.name, input.description ?? null, input.permissions],
+      [
+        input.tenantId,
+        input.name,
+        input.description ?? null,
+        input.permissions,
+        input.dashboardScopeMode ?? "GLOBAL",
+      ],
     );
     const row = rows[0];
     if (!row) throw new Error("Insert into roles returned no row");
@@ -97,6 +106,7 @@ export class PostgresRoleRepository implements RoleRepository {
         name: input.name,
         description: input.description,
         permissions: input.permissions,
+        dashboard_scope_mode: input.dashboardScopeMode,
       },
       3,
     );
