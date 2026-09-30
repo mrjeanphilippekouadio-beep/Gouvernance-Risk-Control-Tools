@@ -32,7 +32,7 @@ describe("SEC: audit_log database append-only migration", () => {
 
   it("fails closed with an authorization error", () => {
     expect(sql).toMatch(
-      /RAISE\s+EXCEPTION\s+'audit_log is append-only:[^']*'\s+USING\s+ERRCODE\s*=\s*'42501'/i,
+      /RAISE\\s+EXCEPTION\\s+'audit_log is append-only:[^']*'\\s*,?\\s+USING\\s+ERRCODE\\s*=\\s*'42501'/i,
     );
   });
 });
