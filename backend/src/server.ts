@@ -66,6 +66,7 @@ import { RiskOwnershipService } from "./services/RiskOwnershipService.js";
 import { ActionPlanService } from "./services/ActionPlanService.js";
 import { RaciAssignmentService } from "./services/RaciAssignmentService.js";
 import { RaciEnrichmentViewService } from "./services/RaciEnrichmentViewService.js";
+import { RiskDeviceViewService } from "./services/RiskDeviceViewService.js";
 import { CartographyService } from "./services/CartographyService.js";
 import { DashboardService } from "./services/DashboardService.js";
 import { DashboardScopeResolver } from "./services/DashboardScopeResolver.js";
@@ -257,6 +258,18 @@ const raciEnrichmentViewService = new RaciEnrichmentViewService(
   actionPlanService,
   raciAssignmentService,
 );
+// DECISION-002/DECISION-003: Risk 360 / Dispositif de risque read model —
+// composes the repositories/services above, no new table/migration. See
+// RiskDeviceViewService's file header for scope.
+const riskDeviceViewService = new RiskDeviceViewService(
+  riskRepository,
+  riskEvaluationRepository,
+  controlRepository,
+  effectivenessRepository,
+  actionPlanService,
+  raciEnrichmentViewService,
+  riskAppetiteService,
+);
 
 const documentStorage = new GoogleDriveStorage(
   (tenantId) => tenantRepository.getDriveFolderId(tenantId),
@@ -386,7 +399,7 @@ app.use(
   "/api/v1/risks",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "RISK"),
-  risksRouter(riskService, raciEnrichmentViewService),
+  risksRouter(riskService, raciEnrichmentViewService, riskDeviceViewService),
 );
 app.use(
   "/api/v1/evidences",

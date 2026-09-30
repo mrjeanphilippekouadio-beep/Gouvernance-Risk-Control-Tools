@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { RiskService } from "../../services/RiskService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
+import type { RiskDeviceViewService } from "../../services/RiskDeviceViewService.js";
 
 const CreateRiskBody = z.object({
   process: z.string().min(1),
@@ -38,7 +39,11 @@ const EscalateRiskBody = z.object({
  * Thin HTTP layer: parse/validate input, call the service, shape the
  * response. No business rule lives here — see RiskService.
  */
-export function risksRouter(riskService: RiskService, raciEnrichmentViewService: RaciEnrichmentViewService): Router {
+export function risksRouter(
+  riskService: RiskService,
+  raciEnrichmentViewService: RaciEnrichmentViewService,
+  riskDeviceViewService: RiskDeviceViewService,
+): Router {
   const router = Router();
 
   router.get("/", async (req, res, next) => {
@@ -72,6 +77,18 @@ export function risksRouter(riskService: RiskService, raciEnrichmentViewService:
     try {
       const context = await raciEnrichmentViewService.getRiskWithRaci(req.user, req.params["id"] as string);
       res.json({ data: context });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // DECISION-002/DECISION-003: Risk 360 / Dispositif de risque — composed
+  // read model (RiskDeviceViewService). See that service's file header for
+  // exactly what's covered and what's deliberately left out for now.
+  router.get("/:id/360", async (req, res, next) => {
+    try {
+      const device = await riskDeviceViewService.getDevice(req.user, req.params["id"] as string);
+      res.json({ data: device });
     } catch (err) {
       next(err);
     }

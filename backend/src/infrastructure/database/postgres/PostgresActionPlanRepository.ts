@@ -188,6 +188,27 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
     return listLinksFor(this.pool, tenantId, actionId);
   }
 
+  /**
+   * DECISION-003: a risk's action plans, combining both ways one can be
+   * tied to it — directly via `source_type/source_id`, or indirectly via
+   * an `action_links` row — in a single query (no N+1 across either the
+   * tenant's full action plan list or a per-action link lookup).
+   */
+  async listForRisk(tenantId: string, riskId: string): Promise<ActionPlan[]> {
+    const { rows } = await this.pool.query<ActionPlanRow>(
+      `SELECT DISTINCT ap.* FROM action_plans ap
+       LEFT JOIN action_links al ON al.tenant_id = ap.tenant_id AND al.action_id = ap.id
+       WHERE ap.tenant_id = $1
+         AND (
+           (ap.source_type = 'RISK' AND ap.source_id = $2)
+           OR (al.resource_type = 'RISK' AND al.resource_id = $2)
+         )
+       ORDER BY ap.due_date ASC`,
+      [tenantId, riskId],
+    );
+    return rows.map(toDomain);
+  }
+
   async replaceLinks(tenantId: string, actionId: string, links: ActionLink[]): Promise<void> {
     const client = await this.pool.connect();
     try {

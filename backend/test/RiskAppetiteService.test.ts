@@ -218,6 +218,27 @@ describe("RiskAppetiteService", () => {
     await expect(service.list(writeOnlyActor)).rejects.toThrow(ForbiddenError);
   });
 
+  describe("getApplicable (Risk 360/Dispositif de risque read-side helper)", () => {
+    it("returns the threshold currently active for a (subCategory, entity) pair", async () => {
+      const service = new RiskAppetiteService(inMemoryRiskAppetiteRepository(), inMemoryAuditRepository());
+      await service.setThreshold(actor, "Fraude interne", { threshold: 10, methodologyVersion: "v1" }, "REQ-1");
+
+      const applicable = await service.getApplicable(readOnlyActor, "Fraude interne", null);
+      expect(applicable?.threshold).toBe(10);
+    });
+
+    it("returns null when no threshold is defined for that pair", async () => {
+      const service = new RiskAppetiteService(inMemoryRiskAppetiteRepository(), inMemoryAuditRepository());
+      await expect(service.getApplicable(readOnlyActor, "Inconnue", null)).resolves.toBeNull();
+    });
+
+    it("requires riskappetite.read", async () => {
+      const service = new RiskAppetiteService(inMemoryRiskAppetiteRepository(), inMemoryAuditRepository());
+      const noRead: AuthenticatedUser = { ...actor, userId: "user-4", roles: [] };
+      await expect(service.getApplicable(noRead, "Fraude interne", null)).rejects.toThrow(ForbiddenError);
+    });
+  });
+
   it("lists active thresholds by default and excludes inactive ones", async () => {
     const service = new RiskAppetiteService(inMemoryRiskAppetiteRepository(), inMemoryAuditRepository());
     await service.setThreshold(actor, "Fraude interne", { threshold: 10, methodologyVersion: "v1" }, "REQ-1");
