@@ -1,0 +1,20 @@
+.action-plans-page{display:flex;flex-direction:column;gap:var(--gs-space-3);min-width:0;color:var(--gs-text);text-align:left}
+.action-plans-heading{display:flex;flex-direction:column;gap:var(--gs-space-2);margin-bottom:var(--gs-space-2)}
+.action-plans-heading h1{margin:0;font-family:var(--gs-font-display);font-size:28px;letter-spacing:-.035em}
+.action-plans-heading>p:last-child{max-width:80ch;color:var(--gs-text-secondary);line-height:1.55}
+.action-plans-eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--gs-primary);text-transform:uppercase}
+.action-plans-stats{align-items:stretch}
+.action-plans-stat-label{display:block;color:var(--gs-text-secondary);font-size:12px;margin-bottom:var(--gs-space-2)}
+.action-plans-stat-value{display:block;font:700 25px var(--gs-font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.04em}
+.action-plans-form{display:flex;flex-direction:column;gap:var(--gs-space-3)}
+.action-plans-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--gs-space-3);align-items:start}
+.action-plans-span{grid-column:1/-1;min-width:0}
+.action-plans-actions{display:flex;justify-content:flex-end;gap:var(--gs-space-2);margin-top:var(--gs-space-2)}
+.action-plans-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--gs-space-3);margin-bottom:var(--gs-space-3)}
+.action-plan-cell{display:flex;flex-direction:column;gap:4px;min-width:140px}
+.action-plan-cell>span,.action-plan-cell small,.action-plan-progress small{color:var(--gs-text-secondary);white-space:normal}
+.action-plan-cell strong{font-weight:600}
+.action-plan-progress{display:flex;flex-direction:column;gap:4px;min-width:140px}
+.action-plan-row-actions{display:flex;flex-wrap:wrap;gap:var(--gs-space-1);min-width:170px}
+.action-plans-evidence{display:flex;flex-direction:column;gap:var(--gs-space-2);margin:var(--gs-space-3) 0}
+@media(max-width:760px){.action-plans-form-grid,.action-plans-filters{grid-template-columns:minmax(0,1fr)}.action-plans-span{grid-column:auto}.action-plans-heading h1{font-size:24px}}
