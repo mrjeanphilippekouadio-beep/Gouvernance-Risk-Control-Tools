@@ -1136,6 +1136,73 @@ un par un, pas une convention implicite censée survivre à la pression d'une
 session chargée. Si plusieurs PR s'accumulent sans que ces étapes soient
 faites, rattraper tout le lot d'un coup plutôt que seulement la dernière PR.
 
+## 10. Revue de sécurité partielle prise pour une revue complète — deux audits externes trouvent ce que la revue interne avait raté (30/09/2026)
+
+**Constat, signalé par le PO, pas auto-détecté.** Le 2026-09-30, l'orchestrateur
+a dispatché une revue sécurité indépendante sur la PR #27 (scope configurable
+`dashboard.executive`), avec une consigne explicite ciblant le risque le plus
+évident : « les KRI ne sont-ils pas filtrés par le scope ? ». La revue a
+répondu en vérifiant **un seul point d'appel** — l'endpoint dédié
+`getKriConsolidated()` — l'a trouvé non filtré, a fait corriger, et a rendu
+un verdict global "7/8 CONFIRMED_SAFE, 1 HIGH corrigé". Le PO a ensuite fait
+mener, de son côté et en parallèle, deux campagnes d'audit externes sur le
+même commit. Les deux ont trouvé que **trois autres méthodes du même
+fichier** (`getExecutiveView`, `getRiskCommitteeReport`,
+`getConsolidatedReport`) appellent chacune séparément
+`getAllKriSummaries(actor.tenantId)` — sans aucun filtre de scope — pour
+construire leurs propres agrégats KRI. Le "1/8" de la revue interne était en
+réalité "1/4" : le même défaut existait à trois autres endroits que la
+revue n'a jamais regardés, alors que la question posée à l'agent nommait
+explicitement le fichier concerné.
+
+**Root cause.** La consigne donnée à l'agent de revue ciblait la bonne
+*question* (« les KRI sont-ils filtrés par le scope ? ») mais pas la bonne
+*méthode de vérification* : elle citait un point d'entrée précis
+(`getKriConsolidated`) plutôt que de demander un grep exhaustif de tous les
+appelants d'une fonction sensible (`getAllKriSummaries`/`this.kris.list`)
+dans le fichier. L'agent a vérifié ce qu'on lui a montré, pas ce que le
+fichier contenait réellement. C'est le même type d'erreur que celle déjà
+capitalisée au §9.4 (triptyque de clôture de batch) — un critère de
+vérification qui semble complet parce qu'il répond à la question posée,
+sans qu'on ait vérifié qu'il couvre tous les chemins réels — mais appliqué
+ici à la méthodologie même d'une revue de sécurité, pas à un process de
+livraison.
+
+**Ce que les audits externes ont fait différemment, à reproduire** : ils ont
+cherché tous les appelants de la fonction à risque (`getAllKriSummaries`)
+dans le fichier entier, pas seulement vérifié l'endpoint nommé dans la
+consigne initiale. Un des deux rapports le formule explicitement comme règle
+technique : « calculer une fois le scope autorisé côté serveur et le
+transmettre explicitement aux requêtes des risques, KRI, alertes, entités et
+exports — éviter les méthodes qui appellent un `getAll...()` global puis
+filtrent partiellement les résultats ». C'est un principe de conception (un
+seul point de calcul du périmètre, jamais une fonction "tout" appelée puis
+filtrée ailleurs), pas seulement une méthode de test.
+
+**Correctif appliqué** : PR corrective mergée le jour même par le PO
+(scope appliqué aux 3 méthodes restantes, tests négatifs à deux départements
+pour chacune). Les 4 documents d'audit externe (cahier des charges de tests
+de sécurité, 2 rapports d'audit technique, SARIF Semgrep) copiés dans
+`docs/security/external-audit-2026-09-30/` avec un README qui recoupe
+chaque constat contre l'état réel du code au moment de la lecture — ne pas
+traiter un rapport d'audit comme une photo de l'état courant sans revérifier
+la date du commit audité.
+
+**À reporter dans le workbook, pour toute future revue de sécurité
+dispatchée par un agent** :
+1. Ne jamais formuler une consigne de revue autour d'un point d'entrée
+   nommé sans **aussi** demander explicitement un grep exhaustif des autres
+   appelants de la même fonction/du même repository dans le fichier ou le
+   service concerné.
+2. Un verdict "X/Y CONFIRMED_SAFE" n'est fiable que si Y couvre tous les
+   chemins réels — pas seulement ceux que la consigne a nommés. Demander à
+   l'agent de revue de documenter explicitement comment il a établi
+   l'exhaustivité de sa liste de points vérifiés, pas seulement le résultat
+   par point.
+3. Un audit externe (PO, tiers) qui recoupe une revue interne n'est pas une
+   redite à ignorer une fois le point déjà "corrigé" — il faut vérifier
+   s'il couvre un périmètre plus large que ce qui a été corrigé, comme ici.
+
 ---
 
 *Document vivant — mis à jour après chaque batch de modules livré ou
