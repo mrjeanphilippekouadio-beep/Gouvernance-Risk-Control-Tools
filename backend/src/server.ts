@@ -4,6 +4,7 @@ import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { pool } from "./infrastructure/database/pool.js";
+import { assertProductionDatabaseRole } from "./infrastructure/database/postgres/databaseRoleSecurity.js";
 import { PostgresRiskRepository } from "./infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresAuditRepository } from "./infrastructure/database/postgres/PostgresAuditRepository.js";
 import { PostgresEvidenceRepository } from "./infrastructure/database/postgres/PostgresEvidenceRepository.js";
@@ -484,7 +485,17 @@ app.use("/api/v1/review-cycles", authMiddleware(identityProvider), reviewCyclesR
 
 app.use(errorHandler);
 
-app.listen(env.PORT, () => {
+async function startServer(): Promise<void> {
+  await assertProductionDatabaseRole(pool, env.NODE_ENV);
+
+  app.listen(env.PORT, () => {
+    // eslint-disable-next-line no-console
+    console.log(`GRC Tools backend listening on port ${env.PORT} (${env.NODE_ENV})`);
+  });
+}
+
+startServer().catch((err) => {
   // eslint-disable-next-line no-console
-  console.log(`GRC Tools backend listening on port ${env.PORT} (${env.NODE_ENV})`);
+  console.error("Fatal startup error:", err);
+  process.exit(1);
 });
