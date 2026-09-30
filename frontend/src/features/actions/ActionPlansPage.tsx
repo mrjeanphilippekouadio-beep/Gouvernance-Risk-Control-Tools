@@ -3,6 +3,7 @@ import { Button, Card, DatePicker, FileUpload, FormField, Grid, GridItem, Messag
 import { ApiError } from "../../api/client";
 import { actionPlansApi, type ActionPlan, type ActionPlanSourceType, type ActionPlanStatus } from "../../api/actionPlans";
 import { evidenceApi } from "../../api/evidence";
+import { RaciPanel } from "../../design-system/RaciPanel";
 import "./ActionPlansPage.css";
 
 const sourceLabels: Record<ActionPlanSourceType, string> = {
@@ -43,6 +44,7 @@ export function ActionPlansPage({ token }: Props) {
   const [progressPercent, setProgressPercent] = useState(0);
   const [progressComment, setProgressComment] = useState("");
   const [closeTarget, setCloseTarget] = useState<ActionPlan | null>(null);
+  const [raciTarget, setRaciTarget] = useState<ActionPlan | null>(null);
   const [closureFile, setClosureFile] = useState<File | null>(null);
   const [evidenceId, setEvidenceId] = useState("");
   const [closureComment, setClosureComment] = useState("");
@@ -153,6 +155,7 @@ export function ActionPlansPage({ token }: Props) {
     { key: "due", header: "Échéance", render: (action) => dateLabel(action.dueDate) },
     { key: "progress", header: "Avancement", render: (action) => <div className="action-plan-progress"><ProgressBar value={action.progressPercent} label={`Avancement de ${action.title}`} /><small>{action.progressComment || "Aucun commentaire récent"}</small></div> },
     { key: "actions", header: "Actions", render: (action) => <div className="action-plan-row-actions">
+      <Button onClick={() => setRaciTarget(action)}>RACI</Button>
       {action.status === "PLANIFIEE" && <Button disabled={busyId === action.id} onClick={() => void startAction(action)}>Démarrer</Button>}
       {action.computedStatus !== "TERMINEE" && <Button disabled={busyId === action.id} onClick={() => { setProgressTarget({ action }); setProgressPercent(action.progressPercent); setProgressComment(action.progressComment ?? ""); }}>Avancement</Button>}
       {action.computedStatus === "EN_RETARD" && <Button disabled={busyId === action.id} onClick={() => void escalateAction(action)}>Escalader</Button>}
@@ -198,6 +201,11 @@ export function ActionPlansPage({ token }: Props) {
       </div>
       <Table columns={columns} rows={actions} rowKey={(action) => action.id} loading={loading} emptyMessage="Aucun plan d'action ne correspond aux filtres." />
     </Card>
+
+    {raciTarget && <section className="action-plan-raci">
+      <div className="action-plan-raci-heading"><div><h2>RACI — {raciTarget.title}</h2><p>Les attributions sont chargées et modifiées par le composant métier existant.</p></div><Button onClick={() => setRaciTarget(null)}>Fermer</Button></div>
+      <RaciPanel token={token} entityType="ACTION_PLAN" entityId={raciTarget.id} />
+    </section>}
 
     <Modal open={!!progressTarget} onClose={() => setProgressTarget(null)} title="Mettre à jour l'avancement" actions={<><Button onClick={() => setProgressTarget(null)}>Annuler</Button><Button variant="primary" disabled={!progressTarget || !!busyId} onClick={() => void saveProgress()}>{busyId ? "Enregistrement…" : "Enregistrer"}</Button></>}>
       <p>La modification de l'avancement est historisée dans le journal d'audit.</p>
