@@ -22,10 +22,10 @@ Ce dossier contient un modèle de déploiement sécurisé pour l'API GRC.
 
 Créer au minimum le secret `grc-database-url` et accorder au compte de service
 runtime uniquement le rôle `roles/secretmanager.secretAccessor` sur ce secret.
-Google recommande Secret Manager pour les credentials et clés API, plutôt que
-les variables d'environnement en clair. Lorsqu'un secret est injecté comme
-variable d'environnement, Cloud Run le récupère avant le démarrage de l'instance.
-citeturn447114search0turn447114search1
+Google recommande Secret Manager pour les credentials et clés API plutôt que
+les variables d'environnement contenant les valeurs secrètes en clair.
+Lorsqu'un secret est injecté comme variable d'environnement, Cloud Run le
+récupère avant le démarrage de l'instance.
 
 Le manifeste référence explicitement la version `1` du secret. Google recommande
 de pinner une version plutôt que `latest` lorsqu'un secret est consommé comme
@@ -38,7 +38,7 @@ avec uniquement le niveau d'accès nécessaire. La clé JSON historique reste
 possible pour le développement local uniquement ; le runtime Cloud Run ne doit
 pas utiliser `GOOGLE_APPLICATION_CREDENTIALS` ni une clé de compte de service.
 Google recommande un compte de service géré par l'utilisateur comme identité
-Cloud Run. citeturn447114search7turn447114search8
+Cloud Run.
 
 ## Avant déploiement
 
