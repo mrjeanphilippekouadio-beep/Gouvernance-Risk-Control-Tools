@@ -5,11 +5,15 @@ import type { RiskEvaluationRepository } from "../src/domain/repositories/RiskEv
 import type { RiskRepository } from "../src/domain/repositories/RiskRepository.js";
 import type { RatingScaleRepository } from "../src/domain/repositories/RatingScaleRepository.js";
 import type { RiskAppetiteRepository } from "../src/domain/repositories/RiskAppetiteRepository.js";
+import type { ProcessRepository } from "../src/domain/repositories/ProcessRepository.js";
+import type { ConfigRepository } from "../src/domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
 import type { RiskEvaluation } from "../src/domain/entities/RiskEvaluation.js";
 import type { Risk } from "../src/domain/entities/Risk.js";
 import type { RatingScale } from "../src/domain/entities/RatingScale.js";
 import type { RiskAppetite } from "../src/domain/entities/RiskAppetite.js";
+import type { Process } from "../src/domain/entities/Process.js";
+import type { Config } from "../src/domain/entities/Config.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 
@@ -43,6 +47,7 @@ function inMemoryRiskEvaluationRepository(): RiskEvaluationRepository {
         evaluatorId: input.evaluatorId,
         subCategory: input.subCategory,
         entity: input.entity ?? null,
+        evaluationMode: input.evaluationMode,
         ratingScaleId: null,
         ratingScaleVersion: null,
         inherentProbability: null,
@@ -243,6 +248,37 @@ function inMemoryRiskAppetiteRepository(appetites: RiskAppetite[]): RiskAppetite
   };
 }
 
+function inMemoryProcessRepository(processes: Process[]): ProcessRepository {
+  return {
+    async getById(tenantId, id) {
+      return processes.find((p) => p.tenantId === tenantId && p.id === id) ?? null;
+    },
+    async list(tenantId) {
+      return processes.filter((p) => p.tenantId === tenantId);
+    },
+    async create() {
+      throw new Error("not implemented");
+    },
+    async update() {
+      throw new Error("not implemented");
+    },
+    async softDelete() {
+      throw new Error("not implemented");
+    },
+  };
+}
+
+function inMemoryConfigRepository(config: Config | null): ConfigRepository {
+  return {
+    async getByTenant(tenantId) {
+      return config && config.tenantId === tenantId ? config : null;
+    },
+    async upsert() {
+      throw new Error("not implemented");
+    },
+  };
+}
+
 function inMemoryAuditRepository(): AuditRepository {
   return {
     async record() {},
@@ -318,6 +354,44 @@ function buildActiveRatingScale(id = "scale-1"): RatingScale {
   };
 }
 
+function buildProcess(overrides: Partial<Process> = {}): Process {
+  return {
+    id: "process-1",
+    tenantId: TENANT,
+    parentId: null,
+    level: "PROCESS",
+    name: "Paiements",
+    description: null,
+    documentType: null,
+    documentReference: null,
+    owner: null,
+    active: true,
+    evaluationMode: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    deletedBy: null,
+    deletionReason: null,
+    ...overrides,
+  };
+}
+
+function buildConfig(evaluationMode: Config["evaluationMode"]): Config {
+  return {
+    id: "config-1",
+    tenantId: TENANT,
+    scoreFormula: "P_X_I",
+    levelThresholds: [],
+    impactRetenuRule: "MAX",
+    appetiteMode: "AUTO_AVEC_SURCHARGE_MANUELLE",
+    evaluationMode,
+    version: 1,
+    updatedBy: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
 const evaluatorActor: AuthenticatedUser = {
   userId: "user-evaluator",
   tenantId: TENANT,
@@ -346,14 +420,26 @@ const MASTERY_LINES_GOOD = [
   { line: "L3", adequacy: 2, execution: 2, effectiveness: 3 },
 ];
 
-function newService(options?: { appetites?: RiskAppetite[]; scales?: RatingScale[] }) {
+function newService(options?: {
+  appetites?: RiskAppetite[];
+  scales?: RatingScale[];
+  risks?: Risk[];
+  processes?: Process[];
+  config?: Config | null;
+  /** Omit entirely (undefined) to exercise the "no ProcessRepository wired" degrade path — distinct from passing an empty array. */
+  withProcessRepository?: boolean;
+  /** Omit entirely (undefined) to exercise the "no ConfigRepository wired" degrade path. */
+  withConfigRepository?: boolean;
+}) {
   return {
     service: new RiskEvaluationService(
       inMemoryRiskEvaluationRepository(),
       inMemoryAuditRepository(),
-      inMemoryRiskRepository([risk]),
+      inMemoryRiskRepository(options?.risks ?? [risk]),
       inMemoryRatingScaleRepository(options?.scales ?? [buildActiveRatingScale()]),
       inMemoryRiskAppetiteRepository(options?.appetites ?? []),
+      options?.withProcessRepository === false ? undefined : inMemoryProcessRepository(options?.processes ?? []),
+      options?.withConfigRepository === false ? undefined : inMemoryConfigRepository(options?.config ?? null),
     ),
   };
 }
@@ -391,6 +477,120 @@ describe("RiskEvaluationService", () => {
     await expect(
       service.create(readOnlyActor, { riskId: risk.id, evaluationType: "AD_HOC", subCategory: "Fraude" }, "REQ-3"),
     ).rejects.toThrow(ForbiddenError);
+  });
+
+  describe("evaluationMode resolution (DIV-06 wiring)", () => {
+    it("resolves from the risk's own process when it has an explicit mode set", async () => {
+      const process = buildProcess({ id: "process-1", evaluationMode: "PARTICIPATIF" });
+      const riskWithProcess = { ...risk, id: "risk-with-process", processId: process.id };
+      const { service } = newService({ risks: [riskWithProcess], processes: [process], config: buildConfig("CLASSIQUE") });
+
+      const evaluation = await service.create(
+        evaluatorActor,
+        { riskId: riskWithProcess.id, evaluationType: "AD_HOC", subCategory: "Fraude" },
+        "REQ-MODE-1",
+      );
+
+      expect(evaluation.evaluationMode).toBe("PARTICIPATIF");
+    });
+
+    it("walks up the ancestor chain when the risk's own process has no explicit mode", async () => {
+      const parent = buildProcess({ id: "parent-process", level: "PROCESS", parentId: null, evaluationMode: "PARTICIPATIF" });
+      const child = buildProcess({
+        id: "child-process",
+        level: "SUBPROCESS",
+        parentId: parent.id,
+        evaluationMode: null,
+      });
+      const riskWithProcess = { ...risk, id: "risk-with-child-process", processId: child.id };
+      const { service } = newService({
+        risks: [riskWithProcess],
+        processes: [parent, child],
+        config: buildConfig("CLASSIQUE"),
+      });
+
+      const evaluation = await service.create(
+        evaluatorActor,
+        { riskId: riskWithProcess.id, evaluationType: "AD_HOC", subCategory: "Fraude" },
+        "REQ-MODE-2",
+      );
+
+      expect(evaluation.evaluationMode).toBe("PARTICIPATIF");
+    });
+
+    it("falls back to the tenant's Config.evaluationMode when the risk has no processId", async () => {
+      const riskWithoutProcess = { ...risk, id: "risk-no-process", processId: null };
+      const { service } = newService({ risks: [riskWithoutProcess], config: buildConfig("PARTICIPATIF") });
+
+      const evaluation = await service.create(
+        evaluatorActor,
+        { riskId: riskWithoutProcess.id, evaluationType: "AD_HOC", subCategory: "Fraude" },
+        "REQ-MODE-3",
+      );
+
+      expect(evaluation.evaluationMode).toBe("PARTICIPATIF");
+    });
+
+    it("falls back to the tenant's Config.evaluationMode when the risk's processId resolves to no ancestor mode", async () => {
+      const process = buildProcess({ id: "process-no-mode", evaluationMode: null });
+      const riskWithProcess = { ...risk, id: "risk-process-no-mode", processId: process.id };
+      const { service } = newService({
+        risks: [riskWithProcess],
+        processes: [process],
+        config: buildConfig("PARTICIPATIF"),
+      });
+
+      const evaluation = await service.create(
+        evaluatorActor,
+        { riskId: riskWithProcess.id, evaluationType: "AD_HOC", subCategory: "Fraude" },
+        "REQ-MODE-4",
+      );
+
+      expect(evaluation.evaluationMode).toBe("PARTICIPATIF");
+    });
+
+    it("falls back to CLASSIQUE when no Config row exists for the tenant yet", async () => {
+      const riskWithoutProcess = { ...risk, id: "risk-no-config", processId: null };
+      const { service } = newService({ risks: [riskWithoutProcess], config: null });
+
+      const evaluation = await service.create(
+        evaluatorActor,
+        { riskId: riskWithoutProcess.id, evaluationType: "AD_HOC", subCategory: "Fraude" },
+        "REQ-MODE-5",
+      );
+
+      expect(evaluation.evaluationMode).toBe("CLASSIQUE");
+    });
+
+    it("falls back to CLASSIQUE when neither ProcessRepository nor ConfigRepository is wired (degrade, never throw)", async () => {
+      const { service } = newService({ withProcessRepository: false, withConfigRepository: false });
+
+      const evaluation = await createDraft(service);
+
+      expect(evaluation.evaluationMode).toBe("CLASSIQUE");
+    });
+
+    it("never recomputes evaluationMode on a later setter — fixed once at creation (immutable snapshot, same treatment as subCategory/entity)", async () => {
+      const process = buildProcess({ id: "process-1", evaluationMode: "PARTICIPATIF" });
+      const riskWithProcess = { ...risk, id: "risk-snapshot", processId: process.id };
+      const { service } = newService({ risks: [riskWithProcess], processes: [process] });
+
+      const created = await service.create(
+        evaluatorActor,
+        { riskId: riskWithProcess.id, evaluationType: "AD_HOC", subCategory: "Fraude" },
+        "REQ-MODE-6",
+      );
+      expect(created.evaluationMode).toBe("PARTICIPATIF");
+
+      const afterScoring = await service.recordInherentScoring(
+        evaluatorActor,
+        created.id,
+        { probability: 2, impacts: IMPACTS_LOW },
+        "REQ-MODE-7",
+      );
+
+      expect(afterScoring.evaluationMode).toBe("PARTICIPATIF");
+    });
   });
 
   it("computes the inherent score server-side, ignoring any client-supplied score (ACT-151/ACT-154)", async () => {

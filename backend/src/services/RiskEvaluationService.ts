@@ -3,7 +3,11 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
 import type { RiskAppetiteRepository } from "../domain/repositories/RiskAppetiteRepository.js";
+import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
+import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { ImpactAxis, RatingScale, RetainedImpactRule } from "../domain/entities/RatingScale.js";
+import { PROCESS_LEVEL_BY_RANK, resolveInheritedEvaluationMode, type Process } from "../domain/entities/Process.js";
+import type { EvaluationMode } from "../domain/entities/Config.js";
 import type {
   CreateRiskEvaluationInput,
   ImpactAxisScore,
@@ -15,6 +19,9 @@ import type {
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+
+/** Mirrors ConfigService's own defaultConfig()/030_evaluation_mode.sql's DB default — the tenant-wide fallback when no Config row exists yet and/or no ConfigRepository is wired. */
+const FALLBACK_EVALUATION_MODE: EvaluationMode = "CLASSIQUE";
 
 const EVALUATION_TYPES: RiskEvaluationType[] = ["AD_HOC", "ANNUELLE", "ANTICIPEE"];
 const MIN_APPETITE_THRESHOLD = 1;
@@ -132,11 +139,21 @@ export class RiskEvaluationService {
     private readonly ratingScales?: RatingScaleRepository,
     /** Optional — if absent, appetite suggestion/comparison degrade to "no threshold available" rather than throwing. */
     private readonly riskAppetites?: RiskAppetiteRepository,
+    /**
+     * DIV-06 wiring — optional so existing test construction sites (and
+     * any caller that never needs the resolution) keep working unchanged.
+     * If absent, evaluationMode resolution skips the process-inheritance
+     * walk and falls straight to the Config/fallback default — the same
+     * "degrade, never throw" posture as riskAppetites above.
+     */
+    private readonly processes?: ProcessRepository,
+    /** Optional — if absent, evaluationMode resolution falls back to FALLBACK_EVALUATION_MODE instead of the tenant's saved Config row. */
+    private readonly configs?: ConfigRepository,
   ) {}
 
   async create(
     actor: AuthenticatedUser,
-    input: Omit<CreateRiskEvaluationInput, "tenantId" | "evaluatorId">,
+    input: Omit<CreateRiskEvaluationInput, "tenantId" | "evaluatorId" | "evaluationMode">,
     requestId: string,
   ): Promise<RiskEvaluation> {
     requirePermission(actor, "riskevaluation.create");
@@ -147,10 +164,16 @@ export class RiskEvaluationService {
     if (!input.subCategory?.trim()) throw new ValidationError("subCategory is required");
     if (!input.riskId?.trim()) throw new ValidationError("riskId is required");
 
+    let risk = null;
     if (this.risks) {
-      const risk = await this.risks.getById(actor.tenantId, input.riskId);
+      risk = await this.risks.getById(actor.tenantId, input.riskId);
       if (!risk) throw new ValidationError(`Risk ${input.riskId} does not exist in this tenant`);
     }
+
+    // DIV-06 wiring: resolved exactly once, here, and never again — see
+    // RiskEvaluation.evaluationMode's doc comment. Never client-supplied,
+    // same gesture as evaluatorId above (excluded from the input type).
+    const evaluationMode = await this.resolveEvaluationModeForRisk(actor.tenantId, risk?.processId ?? null);
 
     const evaluation = await this.evaluations.create({
       tenantId: actor.tenantId,
@@ -161,6 +184,7 @@ export class RiskEvaluationService {
       evaluatorId: actor.userId,
       subCategory: input.subCategory.trim(),
       entity: input.entity?.trim() || null,
+      evaluationMode,
     });
 
     await this.audit.record({
@@ -491,6 +515,38 @@ export class RiskEvaluationService {
     });
 
     return after;
+  }
+
+  /**
+   * DIV-06 wiring: resolved once by `create()`, never again. Duplicates
+   * (deliberately, not via composition) the ancestor-chain walk that
+   * `ProcessService.resolveEvaluationMode` already performs — that
+   * method requires `process.read` and takes an `AuthenticatedUser`,
+   * which is right for a user explicitly inspecting a Process but wrong
+   * here: an evaluator recording a risk evaluation should never be
+   * blocked from creating it just because they lack `process.read`. The
+   * actual inheritance rule (`resolveInheritedEvaluationMode`) is reused
+   * as-is — only the I/O/permission wrapper differs.
+   */
+  private async resolveEvaluationModeForRisk(tenantId: string, processId: string | null): Promise<EvaluationMode> {
+    const tenantDefault = await this.resolveTenantDefaultEvaluationMode(tenantId);
+    if (!processId || !this.processes) return tenantDefault;
+
+    const chain: Pick<Process, "evaluationMode">[] = [];
+    let current: Process | null = await this.processes.getById(tenantId, processId);
+    while (current && chain.length < PROCESS_LEVEL_BY_RANK.length) {
+      chain.push(current);
+      if (!current.parentId) break;
+      current = await this.processes.getById(tenantId, current.parentId);
+    }
+
+    return resolveInheritedEvaluationMode(chain, tenantDefault);
+  }
+
+  private async resolveTenantDefaultEvaluationMode(tenantId: string): Promise<EvaluationMode> {
+    if (!this.configs) return FALLBACK_EVALUATION_MODE;
+    const config = await this.configs.getByTenant(tenantId);
+    return config?.evaluationMode ?? FALLBACK_EVALUATION_MODE;
   }
 
   private async resolveActiveRatingScale(tenantId: string): Promise<RatingScale> {

@@ -1,9 +1,11 @@
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
+import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { Risk } from "../domain/entities/Risk.js";
 import type { RiskEvaluation } from "../domain/entities/RiskEvaluation.js";
 import type { ScoreThreshold } from "../domain/entities/RatingScale.js";
+import type { Process } from "../domain/entities/Process.js";
 import { ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
@@ -32,7 +34,18 @@ export interface CartographyFilters {
 /** One risk plotted on the heatmap: position (probability x impact), color (criticality), size (velocity). */
 export interface CartographyDataPoint {
   riskId: string;
+  /** DIV-05 wiring: `Process.name` when `Risk.processId` resolves to a real process, `Risk.process` free text otherwise — see `resolvedVia`. */
   process: string;
+  /** `Risk.processId` verbatim — null when the risk was never linked to a real Process row. */
+  processId: string | null;
+  /**
+   * Explicit marker for how `process` above was produced — never a
+   * silent degradation. "processId" means the FK resolved to a real,
+   * non-deleted Process row; "processText" covers every other case
+   * (processId null, the repository not wired, or a stale FK pointing at
+   * a process that no longer resolves).
+   */
+  resolvedVia: "processId" | "processText";
   probability: number;
   impactRetained: number;
   score: number;
@@ -135,6 +148,14 @@ export class CartographyService {
      * used instead of RiskAppetiteRepository.
      */
     private readonly ratingScales?: RatingScaleRepository,
+    /**
+     * DIV-05 wiring (ACTION_ITEMS.md, 2026-09-30): optional so existing
+     * construction sites keep working unchanged. When absent, every data
+     * point falls back to `Risk.process` free text — same degrade-never-
+     * throw posture as `ratingScales` above, but always flagged via
+     * `resolvedVia`, never silently.
+     */
+    private readonly processes?: ProcessRepository,
   ) {}
 
   /** ACT-180/181/183: heatmap data points for one version, with optional combinable filters. */
@@ -178,6 +199,7 @@ export class CartographyService {
     const candidates = risks.filter((risk) => this.matchesStaticFilters(risk, filters));
 
     const bandsCache = new Map<string, ScoreThreshold[]>();
+    const processCache = new Map<string, Process | null>();
     const points: CartographyDataPoint[] = [];
 
     for (const risk of candidates) {
@@ -200,10 +222,13 @@ export class CartographyService {
       if (filters?.maxScore !== undefined && fields.score > filters.maxScore) continue;
 
       const bands = await this.resolveCriticalityBands(actor.tenantId, evaluation.ratingScaleId, bandsCache);
+      const { process, resolvedVia } = await this.resolveProcessLabel(actor.tenantId, risk, processCache);
 
       points.push({
         riskId: risk.id,
-        process: risk.process,
+        process,
+        processId: risk.processId,
+        resolvedVia,
         probability: fields.probability,
         impactRetained: fields.impactRetained,
         score: fields.score,
@@ -225,6 +250,29 @@ export class CartographyService {
   private async getMostRecentValidatedEvaluation(tenantId: string, riskId: string): Promise<RiskEvaluation | null> {
     const results = await this.evaluations.listForRisk(tenantId, riskId, { status: "VALIDATED", limit: 1 });
     return results[0] ?? null;
+  }
+
+  /**
+   * DIV-05 wiring: prefer the real FK (`Risk.processId` -> `Process.name`)
+   * over the free-text `Risk.process` when it resolves — falls back
+   * explicitly (never silently) to the free text when `processId` is
+   * null, no `ProcessRepository` is wired, or the FK is stale (points at
+   * a process that no longer exists/is soft-deleted).
+   */
+  private async resolveProcessLabel(
+    tenantId: string,
+    risk: Risk,
+    cache: Map<string, Process | null>,
+  ): Promise<{ process: string; resolvedVia: "processId" | "processText" }> {
+    if (risk.processId && this.processes) {
+      let process = cache.get(risk.processId);
+      if (process === undefined) {
+        process = await this.processes.getById(tenantId, risk.processId);
+        cache.set(risk.processId, process);
+      }
+      if (process) return { process: process.name, resolvedVia: "processId" };
+    }
+    return { process: risk.process, resolvedVia: "processText" };
   }
 
   private async resolveCriticalityBands(
