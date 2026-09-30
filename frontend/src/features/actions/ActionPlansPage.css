@@ -18,3 +18,8 @@
 .action-plan-row-actions{display:flex;flex-wrap:wrap;gap:var(--gs-space-1);min-width:170px}
 .action-plans-evidence{display:flex;flex-direction:column;gap:var(--gs-space-2);margin:var(--gs-space-3) 0}
 @media(max-width:760px){.action-plans-form-grid,.action-plans-filters{grid-template-columns:minmax(0,1fr)}.action-plans-span{grid-column:auto}.action-plans-heading h1{font-size:24px}}
+
+.action-plan-raci{display:flex;flex-direction:column;gap:var(--gs-space-2)}
+.action-plan-raci-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--gs-space-3)}
+.action-plan-raci-heading h2{margin:0 0 var(--gs-space-1)}
+.action-plan-raci-heading p{color:var(--gs-text-secondary);font-size:13px}
