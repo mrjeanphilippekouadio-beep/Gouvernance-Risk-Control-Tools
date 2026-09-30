@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { ActionPlanService } from "../../services/ActionPlanService.js";
+import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
 import {
   ACTION_LINK_RESOURCE_TYPES,
   ACTION_PLAN_SOURCE_TYPES,
@@ -59,7 +60,10 @@ function parseListFilters(query: Record<string, unknown>) {
  * /api/v1/dashboard so the literal backlog path `GET /dashboard/actions`
  * is honored.
  */
-export function actionPlansRouter(actionPlanService: ActionPlanService): Router {
+export function actionPlansRouter(
+  actionPlanService: ActionPlanService,
+  raciEnrichmentViewService: RaciEnrichmentViewService,
+): Router {
   const router = Router();
 
   router.get("/", async (req, res, next) => {
@@ -84,6 +88,17 @@ export function actionPlansRouter(actionPlanService: ActionPlanService): Router 
     try {
       const links = await actionPlanService.listLinks(req.user, req.params["id"] as string);
       res.json({ data: links });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // RACI read-side wiring (PO-confirmed follow-up to Lot 1): who is R/A/C/I
+  // on this action plan. Display only — never a condition for any write below.
+  router.get("/:id/raci", async (req, res, next) => {
+    try {
+      const context = await raciEnrichmentViewService.getActionPlanWithRaci(req.user, req.params["id"] as string);
+      res.json({ data: context });
     } catch (err) {
       next(err);
     }

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { ControlService } from "../../services/ControlService.js";
+import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
 
 const ControlType = z.enum(["PREVENTIVE", "DETECTIVE", "CORRECTIVE"]);
 const ControlStatus = z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]);
@@ -29,7 +30,10 @@ const UpdateControlBody = CreateControlBody.partial().extend({
 
 const ArchiveControlBody = z.object({ reason: z.string().min(1) });
 
-export function controlsRouter(controlService: ControlService): Router {
+export function controlsRouter(
+  controlService: ControlService,
+  raciEnrichmentViewService: RaciEnrichmentViewService,
+): Router {
   const router = Router();
 
   router.get("/", async (req, res, next) => {
@@ -50,6 +54,17 @@ export function controlsRouter(controlService: ControlService): Router {
     try {
       const control = await controlService.get(req.user, req.params["id"] as string);
       res.json({ data: control });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // RACI read-side wiring (PO-confirmed follow-up to Lot 1): who is R/A/C/I
+  // on this control. Display only — never a condition for any write below.
+  router.get("/:id/raci", async (req, res, next) => {
+    try {
+      const context = await raciEnrichmentViewService.getControlWithRaci(req.user, req.params["id"] as string);
+      res.json({ data: context });
     } catch (err) {
       next(err);
     }
