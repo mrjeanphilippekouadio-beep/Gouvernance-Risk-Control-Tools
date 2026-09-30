@@ -2,8 +2,7 @@
 
 ## Mise en place
 
-1. Créer un projet sur [neon.tech](https://neon.tech) (le plan gratuit
-   suffit pour le développement).
+1. Créer un projet sur https://neon.tech (le plan gratuit suffit pour le développement).
 2. Copier la connection string (`postgresql://...?sslmode=require`) dans
    `backend/.env` sous `DATABASE_URL`. Utiliser une **branche Neon
    dédiée** pour le développement (`neon branches create`) plutôt que la
@@ -20,42 +19,67 @@
    psql "$DATABASE_URL" -f database/postgresql/seed/dev_seed.sql
    ```
 
-## Convention
+## Séparation des rôles PostgreSQL
 
-- `migrations/NNN_description.sql` — appliquées dans l'ordre, une seule
-  fois chacune, suivies dans `schema_migrations`. Ne jamais modifier une
-  migration déjà appliquée en production : en écrire une nouvelle.
-- `seed/` — données de confort pour le développement local uniquement,
-  jamais exécutées automatiquement, jamais visées pour la production.
+Le backend et le processus de migration ne doivent **pas** utiliser le même
+rôle PostgreSQL en production :
+
+```text
+Cloud Run runtime
+  DATABASE_URL
+      ↓
+  grc_runtime
+  DML applicatif uniquement
+  + protections audit_log
+
+Migration job / maintenance
+  MIGRATION_DATABASE_URL
+      ↓
+  grc_migrator
+  privilèges DDL nécessaires
+```
+
+Règle opérationnelle :
+- `DATABASE_URL` est le seul secret DB injecté dans le conteneur Cloud Run
+  qui reste en exécution.
+- `MIGRATION_DATABASE_URL` est réservé au job de migration / à une
+  opération de maintenance contrôlée.
+- En production, `npm run migrate` refuse de fonctionner sans
+  `MIGRATION_DATABASE_URL`, refuse de réutiliser `DATABASE_URL`, puis
+  compare les rôles PostgreSQL réellement connectés.
+- Le runtime refuse de démarrer si `MIGRATION_DATABASE_URL` est présent
+  dans son environnement production.
+- Le rôle runtime doit rester sans privilèges `CREATE ROLE`,
+  `CREATE DATABASE` ou `CREATE` dans le schéma `public`.
 
 ## Vérification de sécurité (avant tout déploiement)
 
 Avant de pointer un environnement de production vers une base Neon,
-vérifier manuellement (l'automatisation de ce contrôle est un chantier
-futur, pas encore fait) :
+vérifier manuellement :
 
-- [ ] `sslmode=require` dans la connection string (Neon l'impose par
-      défaut — ne pas le désactiver).
-- [x] Le backend vérifie au démarrage en production que le rôle
-      courant est distinct du propriétaire/admin Neon, n'est pas
-      `SUPERUSER`, ne peut pas créer de rôle/base, et ne peut pas créer
-      dans le schéma `public`.
-- [x] Le rôle utilisé par le backend doit avoir uniquement les privilèges
-      `SELECT`/`INSERT` requis sur `audit_log` et aucun
-      `UPDATE`/`DELETE`/`TRUNCATE`. Le démarrage production échoue si
-      cette condition n'est pas satisfaite.
-- [ ] Aucune connection string n'est committée (`.env` est gitignoré —
-      vérifier `git status` avant de commit si un fichier `.env*` apparaît).
-- [ ] Le frontend ne reçoit jamais `DATABASE_URL` (le backend est le seul
-      composant qui s'y connecte — voir ADR-001).
-- [x] **Protection DB de l'intégrité du journal** : la migration
-      `038_audit_log_append_only.sql` interdit explicitement à `PUBLIC`
-      `UPDATE`/`DELETE`/`TRUNCATE` et ajoute des triggers PostgreSQL qui
-      rejettent ces opérations. Cela protège aussi le cas où le backend
-      utilise le propriétaire de la table : les `REVOKE` seuls ne suffiraient
-      pas dans ce cas.
-- [ ] **À vérifier avant production** : le rôle utilisé par le backend
-      doit rester un rôle applicatif dédié, distinct du propriétaire/admin de
-      la base. Un propriétaire ou superuser peut toujours désactiver/supprimer
-      le trigger ou modifier le schéma ; ce contrôle opérationnel reste donc
-      nécessaire en complément de la migration.
+- [ ] `sslmode=require` dans la connection string.
+- [x] Le backend vérifie au démarrage que le rôle runtime est distinct du
+      propriétaire/admin Neon, n'est pas `SUPERUSER`, ne peut pas créer de
+      rôle/base et ne peut pas créer dans le schéma `public`.
+- [x] Le rôle runtime ne possède pas `UPDATE`/`DELETE`/`TRUNCATE`
+      sur `audit_log` et possède les droits `SELECT`/`INSERT` nécessaires.
+- [x] La migration 038 protège `audit_log` au niveau PostgreSQL contre
+      `UPDATE`/`DELETE`/`TRUNCATE`.
+- [x] Le runner de migrations utilise une connexion dédiée en production
+      via `MIGRATION_DATABASE_URL` et vérifie que le rôle de migration
+      est différent du rôle runtime.
+- [x] Le runtime production refuse la présence de
+      `MIGRATION_DATABASE_URL`.
+- [ ] Le compte de migration réellement configuré dans l'infrastructure
+      possède uniquement les privilèges DDL nécessaires aux migrations et
+      n'est pas utilisé par Cloud Run.
+- [ ] Aucune connection string n'est committée.
+- [ ] Le frontend ne reçoit jamais `DATABASE_URL` ou
+      `MIGRATION_DATABASE_URL`.
+
+## Limite importante
+
+Cette séparation est maintenant imposée par le code du runner et du runtime,
+mais la création des rôles, la distribution des secrets et l'autorisation du
+job de migration restent des contrôles d'infrastructure à configurer dans
+Neon / Google Cloud.
