@@ -5,7 +5,7 @@ import "./ContextRail.css";
 type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings";
 type RailTab = "comments" | "raci" | "evidence" | "occurrence";
 
-const LABELS: Record<RailTab, string> = { comments: "Commentaires", raci: "RACI", evidence: "Evidence", occurrence: "Occurrence" };
+const LABELS: Record<RailTab, string> = { comments: "Commentaires", raci: "RACI", evidence: "Preuves", occurrence: "Occurrence" };
 const ICONS: Record<RailTab, ReactNode> = {
   comments: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.9 8.4 9 9 0 0 1-3.6-.8L3 20l1-4.5a8.4 8.4 0 0 1-.9-3.9A8.4 8.4 0 0 1 11.9 3a8.5 8.5 0 0 1 9.1 8.5z"/></svg>,
   raci: <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>,
