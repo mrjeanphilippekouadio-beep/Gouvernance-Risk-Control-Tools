@@ -59,27 +59,62 @@ export class EvidenceService {
       content: params.content,
     });
 
-    const evidence = await this.evidences.create({
-      tenantId: actor.tenantId,
-      controlExecutionId: params.controlExecutionId,
-      fileName: uploaded.fileName,
-      driveFileId: uploaded.storageFileId,
-      driveUrl: uploaded.url,
-      documentType: params.documentType,
-      uploadedBy: actor.userId,
-    });
+    let evidence: Evidence;
+    try {
+      evidence = await this.evidences.create({
+        tenantId: actor.tenantId,
+        controlExecutionId: params.controlExecutionId,
+        fileName: uploaded.fileName,
+        driveFileId: uploaded.storageFileId,
+        driveUrl: uploaded.url,
+        documentType: params.documentType,
+        uploadedBy: actor.userId,
+      });
+    } catch (persistError) {
+      // Compensate the external upload when metadata persistence fails.
+      try {
+        await this.storage.delete(uploaded.storageFileId);
+      } catch (cleanupError) {
+        throw new Error(
+          "Evidence metadata persistence failed and document cleanup also failed; reconciliation is required",
+          { cause: new AggregateError([persistError, cleanupError]) },
+        );
+      }
+      throw persistError;
+    }
 
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Evidence",
-      entityId: evidence.id,
-      action: "CREATE",
-      oldValue: null,
-      newValue: { ...evidence, driveUrl: undefined }, // never put the Drive URL in the audit trail
-      reason: null,
-      requestId,
-    });
+    try {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Evidence",
+        entityId: evidence.id,
+        action: "CREATE",
+        oldValue: null,
+        newValue: { ...evidence, driveUrl: undefined }, // never put the Drive URL in the audit trail
+        reason: null,
+        requestId,
+      });
+    } catch (auditError) {
+      // Do not leave a visible active evidence record when its audit event failed.
+      try {
+        await this.evidences.markDeleted(actor.tenantId, evidence.id);
+      } catch (rollbackError) {
+        throw new Error(
+          "Evidence audit failed and database compensation failed; reconciliation is required",
+          { cause: new AggregateError([auditError, rollbackError]) },
+        );
+      }
+      try {
+        await this.storage.delete(uploaded.storageFileId);
+      } catch (cleanupError) {
+        throw new Error(
+          "Evidence audit failed; record was soft-deleted but document cleanup failed; reconciliation is required",
+          { cause: new AggregateError([auditError, cleanupError]) },
+        );
+      }
+      throw auditError;
+    }
 
     return evidence;
   }
