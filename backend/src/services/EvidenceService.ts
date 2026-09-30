@@ -6,6 +6,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { DocumentStorage } from "../infrastructure/storage/DocumentStorage.js";
+import { validateEvidenceFile } from "./evidenceFileValidation.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB — generous for scanned evidence, not unbounded
 
@@ -43,6 +44,7 @@ export class EvidenceService {
     if (params.content.byteLength > MAX_UPLOAD_BYTES) {
       throw new ValidationError(`File exceeds the ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB limit`);
     }
+    validateEvidenceFile(params.fileName, params.mimeType, params.content);
 
     // SEC-004: don't attach evidence to another tenant's control execution.
     if (params.controlExecutionId && this.controlExecutions) {
