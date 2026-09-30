@@ -1,6 +1,7 @@
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
+import { AUTHORITATIVE_EVALUATION_STATUSES } from "../domain/entities/RiskEvaluation.js";
 import type { RiskStatus } from "../domain/entities/Risk.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
@@ -10,7 +11,7 @@ export interface RiskOwnerRiskSummary {
   process: string;
   description: string;
   status: RiskStatus;
-  /** Latest VALIDATED evaluation's residualScore (falling back to inherentScore) — null if never evaluated/validated. */
+  /** Latest authoritative (VALIDATED or VALIDE_COMITE) evaluation's residualScore (falling back to inherentScore) — null if never authoritatively evaluated. */
   score: number | null;
 }
 
@@ -66,7 +67,7 @@ export class RiskOwnershipService {
       await Promise.all(
         ownedRisks.map(async (risk) => {
           const [latest] = await this.evaluations!.listForRisk(actor.tenantId, risk.id, {
-            status: "VALIDATED",
+            status: [...AUTHORITATIVE_EVALUATION_STATUSES],
             limit: 1,
           });
           scoreByRiskId.set(risk.id, latest?.residualScore ?? latest?.inherentScore ?? null);

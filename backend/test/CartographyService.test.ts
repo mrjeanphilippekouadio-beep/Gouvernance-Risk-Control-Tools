@@ -44,9 +44,10 @@ function inMemoryRiskEvaluationRepository(evaluations: RiskEvaluation[]): RiskEv
       return e ?? null;
     },
     async listForRisk(tenantId, riskId, options) {
+      const statuses = options?.status ? (Array.isArray(options.status) ? options.status : [options.status]) : null;
       let results = evaluations
         .filter((e) => e.tenantId === tenantId && e.riskId === riskId)
-        .filter((e) => !options?.status || e.status === options.status)
+        .filter((e) => !statuses || statuses.includes(e.status))
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       const offset = options?.offset ?? 0;
       const limit = options?.limit ?? 50;
@@ -226,13 +227,82 @@ describe("CartographyService", () => {
     await expect(service.getCartography(forbiddenActor, "residual")).rejects.toThrow();
   });
 
-  it("excludes a risk with no VALIDATED evaluation (a BROUILLON evaluation does not count)", async () => {
+  it("excludes a risk with no authoritative evaluation (a BROUILLON evaluation does not count)", async () => {
     const risk = buildRisk();
     const draft = buildEvaluation(risk.id, { status: "BROUILLON", residualScore: null, residualProbability: null, residualImpactRetained: null });
     const service = newService([risk], [draft]);
 
     const points = await service.getCartography(actor, "residual");
     expect(points).toHaveLength(0);
+  });
+
+  it("excludes a risk with only a REJECTED evaluation", async () => {
+    const risk = buildRisk();
+    const rejected = buildEvaluation(risk.id, { status: "REJECTED" });
+    const service = newService([risk], [rejected]);
+
+    const points = await service.getCartography(actor, "residual");
+    expect(points).toHaveLength(0);
+  });
+
+  it("2026-09-30 audit fix: includes a risk whose only evaluation is VALIDE_COMITE (committee-validated), not just VALIDATED", async () => {
+    const risk = buildRisk();
+    const committeeValidated = buildEvaluation(risk.id, { status: "VALIDE_COMITE", residualScore: 25 });
+    const service = newService([risk], [committeeValidated]);
+
+    const points = await service.getCartography(actor, "residual");
+    expect(points).toHaveLength(1);
+    expect(points[0]?.score).toBe(25);
+    expect(points[0]?.evaluationStatus).toBe("VALIDE_COMITE");
+  });
+
+  it("prefers the most recent of a VALIDATED and a VALIDE_COMITE evaluation on the same risk, regardless of which status is newer", async () => {
+    const risk = buildRisk();
+    const olderValidated = buildEvaluation(risk.id, {
+      createdAt: new Date("2026-01-01"),
+      residualScore: 5,
+      status: "VALIDATED",
+    });
+    const newerCommittee = buildEvaluation(risk.id, {
+      createdAt: new Date("2026-03-01"),
+      residualScore: 25,
+      status: "VALIDE_COMITE",
+    });
+    const service = newService([risk], [olderValidated, newerCommittee]);
+
+    const points = await service.getCartography(actor, "residual");
+    expect(points).toHaveLength(1);
+    expect(points[0]?.score).toBe(25);
+    expect(points[0]?.evaluationStatus).toBe("VALIDE_COMITE");
+  });
+
+  it("prefers a newer VALIDATED evaluation over an older VALIDE_COMITE one (most recent wins either way)", async () => {
+    const risk = buildRisk();
+    const olderCommittee = buildEvaluation(risk.id, {
+      createdAt: new Date("2026-01-01"),
+      residualScore: 25,
+      status: "VALIDE_COMITE",
+    });
+    const newerValidated = buildEvaluation(risk.id, {
+      createdAt: new Date("2026-03-01"),
+      residualScore: 5,
+      status: "VALIDATED",
+    });
+    const service = newService([risk], [olderCommittee, newerValidated]);
+
+    const points = await service.getCartography(actor, "residual");
+    expect(points).toHaveLength(1);
+    expect(points[0]?.score).toBe(5);
+    expect(points[0]?.evaluationStatus).toBe("VALIDATED");
+  });
+
+  it("exposes evaluationStatus: VALIDATED for a plain maker-checker-validated evaluation", async () => {
+    const risk = buildRisk();
+    const evaluation = buildEvaluation(risk.id, { status: "VALIDATED" });
+    const service = newService([risk], [evaluation]);
+
+    const points = await service.getCartography(actor, "residual");
+    expect(points[0]?.evaluationStatus).toBe("VALIDATED");
   });
 
   it("excludes a risk that has no evaluation at all", async () => {

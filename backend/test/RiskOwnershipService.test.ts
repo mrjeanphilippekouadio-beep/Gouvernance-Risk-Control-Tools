@@ -82,7 +82,8 @@ function fakeRiskEvaluationRepository(evaluationsByRisk: Map<string, RiskEvaluat
     },
     async listForRisk(tenantId, riskId, options) {
       const all = (evaluationsByRisk.get(riskId) ?? []).filter((e) => e.tenantId === tenantId);
-      const filtered = options?.status ? all.filter((e) => e.status === options.status) : all;
+      const statuses = options?.status ? (Array.isArray(options.status) ? options.status : [options.status]) : null;
+      const filtered = statuses ? all.filter((e) => statuses.includes(e.status)) : all;
       const sorted = [...filtered].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       const limit = options?.limit ?? sorted.length;
       return sorted.slice(0, limit);
@@ -245,6 +246,52 @@ describe("RiskOwnershipService (ACT-127)", () => {
     const groups = await service.listOwners(actor);
     const ownerIds = groups.flatMap((g) => g.owners.map((o) => o.ownerId));
     expect(ownerIds).toEqual([ownerT1.id]);
+  });
+
+  it("2026-09-30 audit fix: counts a VALIDE_COMITE evaluation toward score/maxScore, not just VALIDATED", async () => {
+    const owner = user({ id: "owner-1" });
+    const r = risk({ id: "risk-1", ownerId: owner.id });
+
+    const evaluationsByRisk = new Map<string, RiskEvaluation[]>([
+      ["risk-1", [evaluation({ riskId: "risk-1", status: "VALIDE_COMITE", residualScore: 25 })]],
+    ]);
+
+    const service = new RiskOwnershipService(
+      inMemoryRiskRepository([r]),
+      inMemoryUserRepository([owner]),
+      fakeRiskEvaluationRepository(evaluationsByRisk),
+    );
+
+    const groups = await service.listOwners(actor);
+    const summary = groups[0]?.owners[0];
+    expect(summary?.risks[0]?.score).toBe(25);
+    expect(summary?.maxScore).toBe(25);
+  });
+
+  it("still reports a null score for a risk whose only evaluations are BROUILLON/REJECTED", async () => {
+    const owner = user({ id: "owner-1" });
+    const r = risk({ id: "risk-1", ownerId: owner.id });
+
+    const evaluationsByRisk = new Map<string, RiskEvaluation[]>([
+      [
+        "risk-1",
+        [
+          evaluation({ riskId: "risk-1", status: "BROUILLON", residualScore: null }),
+          evaluation({ riskId: "risk-1", status: "REJECTED", residualScore: 99 }),
+        ],
+      ],
+    ]);
+
+    const service = new RiskOwnershipService(
+      inMemoryRiskRepository([r]),
+      inMemoryUserRepository([owner]),
+      fakeRiskEvaluationRepository(evaluationsByRisk),
+    );
+
+    const groups = await service.listOwners(actor);
+    const summary = groups[0]?.owners[0];
+    expect(summary?.risks[0]?.score).toBeNull();
+    expect(summary?.maxScore).toBeNull();
   });
 
   it("produces a null maxScore when no evaluations exist for an owner's risks", async () => {

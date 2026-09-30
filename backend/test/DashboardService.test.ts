@@ -57,8 +57,9 @@ function fakeEvaluations(evaluations: RiskEvaluation[]): RiskEvaluationRepositor
   return {
     getById: NOT_IMPLEMENTED,
     async listForRisk(tenantId, riskId, options) {
+      const statuses = options?.status ? (Array.isArray(options.status) ? options.status : [options.status]) : null;
       return evaluations
-        .filter((e) => e.tenantId === tenantId && e.riskId === riskId && (!options?.status || e.status === options.status))
+        .filter((e) => e.tenantId === tenantId && e.riskId === riskId && (!statuses || statuses.includes(e.status)))
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
         .slice(0, options?.limit ?? 50);
     },
@@ -429,6 +430,55 @@ describe("DashboardService", () => {
       expect(dashboard.alerts).toEqual(
         expect.arrayContaining([expect.objectContaining({ type: "APPETITE_EXCEEDED", riskId: myRisk.id })]),
       );
+    });
+
+    it("2026-09-30 audit fix: shows the score of a risk whose only evaluation is VALIDE_COMITE, not just VALIDATED", async () => {
+      const myRisk = buildRisk({ ownerId: "user-1" });
+      const committeeValidated = buildEvaluation(myRisk.id, { status: "VALIDE_COMITE", residualScore: 25 });
+      const service = newService({ risks: [myRisk], evaluations: [committeeValidated] });
+
+      const dashboard = await service.getRiskOwnerView(actorWith(["dashboard.read"]));
+
+      expect(dashboard.risks[0]?.score).toBe(25);
+      expect(dashboard.risks[0]?.evaluationStatus).toBe("VALIDE_COMITE");
+    });
+
+    it("still reports score: null and evaluationStatus: null for a risk with only BROUILLON/REJECTED evaluations", async () => {
+      const myRisk = buildRisk({ ownerId: "user-1" });
+      const draft = buildEvaluation(myRisk.id, {
+        status: "BROUILLON",
+        residualScore: null,
+        residualProbability: null,
+        residualImpactRetained: null,
+        createdAt: new Date("2026-01-01"),
+      });
+      const rejected = buildEvaluation(myRisk.id, { status: "REJECTED", residualScore: 99, createdAt: new Date("2026-02-01") });
+      const service = newService({ risks: [myRisk], evaluations: [draft, rejected] });
+
+      const dashboard = await service.getRiskOwnerView(actorWith(["dashboard.read"]));
+
+      expect(dashboard.risks[0]?.score).toBeNull();
+      expect(dashboard.risks[0]?.evaluationStatus).toBeNull();
+    });
+
+    it("prefers the more recent of a VALIDATED and a VALIDE_COMITE evaluation, regardless of which status is newer", async () => {
+      const myRisk = buildRisk({ ownerId: "user-1" });
+      const olderValidated = buildEvaluation(myRisk.id, {
+        status: "VALIDATED",
+        residualScore: 5,
+        createdAt: new Date("2026-01-01"),
+      });
+      const newerCommittee = buildEvaluation(myRisk.id, {
+        status: "VALIDE_COMITE",
+        residualScore: 25,
+        createdAt: new Date("2026-03-01"),
+      });
+      const service = newService({ risks: [myRisk], evaluations: [olderValidated, newerCommittee] });
+
+      const dashboard = await service.getRiskOwnerView(actorWith(["dashboard.read"]));
+
+      expect(dashboard.risks[0]?.score).toBe(25);
+      expect(dashboard.risks[0]?.evaluationStatus).toBe("VALIDE_COMITE");
     });
   });
 
