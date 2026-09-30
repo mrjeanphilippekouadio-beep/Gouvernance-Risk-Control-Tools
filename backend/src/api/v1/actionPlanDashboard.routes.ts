@@ -35,7 +35,7 @@ export function actionPlanDashboardRouter(actionPlanService: ActionPlanService):
         status,
         sourceType,
         responsibleUserId,
-        departmentId,
+        departmentIds: departmentId ? [departmentId] : undefined,
         dueFrom,
         dueTo,
       });

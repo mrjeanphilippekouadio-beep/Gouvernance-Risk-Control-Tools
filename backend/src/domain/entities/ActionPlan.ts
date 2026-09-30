@@ -139,7 +139,8 @@ export interface ActionPlanListFilters {
   status?: ActionPlanStatus;
   sourceType?: ActionPlanSourceType;
   responsibleUserId?: string;
-  departmentId?: string;
+  /** DashboardScopeResolver (2026-09-30): a real `= ANY($n)` filter, plural since a DEPARTMENT-mode scope can span several departments. */
+  departmentIds?: string[];
   dueFrom?: Date;
   dueTo?: Date;
 }

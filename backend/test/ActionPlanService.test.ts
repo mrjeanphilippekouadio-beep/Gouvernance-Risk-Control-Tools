@@ -31,7 +31,7 @@ function inMemoryActionPlanRepository(): ActionPlanRepository {
         if (filters?.status && a.status !== filters.status) return false;
         if (filters?.sourceType && a.sourceType !== filters.sourceType) return false;
         if (filters?.responsibleUserId && a.responsibleUserId !== filters.responsibleUserId) return false;
-        if (filters?.departmentId && a.departmentId !== filters.departmentId) return false;
+        if (filters?.departmentIds && filters.departmentIds.length > 0 && (!a.departmentId || !filters.departmentIds.includes(a.departmentId))) return false;
         if (filters?.dueFrom && a.dueDate.getTime() < filters.dueFrom.getTime()) return false;
         if (filters?.dueTo && a.dueDate.getTime() > filters.dueTo.getTime()) return false;
         return true;

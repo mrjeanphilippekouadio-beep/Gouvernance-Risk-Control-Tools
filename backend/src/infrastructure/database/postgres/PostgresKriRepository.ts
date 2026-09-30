@@ -100,6 +100,11 @@ export class PostgresKriRepository implements KriRepository {
       values.push(filters.entity);
       i++;
     }
+    if (filters?.riskIds && filters.riskIds.length > 0) {
+      conditions.push(`risk_id = ANY($${i})`);
+      values.push(filters.riskIds);
+      i++;
+    }
 
     const { rows } = await this.pool.query<KriRow>(
       `SELECT * FROM kris WHERE ${conditions.join(" AND ")} ORDER BY label`,

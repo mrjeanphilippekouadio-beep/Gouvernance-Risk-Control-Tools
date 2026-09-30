@@ -48,9 +48,10 @@ function parseListFilters(query: Record<string, unknown>) {
   const sourceType = typeof query["sourceType"] === "string" ? (SourceType.parse(query["sourceType"]) as ActionPlanSourceType) : undefined;
   const responsibleUserId = typeof query["responsibleUserId"] === "string" ? query["responsibleUserId"] : undefined;
   const departmentId = typeof query["departmentId"] === "string" ? query["departmentId"] : undefined;
+  const departmentIds = departmentId ? [departmentId] : undefined;
   const dueFrom = typeof query["dueFrom"] === "string" ? new Date(query["dueFrom"]) : undefined;
   const dueTo = typeof query["dueTo"] === "string" ? new Date(query["dueTo"]) : undefined;
-  return { status, sourceType, responsibleUserId, departmentId, dueFrom, dueTo };
+  return { status, sourceType, responsibleUserId, departmentIds, dueFrom, dueTo };
 }
 
 /**

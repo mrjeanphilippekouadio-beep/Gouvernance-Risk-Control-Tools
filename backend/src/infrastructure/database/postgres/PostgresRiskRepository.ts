@@ -60,7 +60,16 @@ export class PostgresRiskRepository implements RiskRepository {
     return rows.map(toDomain);
   }
 
-  async list(tenantId: string, options?: { includeArchived?: boolean; ownerId?: string }): Promise<Risk[]> {
+  async list(
+    tenantId: string,
+    options?: {
+      includeArchived?: boolean;
+      ownerId?: string;
+      ownerDepartmentIds?: string[];
+      processIds?: string[];
+      ids?: string[];
+    },
+  ): Promise<Risk[]> {
     const statusFilter = options?.includeArchived ? "" : "AND status <> 'ARCHIVED'";
     const params: unknown[] = [tenantId];
     let ownerFilter = "";
@@ -68,9 +77,28 @@ export class PostgresRiskRepository implements RiskRepository {
       params.push(options.ownerId);
       ownerFilter = `AND owner_id = $${params.length}`;
     }
+
+    // DashboardScopeResolver scoping (2026-09-30): a true `= ANY($n)`
+    // filter per dimension given, OR'd together — never a post-fetch,
+    // in-memory filter. Omitted dimensions impose no constraint.
+    const scopeConditions: string[] = [];
+    if (options?.ownerDepartmentIds && options.ownerDepartmentIds.length > 0) {
+      params.push(options.ownerDepartmentIds);
+      scopeConditions.push(`owner_department_id = ANY($${params.length})`);
+    }
+    if (options?.processIds && options.processIds.length > 0) {
+      params.push(options.processIds);
+      scopeConditions.push(`process_id = ANY($${params.length})`);
+    }
+    if (options?.ids && options.ids.length > 0) {
+      params.push(options.ids);
+      scopeConditions.push(`id = ANY($${params.length})`);
+    }
+    const scopeFilter = scopeConditions.length > 0 ? `AND (${scopeConditions.join(" OR ")})` : "";
+
     const { rows } = await this.pool.query<RiskRow>(
       `SELECT * FROM risks
-       WHERE tenant_id = $1 AND deleted_at IS NULL ${statusFilter} ${ownerFilter}
+       WHERE tenant_id = $1 AND deleted_at IS NULL ${statusFilter} ${ownerFilter} ${scopeFilter}
        ORDER BY created_at DESC`,
       params,
     );

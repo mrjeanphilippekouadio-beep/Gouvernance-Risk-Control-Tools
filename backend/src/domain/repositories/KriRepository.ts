@@ -4,6 +4,17 @@ export interface KriListFilters {
   includeInactive?: boolean;
   riskId?: string;
   entity?: string;
+  /**
+   * dashboard.executive scope fix (CWE-863, 2026-09-30): a real
+   * `WHERE risk_id = ANY($n)` filter, symmetric to
+   * RiskRepository.list's `ids` — used by DashboardService.getKriConsolidated
+   * to restrict the KRI set to the actor's resolved RiskScope instead of
+   * exposing every KRI in the tenant. Never a post-fetch, in-memory
+   * filter. `Kri.riskId` is a mandatory, non-null FK (ACT-130), so this
+   * excludes every KRI whose primary risk is out of scope with no
+   * "orphan KRI" edge case to reason about.
+   */
+  riskIds?: string[];
 }
 
 export interface KriRepository {

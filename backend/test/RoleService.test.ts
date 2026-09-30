@@ -33,6 +33,7 @@ function inMemoryRoleRepository(): RoleRepository {
         name: input.name,
         description: input.description ?? null,
         permissions: input.permissions,
+        dashboardScopeMode: input.dashboardScopeMode ?? "GLOBAL",
         createdAt: new Date(),
         updatedAt: new Date(),
         deletedAt: null,
@@ -199,6 +200,50 @@ describe("RoleService", () => {
     const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-15");
     await service.assignToUser(otherAdmin, role.id, admin.userId, "REQ-16");
     await expect(service.revokeFromUser(admin, role.id, admin.userId, "REQ-17")).rejects.toThrow(ForbiddenError);
+  });
+
+  describe("dashboardScopeMode (@architect design, 2026-09-30)", () => {
+    it("defaults a role to GLOBAL when dashboardScopeMode is omitted", async () => {
+      const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
+      const role = await service.create(admin, { name: "Chef", permissions: ["dashboard.read"] }, "REQ-D1");
+      expect(role.dashboardScopeMode).toBe("GLOBAL");
+    });
+
+    it("accepts DEPARTMENT on create", async () => {
+      const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
+      const role = await service.create(
+        admin,
+        { name: "Chef Dept", permissions: ["dashboard.executive"], dashboardScopeMode: "DEPARTMENT" },
+        "REQ-D2",
+      );
+      expect(role.dashboardScopeMode).toBe("DEPARTMENT");
+    });
+
+    it("rejects PROCESS on create — risks.process_id backfill is not done", async () => {
+      const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
+      await expect(
+        service.create(
+          admin,
+          { name: "Chef Process", permissions: ["dashboard.executive"], dashboardScopeMode: "PROCESS" },
+          "REQ-D3",
+        ),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("rejects PROCESS on update", async () => {
+      const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
+      const role = await service.create(admin, { name: "Chef", permissions: ["dashboard.executive"] }, "REQ-D4");
+      await expect(
+        service.update(admin, role.id, { dashboardScopeMode: "PROCESS" }, "REQ-D5"),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("accepts switching an existing role from GLOBAL to DEPARTMENT on update", async () => {
+      const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
+      const role = await service.create(admin, { name: "Chef", permissions: ["dashboard.executive"] }, "REQ-D6");
+      const updated = await service.update(admin, role.id, { dashboardScopeMode: "DEPARTMENT" }, "REQ-D7");
+      expect(updated.dashboardScopeMode).toBe("DEPARTMENT");
+    });
   });
 
   describe("getEffectivePermissions", () => {

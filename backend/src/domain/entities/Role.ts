@@ -1,4 +1,5 @@
 import type { Permission } from "../permissions.js";
+import type { DashboardScopeMode } from "./DashboardScope.js";
 
 /**
  * Named, admin-defined bundle of permissions (ACT-110 to ACT-118).
@@ -11,6 +12,15 @@ export interface Role {
   name: string;
   description: string | null;
   permissions: Permission[];
+  /**
+   * @architect design 2026-09-30 (dashboard.executive scope): configurable
+   * perimeter for holders of `dashboard.executive`, defaults to GLOBAL
+   * (today's behavior, zero regression). Resolved at read time by
+   * DashboardScopeResolver — never itself a computed perimeter. PROCESS is
+   * a valid stored value but rejected at RoleService's write boundary
+   * (risks.process_id backfill not done) — see RoleService.
+   */
+  dashboardScopeMode: DashboardScopeMode;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -21,12 +31,15 @@ export interface CreateRoleInput {
   name: string;
   description?: string | null;
   permissions: Permission[];
+  /** Defaults to GLOBAL when omitted — see Role.dashboardScopeMode. */
+  dashboardScopeMode?: DashboardScopeMode;
 }
 
 export interface UpdateRoleInput {
   name?: string;
   description?: string | null;
   permissions?: Permission[];
+  dashboardScopeMode?: DashboardScopeMode;
 }
 
 /**

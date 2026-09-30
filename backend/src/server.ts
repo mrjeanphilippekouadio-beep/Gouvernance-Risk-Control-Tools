@@ -67,6 +67,8 @@ import { RaciAssignmentService } from "./services/RaciAssignmentService.js";
 import { RaciEnrichmentViewService } from "./services/RaciEnrichmentViewService.js";
 import { CartographyService } from "./services/CartographyService.js";
 import { DashboardService } from "./services/DashboardService.js";
+import { DashboardScopeResolver } from "./services/DashboardScopeResolver.js";
+import { widestScopeMode, type DashboardScopeMode } from "./domain/entities/DashboardScope.js";
 import { BrandingService } from "./services/BrandingService.js";
 import { ConfigService } from "./services/ConfigService.js";
 import { ModuleToggleService } from "./services/ModuleToggleService.js";
@@ -261,6 +263,8 @@ const documentStorage = new GoogleDriveStorage(
 );
 const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository, executionRepository);
 
+const dashboardScopeResolver = new DashboardScopeResolver(raciAssignmentRepository, riskRepository);
+
 const dashboardService = new DashboardService(
   riskRepository,
   riskEvaluationRepository,
@@ -276,6 +280,7 @@ const dashboardService = new DashboardService(
   kpiRepository,
   kpiMeasureRepository,
   processRepository,
+  dashboardScopeResolver,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
 const configService = new ConfigService(configRepository, auditRepository);
@@ -311,6 +316,18 @@ const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, 
     [row.tenant_id, row.id],
   );
 
+  // dashboard.executive scope (@architect design, 2026-09-30): the widest
+  // dashboardScopeMode across every real Role currently assigned — same
+  // "resolve every role" join as rolePerms above, just projecting a
+  // different column.
+  const { rows: roleScopes } = await pool.query<{ dashboard_scope_mode: DashboardScopeMode }>(
+    `SELECT DISTINCT r.dashboard_scope_mode
+     FROM user_roles ur
+     JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+     WHERE ur.tenant_id = $1 AND ur.user_id = $2 AND ur.revoked_at IS NULL`,
+    [row.tenant_id, row.id],
+  );
+
   // SEC-005: users.roles is hand-edited/seeded, never validated — filter
   // out anything that isn't a real, current permission before trusting
   // it, and log what got dropped (a typo or a stale/renamed permission
@@ -324,8 +341,27 @@ const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, 
     );
   }
 
+  // Legacy path (@architect design, 2026-09-30): a user granted only via
+  // `users.roles` (no real Role row assigned at all) always resolves to
+  // GLOBAL — never blocks a bootstrap admin out of their own tool, same
+  // posture as the rest of this lookup toward `users.roles`. A user with
+  // zero roles of any kind also defaults to GLOBAL: there is nothing to
+  // widen from and dashboard.executive itself won't be held anyway.
+  let dashboardScopeMode: DashboardScopeMode;
+  if (roleScopes.length > 0) {
+    dashboardScopeMode = widestScopeMode(roleScopes.map((r) => r.dashboard_scope_mode));
+  } else {
+    dashboardScopeMode = "GLOBAL";
+    if (legacyPermissions.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `${email} holds permissions only via legacy users.roles (no real Role assigned) — dashboardScopeMode resolved to GLOBAL`,
+      );
+    }
+  }
+
   const roles = Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePerms.map((r) => r.permission)]));
-  return { userId: row.id, tenantId: row.tenant_id, roles };
+  return { userId: row.id, tenantId: row.tenant_id, roles, dashboardScopeMode };
 });
 
 // --- Health checks (no auth — used by Cloud Run / uptime checks) ---

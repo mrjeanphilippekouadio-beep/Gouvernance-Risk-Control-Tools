@@ -1,9 +1,20 @@
+import type { DashboardScopeMode } from "../../domain/entities/DashboardScope.js";
+
 export interface AuthenticatedUser {
   userId: string;
   tenantId: string;
   email: string;
   displayName: string;
   roles: string[];
+  /**
+   * @architect design 2026-09-30 (dashboard.executive scope): the widest
+   * dashboardScopeMode across every Role currently assigned to this user
+   * (widestScopeMode — GLOBAL > DEPARTMENT > PROCESS). Resolved once at
+   * identity time (server.ts), not re-derived per request. A legacy
+   * bootstrap admin (granted only via `users.roles`, no real Role row)
+   * always resolves to GLOBAL — see server.ts.
+   */
+  dashboardScopeMode: DashboardScopeMode;
 }
 
 /**

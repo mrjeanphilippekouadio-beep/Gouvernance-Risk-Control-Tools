@@ -1233,6 +1233,15 @@ function inMemoryRaciRepositoryForSec016(): RaciAssignmentRepository {
         (a) => a.tenantId === tenantId && a.entityType === entityType && a.entityId === entityId && !a.deletedAt,
       );
     },
+    async listForUser(tenantId, userId, options) {
+      return [...store.values()].filter(
+        (a) =>
+          a.tenantId === tenantId &&
+          a.userId === userId &&
+          !a.deletedAt &&
+          (!options?.roles || options.roles.includes(a.role)),
+      );
+    },
     async remove(tenantId, id) {
       const existing = store.get(id);
       if (!existing || existing.tenantId !== tenantId || existing.deletedAt) {
