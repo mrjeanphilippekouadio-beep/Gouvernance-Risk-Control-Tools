@@ -57,7 +57,7 @@ Les 18 primitives génériques exportées et le composant métier GRC `RaciPanel
 | 16 | `Table` | `columns`, `rows`, `rowKey`, `loading?`, `emptyMessage?` | Utiliser les colonnes typées, état de chargement et état vide du composant. |
 | 17 | `Tabs` | `items`, `active`, `onChange` | Navigation entre vues d'une même page. |
 | 18 | `Timeline` | `items`, `className?`; étape : `label`, `detail?`, `state?` | Historique/étapes de workflow sans refaire le rail graphique. |
-| 19 | `RaciPanel` (GRC) | Props à relire dans `frontend/src/design-system/RaciPanel.tsx` avant usage | Composant métier déjà existant : ne pas recréer de matrice RACI dans une page. |
+| 19 | `RaciPanel` (GRC) | `token`, `entityType`, `entityId` | Composant métier déjà existant : réutiliser pour les risques, contrôles et plans d’action ; ne pas recréer de matrice RACI dans une page. |
 
 ## 4. Revue des pages #71 et #72
 
