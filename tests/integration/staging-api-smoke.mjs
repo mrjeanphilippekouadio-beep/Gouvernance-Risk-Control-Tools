@@ -1,5 +1,7 @@
 const baseUrl = process.env.GRC_STAGING_API_BASE_URL?.trim();
 const token = process.env.GRC_STAGING_BEARER_TOKEN?.trim();
+const controlId = process.env.GRC_STAGING_CONTROL_ID?.trim();
+const evidenceId = process.env.GRC_STAGING_EVIDENCE_ID?.trim();
 
 function fail(message) {
   console.error(`FAIL: ${message}`);
