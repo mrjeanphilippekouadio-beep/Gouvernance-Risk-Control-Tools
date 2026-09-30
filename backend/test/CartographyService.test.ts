@@ -4,9 +4,11 @@ import { CartographyService } from "../src/services/CartographyService.js";
 import type { RiskRepository } from "../src/domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../src/domain/repositories/RiskEvaluationRepository.js";
 import type { RatingScaleRepository } from "../src/domain/repositories/RatingScaleRepository.js";
+import type { ProcessRepository } from "../src/domain/repositories/ProcessRepository.js";
 import type { Risk } from "../src/domain/entities/Risk.js";
 import type { RiskEvaluation, RiskEvaluationStatus } from "../src/domain/entities/RiskEvaluation.js";
 import type { RatingScale } from "../src/domain/entities/RatingScale.js";
+import type { Process } from "../src/domain/entities/Process.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ValidationError } from "../src/domain/errors/DomainErrors.js";
 
@@ -112,6 +114,26 @@ function inMemoryRatingScaleRepository(scales: RatingScale[]): RatingScaleReposi
   };
 }
 
+function inMemoryProcessRepository(processes: Process[]): ProcessRepository {
+  return {
+    async getById(tenantId, id) {
+      return processes.find((p) => p.tenantId === tenantId && p.id === id) ?? null;
+    },
+    async list(tenantId) {
+      return processes.filter((p) => p.tenantId === tenantId);
+    },
+    async create() {
+      throw new Error("not implemented");
+    },
+    async update() {
+      throw new Error("not implemented");
+    },
+    async softDelete() {
+      throw new Error("not implemented");
+    },
+  };
+}
+
 // ---------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------
@@ -208,11 +230,39 @@ function buildRatingScale(id: string, criticalityThresholds: RatingScale["critic
   };
 }
 
-function newService(risks: Risk[], evaluations: RiskEvaluation[], scales: RatingScale[] = []) {
+function buildProcess(overrides: Partial<Process> = {}): Process {
+  return {
+    id: "process-1",
+    tenantId: TENANT,
+    parentId: null,
+    level: "PROCESS",
+    name: "Paiements (FK)",
+    description: null,
+    documentType: null,
+    documentReference: null,
+    owner: null,
+    active: true,
+    evaluationMode: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    deletedBy: null,
+    deletionReason: null,
+    ...overrides,
+  };
+}
+
+function newService(
+  risks: Risk[],
+  evaluations: RiskEvaluation[],
+  scales: RatingScale[] = [],
+  processes: Process[] = [],
+) {
   return new CartographyService(
     inMemoryRiskRepository(risks),
     inMemoryRiskEvaluationRepository(evaluations),
     inMemoryRatingScaleRepository(scales),
+    inMemoryProcessRepository(processes),
   );
 }
 
@@ -452,6 +502,53 @@ describe("CartographyService", () => {
     const risk = buildRisk();
     const service = newService([risk], [buildEvaluation(risk.id)]);
     await expect(service.compare(actor, { ownerId: "me" })).rejects.toThrow(ValidationError);
+  });
+
+  describe("processId wiring (DIV-05)", () => {
+    it("resolves the process label via Risk.processId -> Process.name when the FK is set and resolves", async () => {
+      const process = buildProcess({ id: "process-1", name: "Paiements instantanés" });
+      const risk = buildRisk({ process: "stale free text", processId: process.id });
+      const service = newService([risk], [buildEvaluation(risk.id)], [], [process]);
+
+      const points = await service.getCartography(actor, "residual");
+      expect(points[0]?.process).toBe("Paiements instantanés");
+      expect(points[0]?.processId).toBe(process.id);
+      expect(points[0]?.resolvedVia).toBe("processId");
+    });
+
+    it("falls back to Risk.process free text, explicitly flagged, when processId is null", async () => {
+      const risk = buildRisk({ process: "Payments", processId: null });
+      const service = newService([risk], [buildEvaluation(risk.id)]);
+
+      const points = await service.getCartography(actor, "residual");
+      expect(points[0]?.process).toBe("Payments");
+      expect(points[0]?.processId).toBeNull();
+      expect(points[0]?.resolvedVia).toBe("processText");
+    });
+
+    it("falls back to free text, explicitly flagged, when processId points at a process that no longer resolves (stale FK)", async () => {
+      const risk = buildRisk({ process: "Payments", processId: "deleted-process" });
+      const service = newService([risk], [buildEvaluation(risk.id)], [], []);
+
+      const points = await service.getCartography(actor, "residual");
+      expect(points[0]?.process).toBe("Payments");
+      expect(points[0]?.resolvedVia).toBe("processText");
+    });
+
+    it("falls back to free text, explicitly flagged, when no ProcessRepository is wired", async () => {
+      const process = buildProcess({ id: "process-1", name: "Paiements instantanés" });
+      const risk = buildRisk({ process: "Payments", processId: process.id });
+      const service = new CartographyService(
+        inMemoryRiskRepository([risk]),
+        inMemoryRiskEvaluationRepository([buildEvaluation(risk.id)]),
+        inMemoryRatingScaleRepository([]),
+        // processes repository omitted entirely
+      );
+
+      const points = await service.getCartography(actor, "residual");
+      expect(points[0]?.process).toBe("Payments");
+      expect(points[0]?.resolvedVia).toBe("processText");
+    });
   });
 
   it("scopes by tenant: a risk from another tenant never appears", async () => {

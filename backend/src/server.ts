@@ -176,7 +176,13 @@ const riskService = new RiskService(
   processRepository,
 );
 const departmentService = new DepartmentService(departmentRepository, auditRepository);
-const processService = new ProcessService(processRepository, auditRepository);
+const processService = new ProcessService(
+  processRepository,
+  auditRepository,
+  riskRepository,
+  controlRepository,
+  processEvaluationModeRequestRepository,
+);
 const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
   processEvaluationModeRequestRepository,
   processRepository,
@@ -210,6 +216,8 @@ const riskEvaluationService = new RiskEvaluationService(
   riskRepository,
   ratingScaleRepository,
   riskAppetiteRepository,
+  processRepository,
+  configRepository,
 );
 // DIV-07: read-only companion of riskEvaluationService — composes only, never scores.
 const riskEvaluationViewService = new RiskEvaluationViewService(
@@ -234,7 +242,7 @@ const actionPlanService = new ActionPlanService(
   userRepository,
   departmentRepository,
 );
-const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository);
+const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository);
 const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository);
 
 const documentStorage = new GoogleDriveStorage(
@@ -257,6 +265,7 @@ const dashboardService = new DashboardService(
   departmentRepository,
   kpiRepository,
   kpiMeasureRepository,
+  processRepository,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
 const configService = new ConfigService(configRepository, auditRepository);

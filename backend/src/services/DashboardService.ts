@@ -11,8 +11,10 @@ import type { ControlEffectivenessRepository } from "../domain/repositories/Cont
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { KpiRepository } from "../domain/repositories/KpiRepository.js";
 import type { KpiMeasureRepository } from "../domain/repositories/KpiMeasureRepository.js";
+import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 
 import type { Risk, RiskStatus } from "../domain/entities/Risk.js";
+import type { Process } from "../domain/entities/Process.js";
 import {
   AUTHORITATIVE_EVALUATION_STATUSES,
   type AuthoritativeEvaluationStatus,
@@ -74,7 +76,15 @@ function toActionPlanView(action: ActionPlan): ActionPlanView {
 
 export interface DashboardRiskSummary {
   riskId: string;
+  /** DIV-05 wiring: `Process.name` when `Risk.processId` resolves to a real process, `Risk.process` free text otherwise — see `resolvedVia`. */
   process: string;
+  /** `Risk.processId` verbatim — null when the risk was never linked to a real Process row. */
+  processId: string | null;
+  /**
+   * Explicit marker for how `process` above was produced — never a
+   * silent degradation, same contract as CartographyDataPoint.resolvedVia.
+   */
+  resolvedVia: "processId" | "processText";
   description: string;
   status: RiskStatus;
   ownerDepartmentId: string | null;
@@ -256,6 +266,14 @@ export class DashboardService {
     private readonly departments: DepartmentRepository,
     private readonly kpis: KpiRepository,
     private readonly kpiMeasures: KpiMeasureRepository,
+    /**
+     * DIV-05 wiring (ACTION_ITEMS.md, 2026-09-30): optional so existing
+     * construction sites keep working unchanged. When absent, every risk
+     * summary falls back to `Risk.process` free text — same degrade-
+     * never-throw posture as CartographyService.processes, always
+     * flagged via `resolvedVia`, never silently.
+     */
+    private readonly processes?: ProcessRepository,
   ) {}
 
   // -- ACT-080 ---------------------------------------------------------
@@ -361,7 +379,9 @@ export class DashboardService {
         evaluation: await this.getMostRecentAuthoritativeEvaluation(actor.tenantId, risk.id),
       })),
     );
-    const riskSummaries = withEvaluations.map(({ risk, evaluation }) => this.buildRiskSummary(risk, evaluation));
+    const riskSummaries = await Promise.all(
+      withEvaluations.map(({ risk, evaluation }) => this.buildRiskSummary(actor.tenantId, risk, evaluation)),
+    );
 
     const ownedRiskIds = new Set(ownedRisks.map((r) => r.id));
     const allKris = await this.kris.list(actor.tenantId);
@@ -469,7 +489,12 @@ export class DashboardService {
       this.anomalies.list(actor.tenantId),
     ]);
 
-    const topRisks = [...scored].sort((a, b) => b.score - a.score).slice(0, topN).map((s) => this.buildRiskSummary(s.risk, s.evaluation));
+    const topRisks = await Promise.all(
+      [...scored]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, topN)
+        .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation)),
+    );
     const criticalKris = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
     const openAnomaliesCount = allAnomalies.filter((a) => a.status !== "CLOSED").length;
 
@@ -495,7 +520,12 @@ export class DashboardService {
       this.getOverdueActionViews(actor.tenantId),
     ]);
 
-    const topRisks = [...scored].sort((a, b) => b.score - a.score).slice(0, topN).map((s) => this.buildRiskSummary(s.risk, s.evaluation));
+    const topRisks = await Promise.all(
+      [...scored]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, topN)
+        .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation)),
+    );
     const krisInAlert = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
 
     return { topRisks, krisInAlert, overdueActions };
@@ -539,19 +569,24 @@ export class DashboardService {
         ? entityFilter
         : [...new Set([...scored.map((s) => entityKey(s.evaluation.entity)), ...kriSummaries.map((k) => entityKey(k.kri.entity))])];
 
-    const breakdown: ConsolidatedEntityBreakdown[] = relevantEntities.map((entity) => {
-      const entityScored = scored.filter((s) => entityKey(s.evaluation.entity) === entity);
-      const entityKris = kriSummaries.filter((k) => entityKey(k.kri.entity) === entity);
-      return {
-        entity,
-        riskCount: entityScored.length,
-        topRisks: [...entityScored]
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 5)
-          .map((s) => this.buildRiskSummary(s.risk, s.evaluation)),
-        criticalKriCount: entityKris.filter((k) => k.status === "ORANGE" || k.status === "ROUGE").length,
-      };
-    });
+    const breakdown: ConsolidatedEntityBreakdown[] = await Promise.all(
+      relevantEntities.map(async (entity) => {
+        const entityScored = scored.filter((s) => entityKey(s.evaluation.entity) === entity);
+        const entityKris = kriSummaries.filter((k) => entityKey(k.kri.entity) === entity);
+        const topRisks = await Promise.all(
+          [...entityScored]
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5)
+            .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation)),
+        );
+        return {
+          entity,
+          riskCount: entityScored.length,
+          topRisks,
+          criticalKriCount: entityKris.filter((k) => k.status === "ORANGE" || k.status === "ROUGE").length,
+        };
+      }),
+    );
 
     return { entities: breakdown.sort((a, b) => a.entity.localeCompare(b.entity)) };
   }
@@ -659,11 +694,39 @@ export class DashboardService {
     return results[0] ?? null;
   }
 
-  private buildRiskSummary(risk: Risk, evaluation: RiskEvaluation | null): DashboardRiskSummary {
+  /**
+   * DIV-05 wiring: prefer the real FK (`Risk.processId` -> `Process.name`)
+   * over the free-text `Risk.process` when it resolves — falls back
+   * explicitly (never silently) to the free text when `processId` is
+   * null, no `ProcessRepository` is wired, or the FK is stale (points at
+   * a process that no longer exists/is soft-deleted). Same contract as
+   * CartographyService.resolveProcessLabel; not shared code because these
+   * two services don't otherwise depend on each other (ADR-003 — no
+   * speculative shared abstraction for a two-line lookup).
+   */
+  private async resolveProcessLabel(
+    tenantId: string,
+    risk: Risk,
+  ): Promise<{ process: string; resolvedVia: "processId" | "processText" }> {
+    if (risk.processId && this.processes) {
+      const process = await this.processes.getById(tenantId, risk.processId);
+      if (process) return { process: process.name, resolvedVia: "processId" };
+    }
+    return { process: risk.process, resolvedVia: "processText" };
+  }
+
+  private async buildRiskSummary(
+    tenantId: string,
+    risk: Risk,
+    evaluation: RiskEvaluation | null,
+  ): Promise<DashboardRiskSummary> {
     const score = evaluation ? evaluation.residualScore ?? evaluation.inherentScore : null;
+    const { process, resolvedVia } = await this.resolveProcessLabel(tenantId, risk);
     return {
       riskId: risk.id,
-      process: risk.process,
+      process,
+      processId: risk.processId,
+      resolvedVia,
       description: risk.description,
       status: risk.status,
       ownerDepartmentId: risk.ownerDepartmentId,
@@ -681,7 +744,7 @@ export class DashboardService {
 
   private async toRiskSummaryOrNull(tenantId: string, risk: Risk): Promise<DashboardRiskSummary> {
     const evaluation = await this.getMostRecentAuthoritativeEvaluation(tenantId, risk.id);
-    return this.buildRiskSummary(risk, evaluation);
+    return this.buildRiskSummary(tenantId, risk, evaluation);
   }
 
   /** Only risks with an authoritative (VALIDATED/VALIDE_COMITE), scored evaluation — used by every "top risks by score" ranking (executive/committee/consolidated/appetite-vs-residual). */

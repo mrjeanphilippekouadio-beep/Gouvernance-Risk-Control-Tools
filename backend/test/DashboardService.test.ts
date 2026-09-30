@@ -14,12 +14,14 @@ import type { ControlEffectivenessRepository } from "../src/domain/repositories/
 import type { DepartmentRepository } from "../src/domain/repositories/DepartmentRepository.js";
 import type { KpiRepository } from "../src/domain/repositories/KpiRepository.js";
 import type { KpiMeasureRepository } from "../src/domain/repositories/KpiMeasureRepository.js";
+import type { ProcessRepository } from "../src/domain/repositories/ProcessRepository.js";
 import type { Risk } from "../src/domain/entities/Risk.js";
 import type { RiskEvaluation } from "../src/domain/entities/RiskEvaluation.js";
 import type { Kri } from "../src/domain/entities/Kri.js";
 import type { ActionPlan } from "../src/domain/entities/ActionPlan.js";
 import type { RiskAppetite } from "../src/domain/entities/RiskAppetite.js";
 import type { Department } from "../src/domain/entities/Department.js";
+import type { Process } from "../src/domain/entities/Process.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ForbiddenError } from "../src/domain/errors/DomainErrors.js";
 
@@ -216,6 +218,20 @@ function fakeKpiMeasures(): KpiMeasureRepository {
   };
 }
 
+function fakeProcesses(processes: Process[]): ProcessRepository {
+  return {
+    async getById(tenantId, id) {
+      return processes.find((p) => p.tenantId === tenantId && p.id === id) ?? null;
+    },
+    async list(tenantId) {
+      return processes.filter((p) => p.tenantId === tenantId);
+    },
+    create: NOT_IMPLEMENTED,
+    update: NOT_IMPLEMENTED,
+    softDelete: NOT_IMPLEMENTED,
+  };
+}
+
 // ---------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------
@@ -303,6 +319,28 @@ function buildDepartment(overrides: Partial<Department> = {}): Department {
   };
 }
 
+function buildProcess(overrides: Partial<Process> = {}): Process {
+  return {
+    id: "process-1",
+    tenantId: TENANT,
+    parentId: null,
+    level: "PROCESS",
+    name: "Paiements (FK)",
+    description: null,
+    documentType: null,
+    documentReference: null,
+    owner: null,
+    active: true,
+    evaluationMode: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    deletedBy: null,
+    deletionReason: null,
+    ...overrides,
+  };
+}
+
 function buildAppetite(overrides: Partial<RiskAppetite> = {}): RiskAppetite {
   return {
     id: randomUUID(),
@@ -329,6 +367,9 @@ function newService(fixtures: {
   actionPlans?: ActionPlan[];
   appetites?: RiskAppetite[];
   departments?: Department[];
+  processes?: Process[];
+  /** Omit entirely (undefined) to exercise the "no ProcessRepository wired" degrade path — distinct from passing an empty array. */
+  withProcessRepository?: boolean;
 }): DashboardService {
   return new DashboardService(
     fakeRisks(fixtures.risks ?? []),
@@ -344,6 +385,7 @@ function newService(fixtures: {
     fakeDepartments(fixtures.departments ?? []),
     fakeKpis(),
     fakeKpiMeasures(),
+    fixtures.withProcessRepository === false ? undefined : fakeProcesses(fixtures.processes ?? []),
   );
 }
 
@@ -366,6 +408,48 @@ describe("DashboardService", () => {
     it("rejects a caller without dashboard.read", async () => {
       const service = newService({ risks: [buildRisk()] });
       await expect(service.getRisksOverview(actorWith([]))).rejects.toThrow();
+    });
+  });
+
+  describe("processId wiring (DIV-05)", () => {
+    it("resolves the process label via Risk.processId -> Process.name when the FK is set and resolves", async () => {
+      const process = buildProcess({ id: "process-1", name: "Paiements instantanés" });
+      const risk = buildRisk({ process: "stale free text", processId: process.id });
+      const service = newService({ risks: [risk], processes: [process] });
+
+      const rows = await service.getRisksOverview(actorWith(["dashboard.read"]));
+      expect(rows[0]?.process).toBe("Paiements instantanés");
+      expect(rows[0]?.processId).toBe(process.id);
+      expect(rows[0]?.resolvedVia).toBe("processId");
+    });
+
+    it("falls back to Risk.process free text, explicitly flagged, when processId is null", async () => {
+      const risk = buildRisk({ process: "Payments", processId: null });
+      const service = newService({ risks: [risk] });
+
+      const rows = await service.getRisksOverview(actorWith(["dashboard.read"]));
+      expect(rows[0]?.process).toBe("Payments");
+      expect(rows[0]?.processId).toBeNull();
+      expect(rows[0]?.resolvedVia).toBe("processText");
+    });
+
+    it("falls back to free text, explicitly flagged, when processId points at a process that no longer resolves (stale FK)", async () => {
+      const risk = buildRisk({ process: "Payments", processId: "deleted-process" });
+      const service = newService({ risks: [risk], processes: [] });
+
+      const rows = await service.getRisksOverview(actorWith(["dashboard.read"]));
+      expect(rows[0]?.process).toBe("Payments");
+      expect(rows[0]?.resolvedVia).toBe("processText");
+    });
+
+    it("falls back to free text, explicitly flagged, when no ProcessRepository is wired", async () => {
+      const process = buildProcess({ id: "process-1", name: "Paiements instantanés" });
+      const risk = buildRisk({ process: "Payments", processId: process.id });
+      const service = newService({ risks: [risk], withProcessRepository: false });
+
+      const rows = await service.getRisksOverview(actorWith(["dashboard.read"]));
+      expect(rows[0]?.process).toBe("Payments");
+      expect(rows[0]?.resolvedVia).toBe("processText");
     });
   });
 

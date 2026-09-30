@@ -26,6 +26,8 @@
  * Architecture (A05) call, not made here.
  */
 
+import type { EvaluationMode } from "./Config.js";
+
 export type RiskEvaluationType = "AD_HOC" | "ANNUELLE" | "ANTICIPEE";
 
 /** ACT-253: VALIDE_COMITE is a distinct terminal status from VALIDATED — reachable only via RiskEvaluationService.validateByCommittee, never via validate(). */
@@ -74,6 +76,20 @@ export interface RiskEvaluation {
   /** Snapshot at creation time — see file header for why these live here rather than on Risk. */
   subCategory: string;
   entity: string | null;
+
+  /**
+   * DIV-06 wiring (ACTION_ITEMS.md, 2026-09-30): the Classique/Participatif
+   * mode resolved once, at creation time only, via
+   * `resolveInheritedEvaluationMode` (Process.ts) walking up from
+   * `Risk.processId` and falling back to `Config.evaluationMode` — never
+   * recomputed by a later setter, same immutable-snapshot treatment as
+   * `subCategory`/`entity` above. Null only for evaluations created before
+   * this field existed (034_risk_evaluations_evaluation_mode.sql,
+   * Expand-only, not backfilled — see that migration's header for why).
+   * Every evaluation created from that migration onward always has a
+   * non-null value here.
+   */
+  evaluationMode: EvaluationMode | null;
 
   /** The active RatingScale used for this evaluation's scoring, captured at inherent-scoring time (ACT-151) so a later methodology change never retroactively alters a finalized evaluation. */
   ratingScaleId: string | null;
@@ -124,6 +140,8 @@ export interface CreateRiskEvaluationInput {
   evaluatorId: string;
   subCategory: string;
   entity?: string | null;
+  /** Never client-supplied — always resolved server-side by RiskEvaluationService.create (see RiskEvaluation.evaluationMode's doc comment). */
+  evaluationMode: EvaluationMode;
 }
 
 export interface RecordInherentScoringInput {

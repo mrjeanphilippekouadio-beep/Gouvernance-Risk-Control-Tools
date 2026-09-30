@@ -21,6 +21,7 @@ interface RiskEvaluationRow {
   evaluator_id: string;
   sub_category: string;
   entity: string | null;
+  evaluation_mode: RiskEvaluation["evaluationMode"];
   rating_scale_id: string | null;
   rating_scale_version: string | null;
   inherent_probability: number | null;
@@ -55,6 +56,7 @@ function toDomain(row: RiskEvaluationRow): RiskEvaluation {
     evaluatorId: row.evaluator_id,
     subCategory: row.sub_category,
     entity: row.entity,
+    evaluationMode: row.evaluation_mode,
     ratingScaleId: row.rating_scale_id,
     ratingScaleVersion: row.rating_scale_version,
     inherentProbability: row.inherent_probability,
@@ -129,10 +131,18 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
   async create(input: CreateRiskEvaluationInput): Promise<RiskEvaluation> {
     const { rows } = await this.pool.query<RiskEvaluationRow>(
       `INSERT INTO risk_evaluations
-         (tenant_id, risk_id, evaluation_type, status, evaluator_id, sub_category, entity)
-       VALUES ($1, $2, $3, 'BROUILLON', $4, $5, $6)
+         (tenant_id, risk_id, evaluation_type, status, evaluator_id, sub_category, entity, evaluation_mode)
+       VALUES ($1, $2, $3, 'BROUILLON', $4, $5, $6, $7)
        RETURNING *`,
-      [input.tenantId, input.riskId, input.evaluationType, input.evaluatorId, input.subCategory, input.entity ?? null],
+      [
+        input.tenantId,
+        input.riskId,
+        input.evaluationType,
+        input.evaluatorId,
+        input.subCategory,
+        input.entity ?? null,
+        input.evaluationMode,
+      ],
     );
     const row = rows[0];
     if (!row) throw new Error("Insert into risk_evaluations returned no row");

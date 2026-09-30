@@ -3,7 +3,13 @@ import { randomUUID } from "node:crypto";
 import { ProcessService } from "../src/services/ProcessService.js";
 import type { ProcessRepository } from "../src/domain/repositories/ProcessRepository.js";
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
+import type { RiskRepository } from "../src/domain/repositories/RiskRepository.js";
+import type { ControlRepository } from "../src/domain/repositories/ControlRepository.js";
+import type { ProcessEvaluationModeRequestRepository } from "../src/domain/repositories/ProcessEvaluationModeRequestRepository.js";
 import { resolveInheritedEvaluationMode, type Process } from "../src/domain/entities/Process.js";
+import type { Risk } from "../src/domain/entities/Risk.js";
+import type { Control } from "../src/domain/entities/Control.js";
+import type { ProcessEvaluationModeRequest } from "../src/domain/entities/ProcessEvaluationModeRequest.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ValidationError } from "../src/domain/errors/DomainErrors.js";
 
@@ -50,6 +56,87 @@ function inMemoryProcessRepository(): ProcessRepository {
       const existing = store.get(id);
       if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
       store.set(id, { ...existing, deletedAt: new Date(), deletedBy, deletionReason: reason });
+    },
+  };
+}
+
+function inMemoryRiskRepository(risks: Risk[]): RiskRepository {
+  return {
+    async getById(tenantId, id) {
+      return risks.find((r) => r.tenantId === tenantId && r.id === id) ?? null;
+    },
+    async listByIds(tenantId, ids) {
+      return risks.filter((r) => r.tenantId === tenantId && ids.includes(r.id));
+    },
+    async list(tenantId, options) {
+      return risks.filter((r) => r.tenantId === tenantId && (options?.includeArchived || r.status !== "ARCHIVED"));
+    },
+    async create() {
+      throw new Error("not implemented");
+    },
+    async update() {
+      throw new Error("not implemented");
+    },
+    async assignOwner() {
+      throw new Error("not implemented");
+    },
+    async assignSuperiorOwner() {
+      throw new Error("not implemented");
+    },
+    async softDelete() {
+      throw new Error("not implemented");
+    },
+  };
+}
+
+function inMemoryControlRepository(controls: Control[]): ControlRepository {
+  return {
+    async getById(tenantId, id) {
+      return controls.find((c) => c.tenantId === tenantId && c.id === id) ?? null;
+    },
+    async list(tenantId, options) {
+      return controls.filter(
+        (c) => c.tenantId === tenantId && (options?.includeArchived || c.status !== "ARCHIVED"),
+      );
+    },
+    async listCoveringRisk() {
+      throw new Error("not implemented");
+    },
+    async create() {
+      throw new Error("not implemented");
+    },
+    async update() {
+      throw new Error("not implemented");
+    },
+    async softDelete() {
+      throw new Error("not implemented");
+    },
+  };
+}
+
+function inMemoryProcessEvaluationModeRequestRepository(
+  requests: ProcessEvaluationModeRequest[],
+): ProcessEvaluationModeRequestRepository {
+  return {
+    async getById(tenantId, id) {
+      return requests.find((r) => r.tenantId === tenantId && r.id === id) ?? null;
+    },
+    async list(tenantId, options) {
+      return requests.filter(
+        (r) =>
+          r.tenantId === tenantId &&
+          (options?.processId === undefined || r.processId === options.processId) &&
+          (options?.status === undefined || r.status === options.status),
+      );
+    },
+    async create() {
+      throw new Error("not implemented");
+    },
+    async validate() {
+      throw new Error("not implemented");
+    },
+    async reject() {
+      throw new Error("not implemented");
     },
   };
 }
@@ -270,6 +357,169 @@ describe("ProcessService", () => {
       const updated = await service.setEvaluationMode(riskManager, root.id, null, "REQ-26");
 
       expect(updated.evaluationMode).toBeNull();
+    });
+  });
+
+  describe("archive (referential guard, architect audit 2026-09-30)", () => {
+    function buildRisk(overrides: Partial<Risk> = {}): Risk {
+      return {
+        id: randomUUID(),
+        tenantId: actor.tenantId,
+        process: "Paiements",
+        processId: null,
+        description: "Risque test",
+        ownerDepartmentId: null,
+        ownerId: null,
+        superiorOwnerId: null,
+        status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        deletedBy: null,
+        deletionReason: null,
+        ...overrides,
+      };
+    }
+
+    function buildControl(overrides: Partial<Control> = {}): Control {
+      return {
+        id: randomUUID(),
+        tenantId: actor.tenantId,
+        label: "Contrôle test",
+        objective: null,
+        coveredRiskIds: [],
+        process: "Paiements",
+        processId: null,
+        departmentId: null,
+        procedureDescription: null,
+        controlType: "PREVENTIVE",
+        nature: null,
+        defenseLine: null,
+        frequency: "Mensuelle",
+        executor: "Analyste",
+        validator: null,
+        expectedEvidence: null,
+        complianceCriteria: "Critère",
+        status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        deletedBy: null,
+        deletionReason: null,
+        ...overrides,
+      };
+    }
+
+    function buildRequest(overrides: Partial<ProcessEvaluationModeRequest> = {}): ProcessEvaluationModeRequest {
+      return {
+        id: randomUUID(),
+        tenantId: actor.tenantId,
+        processId: "process-x",
+        requestedMode: "PARTICIPATIF",
+        status: "PENDING_VALIDATION",
+        requestedBy: actor.userId,
+        requestedAt: new Date(),
+        validatedBy: null,
+        validatedAt: null,
+        rejectionReason: null,
+        ...overrides,
+      };
+    }
+
+    it("refuses to archive a process still referenced by an active risk's processId", async () => {
+      const repo = inMemoryProcessRepository();
+      const process = await new ProcessService(repo, inMemoryAuditRepository()).create(
+        actor,
+        { level: "PROCESS", name: "P1" },
+        "REQ-27",
+      );
+      const referencingRisk = buildRisk({ processId: process.id });
+      const service = new ProcessService(
+        repo,
+        inMemoryAuditRepository(),
+        inMemoryRiskRepository([referencingRisk]),
+      );
+
+      await expect(service.archive(actor, process.id, "obsolète", "REQ-28")).rejects.toThrow(ValidationError);
+
+      const stillThere = await repo.getById(actor.tenantId, process.id);
+      expect(stillThere).not.toBeNull();
+    });
+
+    it("refuses to archive a process still referenced by an active control's processId", async () => {
+      const repo = inMemoryProcessRepository();
+      const process = await new ProcessService(repo, inMemoryAuditRepository()).create(
+        actor,
+        { level: "PROCESS", name: "P1" },
+        "REQ-29",
+      );
+      const referencingControl = buildControl({ processId: process.id });
+      const service = new ProcessService(
+        repo,
+        inMemoryAuditRepository(),
+        inMemoryRiskRepository([]),
+        inMemoryControlRepository([referencingControl]),
+      );
+
+      await expect(service.archive(actor, process.id, "obsolète", "REQ-30")).rejects.toThrow(ValidationError);
+    });
+
+    it("refuses to archive a process with a pending evaluation-mode request", async () => {
+      const repo = inMemoryProcessRepository();
+      const process = await new ProcessService(repo, inMemoryAuditRepository()).create(
+        actor,
+        { level: "PROCESS", name: "P1" },
+        "REQ-31",
+      );
+      const pending = buildRequest({ processId: process.id, status: "PENDING_VALIDATION" });
+      const service = new ProcessService(
+        repo,
+        inMemoryAuditRepository(),
+        inMemoryRiskRepository([]),
+        inMemoryControlRepository([]),
+        inMemoryProcessEvaluationModeRequestRepository([pending]),
+      );
+
+      await expect(service.archive(actor, process.id, "obsolète", "REQ-32")).rejects.toThrow(ValidationError);
+    });
+
+    it("allows archiving once no active risk/control/pending request references the process", async () => {
+      const repo = inMemoryProcessRepository();
+      const process = await new ProcessService(repo, inMemoryAuditRepository()).create(
+        actor,
+        { level: "PROCESS", name: "P1" },
+        "REQ-33",
+      );
+      // An ARCHIVED risk still carries processId, but list() excludes it by default — must not block the archive.
+      const archivedRisk = buildRisk({ processId: process.id, status: "ARCHIVED" });
+      const validatedRequest = buildRequest({ processId: process.id, status: "VALIDATED" });
+      const service = new ProcessService(
+        repo,
+        inMemoryAuditRepository(),
+        inMemoryRiskRepository([archivedRisk]),
+        inMemoryControlRepository([]),
+        inMemoryProcessEvaluationModeRequestRepository([validatedRequest]),
+      );
+
+      await service.archive(actor, process.id, "obsolète", "REQ-34");
+
+      const gone = await repo.getById(actor.tenantId, process.id);
+      expect(gone).toBeNull();
+    });
+
+    it("still allows archiving when risks/controls/requests repositories are not wired (degrade, matches SEC-012's accepted structural risk)", async () => {
+      const repo = inMemoryProcessRepository();
+      const process = await new ProcessService(repo, inMemoryAuditRepository()).create(
+        actor,
+        { level: "PROCESS", name: "P1" },
+        "REQ-35",
+      );
+      const service = new ProcessService(repo, inMemoryAuditRepository());
+
+      await service.archive(actor, process.id, "obsolète", "REQ-36");
+
+      const gone = await repo.getById(actor.tenantId, process.id);
+      expect(gone).toBeNull();
     });
   });
 });
