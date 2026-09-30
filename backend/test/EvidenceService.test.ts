@@ -162,8 +162,12 @@ describe("EvidenceService", () => {
   it("restores the evidence row and does not touch Drive when audit recording fails during delete", async () => {
     const repo = inMemoryEvidenceRepository();
     const storage = fakeDocumentStorage();
+    let auditCalls = 0;
     const audit: AuditRepository = {
-      async record() { throw new Error("audit unavailable"); },
+      async record() {
+        auditCalls += 1;
+        if (auditCalls === 2) throw new Error("audit unavailable");
+      },
       async listForEntity() { return []; },
     };
     const service = new EvidenceService(repo, storage, audit);
