@@ -8,8 +8,8 @@ function fail(message) {
   process.exitCode = 1;
 }
 
-if (!baseUrl || !token) {
-  console.error("Missing required GitHub Actions secrets: GRC_STAGING_API_BASE_URL and/or GRC_STAGING_BEARER_TOKEN.");
+if (!baseUrl || !token || !controlId || !evidenceId) {
+  console.error("Missing required GitHub Actions secrets. See tests/integration/README.md for the four required values.");
   process.exit(2);
 }
 
