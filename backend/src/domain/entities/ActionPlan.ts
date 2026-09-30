@@ -40,6 +40,16 @@ import type { GrcObjectType } from "../GrcObjectType.js";
  * ActionLinkResourceType below on purpose, see the module comment above.
  * `satisfies` ties every value back to GrcObjectType so a typo or a
  * renamed GrcObjectType member fails to compile here.
+ *
+ * FINDING added 2026-09-30 (Lot 4, Audit module, GRC_Target_Domain_Model.md
+ * §8.1/§9.2): an audit Finding is now its own, entity-backed source —
+ * sourceId must resolve to a real, in-tenant Finding row (see
+ * ENTITY_BACKED_SOURCE_TYPES in ActionPlanService and
+ * FindingService/FindingRepository). Deliberately kept distinct from the
+ * pre-existing generic "AUDIT" value: AUDIT never carried a sourceId
+ * (nothing to point it at before this module existed), whereas FINDING
+ * always does — collapsing the two would silently drop the very
+ * Finding -> ActionPlan traceability this extension exists to add.
  */
 export const ACTION_PLAN_SOURCE_TYPES = [
   "RISK",
@@ -48,6 +58,7 @@ export const ACTION_PLAN_SOURCE_TYPES = [
   "AUDIT",
   "INCIDENT",
   "MANAGEMENT",
+  "FINDING",
 ] as const satisfies readonly GrcObjectType[];
 
 export type ActionPlanSourceType = (typeof ACTION_PLAN_SOURCE_TYPES)[number];
