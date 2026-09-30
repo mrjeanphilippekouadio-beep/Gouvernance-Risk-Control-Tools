@@ -24,6 +24,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      - run: npm audit --audit-level=high
       - run: npm run typecheck
       - run: npm test
 
@@ -36,14 +37,11 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: package-lock.json
-      # package-lock.json is generated on Windows and, per npm/cli#4828,
-      # its resolved-package entries for OS-specific optionalDependencies
-      # (rolldown's native binding for vite 8) don't carry over to other
-      # platforms. Re-resolving fresh on the Linux runner avoids replaying
-      # that stale lockfile; --package-lock=false stops it from being
-      # rewritten in the workspace (kept as-is for local/Windows use).
-      - run: rm -f package-lock.json
-      - run: npm install --package-lock=false
+      # Use the committed lockfile for a reproducible Linux install.
+      # The required x64/glibc native bindings are explicitly present in the
+      # lockfile; do not silently re-resolve dependencies in CI.
+      - run: npm ci
+      - run: npm audit --audit-level=high
       - run: npm run build --workspace=@djamo/design-system
       - run: npm run build --workspace=@grc-tools/frontend
 
@@ -67,7 +65,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - run: pip install semgrep
+      - run: pip install -r .github/security-requirements.txt
       - run: semgrep scan --config p/ci --sarif --output semgrep-results.sarif
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
