@@ -74,6 +74,7 @@ vérifier manuellement :
       possède uniquement les privilèges DDL nécessaires aux migrations et
       n'est pas utilisé par Cloud Run.
 - [ ] Aucune connection string n'est committée.
+- [x] Le contrôle Gitleaks est exécuté dans la CI et bloque une PR lorsqu'un secret détectable est trouvé dans le dépôt ou son historique.
 - [ ] Le frontend ne reçoit jamais `DATABASE_URL` ou
       `MIGRATION_DATABASE_URL`.
 
