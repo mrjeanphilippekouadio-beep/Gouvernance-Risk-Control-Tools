@@ -1,0 +1,27 @@
+name: Staging API integration smoke checks
+
+on:
+  workflow_dispatch:
+
+# Read-only test: no repository writes, no deployment, no data mutation.
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-api-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Read-only API and authentication checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run staging API checks
+        env:
+          GRC_STAGING_API_BASE_URL: ${{ secrets.GRC_STAGING_API_BASE_URL }}
+          GRC_STAGING_BEARER_TOKEN: ${{ secrets.GRC_STAGING_BEARER_TOKEN }}
+        run: node tests/integration/staging-api-smoke.mjs
