@@ -42,10 +42,14 @@ futur, pas encore fait) :
       vérifier `git status` avant de commit si un fichier `.env*` apparaît).
 - [ ] Le frontend ne reçoit jamais `DATABASE_URL` (le backend est le seul
       composant qui s'y connecte — voir ADR-001).
-- [ ] **Non fait en V1** : `audit_log` n'a pas encore de protection au
-      niveau rôle DB contre `UPDATE`/`DELETE` (seul le code applicatif
-      s'engage à ne faire que des `INSERT`). Avant tout usage en
-      production, créer un rôle applicatif dédié et lui retirer les
-      privilèges `UPDATE`/`DELETE` sur `audit_log` — sans ça, l'intégrité
-      du journal d'audit repose uniquement sur la discipline du code, pas
-      sur la base.
+- [x] **Protection DB de l'intégrité du journal** : la migration
+      `038_audit_log_append_only.sql` interdit explicitement à `PUBLIC`
+      `UPDATE`/`DELETE`/`TRUNCATE` et ajoute des triggers PostgreSQL qui
+      rejettent ces opérations. Cela protège aussi le cas où le backend
+      utilise le propriétaire de la table : les `REVOKE` seuls ne suffiraient
+      pas dans ce cas.
+- [ ] **À vérifier avant production** : le rôle utilisé par le backend
+      doit rester un rôle applicatif dédié, distinct du propriétaire/admin de
+      la base. Un propriétaire ou superuser peut toujours désactiver/supprimer
+      le trigger ou modifier le schéma ; ce contrôle opérationnel reste donc
+      nécessaire en complément de la migration.
