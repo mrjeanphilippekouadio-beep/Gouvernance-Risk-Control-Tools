@@ -23,6 +23,7 @@ export interface RatingScale {
   probabilityLabels: ScaleLevel[] | null;
   impactLevels: number;
   impactLabels: ScaleLevel[] | null;
+  criticalityThresholds?: { label: string; min: number; max: number }[] | null;
   impactAxes: { axes: ImpactAxis[]; retainedImpactRule: "MAX" | "AVERAGE" | "WEIGHTED_SUM" } | null;
   masteryScale: { levels: ScaleLevel[]; defenseLines: string[]; aggregation: "MIN"; thresholds: { label: string; min: number; max: number }[] | null } | null;
 }
@@ -104,5 +105,9 @@ export const evaluationsApi = {
 };
 
 export const ratingScalesApi = {
-  list: (token: string) => apiRequest<RatingScale[]>("/api/v1/rating-scales", { token }),
+  list: (token: string, includeArchived = false) => apiRequest<RatingScale[]>(`/api/v1/rating-scales${includeArchived ? "?includeArchived=true" : ""}`, { token }),
+  create: (token: string, input: { name: string; version: string; probabilityLevels: number; impactLevels: number }) =>
+    apiRequest<RatingScale>("/api/v1/rating-scales", { method: "POST", body: input, token }),
+  activate: (token: string, id: string) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/activate`, { method: "PATCH", token }),
 };
