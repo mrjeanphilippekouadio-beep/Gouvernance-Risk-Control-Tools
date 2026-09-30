@@ -11,4 +11,6 @@ export interface EvidenceRepository {
   listForControlExecution(tenantId: string, controlExecutionId: string): Promise<Evidence[]>;
   create(input: CreateEvidenceInput): Promise<Evidence>;
   markDeleted(tenantId: string, id: string): Promise<void>;
+  /** Restore an evidence row after an audit failure before external storage is touched. */
+  restoreActive(tenantId: string, id: string): Promise<void>;
 }
