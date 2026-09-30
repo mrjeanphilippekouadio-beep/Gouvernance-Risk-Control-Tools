@@ -10,13 +10,14 @@ import { AppetitePage } from "./features/appetite/AppetitePage";
 import { RatingScalesPage } from "./features/scales/RatingScalesPage";
 import { ControlsPage } from "./features/controls/ControlsPage";
 import { ControlMonitoringPage } from "./features/controls/ControlMonitoringPage";
+import { AuditFindingsPage } from "./features/audit/AuditFindingsPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import "./App.css";
 
 const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings";
 type NavItem = { id: View; label: string; icon: string; available?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -46,7 +47,7 @@ const NAV_GROUPS: NavGroup[] = [
   ] },
   { label: "Audit", items: [
     { id: "placeholder", label: "Missions", icon: "search" },
-    { id: "placeholder", label: "Constats & recommandations", icon: "message" },
+    { id: "findings", label: "Constats & recommandations", icon: "message", available: true },
   ] },
   { label: "Administration", items: [
     { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
@@ -66,6 +67,7 @@ const PAGE_TITLES: Record<View, string> = {
   scales: "Grilles de cotation",
   controls: "Contrôles",
   monitoring: "Exécutions & efficacité",
+  findings: "Constats & recommandations",
 };
 
 function App() {
@@ -133,6 +135,7 @@ function App() {
             {view === "scales" && <RatingScalesPage token={token} />}
             {view === "controls" && <ControlsPage token={token} />}
             {view === "monitoring" && <ControlMonitoringPage token={token} />}
+            {view === "findings" && <AuditFindingsPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} initialRiskId={evaluationRiskId} />}
             {view === "risks" && <RisksPage token={token} onEvaluate={(riskId) => { setEvaluationRiskId(riskId); setView("evaluation"); }} />}
             {view === "roles" && <RolesAdmin token={token} />}
