@@ -10,6 +10,7 @@ interface UserRow {
   email: string;
   display_name: string;
   roles: string[];
+  department_id: string | null;
   created_at: Date;
   deleted_at: Date | null;
 }
@@ -21,6 +22,7 @@ function toDomain(row: UserRow): User {
     email: row.email,
     displayName: row.display_name,
     roles: row.roles,
+    departmentId: row.department_id,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
   };
@@ -74,8 +76,8 @@ export class PostgresUserRepository implements UserRepository {
   async create(input: CreateUserInput): Promise<User> {
     try {
       const { rows } = await this.pool.query<UserRow>(
-        `INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, $3) RETURNING *`,
-        [input.tenantId, input.email, input.displayName],
+        `INSERT INTO users (tenant_id, email, display_name, department_id) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [input.tenantId, input.email, input.displayName, input.departmentId ?? null],
       );
       const row = rows[0];
       if (!row) throw new Error("Insert into users returned no row");
@@ -93,7 +95,10 @@ export class PostgresUserRepository implements UserRepository {
   }
 
   async update(tenantId: string, id: string, input: UpdateUserInput): Promise<User> {
-    const { setClauses, values } = buildUpdateSet({ display_name: input.displayName }, 3);
+    const { setClauses, values } = buildUpdateSet(
+      { display_name: input.displayName, department_id: input.departmentId },
+      3,
+    );
     if (setClauses.length === 0) {
       const current = await this.getById(tenantId, id);
       if (!current) throw new NotFoundError("User", id);

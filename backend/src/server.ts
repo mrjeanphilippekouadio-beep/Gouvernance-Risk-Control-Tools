@@ -220,7 +220,7 @@ const riskEvaluationViewService = new RiskEvaluationViewService(
 );
 const kriService = new KriService(kriRepository, kriMeasureRepository, riskRepository, auditRepository);
 const kriMeasureService = new KriMeasureService(kriMeasureRepository, kriRepository, auditRepository, notifier);
-const userService = new UserService(userRepository, auditRepository, roleService);
+const userService = new UserService(userRepository, auditRepository, roleService, departmentRepository);
 const riskOwnershipService = new RiskOwnershipService(riskRepository, userRepository, riskEvaluationRepository);
 const actionPlanService = new ActionPlanService(
   actionPlanRepository,
