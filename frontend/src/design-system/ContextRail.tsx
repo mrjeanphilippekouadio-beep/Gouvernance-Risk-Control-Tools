@@ -29,7 +29,7 @@ export function ContextRail({ view }: ContextRailProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [active, setActive] = useState<RailTab>("comments");
 
-  if (!tabs.includes(active)) setActive(tabs[0]);
+  const currentActive = tabs.includes(active) ? active : tabs[0];
 
   return (
     <aside className={collapsed ? "context-rail collapsed" : "context-rail"}>
@@ -41,7 +41,7 @@ export function ContextRail({ view }: ContextRailProps) {
           <button
             type="button"
             key={tab}
-            className={active === tab ? "context-rail__tab on" : "context-rail__tab"}
+            className={currentActive === tab ? "context-rail__tab on" : "context-rail__tab"}
             title={LABELS[tab]}
             onClick={() => setActive(tab)}
           >
@@ -54,10 +54,10 @@ export function ContextRail({ view }: ContextRailProps) {
 
       {!collapsed && (
         <div className="context-rail__panel">
-          {active === "comments" && <CommentsPanel objectView={objectView} />}
-          {active === "raci" && <RaciPanelPreview objectView={objectView} />}
-          {active === "evidence" && <EvidencePanel />}
-          {active === "occurrence" && <OccurrencePanel />}
+          {currentActive === "comments" && <CommentsPanel objectView={objectView} />}
+          {currentActive === "raci" && <RaciPanelPreview objectView={objectView} />}
+          {currentActive === "evidence" && <EvidencePanel />}
+          {currentActive === "occurrence" && <OccurrencePanel />}
         </div>
       )}
     </aside>
