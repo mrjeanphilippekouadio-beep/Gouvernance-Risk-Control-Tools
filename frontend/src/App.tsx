@@ -13,6 +13,7 @@ import { ControlMonitoringPage } from "./features/controls/ControlMonitoringPage
 import { AuditFindingsPage } from "./features/audit/AuditFindingsPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
+import { ErrorPage } from "./features/errors/ErrorPages";
 import "./App.css";
 
 const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
@@ -77,6 +78,10 @@ function App() {
   const [evaluationRiskId, setEvaluationRiskId] = useState<string | undefined>();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const token = idToken ?? devToken;
+  const errorPath = window.location.pathname;
+
+  if (errorPath === "/400" || errorPath === "/error/400") return <ErrorPage code={400} />;
+  if (errorPath === "/500" || errorPath === "/error/500") return <ErrorPage code={500} onRetry={() => window.location.reload()} />;
 
   if (!token) {
     return (
