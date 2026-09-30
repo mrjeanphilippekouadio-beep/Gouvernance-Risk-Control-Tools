@@ -16,7 +16,7 @@ const lock = JSON.parse(readFileSync(resolve(root, "package-lock.json"), "utf8")
   }>;
 };
 const workflow = readFileSync(
-  resolve(root, ".github/workflows/dependency-review.yml"),
+  resolve(root, ".github/workflows/ci.yml"),
   "utf8",
 );
 const dependabot = readFileSync(
@@ -59,8 +59,8 @@ describe("SEC: dependency management", () => {
     expect(oxlint?.integrity).toMatch(/^sha512-/);
   });
 
-  it("keeps vulnerability review blocking at high severity", () => {
-    expect(workflow).toMatch(/fail-on-severity:\s*high/);
+  it("keeps vulnerability auditing blocking at high severity", () => {
+    expect(workflow).toMatch(/npm audit --audit-level=high/);
     expect(workflow).toMatch(/permissions:\s*\n\s+contents:\s+read/);
   });
 
