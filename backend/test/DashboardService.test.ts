@@ -117,14 +117,15 @@ function fakeKris(kris: Kri[]): KriRepository {
   };
 }
 
-function fakeKriMeasures(): KriMeasureRepository {
+function fakeKriMeasures(latestValues: Map<string, number> = new Map()): KriMeasureRepository {
   return {
     getById: NOT_IMPLEMENTED,
     async listForKri() {
       return { items: [], total: 0, page: 1, pageSize: 0 };
     },
-    async getLatest() {
-      return null;
+    async getLatest(_tenantId, kriId) {
+      const value = latestValues.get(kriId);
+      return value === undefined ? null : ({ value, measureDate: new Date() } as Awaited<ReturnType<KriMeasureRepository["getLatest"]>>);
     },
     create: NOT_IMPLEMENTED,
   };
@@ -438,6 +439,7 @@ function newService(fixtures: {
   risks?: Risk[];
   evaluations?: RiskEvaluation[];
   kris?: Kri[];
+  kriLatestValues?: Record<string, number>;
   actionPlans?: ActionPlan[];
   appetites?: RiskAppetite[];
   departments?: Department[];
@@ -453,7 +455,7 @@ function newService(fixtures: {
     fakeEvaluations(fixtures.evaluations ?? []),
     fakeAnomalies(fixtures.anomalies ?? []),
     fakeKris(fixtures.kris ?? []),
-    fakeKriMeasures(),
+    fakeKriMeasures(new Map(Object.entries(fixtures.kriLatestValues ?? {}))),
     fakeActionPlans(fixtures.actionPlans ?? []),
     fakeRiskAppetites(fixtures.appetites ?? []),
     fakeControls(),
@@ -772,6 +774,24 @@ describe("DashboardService", () => {
       expect(result.scope).toEqual({ mode: "DEPARTMENT", departmentCount: 1 });
     });
 
+    it("getExecutiveView: excludes out-of-scope critical KRIs", async () => {
+      const inScopeRisk = buildRisk({ ownerDepartmentId: "dept-a" });
+      const outOfScopeRisk = buildRisk({ ownerDepartmentId: "dept-b" });
+      const inScopeKri = buildKri(inScopeRisk.id, { label: "In-scope KRI" });
+      const outOfScopeKri = buildKri(outOfScopeRisk.id, { label: "Out-of-scope KRI" });
+      const service = newService({
+        risks: [inScopeRisk, outOfScopeRisk],
+        kris: [inScopeKri, outOfScopeKri],
+        kriLatestValues: { [inScopeKri.id]: 10, [outOfScopeKri.id]: 10 },
+        scopeResolver: fakeScopeResolver({ mode: "DEPARTMENT", departmentIds: ["dept-a"], processIds: [] }),
+      });
+
+      const result = await service.getExecutiveView(actorWith(["dashboard.executive"]));
+
+      expect(result.criticalKris.map((row) => row.kri.id)).toEqual([inScopeKri.id]);
+      expect(result.criticalKris.map((row) => row.kri.id)).not.toContain(outOfScopeKri.id);
+    });
+
     it("getRiskCommitteeReport: applies the same DEPARTMENT scope to top risks", async () => {
       const inScope = buildRisk({ ownerDepartmentId: "dept-a" });
       const outOfScope = buildRisk({ ownerDepartmentId: "dept-b" });
@@ -785,6 +805,41 @@ describe("DashboardService", () => {
 
       expect(result.topRisks.map((r) => r.riskId)).toEqual([inScope.id]);
       expect(result.scope).toEqual({ mode: "DEPARTMENT", departmentCount: 1 });
+    });
+
+    it("getRiskCommitteeReport: excludes out-of-scope critical KRIs", async () => {
+      const inScopeRisk = buildRisk({ ownerDepartmentId: "dept-a" });
+      const outOfScopeRisk = buildRisk({ ownerDepartmentId: "dept-b" });
+      const inScopeKri = buildKri(inScopeRisk.id, { label: "In-scope KRI" });
+      const outOfScopeKri = buildKri(outOfScopeRisk.id, { label: "Out-of-scope KRI" });
+      const service = newService({
+        risks: [inScopeRisk, outOfScopeRisk],
+        kris: [inScopeKri, outOfScopeKri],
+        kriLatestValues: { [inScopeKri.id]: 10, [outOfScopeKri.id]: 10 },
+        scopeResolver: fakeScopeResolver({ mode: "DEPARTMENT", departmentIds: ["dept-a"], processIds: [] }),
+      });
+
+      const result = await service.getRiskCommitteeReport(actorWith(["dashboard.executive"]));
+
+      expect(result.krisInAlert.map((row) => row.kri.id)).toEqual([inScopeKri.id]);
+      expect(result.krisInAlert.map((row) => row.kri.id)).not.toContain(outOfScopeKri.id);
+    });
+
+    it("getConsolidatedReport: does not expose entities represented only by out-of-scope KRIs", async () => {
+      const inScopeRisk = buildRisk({ ownerDepartmentId: "dept-a" });
+      const outOfScopeRisk = buildRisk({ ownerDepartmentId: "dept-b" });
+      const inScopeKri = buildKri(inScopeRisk.id, { entity: "CI" });
+      const outOfScopeKri = buildKri(outOfScopeRisk.id, { entity: "SN" });
+      const service = newService({
+        risks: [inScopeRisk, outOfScopeRisk],
+        kris: [inScopeKri, outOfScopeKri],
+        scopeResolver: fakeScopeResolver({ mode: "DEPARTMENT", departmentIds: ["dept-a"], processIds: [] }),
+      });
+
+      const result = await service.getConsolidatedReport(actorWith(["dashboard.executive"]));
+
+      expect(result.entities.map((row) => row.entity)).toEqual(["CI"]);
+      expect(result.entities.find((row) => row.entity === "SN")).toBeUndefined();
     });
 
     it("getAppetiteVsResidual: scoped risk set, still a bare array (no scope metadata on this one endpoint)", async () => {
