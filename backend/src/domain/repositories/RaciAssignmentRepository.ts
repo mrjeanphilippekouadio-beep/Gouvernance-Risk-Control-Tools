@@ -15,4 +15,6 @@ export interface RaciAssignmentRepository {
   listForUser(tenantId: string, userId: string, options?: { roles?: RaciRole[] }): Promise<RaciAssignment[]>;
   /** Soft-delete (deleted_at), never a physical DELETE — see CLAUDE.md. */
   remove(tenantId: string, id: string): Promise<RaciAssignment>;
+  /** Restore an assignment when its audit write fails, compensating the preceding soft-delete. */
+  restore(tenantId: string, id: string): Promise<RaciAssignment>;
 }
