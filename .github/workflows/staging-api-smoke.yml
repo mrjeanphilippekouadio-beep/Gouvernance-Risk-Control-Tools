@@ -24,4 +24,6 @@ jobs:
         env:
           GRC_STAGING_API_BASE_URL: ${{ secrets.GRC_STAGING_API_BASE_URL }}
           GRC_STAGING_BEARER_TOKEN: ${{ secrets.GRC_STAGING_BEARER_TOKEN }}
+          GRC_STAGING_CONTROL_ID: ${{ secrets.GRC_STAGING_CONTROL_ID }}
+          GRC_STAGING_EVIDENCE_ID: ${{ secrets.GRC_STAGING_EVIDENCE_ID }}
         run: node tests/integration/staging-api-smoke.mjs
