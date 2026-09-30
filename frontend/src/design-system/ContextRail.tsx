@@ -30,7 +30,6 @@ export function ContextRail({ view }: ContextRailProps) {
           <button type="button" key={tab} className={currentActive === tab ? "context-rail__tab on" : "context-rail__tab"} title={LABELS[tab]} aria-current={currentActive === tab ? "page" : undefined} onClick={() => setActive(tab)}>
             {ICONS[tab]}
             <span className="context-rail__label">{tab === "comments" ? "Comment." : LABELS[tab]}</span>
-            <span className="context-rail__count">0</span>
           </button>
         ))}
       </div>
