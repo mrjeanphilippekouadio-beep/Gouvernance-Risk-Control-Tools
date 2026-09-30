@@ -102,8 +102,12 @@ function fakeAnomalies(anomalies: Anomaly[] = []): AnomalyRepository {
 function fakeKris(kris: Kri[]): KriRepository {
   return {
     getById: NOT_IMPLEMENTED,
-    async list(tenantId) {
-      return kris.filter((k) => k.tenantId === tenantId);
+    async list(tenantId, filters) {
+      return kris.filter(
+        (k) =>
+          k.tenantId === tenantId &&
+          (!filters?.riskIds || filters.riskIds.length === 0 || filters.riskIds.includes(k.riskId)),
+      );
     },
     create: NOT_IMPLEMENTED,
     update: NOT_IMPLEMENTED,
@@ -356,6 +360,30 @@ function buildProcess(overrides: Partial<Process> = {}): Process {
     owner: null,
     active: true,
     evaluationMode: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    deletedBy: null,
+    deletionReason: null,
+    ...overrides,
+  };
+}
+
+function buildKri(riskId: string, overrides: Partial<Kri> = {}): Kri {
+  return {
+    id: randomUUID(),
+    tenantId: TENANT,
+    label: "KRI",
+    formula: "count(x)",
+    thresholdGreen: 1,
+    thresholdOrange: 5,
+    thresholdRed: 10,
+    frequency: "MONTHLY",
+    riskId,
+    entity: null,
+    methodologyVersion: null,
+    description: null,
+    active: true,
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
@@ -776,6 +804,68 @@ describe("DashboardService", () => {
       const rows = await service.getAppetiteVsResidual(actorWith(["dashboard.executive"]));
 
       expect(rows.find((r) => r.subCategory === "Fraude")).toMatchObject({ maxResidualScore: 15, riskIds: [inScope.id] });
+    });
+
+    it("getKriConsolidated (CWE-863 fix): a DEPARTMENT-scoped actor does NOT see KRIs of a risk outside their perimeter", async () => {
+      const inScopeRisk = buildRisk({ ownerDepartmentId: "dept-a" });
+      const outOfScopeRisk = buildRisk({ ownerDepartmentId: "dept-b" });
+      const inScopeKri = buildKri(inScopeRisk.id, { label: "In-scope KRI" });
+      const outOfScopeKri = buildKri(outOfScopeRisk.id, { label: "Out-of-scope KRI" });
+
+      const service = newService({
+        risks: [inScopeRisk, outOfScopeRisk],
+        kris: [inScopeKri, outOfScopeKri],
+        scopeResolver: fakeScopeResolver({ mode: "DEPARTMENT", departmentIds: ["dept-a"], processIds: [] }),
+      });
+
+      const result = await service.getKriConsolidated(actorWith(["dashboard.executive"]));
+
+      expect(result.kris.map((r) => r.kri.id)).toEqual([inScopeKri.id]);
+      expect(result.kris.map((r) => r.kri.id)).not.toContain(outOfScopeKri.id);
+      expect(result.scope).toEqual({ mode: "DEPARTMENT", departmentCount: 1 });
+    });
+
+    it("getKriConsolidated: empty DEPARTMENT perimeter returns an empty KRI list, never falls back to unfiltered", async () => {
+      const risk = buildRisk({ ownerDepartmentId: "dept-a" });
+      const kri = buildKri(risk.id);
+      const service = newService({
+        risks: [risk],
+        kris: [kri],
+        scopeResolver: fakeScopeResolver({ mode: "DEPARTMENT", departmentIds: [], processIds: [] }),
+      });
+
+      const result = await service.getKriConsolidated(actorWith(["dashboard.executive"]));
+
+      expect(result).toEqual({ kris: [], activeAlerts: [], scope: { mode: "DEPARTMENT", departmentCount: 0 } });
+    });
+
+    it("getKriConsolidated: GLOBAL scope remains unfiltered (non-regression)", async () => {
+      const riskA = buildRisk({ ownerDepartmentId: "dept-a" });
+      const riskB = buildRisk({ ownerDepartmentId: "dept-b" });
+      const kriA = buildKri(riskA.id);
+      const kriB = buildKri(riskB.id);
+
+      const service = newService({
+        risks: [riskA, riskB],
+        kris: [kriA, kriB],
+        scopeResolver: fakeScopeResolver({ mode: "GLOBAL" }),
+      });
+
+      const result = await service.getKriConsolidated(actorWith(["dashboard.executive"]));
+
+      expect(result.kris.map((r) => r.kri.id).sort()).toEqual([kriA.id, kriB.id].sort());
+      expect(result.scope).toEqual({ mode: "GLOBAL", departmentCount: 0 });
+    });
+
+    it("getKriConsolidated: no scopeResolver wired -> GLOBAL, unchanged from pre-existing behavior", async () => {
+      const risk = buildRisk({ ownerDepartmentId: "dept-other" });
+      const kri = buildKri(risk.id);
+      const service = newService({ risks: [risk], kris: [kri] });
+
+      const result = await service.getKriConsolidated(actorWith(["dashboard.executive"]));
+
+      expect(result.kris.map((r) => r.kri.id)).toEqual([kri.id]);
+      expect(result.scope).toEqual({ mode: "GLOBAL", departmentCount: 0 });
     });
 
     it("multi-role: widestScopeMode already resolved onto the actor — GLOBAL wins over DEPARTMENT/PROCESS", () => {

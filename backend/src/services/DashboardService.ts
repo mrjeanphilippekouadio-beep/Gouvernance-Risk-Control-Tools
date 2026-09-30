@@ -714,16 +714,22 @@ export class DashboardService {
 
   /** GET /reports/kri-consolidated — global KRI view, trend over N periods (default 6), active alerts. */
   /**
-   * KRI aggregation is NOT filtered by the RACI-derived RiskScope: the
-   * @architect design (2026-09-30) only specifies scoping for
-   * risks/actions/anomalies (RiskRepository/ActionPlanListFilters
-   * extended, KriRepository deliberately not touched) — Kri has no
-   * department/process dimension to filter on in this lot. `scope` is
-   * still resolved and surfaced here so a DEPARTMENT/PROCESS-scoped
-   * actor's UI can show the same perimeter banner as the other 4
-   * dashboard.executive endpoints; it just doesn't change which KRIs
-   * come back. Flagged explicitly rather than silently scoping only
-   * some endpoints under one umbrella response shape.
+   * Security fix (CWE-863 HIGH, confirmed on PR #27 independent review):
+   * this endpoint previously resolved and surfaced `scope` but never
+   * applied it to `this.kris.list(...)`, so a dashboard.executive holder
+   * scoped to DEPARTMENT/PROCESS received every KRI in the tenant
+   * (formulas, measured values, riskId) through this one endpoint even
+   * though the response's `scope` field implied a respected perimeter.
+   * Now mirrors getExecutiveView/getRiskCommitteeReport/getConsolidatedReport:
+   * GLOBAL -> unfiltered (unchanged behavior); DEPARTMENT/PROCESS -> the
+   * KRI set is restricted to `Kri.riskId` values inside `getScopedRiskIds`,
+   * via a real repository-level `riskIds` filter, never a post-fetch
+   * in-memory one; empty perimeter -> `[]` directly, no repository call
+   * (same "empty perimeter -> empty result" doctrine as the other scoped
+   * endpoints). `Kri.riskId` is a mandatory non-null FK (ACT-130), so
+   * there is no orphan-KRI case to special-case here — unlike orphan
+   * anomalies (`riskId IS NULL`), which are excluded from scoped counts
+   * elsewhere in this class for the same fail-closed reason.
    */
   async getKriConsolidated(actor: AuthenticatedUser, options?: { periods?: number }): Promise<KriConsolidatedReport> {
     requirePermission(actor, "dashboard.executive");
@@ -731,7 +737,29 @@ export class DashboardService {
     const scope = await this.resolveScope(actor);
     const scopeSummary = this.scopeSummary(scope);
 
-    const kris = await this.kris.list(actor.tenantId);
+    if (this.scopeIsEmpty(scope)) {
+      return { kris: [], activeAlerts: [], scope: scopeSummary };
+    }
+
+    let kriListFilters: { riskIds?: string[] } | undefined;
+    if (scope.mode !== "GLOBAL") {
+      const scopedRiskIds = await this.getScopedRiskIds(actor.tenantId, scope);
+      const riskIds = [...(scopedRiskIds ?? new Set<string>())];
+      // A non-empty perimeter (scopeIsEmpty already returned above
+      // otherwise) can still resolve to zero actual risks — e.g. the
+      // configured departments currently own none. `kris.list`'s
+      // `riskIds` filter, like RiskRepository.list's `ids`, treats an
+      // empty array as "no constraint" (matches everything), which would
+      // silently re-leak the whole tenant here. Short-circuit to an
+      // empty result instead of ever calling the repository with an
+      // ambiguous empty filter.
+      if (riskIds.length === 0) {
+        return { kris: [], activeAlerts: [], scope: scopeSummary };
+      }
+      kriListFilters = { riskIds };
+    }
+
+    const kris = await this.kris.list(actor.tenantId, kriListFilters);
     const rows = await Promise.all(
       kris.map(async (kri): Promise<KriConsolidatedRow> => {
         const summary = await this.toKriSummary(actor.tenantId, kri);
