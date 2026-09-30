@@ -64,6 +64,7 @@ function App() {
   const { idToken, error, buttonRef, signOut } = useGoogleSignIn(GOOGLE_CLIENT_ID);
   const [devToken, setDevToken] = useState("");
   const [view, setView] = useState<View>("cartography");
+  const [evaluationRiskId, setEvaluationRiskId] = useState<string | undefined>();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const token = idToken ?? devToken;
 
@@ -120,8 +121,8 @@ function App() {
         <div className="workspace-grid">
           <main className="app-content">
             {view === "cartography" && <CartographyPage token={token} />}
-            {view === "evaluation" && <EvaluationPage token={token} />}
-            {view === "risks" && <RisksPage token={token} />}
+            {view === "evaluation" && <EvaluationPage token={token} initialRiskId={evaluationRiskId} />}
+            {view === "risks" && <RisksPage token={token} onEvaluate={(riskId) => { setEvaluationRiskId(riskId); setView("evaluation"); }} />}
             {view === "roles" && <RolesAdmin token={token} />}
             {view === "feedback" && <FeedbackAdmin token={token} />}
             {view === "placeholder" && (
@@ -144,7 +145,7 @@ function App() {
 }
 
 function Icon({ name }: { name: string }) {
-  const paths: Record<string, React.ReactNode> = {
+  const paths: Record<string, import("react").ReactNode> = {
     grid: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
     check: <><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10"/></>,
     scale: <><path d="M12 21a9 9 0 1 0 0-18"/><path d="M12 21a9 9 0 1 1 0-18"/><path d="M12 3v18"/></>,
