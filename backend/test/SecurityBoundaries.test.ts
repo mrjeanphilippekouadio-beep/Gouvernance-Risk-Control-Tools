@@ -778,7 +778,7 @@ describe("SEC-008 evidence deletion ordering (regression lock)", () => {
       {
         fileName: "proof.pdf",
         mimeType: "application/pdf",
-        content: Buffer.from("x"),
+        content: Buffer.from("%PDF-1.7\nminimal test fixture"),
         documentType: "CONTROL_EVIDENCE",
         controlExecutionId: null,
       },
