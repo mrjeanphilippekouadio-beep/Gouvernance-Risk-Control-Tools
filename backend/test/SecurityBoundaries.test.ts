@@ -1206,6 +1206,24 @@ describe("SEC-015 retired risk appetite threshold is still applied to residual s
 // reliably enforce the R+A combination it explicitly documents itself as
 // blocking.
 
+function inMemoryUserRepositoryForSec016(): UserRepository {
+  return {
+    async getById(tenantId, id) {
+      if (tenantId !== TENANT) return null;
+      return {
+        id,
+        tenantId,
+        email: `${id}@example.com`,
+        displayName: id,
+        roles: [],
+        departmentId: null,
+        createdAt: new Date(),
+        deletedAt: null,
+      } satisfies User;
+    },
+  } as unknown as UserRepository;
+}
+
 function inMemoryRaciRepositoryForSec016(): RaciAssignmentRepository {
   const store = new Map<string, RaciAssignment>();
   return {
@@ -1264,7 +1282,7 @@ describe("SEC-016 RACI self-Accountable guard bypassable via assignment order", 
         },
       } as unknown as RiskRepository;
 
-      const service = new RaciAssignmentService(inMemoryRaciRepositoryForSec016(), inMemoryAuditRepository(), risks);
+      const service = new RaciAssignmentService(inMemoryRaciRepositoryForSec016(), inMemoryAuditRepository(), risks, undefined, undefined, inMemoryUserRepositoryForSec016());
       const selfDesigner: AuthenticatedUser = { ...attacker, roles: ["raci.assign", "raci.read"] };
 
       // Self-designate as Accountable FIRST — allowed today, since no
