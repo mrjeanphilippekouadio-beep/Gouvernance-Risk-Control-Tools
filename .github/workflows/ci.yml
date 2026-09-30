@@ -44,6 +44,7 @@ jobs:
       - run: npm audit --audit-level=high
       - run: npm run build --workspace=@djamo/design-system
       - run: npm run build --workspace=@grc-tools/frontend
+      - run: npm run lint --workspace=@grc-tools/frontend
 
   security:
     runs-on: ubuntu-latest
