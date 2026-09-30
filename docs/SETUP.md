@@ -82,7 +82,8 @@ tout le reste (migrations, démarrage) est déjà scripté.
 ```bash
 cd backend
 cp .env.example .env
-# remplir DATABASE_URL, GOOGLE_OAUTH_CLIENT_ID, GOOGLE_DRIVE_CREDENTIALS_PATH
+# remplir DATABASE_URL et GOOGLE_OAUTH_CLIENT_ID
+# GOOGLE_DRIVE_CREDENTIALS_PATH est optionnel et réservé au développement local
 npm install
 npm run migrate
 # charger le tenant/utilisateur de démo, ou créer les vôtres :
@@ -120,3 +121,11 @@ La création des rôles et la distribution des secrets restent des opérations
 d'infrastructure : le rôle runtime doit rester sans privilèges DDL, tandis
 que le rôle de migration reçoit uniquement les privilèges nécessaires aux
 migrations et n'est jamais utilisé par Cloud Run.
+
+### Cloud Run
+
+Le modèle de déploiement sécurisé se trouve dans
+`infra/cloud-run/service.template.yaml`. Il impose un compte de service
+runtime dédié, `DATABASE_URL` via Secret Manager, une image référencée par
+digest et des probes `/ready` et `/health`.
+

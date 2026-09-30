@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { GoogleAuth } from "google-auth-library";
+import { resolveGoogleDriveAuthOptions } from "./googleDriveAuth.js";
 import type { DocumentStorage, StoredDocumentRef } from "./DocumentStorage.js";
 
 /**
@@ -18,12 +19,11 @@ export class GoogleDriveStorage implements DocumentStorage {
 
   constructor(
     private readonly tenantFolderResolver: (tenantId: string) => Promise<string>,
-    credentialsJsonPath: string,
+    credentialsJsonPath?: string,
   ) {
-    this.auth = new GoogleAuth({
-      keyFile: credentialsJsonPath,
-      scopes: ["https://www.googleapis.com/auth/drive"],
-    });
+    this.auth = new GoogleAuth(
+      resolveGoogleDriveAuthOptions(process.env.NODE_ENV ?? "development", credentialsJsonPath),
+    );
   }
 
   private async drive() {
