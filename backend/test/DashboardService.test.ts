@@ -99,10 +99,14 @@ function fakeAnomalies(anomalies: Anomaly[] = []): AnomalyRepository {
   };
 }
 
-function fakeKris(kris: Kri[]): KriRepository {
+function fakeKris(
+  kris: Kri[],
+  listCalls: Array<{ tenantId: string; riskIds?: string[] }> = [],
+): KriRepository {
   return {
     getById: NOT_IMPLEMENTED,
     async list(tenantId, filters) {
+      listCalls.push({ tenantId, ...(filters?.riskIds ? { riskIds: [...filters.riskIds] } : {}) });
       return kris.filter(
         (k) =>
           k.tenantId === tenantId &&
@@ -438,6 +442,8 @@ function newService(fixtures: {
   risks?: Risk[];
   evaluations?: RiskEvaluation[];
   kris?: Kri[];
+  /** Captures KRI repository filters for dashboard scope regression tests. */
+  kriListCalls?: Array<{ tenantId: string; riskIds?: string[] }>;
   actionPlans?: ActionPlan[];
   appetites?: RiskAppetite[];
   departments?: Department[];
@@ -452,7 +458,7 @@ function newService(fixtures: {
     fakeRisks(fixtures.risks ?? []),
     fakeEvaluations(fixtures.evaluations ?? []),
     fakeAnomalies(fixtures.anomalies ?? []),
-    fakeKris(fixtures.kris ?? []),
+    fakeKris(fixtures.kris ?? [], fixtures.kriListCalls),
     fakeKriMeasures(),
     fakeActionPlans(fixtures.actionPlans ?? []),
     fakeRiskAppetites(fixtures.appetites ?? []),
@@ -785,6 +791,34 @@ describe("DashboardService", () => {
 
       expect(result.topRisks.map((r) => r.riskId)).toEqual([inScope.id]);
       expect(result.scope).toEqual({ mode: "DEPARTMENT", departmentCount: 1 });
+    });
+
+    it("executive view, committee report, and consolidated report all filter KRI data to the resolved risk scope", async () => {
+      const inScopeRisk = buildRisk({ ownerDepartmentId: "dept-a" });
+      const outOfScopeRisk = buildRisk({ ownerDepartmentId: "dept-b" });
+      const inScopeKri = buildKri(inScopeRisk.id, { entity: "CI", label: "In-scope KRI" });
+      const outOfScopeKri = buildKri(outOfScopeRisk.id, { entity: "OUTSIDE", label: "Out-of-scope KRI" });
+      const kriListCalls: Array<{ tenantId: string; riskIds?: string[] }> = [];
+      const service = newService({
+        risks: [inScopeRisk, outOfScopeRisk],
+        kris: [inScopeKri, outOfScopeKri],
+        kriListCalls,
+        scopeResolver: fakeScopeResolver({ mode: "DEPARTMENT", departmentIds: ["dept-a"], processIds: [] }),
+      });
+      const actor = actorWith(["dashboard.executive"]);
+
+      const executive = await service.getExecutiveView(actor);
+      const committee = await service.getRiskCommitteeReport(actor);
+      const consolidated = await service.getConsolidatedReport(actor);
+
+      expect(executive.criticalKris.map((row) => row.kri.id)).not.toContain(outOfScopeKri.id);
+      expect(committee.krisInAlert.map((row) => row.kri.id)).not.toContain(outOfScopeKri.id);
+      expect(consolidated.entities.map((row) => row.entity)).toContain("CI");
+      expect(consolidated.entities.map((row) => row.entity)).not.toContain("OUTSIDE");
+      expect(kriListCalls.filter((call) => call.riskIds !== undefined)).toHaveLength(3);
+      for (const call of kriListCalls.filter((item) => item.riskIds !== undefined)) {
+        expect(call.riskIds).toEqual([inScopeRisk.id]);
+      }
     });
 
     it("getAppetiteVsResidual: scoped risk set, still a bare array (no scope metadata on this one endpoint)", async () => {
