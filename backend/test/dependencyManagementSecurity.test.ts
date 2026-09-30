@@ -19,6 +19,10 @@ const workflow = readFileSync(
   resolve(root, ".github/workflows/ci.yml"),
   "utf8",
 );
+const dependencyReview = readFileSync(
+  resolve(root, ".github/workflows/dependency-review.yml"),
+  "utf8",
+);
 const dependabot = readFileSync(
   resolve(root, ".github/dependabot.yml"),
   "utf8",
