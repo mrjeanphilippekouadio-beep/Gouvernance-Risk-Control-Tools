@@ -90,7 +90,7 @@ describe("EvidenceService", () => {
     const service = new EvidenceService(inMemoryEvidenceRepository(), fakeDocumentStorage(), inMemoryAuditRepository());
     const evidence = await service.upload(
       tenantAUser,
-      { fileName: "preuve.pdf", mimeType: "application/pdf", content: Buffer.from("x"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
+      { fileName: "preuve.pdf", mimeType: "application/pdf", content: Buffer.from("%PDF-1.7\nminimal test fixture"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
       "REQ-1",
     );
     expect(evidence.tenantId).toBe("tenant-a");
@@ -113,7 +113,7 @@ describe("EvidenceService", () => {
     const service = new EvidenceService(repo, fakeDocumentStorage(), inMemoryAuditRepository());
     const evidence = await service.upload(
       tenantAUser,
-      { fileName: "confidentiel.pdf", mimeType: "application/pdf", content: Buffer.from("x"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
+      { fileName: "confidentiel.pdf", mimeType: "application/pdf", content: Buffer.from("%PDF-1.7\nminimal test fixture"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
       "REQ-3",
     );
 
@@ -126,7 +126,7 @@ describe("EvidenceService", () => {
     const service = new EvidenceService(repo, storage, inMemoryAuditRepository());
     const evidence = await service.upload(
       tenantAUser,
-      { fileName: "confidentiel.pdf", mimeType: "application/pdf", content: Buffer.from("x"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
+      { fileName: "confidentiel.pdf", mimeType: "application/pdf", content: Buffer.from("%PDF-1.7\nminimal test fixture"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
       "REQ-4",
     );
 
@@ -140,7 +140,7 @@ describe("EvidenceService", () => {
     await expect(
       service.upload(
         noPermUser,
-        { fileName: "x.pdf", mimeType: "application/pdf", content: Buffer.from("x"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
+        { fileName: "x.pdf", mimeType: "application/pdf", content: Buffer.from("%PDF-1.7\nminimal test fixture"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
         "REQ-6",
       ),
     ).rejects.toThrow(ForbiddenError);
