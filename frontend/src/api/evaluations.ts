@@ -1,0 +1,108 @@
+import { apiRequest } from "./client";
+
+export type EvaluationType = "AD_HOC" | "ANNUELLE" | "ANTICIPEE";
+export type EvaluationStatus = "BROUILLON" | "VALIDATED" | "REJECTED" | "VALIDE_COMITE";
+
+export interface ImpactAxis {
+  code: string;
+  label: string;
+  order: number;
+}
+
+export interface ScaleLevel {
+  level: number;
+  label: string;
+}
+
+export interface RatingScale {
+  id: string;
+  name: string;
+  version: string;
+  status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+  probabilityLevels: number;
+  probabilityLabels: ScaleLevel[] | null;
+  impactLevels: number;
+  impactLabels: ScaleLevel[] | null;
+  impactAxes: { axes: ImpactAxis[]; retainedImpactRule: "MAX" | "AVERAGE" | "WEIGHTED_SUM" } | null;
+  masteryScale: { levels: ScaleLevel[]; defenseLines: string[]; aggregation: "MIN"; thresholds: { label: string; min: number; max: number }[] | null } | null;
+}
+
+export interface MasteryLineScore {
+  line: string;
+  adequacy: number;
+  execution: number;
+  effectiveness: number;
+}
+
+export interface RiskEvaluation {
+  id: string;
+  riskId: string;
+  evaluationType: EvaluationType;
+  status: EvaluationStatus;
+  evaluatorId: string;
+  subCategory: string;
+  entity: string | null;
+  evaluationMode: "CLASSIQUE" | "PARTICIPATIF" | null;
+  ratingScaleId: string | null;
+  ratingScaleVersion: string | null;
+  inherentProbability: number | null;
+  inherentImpacts: { code: string; value: number }[] | null;
+  inherentImpactRetained: number | null;
+  inherentScore: number | null;
+  masteryLines: MasteryLineScore[] | null;
+  masteryGlobal: number | null;
+  residualProbability: number | null;
+  residualImpacts: { code: string; value: number }[] | null;
+  residualImpactRetained: number | null;
+  residualScore: number | null;
+  residualJustification: string | null;
+  appetiteThresholdSuggested: number | null;
+  appetiteThresholdOverride: number | null;
+  appetiteThresholdApplied: number | null;
+  appetiteExceeded: boolean | null;
+  validatedBy: string | null;
+  validatedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateEvaluationInput {
+  riskId: string;
+  evaluationType: EvaluationType;
+  subCategory: string;
+  entity?: string | null;
+}
+
+export const evaluationsApi = {
+  listForRisk: (token: string, riskId: string) =>
+    apiRequest<RiskEvaluation[]>(`/api/v1/risk-evaluations?riskId=${encodeURIComponent(riskId)}&limit=100`, { token }),
+  get: (token: string, id: string) =>
+    apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}`, { token }),
+  create: (token: string, input: CreateEvaluationInput) =>
+    apiRequest<RiskEvaluation>("/api/v1/risk-evaluations", { method: "POST", body: input, token }),
+  recordInherent: (token: string, id: string, probability: number, impacts: { code: string; value: number }[]) =>
+    apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/inherent`, {
+      method: "PATCH", body: { probability, impacts }, token,
+    }),
+  recordMastery: (token: string, id: string, lines: MasteryLineScore[]) =>
+    apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/mastery`, {
+      method: "PATCH", body: { lines }, token,
+    }),
+  recordResidual: (
+    token: string, id: string, probability: number, impacts: { code: string; value: number }[],
+    justification: string, appetiteOverride: number | null,
+  ) => apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/residual`, {
+    method: "PATCH", body: { probability, impacts, justification, appetiteOverride }, token,
+  }),
+  validate: (token: string, id: string, comment: string) =>
+    apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/validate`, {
+      method: "PATCH", body: { comment: comment || null }, token,
+    }),
+  reject: (token: string, id: string, comment: string) =>
+    apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/reject`, {
+      method: "PATCH", body: { comment }, token,
+    }),
+};
+
+export const ratingScalesApi = {
+  list: (token: string) => apiRequest<RatingScale[]>("/api/v1/rating-scales", { token }),
+};
