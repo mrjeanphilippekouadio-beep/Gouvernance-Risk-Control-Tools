@@ -16,8 +16,6 @@ const STATUS: Record<EvaluationStatus, { label: string; tone: "neutral" | "succe
 const TYPE_LABEL: Record<EvaluationType, string> = {
   AD_HOC: "Ponctuelle", ANNUELLE: "Annuelle", ANTICIPEE: "Anticipée",
 };
-const levelLabel = (levels: { level: number; label: string }[] | null | undefined, value: number | null) =>
-  value === null ? "—" : levels?.find((level) => level.level === value)?.label ?? String(value);
 const describeError = (error: unknown) =>
   error instanceof ApiError ? `${error.message}${error.requestId ? ` (réf. ${error.requestId})` : ""}`
     : error instanceof Error ? error.message : "Une erreur inattendue est survenue.";
@@ -143,7 +141,7 @@ export function EvaluationPage({ token }: EvaluationPageProps) {
 
   const selectedImpactPayload = (values: Record<string, number>) => axes.map((axis) => ({ code: axis.code, value: values[axis.code] ?? 1 }));
   const scorePreview = (p: number, values: Record<string, number>) => {
-    if (!values || !axes.length) return null;
+    if (!values || !axes.length || activeScale?.impactAxes?.retainedImpactRule === "WEIGHTED_SUM") return null;
     const vals = axes.map((axis) => values[axis.code] ?? 1);
     const retained = activeScale?.impactAxes?.retainedImpactRule === "AVERAGE"
       ? vals.reduce((sum, value) => sum + value, 0) / vals.length
@@ -188,6 +186,7 @@ export function EvaluationPage({ token }: EvaluationPageProps) {
       {error && <MessageBanner tone="danger">{error}</MessageBanner>}
       {notice && <MessageBanner tone="success">{notice}</MessageBanner>}
       {!activeScale && <MessageBanner tone="warning">Aucune grille de cotation active n'est disponible. Configure et active une grille avant de saisir les scores.</MessageBanner>}
+      {activeScale?.impactAxes?.retainedImpactRule === "WEIGHTED_SUM" && <MessageBanner tone="warning">La règle d'impact retenu « somme pondérée » n'est pas encore prise en charge par le moteur de cotation. Configure une règle MAX ou AVERAGE avant de saisir les scores.</MessageBanner>}
 
       <div className="eval-context-bar">
         <FormField label="Risque à évaluer" htmlFor="eval-risk-select">
@@ -266,7 +265,7 @@ export function EvaluationPage({ token }: EvaluationPageProps) {
                 {renderProbability("Probabilité inhérente", probability, setProbability)}
                 {renderImpactFields(inherentImpacts, setInherentImpacts, "inherent")}
                 <div className="eval-score-preview"><span>Score indicatif</span><strong>{inherentPreview ? inherentPreview.score.toFixed(1).replace(/\.0$/, "") : "—"}</strong><small>Probabilité × impact retenu · le serveur reste la référence</small></div>
-                <Button disabled={saving || !activeScale?.impactAxes?.axes.length} onClick={() => perform(() => evaluationsApi.recordInherent(token, selectedEvaluation.id, probability, selectedImpactPayload(inherentImpacts)), "Cotation inhérente enregistrée.")}>Enregistrer l'inhérent</Button>
+                <Button disabled={saving || !activeScale?.impactAxes?.axes.length || activeScale?.impactAxes?.retainedImpactRule === "WEIGHTED_SUM"} onClick={() => perform(() => evaluationsApi.recordInherent(token, selectedEvaluation.id, probability, selectedImpactPayload(inherentImpacts)), "Cotation inhérente enregistrée.")}>Enregistrer l'inhérent</Button>
               </section>
 
               <section className="eval-scoring-section">
