@@ -12,9 +12,9 @@ const EnvSchema = z.object({
 
   GOOGLE_OAUTH_CLIENT_ID: z.string().min(1, "GOOGLE_OAUTH_CLIENT_ID is required for auth"),
 
-  GOOGLE_DRIVE_CREDENTIALS_PATH: z
-    .string()
-    .min(1, "GOOGLE_DRIVE_CREDENTIALS_PATH is required (service account JSON key path)"),
+  // Optional local-development compatibility. Production Cloud Run uses
+  // the assigned service identity (Application Default Credentials) instead.
+  GOOGLE_DRIVE_CREDENTIALS_PATH: z.string().optional(),
 
   // Comma-separated list of origins the frontend is served from. The
   // browser sends a CORS preflight (OPTIONS, no Authorization header)
@@ -33,6 +33,13 @@ const EnvSchema = z.object({
 });
 
 const parsed = EnvSchema.safeParse(process.env);
+
+if (process.env.NODE_ENV === "production" && process.env.GOOGLE_DRIVE_CREDENTIALS_PATH) {
+  console.error(
+    "Invalid production configuration: GOOGLE_DRIVE_CREDENTIALS_PATH must not be set; use the Cloud Run service identity.",
+  );
+  process.exit(1);
+}
 
 if (process.env.NODE_ENV === "production" && process.env.MIGRATION_DATABASE_URL) {
   // Migration credentials must never be injected into the long-running
