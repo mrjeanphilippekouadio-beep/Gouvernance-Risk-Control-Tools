@@ -42,6 +42,7 @@ export function CartographyPage({ token }: CartographyPageProps) {
   const [points, setPoints] = useState<RiskPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [partialErrorCount, setPartialErrorCount] = useState(0);
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [processFilter, setProcessFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<EvaluationStatus | "">("");
@@ -53,28 +54,32 @@ export function CartographyPage({ token }: CartographyPageProps) {
       setError(null);
       try {
         const riskList = await risksApi.list(token);
-        const all = await Promise.all(
+        const results = await Promise.all(
           riskList.map(async (risk) => {
             try {
               const evaluations = await evaluationsApi.listForRisk(token, risk.id);
               const evaluation = latestEvaluation(evaluations);
-              if (!evaluation) return null;
+              if (!evaluation) return { point: null, failed: false };
               return {
-                risk,
-                evaluation,
-                inherentImpact: impactValue(evaluation.inherentImpacts, evaluation.inherentImpactRetained),
-                residualImpact: impactValue(evaluation.residualImpacts, evaluation.residualImpactRetained),
-                inherentProbability: Math.max(1, Math.min(5, Math.round(evaluation.inherentProbability ?? 1))),
-                residualProbability: Math.max(1, Math.min(5, Math.round(evaluation.residualProbability ?? 1))),
-              } satisfies RiskPoint;
+                point: {
+                  risk,
+                  evaluation,
+                  inherentImpact: impactValue(evaluation.inherentImpacts, evaluation.inherentImpactRetained),
+                  residualImpact: impactValue(evaluation.residualImpacts, evaluation.residualImpactRetained),
+                  inherentProbability: Math.max(1, Math.min(5, Math.round(evaluation.inherentProbability ?? 1))),
+                  residualProbability: Math.max(1, Math.min(5, Math.round(evaluation.residualProbability ?? 1))),
+                } satisfies RiskPoint,
+                failed: false,
+              };
             } catch {
-              return null;
+              return { point: null, failed: true };
             }
           }),
         );
         if (!cancelled) {
           setRisks(riskList);
-          setPoints(all.filter((value): value is RiskPoint => Boolean(value)));
+          setPoints(results.flatMap((result) => result.point ? [result.point] : []));
+          setPartialErrorCount(results.filter((result) => result.failed).length);
         }
       } catch (err) {
         if (!cancelled) setError(describeError(err));
@@ -126,6 +131,11 @@ export function CartographyPage({ token }: CartographyPageProps) {
       </div>
 
       {error && <MessageBanner tone="danger">{error}</MessageBanner>}
+      {partialErrorCount > 0 && (
+        <MessageBanner tone="warning">
+          Impossible de charger les évaluations de {partialErrorCount} risque(s). La cartographie peut être incomplète ; les données manquantes ne sont pas assimilées à des risques sans évaluation.
+        </MessageBanner>
+      )}
 
       <MessageBanner tone="info">
         <strong>Dépend d'Évaluation, jamais l'inverse.</strong> Chaque point de cette cartographie provient d'une évaluation renvoyée par le backend. La page n'invente aucun score.
