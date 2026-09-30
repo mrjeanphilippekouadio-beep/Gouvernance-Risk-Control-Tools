@@ -3,7 +3,7 @@ import { Button, Card, DatePicker, FormField, Grid, GridItem, MessageBanner, Mod
 import { ApiError } from "../../api/client";
 import { controlsApi, type Control } from "../../api/controls";
 import { executionsApi, effectivenessApi, type ControlExecution, type EffectivenessAssessment, type ExecutionStatus, type EffectivenessRating, type EffectivenessResult } from "../../api/controlMonitoring";
-import "./WorkflowPages.css";
+import "../core/WorkflowPages.css";
 
 type Mode = "executions" | "effectiveness";
 const executionLabels: Record<ExecutionStatus, string> = { DONE: "Réalisé", NOT_DONE: "Non réalisé", NOT_APPLICABLE: "Non applicable" };
