@@ -5,7 +5,7 @@ import { evaluationsApi, ratingScalesApi, type EvaluationStatus, type Evaluation
 import { risksApi, type Risk } from "../../api/risks";
 import "./EvaluationPage.css";
 
-interface EvaluationPageProps { token: string; }
+interface EvaluationPageProps { token: string; initialRiskId?: string; }
 
 const STATUS: Record<EvaluationStatus, { label: string; tone: "neutral" | "success" | "danger" | "warning" }> = {
   BROUILLON: { label: "Brouillon", tone: "warning" },
@@ -20,7 +20,7 @@ const describeError = (error: unknown) =>
   error instanceof ApiError ? `${error.message}${error.requestId ? ` (réf. ${error.requestId})` : ""}`
     : error instanceof Error ? error.message : "Une erreur inattendue est survenue.";
 
-export function EvaluationPage({ token }: EvaluationPageProps) {
+export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
   const [risks, setRisks] = useState<Risk[]>([]);
   const [scales, setScales] = useState<RatingScale[]>([]);
   const [selectedRiskId, setSelectedRiskId] = useState("");
@@ -61,7 +61,7 @@ export function EvaluationPage({ token }: EvaluationPageProps) {
         if (cancelled) return;
         setRisks(riskData.filter((risk) => risk.status !== "ARCHIVED"));
         setScales(scaleData);
-        if (!selectedRiskId && riskData.length) setSelectedRiskId(riskData.find((risk) => risk.status !== "ARCHIVED")?.id ?? "");
+        if (!selectedRiskId) setSelectedRiskId(initialRiskId ?? riskData.find((risk) => risk.status !== "ARCHIVED")?.id ?? "");
       } catch (err) { if (!cancelled) setError(describeError(err)); }
       finally { if (!cancelled) setLoading(false); }
     }
@@ -69,7 +69,7 @@ export function EvaluationPage({ token }: EvaluationPageProps) {
     return () => { cancelled = true; };
     // The initial list is intentionally loaded once per authenticated token.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, initialRiskId]);
 
   useEffect(() => {
     let cancelled = false;
