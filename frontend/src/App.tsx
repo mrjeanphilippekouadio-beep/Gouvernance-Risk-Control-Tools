@@ -78,7 +78,7 @@ function App() {
   const [evaluationRiskId, setEvaluationRiskId] = useState<string | undefined>();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const token = idToken ?? devToken;
-  const errorPath = window.location.pathname.replace(/\\/+$/, "");
+  const errorPath = window.location.pathname;
 
   if (errorPath === "/400" || errorPath === "/error/400") return <ErrorPage code={400} />;
   if (errorPath === "/500" || errorPath === "/error/500") return <ErrorPage code={500} onRetry={() => window.location.reload()} />;
