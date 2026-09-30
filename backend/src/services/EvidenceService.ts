@@ -163,7 +163,9 @@ export class EvidenceService {
       await this.storage.delete(evidence.driveFileId);
     } catch (storageError) {
       throw new Error(
-        "Evidence was logically deleted and audited, but Drive cleanup failed; reconciliation is required",
+        `Evidence was logically deleted and audited, but Drive cleanup failed; reconciliation is required: ${
+          storageError instanceof Error ? storageError.message : String(storageError)
+        }`,
         { cause: storageError },
       );
     }
