@@ -750,6 +750,11 @@ function inMemoryEvidenceRepository(): EvidenceRepository & { _store: Map<string
       if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
       store.set(id, { ...existing, status: "DELETED" });
     },
+    async restoreActive(tenantId, id) {
+      const existing = store.get(id);
+      if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
+      store.set(id, { ...existing, status: "ACTIVE" });
+    },
     _store: store,
   };
 }
@@ -785,7 +790,7 @@ describe("SEC-008 evidence deletion ordering (regression lock)", () => {
       "REQ-SEC-008a",
     );
 
-    await expect(service.delete(evidenceUser, evidence.id, "REQ-SEC-008b")).rejects.toThrow("Drive is down");
+    await expect(service.delete(evidenceUser, evidence.id, "REQ-SEC-008b")).rejects.toThrow(/Drive cleanup failed.*Drive is down/);
 
     // Even though storage.delete threw, the DB row is already marked
     // DELETED — the old order (storage first) could leave it ACTIVE and

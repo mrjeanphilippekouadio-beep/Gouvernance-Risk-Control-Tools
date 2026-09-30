@@ -130,25 +130,45 @@ export class EvidenceService {
     requirePermission(actor, "evidence.delete");
     const evidence = await this.getOwnedOrThrow(actor, id);
 
-    // SEC-008: soft-delete the DB row first. If the Drive call below then
-    // fails, the record is already correctly marked deleted and the file
-    // is merely an orphan (recoverable, no proof lost) — the old order
-    // could otherwise leave the DB row "active" pointing at nothing were
-    // the DB write to fail after storage.delete had already succeeded.
+    // SEC-008: establish the logical deletion and its audit record before
+    // touching external storage. If the audit write fails, restore the DB
+    // row to ACTIVE so the logical state and audit trail do not diverge.
     await this.evidences.markDeleted(actor.tenantId, id);
-    await this.storage.delete(evidence.driveFileId);
 
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Evidence",
-      entityId: id,
-      action: "DELETE",
-      oldValue: { ...evidence, driveUrl: undefined },
-      newValue: null,
-      reason: null,
-      requestId,
-    });
+    try {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Evidence",
+        entityId: id,
+        action: "DELETE",
+        oldValue: { ...evidence, driveUrl: undefined },
+        newValue: null,
+        reason: null,
+        requestId,
+      });
+    } catch (auditError) {
+      try {
+        await this.evidences.restoreActive(actor.tenantId, id);
+      } catch (rollbackError) {
+        throw new Error(
+          "Evidence audit failed and DB rollback failed; reconciliation is required",
+          { cause: new AggregateError([auditError, rollbackError]) },
+        );
+      }
+      throw auditError;
+    }
+
+    try {
+      await this.storage.delete(evidence.driveFileId);
+    } catch (storageError) {
+      throw new Error(
+        `Evidence was logically deleted and audited, but Drive cleanup failed; reconciliation is required: ${
+          storageError instanceof Error ? storageError.message : String(storageError)
+        }`,
+        { cause: storageError },
+      );
+    }
   }
 
   private async getOwnedOrThrow(actor: AuthenticatedUser, id: string): Promise<Evidence> {

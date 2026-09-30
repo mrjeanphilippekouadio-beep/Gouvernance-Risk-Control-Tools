@@ -42,6 +42,11 @@ function inMemoryEvidenceRepository(): EvidenceRepository {
       if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
       store.set(id, { ...existing, status: "DELETED" });
     },
+    async restoreActive(tenantId, id) {
+      const existing = store.get(id);
+      if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
+      store.set(id, { ...existing, status: "ACTIVE" });
+    },
   };
 }
 
@@ -152,6 +157,31 @@ describe("EvidenceService", () => {
     );
 
     await expect(service.getUrl(tenantBUser, evidence.id)).rejects.toThrow(NotFoundError);
+  });
+
+  it("restores the evidence row and does not touch Drive when audit recording fails during delete", async () => {
+    const repo = inMemoryEvidenceRepository();
+    const storage = fakeDocumentStorage();
+    let auditCalls = 0;
+    const audit: AuditRepository = {
+      async record() {
+        auditCalls += 1;
+        if (auditCalls === 2) throw new Error("audit unavailable");
+      },
+      async listForEntity() { return []; },
+    };
+    const service = new EvidenceService(repo, storage, audit);
+    const evidence = await service.upload(
+      tenantAUser,
+      { fileName: "audit-failure.pdf", mimeType: "application/pdf", content: Buffer.from("%PDF-1.7\nminimal test fixture"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
+      "REQ-DELETE-AUDIT-1",
+    );
+
+    await expect(service.delete(tenantAUser, evidence.id, "REQ-DELETE-AUDIT-2")).rejects.toThrow("audit unavailable");
+
+    const restored = await repo.getById(tenantAUser.tenantId, evidence.id);
+    expect(restored?.status).toBe("ACTIVE");
+    expect(storage.deletedIds).toHaveLength(0);
   });
 
   it("never lets a different tenant delete another tenant's evidence", async () => {
