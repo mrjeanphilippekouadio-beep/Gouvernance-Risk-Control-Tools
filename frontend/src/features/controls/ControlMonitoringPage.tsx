@@ -55,14 +55,13 @@ export function ControlMonitoringPage({ token }: Props) {
     if (!controlId) { setExecutions([]); setAssessments([]); return; }
     setError(null);
     try {
-      const [executionRows, assessmentRows] = await Promise.all([
-        executionsApi.list(token, controlId),
-        effectivenessApi.list(token, controlId),
-      ]);
-      setExecutions(executionRows);
-      setAssessments(assessmentRows);
+      if (mode === "executions") {
+        setExecutions(await executionsApi.list(token, controlId));
+      } else {
+        setAssessments(await effectivenessApi.list(token, controlId));
+      }
     } catch (err) { setError(errorMessage(err)); }
-  }, [token, controlId]);
+  }, [token, controlId, mode]);
 
   useEffect(() => { void loadControls(); }, [loadControls]);
   useEffect(() => { void loadRecords(); }, [loadRecords]);
@@ -70,7 +69,6 @@ export function ControlMonitoringPage({ token }: Props) {
   const activeControl = controls.find((item) => item.id === controlId);
   const doneCount = executions.filter((item) => item.status === "DONE").length;
   const pendingValidationCount = executions.filter((item) => !item.validatedAt).length;
-  const ineffectiveCount = assessments.filter((item) => item.operationalEffectiveness === "INEFFECTIVE").length;
 
   async function submitExecution(event: FormEvent) {
     event.preventDefault();
@@ -133,7 +131,7 @@ export function ControlMonitoringPage({ token }: Props) {
     <div className="core-page__stats">
       <div className="core-stat"><span>Exécutions enregistrées</span><strong>{executions.length}</strong></div>
       <div className="core-stat"><span>En attente de validation</span><strong>{pendingValidationCount}</strong></div>
-      <div className="core-stat"><span>Évaluations inefficaces</span><strong>{ineffectiveCount}</strong></div>
+      <div className="core-stat"><span>Exécutions réalisées</span><strong>{doneCount}</strong></div>
     </div>
 
     <section className="core-panel">
