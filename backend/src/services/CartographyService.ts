@@ -3,7 +3,11 @@ import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvalua
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { Risk } from "../domain/entities/Risk.js";
-import type { RiskEvaluation } from "../domain/entities/RiskEvaluation.js";
+import {
+  AUTHORITATIVE_EVALUATION_STATUSES,
+  type AuthoritativeEvaluationStatus,
+  type RiskEvaluation,
+} from "../domain/entities/RiskEvaluation.js";
 import type { ScoreThreshold } from "../domain/entities/RatingScale.js";
 import type { Process } from "../domain/entities/Process.js";
 import { ValidationError } from "../domain/errors/DomainErrors.js";
@@ -49,6 +53,15 @@ export interface CartographyDataPoint {
   probability: number;
   impactRetained: number;
   score: number;
+  /**
+   * Which terminal status the plotted evaluation actually carries —
+   * VALIDATED (maker-checker) or VALIDE_COMITE (Comité des Risques
+   * escalation outcome, ACT-253). Both are authoritative and plottable;
+   * this is purely informational (e.g. to badge committee-validated
+   * points differently), never used to exclude — exclusion already
+   * happened upstream in getMostRecentAuthoritativeEvaluation.
+   */
+  evaluationStatus: AuthoritativeEvaluationStatus;
   criticality: string;
   /**
    * Always null today. The backlog (ACT-180) describes bubble size as
@@ -123,8 +136,9 @@ function extractVersionFields(evaluation: RiskEvaluation, version: CartographyVe
  * ACT-180/181/183/184 — the risk cartography (heatmap). Pure read-only
  * aggregation: no entity of its own, no migration, no writes, nothing to
  * audit. Composes `Risk` (process, ownerDepartmentId) with each risk's
- * most recent VALIDATED `RiskEvaluation` (score, criticality inputs). A
- * risk with no validated evaluation yet has no score to plot and is
+ * most recent authoritative `RiskEvaluation` (score, criticality inputs)
+ * — VALIDATED or VALIDE_COMITE, see AUTHORITATIVE_EVALUATION_STATUSES. A
+ * risk with no authoritative evaluation yet has no score to plot and is
  * excluded, never defaulted.
  */
 export class CartographyService {
@@ -204,19 +218,19 @@ export class CartographyService {
 
     for (const risk of candidates) {
       // N+1 by design for now: RiskEvaluationRepository only exposes
-      // listForRisk(riskId), not a bulk "most recent VALIDATED per risk"
-      // query. Acceptable for the current risk-count scale of this module;
-      // flagged here rather than silently adding a bulk repository method
-      // (and its Postgres DISTINCT ON implementation) to a neighboring,
-      // already-shipped module's interface.
-      const evaluation = await this.getMostRecentValidatedEvaluation(actor.tenantId, risk.id);
-      if (!evaluation) continue; // no validated evaluation yet -> excluded, never defaulted
+      // listForRisk(riskId), not a bulk "most recent authoritative per
+      // risk" query. Acceptable for the current risk-count scale of this
+      // module; flagged here rather than silently adding a bulk
+      // repository method (and its Postgres DISTINCT ON implementation)
+      // to a neighboring, already-shipped module's interface.
+      const evaluation = await this.getMostRecentAuthoritativeEvaluation(actor.tenantId, risk.id);
+      if (!evaluation) continue; // no authoritative (VALIDATED/VALIDE_COMITE) evaluation yet -> excluded, never defaulted
 
       if (filters?.subCategory && evaluation.subCategory !== filters.subCategory) continue;
       if (filters?.entity && (evaluation.entity ?? undefined) !== filters.entity) continue;
 
       const fields = extractVersionFields(evaluation, version);
-      if (!fields) continue; // defensive: a VALIDATED evaluation should always have both scores set
+      if (!fields) continue; // defensive: an authoritative evaluation should always have both scores set
 
       if (filters?.minScore !== undefined && fields.score < filters.minScore) continue;
       if (filters?.maxScore !== undefined && fields.score > filters.maxScore) continue;
@@ -232,6 +246,9 @@ export class CartographyService {
         probability: fields.probability,
         impactRetained: fields.impactRetained,
         score: fields.score,
+        // Safe: getMostRecentAuthoritativeEvaluation only ever returns an
+        // evaluation whose status is in AUTHORITATIVE_EVALUATION_STATUSES.
+        evaluationStatus: evaluation.status as AuthoritativeEvaluationStatus,
         criticality: deriveCriticality(fields.score, bands),
         velocity: null,
         entityLabel: evaluation.entity,
@@ -247,8 +264,17 @@ export class CartographyService {
     return true;
   }
 
-  private async getMostRecentValidatedEvaluation(tenantId: string, riskId: string): Promise<RiskEvaluation | null> {
-    const results = await this.evaluations.listForRisk(tenantId, riskId, { status: "VALIDATED", limit: 1 });
+  /**
+   * Most recent evaluation among the authoritative terminal statuses
+   * (VALIDATED, VALIDE_COMITE), by `created_at DESC` — whichever of the
+   * two is more recent wins, since neither status outranks the other
+   * (2026-09-30 audit finding, ACT-253).
+   */
+  private async getMostRecentAuthoritativeEvaluation(tenantId: string, riskId: string): Promise<RiskEvaluation | null> {
+    const results = await this.evaluations.listForRisk(tenantId, riskId, {
+      status: [...AUTHORITATIVE_EVALUATION_STATUSES],
+      limit: 1,
+    });
     return results[0] ?? null;
   }
 

@@ -102,8 +102,13 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
     const values: unknown[] = [tenantId, riskId];
 
     if (options?.status) {
-      values.push(options.status);
-      conditions.push(`status = $${values.length}`);
+      if (Array.isArray(options.status)) {
+        values.push(options.status);
+        conditions.push(`status = ANY($${values.length}::text[])`);
+      } else {
+        values.push(options.status);
+        conditions.push(`status = $${values.length}`);
+      }
     }
 
     const limit = options?.limit ?? 50;

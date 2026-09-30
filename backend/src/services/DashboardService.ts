@@ -15,7 +15,11 @@ import type { ProcessRepository } from "../domain/repositories/ProcessRepository
 
 import type { Risk, RiskStatus } from "../domain/entities/Risk.js";
 import type { Process } from "../domain/entities/Process.js";
-import type { RiskEvaluation } from "../domain/entities/RiskEvaluation.js";
+import {
+  AUTHORITATIVE_EVALUATION_STATUSES,
+  type AuthoritativeEvaluationStatus,
+  type RiskEvaluation,
+} from "../domain/entities/RiskEvaluation.js";
 import type { Anomaly, AnomalyStatus } from "../domain/entities/Anomaly.js";
 import { computeKriStatus, type Kri, type KriStatus } from "../domain/entities/Kri.js";
 import {
@@ -85,8 +89,10 @@ export interface DashboardRiskSummary {
   status: RiskStatus;
   ownerDepartmentId: string | null;
   ownerId: string | null;
-  /** Most recent VALIDATED evaluation's residualScore (falling back to inherentScore), null if never validated. */
+  /** Most recent authoritative (VALIDATED or VALIDE_COMITE) evaluation's residualScore (falling back to inherentScore), null if never authoritatively evaluated. */
   score: number | null;
+  /** Which terminal status backs `score` — null when no authoritative evaluation was found (distinct from "evaluated but excluded": BROUILLON/REJECTED evaluations are never authoritative and always yield null here too). */
+  evaluationStatus: AuthoritativeEvaluationStatus | null;
   criticality: string | null;
   subCategory: string | null;
   entity: string | null;
@@ -238,8 +244,8 @@ export interface ComplianceReport {
  * Pure read-only aggregation, like CartographyService: no entity of its
  * own, no migration, no writes, nothing to audit.
  *
- * N+1 by design in several places (most recent VALIDATED evaluation per
- * risk, executions/assessments per control) — same acknowledged
+ * N+1 by design in several places (most recent authoritative evaluation
+ * per risk, executions/assessments per control) — same acknowledged
  * trade-off as CartographyService: none of the underlying repositories
  * expose a bulk "most recent per parent" query, and this is not the
  * place to add one speculatively to a neighboring, already-shipped
@@ -370,7 +376,7 @@ export class DashboardService {
     const withEvaluations = await Promise.all(
       ownedRisks.map(async (risk) => ({
         risk,
-        evaluation: await this.getMostRecentValidatedEvaluation(actor.tenantId, risk.id),
+        evaluation: await this.getMostRecentAuthoritativeEvaluation(actor.tenantId, risk.id),
       })),
     );
     const riskSummaries = await Promise.all(
@@ -674,8 +680,17 @@ export class DashboardService {
     requirePermission(actor, "dashboard.executive");
   }
 
-  private async getMostRecentValidatedEvaluation(tenantId: string, riskId: string): Promise<RiskEvaluation | null> {
-    const results = await this.evaluations.listForRisk(tenantId, riskId, { status: "VALIDATED", limit: 1 });
+  /**
+   * Most recent evaluation among the authoritative terminal statuses
+   * (VALIDATED, VALIDE_COMITE), by `created_at DESC` — whichever of the
+   * two is more recent wins, since neither status outranks the other
+   * (2026-09-30 audit finding, ACT-253).
+   */
+  private async getMostRecentAuthoritativeEvaluation(tenantId: string, riskId: string): Promise<RiskEvaluation | null> {
+    const results = await this.evaluations.listForRisk(tenantId, riskId, {
+      status: [...AUTHORITATIVE_EVALUATION_STATUSES],
+      limit: 1,
+    });
     return results[0] ?? null;
   }
 
@@ -717,6 +732,9 @@ export class DashboardService {
       ownerDepartmentId: risk.ownerDepartmentId,
       ownerId: risk.ownerId,
       score,
+      // Safe: getMostRecentAuthoritativeEvaluation only ever returns an
+      // evaluation whose status is in AUTHORITATIVE_EVALUATION_STATUSES.
+      evaluationStatus: evaluation ? (evaluation.status as AuthoritativeEvaluationStatus) : null,
       criticality: score !== null ? deriveCriticality(score) : null,
       subCategory: evaluation?.subCategory ?? null,
       entity: evaluation?.entity ?? null,
@@ -725,16 +743,16 @@ export class DashboardService {
   }
 
   private async toRiskSummaryOrNull(tenantId: string, risk: Risk): Promise<DashboardRiskSummary> {
-    const evaluation = await this.getMostRecentValidatedEvaluation(tenantId, risk.id);
+    const evaluation = await this.getMostRecentAuthoritativeEvaluation(tenantId, risk.id);
     return this.buildRiskSummary(tenantId, risk, evaluation);
   }
 
-  /** Only risks with a validated, scored evaluation — used by every "top risks by score" ranking (executive/committee/consolidated/appetite-vs-residual). */
+  /** Only risks with an authoritative (VALIDATED/VALIDE_COMITE), scored evaluation — used by every "top risks by score" ranking (executive/committee/consolidated/appetite-vs-residual). */
   private async getScoredRisks(tenantId: string, options?: { includeArchived?: boolean }): Promise<ScoredRisk[]> {
     const risks = await this.risks.list(tenantId, options);
     const scored: ScoredRisk[] = [];
     for (const risk of risks) {
-      const evaluation = await this.getMostRecentValidatedEvaluation(tenantId, risk.id);
+      const evaluation = await this.getMostRecentAuthoritativeEvaluation(tenantId, risk.id);
       if (!evaluation) continue;
       const score = evaluation.residualScore ?? evaluation.inherentScore;
       if (score === null) continue;

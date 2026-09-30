@@ -33,6 +33,24 @@ export type RiskEvaluationType = "AD_HOC" | "ANNUELLE" | "ANTICIPEE";
 /** ACT-253: VALIDE_COMITE is a distinct terminal status from VALIDATED — reachable only via RiskEvaluationService.validateByCommittee, never via validate(). */
 export type RiskEvaluationStatus = "BROUILLON" | "VALIDATED" | "REJECTED" | "VALIDE_COMITE";
 
+/**
+ * 2026-09-30 Risk Manager audit finding: both terminal-and-decided
+ * statuses carry an authoritative, displayable score — VALIDATED (maker-
+ * checker) and VALIDE_COMITE (Comité des Risques escalation outcome, ACT-253).
+ * Neither is "more final" than the other; a risk reaches exactly one of
+ * them depending on whether its residual score triggered escalation.
+ * Any read model deciding "does this risk have a score to show" must
+ * filter on this set, not on `"VALIDATED"` alone — a hardcoded single-
+ * status filter is exactly the bug this constant exists to prevent
+ * (DashboardService/CartographyService/RiskOwnershipService all filtered
+ * on `"VALIDATED"` only, silently dropping committee-validated risks from
+ * every ranking/heatmap).
+ */
+export const AUTHORITATIVE_EVALUATION_STATUSES: readonly RiskEvaluationStatus[] = ["VALIDATED", "VALIDE_COMITE"];
+
+/** Narrower than the full RiskEvaluationStatus union: the only two statuses a read model exposing a score can ever carry (see AUTHORITATIVE_EVALUATION_STATUSES above). Used on DTOs alongside `score` — null there means no authoritative evaluation was found. */
+export type AuthoritativeEvaluationStatus = "VALIDATED" | "VALIDE_COMITE";
+
 /** One impact axis score, keyed by the RatingScale.impactAxes code it answers. */
 export interface ImpactAxisScore {
   code: string;
@@ -153,7 +171,8 @@ export interface RecordResidualScoringInput {
 }
 
 export interface ListRiskEvaluationsOptions {
-  status?: RiskEvaluationStatus;
+  /** Single status, or a set of statuses to match any of (e.g. AUTHORITATIVE_EVALUATION_STATUSES). */
+  status?: RiskEvaluationStatus | RiskEvaluationStatus[];
   limit?: number;
   offset?: number;
 }
