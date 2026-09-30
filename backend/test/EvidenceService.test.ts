@@ -97,6 +97,40 @@ describe("EvidenceService", () => {
     expect(evidence.fileName).toBe("preuve.pdf");
   });
 
+  it("cleans up the stored document if metadata persistence fails", async () => {
+    const baseRepo = inMemoryEvidenceRepository();
+    const repo: EvidenceRepository = {
+      ...baseRepo,
+      async create() { throw new Error("database unavailable"); },
+    };
+    const storage = fakeDocumentStorage();
+    const service = new EvidenceService(repo, storage, inMemoryAuditRepository());
+
+    await expect(service.upload(
+      tenantAUser,
+      { fileName: "preuve.pdf", mimeType: "application/pdf", content: Buffer.from("%PDF-1.7\\nfixture"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
+      "REQ-COMP-1",
+    )).rejects.toThrow("database unavailable");
+    expect(storage.deletedIds).toHaveLength(1);
+  });
+
+  it("soft-deletes and cleans up the document if audit recording fails", async () => {
+    const storage = fakeDocumentStorage();
+    const audit: AuditRepository = {
+      async record() { throw new Error("audit unavailable"); },
+      async listForEntity() { return []; },
+      async listRecent() { return []; },
+    };
+    const service = new EvidenceService(inMemoryEvidenceRepository(), storage, audit);
+
+    await expect(service.upload(
+      tenantAUser,
+      { fileName: "preuve.pdf", mimeType: "application/pdf", content: Buffer.from("%PDF-1.7\\nfixture"), documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
+      "REQ-COMP-2",
+    )).rejects.toThrow("audit unavailable");
+    expect(storage.deletedIds).toHaveLength(1);
+  });
+
   it("rejects an empty file", async () => {
     const service = new EvidenceService(inMemoryEvidenceRepository(), fakeDocumentStorage(), inMemoryAuditRepository());
     await expect(
