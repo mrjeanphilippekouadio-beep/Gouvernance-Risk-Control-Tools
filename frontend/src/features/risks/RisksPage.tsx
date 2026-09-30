@@ -7,6 +7,7 @@ import { RaciPanel } from "../../design-system";
 interface RisksPageProps {
   /** Google ID token — see AuthContext TODO in App.tsx. */
   token: string;
+  onEvaluate?: (riskId: string) => void;
 }
 
 const STATUS_LABELS: Record<RiskStatus, string> = {
@@ -25,7 +26,7 @@ const STATUS_TONES: Record<RiskStatus, StatusTone> = {
  * Pure presentation + API calls. No scoring, no transition rules, no
  * permission checks here — the backend owns all of that (ADR-001).
  */
-export function RisksPage({ token }: RisksPageProps) {
+export function RisksPage({ token, onEvaluate }: RisksPageProps) {
   const [risks, setRisks] = useState<Risk[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +69,8 @@ export function RisksPage({ token }: RisksPageProps) {
 
   return (
     <section>
-      <h1>Risques</h1>
+      <div className="page-heading-block"><p className="page-eyebrow">RISQUES · REGISTRE</p><h1>Registre des risques</h1><p className="page-subtitle">Identification et description du risque. La cotation inhérente, la maîtrise et le résiduel sont portés par l’évaluation dédiée.</p></div>
+      <MessageBanner tone="info">Identification, pas évaluation. Le registre décrit les risques ; la cotation se fait ensuite sur la fiche d’évaluation.</MessageBanner>
 
       <form onSubmit={handleCreate} className="inline-form">
         <FormField label="Processus" htmlFor="risk-process">
@@ -96,19 +98,22 @@ export function RisksPage({ token }: RisksPageProps) {
         rowKey={(risk) => risk.id}
         columns={[
           { key: "process", header: "Processus", render: (risk) => risk.process },
-          { key: "description", header: "Description", render: (risk) => risk.description },
+          { key: "description", header: "Description", render: (risk) => <strong>{risk.description}</strong> },
+          { key: "department", header: "Département", render: (risk) => risk.ownerDepartmentId ?? <span className="admin-muted">Non assigné</span> },
           {
             key: "status",
             header: "Statut",
             render: (risk) => <StatusBadge label={STATUS_LABELS[risk.status]} tone={STATUS_TONES[risk.status]} />,
           },
           {
-            key: "raci",
-            header: "RACI",
+            key: "actions",
+            header: "Actions",
             render: (risk) => (
-              <Button onClick={() => setRaciRiskId((current) => (current === risk.id ? null : risk.id))}>
-                {raciRiskId === risk.id ? "Masquer" : "RACI"}
-              </Button>
+              <div className="row-actions">
+                <Button variant="primary" onClick={() => onEvaluate?.(risk.id)}>Évaluer</Button>
+                <Button onClick={() => setRaciRiskId((current) => (current === risk.id ? null : risk.id))}>{raciRiskId === risk.id ? "Masquer" : "RACI"}</Button>
+                {risk.status !== "ARCHIVED" && <Button variant="destructive" onClick={() => void risksApi.updateStatus(token, risk.id, "ARCHIVED").then(refresh).catch((err) => setError(describeError(err)))}>Archiver</Button>}
+              </div>
             ),
           },
         ]}
