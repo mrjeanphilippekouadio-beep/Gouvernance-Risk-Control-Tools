@@ -750,6 +750,11 @@ function inMemoryEvidenceRepository(): EvidenceRepository & { _store: Map<string
       if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
       store.set(id, { ...existing, status: "DELETED" });
     },
+    async restoreActive(tenantId, id) {
+      const existing = store.get(id);
+      if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
+      store.set(id, { ...existing, status: "ACTIVE" });
+    },
     _store: store,
   };
 }
