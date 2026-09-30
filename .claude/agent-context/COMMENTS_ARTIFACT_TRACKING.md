@@ -30,7 +30,7 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `bc9cba92` | Couleur des points = criticité (pas statut) + filtre | resolved (v25) |
 | `5e3eedcf` | 3e info "décision de traitement" + liste défilable | resolved (v25) |
 | `85d640e2` | Bandeau réutilisé pour les états — ambigu, clarification demandée | **open — attente précision PO** |
-| `faa01c24` | Déplacer un élément pour faire place au panneau Commentaires — ambigu, clarification demandée | **open — attente précision PO** |
+| `faa01c24` | Déplacer un élément pour faire place au panneau Commentaires — ambigu, clarification demandée | resolved (v45) — panneau Commentaires/RACI ajouté sur Cartographie, rétractable |
 | `ac1bf7c2` | Cartes animées via Chart.js + déplaçables via GridStack | resolved (v26) — vraies libs chargées (Chart.js 4.4.7, GridStack 14.0.0, CDN cdnjs, CSS GridStack inlinée) |
 | `f2fdacb0` | Détails du risque au survol | resolved (v26) — tooltip Chart.js riche (processus/département/statut/traitement/zone) |
 | `787b4e53` | Points mal centrés dans les cellules | resolved (v26) — résolu de fait par les vraies coordonnées Chart.js |
@@ -41,7 +41,7 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | `a3e10b3d` | Colonnes de tags non alignées (largeur du mot le plus long) | resolved (v27) — liste passée en vraie grille CSS |
 | `bc9cba92` (rouvert) | Teintes des points de criticité trop pâles, difficiles à distinguer | resolved (v27) — palette saturée dédiée aux points, distincte du fond pâle de la heatmap |
 | `927e753a` (rouvert) | Panneau Comments/RACI/Evidence/Occurrence : déplacer de bas de page vers la colonne droite (au-dessus Historique/Actions), redimensionner | resolved (v27) — écran Évaluation |
-| `faa01c24` | Panneau Commentaires sur Cartographie — ambigu, clarification demandée | **open — attente précision PO** |
+| `faa01c24` | Panneau Commentaires sur Cartographie — ambigu, clarification demandée | resolved (v45) — panneau Commentaires/RACI global ajouté (Comments+RACI seulement, Evidence/Historique restent objet-spécifiques), rétractable, présent sur Cartographie et Évaluation |
 | `d0942768` | Teintes de la heatmap trop claires, rendre plus vives | resolved (v28) — palette de fond saturée |
 | — | **Limite d'outil notée (2026-09-29)** : pas d'action pour relire une ancienne version publiée d'un artefact — impossible de "retrouver" un état antérieur exact. Seul recours : la mémoire de session + ce qui reste inchangé dans le CSS/HTML actuel. | note |
 | `68461ff8`, `1862344a`, `f22ccabd` (rouvert), `787b4e53` (rouvert) | **BUG RÉEL "je ne vois rien" (PO), persistant même après correctif d'URL v29.** Décision (2026-09-29) : abandon complet de Chart.js/GridStack — v32 (SVG brut, rendu garanti). **Correction PO (2026-09-29)** : le style des heatmaps 1/2 n'aurait pas dû changer — il fallait juste les dupliquer (Inhérent/Résiduel), le SVG était une sur-correction. v33 restaure le style CSS grille original (`.heatmap`/`.heatmap-cell`, déjà validé plus tôt dans la session) avec les vrais correctifs déjà demandés dessus (centrage, teintes saturées, couleur des points = criticité). Graphiques 3/4 (barres) inchangés, libre choix confirmé par le PO. | **open — attente confirmation PO que ça s'affiche enfin** |
@@ -52,8 +52,8 @@ répercuté ailleurs (ACTION_ITEMS.md, SHARED_LOG.md, code réel).
 | — (v33-36) | Style heatmap 1/2 restauré (grille CSS, points bleus/bordure blanche), légende par carte centrée, scrollbar bleue | resolved |
 | `ced89476` | Treemap possible ? | resolved (v37) — graphique 5 ajouté, treemap CSS pur par processus, taille = poids de criticité cumulé |
 | `4e0daba1` | Graphiques 3/4 repensés en heatmap (grille), tous processus/départements, teinte→rouge selon concentration | resolved (v38) |
-| `23e7baee` | **Vraie nomenclature Djamo reçue (9 processus, 15 directions)** — remplace les listes illustratives ; case-par-criticité (span CSS) au lieu de teinte seule | **open (v39) — attente validation PO comme référence définitive, pas encore propagée au registre/évaluation** |
-| `95f13578` | "Retire ce bloc" — ambigu, proposé et retiré graphique 5 (treemap, redondant avec 3/4) | **open (v40) — attente confirmation que c'était le bon bloc** |
+| `23e7baee` | **Vraie nomenclature Djamo reçue (9 processus, 15 directions)** — remplace les listes illustratives ; case-par-criticité (span CSS) au lieu de teinte seule | resolved — **CONFIRMÉE DÉFINITIVE par le PO (2026-09-30)**, mentions "provisoire" retirées v45, précision de visibilité R/A ajoutée sur les graphiques 3/4 |
+| `95f13578` | "Retire ce bloc" — ambigu, proposé et retiré graphique 5 (treemap, redondant avec 3/4) | resolved — confirmé par le PO que c'était le bon bloc |
 | `7fe0e5a8` | Graphiques 3/4 : couleurs vert→rouge (mêmes teintes que heatmap 1/2) + visualiser la "surface" quand plusieurs risques/nombres différents | resolved (v41) — palette `#a6e0ba→#e0483a` reprise, cases passées de `grid-column:span N` à taille explicite largeur+hauteur (44px/86px), côté ∝ √(nb risques) donc surface réellement proportionnelle |
 | `fbc778f5` | Décalage horizontal (regression v41) sur graphiques 3/4 — cases pas alignées | resolved (v42) — repassé de flex-wrap à grille CSS à colonnes fixes (4/5), taille variable déplacée dans un `.swatch` interne centré, alignement propre conservé avec surface toujours ∝ risques |
 | `69a001f2` | Heatmap façon ECharts treemap-show-parent (zoom/drill-down + breadcrumb) | resolved — PO : "plus d'actualité", abandonné, clarification retirée |
