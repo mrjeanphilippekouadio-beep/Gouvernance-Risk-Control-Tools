@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Button, Card, FormField, Grid, GridItem, MessageBanner, Modal, StatusBadge, Table, type TableColumn, type StatusTone } from "@djamo/design-system";
 import { ApiError } from "../../api/client";
 import { auditMissionsApi, findingsApi, type AuditMission, type Finding, type FindingSeverity, type FindingStatus, type RelatedObjectType } from "../../api/audit";
-import "./WorkflowPages.css";
+import "../core/WorkflowPages.css";
 
 const severityLabels: Record<FindingSeverity, string> = { LOW: "Faible", MODERATE: "Modérée", HIGH: "Élevée", MAJOR: "Majeure", CRITICAL: "Critique" };
 const statusLabels: Record<FindingStatus, string> = { OUVERT: "Ouvert", EN_TRAITEMENT: "En traitement", CLOS: "Clos" };
