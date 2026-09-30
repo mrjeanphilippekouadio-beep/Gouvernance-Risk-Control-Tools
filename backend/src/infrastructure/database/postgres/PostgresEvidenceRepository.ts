@@ -77,7 +77,15 @@ export class PostgresEvidenceRepository implements EvidenceRepository {
 
   async markDeleted(tenantId: string, id: string): Promise<void> {
     const { rowCount } = await this.pool.query(
-      `UPDATE evidences SET status = 'DELETED' WHERE tenant_id = $1 AND id = $2`,
+      `UPDATE evidences SET status = 'DELETED' WHERE tenant_id = $1 AND id = $2 AND status = 'ACTIVE'`,
+      [tenantId, id],
+    );
+    if (!rowCount) throw new NotFoundError("Evidence", id);
+  }
+
+  async restoreActive(tenantId: string, id: string): Promise<void> {
+    const { rowCount } = await this.pool.query(
+      `UPDATE evidences SET status = 'ACTIVE' WHERE tenant_id = $1 AND id = $2 AND status = 'DELETED'`,
       [tenantId, id],
     );
     if (!rowCount) throw new NotFoundError("Evidence", id);
