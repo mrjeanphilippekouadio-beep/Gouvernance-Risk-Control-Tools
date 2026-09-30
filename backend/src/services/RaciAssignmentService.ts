@@ -81,17 +81,29 @@ export class RaciAssignmentService {
       createdBy: actor.userId,
     });
 
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "RaciAssignment",
-      entityId: assignment.id,
-      action: "CREATE",
-      oldValue: null,
-      newValue: assignment,
-      reason: null,
-      requestId,
-    });
+    try {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "RaciAssignment",
+        entityId: assignment.id,
+        action: "CREATE",
+        oldValue: null,
+        newValue: assignment,
+        reason: null,
+        requestId,
+      });
+    } catch (auditError) {
+      try {
+        await this.raci.remove(actor.tenantId, assignment.id);
+      } catch (rollbackError) {
+        throw new Error(
+          "RACI assignment audit failed and compensation failed; reconciliation is required",
+          { cause: new AggregateError([auditError, rollbackError]) },
+        );
+      }
+      throw auditError;
+    }
 
     return assignment;
   }
@@ -113,17 +125,29 @@ export class RaciAssignmentService {
 
     const after = await this.raci.remove(actor.tenantId, assignmentId);
 
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "RaciAssignment",
-      entityId: assignmentId,
-      action: "DELETE",
-      oldValue: before,
-      newValue: after,
-      reason: null,
-      requestId,
-    });
+    try {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "RaciAssignment",
+        entityId: assignmentId,
+        action: "DELETE",
+        oldValue: before,
+        newValue: after,
+        reason: null,
+        requestId,
+      });
+    } catch (auditError) {
+      try {
+        await this.raci.restore(actor.tenantId, assignmentId);
+      } catch (rollbackError) {
+        throw new Error(
+          "RACI revoke audit failed and restoration failed; reconciliation is required",
+          { cause: new AggregateError([auditError, rollbackError]) },
+        );
+      }
+      throw auditError;
+    }
 
     return after;
   }
