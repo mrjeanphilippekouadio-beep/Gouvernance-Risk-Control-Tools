@@ -6,6 +6,8 @@ import type { AuditRepository } from "../src/domain/repositories/AuditRepository
 import type { RiskRepository } from "../src/domain/repositories/RiskRepository.js";
 import type { ControlRepository } from "../src/domain/repositories/ControlRepository.js";
 import type { ActionPlanRepository } from "../src/domain/repositories/ActionPlanRepository.js";
+import type { UserRepository } from "../src/domain/repositories/UserRepository.js";
+import type { User } from "../src/domain/entities/User.js";
 import type { RaciAssignment } from "../src/domain/entities/RaciAssignment.js";
 import type { Risk } from "../src/domain/entities/Risk.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
@@ -118,6 +120,22 @@ function fakeRiskRepositoryMultiTenant(risksByTenant: Record<string, string[]>):
 const noopControlRepository = undefined as unknown as ControlRepository;
 const noopActionPlanRepository = undefined as unknown as ActionPlanRepository;
 
+function fakeUserRepository(
+  usersByTenant: Record<string, string[]> = { "tenant-1": ["user-1", "user-2", "user-3", "admin-1"], "tenant-2": ["user-b"] },
+  suspendedUserIds: string[] = [],
+): UserRepository {
+  return {
+    async getById(tenantId, id) {
+      if (!usersByTenant[tenantId]?.includes(id)) return null;
+      return { id, tenantId, email: `${id}@example.com`, displayName: id, roles: [], departmentId: null,
+        createdAt: new Date(), deletedAt: suspendedUserIds.includes(id) ? new Date() : null } satisfies User;
+    },
+    async getByEmail() { return null; }, async list() { return []; }, async count() { return 0; },
+    async create() { throw new Error("not used in this test"); }, async update() { throw new Error("not used in this test"); },
+    async suspend() { throw new Error("not used in this test"); }, async reactivate() { throw new Error("not used in this test"); },
+  };
+}
+
 function actor(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
   return {
     userId: "user-1",
@@ -137,7 +155,7 @@ describe("RaciAssignmentService", () => {
     audit.record = async (event) => {
       recorded = event;
     };
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), audit, risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), audit, risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     const assignment = await service.assign(actor(), "RISK", "risk-1", "user-2", "R", "req-1");
 
@@ -150,7 +168,7 @@ describe("RaciAssignmentService", () => {
 
   it("lists assignments for an entity", async () => {
     const risks = fakeRiskRepository(["risk-1"], "tenant-1");
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     await service.assign(actor(), "RISK", "risk-1", "user-2", "R", "req-1");
     await service.assign(actor(), "RISK", "risk-1", "user-3", "C", "req-2");
@@ -161,7 +179,7 @@ describe("RaciAssignmentService", () => {
 
   it("revokes (soft-deletes) an assignment", async () => {
     const risks = fakeRiskRepository(["risk-1"], "tenant-1");
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     const assignment = await service.assign(actor(), "RISK", "risk-1", "user-2", "R", "req-1");
     const revoked = await service.revoke(actor(), "RISK", "risk-1", assignment.id, "req-2");
@@ -173,20 +191,40 @@ describe("RaciAssignmentService", () => {
 
   it("rejects assignment when entityId does not exist in the tenant", async () => {
     const risks = fakeRiskRepository([], "tenant-1"); // no risks exist
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     await expect(service.assign(actor(), "RISK", "risk-does-not-exist", "user-2", "R", "req-1")).rejects.toThrow(ValidationError);
   });
 
+  it("rejects assigning RACI to a user that does not exist in the actor's tenant", async () => {
+    const risks = fakeRiskRepository(["risk-1"], "tenant-1");
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository,
+      fakeUserRepository({ "tenant-1": ["user-1"], "tenant-2": ["user-b"] }));
+    await expect(service.assign(actor(), "RISK", "risk-1", "user-b", "R", "req-cross-tenant")).rejects.toThrow(ValidationError);
+  });
+
+  it("rejects assigning RACI to a suspended target user", async () => {
+    const risks = fakeRiskRepository(["risk-1"], "tenant-1");
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository,
+      fakeUserRepository(undefined, ["user-2"]));
+    await expect(service.assign(actor(), "RISK", "risk-1", "user-2", "R", "req-suspended")).rejects.toThrow(ValidationError);
+  });
+
+  it("fails closed when target-user validation is not configured", async () => {
+    const risks = fakeRiskRepository(["risk-1"], "tenant-1");
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    await expect(service.assign(actor(), "RISK", "risk-1", "user-2", "R", "req-no-user-repo")).rejects.toThrow(ValidationError);
+  });
+
   it("rejects an unknown entityType", async () => {
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository());
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), undefined, undefined, undefined, fakeUserRepository());
     await expect(
       service.assign(actor(), "Incident" as never, "x", "user-2", "R", "req-1"),
     ).rejects.toThrow(ValidationError);
   });
 
   it("requires raci.assign permission", async () => {
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository());
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), undefined, undefined, undefined, fakeUserRepository());
     await expect(
       service.assign(actor({ roles: [] }), "RISK", "risk-1", "user-2", "R", "req-1"),
     ).rejects.toThrow(ForbiddenError);
@@ -195,7 +233,7 @@ describe("RaciAssignmentService", () => {
   // Security guard-rail: self-designation as Accountable while already Responsible on the same entity.
   it("blocks self-designation as Accountable when the actor already holds Responsible on the same entity", async () => {
     const risks = fakeRiskRepository(["risk-1"], "tenant-1");
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     await service.assign(actor(), "RISK", "risk-1", "user-1", "R", "req-1"); // actor assigns themselves as Responsible
 
@@ -204,7 +242,7 @@ describe("RaciAssignmentService", () => {
 
   it("still allows a different actor to designate that same user as Accountable", async () => {
     const risks = fakeRiskRepository(["risk-1"], "tenant-1");
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     await service.assign(actor(), "RISK", "risk-1", "user-2", "R", "req-1"); // user-2 is Responsible
     const admin = actor({ userId: "admin-1", roles: ["raci.assign"] });
@@ -221,21 +259,21 @@ describe("RaciAssignmentService", () => {
 
   it("QA-RACI: rejects revoke() for an assignmentId that does not exist", async () => {
     const risks = fakeRiskRepository(["risk-1"], "tenant-1");
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     await expect(service.revoke(actor(), "RISK", "risk-1", randomUUID(), "req-1")).rejects.toThrow(NotFoundError);
   });
 
   it("QA-RACI: rejects assignment when the target Risk is soft-deleted (mirrors PostgresRiskRepository.getById's `deleted_at IS NULL` filter — a soft-deleted row is invisible to getById, same as a nonexistent one)", async () => {
     const risks = fakeRiskRepository([], "tenant-1"); // risk-1 physically exists but soft-deleted -> getById returns null, exactly like the real filtered SELECT
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     await expect(service.assign(actor(), "RISK", "risk-1", "user-2", "R", "req-1")).rejects.toThrow(ValidationError);
   });
 
   it("QA-RACI: rejects revoking an already-revoked assignment (double revoke)", async () => {
     const risks = fakeRiskRepository(["risk-1"], "tenant-1");
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     const assignment = await service.assign(actor(), "RISK", "risk-1", "user-2", "R", "req-1");
     await service.revoke(actor(), "RISK", "risk-1", assignment.id, "req-2");
@@ -245,13 +283,13 @@ describe("RaciAssignmentService", () => {
 
   it("QA-RACI: allows the same person to accumulate non R+A role pairs on the same entity (C+I, and R+C — only R+A is blocked)", async () => {
     const risksCI = fakeRiskRepository(["risk-1"], "tenant-1");
-    const serviceCI = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risksCI, noopControlRepository, noopActionPlanRepository);
+    const serviceCI = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risksCI, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
     await serviceCI.assign(actor(), "RISK", "risk-1", "user-1", "C", "req-1");
     const asI = await serviceCI.assign(actor(), "RISK", "risk-1", "user-1", "I", "req-2");
     expect(asI.role).toBe("I");
 
     const risksRC = fakeRiskRepository(["risk-2"], "tenant-1");
-    const serviceRC = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risksRC, noopControlRepository, noopActionPlanRepository);
+    const serviceRC = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risksRC, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
     await serviceRC.assign(actor(), "RISK", "risk-2", "user-1", "R", "req-3");
     const asC = await serviceRC.assign(actor(), "RISK", "risk-2", "user-1", "C", "req-4");
     expect(asC.role).toBe("C");
@@ -259,7 +297,7 @@ describe("RaciAssignmentService", () => {
 
   it("QA-RACI: list() returns an empty array for an entity that has never had any assignment", async () => {
     const risks = fakeRiskRepository(["risk-1"], "tenant-1");
-    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     const list = await service.list(actor(), "RISK", "risk-1");
     expect(list).toEqual([]);
@@ -268,7 +306,7 @@ describe("RaciAssignmentService", () => {
   it("QA-RACI: never leaks another tenant's RACI assignment via list() or revoke() — shared repository instance, guessed assignmentId (same pattern as QA-02/QA-07 in QA_REVIEW_BATCHES_1_3.md)", async () => {
     const raci = inMemoryRaciRepository(); // single shared store, both tenants write into it
     const risks = fakeRiskRepositoryMultiTenant({ "tenant-1": ["risk-1"], "tenant-2": ["risk-1"] });
-    const service = new RaciAssignmentService(raci, inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository);
+    const service = new RaciAssignmentService(raci, inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
 
     const tenantAActor = actor({ tenantId: "tenant-1" });
     const tenantBActor = actor({ userId: "user-b", tenantId: "tenant-2" });
