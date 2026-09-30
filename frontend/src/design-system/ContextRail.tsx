@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Card, StatusBadge, Timeline } from "@djamo/design-system";
 import "./ContextRail.css";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring";
 type RailTab = "comments" | "raci" | "evidence" | "occurrence";
 
 const LABELS: Record<RailTab, string> = {
