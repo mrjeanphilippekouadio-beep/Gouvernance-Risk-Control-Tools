@@ -6,6 +6,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { DocumentStorage } from "../infrastructure/storage/DocumentStorage.js";
+import { validateEvidenceFile } from "./evidenceFileValidation.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB — generous for scanned evidence, not unbounded
 
@@ -43,6 +44,7 @@ export class EvidenceService {
     if (params.content.byteLength > MAX_UPLOAD_BYTES) {
       throw new ValidationError(`File exceeds the ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB limit`);
     }
+    validateEvidenceFile(params.fileName, params.mimeType, params.content);
 
     // SEC-004: don't attach evidence to another tenant's control execution.
     if (params.controlExecutionId && this.controlExecutions) {
@@ -59,27 +61,60 @@ export class EvidenceService {
       content: params.content,
     });
 
-    const evidence = await this.evidences.create({
-      tenantId: actor.tenantId,
-      controlExecutionId: params.controlExecutionId,
-      fileName: uploaded.fileName,
-      driveFileId: uploaded.storageFileId,
-      driveUrl: uploaded.url,
-      documentType: params.documentType,
-      uploadedBy: actor.userId,
-    });
+    let evidence: Evidence;
+    try {
+      evidence = await this.evidences.create({
+        tenantId: actor.tenantId,
+        controlExecutionId: params.controlExecutionId,
+        fileName: uploaded.fileName,
+        driveFileId: uploaded.storageFileId,
+        driveUrl: uploaded.url,
+        documentType: params.documentType,
+        uploadedBy: actor.userId,
+      });
+    } catch (persistError) {
+      try {
+        await this.storage.delete(uploaded.storageFileId);
+      } catch (cleanupError) {
+        throw new Error(
+          "Evidence metadata persistence failed and document cleanup also failed; reconciliation is required",
+          { cause: new AggregateError([persistError, cleanupError]) },
+        );
+      }
+      throw persistError;
+    }
 
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Evidence",
-      entityId: evidence.id,
-      action: "CREATE",
-      oldValue: null,
-      newValue: { ...evidence, driveUrl: undefined }, // never put the Drive URL in the audit trail
-      reason: null,
-      requestId,
-    });
+    try {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Evidence",
+        entityId: evidence.id,
+        action: "CREATE",
+        oldValue: null,
+        newValue: { ...evidence, driveUrl: undefined },
+        reason: null,
+        requestId,
+      });
+    } catch (auditError) {
+      try {
+        await this.evidences.markDeleted(actor.tenantId, evidence.id);
+      } catch (rollbackError) {
+        throw new Error(
+          "Evidence audit failed and database compensation failed; reconciliation is required",
+          { cause: new AggregateError([auditError, rollbackError]) },
+        );
+      }
+      try {
+        await this.storage.delete(uploaded.storageFileId);
+      } catch (cleanupError) {
+        throw new Error(
+          "Evidence audit failed; record was soft-deleted but document cleanup failed; reconciliation is required",
+          { cause: new AggregateError([auditError, cleanupError]) },
+        );
+      }
+      throw auditError;
+    }
 
     return evidence;
   }
