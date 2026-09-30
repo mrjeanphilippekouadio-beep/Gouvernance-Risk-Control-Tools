@@ -90,4 +90,17 @@ export class PostgresRaciAssignmentRepository implements RaciAssignmentRepositor
     if (!row) throw new NotFoundError("RaciAssignment", id);
     return toDomain(row);
   }
+
+  async restore(tenantId: string, id: string): Promise<RaciAssignment> {
+    const { rows } = await this.pool.query<RaciAssignmentRow>(
+      `UPDATE raci_assignments
+       SET deleted_at = NULL
+       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NOT NULL
+       RETURNING *`,
+      [tenantId, id],
+    );
+    const row = rows[0];
+    if (!row) throw new NotFoundError("RaciAssignment", id);
+    return toDomain(row);
+  }
 }
