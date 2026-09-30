@@ -3,6 +3,7 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
 import type { ActionPlanRepository } from "../domain/repositories/ActionPlanRepository.js";
+import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import { RACI_ENTITY_TYPES, type RaciAssignment, type RaciEntityType, type RaciRole } from "../domain/entities/RaciAssignment.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -40,6 +41,7 @@ export class RaciAssignmentService {
     private readonly risks?: RiskRepository,
     private readonly controls?: ControlRepository,
     private readonly actionPlans?: ActionPlanRepository,
+    private readonly users?: UserRepository,
   ) {}
 
   async assign(
@@ -62,6 +64,12 @@ export class RaciAssignmentService {
     }
 
     await this.assertEntityExists(actor.tenantId, entityType, entityId);
+    // Fail closed: only assign business responsibility to an active user in this tenant.
+    if (!this.users) throw new ValidationError("RACI target-user validation is not configured");
+    const targetUser = await this.users.getById(actor.tenantId, userId);
+    if (!targetUser || targetUser.deletedAt !== null) {
+      throw new ValidationError("Target user does not exist in this tenant or is suspended");
+    }
     await this.assertNoSelfRaConflict(actor.tenantId, entityType, entityId, actor.userId, userId, role);
 
     const assignment = await this.raci.create({
