@@ -36,8 +36,14 @@ futur, pas encore fait) :
 
 - [ ] `sslmode=require` dans la connection string (Neon l'impose par
       défaut — ne pas le désactiver).
-- [ ] Le rôle applicatif utilisé par le backend n'est **pas** le rôle
-      propriétaire/admin Neon.
+- [x] Le backend vérifie au démarrage en production que le rôle
+      courant est distinct du propriétaire/admin Neon, n'est pas
+      `SUPERUSER`, ne peut pas créer de rôle/base, et ne peut pas créer
+      dans le schéma `public`.
+- [x] Le rôle utilisé par le backend doit avoir uniquement les privilèges
+      `SELECT`/`INSERT` requis sur `audit_log` et aucun
+      `UPDATE`/`DELETE`/`TRUNCATE`. Le démarrage production échoue si
+      cette condition n'est pas satisfaite.
 - [ ] Aucune connection string n'est committée (`.env` est gitignoré —
       vérifier `git status` avant de commit si un fichier `.env*` apparaît).
 - [ ] Le frontend ne reçoit jamais `DATABASE_URL` (le backend est le seul
