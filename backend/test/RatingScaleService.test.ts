@@ -278,7 +278,7 @@ describe("RatingScaleService", () => {
       },
       "REQ-11",
     );
-    expect(updated.masteryScale?.aggregation).toBe("MAX");
+    expect(updated.masteryScale?.aggregation).toBe("MIN");
     expect(updated.masteryScale?.defenseLines).toEqual(["L1", "L2", "L3"]);
   });
 

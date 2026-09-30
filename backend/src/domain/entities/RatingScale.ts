@@ -54,8 +54,8 @@ export interface MasteryScaleConfig {
   levels: ScaleLevel[];
   /** The 3 lines of defense the mastery score is assessed per (L1/L2/L3). */
   defenseLines: string[];
-  /** CHALLENGE-001 (PO decision, 2026-09-29): "on prend le max de tous les axes" — always "MAX" today. Supersedes ACT-175's original "maîtrise globale = moyenne". */
-  aggregation: "MAX";
+  /** CHALLENGE-001 (PO decision, 2026-09-29, corrected after Risk Manager review): the 3 lines of defense are not compensatory — a weak line must dominate, per the Three Lines of Defense Model. Always "MIN" today. Supersedes ACT-175's original "maîtrise globale = moyenne". */
+  aggregation: "MIN";
   /** CONFIG.SEUILS_MAITRISE — optional until configured. */
   thresholds: ScoreThreshold[] | null;
 }

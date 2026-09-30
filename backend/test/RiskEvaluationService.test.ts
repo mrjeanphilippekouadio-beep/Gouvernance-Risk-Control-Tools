@@ -305,7 +305,7 @@ function buildActiveRatingScale(id = "scale-1"): RatingScale {
         { level: 3, label: "Adéquat" },
       ],
       defenseLines: ["L1", "L2", "L3"],
-      aggregation: "MAX",
+      aggregation: "MIN",
       thresholds: null,
     },
     activatedAt: new Date(),
@@ -440,14 +440,14 @@ describe("RiskEvaluationService", () => {
     ).rejects.toThrow(ValidationError);
   });
 
-  it("computes maîtrise globale as the max across all lines (CHALLENGE-001)", async () => {
+  it("computes maîtrise globale as the min across all lines (CHALLENGE-001, corrected)", async () => {
     const { service } = newService();
     const draft = await createDraft(service);
     await service.recordInherentScoring(evaluatorActor, draft.id, { probability: 3, impacts: IMPACTS_LOW }, "REQ-8");
     const scored = await service.recordMasteryAssessment(evaluatorActor, draft.id, { lines: MASTERY_LINES_GOOD }, "REQ-9");
 
-    // max(3,3,3, 2,2,2, 2,2,3) = 3
-    expect(scored.masteryGlobal).toBe(3);
+    // min(3,3,3, 2,2,2, 2,2,3) = 2
+    expect(scored.masteryGlobal).toBe(2);
   });
 
   it("rejects a mastery score outside the configured 1-3 bounds", async () => {

@@ -494,7 +494,7 @@ function buildActiveRatingScale(): RatingScale {
     masteryScale: {
       levels: [{ level: 1, label: "Inadéquat" }, { level: 2, label: "Adéquat" }],
       defenseLines: ["L1"],
-      aggregation: "MAX",
+      aggregation: "MIN",
       thresholds: null,
     },
     activatedAt: new Date(),
