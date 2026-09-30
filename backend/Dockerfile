@@ -1,6 +1,6 @@
 # Cloud Run production image.
 # Node 24 is the active LTS line; pinning to the LTS major avoids an EOL runtime.
-FROM node:24.21.0-bookworm-slim AS build
+FROM node:26.10.0-bookworm-slim AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -9,7 +9,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:24.21.0-bookworm-slim
+FROM node:26.10.0-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 
