@@ -9,13 +9,14 @@ import { CartographyPage } from "./features/cartography/CartographyPage";
 import { AppetitePage } from "./features/appetite/AppetitePage";
 import { RatingScalesPage } from "./features/scales/RatingScalesPage";
 import { ControlsPage } from "./features/controls/ControlsPage";
+import { ControlMonitoringPage } from "./features/controls/ControlMonitoringPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import "./App.css";
 
 const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring";
 type NavItem = { id: View; label: string; icon: string; available?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -30,7 +31,7 @@ const NAV_GROUPS: NavGroup[] = [
   ] },
   { label: "Contrôle interne", items: [
     { id: "controls", label: "Contrôles", icon: "check", available: true },
-    { id: "placeholder", label: "Exécutions", icon: "play" },
+    { id: "monitoring", label: "Exécutions & efficacité", icon: "play", available: true },
     { id: "placeholder", label: "Plan de contrôle", icon: "panel" },
     { id: "placeholder", label: "Lignes de défense", icon: "shield" },
   ] },
@@ -64,6 +65,7 @@ const PAGE_TITLES: Record<View, string> = {
   appetite: "Appétence au risque",
   scales: "Grilles de cotation",
   controls: "Contrôles",
+  monitoring: "Exécutions & efficacité",
 };
 
 function App() {
@@ -130,6 +132,7 @@ function App() {
             {view === "appetite" && <AppetitePage token={token} />}
             {view === "scales" && <RatingScalesPage token={token} />}
             {view === "controls" && <ControlsPage token={token} />}
+            {view === "monitoring" && <ControlMonitoringPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} initialRiskId={evaluationRiskId} />}
             {view === "risks" && <RisksPage token={token} onEvaluate={(riskId) => { setEvaluationRiskId(riskId); setView("evaluation"); }} />}
             {view === "roles" && <RolesAdmin token={token} />}
