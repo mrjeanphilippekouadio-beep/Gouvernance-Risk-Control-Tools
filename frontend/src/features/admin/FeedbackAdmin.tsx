@@ -61,7 +61,7 @@ export function FeedbackAdmin({ token }: FeedbackAdminProps) {
 
   return (
     <section>
-      <h2>Feedback</h2>
+      <div className="admin-pagehead"><div><p className="page-eyebrow">ADMINISTRATION · RETOURS</p><h1>Feedback</h1><p className="page-subtitle">Trier les retours transmis depuis le bouton Feedback présent sur les écrans GRC.</p></div><span className="admin-surface-badge">Triage</span></div>
 
       <FormField label="Filtrer par statut" htmlFor="feedback-filter">
         <select
