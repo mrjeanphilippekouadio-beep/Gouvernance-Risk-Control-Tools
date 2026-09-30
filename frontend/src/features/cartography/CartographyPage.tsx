@@ -184,7 +184,7 @@ export function CartographyPage({ token }: CartographyPageProps) {
             <thead><tr><th>Évaluation</th><th>Risque</th><th>Processus</th><th>Statut</th><th>Inhérent</th><th>Résiduel</th></tr></thead>
             <tbody>
               {loading && <tr><td colSpan={6} className="cart-loading">Chargement de la cartographie…</td></tr>}
-              {!loading && filtered.length === 0 && <tr><td colSpan={7} className="cart-loading">Aucun point à afficher.</td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={6} className="cart-loading">Aucun point à afficher.</td></tr>}
               {filtered.map((point) => (
                 <tr key={point.evaluation.id}>
                   <td><code>{point.evaluation.id}</code></td>
