@@ -72,7 +72,7 @@ function App() {
       <div className="app-shell">
         <Sidebar view={view} setView={setView} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} />
         <div className="app-main">
-          <header className="app-topbar"><div><span className="topbar-kicker">GRC TOOLS</span><strong>Module en préparation</strong></div><Button onClick={idToken ? signOut : () => setDevToken("")}>Déconnexion</Button></header>
+          <header className="app-topbar"><button type="button" className="mobile-menu-toggle" aria-label={mobileNavOpen ? "Fermer la navigation" : "Ouvrir la navigation"} onClick={() => setMobileNavOpen(!mobileNavOpen)}>{mobileNavOpen ? "×" : "☰"}</button><div className="topbar-title"><span className="topbar-kicker">GRC TOOLS</span><strong>Module en préparation</strong></div><Button onClick={idToken ? signOut : () => setDevToken("")}>Déconnexion</Button></header>
           <main className="app-content"><div className="coming-soon"><span className="coming-soon-icon">✳</span><p className="auth-eyebrow">FEUILLE DE ROUTE PRODUIT</p><h1>Ce module sera construit dans la prochaine étape.</h1><p>La navigation est déjà structurée. Les écrans seront activés au fur et à mesure du portage des maquettes et de la disponibilité des API métier.</p><Button variant="primary" onClick={() => setView("evaluation")}>Revenir à l'évaluation</Button></div></main>
         </div>
         <FeedbackWidget token={token} />
