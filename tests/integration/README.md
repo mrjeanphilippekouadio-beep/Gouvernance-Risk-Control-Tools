@@ -7,7 +7,7 @@ This workflow runs manually from GitHub Actions and performs **read-only** HTTP 
 Configure these under **Settings → Secrets and variables → Actions**:
 
 - `GRC_STAGING_API_BASE_URL`: HTTPS base URL of the **staging API** (for example, the origin hosting the backend; do not include a route such as `/api/v1`).
-- `GRC_STAGING_BEARER_TOKEN`: short-lived or dedicated test-user bearer token with read access to action plans, controls, audit missions, findings, executions, effectiveness, and evidence.
+- `GRC_STAGING_BEARER_TOKEN`: short-lived or dedicated test-user bearer token with read access to action plans, controls, audit missions, findings, executions, effectiveness, and evidence.\n- `GRC_STAGING_CONTROL_ID`: ID of an existing control in the staging tenant, visible to the test user.\n- `GRC_STAGING_EVIDENCE_ID`: ID of an existing evidence record in the staging tenant, visible to the test user.
 
 Never commit the token or paste it into source files, issues, pull requests, or chat. Do not use a production URL or production token.
 
