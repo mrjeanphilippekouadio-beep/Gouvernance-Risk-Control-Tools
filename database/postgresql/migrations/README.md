@@ -102,3 +102,11 @@ polymorphe non contrainte, cf. commentaire de tête de 027).
   `processes.evaluation_mode` (030) n'est jamais écrit qu'indirectement
   par cette table — le rollback n'affecte pas le mode actuellement en
   vigueur sur un `Process`, seulement l'historique des propositions.
+- `036_users_department_id.down.sql` — `DROP INDEX
+  users_tenant_department_idx` puis `ALTER TABLE users DROP COLUMN
+  department_id`. Non destructif tant qu'aucun code applicatif n'a
+  encore écrit de valeur dans cette colonne (nullable, jamais
+  backfillée par la migration forward elle-même). Numérotée 036 (et non
+  034) car 034/035 sont déjà réservées par la branche non fusionnée
+  `feature/wire-processid-evaluationmode` (vérifié via `git log --all`,
+  pas seulement en listant l'arborescence de `main`).

@@ -1,5 +1,6 @@
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
+import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { UpdateUserInput, User } from "../domain/entities/User.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -11,6 +12,8 @@ export interface CreateUserWithRoleInput {
   displayName: string;
   /** ACT-100: "rôle initial obligatoire" — an RBAC Role id (RoleService/roles table), not a legacy `users.roles` string. */
   roleId: string;
+  /** Architect audit (2026-09-30): optional department attachment, validated against the actor's tenant — see assertDepartmentExists. */
+  departmentId?: string | null;
 }
 
 export interface ListUsersOptions {
@@ -40,6 +43,16 @@ export class UserService {
     private readonly users: UserRepository,
     private readonly audit: AuditRepository,
     private readonly roleService?: RoleService,
+    /**
+     * Architect audit (2026-09-30): optional so existing tests keep
+     * compiling — but if a caller actually supplies `departmentId`,
+     * `assertDepartmentExists` throws rather than silently skipping
+     * validation, same pattern as RiskService.assertProcessExists (the
+     * SEC-012 lesson — never `if (!this.x) return;` on a dependency the
+     * current call is actually trying to use). server.ts must wire the
+     * real repository for `departmentId` to ever be accepted.
+     */
+    private readonly departments?: DepartmentRepository,
   ) {}
 
   /**
@@ -68,11 +81,13 @@ export class UserService {
     if (!this.roleService) {
       throw new ValidationError("Role assignment is not configured — cannot create a user without an initial role");
     }
+    await this.assertDepartmentExists(actor.tenantId, input.departmentId);
 
     const user = await this.users.create({
       tenantId: actor.tenantId,
       email: input.email.trim().toLowerCase(),
       displayName: input.displayName.trim(),
+      departmentId: input.departmentId ?? null,
     });
 
     // Not wrapped in a DB transaction with the insert above — no
@@ -130,6 +145,7 @@ export class UserService {
     if (input.displayName !== undefined && !input.displayName.trim()) {
       throw new ValidationError("displayName cannot be empty");
     }
+    await this.assertDepartmentExists(actor.tenantId, input.departmentId);
 
     const after = await this.users.update(actor.tenantId, id, input);
 
@@ -209,5 +225,22 @@ export class UserService {
     });
 
     return after;
+  }
+
+  /**
+   * Architect audit (2026-09-30): a departmentId, if given, must belong
+   * to the caller's tenant. Unlike a repository that's simply unused for
+   * a call, a missing DepartmentRepository here does NOT silently skip
+   * validation when a departmentId was actually supplied — same
+   * reasoning as RiskService.assertProcessExists (DIV-05): it's only
+   * safe to no-op when the caller didn't ask to set departmentId at all.
+   */
+  private async assertDepartmentExists(tenantId: string, departmentId: string | null | undefined): Promise<void> {
+    if (departmentId === undefined || departmentId === null) return;
+    if (!this.departments) {
+      throw new ValidationError("User department validation is not available: DepartmentRepository is not configured");
+    }
+    const department = await this.departments.getById(tenantId, departmentId);
+    if (!department) throw new ValidationError(`Department ${departmentId} does not exist in this tenant`);
   }
 }

@@ -14,6 +14,15 @@ export interface User {
   email: string;
   displayName: string;
   roles: string[];
+  /**
+   * Architect audit (2026-09-30, .claude/agent-context/ACTION_ITEMS.md):
+   * real FK to `departments(id)` added by migration 034 — Expand-only,
+   * same pattern as Risk.processId (029) / Control.processId (031) /
+   * RiskAppetite.subCategoryId (032). Nullable, never backfilled; set
+   * only through UserService, which validates it against the actor's
+   * tenant (see UserService.assertDepartmentExists).
+   */
+  departmentId: string | null;
   createdAt: Date;
   deletedAt: Date | null;
 }
@@ -22,14 +31,17 @@ export interface CreateUserInput {
   tenantId: string;
   email: string;
   displayName: string;
+  departmentId?: string | null;
 }
 
 /**
  * ACT-101: profile edit is display name only for now — the `users` table
  * (migration 002) has no `fonction`/`entité` columns, and none are added
  * in this pass (see backlog note: only add them with a real migration if
- * genuinely needed, not speculatively).
+ * genuinely needed, not speculatively). `departmentId` is a separate,
+ * later addition (migration 034) — see User.departmentId's doc comment.
  */
 export interface UpdateUserInput {
   displayName?: string;
+  departmentId?: string | null;
 }

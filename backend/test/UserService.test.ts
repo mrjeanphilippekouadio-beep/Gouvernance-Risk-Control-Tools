@@ -5,6 +5,8 @@ import { RoleService } from "../src/services/RoleService.js";
 import type { UserRepository } from "../src/domain/repositories/UserRepository.js";
 import type { RoleRepository } from "../src/domain/repositories/RoleRepository.js";
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
+import type { DepartmentRepository } from "../src/domain/repositories/DepartmentRepository.js";
+import type { Department } from "../src/domain/entities/Department.js";
 import type { User } from "../src/domain/entities/User.js";
 import type { Role, RoleAssignment } from "../src/domain/entities/Role.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
@@ -45,6 +47,7 @@ function inMemoryUserRepository(): UserRepository {
         email: input.email,
         displayName: input.displayName,
         roles: [],
+        departmentId: input.departmentId ?? null,
         createdAt: new Date(),
         deletedAt: null,
       };
@@ -150,6 +153,59 @@ function inMemoryRoleRepository(): RoleRepository {
   };
 }
 
+function inMemoryDepartmentRepository(seed: Department[] = []): DepartmentRepository {
+  const store = new Map<string, Department>(seed.map((d) => [d.id, d]));
+  return {
+    async getById(tenantId, id) {
+      const d = store.get(id);
+      return d && d.tenantId === tenantId ? d : null;
+    },
+    async list(tenantId) {
+      return [...store.values()].filter((d) => d.tenantId === tenantId);
+    },
+    async create(input) {
+      const department: Department = {
+        id: randomUUID(),
+        tenantId: input.tenantId,
+        name: input.name,
+        entity: input.entity ?? null,
+        manager: input.manager,
+        riskOwner: input.riskOwner ?? input.manager,
+        riskOwnerDesignatedBy: input.riskOwnerDesignatedBy ?? null,
+        riskOwnerDesignatedAt: null,
+        linkedProcesses: input.linkedProcesses ?? null,
+        active: input.active ?? true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        deletedBy: null,
+        deletionReason: null,
+      };
+      store.set(department.id, department);
+      return department;
+    },
+    async update(tenantId, id, input) {
+      const existing = store.get(id);
+      if (!existing || existing.tenantId !== tenantId) throw new NotFoundError("Department", id);
+      const updated = { ...existing, ...input, updatedAt: new Date() };
+      store.set(id, updated);
+      return updated;
+    },
+    async designateRiskOwner(tenantId, id, riskOwner, designatedBy) {
+      const existing = store.get(id);
+      if (!existing || existing.tenantId !== tenantId) throw new NotFoundError("Department", id);
+      const updated = { ...existing, riskOwner, riskOwnerDesignatedBy: designatedBy, riskOwnerDesignatedAt: new Date() };
+      store.set(id, updated);
+      return updated;
+    },
+    async softDelete(tenantId, id, deletedBy, reason) {
+      const existing = store.get(id);
+      if (!existing || existing.tenantId !== tenantId) throw new NotFoundError("Department", id);
+      store.set(id, { ...existing, deletedAt: new Date(), deletedBy, deletionReason: reason });
+    },
+  };
+}
+
 function inMemoryAuditRepository(): AuditRepository {
   return {
     async record() {},
@@ -172,12 +228,12 @@ const admin: AuthenticatedUser = {
 
 const otherTenantAdmin: AuthenticatedUser = { ...admin, userId: "admin-2", tenantId: "tenant-2" };
 
-function makeServices() {
+function makeServices(departmentRepo?: DepartmentRepository) {
   const audit = inMemoryAuditRepository();
   const roleRepo = inMemoryRoleRepository();
   const roleService = new RoleService(roleRepo, audit);
   const userRepo = inMemoryUserRepository();
-  const userService = new UserService(userRepo, audit, roleService);
+  const userService = new UserService(userRepo, audit, roleService, departmentRepo);
   return { userService, roleService, userRepo, roleRepo };
 }
 
@@ -340,5 +396,90 @@ describe("UserService", () => {
     await expect(userService.reactivate(reactivateOnlyActor, user.id, "REQ-22")).resolves.toMatchObject({
       deletedAt: null,
     });
+  });
+
+  it("attaches a user to a department that exists in the actor's tenant", async () => {
+    const departmentRepo = inMemoryDepartmentRepository();
+    const department = await departmentRepo.create({ tenantId: "tenant-1", name: "Finance", manager: "Manager" });
+    const { userService, roleService } = makeServices(departmentRepo);
+    const role = await seedRole(roleService, admin);
+
+    const user = await userService.create(
+      admin,
+      { email: "dept@djamo.com", displayName: "Dept User", roleId: role.id, departmentId: department.id },
+      "REQ-23",
+    );
+
+    expect(user.departmentId).toBe(department.id);
+  });
+
+  it("rejects creating a user with a department from another tenant", async () => {
+    const departmentRepo = inMemoryDepartmentRepository();
+    const otherTenantDepartment = await departmentRepo.create({
+      tenantId: "tenant-2",
+      name: "Ops",
+      manager: "Manager",
+    });
+    const { userService, roleService } = makeServices(departmentRepo);
+    const role = await seedRole(roleService, admin);
+
+    await expect(
+      userService.create(
+        admin,
+        { email: "crosstenant@djamo.com", displayName: "X", roleId: role.id, departmentId: otherTenantDepartment.id },
+        "REQ-24",
+      ),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it("rejects creating a user with a department that does not exist", async () => {
+    const departmentRepo = inMemoryDepartmentRepository();
+    const { userService, roleService } = makeServices(departmentRepo);
+    const role = await seedRole(roleService, admin);
+
+    await expect(
+      userService.create(
+        admin,
+        { email: "ghost@djamo.com", displayName: "Ghost", roleId: role.id, departmentId: "does-not-exist" },
+        "REQ-25",
+      ),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it("throws (does not silently skip) when a departmentId is supplied but no DepartmentRepository is configured", async () => {
+    const { userService, roleService } = makeServices();
+    const role = await seedRole(roleService, admin);
+
+    await expect(
+      userService.create(
+        admin,
+        { email: "unwired@djamo.com", displayName: "Unwired", roleId: role.id, departmentId: "dept-1" },
+        "REQ-26",
+      ),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it("updates a user's department, and rejects an update to a department outside the tenant", async () => {
+    const departmentRepo = inMemoryDepartmentRepository();
+    const department = await departmentRepo.create({ tenantId: "tenant-1", name: "Finance", manager: "Manager" });
+    const otherTenantDepartment = await departmentRepo.create({
+      tenantId: "tenant-2",
+      name: "Ops",
+      manager: "Manager",
+    });
+    const { userService, roleService } = makeServices(departmentRepo);
+    const role = await seedRole(roleService, admin);
+    const user = await userService.create(
+      admin,
+      { email: "toUpdate@djamo.com", displayName: "To Update", roleId: role.id },
+      "REQ-27",
+    );
+
+    const updated = await userService.update(admin, user.id, { departmentId: department.id }, "REQ-28");
+    expect(updated.departmentId).toBe(department.id);
+
+    await expect(
+      userService.update(admin, user.id, { departmentId: otherTenantDepartment.id }, "REQ-29"),
+    ).rejects.toThrow(ValidationError);
   });
 });

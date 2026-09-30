@@ -6,10 +6,12 @@ const CreateUserBody = z.object({
   email: z.string().email(),
   displayName: z.string().min(1),
   roleId: z.string().min(1),
+  departmentId: z.string().nullish(),
 });
 
 const UpdateUserBody = z.object({
   displayName: z.string().min(1).optional(),
+  departmentId: z.string().nullish(),
 });
 
 export function usersRouter(userService: UserService): Router {
