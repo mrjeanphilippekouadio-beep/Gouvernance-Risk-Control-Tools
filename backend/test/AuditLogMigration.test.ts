@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(fileURLToPath(import.meta.url), "../..");
 const migrationPath = resolve(
   repoRoot,
-  "../database/postgresql/migrations/038_audit_log_append_only.sql",
+  "database/postgresql/migrations/038_audit_log_append_only.sql",
 );
 
 describe("SEC: audit_log database append-only migration", () => {
