@@ -246,7 +246,7 @@ const actionPlanService = new ActionPlanService(
   departmentRepository,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository);
-const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository);
+const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository);
 // RACI read-side wiring (PO-confirmed follow-up to Lot 1, see RaciEnrichmentViewService
 // doc comment): composes risk/control/actionPlan services with raciAssignmentService,
 // read-only, never a condition for a write.

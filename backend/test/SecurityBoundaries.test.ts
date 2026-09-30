@@ -1264,8 +1264,18 @@ describe("SEC-016 RACI self-Accountable guard bypassable via assignment order", 
         },
       } as unknown as RiskRepository;
 
-      const service = new RaciAssignmentService(inMemoryRaciRepositoryForSec016(), inMemoryAuditRepository(), risks);
       const selfDesigner: AuthenticatedUser = { ...attacker, roles: ["raci.assign", "raci.read"] };
+      const users = {
+        async getById(tenantId: string, id: string) {
+          return tenantId === TENANT && id === selfDesigner.userId
+            ? ({ id, tenantId, deletedAt: null } as User)
+            : null;
+        },
+      } as UserRepository;
+      const service = new RaciAssignmentService(
+        inMemoryRaciRepositoryForSec016(), inMemoryAuditRepository(), risks,
+        undefined, undefined, users,
+      );
 
       // Self-designate as Accountable FIRST — allowed today, since no
       // Responsible assignment exists yet for this user on this entity.
