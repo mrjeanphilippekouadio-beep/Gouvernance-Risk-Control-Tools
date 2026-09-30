@@ -41,3 +41,34 @@ jobs:
       - run: npm install --package-lock=false
       - run: npm run build --workspace=@djamo/design-system
       - run: npm run build --workspace=@grc-tools/frontend
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Semgrep — static analysis (SAST). Public community ruleset (p/ci),
+      # no Semgrep App token required. Non-fatal on findings for now
+      # (visibility first); tighten to fail-on-finding once the baseline
+      # is triaged.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install semgrep
+      - run: semgrep scan --config p/ci --sarif --output semgrep-results.sarif
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.sarif
+          if-no-files-found: ignore
+
+      # Trivy — dependency vulnerability scan (backend + frontend
+      # package-lock.json). Fails the job on HIGH/CRITICAL findings.
+      - uses: aquasecurity/trivy-action@v0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: "1"
