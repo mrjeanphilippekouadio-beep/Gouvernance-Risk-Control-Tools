@@ -23,7 +23,6 @@ const STATUS: Record<EvaluationStatus, { label: string; tone: StatusTone }> = {
   REJECTED: { label: "Rejetée", tone: "danger" },
 };
 
-const TREATMENTS = ["Réduire", "Transférer", "Accepter", "Éviter"];
 
 function latestEvaluation(list: RiskEvaluation[]) {
   return [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
@@ -55,7 +54,7 @@ export function CartographyPage({ token }: CartographyPageProps) {
       try {
         const riskList = await risksApi.list(token);
         const all = await Promise.all(
-          riskList.slice(0, 50).map(async (risk) => {
+          riskList.map(async (risk) => {
             try {
               const evaluations = await evaluationsApi.listForRisk(token, risk.id);
               const evaluation = latestEvaluation(evaluations);
@@ -182,11 +181,11 @@ export function CartographyPage({ token }: CartographyPageProps) {
       <Card header={<div className="cart-card-title"><div><h2>Risques sur les deux cartes</h2><p>Portefeuille filtré · {filtered.length} évaluation(s) représentée(s)</p></div></div>}>
         <div className="cart-table-wrap">
           <table className="cart-table">
-            <thead><tr><th>Évaluation</th><th>Risque</th><th>Processus</th><th>Statut</th><th>Inhérent</th><th>Résiduel</th><th>Traitement</th></tr></thead>
+            <thead><tr><th>Évaluation</th><th>Risque</th><th>Processus</th><th>Statut</th><th>Inhérent</th><th>Résiduel</th></tr></thead>
             <tbody>
-              {loading && <tr><td colSpan={7} className="cart-loading">Chargement de la cartographie…</td></tr>}
+              {loading && <tr><td colSpan={6} className="cart-loading">Chargement de la cartographie…</td></tr>}
               {!loading && filtered.length === 0 && <tr><td colSpan={7} className="cart-loading">Aucun point à afficher.</td></tr>}
-              {filtered.map((point, index) => (
+              {filtered.map((point) => (
                 <tr key={point.evaluation.id}>
                   <td><code>{point.evaluation.id}</code></td>
                   <td><strong>{point.risk.description}</strong></td>
@@ -194,7 +193,6 @@ export function CartographyPage({ token }: CartographyPageProps) {
                   <td><StatusBadge label={statusTone(point.evaluation.status).label} tone={statusTone(point.evaluation.status).tone} /></td>
                   <td><span className="cart-score">{point.evaluation.inherentScore ?? (point.inherentProbability + "×" + point.inherentImpact)}</span></td>
                   <td><span className="cart-score">{point.evaluation.residualScore ?? (point.residualProbability + "×" + point.residualImpact)}</span></td>
-                  <td><span className="cart-treatment">{TREATMENTS[index % TREATMENTS.length]}</span></td>
                 </tr>
               ))}
             </tbody>
