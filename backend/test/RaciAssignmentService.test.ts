@@ -56,6 +56,13 @@ function inMemoryRaciRepository(): RaciAssignmentRepository {
       store.set(id, updated);
       return updated;
     },
+    async restore(tenantId, id) {
+      const existing = store.get(id);
+      if (!existing || existing.tenantId !== tenantId || !existing.deletedAt) throw new NotFoundError("RaciAssignment", id);
+      const updated: RaciAssignment = { ...existing, deletedAt: null };
+      store.set(id, updated);
+      return updated;
+    },
   };
 }
 
@@ -166,6 +173,17 @@ describe("RaciAssignmentService", () => {
     expect(recorded).toMatchObject({ action: "CREATE", entityType: "RaciAssignment" });
   });
 
+  it("compensates an assignment when audit recording fails", async () => {
+    const risks = fakeRiskRepository(["risk-1"], "tenant-1");
+    const raci = inMemoryRaciRepository();
+    const audit = inMemoryAuditRepository();
+    audit.record = async () => { throw new Error("audit unavailable"); };
+    const service = new RaciAssignmentService(raci, audit, risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
+
+    await expect(service.assign(actor(), "RISK", "risk-1", "user-2", "R", "req-audit-fail")).rejects.toThrow("audit unavailable");
+    expect(await service.list(actor(), "RISK", "risk-1")).toHaveLength(0);
+  });
+
   it("lists assignments for an entity", async () => {
     const risks = fakeRiskRepository(["risk-1"], "tenant-1");
     const service = new RaciAssignmentService(inMemoryRaciRepository(), inMemoryAuditRepository(), risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
@@ -187,6 +205,23 @@ describe("RaciAssignmentService", () => {
     expect(revoked.deletedAt).not.toBeNull();
     const list = await service.list(actor(), "RISK", "risk-1");
     expect(list).toHaveLength(0);
+  });
+
+  it("restores an assignment when audit recording fails during revoke", async () => {
+    const risks = fakeRiskRepository(["risk-1"], "tenant-1");
+    const raci = inMemoryRaciRepository();
+    const audit = inMemoryAuditRepository();
+    let recordCount = 0;
+    audit.record = async () => {
+      recordCount += 1;
+      if (recordCount === 2) throw new Error("audit unavailable");
+    };
+    const service = new RaciAssignmentService(raci, audit, risks, noopControlRepository, noopActionPlanRepository, fakeUserRepository());
+    const assignment = await service.assign(actor(), "RISK", "risk-1", "user-2", "R", "req-create");
+
+    await expect(service.revoke(actor(), "RISK", "risk-1", assignment.id, "req-revoke")).rejects.toThrow("audit unavailable");
+    const remaining = await service.list(actor(), "RISK", "risk-1");
+    expect(remaining.map((item) => item.id)).toContain(assignment.id);
   });
 
   it("rejects assignment when entityId does not exist in the tenant", async () => {
