@@ -11,6 +11,7 @@ import { RatingScalesPage } from "./features/scales/RatingScalesPage";
 import { ControlsPage } from "./features/controls/ControlsPage";
 import { ControlMonitoringPage } from "./features/controls/ControlMonitoringPage";
 import { AuditFindingsPage } from "./features/audit/AuditFindingsPage";
+import { ActionPlansPage } from "./features/actions/ActionPlansPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import { ErrorPage } from "./features/errors/ErrorPages";
@@ -18,7 +19,7 @@ import "./App.css";
 
 const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions";
 type NavItem = { id: View; label: string; icon: string; available?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -43,7 +44,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "placeholder", label: "Dashboards", icon: "dashboard" },
   ] },
   { label: "Plans & revues", items: [
-    { id: "placeholder", label: "Plans d'action", icon: "arrow" },
+    { id: "actions", label: "Plans d'action", icon: "arrow", available: true },
     { id: "placeholder", label: "Cycles de revue", icon: "clock" },
   ] },
   { label: "Audit", items: [
@@ -69,6 +70,7 @@ const PAGE_TITLES: Record<View, string> = {
   controls: "Contrôles",
   monitoring: "Exécutions & efficacité",
   findings: "Constats & recommandations",
+  actions: "Plans d’action",
 };
 
 function App() {
@@ -141,6 +143,7 @@ function App() {
             {view === "controls" && <ControlsPage token={token} />}
             {view === "monitoring" && <ControlMonitoringPage token={token} />}
             {view === "findings" && <AuditFindingsPage token={token} />}
+            {view === "actions" && <ActionPlansPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} initialRiskId={evaluationRiskId} />}
             {view === "risks" && <RisksPage token={token} onEvaluate={(riskId) => { setEvaluationRiskId(riskId); setView("evaluation"); }} />}
             {view === "roles" && <RolesAdmin token={token} />}

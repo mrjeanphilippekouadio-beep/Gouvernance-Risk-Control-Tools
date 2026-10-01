@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { MessageBanner } from "@djamo/design-system";
 import "./ContextRail.css";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions";
 type RailTab = "comments" | "raci" | "evidence" | "occurrence";
 
 const LABELS: Record<RailTab, string> = { comments: "Commentaires", raci: "RACI", evidence: "Preuves", occurrence: "Occurrence" };
