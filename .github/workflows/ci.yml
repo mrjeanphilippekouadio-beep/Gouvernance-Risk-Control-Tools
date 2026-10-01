@@ -67,8 +67,17 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r .github/security-requirements.txt
-      - run: semgrep scan --error --config p/ci --sarif --output semgrep-results.sarif
+      - name: Semgrep security scan
+        run: semgrep scan --error --config p/ci --sarif --output semgrep-results.sarif
+
+      # Always print human-readable findings, even when the blocking scan fails.
+      - name: Semgrep findings (diagnostic output)
+        if: always()
+        run: semgrep scan --config p/ci --text || true
+
+      # Preserve the machine-readable report even when Semgrep blocks the job.
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
         with:
           name: semgrep-results
           path: semgrep-results.sarif
@@ -77,6 +86,7 @@ jobs:
       # Trivy — dependency vulnerability scan (backend + frontend
       # package-lock.json). Fails the job on HIGH/CRITICAL findings.
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        if: always()
         with:
           scan-type: fs
           scan-ref: .
