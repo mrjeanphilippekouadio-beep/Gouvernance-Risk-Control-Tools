@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import type { DashboardService } from "../../services/DashboardService.js";
 import { ValidationError } from "../../domain/errors/DomainErrors.js";
 
@@ -18,7 +19,10 @@ function parseDate(value: unknown): Date | undefined {
  */
 export function reportsRouter(dashboardService: DashboardService): Router {
   const router = Router();
-
+  const ReportQuery = z.object({
+    topN: z.coerce.number().int().min(1).max(100).optional(),
+    periods: z.coerce.number().int().min(1).max(24).optional(),
+  });
   router.get("/compliance", async (req, res, next) => {
     try {
       const q = req.query as Record<string, unknown>;
@@ -36,7 +40,7 @@ export function reportsRouter(dashboardService: DashboardService): Router {
 
   router.get("/risk-committee", async (req, res, next) => {
     try {
-      const topN = typeof req.query["topN"] === "string" ? Number(req.query["topN"]) : undefined;
+      const { topN } = ReportQuery.parse(req.query);
       res.json({ data: await dashboardService.getRiskCommitteeReport(req.user, { topN }) });
     } catch (err) {
       next(err);
@@ -71,7 +75,7 @@ export function reportsRouter(dashboardService: DashboardService): Router {
 
   router.get("/kri-consolidated", async (req, res, next) => {
     try {
-      const periods = typeof req.query["periods"] === "string" ? Number(req.query["periods"]) : undefined;
+      const { periods } = ReportQuery.parse(req.query);
       res.json({ data: await dashboardService.getKriConsolidated(req.user, { periods }) });
     } catch (err) {
       next(err);

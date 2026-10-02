@@ -9,6 +9,11 @@ const CreateUserBody = z.object({
   departmentId: z.string().nullish(),
 });
 
+const PaginationQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
 const UpdateUserBody = z.object({
   displayName: z.string().min(1).optional(),
   departmentId: z.string().nullish(),
@@ -31,8 +36,7 @@ export function usersRouter(userService: UserService): Router {
   router.get("/", async (req, res, next) => {
     try {
       const includeSuspended = req.query["includeSuspended"] === "true";
-      const limit = req.query["limit"] ? Number(req.query["limit"]) : undefined;
-      const offset = req.query["offset"] ? Number(req.query["offset"]) : undefined;
+      const { limit, offset } = PaginationQuery.parse(req.query);
       const result = await userService.list(req.user, { includeSuspended, limit, offset });
       res.json({ data: result.users, total: result.total });
     } catch (err) {

@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import express from "express";
 import cors from "cors";
 import { pinoHttp } from "pino-http";
@@ -129,13 +130,22 @@ import { moduleGuard } from "./api/middleware/moduleGuard.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
 
 const app = express();
+app.disable("x-powered-by");
+
+// Baseline security headers for the API.
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  next();
+});
 
 app.use(pinoHttp());
 // Must run before authMiddleware: the browser's CORS preflight (OPTIONS)
 // never carries the Authorization header, so if auth ran first it would
 // reject the preflight and the real request would never be sent.
 app.use(cors({ origin: env.CORS_ALLOWED_ORIGINS, allowedHeaders: ["Authorization", "Content-Type"] }));
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(requestIdMiddleware);
 
 // --- Wiring: infrastructure implementations behind their interfaces ---
@@ -518,7 +528,13 @@ app.use(errorHandler);
 async function startServer(): Promise<void> {
   await assertProductionDatabaseRole(pool, env.NODE_ENV);
 
-  app.listen(env.PORT, () => {
+  const server = createServer(app);
+
+  server.requestTimeout = 120_000;
+  server.headersTimeout = 15_000;
+  server.keepAliveTimeout = 5_000;
+
+  server.listen(env.PORT, () => {
     // eslint-disable-next-line no-console
     console.log(`GRC Tools backend listening on port ${env.PORT} (${env.NODE_ENV})`);
   });

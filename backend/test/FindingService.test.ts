@@ -52,6 +52,9 @@ function inMemoryFindingRepository(): FindingRepository {
     async updateStatus(tenantId, id, status) {
       const existing = store.get(id);
       if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
+      if (existing.status !== "OUVERT") {
+        throw new ValidationError("Finding status must be OUVERT to start treatment");
+      }
       const updated: Finding = { ...existing, status, updatedAt: new Date() };
       store.set(id, updated);
       return updated;
@@ -59,6 +62,9 @@ function inMemoryFindingRepository(): FindingRepository {
     async close(tenantId, id, closedBy, comment) {
       const existing = store.get(id);
       if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
+      if (existing.status !== "EN_TRAITEMENT") {
+        throw new ValidationError("Finding status must be EN_TRAITEMENT to close");
+      }
       const updated: Finding = {
         ...existing,
         status: "CLOS",
@@ -255,6 +261,19 @@ describe("FindingService", () => {
     expect(inTreatment.status).toBe("EN_TRAITEMENT");
   });
 
+  it("rejects closing a Finding that is still OUVERT", async () => {
+    const service = buildService();
+    const finding = await service.create(
+      auditor1,
+      { auditMissionId: "mission-1", title: "T", description: "D", severity: "LOW" },
+      "REQ-9A",
+    );
+
+    await expect(
+      service.close(auditor2, finding.id, "Correction vérifiée", "REQ-9B"),
+    ).rejects.toThrow(ValidationError);
+  });
+
   it("requires a closure comment, and forbids the raiser from closing their own Finding (maker-checker)", async () => {
     const service = buildService();
     const finding = await service.create(
@@ -263,6 +282,7 @@ describe("FindingService", () => {
       "REQ-10",
     );
 
+    await service.startTreatment(auditor1, finding.id, "REQ-10A");
     await expect(service.close(auditor2, finding.id, "", "REQ-11")).rejects.toThrow(ValidationError);
     await expect(service.close(auditor1, finding.id, "J'ai corrigé moi-même", "REQ-12")).rejects.toThrow(ForbiddenError);
 
@@ -279,6 +299,7 @@ describe("FindingService", () => {
       { auditMissionId: "mission-1", title: "T", description: "D", severity: "LOW" },
       "REQ-14",
     );
+    await service.startTreatment(auditor1, finding.id, "REQ-14A");
     await service.close(auditor2, finding.id, "Remédié", "REQ-15");
     await expect(service.close(auditor2, finding.id, "Encore", "REQ-16")).rejects.toThrow(ValidationError);
   });

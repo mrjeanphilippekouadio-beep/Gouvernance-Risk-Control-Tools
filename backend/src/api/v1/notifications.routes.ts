@@ -8,6 +8,10 @@ const ResourceType = z.enum(NOTIFICATION_RESOURCE_TYPES);
 /** ACT-202: mounted at /api/v1/notifications by server.ts. */
 export function notificationsRouter(notificationService: NotificationService): Router {
   const router = Router();
+  const PaginationQuery = z.object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+  });
 
   // GET /notifications?user_id=me&resourceType=&eventType=&read=&limit=&offset=
   router.get("/", async (req, res, next) => {
@@ -18,8 +22,7 @@ export function notificationsRouter(notificationService: NotificationService): R
       const eventType = typeof req.query["eventType"] === "string" ? req.query["eventType"] : undefined;
       const readRaw = req.query["read"];
       const read = readRaw === "true" ? true : readRaw === "false" ? false : undefined;
-      const limit = req.query["limit"] ? Number(req.query["limit"]) : undefined;
-      const offset = req.query["offset"] ? Number(req.query["offset"]) : undefined;
+      const { limit, offset } = PaginationQuery.parse(req.query);
 
       const result = await notificationService.listForRecipient(req.user, userId, { resourceType, eventType, read, limit, offset });
       res.json(result);

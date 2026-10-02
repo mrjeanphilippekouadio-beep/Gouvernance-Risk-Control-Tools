@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import type { DashboardService } from "../../services/DashboardService.js";
 import type { AnomalyStatus } from "../../domain/entities/Anomaly.js";
 import { ValidationError } from "../../domain/errors/DomainErrors.js";
@@ -33,7 +34,9 @@ function parseDate(value: unknown): Date | undefined {
  */
 export function dashboardRouter(dashboardService: DashboardService): Router {
   const router = Router();
-
+  const TopNQuery = z.object({
+    topN: z.coerce.number().int().min(1).max(100).optional(),
+  });
   router.get("/risks", async (req, res, next) => {
     try {
       res.json({ data: await dashboardService.getRisksOverview(req.user) });
@@ -90,7 +93,7 @@ export function dashboardRouter(dashboardService: DashboardService): Router {
 
   router.get("/executive", async (req, res, next) => {
     try {
-      const topN = typeof req.query["topN"] === "string" ? Number(req.query["topN"]) : undefined;
+      const { topN } = TopNQuery.parse(req.query);
       res.json({ data: await dashboardService.getExecutiveView(req.user, { topN }) });
     } catch (err) {
       next(err);

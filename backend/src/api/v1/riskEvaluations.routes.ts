@@ -6,6 +6,11 @@ import type { RiskEvaluationViewService } from "../../services/RiskEvaluationVie
 const EvaluationType = z.enum(["AD_HOC", "ANNUELLE", "ANTICIPEE"]);
 const EvaluationStatus = z.enum(["BROUILLON", "VALIDATED", "REJECTED", "VALIDE_COMITE"]);
 
+const PaginationQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
 const ImpactAxisScoreSchema = z.object({
   code: z.string().min(1),
   value: z.number().int(),
@@ -72,8 +77,8 @@ export function riskEvaluationsRouter(
       }
       const statusRaw = req.query["status"];
       const status = typeof statusRaw === "string" ? EvaluationStatus.parse(statusRaw) : undefined;
-      const limit = req.query["limit"] ? Number(req.query["limit"]) : undefined;
-      const offset = req.query["offset"] ? Number(req.query["offset"]) : undefined;
+      const { limit, offset } = PaginationQuery.parse(req.query);
+
 
       const evaluations = await riskEvaluationService.listForRisk(req.user, riskId, { status, limit, offset });
       res.json({ data: evaluations });

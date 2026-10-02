@@ -170,8 +170,10 @@ export class FindingService {
     requirePermission(actor, "audit.finding.close");
     const before = await this.getRaw(actor, id);
 
-    if (before.status === "CLOS") {
-      throw new ValidationError("This Finding has already been closed");
+    if (before.status !== "EN_TRAITEMENT") {
+      throw new ValidationError(
+        `Cannot close a Finding unless it is EN_TRAITEMENT (current status: ${before.status})`,
+      );
     }
     if (!comment?.trim()) {
       throw new ValidationError("Closing a Finding requires a closure comment");
