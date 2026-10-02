@@ -8,7 +8,7 @@ import type {
   FindingSeverity,
   FindingStatus,
 } from "../../../domain/entities/Finding.js";
-import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 
 interface FindingRow {
   id: string;
@@ -108,13 +108,22 @@ export class PostgresFindingRepository implements FindingRepository {
     return toDomain(row);
   }
 
-  async updateStatus(tenantId: string, id: string, status: FindingStatus): Promise<Finding> {
+  async updateStatus(tenantId: string, id: string, status: "EN_TRAITEMENT"): Promise<Finding> {
     const { rows } = await this.pool.query<FindingRow>(
-      `UPDATE findings SET status = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+      `UPDATE findings
+       SET status = $3, updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND status = 'OUVERT'
+       RETURNING *`,
       [tenantId, id, status],
     );
     const row = rows[0];
-    if (!row) throw new NotFoundError("Finding", id);
+
+    if (!row) {
+      const existing = await this.getById(tenantId, id);
+      if (!existing) throw new NotFoundError("Finding", id);
+      throw new ValidationError("Finding status must be OUVERT to start treatment");
+    }
+
     return toDomain(row);
   }
 
@@ -122,12 +131,18 @@ export class PostgresFindingRepository implements FindingRepository {
     const { rows } = await this.pool.query<FindingRow>(
       `UPDATE findings
        SET status = 'CLOS', closed_by = $3, closed_at = now(), closure_comment = $4, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2
+       WHERE tenant_id = $1 AND id = $2 AND status = 'EN_TRAITEMENT'
        RETURNING *`,
       [tenantId, id, closedBy, comment],
     );
     const row = rows[0];
-    if (!row) throw new NotFoundError("Finding", id);
+
+    if (!row) {
+      const existing = await this.getById(tenantId, id);
+      if (!existing) throw new NotFoundError("Finding", id);
+      throw new ValidationError("Finding status must be EN_TRAITEMENT to close");
+    }
+
     return toDomain(row);
   }
 }
