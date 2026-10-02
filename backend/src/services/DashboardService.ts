@@ -516,7 +516,7 @@ export class DashboardService {
     const [allRisks, scored, kriSummaries, overdueActions, allAnomalies, scopedRiskIds] = await Promise.all([
       this.risks.list(actor.tenantId, riskListOptions),
       this.getScoredRisks(actor.tenantId, riskListOptions),
-      this.getAllKriSummaries(actor.tenantId),
+      this.getKriSummariesScoped(actor.tenantId, scope),
       this.getOverdueActionViewsScoped(actor.tenantId, scope),
       this.anomalies.list(actor.tenantId),
       this.getScopedRiskIds(actor.tenantId, scope),
@@ -557,7 +557,7 @@ export class DashboardService {
     const riskListOptions = this.riskListOptionsForScope(scope);
     const [scored, kriSummaries, overdueActions] = await Promise.all([
       this.getScoredRisks(actor.tenantId, riskListOptions),
-      this.getAllKriSummaries(actor.tenantId),
+      this.getKriSummariesScoped(actor.tenantId, scope),
       this.getOverdueActionViewsScoped(actor.tenantId, scope),
     ]);
 
@@ -608,7 +608,7 @@ export class DashboardService {
     const riskListOptions = this.riskListOptionsForScope(scope);
     const [scored, kriSummaries] = await Promise.all([
       this.getScoredRisks(actor.tenantId, riskListOptions),
-      this.getAllKriSummaries(actor.tenantId),
+      this.getKriSummariesScoped(actor.tenantId, scope),
     ]);
 
     const entityKey = (v: string | null) => v ?? "UNSPECIFIED";
@@ -881,6 +881,22 @@ export class DashboardService {
 
   private async getAllKriSummaries(tenantId: string): Promise<DashboardKriSummary[]> {
     const kris = await this.kris.list(tenantId);
+    return Promise.all(kris.map((kri) => this.toKriSummary(tenantId, kri)));
+  }
+
+  /**
+   * Apply the dashboard risk perimeter to every KRI aggregate, not just
+   * the dedicated KRI endpoint. Empty scopes and scopes that resolve to
+   * no risk IDs must fail closed; KriRepository treats riskIds: [] as
+   * unfiltered, so never pass an empty array to it.
+   */
+  private async getKriSummariesScoped(tenantId: string, scope: RiskScope): Promise<DashboardKriSummary[]> {
+    if (scope.mode === "GLOBAL") return this.getAllKriSummaries(tenantId);
+
+    const scopedRiskIds = await this.getScopedRiskIds(tenantId, scope);
+    if (!scopedRiskIds || scopedRiskIds.size === 0) return [];
+
+    const kris = await this.kris.list(tenantId, { riskIds: [...scopedRiskIds] });
     return Promise.all(kris.map((kri) => this.toKriSummary(tenantId, kri)));
   }
 

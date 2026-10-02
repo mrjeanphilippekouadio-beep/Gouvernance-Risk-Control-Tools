@@ -22,6 +22,7 @@ export function RolesAdmin({ token }: RolesAdminProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [permissionSearch, setPermissionSearch] = useState("");
 
   const [assignUserId, setAssignUserId] = useState<Record<string, string>>({});
 
@@ -100,7 +101,7 @@ export function RolesAdmin({ token }: RolesAdminProps) {
 
   return (
     <section>
-      <h2>Rôles (RBAC)</h2>
+      <div className="admin-pagehead"><div><p className="page-eyebrow">ADMINISTRATION · IAM</p><h1>Rôles (RBAC)</h1><p className="page-subtitle">Créer, attribuer et révoquer les rôles. Les permissions restent contrôlées par le backend.</p></div><span className="admin-surface-badge">Accès administrateur</span></div>
 
       <form onSubmit={handleCreate} className="admin-form">
         <FormField label="Nom du rôle" htmlFor="role-name">
@@ -109,9 +110,12 @@ export function RolesAdmin({ token }: RolesAdminProps) {
         <FormField label="Description" htmlFor="role-description" help="Optionnel">
           <input id="role-description" value={description} onChange={(e) => setDescription(e.target.value)} />
         </FormField>
+        <FormField label="Rechercher une permission" htmlFor="permission-search">
+          <div className="permission-search-field"><input id="permission-search" placeholder="ex. raci, risk.update…" value={permissionSearch} onChange={(e) => setPermissionSearch(e.target.value)} /><span aria-hidden="true">⌕</span></div>
+        </FormField>
         <fieldset className="admin-permissions">
           <legend>Permissions</legend>
-          {allPermissions.map((p) => (
+          {allPermissions.filter((p) => p.toLowerCase().includes(permissionSearch.trim().toLowerCase())).map((p) => (
             <label key={p}>
               <input
                 type="checkbox"

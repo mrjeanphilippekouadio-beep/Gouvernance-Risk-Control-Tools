@@ -138,7 +138,33 @@ export type Permission =
   /** Lot 1 RACI minimal (GRC_Migration_Plan.md Lot A) — dedicated permissions, never folded into risk/control/actionplan.update. */
   | "raci.assign"
   | "raci.revoke"
-  | "raci.read";
+  | "raci.read"
+  /**
+   * Lot 4 (Audit module, 2026-09-30): AuditMission. audit.mission.close
+   * is deliberately its own permission, not folded into
+   * audit.mission.update — same "terminal transition gets its own gate"
+   * convention as execution.validate/actionplan.validate. Distinct from
+   * the pre-existing `audit.read` (AuditLogService — the technical,
+   * append-only audit trail, a completely different concept) and from
+   * `governance.*` (review cycles) — deliberately prefixed
+   * `audit.mission.*`/`audit.finding.*` rather than bare
+   * `mission.*`/`finding.*` so these scope to the Audit module
+   * unambiguously.
+   */
+  | "audit.mission.read"
+  | "audit.mission.create"
+  | "audit.mission.update"
+  | "audit.mission.close"
+  /**
+   * Lot 4 (Audit module, 2026-09-30): Finding. audit.finding.close is its
+   * own permission (never audit.finding.update) and is maker-checker
+   * gated in FindingService — the auditor who raised a Finding can never
+   * be the one who closes it.
+   */
+  | "audit.finding.read"
+  | "audit.finding.create"
+  | "audit.finding.update"
+  | "audit.finding.close";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -231,6 +257,14 @@ export const ALL_PERMISSIONS: Permission[] = [
   "raci.assign",
   "raci.revoke",
   "raci.read",
+  "audit.mission.read",
+  "audit.mission.create",
+  "audit.mission.update",
+  "audit.mission.close",
+  "audit.finding.read",
+  "audit.finding.create",
+  "audit.finding.update",
+  "audit.finding.close",
 ];
 
 /**

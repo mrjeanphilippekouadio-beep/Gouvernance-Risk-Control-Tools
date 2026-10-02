@@ -79,7 +79,23 @@ export type GrcObjectType =
   | "INCIDENT"
   | "MANAGEMENT"
   | "RISK_EVALUATION"
-  | "REVIEW_CYCLE";
+  | "REVIEW_CYCLE"
+  | "FINDING";
+
+/**
+ * FINDING added 2026-09-30 (Lot 4, Audit module) — see
+ * GRC_Target_Domain_Model.md §8.1's "point d'extension proposé
+ * (additif)": a Finding becomes a distinct ActionPlan.sourceType (its
+ * own GrcObjectType member, not a bare "AUDIT" tag with a null
+ * sourceId) so an ActionPlan born from a Finding keeps a real,
+ * validated sourceId pointing back at that Finding row — preserving
+ * the "chaîne logique Finding -> Action Plan" (cahier des charges §21)
+ * instead of collapsing it into the pre-existing, unbacked generic
+ * AUDIT source. Purely additive: no existing member renamed or
+ * removed — see ActionPlan.ts's ACTION_PLAN_SOURCE_TYPES for the
+ * consuming whitelist, and Finding.ts for the (narrower) subset of
+ * GrcObjectType Finding.relatedObjectType itself accepts.
+ */
 
 /** Runtime mirror of GrcObjectType, for building Zod enums / DB CHECK lists without duplicating the literal array. */
 export const GRC_OBJECT_TYPES: readonly GrcObjectType[] = [
@@ -93,4 +109,5 @@ export const GRC_OBJECT_TYPES: readonly GrcObjectType[] = [
   "MANAGEMENT",
   "RISK_EVALUATION",
   "REVIEW_CYCLE",
+  "FINDING",
 ] as const;

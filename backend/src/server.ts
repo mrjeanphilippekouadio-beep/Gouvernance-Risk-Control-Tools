@@ -13,6 +13,8 @@ import { PostgresControlRepository } from "./infrastructure/database/postgres/Po
 import { PostgresControlExecutionRepository } from "./infrastructure/database/postgres/PostgresControlExecutionRepository.js";
 import { PostgresControlEffectivenessRepository } from "./infrastructure/database/postgres/PostgresControlEffectivenessRepository.js";
 import { PostgresAnomalyRepository } from "./infrastructure/database/postgres/PostgresAnomalyRepository.js";
+import { PostgresAuditMissionRepository } from "./infrastructure/database/postgres/PostgresAuditMissionRepository.js";
+import { PostgresFindingRepository } from "./infrastructure/database/postgres/PostgresFindingRepository.js";
 import { PostgresDepartmentRepository } from "./infrastructure/database/postgres/PostgresDepartmentRepository.js";
 import { PostgresProcessRepository } from "./infrastructure/database/postgres/PostgresProcessRepository.js";
 import { PostgresRoleRepository } from "./infrastructure/database/postgres/PostgresRoleRepository.js";
@@ -47,6 +49,8 @@ import { ControlService } from "./services/ControlService.js";
 import { ControlExecutionService } from "./services/ControlExecutionService.js";
 import { ControlEffectivenessService } from "./services/ControlEffectivenessService.js";
 import { AnomalyService } from "./services/AnomalyService.js";
+import { AuditMissionService } from "./services/AuditMissionService.js";
+import { FindingService } from "./services/FindingService.js";
 import { DepartmentService } from "./services/DepartmentService.js";
 import { ProcessService } from "./services/ProcessService.js";
 import { ProcessEvaluationModeRequestService } from "./services/ProcessEvaluationModeRequestService.js";
@@ -85,6 +89,8 @@ import { controlsRouter } from "./api/v1/controls.routes.js";
 import { executionsRouter } from "./api/v1/executions.routes.js";
 import { effectivenessRouter } from "./api/v1/effectiveness.routes.js";
 import { anomaliesRouter } from "./api/v1/anomalies.routes.js";
+import { auditMissionsRouter } from "./api/v1/auditMissions.routes.js";
+import { findingsRouter } from "./api/v1/findings.routes.js";
 import { departmentsRouter } from "./api/v1/departments.routes.js";
 import { processesRouter } from "./api/v1/processes.routes.js";
 import { processEvaluationModeRequestsRouter } from "./api/v1/processEvaluationModeRequests.routes.js";
@@ -153,6 +159,8 @@ const controlRepository = new PostgresControlRepository(pool);
 const executionRepository = new PostgresControlExecutionRepository(pool);
 const effectivenessRepository = new PostgresControlEffectivenessRepository(pool);
 const anomalyRepository = new PostgresAnomalyRepository(pool);
+const auditMissionRepository = new PostgresAuditMissionRepository(pool);
+const findingRepository = new PostgresFindingRepository(pool);
 const departmentRepository = new PostgresDepartmentRepository(pool);
 const processRepository = new PostgresProcessRepository(pool);
 const roleRepository = new PostgresRoleRepository(pool);
@@ -220,6 +228,15 @@ const anomalyService = new AnomalyService(
   executionRepository,
   riskRepository,
 );
+const auditMissionService = new AuditMissionService(auditMissionRepository, auditRepository, userRepository);
+const findingService = new FindingService(
+  findingRepository,
+  auditMissionRepository,
+  auditRepository,
+  riskRepository,
+  controlRepository,
+  anomalyRepository,
+);
 const roleService = new RoleService(roleRepository, auditRepository, userRepository);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
@@ -257,6 +274,7 @@ const actionPlanService = new ActionPlanService(
   notifier,
   userRepository,
   departmentRepository,
+  findingRepository,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository);
 const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository);
@@ -419,6 +437,18 @@ app.use(
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "ANOMALY"),
   anomaliesRouter(anomalyService),
+);
+app.use(
+  "/api/v1/audit-missions",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "AUDIT"),
+  auditMissionsRouter(auditMissionService),
+);
+app.use(
+  "/api/v1/findings",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "AUDIT"),
+  findingsRouter(findingService),
 );
 app.use("/api/v1/departments", authMiddleware(identityProvider), departmentsRouter(departmentService));
 app.use("/api/v1/processes", authMiddleware(identityProvider), processesRouter(processService));

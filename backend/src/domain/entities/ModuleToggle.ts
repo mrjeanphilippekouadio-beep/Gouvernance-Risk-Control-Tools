@@ -17,6 +17,8 @@ export const MODULE_NAMES = [
   "ACTION_PLAN",
   "EVIDENCE",
   "CARTOGRAPHY",
+  /** Lot 4 (Audit module, 2026-09-30): gates /api/v1/audit-missions and /api/v1/findings, same as every other business module. */
+  "AUDIT",
 ] as const;
 
 export type ModuleName = (typeof MODULE_NAMES)[number];

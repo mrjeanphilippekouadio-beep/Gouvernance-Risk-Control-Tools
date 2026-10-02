@@ -110,3 +110,19 @@ polymorphe non contrainte, cf. commentaire de tête de 027).
   034) car 034/035 sont déjà réservées par la branche non fusionnée
   `feature/wire-processid-evaluationmode` (vérifié via `git log --all`,
   pas seulement en listant l'arborescence de `main`).
+- `039_audit_missions.down.sql` — `DROP TABLE audit_missions`. Destructif
+  (toutes les missions). Exécuter `down(040_findings)` d'abord si
+  040 a aussi été appliquée (FK entrante `findings.audit_mission_id`).
+- `040_findings.down.sql` — `DROP TABLE findings`. Destructif (tous les
+  constats). Non destructif pour `audit_missions` (aucune FK entrante
+  depuis `audit_missions` vers `findings`).
+- `041_action_plan_finding_source.down.sql` — restaure l'ancienne
+  `CHECK` constraint de `action_plans.source_type` (sans `'FINDING'`).
+  Sûr uniquement si aucune ligne `action_plans` n'a encore
+  `source_type = 'FINDING'` au moment du rollback (sinon l'`ADD
+  CONSTRAINT` échoue) — à vérifier avant d'exécuter en environnement
+  partagé.
+- `042_module_toggles_audit.down.sql` — restaure l'ancienne `CHECK`
+  constraint de `module_toggles.module_name` (sans `'AUDIT'`). Sûr
+  uniquement si aucune ligne `module_toggles` n'a encore
+  `module_name = 'AUDIT'` au moment du rollback.
