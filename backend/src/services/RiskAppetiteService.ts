@@ -98,14 +98,6 @@ export class RiskAppetiteService {
     return after;
   }
 
-  /** GET /appetite/:id — direct lookup, not exposed by ACT-168's route but useful for e.g. archive's before-state. */
-  async get(actor: AuthenticatedUser, id: string): Promise<RiskAppetite> {
-    requirePermission(actor, "riskappetite.read");
-    const appetite = await this.appetites.getById(actor.tenantId, id);
-    if (!appetite) throw new NotFoundError("RiskAppetite", id);
-    return appetite;
-  }
-
   /**
    * Read-side helper for Risk 360/Dispositif de risque (RiskDeviceViewService):
    * the threshold currently applicable to a (subCategory, entity) pair,
@@ -118,6 +110,14 @@ export class RiskAppetiteService {
   async getApplicable(actor: AuthenticatedUser, subCategory: string, entity: string | null): Promise<RiskAppetite | null> {
     requirePermission(actor, "riskappetite.read");
     return this.appetites.getBySubCategory(actor.tenantId, subCategory, entity);
+  }
+
+  /** GET /appetite/:id — direct lookup, not exposed by ACT-168's route but useful for e.g. archive's before-state. */
+  async get(actor: AuthenticatedUser, id: string): Promise<RiskAppetite> {
+    requirePermission(actor, "riskappetite.read");
+    const appetite = await this.appetites.getById(actor.tenantId, id);
+    if (!appetite) throw new NotFoundError("RiskAppetite", id);
+    return appetite;
   }
 
   /** GET /appetite — ACT-168's consolidated view; active-only unless the caller opts into includeInactive. */
