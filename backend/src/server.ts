@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import express from "express";
 import cors from "cors";
 import { pinoHttp } from "pino-http";
@@ -13,6 +14,8 @@ import { PostgresControlRepository } from "./infrastructure/database/postgres/Po
 import { PostgresControlExecutionRepository } from "./infrastructure/database/postgres/PostgresControlExecutionRepository.js";
 import { PostgresControlEffectivenessRepository } from "./infrastructure/database/postgres/PostgresControlEffectivenessRepository.js";
 import { PostgresAnomalyRepository } from "./infrastructure/database/postgres/PostgresAnomalyRepository.js";
+import { PostgresAuditMissionRepository } from "./infrastructure/database/postgres/PostgresAuditMissionRepository.js";
+import { PostgresFindingRepository } from "./infrastructure/database/postgres/PostgresFindingRepository.js";
 import { PostgresDepartmentRepository } from "./infrastructure/database/postgres/PostgresDepartmentRepository.js";
 import { PostgresProcessRepository } from "./infrastructure/database/postgres/PostgresProcessRepository.js";
 import { PostgresRoleRepository } from "./infrastructure/database/postgres/PostgresRoleRepository.js";
@@ -47,6 +50,8 @@ import { ControlService } from "./services/ControlService.js";
 import { ControlExecutionService } from "./services/ControlExecutionService.js";
 import { ControlEffectivenessService } from "./services/ControlEffectivenessService.js";
 import { AnomalyService } from "./services/AnomalyService.js";
+import { AuditMissionService } from "./services/AuditMissionService.js";
+import { FindingService } from "./services/FindingService.js";
 import { DepartmentService } from "./services/DepartmentService.js";
 import { ProcessService } from "./services/ProcessService.js";
 import { ProcessEvaluationModeRequestService } from "./services/ProcessEvaluationModeRequestService.js";
@@ -86,6 +91,8 @@ import { controlsRouter } from "./api/v1/controls.routes.js";
 import { executionsRouter } from "./api/v1/executions.routes.js";
 import { effectivenessRouter } from "./api/v1/effectiveness.routes.js";
 import { anomaliesRouter } from "./api/v1/anomalies.routes.js";
+import { auditMissionsRouter } from "./api/v1/auditMissions.routes.js";
+import { findingsRouter } from "./api/v1/findings.routes.js";
 import { departmentsRouter } from "./api/v1/departments.routes.js";
 import { processesRouter } from "./api/v1/processes.routes.js";
 import { processEvaluationModeRequestsRouter } from "./api/v1/processEvaluationModeRequests.routes.js";
@@ -122,16 +129,37 @@ import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { moduleGuard } from "./api/middleware/moduleGuard.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
+import { authAttemptRateLimiter } from "./api/middleware/rateLimit.js";
+import { securityHeadersMiddleware } from "./api/middleware/securityHeaders.js";
 
 const app = express();
+app.disable("x-powered-by");
+
+// Baseline security headers for the API.
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  next();
+});
 
 app.use(pinoHttp());
+// See securityHeaders.ts doc comment for why CSP/COEP/CORP are tuned down
+// from helmet's defaults. Everything else (HSTS, no-sniff, frameguard,
+// referrer-policy, etc.) stays at helmet's secure defaults.
+app.use(securityHeadersMiddleware());
 // Must run before authMiddleware: the browser's CORS preflight (OPTIONS)
 // never carries the Authorization header, so if auth ran first it would
 // reject the preflight and the real request would never be sent.
 app.use(cors({ origin: env.CORS_ALLOWED_ORIGINS, allowedHeaders: ["Authorization", "Content-Type"] }));
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(requestIdMiddleware);
+// See rateLimit.ts doc comment: there is no dedicated /login route, so this
+// throttles failed-auth traffic (401s and other errors) across the whole
+// authenticated API surface instead. /health and /ready are intentionally
+// excluded — they're unauthenticated infra probes, not attacker-reachable
+// auth attempts, and Cloud Run/uptime checks must not be throttled.
+app.use("/api/v1", authAttemptRateLimiter());
 
 // --- Wiring: infrastructure implementations behind their interfaces ---
 const riskRepository = new PostgresRiskRepository(pool);
@@ -142,6 +170,8 @@ const controlRepository = new PostgresControlRepository(pool);
 const executionRepository = new PostgresControlExecutionRepository(pool);
 const effectivenessRepository = new PostgresControlEffectivenessRepository(pool);
 const anomalyRepository = new PostgresAnomalyRepository(pool);
+const auditMissionRepository = new PostgresAuditMissionRepository(pool);
+const findingRepository = new PostgresFindingRepository(pool);
 const departmentRepository = new PostgresDepartmentRepository(pool);
 const processRepository = new PostgresProcessRepository(pool);
 const roleRepository = new PostgresRoleRepository(pool);
@@ -209,6 +239,15 @@ const anomalyService = new AnomalyService(
   executionRepository,
   riskRepository,
 );
+const auditMissionService = new AuditMissionService(auditMissionRepository, auditRepository, userRepository);
+const findingService = new FindingService(
+  findingRepository,
+  auditMissionRepository,
+  auditRepository,
+  riskRepository,
+  controlRepository,
+  anomalyRepository,
+);
 const roleService = new RoleService(roleRepository, auditRepository, userRepository);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
@@ -246,6 +285,7 @@ const actionPlanService = new ActionPlanService(
   notifier,
   userRepository,
   departmentRepository,
+  findingRepository,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository);
 const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository);
@@ -258,6 +298,7 @@ const raciEnrichmentViewService = new RaciEnrichmentViewService(
   actionPlanService,
   raciAssignmentService,
 );
+
 // DECISION-002/DECISION-003: Risk 360 / Dispositif de risque read model —
 // composes the repositories/services above, no new table/migration. See
 // RiskDeviceViewService's file header for scope.
@@ -421,6 +462,18 @@ app.use(
   moduleGuard(moduleToggleService, "ANOMALY"),
   anomaliesRouter(anomalyService),
 );
+app.use(
+  "/api/v1/audit-missions",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "AUDIT"),
+  auditMissionsRouter(auditMissionService),
+);
+app.use(
+  "/api/v1/findings",
+  authMiddleware(identityProvider),
+  moduleGuard(moduleToggleService, "AUDIT"),
+  findingsRouter(findingService),
+);
 app.use("/api/v1/departments", authMiddleware(identityProvider), departmentsRouter(departmentService));
 app.use("/api/v1/processes", authMiddleware(identityProvider), processesRouter(processService));
 app.use(
@@ -501,7 +554,13 @@ app.use(errorHandler);
 async function startServer(): Promise<void> {
   await assertProductionDatabaseRole(pool, env.NODE_ENV);
 
-  app.listen(env.PORT, () => {
+  const server = createServer(app);
+
+  server.requestTimeout = 120_000;
+  server.headersTimeout = 15_000;
+  server.keepAliveTimeout = 5_000;
+
+  server.listen(env.PORT, () => {
     // eslint-disable-next-line no-console
     console.log(`GRC Tools backend listening on port ${env.PORT} (${env.NODE_ENV})`);
   });
