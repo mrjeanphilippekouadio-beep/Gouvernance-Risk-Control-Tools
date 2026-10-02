@@ -14,4 +14,15 @@ export interface ActionPlanRepository {
   listLinks(tenantId: string, actionId: string): Promise<ActionLink[]>;
   /** Pure link-table exception (see control_risks in CLAUDE.md): rebuilt by DELETE + INSERT, tenant-scoped. */
   replaceLinks(tenantId: string, actionId: string, links: ActionLink[]): Promise<void>;
+  /**
+   * DECISION-003 (.claude/agent-context/ACTION_ITEMS.md, 2026-09-29): closes
+   * the N+1 gap the architecture audit flagged for any future Risk 360/
+   * Dispositif read model — a risk's action plans are reachable two ways
+   * (directly, `source_type = 'RISK' AND source_id = riskId`, or through
+   * `action_links`, a separate cross-reference table), and before this
+   * method neither path was queryable without either listing every action
+   * plan in the tenant or issuing one query per action to inspect its
+   * links. Returns the union of both, no duplicates, single query.
+   */
+  listForRisk(tenantId: string, riskId: string): Promise<ActionPlan[]>;
 }

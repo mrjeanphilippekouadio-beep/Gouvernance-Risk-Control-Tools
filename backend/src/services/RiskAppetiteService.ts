@@ -98,6 +98,20 @@ export class RiskAppetiteService {
     return after;
   }
 
+  /**
+   * Read-side helper for Risk 360/Dispositif de risque (RiskDeviceViewService):
+   * the threshold currently applicable to a (subCategory, entity) pair,
+   * regardless of what was applied at the time some earlier evaluation was
+   * scored — same natural-key lookup `setThreshold` uses internally, just
+   * exposed publicly and permission-gated, so a `*ViewService` never has to
+   * reach into `RiskAppetiteRepository` directly to answer "what's the
+   * active threshold right now".
+   */
+  async getApplicable(actor: AuthenticatedUser, subCategory: string, entity: string | null): Promise<RiskAppetite | null> {
+    requirePermission(actor, "riskappetite.read");
+    return this.appetites.getBySubCategory(actor.tenantId, subCategory, entity);
+  }
+
   /** GET /appetite/:id — direct lookup, not exposed by ACT-168's route but useful for e.g. archive's before-state. */
   async get(actor: AuthenticatedUser, id: string): Promise<RiskAppetite> {
     requirePermission(actor, "riskappetite.read");

@@ -174,6 +174,22 @@ export class ActionPlanService {
     return rows.map((row) => this.toView(row));
   }
 
+  /**
+   * DECISION-003: a risk's action plans (direct source + action_links
+   * cross-reference, see ActionPlanRepository.listForRisk) — the read-model
+   * building block Risk 360/Dispositif de risque needs and this service
+   * did not expose before (the architecture audit's N+1 finding).
+   */
+  async listForRisk(actor: AuthenticatedUser, riskId: string): Promise<ActionPlanView[]> {
+    requirePermission(actor, "actionplan.read");
+    if (this.risks) {
+      const risk = await this.risks.getById(actor.tenantId, riskId);
+      if (!risk) throw new ValidationError(`Risk ${riskId} does not exist in this tenant`);
+    }
+    const rows = await this.actions.listForRisk(actor.tenantId, riskId);
+    return rows.map((row) => this.toView(row));
+  }
+
   /** ACT-196: filters by statut (incl. computed EN_RETARD)/source/responsable/date/département. */
   async dashboard(actor: AuthenticatedUser, filters?: DashboardFilters): Promise<ActionPlanView[]> {
     requirePermission(actor, "actionplan.read");

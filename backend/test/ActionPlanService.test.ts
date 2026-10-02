@@ -7,12 +7,14 @@ import type { RiskRepository } from "../src/domain/repositories/RiskRepository.j
 import type { ControlRepository } from "../src/domain/repositories/ControlRepository.js";
 import type { KriRepository } from "../src/domain/repositories/KriRepository.js";
 import type { AnomalyRepository } from "../src/domain/repositories/AnomalyRepository.js";
+import type { FindingRepository } from "../src/domain/repositories/FindingRepository.js";
 import type { EvidenceRepository } from "../src/domain/repositories/EvidenceRepository.js";
 import type { ActionLink, ActionPlan } from "../src/domain/entities/ActionPlan.js";
 import type { Risk } from "../src/domain/entities/Risk.js";
 import type { Control } from "../src/domain/entities/Control.js";
 import type { Kri } from "../src/domain/entities/Kri.js";
 import type { Evidence } from "../src/domain/entities/Evidence.js";
+import type { Finding } from "../src/domain/entities/Finding.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import type { Notifier } from "../src/infrastructure/notifications/Notifier.js";
 import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
@@ -97,6 +99,19 @@ function inMemoryActionPlanRepository(): ActionPlanRepository {
     },
     async replaceLinks(_tenantId, actionId, newLinks) {
       links.set(actionId, newLinks);
+    },
+    async listForRisk(tenantId, riskId) {
+      const directlySourced = [...store.values()].filter(
+        (a) => a.tenantId === tenantId && a.sourceType === "RISK" && a.sourceId === riskId,
+      );
+      const linkedActionIds = [...links.entries()]
+        .filter(([, actionLinks]) => actionLinks.some((l) => l.resourceType === "RISK" && l.resourceId === riskId))
+        .map(([actionId]) => actionId);
+      const linked = linkedActionIds
+        .map((id) => store.get(id))
+        .filter((a): a is ActionPlan => !!a && a.tenantId === tenantId);
+      const byId = new Map([...directlySourced, ...linked].map((a) => [a.id, a]));
+      return [...byId.values()];
     },
   };
 }
@@ -202,6 +217,26 @@ function fakeAnomalyRepository(): AnomalyRepository {
       throw new Error("not used in this test");
     },
     async updateStatus() {
+      throw new Error("not used in this test");
+    },
+  };
+}
+
+function fakeFindingRepository(findings: Finding[]): FindingRepository {
+  return {
+    async getById(tenantId, id) {
+      return findings.find((f) => f.id === id && f.tenantId === tenantId) ?? null;
+    },
+    async list() {
+      return [];
+    },
+    async create() {
+      throw new Error("not used in this test");
+    },
+    async updateStatus() {
+      throw new Error("not used in this test");
+    },
+    async close() {
       throw new Error("not used in this test");
     },
   };
@@ -338,6 +373,7 @@ function buildService(overrides: {
   kris?: KriRepository;
   evidences?: EvidenceRepository;
   notifier?: Notifier;
+  findings?: FindingRepository;
 } = {}) {
   return new ActionPlanService(
     overrides.actions ?? inMemoryActionPlanRepository(),
@@ -348,6 +384,9 @@ function buildService(overrides: {
     fakeAnomalyRepository(),
     overrides.evidences ?? fakeEvidenceRepository([evidence()]),
     overrides.notifier,
+    undefined,
+    undefined,
+    overrides.findings,
   );
 }
 
@@ -397,6 +436,48 @@ describe("ActionPlanService.create (ACT-190) — polymorphic source validation",
         creator,
         { title: "T", sourceType: "RISK", sourceId: "missing-risk", responsibleUserId: "user-2", dueDate: futureDate() },
         "REQ-4",
+      ),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it("Lot 4: requires sourceId when sourceType is FINDING and validates it against FindingRepository", async () => {
+    const finding: Finding = {
+      id: "finding-1",
+      tenantId: "tenant-1",
+      auditMissionId: "mission-1",
+      title: "Ségrégation des tâches insuffisante",
+      description: "D",
+      severity: "HIGH",
+      recommendation: "Séparer les rôles de validation et d'exécution",
+      relatedObjectType: null,
+      relatedObjectId: null,
+      status: "OUVERT",
+      raisedBy: "user-3",
+      closedBy: null,
+      closedAt: null,
+      closureComment: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const service = buildService({ findings: fakeFindingRepository([finding]) });
+
+    await expect(
+      service.create(creator, { title: "T", sourceType: "FINDING", responsibleUserId: "user-2", dueDate: futureDate() }, "REQ-5b"),
+    ).rejects.toThrow(ValidationError);
+
+    const action = await service.create(
+      creator,
+      { title: "Remédier au constat", sourceType: "FINDING", sourceId: "finding-1", responsibleUserId: "user-2", dueDate: futureDate() },
+      "REQ-5c",
+    );
+    expect(action.sourceType).toBe("FINDING");
+    expect(action.sourceId).toBe("finding-1");
+
+    await expect(
+      service.create(
+        creator,
+        { title: "T", sourceType: "FINDING", sourceId: "missing-finding", responsibleUserId: "user-2", dueDate: futureDate() },
+        "REQ-5d",
       ),
     ).rejects.toThrow(ValidationError);
   });
@@ -791,5 +872,68 @@ describe("ActionPlanService.dashboard (ACT-196)", () => {
 
     const tenant1Rows = await service.dashboard(creator, {});
     expect(tenant1Rows.map((r) => r.title)).toEqual(["Tenant 1 action"]);
+  });
+});
+
+describe("ActionPlanService.listForRisk (DECISION-003 — Risk 360/Dispositif de risque building block)", () => {
+  it("returns an action plan directly sourced from the risk", async () => {
+    const service = buildService();
+    const created = await service.create(
+      creator,
+      { title: "Direct source", sourceType: "RISK", sourceId: "risk-1", responsibleUserId: "user-2", dueDate: futureDate() },
+      "REQ-60",
+    );
+
+    const forRisk = await service.listForRisk(creator, "risk-1");
+    expect(forRisk.map((a) => a.id)).toEqual([created.id]);
+  });
+
+  it("also returns an action plan linked to the risk through action_links, not just source-backed ones", async () => {
+    const service = buildService();
+    const linked = await service.create(
+      creator,
+      { title: "Linked only", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      "REQ-61",
+    );
+    await service.setLinks(creator, linked.id, [{ resourceType: "RISK", resourceId: "risk-1" }], "REQ-62");
+
+    const forRisk = await service.listForRisk(creator, "risk-1");
+    expect(forRisk.map((a) => a.id)).toEqual([linked.id]);
+  });
+
+  it("does not duplicate an action plan that is both source-backed and linked to the same risk", async () => {
+    const service = buildService();
+    const both = await service.create(
+      creator,
+      { title: "Both", sourceType: "RISK", sourceId: "risk-1", responsibleUserId: "user-2", dueDate: futureDate() },
+      "REQ-63",
+    );
+    await service.setLinks(creator, both.id, [{ resourceType: "RISK", resourceId: "risk-1" }], "REQ-64");
+
+    const forRisk = await service.listForRisk(creator, "risk-1");
+    expect(forRisk.map((a) => a.id)).toEqual([both.id]);
+  });
+
+  it("excludes action plans belonging to another risk entirely", async () => {
+    const service = buildService({ risks: fakeRiskRepository([risk(), risk({ id: "risk-2" })]) });
+    await service.create(
+      creator,
+      { title: "For risk-2", sourceType: "RISK", sourceId: "risk-2", responsibleUserId: "user-2", dueDate: futureDate() },
+      "REQ-65",
+    );
+
+    const forRisk1 = await service.listForRisk(creator, "risk-1");
+    expect(forRisk1).toEqual([]);
+  });
+
+  it("rejects an unknown risk when the RiskRepository is wired", async () => {
+    const service = buildService();
+    await expect(service.listForRisk(creator, "missing-risk")).rejects.toThrow(ValidationError);
+  });
+
+  it("requires actionplan.read", async () => {
+    const service = buildService();
+    const noPerms = { ...creator, roles: [] };
+    await expect(service.listForRisk(noPerms, "risk-1")).rejects.toThrow(ForbiddenError);
   });
 });
