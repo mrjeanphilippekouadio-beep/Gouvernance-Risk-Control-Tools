@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertDistinctDatabaseRoles,
+  assertMigrationOwnsExistingTables,
   assertRuntimeRoleSafe,
   resolveMigrationDatabaseUrl,
 } from "../src/infrastructure/database/postgres/migrationDatabaseSecurity.js";
@@ -48,5 +49,32 @@ describe("SEC: migration/runtime database role separation", () => {
       can_create_database: false,
       can_create_public_schema: true,
     })).toThrow(/CREATE in public schema/);
+  });
+});
+
+
+describe("SEC: migration ownership preflight", () => {
+  it("accepts an empty existing schema before the first migration", () => {
+    expect(() => assertMigrationOwnsExistingTables("grc_migrator_runtime", [])).not.toThrow();
+  });
+
+  it("accepts existing tables owned by the migration role", () => {
+    expect(() => assertMigrationOwnsExistingTables(
+      "grc_migrator_runtime",
+      [
+        { object_name: "tenants", owner: "grc_migrator_runtime" },
+        { object_name: "action_plans", owner: "grc_migrator_runtime" },
+      ],
+    )).not.toThrow();
+  });
+
+  it("fails before migrations when an existing table has another owner", () => {
+    expect(() => assertMigrationOwnsExistingTables(
+      "grc_migrator_runtime",
+      [
+        { object_name: "tenants", owner: "neondb_owner" },
+        { object_name: "action_plans", owner: "grc_migrator_runtime" },
+      ],
+    )).toThrow(/tenants.*neondb_owner/);
   });
 });
