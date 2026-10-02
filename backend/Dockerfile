@@ -1,24 +1,28 @@
-# Cloud Run production image.
-# Node 24 is the active LTS line; pinning to the LTS major avoids an EOL runtime.
 FROM node:26.10.0-bookworm-slim AS build
-WORKDIR /app
 
-COPY package.json package-lock.json ./
+WORKDIR /app/backend
+
+COPY backend/package.json backend/package-lock.json ./
 RUN npm ci
 
-COPY . .
+COPY backend/ ./
+
 RUN npm run build
 
+
 FROM node:26.10.0-bookworm-slim
-WORKDIR /app
+
+WORKDIR /app/backend
+
 ENV NODE_ENV=production
 
-COPY package.json package-lock.json ./
+COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
-COPY --from=build /app/dist ./dist
 
-# Run as the unprivileged Node user; Cloud Run already removes host-level
-# root capabilities and disables privilege escalation.
+COPY --from=build /app/backend/dist ./dist
+
 USER node
+
 EXPOSE 8080
+
 CMD ["node", "dist/server.js"]
