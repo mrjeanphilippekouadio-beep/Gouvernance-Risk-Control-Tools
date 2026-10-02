@@ -66,3 +66,27 @@ export function assertRuntimeRoleSafe(role: DatabaseRoleSnapshot): void {
     );
   }
 }
+
+
+export type MigrationObjectOwnership = {
+  object_name: string;
+  owner: string;
+};
+
+export function assertMigrationOwnsExistingTables(
+  migrationRoleName: string,
+  objects: MigrationObjectOwnership[],
+): void {
+  const foreignOwnedObjects = objects.filter(({ owner }) => owner !== migrationRoleName);
+
+  if (foreignOwnedObjects.length === 0) return;
+
+  const details = foreignOwnedObjects
+    .map(({ object_name, owner }) => `"${object_name}" (owner: "${owner}")`)
+    .join(", ");
+
+  throw new Error(
+    `Migration preflight failed: role "${migrationRoleName}" does not own existing public tables: ${details}. ` +
+      "Transfer ownership of the existing application tables to the dedicated migration role before running migrations.",
+  );
+}
