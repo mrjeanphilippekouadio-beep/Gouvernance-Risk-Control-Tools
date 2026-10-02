@@ -7,7 +7,9 @@ import {
   assertDistinctDatabaseRoles,
   assertRuntimeRoleSafe,
   resolveMigrationDatabaseUrl,
+  assertMigrationOwnsExistingTables,
   type DatabaseRoleSnapshot,
+  type MigrationObjectOwnership,
 } from "./migrationDatabaseSecurity.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -69,6 +71,22 @@ async function assertProductionMigrationSeparation(): Promise<void> {
   }
 }
 
+async function existingPublicTableOwnership(): Promise<MigrationObjectOwnership[]> {
+  const { rows } = await migrationPool.query<MigrationObjectOwnership>(`
+    SELECT
+      c.relname AS object_name,
+      r.rolname AS owner
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_roles r ON r.oid = c.relowner
+    WHERE n.nspname = 'public'
+      AND c.relkind IN ('r', 'p')
+    ORDER BY c.relname
+  `);
+
+  return rows;
+}
+
 async function ensureMigrationsTable(): Promise<void> {
   await migrationPool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -85,6 +103,13 @@ async function appliedMigrations(): Promise<Set<string>> {
 
 async function main(): Promise<void> {
   await assertProductionMigrationSeparation();
+
+  const migrationRole = await inspectCurrentRole(migrationPool);
+  assertMigrationOwnsExistingTables(
+    migrationRole.role_name,
+    await existingPublicTableOwnership(),
+  );
+
   await ensureMigrationsTable();
   const applied = await appliedMigrations();
 
