@@ -3,6 +3,7 @@ import multer from "multer";
 import { z } from "zod";
 import type { EvidenceService } from "../../services/EvidenceService.js";
 import { ValidationError } from "../../domain/errors/DomainErrors.js";
+import { costlyOperationRateLimiter } from "../middleware/rateLimit.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -18,7 +19,7 @@ const UploadMetadata = z.object({
 export function evidencesRouter(evidenceService: EvidenceService): Router {
   const router = Router();
 
-  router.post("/", upload.single("file"), async (req, res, next) => {
+  router.post("/", costlyOperationRateLimiter(), upload.single("file"), async (req, res, next) => {
     try {
       if (!req.file) throw new ValidationError("Missing file field");
       const metadata = UploadMetadata.parse(req.body);

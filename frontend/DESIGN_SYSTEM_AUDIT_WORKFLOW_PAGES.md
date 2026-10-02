@@ -1,6 +1,6 @@
 # Audit du design system — pages de suivi des contrôles et d'audit
 
-Date : 2026-09-30  
+Date : 2026-09-30
 Périmètre : `packages/design-system`, `frontend/src/design-system`, PR #71 (Exécutions & efficacité) et PR #72 (Constats & recommandations).
 
 ## 1. Sources de référence vérifiées

@@ -128,6 +128,8 @@ import { requestIdMiddleware } from "./api/middleware/requestId.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { moduleGuard } from "./api/middleware/moduleGuard.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
+import { authAttemptRateLimiter } from "./api/middleware/rateLimit.js";
+import { securityHeadersMiddleware } from "./api/middleware/securityHeaders.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -141,12 +143,22 @@ app.use((_req, res, next) => {
 });
 
 app.use(pinoHttp());
+// See securityHeaders.ts doc comment for why CSP/COEP/CORP are tuned down
+// from helmet's defaults. Everything else (HSTS, no-sniff, frameguard,
+// referrer-policy, etc.) stays at helmet's secure defaults.
+app.use(securityHeadersMiddleware());
 // Must run before authMiddleware: the browser's CORS preflight (OPTIONS)
 // never carries the Authorization header, so if auth ran first it would
 // reject the preflight and the real request would never be sent.
 app.use(cors({ origin: env.CORS_ALLOWED_ORIGINS, allowedHeaders: ["Authorization", "Content-Type"] }));
 app.use(express.json({ limit: "1mb" }));
 app.use(requestIdMiddleware);
+// See rateLimit.ts doc comment: there is no dedicated /login route, so this
+// throttles failed-auth traffic (401s and other errors) across the whole
+// authenticated API surface instead. /health and /ready are intentionally
+// excluded — they're unauthenticated infra probes, not attacker-reachable
+// auth attempts, and Cloud Run/uptime checks must not be throttled.
+app.use("/api/v1", authAttemptRateLimiter());
 
 // --- Wiring: infrastructure implementations behind their interfaces ---
 const riskRepository = new PostgresRiskRepository(pool);
