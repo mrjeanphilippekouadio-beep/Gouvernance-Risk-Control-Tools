@@ -1,9 +1,9 @@
-# Database — Neon PostgreSQL
+# Database — PostgreSQL
 
 ## Mise en place
 
 1. Créer un projet sur https://neon.tech (le plan gratuit suffit pour le développement).
-2. Copier la connection string (`postgresql://...?sslmode=require`) dans
+2. Copier la connection string (`postgresql://...?sslmode=verify-full`) dans
    `backend/.env` sous `DATABASE_URL`. Utiliser une **branche Neon
    dédiée** pour le développement (`neon branches create`) plutôt que la
    branche `main` — c'est l'intérêt de Neon : réinitialiser la base de
@@ -28,14 +28,14 @@ rôle PostgreSQL en production :
 Cloud Run runtime
   DATABASE_URL
       ↓
-  grc_runtime
+  grc_app_runtime
   DML applicatif uniquement
   + protections audit_log
 
 Migration job / maintenance
   MIGRATION_DATABASE_URL
       ↓
-  grc_migrator
+  grc_migrator_runtime
   privilèges DDL nécessaires
 ```
 
@@ -57,7 +57,7 @@ Règle opérationnelle :
 Avant de pointer un environnement de production vers une base Neon,
 vérifier manuellement :
 
-- [ ] `sslmode=require` dans la connection string.
+- [x] `sslmode=verify-full` dans la connection string.
 - [x] Le backend vérifie au démarrage que le rôle runtime est distinct du
       propriétaire/admin Neon, n'est pas `SUPERUSER`, ne peut pas créer de
       rôle/base et ne peut pas créer dans le schéma `public`.
@@ -78,9 +78,68 @@ vérifier manuellement :
 - [ ] Le frontend ne reçoit jamais `DATABASE_URL` ou
       `MIGRATION_DATABASE_URL`.
 
-## Limite importante
+## Portabilité et ownership des migrations
 
-Cette séparation est maintenant imposée par le code du runner et du runtime,
-mais la création des rôles, la distribution des secrets et l'autorisation du
-job de migration restent des contrôles d'infrastructure à configurer dans
-Neon / Google Cloud.
+Les migrations sont écrites en PostgreSQL standard et ne doivent pas dépendre
+du modèle de rôles d'un fournisseur particulier.
+
+Sur une base neuve, le processus de migration se connecte directement avec
+`grc_migrator_runtime`. Les tables créées par les migrations appartiennent
+donc à ce rôle et les futures tables héritent du DML runtime via la migration
+`043_runtime_default_privileges.sql`.
+
+Sur une base existante créée avec un autre propriétaire, une normalisation
+d'ownership est nécessaire une seule fois avant de basculer vers
+`grc_migrator_runtime`. Le runner vérifie désormais cet état avant
+d'appliquer une migration et échoue immédiatement avec la liste des tables
+encore détenues par un autre rôle.
+
+Cette normalisation reste une opération d'infrastructure : elle ne doit pas
+être exécutée par le processus applicatif long-running.
+
+### Base existante : normalisation contrôlée
+
+Le propriétaire actuel doit être autorisé à faire `SET ROLE` vers
+`grc_migrator_runtime`, puis peut transférer les tables applicatives :
+
+```sql
+GRANT grc_migrator_runtime TO <current-owner>;
+
+DO $
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT c.relname
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind IN ('r', 'p')
+      AND c.relowner = (
+        SELECT oid FROM pg_roles WHERE rolname = '<current-owner>'
+      )
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE public.%I OWNER TO grc_migrator_runtime',
+      r.relname
+    );
+  END LOOP;
+END
+$;
+```
+
+Ne jamais donner `SUPERUSER`, `CREATEROLE`, `CREATEDB` ou un rôle
+administratif fournisseur à `grc_migrator_runtime`.
+
+### Nouvelles bases et autres fournisseurs
+
+La création des rôles, la distribution des mots de passe et l'accès initial
+au schéma restent des opérations d'infrastructure. Elles ne sont pas codées
+dans les migrations et ne sont pas exécutées par le serveur applicatif.
+
+Le seul prérequis du runner est que le rôle utilisé par
+`MIGRATION_DATABASE_URL` existe, puisse créer dans `public`, et possède
+les tables applicatives déjà existantes lorsqu'une base est migrée.
+
+Neon est donc un fournisseur PostgreSQL, pas une dépendance du modèle de
+migration.
