@@ -4,10 +4,10 @@ import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
 import type { KriRepository } from "../domain/repositories/KriRepository.js";
 import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
+import type { FindingRepository } from "../domain/repositories/FindingRepository.js";
 import type { EvidenceRepository } from "../domain/repositories/EvidenceRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
-import type { FindingRepository } from "../domain/repositories/FindingRepository.js";
 import {
   ACTION_LINK_RESOURCE_TYPES,
   ACTION_PLAN_SOURCE_TYPES,
@@ -28,7 +28,12 @@ import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 
 const SOURCE_TYPES: readonly ActionPlanSourceType[] = ACTION_PLAN_SOURCE_TYPES;
 const LINK_RESOURCE_TYPES: readonly ActionLinkResourceType[] = ACTION_LINK_RESOURCE_TYPES;
-/** ACT-190: only these three source types are tied to an existing entity row that can be validated. */
+/**
+ * ACT-190: source types tied to an existing entity row that can be
+ * validated. FINDING added Lot 4 (Audit module, 2026-09-30) — unlike
+ * AUDIT/INCIDENT/MANAGEMENT, a Finding-sourced ActionPlan always has a
+ * real Finding row behind it (see GrcObjectType.ts's FINDING comment).
+ */
 const ENTITY_BACKED_SOURCE_TYPES: ActionPlanSourceType[] = ["RISK", "CONTROL", "KRI", "FINDING"];
 
 export interface CreateActionPlanRequest {
@@ -95,7 +100,12 @@ export class ActionPlanService {
      */
     private readonly users?: UserRepository,
     private readonly departments?: DepartmentRepository,
-    /** Lot 4 (Audit module, 2026-09-30): validates sourceId when sourceType is FINDING. */
+    /**
+     * Lot 4 (Audit module, 2026-09-30): validates sourceId when sourceType
+     * is FINDING — optional for the same reason as the repos above
+     * (appended at the end so existing positional constructor calls, incl.
+     * server.ts wiring before this change, keep compiling unmodified).
+     */
     private readonly findings?: FindingRepository,
   ) {}
 
@@ -426,12 +436,12 @@ export class ActionPlanService {
     } else if (sourceType === "CONTROL" && this.controls) {
       const control = await this.controls.getById(tenantId, sourceId);
       if (!control) throw new ValidationError(`Control ${sourceId} does not exist in this tenant`);
-    } else if (sourceType === "FINDING" && this.findings) {
-      const finding = await this.findings.getById(tenantId, sourceId);
-      if (!finding) throw new ValidationError(`Finding ${sourceId} does not exist in this tenant`);
     } else if (sourceType === "KRI" && this.kris) {
       const kri = await this.kris.getById(tenantId, sourceId);
       if (!kri) throw new ValidationError(`Kri ${sourceId} does not exist in this tenant`);
+    } else if (sourceType === "FINDING" && this.findings) {
+      const finding = await this.findings.getById(tenantId, sourceId);
+      if (!finding) throw new ValidationError(`Finding ${sourceId} does not exist in this tenant`);
     }
   }
 
