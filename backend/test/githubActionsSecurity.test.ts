@@ -25,7 +25,7 @@ describe("SEC: GitHub Actions least privilege", () => {
       "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0",
     );
     expect(workflow).toContain(
-      "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0",
+      "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
     );
   });
 
