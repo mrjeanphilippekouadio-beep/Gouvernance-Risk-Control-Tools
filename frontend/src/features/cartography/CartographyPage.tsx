@@ -46,6 +46,7 @@ export function CartographyPage({ token }: CartographyPageProps) {
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [processFilter, setProcessFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<EvaluationStatus | "">("");
+  const [concentrationDimension, setConcentrationDimension] = useState<"process" | "department">("process");
 
   useEffect(() => {
     let cancelled = false;
@@ -107,11 +108,16 @@ export function CartographyPage({ token }: CartographyPageProps) {
     return true;
   }), [points, departmentFilter, processFilter, statusFilter]);
 
-  const processConcentration = useMemo(() => {
+  const concentration = useMemo(() => {
     const map = new Map<string, number>();
-    filtered.forEach((p) => map.set(p.risk.process, (map.get(p.risk.process) ?? 0) + 1));
-    return Array.from(map.entries()).sort((a,b) => b[1] - a[1]);
-  }, [filtered]);
+    filtered.forEach((p) => {
+      const key = concentrationDimension === "process"
+        ? p.risk.process
+        : (p.risk.ownerDepartmentId ?? "Non assigné");
+      map.set(key, (map.get(key) ?? 0) + 1);
+    });
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [filtered, concentrationDimension]);
 
   return (
     <section className="cart-page">
@@ -171,10 +177,10 @@ export function CartographyPage({ token }: CartographyPageProps) {
       </div>
 
       <div className="cart-concentration-grid">
-        <Card header={<div className="cart-card-title"><div><h2>3 — Concentration par processus</h2><p>Nombre de risques évalués par processus.</p></div><StatusBadge label="R/A" tone="info" /></div>}>
+        <Card header={<div className="cart-card-title"><div><h2>3 — Concentration</h2><p>Nombre de risques évalués selon l'axe sélectionné.</p></div><label className="cart-inline-select" htmlFor="cart-concentration-dimension"><span>Axe</span><select id="cart-concentration-dimension" value={concentrationDimension} onChange={(e) => setConcentrationDimension(e.target.value as "process" | "department")}><option value="process">Processus</option><option value="department">Département</option></select></label></div>}>
           <div className="concentration-grid">
-            {processConcentration.length === 0 && <div className="cart-empty">Aucune donnée de concentration pour les filtres sélectionnés.</div>}
-            {processConcentration.map(([name, count]) => <div className="concentration-cell" key={name}><span>{name}</span><strong>{count}</strong></div>)}
+            {concentration.length === 0 && <div className="cart-empty">Aucune donnée de concentration pour les filtres sélectionnés.</div>}
+            {concentration.map(([name, count]) => <div className="concentration-cell" key={name}><span>{name}</span><strong>{count}</strong></div>)}
           </div>
         </Card>
 
