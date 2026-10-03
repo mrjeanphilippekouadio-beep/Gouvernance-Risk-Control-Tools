@@ -290,7 +290,7 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
                 aria-expanded={open}
                 title={collapsed ? group.label : undefined}
               >
-                {!collapsed && <><span className={open ? "group-chevron open" : "group-chevron"}>›</span><span>{group.label}</span><span className="group-count">{group.items.length}</span></>}
+                {!collapsed && <><span>{group.label}</span><span className="group-count">{group.items.length}</span></>}
               </button>
               {(open || collapsed) && (
                 <div className="sidebar-group-items">
@@ -308,6 +308,7 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
                           if (item.available) {
                             setView(item.id);
                             setMobileNavOpen(false);
+                            if (collapsed) setCollapsed(false);
                             if (item.id !== group.items[0]?.id) setOpenGroup(group.label);
                           }
                         }}
