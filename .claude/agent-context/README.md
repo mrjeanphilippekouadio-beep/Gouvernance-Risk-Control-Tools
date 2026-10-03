@@ -10,6 +10,7 @@ ait à le lui redemander à chaque fois. Deux fichiers :
   entrée est taguée `@<agent>` (peut en avoir plusieurs). N'importe qui
   — humain ou agent — peut grep son propre tag pour voir tout ce qui le
   concerne sans lire tout l'historique.
+- **`RETEX_2026-10-03_STAGING_NEON_RENDER.md`** — RETEX opérationnel de la transition Neon/Render/staging/QA, à lire avant toute intervention d'infrastructure ou de recette.
 - **`ACTION_ITEMS.md`** — la liste vivante des points en attente d'une
   intervention d'un agent précis, avec statut. C'est ce que
   l'orchestrateur consulte avant de décider qui dispatcher ensuite.
