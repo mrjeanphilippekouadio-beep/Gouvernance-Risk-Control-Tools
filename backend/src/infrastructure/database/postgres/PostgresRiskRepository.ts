@@ -117,6 +117,41 @@ export class PostgresRiskRepository implements RiskRepository {
     return toDomain(row);
   }
 
+  async createIdempotent(
+    input: CreateRiskInput,
+    idempotencyKey: string,
+  ): Promise<{ risk: Risk; created: boolean }> {
+    const inserted = await this.pool.query<RiskRow>(
+      `INSERT INTO risks
+         (tenant_id, process, description, owner_department_id, status, process_id, idempotency_key)
+       VALUES ($1, $2, $3, $4, 'DRAFT', $5, $6)
+       ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+       DO NOTHING
+       RETURNING *`,
+      [
+        input.tenantId,
+        input.process,
+        input.description,
+        input.ownerDepartmentId ?? null,
+        input.processId ?? null,
+        idempotencyKey,
+      ],
+    );
+
+    if (inserted.rows[0]) {
+      return { risk: toDomain(inserted.rows[0]), created: true };
+    }
+
+    const existing = await this.pool.query<RiskRow>(
+      `SELECT * FROM risks WHERE tenant_id = $1 AND idempotency_key = $2`,
+      [input.tenantId, idempotencyKey],
+    );
+    if (!existing.rows[0]) {
+      throw new Error("Idempotent risk lookup returned no row after conflict");
+    }
+    return { risk: toDomain(existing.rows[0]), created: false };
+  }
+
   async update(tenantId: string, id: string, input: UpdateRiskInput): Promise<Risk> {
     // Dynamic SET list, not COALESCE: COALESCE($n, col) can't distinguish
     // "field omitted" from "field explicitly set to null", so a caller
