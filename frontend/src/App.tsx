@@ -5,6 +5,7 @@ import { EvaluationPage } from "./features/evaluations/EvaluationPage";
 import { RolesAdmin } from "./features/admin/RolesAdmin";
 import { FeedbackAdmin } from "./features/admin/FeedbackAdmin";
 import { FeedbackWidget } from "./features/feedback/FeedbackWidget";
+import { UserbackWidget } from "./features/feedback/UserbackWidget";
 import { CartographyPage } from "./features/cartography/CartographyPage";
 import { AppetitePage } from "./features/appetite/AppetitePage";
 import { RatingScalesPage } from "./features/scales/RatingScalesPage";
@@ -21,6 +22,7 @@ import "./App.css";
 const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
+const NATIVE_FEEDBACK_ENABLED = (import.meta.env["VITE_NATIVE_FEEDBACK_ENABLED"] as string | undefined) !== "false";
 
 type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions";
 type NavItem = { id: View; label: string; icon: string; available?: boolean };
@@ -200,7 +202,8 @@ function App() {
         </div>
       </div>
       {mobileNavOpen && <button type="button" aria-label="Fermer la navigation" className="nav-scrim" onClick={() => setMobileNavOpen(false)} />}
-      <FeedbackWidget token={token} />
+      {NATIVE_FEEDBACK_ENABLED && <FeedbackWidget token={token} />}
+      <UserbackWidget userId={LOCAL_AUTH_EMAIL || sessionIdentity} userName={sessionIdentity} />
     </div>
   );
 }
