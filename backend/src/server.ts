@@ -43,6 +43,8 @@ import { PostgresProcessEvaluationModeRequestRepository } from "./infrastructure
 import { TelegramNotifier } from "./infrastructure/notifications/TelegramNotifier.js";
 import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
+import { LocalIdentityProvider } from "./infrastructure/identity/LocalIdentityProvider.js";
+import { localAuthRouter } from "./api/v1/localAuth.routes.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
 import { EvidenceService } from "./services/EvidenceService.js";
@@ -347,22 +349,14 @@ const riskImportService = new RiskImportService(riskService);
 const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
 const governanceService = new GovernanceService(reviewCycleRepository, auditRepository, notifier);
 
-const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, async (email) => {
-  // Real lookup against the `users` table from migration 002 — one user
-  // row per (tenant, email); tenant/roles are ours, never trusted from
-  // the Google token itself.
-  const { rows } = await pool.query<{ id: string; tenant_id: string; roles: string[] }>(
-    `SELECT id, tenant_id, roles FROM users WHERE email = $1 AND deleted_at IS NULL`,
+const lookupMembership = async (email: string) => {
+  const { rows } = await pool.query<{ id: string; tenant_id: string; roles: string[]; email: string; display_name: string | null }>(
+    `SELECT id, tenant_id, roles, email, display_name FROM users WHERE email = $1 AND deleted_at IS NULL`,
     [email],
   );
   const row = rows[0];
   if (!row) return null;
 
-  // `users.roles` stays as a direct/legacy permission list (e.g. for
-  // bootstrapping the first admin before any Role exists). Permissions
-  // granted through the RBAC module (013_roles.sql) are layered on top
-  // by resolving every role currently assigned to this user — this is
-  // what makes assigning the "Auditeur" role actually grant audit.read.
   const { rows: rolePerms } = await pool.query<{ permission: string }>(
     `SELECT DISTINCT unnest(r.permissions) AS permission
      FROM user_roles ur
@@ -371,10 +365,6 @@ const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, 
     [row.tenant_id, row.id],
   );
 
-  // dashboard.executive scope (@architect design, 2026-09-30): the widest
-  // dashboardScopeMode across every real Role currently assigned — same
-  // "resolve every role" join as rolePerms above, just projecting a
-  // different column.
   const { rows: roleScopes } = await pool.query<{ dashboard_scope_mode: DashboardScopeMode }>(
     `SELECT DISTINCT r.dashboard_scope_mode
      FROM user_roles ur
@@ -383,32 +373,20 @@ const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, 
     [row.tenant_id, row.id],
   );
 
-  // SEC-005: users.roles is hand-edited/seeded, never validated — filter
-  // out anything that isn't a real, current permission before trusting
-  // it, and log what got dropped (a typo or a stale/renamed permission
-  // should be visible, not silently inert forever).
   const legacyPermissions = filterKnownPermissions(row.roles);
   const droppedLegacyPermissions = row.roles.filter((r) => !legacyPermissions.includes(r as Permission));
   if (droppedLegacyPermissions.length > 0) {
-    // eslint-disable-next-line no-console
     console.warn(
       `users.roles for ${email} contains unknown permission string(s), ignored: ${droppedLegacyPermissions.join(", ")}`,
     );
   }
 
-  // Legacy path (@architect design, 2026-09-30): a user granted only via
-  // `users.roles` (no real Role row assigned at all) always resolves to
-  // GLOBAL — never blocks a bootstrap admin out of their own tool, same
-  // posture as the rest of this lookup toward `users.roles`. A user with
-  // zero roles of any kind also defaults to GLOBAL: there is nothing to
-  // widen from and dashboard.executive itself won't be held anyway.
   let dashboardScopeMode: DashboardScopeMode;
   if (roleScopes.length > 0) {
     dashboardScopeMode = widestScopeMode(roleScopes.map((r) => r.dashboard_scope_mode));
   } else {
     dashboardScopeMode = "GLOBAL";
     if (legacyPermissions.length > 0) {
-      // eslint-disable-next-line no-console
       console.warn(
         `${email} holds permissions only via legacy users.roles (no real Role assigned) — dashboardScopeMode resolved to GLOBAL`,
       );
@@ -416,8 +394,30 @@ const identityProvider = new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID, 
   }
 
   const roles = Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePerms.map((r) => r.permission)]));
-  return { userId: row.id, tenantId: row.tenant_id, roles, dashboardScopeMode };
-});
+  return {
+    userId: row.id,
+    tenantId: row.tenant_id,
+    email: row.email,
+    displayName: row.display_name ?? row.email,
+    roles,
+    dashboardScopeMode,
+  };
+};
+
+const identityProvider =
+  env.AUTH_PROVIDER === "google"
+    ? new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID!, lookupMembership)
+    : new LocalIdentityProvider(
+        env.LOCAL_AUTH_EMAIL!,
+        env.LOCAL_AUTH_PASSWORD_HASH!,
+        env.LOCAL_AUTH_TOKEN_SECRET!,
+        env.LOCAL_AUTH_TOKEN_TTL_SECONDS,
+        lookupMembership,
+      );
+
+if (env.AUTH_PROVIDER === "local") {
+  app.use("/api/v1/auth", localAuthRouter(identityProvider as LocalIdentityProvider));
+}
 
 // --- Health checks (no auth — used by Cloud Run / uptime checks) ---
 app.get("/health", (_req, res) => {
