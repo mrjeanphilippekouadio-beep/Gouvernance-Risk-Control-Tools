@@ -137,7 +137,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} />
+      <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} onSignOut={AUTH_PROVIDER === "local" ? localAuth.signOut : idToken ? signOut : () => setDevToken("")} />
       <div className="app-main">
         <header className="app-topbar">
           <button
@@ -154,7 +154,6 @@ function App() {
           </div>
           <div className="topbar-actions">
             <span className="topbar-status"><span />Connecté</span>
-            <Button onClick={AUTH_PROVIDER === "local" ? localAuth.signOut : idToken ? signOut : () => setDevToken("")}>Déconnexion</Button>
           </div>
         </header>
 
@@ -211,10 +210,11 @@ function Icon({ name }: { name: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
-  view: View; setView: (view: View) => void; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void;
+function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen, onSignOut }: {
+  view: View; setView: (view: View) => void; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void; onSignOut: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState("Risques");
 
   return (
@@ -271,7 +271,18 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
           );
         })}
       </nav>
-      {!collapsed && <div className="sidebar-footer"><span className="sidebar-avatar">JP</span><div><strong>Session active</strong><small>Accès authentifié</small></div><span className="sidebar-footer-dot" /></div>}
+      {!collapsed && <div className="sidebar-footer">
+        <button type="button" className="sidebar-avatar-button" aria-label="Ouvrir les actions de session" aria-expanded={logoutOpen} onClick={() => setLogoutOpen((open) => !open)}>
+          <span className="sidebar-avatar">JP</span>
+        </button>
+        <div><strong>Session active</strong><small>Accès authentifié</small></div>
+        <span className="sidebar-footer-dot" />
+        {logoutOpen && <div className="sidebar-session-popover" role="menu">
+          <button type="button" className="sidebar-session-action" role="menuitem" onClick={() => { setLogoutOpen(false); onSignOut(); }}>
+            <span aria-hidden="true">↪</span> Déconnexion
+          </button>
+        </div>}
+      </div>}
     </aside>
   );
 }
