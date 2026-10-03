@@ -323,18 +323,6 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
           );
         })}
       </nav>
-      {!collapsed && <div className="sidebar-footer">
-        <button type="button" className="sidebar-avatar-button" aria-label="Ouvrir les actions de session" aria-expanded={logoutOpen} onClick={() => setLogoutOpen((open) => !open)}>
-          <span className="sidebar-avatar">{getInitials(sessionIdentity)}</span>
-        </button>
-        <div><strong>{sessionIdentity || "Utilisateur"}</strong><small>Accès authentifié</small></div>
-        <span className="sidebar-footer-dot" />
-        {logoutOpen && <div className="sidebar-session-popover" role="menu">
-          <button type="button" className="sidebar-session-action" role="menuitem" onClick={() => { setLogoutOpen(false); onSignOut(); }}>
-            <span aria-hidden="true">↪</span> Déconnexion
-          </button>
-        </div>}
-      </div>}
     </aside>
   );
 }
