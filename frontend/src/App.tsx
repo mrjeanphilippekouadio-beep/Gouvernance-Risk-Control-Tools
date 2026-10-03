@@ -14,10 +14,13 @@ import { AuditFindingsPage } from "./features/audit/AuditFindingsPage";
 import { ActionPlansPage } from "./features/actions/ActionPlansPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
+import { useLocalSignIn } from "./auth/useLocalSignIn";
 import { ErrorPage } from "./features/errors/ErrorPages";
 import "./App.css";
 
 const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
+const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
+const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
 type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions";
 type NavItem = { id: View; label: string; icon: string; available?: boolean };
@@ -74,12 +77,13 @@ const PAGE_TITLES: Record<View, string> = {
 };
 
 function App() {
-  const { idToken, error, buttonRef, signOut } = useGoogleSignIn(GOOGLE_CLIENT_ID);
+  const { idToken, error, buttonRef, signOut } = useGoogleSignIn(AUTH_PROVIDER === "google" ? GOOGLE_CLIENT_ID : undefined);
+  const localAuth = useLocalSignIn(LOCAL_AUTH_EMAIL);
   const [devToken, setDevToken] = useState("");
   const [view, setView] = useState<View>("cartography");
   const [evaluationRiskId, setEvaluationRiskId] = useState<string | undefined>();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const token = idToken ?? devToken;
+  const token = AUTH_PROVIDER === "local" ? localAuth.token : (idToken ?? devToken);
   const errorPath = window.location.pathname;
 
   if (errorPath === "/400" || errorPath === "/error/400") return <ErrorPage code={400} />;
@@ -93,7 +97,26 @@ function App() {
           <p className="auth-eyebrow">GOUVERNANCE · RISQUES · CONTRÔLE</p>
           <h1>GRC Tools</h1>
           <p className="auth-description">Le dispositif de maîtrise des risques, au même endroit.</p>
-          {error ? (
+          {AUTH_PROVIDER === "local" ? (
+            <form
+              className="auth-dev"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void localAuth.signIn();
+              }}
+            >
+              {localAuth.error && <p role="alert">{localAuth.error}</p>}
+              <FormField label="Adresse e-mail QA" htmlFor="local-email">
+                <input id="local-email" type="email" value={localAuth.email} onChange={(event) => localAuth.setEmail(event.target.value)} autoComplete="username" />
+              </FormField>
+              <FormField label="Mot de passe QA" htmlFor="local-password">
+                <input id="local-password" type="password" value={localAuth.password} onChange={(event) => localAuth.setPassword(event.target.value)} autoComplete="current-password" />
+              </FormField>
+              <Button type="submit" disabled={localAuth.loading}>
+                {localAuth.loading ? "Connexion…" : "Se connecter"}
+              </Button>
+            </form>
+          ) : error ? (
             <div className="auth-dev">
               <p role="alert">Connexion Google indisponible ({error}). Configurer VITE_GOOGLE_CLIENT_ID dans .env.local pour l'activer.</p>
               <FormField label="ID token Google (développement uniquement)" htmlFor="dev-token" help="Colle un ID token Google valide — ne pas exposer cette saisie hors développement.">
@@ -131,7 +154,7 @@ function App() {
           </div>
           <div className="topbar-actions">
             <span className="topbar-status"><span />Connecté</span>
-            <Button onClick={idToken ? signOut : () => setDevToken("")}>Déconnexion</Button>
+            <Button onClick={AUTH_PROVIDER === "local" ? localAuth.signOut : idToken ? signOut : () => setDevToken("")}>Déconnexion</Button>
           </div>
         </header>
 
