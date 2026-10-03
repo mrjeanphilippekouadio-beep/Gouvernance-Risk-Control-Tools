@@ -34,6 +34,7 @@ function verifyPassword(password: string, encoded: string): boolean {
   if (parts.length !== 3 || parts[0] !== "scrypt") return false;
 
   const [, salt, expectedHex] = parts;
+  if (!salt || !expectedHex) return false;
   const actual = scryptSync(password, salt, 64);
   const expected = Buffer.from(expectedHex, "hex");
   return expected.length === actual.length && timingSafeEqual(actual, expected);
