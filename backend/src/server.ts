@@ -551,7 +551,7 @@ app.use("/api/v1/review-cycles", authMiddleware(identityProvider), reviewCyclesR
 app.use(errorHandler);
 
 async function startServer(): Promise<void> {
-  await assertProductionDatabaseRole(pool, env.NODE_ENV);
+  await assertProductionDatabaseRole(pool, env.APP_ENV);
 
   const server = createServer(app);
 
