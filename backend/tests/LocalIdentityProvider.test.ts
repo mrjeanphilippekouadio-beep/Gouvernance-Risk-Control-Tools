@@ -25,8 +25,7 @@ describe("LocalIdentityProvider", () => {
 
   it("rejects an invalid password", async () => {
     const provider = new LocalIdentityProvider(
-      user.email,
-      hashLocalPassword("correct-password", "qa-salt"),
+      [{ email: user.email, passwordHash: hashLocalPassword("correct-password", "qa-salt") }],
       "a".repeat(32),
       3600,
       async () => user,
@@ -37,8 +36,7 @@ describe("LocalIdentityProvider", () => {
 
   it("rejects a token after its signature is changed", async () => {
     const provider = new LocalIdentityProvider(
-      user.email,
-      hashLocalPassword("correct-password", "qa-salt"),
+      [{ email: user.email, passwordHash: hashLocalPassword("correct-password", "qa-salt") }],
       "a".repeat(32),
       3600,
       async () => user,
@@ -52,8 +50,7 @@ describe("LocalIdentityProvider", () => {
   it("re-checks membership when a token is used", async () => {
     let active = true;
     const provider = new LocalIdentityProvider(
-      user.email,
-      hashLocalPassword("correct-password", "qa-salt"),
+      [{ email: user.email, passwordHash: hashLocalPassword("correct-password", "qa-salt") }],
       "a".repeat(32),
       3600,
       async () => (active ? user : null),
