@@ -19,7 +19,7 @@ Pour la recette automatisée, le backend accepte temporairement un provider loca
 
 `AUTH_PROVIDER=local`
 
-Cette configuration est interdite lorsque `NODE_ENV=production`. Le code refuse donc de démarrer une production avec l'authentification locale.
+Cette configuration est interdite lorsque `APP_ENV=production`. Render staging peut néanmoins utiliser `NODE_ENV=production` ; la garde utilise donc `APP_ENV`.
 
 Le provider local :
 
@@ -52,7 +52,7 @@ Les valeurs secrètes ne doivent jamais être commit dans GitHub.
 Pour produire un hash de mot de passe local :
 
 ```bash
-npm run auth:hash-password -- <password>
+npm --prefix backend run auth:hash-password
 ```
 
 Puis placer uniquement le hash obtenu dans le secret de déploiement `LOCAL_AUTH_PASSWORD_HASH`.
