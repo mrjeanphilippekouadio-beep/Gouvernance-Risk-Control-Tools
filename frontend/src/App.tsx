@@ -85,7 +85,7 @@ function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const token = AUTH_PROVIDER === "local" ? localAuth.token : (idToken ?? devToken);
   const sessionIdentity = AUTH_PROVIDER === "local"
-    ? localAuth.email
+    ? formatIdentity(localAuth.email)
     : getGoogleIdentity(idToken ?? devToken);
   const errorPath = window.location.pathname;
 
@@ -190,6 +190,19 @@ function App() {
       <FeedbackWidget token={token} />
     </div>
   );
+}
+
+function formatIdentity(identity: string): string {
+  const value = identity.trim();
+  if (!value) return "Utilisateur";
+  if (!value.includes("@")) return value;
+  const localPart = value.split("@")[0];
+  return localPart
+    .replace(/[._-]+/g, " ")
+    .split(/\\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function getInitials(identity: string): string {
