@@ -2549,3 +2549,6 @@ ne pas répéter cette dérive sur une session future.
 clôture d'un batch ne doit jamais être déclarée sur la seule base de
 "PR mergée, CI verte" — les 3 étapes doivent être un item explicite du
 plan de travail, pas une convention implicite.
+
+
+**2026-10-03 — @orchestrator @devops @dev-backend @dev-db @qa-engineer @security @documentation** — RETEX staging/Neon/Render consolidé dans `.claude/agent-context/RETEX_2026-10-03_STAGING_NEON_RENDER.md`. Références opérationnelles : `GRT Tools NEON` reste la référence production et `grc-staging` est l'environnement de reconstruction/QA ; les 43 migrations GitHub ont été appliquées et validées sur staging (41 tables, `schema_migrations` à 43). Le runner du dépôt reste la source de vérité des migrations ; ne pas maintenir de parseur SQL maison. Les URLs frontend doivent rester injectées via `VITE_API_BASE_URL` et ne pas être hardcodées. Render staging peut utiliser `NODE_ENV=production`, donc le garde-fou auth local TestSprite repose sur `APP_ENV`, pas `NODE_ENV`. TestSprite est staging-only et n'utilise aucun credential Google personnel. La couche WebSocket reste finale : PostgreSQL source de vérité, autorisation backend, événements versionnés, idempotence, ordering et resync. Le RETEX doit être consulté avant les prochaines interventions sur staging/QA/realtime.
