@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Button } from "@djamo/design-system";
+import { Button, FormField, Modal } from "@djamo/design-system";
 import { ApiError } from "../../api/client";
 import { riskAppetiteApi, type RiskAppetite } from "../../api/riskAppetite";
 import "../core/CorePages.css";
@@ -20,6 +20,8 @@ export function AppetitePage({ token }: Props) {
   const [threshold, setThreshold] = useState("12");
   const [methodologyVersion, setMethodologyVersion] = useState("v1.0");
   const [description, setDescription] = useState("");
+  const [archiveTarget, setArchiveTarget] = useState<RiskAppetite | null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
 
   async function refresh() {
     setLoading(true); setError(null);
@@ -45,12 +47,15 @@ export function AppetitePage({ token }: Props) {
     finally { setSaving(false); }
   }
 
-  async function archive(row: RiskAppetite) {
-    const reason = window.prompt("Motif de retrait de cette appétence :");
-    if (!reason?.trim()) return;
-    setError(null);
-    try { await riskAppetiteApi.archive(token, row.id, reason.trim()); await refresh(); }
-    catch (err) { setError(describeError(err)); }
+  async function archive() {
+    if (!archiveTarget || !archiveReason.trim()) return;
+    setSaving(true); setError(null);
+    try {
+      await riskAppetiteApi.archive(token, archiveTarget.id, archiveReason.trim());
+      setArchiveTarget(null); setArchiveReason("");
+      await refresh();
+    } catch (err) { setError(describeError(err)); }
+    finally { setSaving(false); }
   }
 
   return <section className="core-page">
@@ -75,8 +80,14 @@ export function AppetitePage({ token }: Props) {
     <section className="core-panel">
       <div className="core-panel__head"><div><h2>Référentiel des seuils</h2><p>Les seuils inactifs sont masqués par défaut.</p></div><label className="core-filter"><input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} /> Inclure les inactifs</label></div>
       {loading ? <div className="core-empty">Chargement des seuils…</div> : rows.length === 0 ? <div className="core-empty">Aucun seuil d’appétence enregistré. Crée le premier seuil avec le formulaire ci-dessus.</div> :
-      <div className="core-table-wrap"><table className="core-table"><thead><tr><th>Sous-catégorie</th><th>Entité</th><th>Seuil /25</th><th>Méthodologie</th><th>État</th><th>Action</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong>{row.subCategory}</strong>{row.description && <div className="muted">{row.description}</div>}</td><td>{row.entity || <span className="muted">Toutes</span>}</td><td><strong>{row.threshold}/25</strong></td><td>{row.methodologyVersion}</td><td><span className={`core-badge ${row.active ? "core-badge--success" : "core-badge--warning"}`}>{row.active ? "Actif" : "Inactif"}</span></td><td>{row.active && <Button variant="destructive" onClick={() => void archive(row)}>Retirer</Button>}</td></tr>)}</tbody></table></div>}
+      <div className="core-table-wrap"><table className="core-table"><thead><tr><th>Sous-catégorie</th><th>Entité</th><th>Seuil /25</th><th>Méthodologie</th><th>État</th><th>Action</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong>{row.subCategory}</strong>{row.description && <div className="muted">{row.description}</div>}</td><td>{row.entity || <span className="muted">Toutes</span>}</td><td><strong>{row.threshold}/25</strong></td><td>{row.methodologyVersion}</td><td><span className={`core-badge ${row.active ? "core-badge--success" : "core-badge--warning"}`}>{row.active ? "Actif" : "Inactif"}</span></td><td>{row.active && <Button variant="destructive" onClick={() => { setArchiveTarget(row); setArchiveReason(""); setError(null); }}>Retirer</Button>}</td></tr>)}</tbody></table></div>}
     </section>
+    <Modal open={!!archiveTarget} onClose={() => { if (!saving) { setArchiveTarget(null); setArchiveReason(""); } }} title="Retirer le seuil d’appétence" actions={<><Button onClick={() => { setArchiveTarget(null); setArchiveReason(""); }} disabled={saving}>Annuler</Button><Button variant="destructive" disabled={!archiveTarget || !archiveReason.trim() || saving} onClick={() => void archive()}>{saving ? "Retrait…" : "Confirmer le retrait"}</Button></>}>
+      <p>Le retrait est une transition métier irréversible pour ce seuil. Un motif est obligatoire et sera conservé dans la traçabilité.</p>
+      <FormField label="Motif de retrait" htmlFor="app-archive-reason" help="Décris brièvement pourquoi ce seuil n’est plus applicable.">
+        <textarea id="app-archive-reason" value={archiveReason} onChange={(e) => setArchiveReason(e.target.value)} rows={4} required autoFocus />
+      </FormField>
+    </Modal>
     <div className="core-alert core-alert--info">Le module permet de gérer les seuils. La comparaison automatique avec le score résiduel et les alertes de dépassement dépendent du workflow d’évaluation et ne sont pas déclenchées par cette page seule.</div>
   </section>;
 }

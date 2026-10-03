@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ValidationError } from "../../domain/errors/DomainErrors.js";
 import { z } from "zod";
 import type { RiskService } from "../../services/RiskService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
@@ -96,8 +97,11 @@ export function risksRouter(
 
   router.post("/", async (req, res, next) => {
     try {
+      const idempotencyKey = req.header("Idempotency-Key")?.trim();
+      if (!idempotencyKey) throw new ValidationError("Idempotency-Key header is required for risk creation");
+      if (idempotencyKey.length > 255) throw new ValidationError("Idempotency-Key must not exceed 255 characters");
       const body = CreateRiskBody.parse(req.body);
-      const risk = await riskService.create(req.user, body, req.requestId);
+      const risk = await riskService.create(req.user, body, req.requestId, idempotencyKey);
       res.status(201).json({ data: risk });
     } catch (err) {
       next(err);

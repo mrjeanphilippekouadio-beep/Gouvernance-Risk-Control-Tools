@@ -32,6 +32,8 @@ export function RisksPage({ token, onEvaluate }: RisksPageProps) {
   const [loading, setLoading] = useState(true);
   const [process, setProcess] = useState("");
   const [description, setDescription] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createIdempotencyKey, setCreateIdempotencyKey] = useState(() => crypto.randomUUID());
   // No detail/edit screen exists yet for a risk — RACI is exposed as a
   // per-row toggle rather than a new route (DESIGN_NOTES.md: don't build
   // a screen ahead of one being needed elsewhere).
@@ -56,14 +58,19 @@ export function RisksPage({ token, onEvaluate }: RisksPageProps) {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (creating) return;
+    setCreating(true);
     setError(null);
     try {
-      await risksApi.create(token, { process, description });
+      await risksApi.create(token, { process, description }, createIdempotencyKey);
+      setCreateIdempotencyKey(crypto.randomUUID());
       setProcess("");
       setDescription("");
       await refresh();
     } catch (err) {
       setError(describeError(err));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -84,8 +91,8 @@ export function RisksPage({ token, onEvaluate }: RisksPageProps) {
             required
           />
         </FormField>
-        <Button type="submit" variant="primary">
-          Créer
+        <Button type="submit" variant="primary" disabled={creating} aria-busy={creating}>
+          {creating ? "Création…" : "Créer"}
         </Button>
       </form>
 

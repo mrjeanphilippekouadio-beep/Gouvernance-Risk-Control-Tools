@@ -25,13 +25,14 @@ export class ApiError extends Error {
  */
 export async function apiRequest<T>(
   path: string,
-  options: { method?: string; body?: unknown; token: string } ,
+  options: { method?: string; body?: unknown; token: string; headers?: Record<string, string> } ,
 ): Promise<T> {
   const res = await fetch(`${API_BASE_URL ?? ""}${path}`, {
     method: options.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${options.token}`,
+      ...(options.headers ?? {}),
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
