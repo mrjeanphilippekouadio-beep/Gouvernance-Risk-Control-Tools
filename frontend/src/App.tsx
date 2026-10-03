@@ -83,6 +83,7 @@ function App() {
   const [view, setView] = useState<View>("cartography");
   const [evaluationRiskId, setEvaluationRiskId] = useState<string | undefined>();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const token = AUTH_PROVIDER === "local" ? localAuth.token : (idToken ?? devToken);
   const sessionIdentity = AUTH_PROVIDER === "local"
     ? formatIdentity(localAuth.email)
@@ -140,7 +141,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} onSignOut={AUTH_PROVIDER === "local" ? localAuth.signOut : idToken ? signOut : () => setDevToken("")} sessionIdentity={sessionIdentity} />
+      <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} />
       <div className="app-main">
         <header className="app-topbar">
           <button
@@ -156,7 +157,19 @@ function App() {
             <strong>{PAGE_TITLES[view]}</strong>
           </div>
           <div className="topbar-actions">
-            <span className="topbar-status"><span />Connecté</span>
+            <button type="button" className="topbar-user" aria-label="Ouvrir les actions de session" aria-expanded={logoutOpen} onClick={() => setLogoutOpen((open) => !open)}>
+              <span className="topbar-user-avatar">{getInitials(sessionIdentity)}</span>
+              <span className="topbar-user-copy"><strong>{sessionIdentity || "Utilisateur"}</strong><small>Accès authentifié</small></span>
+              <span className="topbar-user-chevron" aria-hidden="true">⌄</span>
+            </button>
+            {logoutOpen && <div className="topbar-session-popover" role="menu">
+              <button type="button" className="topbar-session-action" role="menuitem" onClick={() => {
+                setLogoutOpen(false);
+                if (AUTH_PROVIDER === "local") localAuth.signOut();
+                else if (idToken) signOut();
+                else setDevToken("");
+              }}><span aria-hidden="true">↪</span>Déconnexion</button>
+            </div>}
           </div>
         </header>
 
@@ -250,11 +263,10 @@ function Icon({ name }: { name: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen, onSignOut, sessionIdentity }: {
-  view: View; setView: (view: View) => void; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void; onSignOut: () => void; sessionIdentity: string;
+function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
+  view: View; setView: (view: View) => void; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [logoutOpen, setLogoutOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState("Risques");
 
   return (
