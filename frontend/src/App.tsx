@@ -199,7 +199,7 @@ function formatIdentity(identity: string): string {
   const localPart = value.split("@")[0];
   return localPart
     .replace(/[._-]+/g, " ")
-    .split(/\\s+/)
+    .split(/\s+/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
@@ -211,7 +211,7 @@ function getInitials(identity: string): string {
   const localPart = value.includes("@") ? value.split("@")[0] : value;
   const parts = localPart
     .replace(/[._-]+/g, " ")
-    .split(/\\s+/)
+    .split(/\s+/)
     .filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   return parts[0].slice(0, 2).toUpperCase();
