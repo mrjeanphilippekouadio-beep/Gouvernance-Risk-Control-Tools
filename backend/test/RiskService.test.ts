@@ -256,7 +256,7 @@ describe("RiskService", () => {
     expect(audit.events).toHaveLength(1);
   });
 
-  it("rejects an empty description", async () => {  it("reuses the original risk and audit event for the same idempotency key", async () => {
+  it("reuses the original risk and audit event for the same idempotency key", async () => {
     const repo = inMemoryRiskRepository();
     const audit = inMemoryAuditRepository();
     const service = new RiskService(repo, audit);
