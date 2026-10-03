@@ -1,8 +1,8 @@
 .gs-card {
   border: 1px solid var(--gs-border);
-  border-radius: var(--gs-radius-card);
-  box-shadow: var(--gs-shadow-card);
-  background: var(--gs-bg-page);
+  border-radius: 16px;
+  box-shadow: var(--gs-elev-1), var(--gs-shadow-card);
+  background: #fff;
   font-family: var(--gs-font-ui);
   overflow: hidden;
 }
@@ -17,6 +17,7 @@
   font-weight: 700;
   font-size: 0.92rem;
   color: var(--gs-text);
+  background: #fff;
 }
 
 .gs-card-body {
