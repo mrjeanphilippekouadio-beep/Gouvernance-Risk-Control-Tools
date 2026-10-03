@@ -36,7 +36,7 @@ Backend :
 AUTH_PROVIDER=local
 LOCAL_AUTH_EMAIL=qagrctest@gmail.com
 LOCAL_AUTH_PASSWORD_HASH=<secret>
-LOCAL_AUTH_TOKEN_SECRET=<secret>=
+LOCAL_AUTH_TOKEN_SECRET=<random-secret-at-least-32-characters>
 LOCAL_AUTH_TOKEN_TTL_SECONDS=3600
 ```
 
