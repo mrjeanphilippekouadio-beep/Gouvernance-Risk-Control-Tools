@@ -82,9 +82,12 @@ if (env.AUTH_PROVIDER === "local") {
     console.error("Invalid production configuration: AUTH_PROVIDER=local is staging/test-only.");
     process.exit(1);
   }
-  if (!env.LOCAL_AUTH_EMAIL || !env.LOCAL_AUTH_PASSWORD_HASH || !env.LOCAL_AUTH_TOKEN_SECRET) {
+  const hasMultiUserConfig = Boolean(env.LOCAL_AUTH_USERS_JSON);
+  const hasLegacySingleUserConfig = Boolean(env.LOCAL_AUTH_EMAIL && env.LOCAL_AUTH_PASSWORD_HASH);
+
+  if ((!hasMultiUserConfig && !hasLegacySingleUserConfig) || !env.LOCAL_AUTH_TOKEN_SECRET) {
     console.error(
-      "Invalid local-auth configuration: LOCAL_AUTH_EMAIL, LOCAL_AUTH_PASSWORD_HASH and LOCAL_AUTH_TOKEN_SECRET are required.",
+      "Invalid local-auth configuration: configure LOCAL_AUTH_USERS_JSON or the legacy LOCAL_AUTH_EMAIL + LOCAL_AUTH_PASSWORD_HASH pair, plus LOCAL_AUTH_TOKEN_SECRET.",
     );
     process.exit(1);
   }
