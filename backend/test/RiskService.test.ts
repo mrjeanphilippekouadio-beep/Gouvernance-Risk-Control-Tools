@@ -16,6 +16,7 @@ import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErro
 
 function inMemoryRiskRepository(): RiskRepository {
   const store = new Map<string, Risk>();
+  const idempotencyKeys = new Map<string, string>();
   return {
     async getById(tenantId, id) {
       const risk = store.get(id);
@@ -55,10 +56,12 @@ function inMemoryRiskRepository(): RiskRepository {
       return risk;
     },
     async createIdempotent(input, idempotencyKey) {
-      const existing = [...store.values()].find(
-        (r) => r.tenantId === input.tenantId && (r as Risk & { idempotencyKey?: string }).idempotencyKey === idempotencyKey,
-      );
-      if (existing) return { risk: existing, created: false };
+      const existingId = idempotencyKeys.get(`${input.tenantId}:${idempotencyKey}`);
+      if (existingId) {
+        const existing = store.get(existingId);
+        if (!existing) throw new Error("idempotency mapping points to missing risk");
+        return { risk: existing, created: false };
+      }
       const risk: Risk = {
         id: randomUUID(),
         tenantId: input.tenantId,
@@ -76,6 +79,7 @@ function inMemoryRiskRepository(): RiskRepository {
         deletionReason: null,
       };
       store.set(risk.id, risk);
+      idempotencyKeys.set(`${input.tenantId}:${idempotencyKey}`, risk.id);
       return { risk, created: true };
     },
     async update(tenantId, id, input) {
