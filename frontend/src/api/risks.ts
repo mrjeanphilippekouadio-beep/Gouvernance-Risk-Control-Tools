@@ -21,8 +21,13 @@ export interface CreateRiskInput {
 export const risksApi = {
   list: (token: string) => apiRequest<Risk[]>("/api/v1/risks", { token }),
 
-  create: (token: string, input: CreateRiskInput) =>
-    apiRequest<Risk>("/api/v1/risks", { method: "POST", body: input, token }),
+  create: (token: string, input: CreateRiskInput, idempotencyKey: string) =>
+    apiRequest<Risk>("/api/v1/risks", {
+      method: "POST",
+      body: input,
+      token,
+      headers: { "Idempotency-Key": idempotencyKey },
+    }),
 
   // Mirrors POST /api/v1/risks/:id/submit-style state changes from the
   // architecture doc: the frontend asks, the backend decides.
