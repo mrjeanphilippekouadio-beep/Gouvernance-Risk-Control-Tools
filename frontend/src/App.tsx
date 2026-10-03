@@ -84,6 +84,9 @@ function App() {
   const [evaluationRiskId, setEvaluationRiskId] = useState<string | undefined>();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const token = AUTH_PROVIDER === "local" ? localAuth.token : (idToken ?? devToken);
+  const sessionIdentity = AUTH_PROVIDER === "local"
+    ? localAuth.email
+    : getGoogleIdentity(idToken ?? devToken);
   const errorPath = window.location.pathname;
 
   if (errorPath === "/400" || errorPath === "/error/400") return <ErrorPage code={400} />;
@@ -137,7 +140,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} onSignOut={AUTH_PROVIDER === "local" ? localAuth.signOut : idToken ? signOut : () => setDevToken("")} />
+      <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} onSignOut={AUTH_PROVIDER === "local" ? localAuth.signOut : idToken ? signOut : () => setDevToken("")} sessionIdentity={sessionIdentity} />
       <div className="app-main">
         <header className="app-topbar">
           <button
@@ -189,6 +192,30 @@ function App() {
   );
 }
 
+function getInitials(identity: string): string {
+  const value = identity.trim();
+  if (!value) return "U";
+  const localPart = value.includes("@") ? value.split("@")[0] : value;
+  const parts = localPart
+    .replace(/[._-]+/g, " ")
+    .split(/\\s+/)
+    .filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return parts[0].slice(0, 2).toUpperCase();
+}
+
+function getGoogleIdentity(token: string | null): string {
+  if (!token) return "";
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return "";
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")) ) as { name?: string; email?: string };
+    return claims.name?.trim() || claims.email?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
 function Icon({ name }: { name: string }) {
   const paths: Record<string, import("react").ReactNode> = {
     grid: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
@@ -210,8 +237,8 @@ function Icon({ name }: { name: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen, onSignOut }: {
-  view: View; setView: (view: View) => void; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void; onSignOut: () => void;
+function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen, onSignOut, sessionIdentity }: {
+  view: View; setView: (view: View) => void; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void; onSignOut: () => void; sessionIdentity: string;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -273,9 +300,9 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen, onSignOut }: 
       </nav>
       {!collapsed && <div className="sidebar-footer">
         <button type="button" className="sidebar-avatar-button" aria-label="Ouvrir les actions de session" aria-expanded={logoutOpen} onClick={() => setLogoutOpen((open) => !open)}>
-          <span className="sidebar-avatar">JP</span>
+          <span className="sidebar-avatar">{getInitials(sessionIdentity)}</span>
         </button>
-        <div><strong>Session active</strong><small>Accès authentifié</small></div>
+        <div><strong>{sessionIdentity || "Utilisateur"}</strong><small>Accès authentifié</small></div>
         <span className="sidebar-footer-dot" />
         {logoutOpen && <div className="sidebar-session-popover" role="menu">
           <button type="button" className="sidebar-session-action" role="menuitem" onClick={() => { setLogoutOpen(false); onSignOut(); }}>
