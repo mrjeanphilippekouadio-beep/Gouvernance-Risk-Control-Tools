@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import express from "express";
 import cors from "cors";
 import { pinoHttp } from "pino-http";
-import { env } from "./config/env.js";
+import { env, getLocalAuthUsers } from "./config/env.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { pool } from "./infrastructure/database/pool.js";
 import { assertProductionDatabaseRole } from "./infrastructure/database/postgres/databaseRoleSecurity.js";
@@ -408,8 +408,7 @@ const identityProvider =
   env.AUTH_PROVIDER === "google"
     ? new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID!, lookupMembership)
     : new LocalIdentityProvider(
-        env.LOCAL_AUTH_EMAIL!,
-        env.LOCAL_AUTH_PASSWORD_HASH!,
+        getLocalAuthUsers(),
         env.LOCAL_AUTH_TOKEN_SECRET!,
         env.LOCAL_AUTH_TOKEN_TTL_SECONDS,
         lookupMembership,
