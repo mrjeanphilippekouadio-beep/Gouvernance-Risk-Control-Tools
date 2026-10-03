@@ -18,22 +18,22 @@ interface ContextRailProps { view: View; }
 export function ContextRail({ view }: ContextRailProps) {
   const objectView = view === "risks" || view === "evaluation";
   const tabs: RailTab[] = objectView ? ["comments", "raci", "evidence", "occurrence"] : ["comments", "raci"];
-  const [collapsed, setCollapsed] = useState(false);
-  const [active, setActive] = useState<RailTab>("comments");
-  const currentActive = tabs.includes(active) ? active : tabs[0];
+  const [railOpen, setRailOpen] = useState(false);
+  const [active, setActive] = useState<RailTab | null>(null);
+  const currentActive = active && tabs.includes(active) ? active : null;
 
   return (
-    <aside className={collapsed ? "context-rail collapsed" : "context-rail"}>
+    <aside className={["context-rail", railOpen ? "open" : "", currentActive ? "has-panel" : ""].filter(Boolean).join(" ")}>
       <div className="context-rail__tabs">
-        <button className="context-rail__collapse" type="button" title={collapsed ? "Déployer le panneau" : "Replier le panneau"} aria-expanded={!collapsed} onClick={() => setCollapsed((value) => !value)}><span aria-hidden="true">‹</span></button>
-        {tabs.map((tab) => (
-          <button type="button" key={tab} className={currentActive === tab ? "context-rail__tab on" : "context-rail__tab"} title={LABELS[tab]} aria-current={currentActive === tab ? "page" : undefined} onClick={() => setActive(tab)}>
+        <button className="context-rail__collapse" type="button" title={railOpen ? "Replier le panneau" : "Afficher les panneaux"} aria-expanded={railOpen} onClick={() => { setRailOpen((value) => !value); setActive(null); }}><span aria-hidden="true">‹</span></button>
+        {railOpen && tabs.map((tab) => (
+          <button type="button" key={tab} className={currentActive === tab ? "context-rail__tab on" : "context-rail__tab"} title={LABELS[tab]} aria-expanded={currentActive === tab} onClick={() => setActive((value) => value === tab ? null : tab)}>
             {ICONS[tab]}
             <span className="context-rail__label">{tab === "comments" ? "Comment." : LABELS[tab]}</span>
           </button>
         ))}
       </div>
-      {!collapsed && <div className="context-rail__panel">
+      {currentActive && <div className="context-rail__panel">
         {currentActive === "comments" && <EmptyContextPanel title="Commentaires" message="Les commentaires ne sont pas encore reliés à cette vue. Aucun commentaire n'est affiché tant que la source métier n'est pas connectée." />}
         {currentActive === "raci" && <EmptyContextPanel title="RACI" message="Aucune attribution RACI n'est chargée pour cette vue. Les responsabilités seront affichées une fois la liaison avec les données métier activée." />}
         {currentActive === "evidence" && <EmptyContextPanel title="Preuves" message="Aucune preuve n'est chargée pour l'objet sélectionné dans cette vue." />}
