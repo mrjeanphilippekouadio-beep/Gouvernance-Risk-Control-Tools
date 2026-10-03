@@ -13,8 +13,7 @@ const user = {
 describe("LocalIdentityProvider", () => {
   it("authenticates the configured QA user and issues a verifiable token", async () => {
     const provider = new LocalIdentityProvider(
-      user.email,
-      hashLocalPassword("correct-password", "qa-salt"),
+      [{ email: user.email, passwordHash: hashLocalPassword("correct-password", "qa-salt") }],
       "a".repeat(32),
       3600,
       async (email) => (email === user.email ? user : null),
