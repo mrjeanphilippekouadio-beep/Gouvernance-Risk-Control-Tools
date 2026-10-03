@@ -289,6 +289,7 @@ describe("RiskService", () => {
   });
 
 
+  it("rejects an empty description", async () => {
     const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository());
     await expect(
       service.create(actor, { process: "Onboarding", description: "  " }, "REQ-2"),
