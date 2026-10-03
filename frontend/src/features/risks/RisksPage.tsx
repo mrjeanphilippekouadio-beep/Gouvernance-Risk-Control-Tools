@@ -33,6 +33,7 @@ export function RisksPage({ token, onEvaluate }: RisksPageProps) {
   const [process, setProcess] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createIdempotencyKey, setCreateIdempotencyKey] = useState(() => crypto.randomUUID());
   // No detail/edit screen exists yet for a risk — RACI is exposed as a
   // per-row toggle rather than a new route (DESIGN_NOTES.md: don't build
   // a screen ahead of one being needed elsewhere).
@@ -61,7 +62,8 @@ export function RisksPage({ token, onEvaluate }: RisksPageProps) {
     setCreating(true);
     setError(null);
     try {
-      await risksApi.create(token, { process, description });
+      await risksApi.create(token, { process, description }, createIdempotencyKey);
+      setCreateIdempotencyKey(crypto.randomUUID());
       setProcess("");
       setDescription("");
       await refresh();
