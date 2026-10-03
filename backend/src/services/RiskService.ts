@@ -45,14 +45,31 @@ export class RiskService {
     private readonly processes?: ProcessRepository,
   ) {}
 
-  async create(actor: AuthenticatedUser, input: Omit<CreateRiskInput, "tenantId">, requestId: string): Promise<Risk> {
+  async create(actor: AuthenticatedUser, input: Omit<CreateRiskInput, "tenantId">, requestId: string, idempotencyKey?: string): Promise<Risk> {
     requirePermission(actor, "risk.create");
     if (!input.process.trim()) throw new ValidationError("process is required");
     if (!input.description.trim()) throw new ValidationError("description is required");
     await this.assertDepartmentExists(actor.tenantId, input.ownerDepartmentId);
     await this.assertProcessExists(actor.tenantId, input.processId);
 
-    const risk = await this.risks.create({ ...input, tenantId: actor.tenantId });
+    const result = idempotencyKey
+      ? await this.risks.createIdempotent({ ...input, tenantId: actor.tenantId }, idempotencyKey)
+      : { risk: await this.risks.create({ ...input, tenantId: actor.tenantId }), created: true };
+
+    if (!result.created) {
+      const existing = result.risk;
+      if (
+        existing.process !== input.process ||
+        existing.description !== input.description ||
+        existing.ownerDepartmentId !== (input.ownerDepartmentId ?? null) ||
+        existing.processId !== (input.processId ?? null)
+      ) {
+        throw new ValidationError("Idempotency-Key was already used with a different risk payload");
+      }
+      return existing;
+    }
+
+    const risk = result.risk;
 
     await this.audit.record({
       tenantId: actor.tenantId,
