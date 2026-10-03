@@ -3,6 +3,7 @@ import { z } from "zod";
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  APP_ENV: z.enum(["development", "staging", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
 
   DATABASE_URL: z
@@ -50,7 +51,7 @@ if (env.AUTH_PROVIDER === "google" && !env.GOOGLE_OAUTH_CLIENT_ID) {
 }
 
 if (env.AUTH_PROVIDER === "local") {
-  if (env.NODE_ENV === "production") {
+  if (env.APP_ENV === "production") {
     console.error("Invalid production configuration: AUTH_PROVIDER=local is staging/test-only.");
     process.exit(1);
   }
