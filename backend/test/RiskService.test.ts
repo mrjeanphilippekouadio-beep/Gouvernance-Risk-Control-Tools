@@ -54,6 +54,30 @@ function inMemoryRiskRepository(): RiskRepository {
       store.set(risk.id, risk);
       return risk;
     },
+    async createIdempotent(input, idempotencyKey) {
+      const existing = [...store.values()].find(
+        (r) => r.tenantId === input.tenantId && (r as Risk & { idempotencyKey?: string }).idempotencyKey === idempotencyKey,
+      );
+      if (existing) return { risk: existing, created: false };
+      const risk: Risk = {
+        id: randomUUID(),
+        tenantId: input.tenantId,
+        process: input.process,
+        processId: input.processId ?? null,
+        description: input.description,
+        ownerDepartmentId: input.ownerDepartmentId ?? null,
+        ownerId: null,
+        superiorOwnerId: null,
+        status: "DRAFT",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        deletedBy: null,
+        deletionReason: null,
+      };
+      store.set(risk.id, risk);
+      return { risk, created: true };
+    },
     async update(tenantId, id, input) {
       const existing = store.get(id);
       if (!existing || existing.tenantId !== tenantId) throw new Error("not found");
@@ -228,7 +252,39 @@ describe("RiskService", () => {
     expect(audit.events).toHaveLength(1);
   });
 
-  it("rejects an empty description", async () => {
+  it("rejects an empty description", async () => {  it("reuses the original risk and audit event for the same idempotency key", async () => {
+    const repo = inMemoryRiskRepository();
+    const audit = inMemoryAuditRepository();
+    const service = new RiskService(repo, audit);
+
+    const first = await service.create(
+      actor,
+      { process: "Onboarding", description: "KYC risk" },
+      "REQ-IDEM-1",
+      "idem-risk-1",
+    );
+    const retry = await service.create(
+      actor,
+      { process: "Onboarding", description: "KYC risk" },
+      "REQ-IDEM-2",
+      "idem-risk-1",
+    );
+
+    expect(retry.id).toBe(first.id);
+    expect(audit.events).toHaveLength(1);
+  });
+
+  it("rejects reuse of an idempotency key with a different payload", async () => {
+    const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository());
+
+    await service.create(actor, { process: "Onboarding", description: "KYC risk" }, "REQ-IDEM-3", "idem-risk-2");
+
+    await expect(
+      service.create(actor, { process: "Payments", description: "Fraud risk" }, "REQ-IDEM-4", "idem-risk-2"),
+    ).rejects.toThrow(ValidationError);
+  });
+
+
     const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository());
     await expect(
       service.create(actor, { process: "Onboarding", description: "  " }, "REQ-2"),
