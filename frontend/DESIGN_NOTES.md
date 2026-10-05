@@ -363,9 +363,11 @@ réel reste et doit rester côté backend.
 ---
 
 **Statut** : `IMPLEMENTED` (priorités 1 à 4, partiellement 6) — voir
-`frontend/src/design-system/` (`Table`, `FormField`, `StatusBadge`,
-`Button`, `Tabs`) et les tokens unifiés dans
-`frontend/src/design-system/tokens.css`, appliqués aux 3 écrans audités.
+`packages/design-system/src/` (composants génériques `Table`, `FormField`,
+`StatusBadge`, `Button`, `Tabs` et tokens unifiés dans `tokens.css`,
+consommés par `frontend` en tant que package workspace `@djamo/design-system`),
+appliqués aux 3 écrans audités. `frontend/src/design-system/` ne contient
+désormais que les composants métier non génériques : `ContextRail` et `RaciPanel`.
 Restent à faire : priorité 5 (sidebar de navigation par domaine — non
 bloquant tant qu'il n'y a que 2 modules visibles côté frontend),
 regroupement des permissions par domaine dans `RolesAdmin`, pagination
