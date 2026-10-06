@@ -6,8 +6,20 @@ import type {
 
 export interface RiskAppetiteRepository {
   getById(tenantId: string, id: string): Promise<RiskAppetite | null>;
-  /** Natural key lookup used by the PUT upsert to decide CREATE vs UPDATE for the audit trail. */
-  getBySubCategory(tenantId: string, subCategory: string, entity: string | null): Promise<RiskAppetite | null>;
+  /**
+   * Natural key lookup. Used two ways: (1) by the PUT upsert, to decide
+   * CREATE vs UPDATE for the audit trail — must see a row regardless of
+   * `active`, since re-activating a previously deactivated threshold is
+   * an UPDATE, not a CREATE; (2) by `getApplicable` (P-04), which must
+   * pass `{ activeOnly: true }` — a deactivated threshold is not an
+   * applicable one, even though it is not soft-deleted.
+   */
+  getBySubCategory(
+    tenantId: string,
+    subCategory: string,
+    entity: string | null,
+    options?: { activeOnly?: boolean },
+  ): Promise<RiskAppetite | null>;
   list(tenantId: string, options?: ListRiskAppetiteOptions): Promise<RiskAppetite[]>;
   /**
    * "Définir ou modifier" (ACT-165) in one call: creates the threshold if
