@@ -28,8 +28,12 @@ export interface RatingScale {
   impactLabels: ScaleLevel[] | null;
   criticalityThresholds?: { label: string; min: number; max: number }[] | null;
   impactAxes: { axes: ImpactAxis[]; retainedImpactRule: "MAX" | "AVERAGE" | "WEIGHTED_SUM" } | null;
+  velocityLevels: ScaleLevel[] | null;
+  persistenceLevels: ScaleLevel[] | null;
   masteryScale: { levels: ScaleLevel[]; defenseLines: string[]; aggregation: "MIN"; thresholds: { label: string; min: number; max: number }[] | null } | null;
 }
+
+export type ScoreThreshold = { label: string; min: number; max: number };
 
 export interface MasteryLineScore {
   line: string;
@@ -149,4 +153,16 @@ export const ratingScalesApi = {
     apiRequest<RatingScale>("/api/v1/rating-scales", { method: "POST", body: input, token }),
   activate: (token: string, id: string) =>
     apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/activate`, { method: "PATCH", token }),
+  updateThresholds: (token: string, id: string, thresholds: ScoreThreshold[]) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/thresholds`, { method: "PUT", body: { thresholds }, token }),
+  updateImpactAxes: (token: string, id: string, input: { axes: ImpactAxis[]; retainedImpactRule?: "MAX" | "AVERAGE" | "WEIGHTED_SUM" }) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/impact-axes`, { method: "PUT", body: input, token }),
+  updateVelocity: (token: string, id: string, levels: ScaleLevel[]) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/velocity`, { method: "PUT", body: { levels }, token }),
+  updatePersistence: (token: string, id: string, levels: ScaleLevel[]) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/persistence`, { method: "PUT", body: { levels }, token }),
+  updateMastery: (token: string, id: string, input: { levels: ScaleLevel[]; defenseLines: string[]; thresholds?: ScoreThreshold[] | null }) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/mastery`, { method: "PUT", body: input, token }),
+  disable: (token: string, id: string, reason: string) =>
+    apiRequest<{ status: string }>(`/api/v1/rating-scales/${encodeURIComponent(id)}/disable`, { method: "PATCH", body: { reason }, token }),
 };
