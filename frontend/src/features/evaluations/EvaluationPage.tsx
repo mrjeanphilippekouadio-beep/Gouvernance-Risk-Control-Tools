@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, StatusBadge, Timeline, type TimelineItem } from "@djamo/design-system";
 import { ApiError } from "../../api/client";
 import {
@@ -65,6 +65,14 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
   const [residualJustification, setResidualJustification] = useState("");
   const [appetiteOverride, setAppetiteOverride] = useState("");
   const [decisionComment, setDecisionComment] = useState("");
+
+  // Guides the user to the existing "Valider en Comité" action when the
+  // backend refuses the ordinary validate() because the residual score is
+  // at/above the configured Comité threshold (see RiskEvaluationService.validate,
+  // ACT-253). The frontend never recomputes that threshold itself — it only
+  // reacts to the backend's own refusal message.
+  const [highlightCommittee, setHighlightCommittee] = useState(false);
+  const committeeActionRef = useRef<HTMLDivElement | null>(null);
 
   const selectedRisk = risks.find((risk) => risk.id === selectedRiskId);
   const selectedEvaluation = evaluations.find((evaluation) => evaluation.id === selectedEvaluationId);
@@ -196,13 +204,36 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
 
   async function perform(action: () => Promise<RiskEvaluation>, message: string) {
     if (!selectedEvaluation) return;
-    setSaving(true); setError(null); setNotice(null);
+    setSaving(true); setError(null); setNotice(null); setHighlightCommittee(false);
     try {
       const updated = await action();
       await refreshHistory(updated.id);
       setNotice(message);
     } catch (err) { setError(describeError(err)); }
     finally { setSaving(false); }
+  }
+
+  // The ordinary validate() refuses server-side when the residual score is
+  // at/above the configured Comité threshold — the backend's own message
+  // already names the "validate-committee" endpoint as the way forward.
+  // Reused verbatim rather than rewritten, so the two never diverge; the
+  // frontend only matches on that marker, it never recomputes the threshold.
+  async function handleValidate() {
+    if (!selectedEvaluation) return;
+    setSaving(true); setError(null); setNotice(null); setHighlightCommittee(false);
+    try {
+      const updated = await evaluationsApi.validate(token, selectedEvaluation.id, decisionComment.trim());
+      await refreshHistory(updated.id);
+      setNotice("Évaluation validée.");
+    } catch (err) {
+      if (err instanceof ApiError && err.message.includes("validate-committee")) {
+        setError(err.message);
+        setHighlightCommittee(true);
+        committeeActionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        setError(describeError(err));
+      }
+    } finally { setSaving(false); }
   }
 
   const selectedImpactPayload = (values: Record<string, number>) => axes.map((axis) => ({ code: axis.code, value: values[axis.code] ?? 1 }));
@@ -421,8 +452,10 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
             <div className="eval-decision-bar"><div><strong>Décision de validation (maker-checker)</strong><span>La validation est irréversible et ne peut jamais être réalisée par l'évaluateur lui-même. Vérifie les scores et la justification avant de confirmer.</span></div>
               <FormField label="Commentaire de décision (facultatif sauf rejet)" htmlFor="decision-comment"><input id="decision-comment" value={decisionComment} onChange={(event) => setDecisionComment(event.target.value)} placeholder="Commentaire pour la traçabilité" /></FormField>
               <div className="eval-decision-actions">
-                <Button disabled={saving || selectedEvaluation.residualScore === null} onClick={() => perform(() => evaluationsApi.validate(token, selectedEvaluation.id, decisionComment.trim()), "Évaluation validée.")} variant="primary">Valider</Button>
-                <Button disabled={saving || selectedEvaluation.residualScore === null} onClick={() => perform(() => evaluationsApi.validateByCommittee(token, selectedEvaluation.id, decisionComment.trim()), "Évaluation validée en Comité des Risques.")}>Valider en Comité</Button>
+                <Button disabled={saving || selectedEvaluation.residualScore === null} onClick={() => void handleValidate()} variant="primary">Valider</Button>
+                <div ref={committeeActionRef} className={highlightCommittee ? "eval-committee-highlight" : undefined}>
+                  <Button disabled={saving || selectedEvaluation.residualScore === null} onClick={() => perform(() => evaluationsApi.validateByCommittee(token, selectedEvaluation.id, decisionComment.trim()), "Évaluation validée en Comité des Risques.")}>Valider en Comité</Button>
+                </div>
                 <Button disabled={saving} onClick={() => { if (!decisionComment.trim()) { setError("Un commentaire est obligatoire pour rejeter une évaluation."); return; } void perform(() => evaluationsApi.reject(token, selectedEvaluation.id, decisionComment.trim()), "Évaluation rejetée."); }}>Rejeter</Button>
               </div>
             </div>
