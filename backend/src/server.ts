@@ -25,6 +25,7 @@ import { PostgresKpiMeasureRepository } from "./infrastructure/database/postgres
 import { PostgresRiskAppetiteRepository } from "./infrastructure/database/postgres/PostgresRiskAppetiteRepository.js";
 import { PostgresRatingScaleRepository } from "./infrastructure/database/postgres/PostgresRatingScaleRepository.js";
 import { PostgresRiskEvaluationRepository } from "./infrastructure/database/postgres/PostgresRiskEvaluationRepository.js";
+import { PostgresTreatmentDecisionRepository } from "./infrastructure/database/postgres/PostgresTreatmentDecisionRepository.js";
 import { PostgresKriRepository } from "./infrastructure/database/postgres/PostgresKriRepository.js";
 import { PostgresKriMeasureRepository } from "./infrastructure/database/postgres/PostgresKriMeasureRepository.js";
 import { PostgresUserRepository } from "./infrastructure/database/postgres/PostgresUserRepository.js";
@@ -66,6 +67,7 @@ import { RiskAppetiteService } from "./services/RiskAppetiteService.js";
 import { RatingScaleService } from "./services/RatingScaleService.js";
 import { RiskEvaluationService } from "./services/RiskEvaluationService.js";
 import { RiskEvaluationViewService } from "./services/RiskEvaluationViewService.js";
+import { TreatmentDecisionService } from "./services/TreatmentDecisionService.js";
 import { KriService } from "./services/KriService.js";
 import { KriMeasureService } from "./services/KriMeasureService.js";
 import { UserService } from "./services/UserService.js";
@@ -106,6 +108,7 @@ import { kpiMeasuresRouter } from "./api/v1/kpiMeasures.routes.js";
 import { riskAppetiteRouter } from "./api/v1/riskAppetite.routes.js";
 import { ratingScalesRouter } from "./api/v1/ratingScales.routes.js";
 import { riskEvaluationsRouter } from "./api/v1/riskEvaluations.routes.js";
+import { treatmentDecisionsRouter } from "./api/v1/treatmentDecisions.routes.js";
 import { krisRouter } from "./api/v1/kris.routes.js";
 import { kriMeasuresRouter } from "./api/v1/kriMeasures.routes.js";
 import { usersRouter } from "./api/v1/users.routes.js";
@@ -183,6 +186,7 @@ const kpiMeasureRepository = new PostgresKpiMeasureRepository(pool);
 const riskAppetiteRepository = new PostgresRiskAppetiteRepository(pool);
 const ratingScaleRepository = new PostgresRatingScaleRepository(pool);
 const riskEvaluationRepository = new PostgresRiskEvaluationRepository(pool);
+const treatmentDecisionRepository = new PostgresTreatmentDecisionRepository(pool);
 const kriRepository = new PostgresKriRepository(pool);
 const kriMeasureRepository = new PostgresKriMeasureRepository(pool);
 const userRepository = new PostgresUserRepository(pool);
@@ -263,6 +267,13 @@ const riskEvaluationService = new RiskEvaluationService(
   ratingScaleRepository,
   riskAppetiteRepository,
   processRepository,
+  configRepository,
+);
+const treatmentDecisionService = new TreatmentDecisionService(
+  treatmentDecisionRepository,
+  riskEvaluationRepository,
+  riskRepository,
+  auditRepository,
   configRepository,
 );
 // DIV-07: read-only companion of riskEvaluationService — composes only, never scores.
@@ -493,7 +504,12 @@ app.use(
 app.use("/api/v1/kpi-measures", authMiddleware(identityProvider), kpiMeasuresRouter(kpiMeasureService));
 app.use("/api/v1/appetite", authMiddleware(identityProvider), riskAppetiteRouter(riskAppetiteService));
 app.use("/api/v1/rating-scales", authMiddleware(identityProvider), ratingScalesRouter(ratingScaleService));
-app.use("/api/v1/risk-evaluations", authMiddleware(identityProvider), riskEvaluationsRouter(riskEvaluationService, riskEvaluationViewService));
+app.use(
+  "/api/v1/risk-evaluations",
+  authMiddleware(identityProvider),
+  riskEvaluationsRouter(riskEvaluationService, riskEvaluationViewService, treatmentDecisionService),
+);
+app.use("/api/v1/treatment-decisions", authMiddleware(identityProvider), treatmentDecisionsRouter(treatmentDecisionService));
 app.use(
   "/api/v1/kris",
   authMiddleware(identityProvider),

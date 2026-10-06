@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { RiskEvaluationService } from "../../services/RiskEvaluationService.js";
 import type { RiskEvaluationViewService } from "../../services/RiskEvaluationViewService.js";
+import type { TreatmentDecisionService } from "../../services/TreatmentDecisionService.js";
 
 const EvaluationType = z.enum(["AD_HOC", "ANNUELLE", "ANTICIPEE"]);
 const EvaluationStatus = z.enum(["BROUILLON", "VALIDATED", "REJECTED", "VALIDE_COMITE"]);
@@ -52,6 +53,8 @@ const RejectBody = z.object({ comment: z.string().min(1) });
 export function riskEvaluationsRouter(
   riskEvaluationService: RiskEvaluationService,
   riskEvaluationViewService: RiskEvaluationViewService,
+  /** Lot B: optional so existing tests/callers built before TreatmentDecision existed keep compiling — server.ts must wire the real service for this sub-route to work. */
+  treatmentDecisionService?: TreatmentDecisionService,
 ): Router {
   const router = Router();
 
@@ -177,6 +180,19 @@ export function riskEvaluationsRouter(
       const body = RejectBody.parse(req.body);
       const evaluation = await riskEvaluationService.reject(req.user, req.params["id"] as string, body.comment, req.requestId);
       res.json({ data: evaluation });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Lot B (§8/§12): 0..1 TreatmentDecision rattachée à cette évaluation.
+  router.get("/:id/treatment-decision", async (req, res, next) => {
+    try {
+      if (!treatmentDecisionService) {
+        throw new Error("TreatmentDecisionService is not configured for this router");
+      }
+      const decision = await treatmentDecisionService.getForEvaluation(req.user, req.params["id"] as string);
+      res.json({ data: decision });
     } catch (err) {
       next(err);
     }
