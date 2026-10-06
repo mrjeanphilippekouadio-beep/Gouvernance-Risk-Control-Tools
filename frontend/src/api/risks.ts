@@ -8,6 +8,8 @@ export interface Risk {
   process: string;
   description: string;
   ownerDepartmentId: string | null;
+  /** ACT-120/121: individual Risk Owner (a User id) — see backend Risk.ts. Null until explicitly assigned via RiskService.assignOwner. */
+  ownerId: string | null;
   status: RiskStatus;
   createdAt: string;
   updatedAt: string;
