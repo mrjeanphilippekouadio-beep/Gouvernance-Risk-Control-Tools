@@ -138,3 +138,8 @@ polymorphe non contrainte, cf. commentaire de tête de 027).
   à vérifier avant d'exécuter en environnement partagé si
   `ConfigService.updateCommitteeThresholds`/`setCommitteeEnforcement` a
   déjà été appelé.
+- `046_treatment_decisions.down.sql` — `DROP TABLE treatment_decisions`.
+  Destructif : supprime tout l'historique des décisions de traitement
+  (toutes les propositions, confirmations, invalidations et validations
+  Comité). Non destructif pour `risk_evaluations`/`risks` (aucune FK
+  entrante depuis ces tables vers `treatment_decisions`).
