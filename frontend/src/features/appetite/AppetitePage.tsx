@@ -59,7 +59,7 @@ export function AppetitePage({ token }: Props) {
   }
 
   return <section className="core-page">
-    <div className="core-page__heading"><div><p className="core-page__eyebrow">RISQUES · GOUVERNANCE</p><h1>Appétence au risque</h1><p className="core-page__subtitle">Définir les seuils de risque acceptables par sous-catégorie et, si nécessaire, par entité. Les seuils sont enregistrés dans le référentiel du tenant.</p></div></div>
+    <div className="core-page__heading"><div><p className="core-page__eyebrow">RISQUES · GOUVERNANCE</p><h1>Appétence au risque</h1><p className="core-page__subtitle">L'appétence est la référence de décision consultée pendant le cycle d'évaluation (comparaison au score résiduel, page Évaluations) — elle n'est pas une fin en soi isolée. Cette page définit les seuils par sous-catégorie et, si nécessaire, par entité ; elle ne déclenche ni ne recalcule une évaluation.</p></div></div>
     <div className="core-page__stats">
       <div className="core-stat"><span>Seuils affichés</span><strong>{loading ? "—" : rows.length}</strong></div>
       <div className="core-stat"><span>Seuils actifs</span><strong>{loading ? "—" : activeCount}</strong></div>
@@ -88,6 +88,12 @@ export function AppetitePage({ token }: Props) {
         <textarea id="app-archive-reason" value={archiveReason} onChange={(e) => setArchiveReason(e.target.value)} rows={4} required autoFocus />
       </FormField>
     </Modal>
-    <div className="core-alert core-alert--info">Le module permet de gérer les seuils. La comparaison automatique avec le score résiduel et les alertes de dépassement dépendent du workflow d’évaluation et ne sont pas déclenchées par cette page seule.</div>
+    <div className="core-alert core-alert--info">Ce module gère uniquement le seuil de score (1 à 25) par sous-catégorie/entité. La comparaison au score résiduel et le signalement de dépassement se font depuis le cycle d'évaluation (page Évaluations) ; cette page ne les déclenche pas.</div>
+    <div className="core-alert core-alert--info">
+      <strong>Décision de traitement en cas de dépassement (§8).</strong> Les 5 options validées — Accepter, Surveiller, Réduire, Transférer, Éviter — restent distinctes (Accepter ≠ Surveiller). Aucune n'est gérée ici : il n'existe à ce jour aucune entité/endpoint Treatment Decision côté backend (gap déjà consigné, voir <code>ACTION_ITEMS.md</code>, entrée « GAPS FRONTEND RM V1 »). Cette page n'invente donc aucune action de déclenchement.
+    </div>
+    <div className="core-alert core-alert--info">
+      <strong>Seuils de passage Comité (§8).</strong> Le contrat exige deux seuils indépendants et configurables côté backend — l'un pour le passage en Comité de l'Évaluation, l'autre pour le passage en Comité de la Treatment Decision. Aujourd'hui, seul le premier existe, et il est codé en dur côté backend (<code>COMMITTEE_VALIDATION_MIN_SCORE = 15</code>, <code>RiskEvaluationService.ts</code>) — ni configurable, ni exposé par une API. Le second n'a pas d'équivalent (Treatment Decision absente). Cette page n'affiche ni ne permet de modifier un seuil Comité : ce n'est pas un seuil d'appétence (score) et aucun contrat n'existe pour l'éditer.
+    </div>
   </section>;
 }

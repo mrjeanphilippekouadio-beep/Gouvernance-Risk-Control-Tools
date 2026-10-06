@@ -1,4 +1,7 @@
 import { apiRequest } from "./client";
+import type { Control } from "./controls";
+import type { EffectivenessAssessment } from "./controlMonitoring";
+import type { Risk } from "./risks";
 
 export type EvaluationType = "AD_HOC" | "ANNUELLE" | "ANTICIPEE";
 export type EvaluationStatus = "BROUILLON" | "VALIDATED" | "REJECTED" | "VALIDE_COMITE";
@@ -25,8 +28,12 @@ export interface RatingScale {
   impactLabels: ScaleLevel[] | null;
   criticalityThresholds?: { label: string; min: number; max: number }[] | null;
   impactAxes: { axes: ImpactAxis[]; retainedImpactRule: "MAX" | "AVERAGE" | "WEIGHTED_SUM" } | null;
+  velocityLevels: ScaleLevel[] | null;
+  persistenceLevels: ScaleLevel[] | null;
   masteryScale: { levels: ScaleLevel[]; defenseLines: string[]; aggregation: "MIN"; thresholds: { label: string; min: number; max: number }[] | null } | null;
 }
+
+export type ScoreThreshold = { label: string; min: number; max: number };
 
 export interface MasteryLineScore {
   line: string;
@@ -63,6 +70,8 @@ export interface RiskEvaluation {
   appetiteExceeded: boolean | null;
   validatedBy: string | null;
   validatedAt: string | null;
+  /** Optional on validate, mandatory on reject (ACT-157). */
+  comment: string | null;
   createdAt: string;
 }
 
@@ -71,6 +80,26 @@ export interface CreateEvaluationInput {
   evaluationType: EvaluationType;
   subCategory: string;
   entity?: string | null;
+}
+
+/**
+ * DIV-07, GET /:id/context — read-only composition: the controls actually
+ * covering this evaluation's risk, and each one's last known effectiveness.
+ * Never a computed mastery score — informs the human mastery judgement,
+ * doesn't replace it (see backend RiskEvaluationViewService doc comment).
+ */
+export interface EvaluationContext {
+  evaluation: RiskEvaluation;
+  risk: Risk;
+  coveringControls: { control: Control; lastEffectiveness: EffectivenessAssessment | null }[];
+}
+
+/** ACT-160, GET /:id/vs-appetite — residual score vs the applicable appetite threshold. */
+export interface AppetiteComparison {
+  residualScore: number;
+  threshold: number | null;
+  source: "OVERRIDE" | "AUTO" | "NONE";
+  exceeded: boolean | null;
 }
 
 export const evaluationsApi = {
@@ -102,6 +131,20 @@ export const evaluationsApi = {
     apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/reject`, {
       method: "PATCH", body: { comment }, token,
     }),
+  // ACT-253: distinct maker-checker circuit from validate() — Comité des
+  // Risques / Direction, gated server-side to Majeur/Critique residual
+  // scores. The frontend never pre-computes that threshold (§8, two
+  // independent Comité thresholds, both backend-configurable).
+  validateByCommittee: (token: string, id: string, comment: string) =>
+    apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/validate-committee`, {
+      method: "PATCH", body: { comment: comment || null }, token,
+    }),
+  // DIV-07: read-only context — covering controls + their last effectiveness.
+  getContext: (token: string, id: string) =>
+    apiRequest<EvaluationContext>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/context`, { token }),
+  // ACT-160: residual score vs the applicable appetite threshold.
+  compareToAppetite: (token: string, id: string) =>
+    apiRequest<AppetiteComparison>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/vs-appetite`, { token }),
 };
 
 export const ratingScalesApi = {
@@ -110,4 +153,16 @@ export const ratingScalesApi = {
     apiRequest<RatingScale>("/api/v1/rating-scales", { method: "POST", body: input, token }),
   activate: (token: string, id: string) =>
     apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/activate`, { method: "PATCH", token }),
+  updateThresholds: (token: string, id: string, thresholds: ScoreThreshold[]) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/thresholds`, { method: "PUT", body: { thresholds }, token }),
+  updateImpactAxes: (token: string, id: string, input: { axes: ImpactAxis[]; retainedImpactRule?: "MAX" | "AVERAGE" | "WEIGHTED_SUM" }) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/impact-axes`, { method: "PUT", body: input, token }),
+  updateVelocity: (token: string, id: string, levels: ScaleLevel[]) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/velocity`, { method: "PUT", body: { levels }, token }),
+  updatePersistence: (token: string, id: string, levels: ScaleLevel[]) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/persistence`, { method: "PUT", body: { levels }, token }),
+  updateMastery: (token: string, id: string, input: { levels: ScaleLevel[]; defenseLines: string[]; thresholds?: ScoreThreshold[] | null }) =>
+    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/mastery`, { method: "PUT", body: input, token }),
+  disable: (token: string, id: string, reason: string) =>
+    apiRequest<{ status: string }>(`/api/v1/rating-scales/${encodeURIComponent(id)}/disable`, { method: "PATCH", body: { reason }, token }),
 };
