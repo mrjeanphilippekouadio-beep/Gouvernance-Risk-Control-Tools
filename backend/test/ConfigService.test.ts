@@ -17,6 +17,9 @@ function defaultRow(tenantId: string): Config {
     impactRetenuRule: "MAX",
     appetiteMode: "AUTO_AVEC_SURCHARGE_MANUELLE",
     evaluationMode: "CLASSIQUE",
+    committeeEvaluationMinScore: 15,
+    committeeTreatmentMinScore: null,
+    committeeEvaluationEnforced: true,
     version: 0,
     updatedBy: null,
     createdAt: new Date(),
@@ -73,6 +76,18 @@ const actor: AuthenticatedUser = {
 
 const readOnlyActor: AuthenticatedUser = { ...actor, userId: "user-2", roles: ["config.read"] };
 
+const thresholdActor: AuthenticatedUser = {
+  ...actor,
+  userId: "user-threshold",
+  roles: ["config.read", "config.committeethreshold.set"],
+};
+
+const enforcementActor: AuthenticatedUser = {
+  ...actor,
+  userId: "user-enforcement",
+  roles: ["config.read", "config.committeeenforcement.set"],
+};
+
 describe("ConfigService", () => {
   it("returns an as-shipped default (version 0) when no config row has ever been saved", async () => {
     const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
@@ -81,6 +96,14 @@ describe("ConfigService", () => {
     expect(config.scoreFormula).toBe("P_X_I");
     expect(config.impactRetenuRule).toBe("MAX");
     expect(config.appetiteMode).toBe("AUTO_AVEC_SURCHARGE_MANUELLE");
+  });
+
+  it("Lot A: defaults the committee thresholds to 15/null/true when no config row has ever been saved", async () => {
+    const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+    const config = await service.get(actor);
+    expect(config.committeeEvaluationMinScore).toBe(15);
+    expect(config.committeeTreatmentMinScore).toBeNull();
+    expect(config.committeeEvaluationEnforced).toBe(true);
   });
 
   it("rejects get() for an actor without config.read", async () => {
@@ -223,6 +246,93 @@ describe("ConfigService", () => {
       expect(events).toHaveLength(1);
       expect((events[0]!.oldValue as Config).evaluationMode).toBe("CLASSIQUE");
       expect((events[0]!.newValue as Config).evaluationMode).toBe("PARTICIPATIF");
+    });
+  });
+
+  describe("updateCommitteeThresholds / setCommitteeEnforcement (Lot A, RISK_MANAGEMENT_V1 §8)", () => {
+    it("rejects updateCommitteeThresholds for an actor without config.committeethreshold.set", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      await expect(
+        service.updateCommitteeThresholds(readOnlyActor, { evaluationMinScore: 10 }, "reason", "REQ-1"),
+      ).rejects.toThrow(ForbiddenError);
+    });
+
+    it("config.committeeenforcement.set alone is not enough for updateCommitteeThresholds", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      await expect(
+        service.updateCommitteeThresholds(enforcementActor, { evaluationMinScore: 10 }, "reason", "REQ-1"),
+      ).rejects.toThrow(ForbiddenError);
+    });
+
+    it("rejects setCommitteeEnforcement for an actor without config.committeeenforcement.set", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      await expect(service.setCommitteeEnforcement(readOnlyActor, false, "reason", "REQ-1")).rejects.toThrow(
+        ForbiddenError,
+      );
+    });
+
+    it("config.committeethreshold.set alone is not enough for setCommitteeEnforcement", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      await expect(service.setCommitteeEnforcement(thresholdActor, false, "reason", "REQ-1")).rejects.toThrow(
+        ForbiddenError,
+      );
+    });
+
+    it("requires a reason for both methods", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      await expect(
+        service.updateCommitteeThresholds(thresholdActor, { evaluationMinScore: 10 }, "  ", "REQ-1"),
+      ).rejects.toThrow(ValidationError);
+      await expect(service.setCommitteeEnforcement(enforcementActor, false, "", "REQ-1")).rejects.toThrow(
+        ValidationError,
+      );
+    });
+
+    it("updates evaluationMinScore, rejecting an out-of-range value", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      await expect(
+        service.updateCommitteeThresholds(thresholdActor, { evaluationMinScore: 26 }, "because", "REQ-1"),
+      ).rejects.toThrow(ValidationError);
+
+      const after = await service.updateCommitteeThresholds(thresholdActor, { evaluationMinScore: 10 }, "because", "REQ-2");
+      expect(after.committeeEvaluationMinScore).toBe(10);
+    });
+
+    it("accepts treatmentMinScore explicitly set to null (distinct from omitted) and audits the change", async () => {
+      const { repo: auditRepo, events } = inMemoryAuditRepository();
+      const service = new ConfigService(inMemoryConfigRepository(), auditRepo);
+
+      const withValue = await service.updateCommitteeThresholds(thresholdActor, { treatmentMinScore: 20 }, "set it", "REQ-1");
+      expect(withValue.committeeTreatmentMinScore).toBe(20);
+
+      const clearedAgain = await service.updateCommitteeThresholds(thresholdActor, { treatmentMinScore: null }, "clear it", "REQ-2");
+      expect(clearedAgain.committeeTreatmentMinScore).toBeNull();
+      // evaluationMinScore (not part of this patch) must stay untouched — buildUpdateSet, not COALESCE.
+      expect(clearedAgain.committeeEvaluationMinScore).toBe(15);
+
+      expect(events).toHaveLength(2);
+      expect((events[1]!.newValue as Config).committeeTreatmentMinScore).toBeNull();
+    });
+
+    it("rejects an out-of-range treatmentMinScore but allows null", async () => {
+      const service = new ConfigService(inMemoryConfigRepository(), inMemoryAuditRepository().repo);
+      await expect(
+        service.updateCommitteeThresholds(thresholdActor, { treatmentMinScore: 0 }, "because", "REQ-1"),
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        service.updateCommitteeThresholds(thresholdActor, { treatmentMinScore: null }, "because", "REQ-2"),
+      ).resolves.not.toThrow();
+    });
+
+    it("toggles committeeEvaluationEnforced and audits old/new", async () => {
+      const { repo: auditRepo, events } = inMemoryAuditRepository();
+      const service = new ConfigService(inMemoryConfigRepository(), auditRepo);
+
+      const after = await service.setCommitteeEnforcement(enforcementActor, false, "pilote sans comité obligatoire", "REQ-1");
+      expect(after.committeeEvaluationEnforced).toBe(false);
+      expect(events).toHaveLength(1);
+      expect((events[0]!.oldValue as Config).committeeEvaluationEnforced).toBe(true);
+      expect((events[0]!.newValue as Config).committeeEvaluationEnforced).toBe(false);
     });
   });
 });

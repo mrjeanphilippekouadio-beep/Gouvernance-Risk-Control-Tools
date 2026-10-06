@@ -60,6 +60,18 @@ export interface Config {
   impactRetenuRule: RetainedImpactRule;
   appetiteMode: AppetiteMode;
   evaluationMode: EvaluationMode;
+  /**
+   * RISK_MANAGEMENT_V1 §8 (Lot A) — the two Committee thresholds are
+   * independent decision references, never a single hardcoded constant.
+   * `committeeTreatmentMinScore: null` is intentional and significant: it
+   * means "no threshold configured yet", fail-closed (no Treatment
+   * Decision can reach Committee until a tenant explicitly sets one) —
+   * never give this a numeric default.
+   */
+  committeeEvaluationMinScore: number;
+  committeeTreatmentMinScore: number | null;
+  /** Default true — the Committee pass-through obligation on riskevaluation.validate() is on by default. */
+  committeeEvaluationEnforced: boolean;
   /** 0 means "default, never explicitly saved" — see DEFAULT_CONFIG in ConfigService. */
   version: number;
   updatedBy: string | null;
@@ -80,4 +92,8 @@ export interface ConfigPatch {
   impactRetenuRule?: RetainedImpactRule;
   appetiteMode?: AppetiteMode;
   evaluationMode?: EvaluationMode;
+  /** `undefined` = omitted (leave as-is); `null` = explicitly clear the Treatment threshold back to "not configured" — buildUpdateSet, never COALESCE, must distinguish the two. */
+  committeeEvaluationMinScore?: number;
+  committeeTreatmentMinScore?: number | null;
+  committeeEvaluationEnforced?: boolean;
 }
