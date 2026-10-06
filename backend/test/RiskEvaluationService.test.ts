@@ -379,7 +379,10 @@ function buildProcess(overrides: Partial<Process> = {}): Process {
   };
 }
 
-function buildConfig(evaluationMode: Config["evaluationMode"]): Config {
+function buildConfig(
+  evaluationMode: Config["evaluationMode"],
+  committeeOverrides?: Partial<Pick<Config, "committeeEvaluationMinScore" | "committeeTreatmentMinScore" | "committeeEvaluationEnforced">>,
+): Config {
   return {
     id: "config-1",
     tenantId: TENANT,
@@ -388,6 +391,10 @@ function buildConfig(evaluationMode: Config["evaluationMode"]): Config {
     impactRetenuRule: "MAX",
     appetiteMode: "AUTO_AVEC_SURCHARGE_MANUELLE",
     evaluationMode,
+    committeeEvaluationMinScore: 15,
+    committeeTreatmentMinScore: null,
+    committeeEvaluationEnforced: true,
+    ...committeeOverrides,
     version: 1,
     updatedBy: null,
     createdAt: new Date(),
@@ -415,6 +422,12 @@ const IMPACTS_LOW = [
   { code: "FINANCIAL", value: 1 },
   { code: "CUSTOMER", value: 2 },
   { code: "OPERATIONAL", value: 1 },
+];
+
+const IMPACTS_HIGH = [
+  { code: "FINANCIAL", value: 5 },
+  { code: "CUSTOMER", value: 5 },
+  { code: "OPERATIONAL", value: 5 },
 ];
 
 const MASTERY_LINES_GOOD = [
@@ -823,6 +836,63 @@ describe("RiskEvaluationService", () => {
       "REQ-C",
     );
   }
+
+  /** Lot A (RISK_MANAGEMENT_V1 §8): score 15 — at the default committee threshold. */
+  async function fullyScoredDraftAtCommitteeThreshold(service: RiskEvaluationService) {
+    const draft = await createDraft(service);
+    await service.recordInherentScoring(evaluatorActor, draft.id, { probability: 3, impacts: IMPACTS_HIGH }, "REQ-A");
+    await service.recordMasteryAssessment(evaluatorActor, draft.id, { lines: MASTERY_LINES_GOOD }, "REQ-B");
+    return service.recordResidualScoring(
+      evaluatorActor,
+      draft.id,
+      { probability: 3, impacts: IMPACTS_HIGH, justification: "Post-maîtrise" },
+      "REQ-C",
+    );
+  }
+
+  describe("committee threshold enforcement on validate() (Lot A, RISK_MANAGEMENT_V1 §8)", () => {
+    it("fail-closed default: refuses validate() at/above score 15 when no ConfigRepository is wired", async () => {
+      const { service } = newService({ withConfigRepository: false });
+      const scored = await fullyScoredDraftAtCommitteeThreshold(service);
+      expect(scored.residualScore).toBe(15);
+      await expect(service.validate(validatorActor, scored.id, "OK", "REQ-D")).rejects.toThrow(ValidationError);
+    });
+
+    it("refuses validate() at/above the configured threshold when enforced", async () => {
+      const { service } = newService({ config: buildConfig("CLASSIQUE", { committeeEvaluationMinScore: 15, committeeEvaluationEnforced: true }) });
+      const scored = await fullyScoredDraftAtCommitteeThreshold(service);
+      await expect(service.validate(validatorActor, scored.id, "OK", "REQ-D")).rejects.toThrow(ValidationError);
+    });
+
+    it("allows validate() at/above the threshold when enforcement is disabled", async () => {
+      const { service } = newService({ config: buildConfig("CLASSIQUE", { committeeEvaluationMinScore: 15, committeeEvaluationEnforced: false }) });
+      const scored = await fullyScoredDraftAtCommitteeThreshold(service);
+      const validated = await service.validate(validatorActor, scored.id, "OK", "REQ-D");
+      expect(validated.status).toBe("VALIDATED");
+    });
+
+    it("still allows validate() below the configured threshold when enforced", async () => {
+      const { service } = newService({ config: buildConfig("CLASSIQUE", { committeeEvaluationMinScore: 15, committeeEvaluationEnforced: true }) });
+      const scored = await fullyScoredDraft(service); // score 4, well below 15
+      const validated = await service.validate(validatorActor, scored.id, "OK", "REQ-D");
+      expect(validated.status).toBe("VALIDATED");
+    });
+
+    it("validateByCommittee's floor is checked independently of committeeEvaluationEnforced (disabled toggle never loosens committee access)", async () => {
+      const { service } = newService({ config: buildConfig("CLASSIQUE", { committeeEvaluationMinScore: 15, committeeEvaluationEnforced: false }) });
+      const scored = await fullyScoredDraftAtCommitteeThreshold(service);
+      const committeeActor: AuthenticatedUser = { ...validatorActor, userId: "user-committee", roles: ["riskevaluation.read", "riskevaluation.validate.committee"] };
+      const validated = await service.validateByCommittee(committeeActor, scored.id, "Approuvé en comité", "REQ-E");
+      expect(validated.status).toBe("VALIDE_COMITE");
+    });
+
+    it("validateByCommittee reads the configured (non-default) threshold, not the old hardcoded constant", async () => {
+      const { service } = newService({ config: buildConfig("CLASSIQUE", { committeeEvaluationMinScore: 20 }) });
+      const scored = await fullyScoredDraftAtCommitteeThreshold(service); // score 15, below the configured 20
+      const committeeActor: AuthenticatedUser = { ...validatorActor, userId: "user-committee", roles: ["riskevaluation.read", "riskevaluation.validate.committee"] };
+      await expect(service.validateByCommittee(committeeActor, scored.id, null, "REQ-F")).rejects.toThrow(ValidationError);
+    });
+  });
 
   it("rejects self-validation: the evaluator cannot validate their own evaluation (maker-checker)", async () => {
     const { service } = newService();

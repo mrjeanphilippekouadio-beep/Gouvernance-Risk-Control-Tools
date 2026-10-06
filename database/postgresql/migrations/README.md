@@ -130,3 +130,11 @@ polymorphe non contrainte, cf. commentaire de tête de 027).
   constraint de `audit_log.action` (sans `'ESCALATE'`). Sûr uniquement
   si aucune ligne `audit_log` n'a encore `action = 'ESCALATE'` au
   moment du rollback (sinon l'`ADD CONSTRAINT` échoue).
+- `045_committee_thresholds.down.sql` — `ALTER TABLE configs DROP
+  COLUMN` sur les 3 colonnes ajoutées (`committee_evaluation_min_score`,
+  `committee_treatment_min_score`, `committee_evaluation_enforced`).
+  Non destructif tant qu'aucun tenant n'a encore écrit de valeur
+  différente du défaut (`15` / `NULL` / `true`) au moment du rollback —
+  à vérifier avant d'exécuter en environnement partagé si
+  `ConfigService.updateCommitteeThresholds`/`setCommitteeEnforcement` a
+  déjà été appelé.
