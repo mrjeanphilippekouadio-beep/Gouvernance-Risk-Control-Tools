@@ -1054,7 +1054,8 @@ describe("SEC-013 rating scale terminal transition via the update permission", (
       },
     } as unknown as RatingScaleRepository;
 
-    const service = new RatingScaleService(ratingScales, inMemoryAuditRepository());
+    const riskEvaluations = { async existsForRatingScale() { return false; } } as unknown as RiskEvaluationRepository;
+    const service = new RatingScaleService(ratingScales, inMemoryAuditRepository(), riskEvaluations);
     const actor: AuthenticatedUser = { ...attacker, roles: ["ratingscale.read", "ratingscale.update"] };
 
     await expect(service.activateVersion(actor, "rs-new", "REQ-SEC-013a")).rejects.toThrow(ForbiddenError);

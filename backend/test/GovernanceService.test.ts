@@ -390,6 +390,9 @@ function inMemoryRiskEvaluationRepository(): RiskEvaluationRepository {
       store.set(id, updated);
       return updated;
     },
+    async existsForRatingScale(tenantId, ratingScaleId) {
+      return [...store.values()].some((e) => e.tenantId === tenantId && e.ratingScaleId === ratingScaleId);
+    },
   };
 }
 
