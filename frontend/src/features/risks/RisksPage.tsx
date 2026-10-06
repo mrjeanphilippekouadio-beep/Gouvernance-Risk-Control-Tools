@@ -41,6 +41,7 @@ function describeError(err: unknown): string {
   if (err instanceof ApiError) {
     return `${err.message}${err.requestId ? ` (réf. ${err.requestId})` : ""}`;
   }
+  if (err instanceof Error) return err.message;
   return "Une erreur inattendue est survenue.";
 }
 
