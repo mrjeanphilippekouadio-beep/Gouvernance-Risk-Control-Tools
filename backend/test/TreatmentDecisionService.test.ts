@@ -446,6 +446,15 @@ describe("TreatmentDecisionService.validateByCommittee", () => {
     await expect(service.validateByCommittee(superiorActor, decision.id, null, REQUEST_ID)).rejects.toThrow(ValidationError);
   });
 
+  it("G4-bis (E-11): the proposer cannot validate their own decision through the committee path either, even holding the permission", async () => {
+    const { service } = newService({
+      config: buildConfig({ committeeTreatmentMinScore: 15 }),
+      evaluations: [buildEvaluation({ residualScore: 20 })],
+    });
+    const decision = await propose(service);
+    await expect(service.validateByCommittee(evaluatorActor, decision.id, null, REQUEST_ID)).rejects.toThrow(ForbiddenError);
+  });
+
   it("validates via committee when the threshold is configured and the residual score clears it", async () => {
     const { service, audit } = newService({
       config: buildConfig({ committeeTreatmentMinScore: 15 }),

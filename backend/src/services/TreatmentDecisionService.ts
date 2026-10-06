@@ -145,6 +145,13 @@ export class TreatmentDecisionService {
     requirePermission(actor, "treatmentdecision.validate.committee");
     const before = await this.getOrThrow(actor.tenantId, id);
     this.assertProposed(before);
+    // G4-bis (E-11): the proposer can never validate their own decision
+    // through the committee path either — same maker-checker invariant
+    // as G4 on the ordinary path, closed after dev-backend flagged the
+    // asymmetry rather than silently deciding either way.
+    if (actor.userId === before.decidedBy) {
+      throw new ForbiddenError("The proposer of a treatment decision cannot validate it through the committee path either");
+    }
 
     const minScore = await this.resolveCommitteeTreatmentMinScore(actor.tenantId);
     if (minScore === null) {
