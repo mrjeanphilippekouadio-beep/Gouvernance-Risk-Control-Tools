@@ -76,6 +76,9 @@ function inMemoryRiskEvaluationRepository(evaluations: RiskEvaluation[]): RiskEv
     async recordCommitteeValidation() {
       throw new Error("not implemented");
     },
+    async existsForRatingScale() {
+      return false;
+    },
   };
 }
 

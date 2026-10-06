@@ -126,3 +126,7 @@ polymorphe non contrainte, cf. commentaire de tête de 027).
   constraint de `module_toggles.module_name` (sans `'AUDIT'`). Sûr
   uniquement si aucune ligne `module_toggles` n'a encore
   `module_name = 'AUDIT'` au moment du rollback.
+- `044_audit_log_escalate.down.sql` — restaure l'ancienne `CHECK`
+  constraint de `audit_log.action` (sans `'ESCALATE'`). Sûr uniquement
+  si aucune ligne `audit_log` n'a encore `action = 'ESCALATE'` au
+  moment du rollback (sinon l'`ADD CONSTRAINT` échoue).

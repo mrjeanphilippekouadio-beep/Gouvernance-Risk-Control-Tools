@@ -58,11 +58,13 @@ export class PostgresRiskAppetiteRepository implements RiskAppetiteRepository {
     tenantId: string,
     subCategory: string,
     entity: string | null,
+    options?: { activeOnly?: boolean },
   ): Promise<RiskAppetite | null> {
+    const activeFilter = options?.activeOnly ? "AND active = true" : "";
     const { rows } = await this.pool.query<RiskAppetiteRow>(
       `SELECT * FROM risk_appetites
        WHERE tenant_id = $1 AND sub_category = $2 AND COALESCE(entity, '') = COALESCE($3, '')
-         AND deleted_at IS NULL`,
+         AND deleted_at IS NULL ${activeFilter}`,
       [tenantId, subCategory, entity],
     );
     return rows[0] ? toDomain(rows[0]) : null;

@@ -310,8 +310,17 @@ function inMemoryRiskAppetiteRepository(appetites: RiskAppetite[] = []): RiskApp
     async getById() {
       throw new Error("not used in this test");
     },
-    async getBySubCategory(tenantId, subCategory, entity) {
-      return appetites.find((a) => a.tenantId === tenantId && a.subCategory === subCategory && a.entity === entity && !a.deletedAt) ?? null;
+    async getBySubCategory(tenantId, subCategory, entity, options) {
+      return (
+        appetites.find(
+          (a) =>
+            a.tenantId === tenantId &&
+            a.subCategory === subCategory &&
+            a.entity === entity &&
+            !a.deletedAt &&
+            (!options?.activeOnly || a.active),
+        ) ?? null
+      );
     },
     async list() {
       return [];
@@ -479,6 +488,20 @@ describe("RiskDeviceViewService", () => {
 
       expect(device.appetite.appliedThreshold).toBe(5); // what the evaluation actually used
       expect(device.appetite.currentThreshold?.threshold).toBe(12); // what's active now
+    });
+
+    it("P-04: never surfaces a deactivated threshold as the current one", async () => {
+      const service = buildService({
+        evaluations: [
+          evaluation({ status: "VALIDATED", residualScore: 8, appetiteThresholdApplied: 5, createdAt: new Date("2026-01-01") }),
+        ],
+        appetites: [{ ...appetite("Fraude interne", 12), active: false }],
+      });
+
+      const device = await service.getDevice(actor, "risk-1");
+
+      expect(device.appetite.appliedThreshold).toBe(5); // unaffected — captured on the evaluation itself
+      expect(device.appetite.currentThreshold).toBeNull(); // the only threshold on file is inactive, not applicable
     });
   });
 
