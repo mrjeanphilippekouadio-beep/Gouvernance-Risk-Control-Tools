@@ -56,6 +56,13 @@
 .eval-controls-list strong{font-size:12px}
 .eval-controls-list span{font-size:11px;color:var(--gs-text-secondary)}
 .eval-gap-banner{margin-top:14px}
+.eval-treatment-form{display:flex;flex-direction:column;gap:14px;max-width:520px}
+.eval-treatment-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--gs-border);border-radius:8px;padding:10px;font:12px/1.5 var(--gs-font-ui);resize:vertical}
+.eval-treatment-form select{width:100%;box-sizing:border-box;border:1px solid var(--gs-border);border-radius:8px;background:#fff;padding:9px 10px;color:var(--gs-text);font:12px var(--gs-font-ui)}
+.eval-treatment-active{display:flex;flex-direction:column;gap:14px}
+.eval-treatment-active input{width:100%;max-width:420px;box-sizing:border-box;border:1px solid var(--gs-border);border-radius:8px;padding:9px 10px;font:12px var(--gs-font-ui)}
+.eval-treatment-history{display:flex;flex-direction:column;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--gs-border)}
+.eval-treatment-history-item{cursor:default}
 @media(max-width:850px){.eval-identification-grid{grid-template-columns:1fr}}
 .eval-muted{font-size:12px;color:var(--gs-text-secondary)}.eval-skeleton{height:250px;border-radius:14px;background:linear-gradient(90deg,var(--gs-bg-surface),#fff,var(--gs-bg-surface));background-size:200% 100%;animation:eval-shimmer 1.4s infinite}
 @keyframes eval-shimmer{to{background-position:-200% 0}}

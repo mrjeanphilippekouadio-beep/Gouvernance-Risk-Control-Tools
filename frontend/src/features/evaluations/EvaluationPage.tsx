@@ -7,6 +7,10 @@ import {
   type MasteryLineScore, type RatingScale, type RiskEvaluation,
 } from "../../api/evaluations";
 import { risksApi, type Risk } from "../../api/risks";
+import {
+  decisionsForEvaluation, treatmentDecisionsApi, TREATMENT_OPTIONS,
+  type TreatmentDecision, type TreatmentDecisionStatus, type TreatmentOption,
+} from "../../api/treatmentDecisions";
 import { usersApi, type UserSummary } from "../../api/users";
 import "./EvaluationPage.css";
 
@@ -23,6 +27,16 @@ const TYPE_LABEL: Record<EvaluationType, string> = {
 };
 const EVALUATION_MODE_LABEL: Record<string, string> = {
   CLASSIQUE: "Classique", PARTICIPATIF: "Participatif",
+};
+const AUTHORITATIVE_STATUSES: EvaluationStatus[] = ["VALIDATED", "VALIDE_COMITE"];
+const TREATMENT_OPTION_LABEL: Record<TreatmentOption, string> = {
+  ACCEPTER: "Accepter", SURVEILLER: "Surveiller", REDUIRE: "Réduire", TRANSFERER: "Transférer", EVITER: "Éviter",
+};
+const TREATMENT_STATUS: Record<TreatmentDecisionStatus, { label: string; tone: "neutral" | "success" | "danger" | "warning" }> = {
+  PROPOSEE: { label: "Proposée", tone: "warning" },
+  CONFIRMEE: { label: "Confirmée", tone: "success" },
+  INVALIDEE: { label: "Invalidée", tone: "danger" },
+  VALIDEE_COMITE: { label: "Validée en comité", tone: "success" },
 };
 const describeError = (error: unknown) =>
   error instanceof ApiError ? `${error.message}${error.requestId ? ` (réf. ${error.requestId})` : ""}`
@@ -53,6 +67,19 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
   // ACT-160 — residual vs applicable appetite threshold, with its source
   // (override vs auto-suggested vs none). Fetched once residual is scored.
   const [appetiteComparison, setAppetiteComparison] = useState<AppetiteComparison | null>(null);
+
+  // Treatment Decision (§8/§12, Lot C) — proposed/tracked on the parent
+  // evaluation once it is authoritative. Fetched per risk (the only real
+  // GET contract is riskId-scoped); the per-evaluation view is derived
+  // client-side via decisionsForEvaluation.
+  const [treatmentDecisions, setTreatmentDecisions] = useState<TreatmentDecision[]>([]);
+  const [treatmentDecisionsError, setTreatmentDecisionsError] = useState<string | null>(null);
+  const [treatmentOption, setTreatmentOption] = useState<TreatmentOption>("ACCEPTER");
+  const [treatmentJustification, setTreatmentJustification] = useState("");
+  const [treatmentActionComment, setTreatmentActionComment] = useState("");
+  const [treatmentSaving, setTreatmentSaving] = useState(false);
+  const [treatmentError, setTreatmentError] = useState<string | null>(null);
+  const [treatmentNotice, setTreatmentNotice] = useState<string | null>(null);
 
   const [evaluationType, setEvaluationType] = useState<EvaluationType>("ANNUELLE");
   const [subCategory, setSubCategory] = useState("");
@@ -85,6 +112,11 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
   const ownerLabel = selectedRisk?.ownerId
     ? userDirectory[selectedRisk.ownerId]?.displayName ?? selectedRisk.ownerId
     : "Non assigné";
+  const isAuthoritative = !!selectedEvaluation && AUTHORITATIVE_STATUSES.includes(selectedEvaluation.status);
+  const evaluationDecisions = selectedEvaluationId ? decisionsForEvaluation(treatmentDecisions, selectedEvaluationId) : [];
+  const activeTreatmentDecision = evaluationDecisions[0] ?? null;
+  const treatmentDecisionHistory = evaluationDecisions.slice(1);
+  const resolveUser = (id: string | null) => (id ? userDirectory[id]?.displayName ?? id : "—");
 
   useEffect(() => {
     let cancelled = false;
@@ -115,13 +147,21 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
   useEffect(() => {
     let cancelled = false;
     async function loadHistory() {
-      if (!selectedRiskId) { setEvaluations([]); setSelectedEvaluationId(""); return; }
+      if (!selectedRiskId) { setEvaluations([]); setSelectedEvaluationId(""); setTreatmentDecisions([]); return; }
       try {
         const rows = await evaluationsApi.listForRisk(token, selectedRiskId);
         if (cancelled) return;
         setEvaluations(rows);
         setSelectedEvaluationId((current) => rows.some((row) => row.id === current) ? current : (rows[0]?.id ?? ""));
       } catch (err) { if (!cancelled) setError(describeError(err)); }
+      // Best-effort — not every evaluator carries "treatmentdecision.read";
+      // degrade to an empty list rather than blocking the page.
+      try {
+        const decisions = await treatmentDecisionsApi.listForRisk(token, selectedRiskId);
+        if (!cancelled) { setTreatmentDecisions(decisions); setTreatmentDecisionsError(null); }
+      } catch (err) {
+        if (!cancelled) { setTreatmentDecisions([]); setTreatmentDecisionsError(describeError(err)); }
+      }
     }
     void loadHistory();
     return () => { cancelled = true; };
@@ -146,6 +186,7 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
     setResidualJustification(selectedEvaluation.residualJustification ?? "");
     setAppetiteOverride(selectedEvaluation.appetiteThresholdOverride === null ? "" : String(selectedEvaluation.appetiteThresholdOverride));
     setDecisionComment("");
+    setTreatmentJustification(""); setTreatmentActionComment(""); setTreatmentError(null); setTreatmentNotice(null);
   }, [selectedEvaluationId, selectedEvaluation?.id, activeScale?.id]);
 
   // Analyse context (DIV-07): fetched per selected evaluation, read-only.
@@ -187,6 +228,46 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
     setEvaluations(rows);
     const nextId = preferredId ?? selectedEvaluationId;
     setSelectedEvaluationId(rows.some((row) => row.id === nextId) ? nextId : (rows[0]?.id ?? ""));
+  }
+
+  async function refreshTreatmentDecisions() {
+    if (!selectedRiskId) return;
+    try {
+      const rows = await treatmentDecisionsApi.listForRisk(token, selectedRiskId);
+      setTreatmentDecisions(rows);
+      setTreatmentDecisionsError(null);
+    } catch (err) {
+      setTreatmentDecisions([]);
+      setTreatmentDecisionsError(describeError(err));
+    }
+  }
+
+  async function proposeTreatmentDecision(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedEvaluation) return;
+    setTreatmentSaving(true); setTreatmentError(null); setTreatmentNotice(null);
+    try {
+      await treatmentDecisionsApi.create(token, {
+        riskEvaluationId: selectedEvaluation.id,
+        option: treatmentOption,
+        justification: treatmentJustification.trim(),
+      });
+      await refreshTreatmentDecisions();
+      setTreatmentJustification("");
+      setTreatmentNotice("Décision de traitement proposée.");
+    } catch (err) { setTreatmentError(describeError(err)); }
+    finally { setTreatmentSaving(false); }
+  }
+
+  async function performTreatmentAction(action: () => Promise<TreatmentDecision>, message: string) {
+    setTreatmentSaving(true); setTreatmentError(null); setTreatmentNotice(null);
+    try {
+      await action();
+      await refreshTreatmentDecisions();
+      setTreatmentActionComment("");
+      setTreatmentNotice(message);
+    } catch (err) { setTreatmentError(describeError(err)); }
+    finally { setTreatmentSaving(false); }
   }
 
   async function createEvaluation(event: FormEvent) {
@@ -393,10 +474,10 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
             {appetiteComparison && <div className="eval-summary-row"><span>Source du seuil</span><strong>{appetiteComparison.source === "OVERRIDE" ? "Dérogation manuelle" : appetiteComparison.source === "AUTO" ? "Suggéré automatiquement" : "Aucun seuil applicable"}</strong></div>}
             {selectedEvaluation?.appetiteExceeded !== null && selectedEvaluation?.appetiteExceeded !== undefined &&
               <div className={selectedEvaluation.appetiteExceeded ? "eval-appetite-alert exceeded" : "eval-appetite-alert"}>{selectedEvaluation.appetiteExceeded ? "Seuil d'appétence dépassé" : "Sous le seuil d'appétence"}</div>}
-            {selectedEvaluation?.appetiteExceeded && (
+            {selectedEvaluation?.appetiteExceeded && isAuthoritative && (
               <div className="eval-gap-banner">
                 <MessageBanner tone="warning">
-                  Décision de traitement (Accepter / Surveiller / Réduire / Transférer / Éviter — §8) : non disponible dans ce lot, aucun contrat backend (entité/endpoint Treatment Decision) n'existe aujourd'hui. Le dépassement est affiché comme information, sans action de traitement fabriquée.
+                  Seuil dépassé — une décision de traitement est attendue (voir la section « Décision de traitement » ci-dessous).
                 </MessageBanner>
               </div>
             )}
@@ -407,6 +488,80 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
           </Card>
         </aside>
       </div>
+
+      {selectedEvaluation && isAuthoritative && selectedEvaluation.appetiteExceeded && (
+        <Card className="eval-treatment-card" header={
+          <div className="eval-card-heading">
+            <div><h2>Décision de traitement</h2><p>Déclenchée par le dépassement du seuil d'appétence sur cette évaluation (§8) — Accepter / Surveiller / Réduire / Transférer / Éviter.</p></div>
+            {activeTreatmentDecision && <StatusBadge label={TREATMENT_STATUS[activeTreatmentDecision.status].label} tone={TREATMENT_STATUS[activeTreatmentDecision.status].tone} />}
+          </div>
+        }>
+          {treatmentError && <MessageBanner tone="danger">{treatmentError}</MessageBanner>}
+          {treatmentNotice && <MessageBanner tone="success">{treatmentNotice}</MessageBanner>}
+          {treatmentDecisionsError && <MessageBanner tone="warning">{treatmentDecisionsError}</MessageBanner>}
+
+          {!activeTreatmentDecision ? (
+            <form className="eval-treatment-form" onSubmit={proposeTreatmentDecision}>
+              <FormField label="Option de traitement" htmlFor="treatment-option">
+                <select id="treatment-option" value={treatmentOption} onChange={(event) => setTreatmentOption(event.target.value as TreatmentOption)}>
+                  {TREATMENT_OPTIONS.map((option) => <option key={option} value={option}>{TREATMENT_OPTION_LABEL[option]}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Justification" htmlFor="treatment-justification" help="Obligatoire — explique le choix de traitement retenu.">
+                <textarea id="treatment-justification" rows={3} value={treatmentJustification} onChange={(event) => setTreatmentJustification(event.target.value)} required />
+              </FormField>
+              <Button type="submit" variant="primary" disabled={treatmentSaving || !treatmentJustification.trim()}>Proposer la décision</Button>
+            </form>
+          ) : activeTreatmentDecision.status === "PROPOSEE" ? (
+            <div className="eval-treatment-active">
+              <div className="eval-identification-grid">
+                <div className="eval-identification-block">
+                  <span className="eval-identification-label">Option proposée</span>
+                  <strong>{TREATMENT_OPTION_LABEL[activeTreatmentDecision.option]}</strong>
+                  <small>{activeTreatmentDecision.justification}</small>
+                </div>
+                <div className="eval-identification-block">
+                  <span className="eval-identification-label">Validateur désigné</span>
+                  <strong>{resolveUser(activeTreatmentDecision.validatorId)}</strong>
+                  <small>Propriétaire supérieur du risque, figé au moment de la proposition</small>
+                </div>
+              </div>
+              <FormField label="Commentaire (facultatif sauf invalidation)" htmlFor="treatment-comment">
+                <input id="treatment-comment" value={treatmentActionComment} onChange={(event) => setTreatmentActionComment(event.target.value)} placeholder="Commentaire pour la traçabilité" />
+              </FormField>
+              <div className="eval-decision-actions">
+                <Button variant="primary" disabled={treatmentSaving} onClick={() => void performTreatmentAction(() => treatmentDecisionsApi.confirm(token, activeTreatmentDecision.id, treatmentActionComment.trim() || null), "Décision de traitement confirmée.")}>Confirmer</Button>
+                <Button disabled={treatmentSaving} onClick={() => { if (!treatmentActionComment.trim()) { setTreatmentError("Un commentaire est obligatoire pour invalider une décision de traitement."); return; } void performTreatmentAction(() => treatmentDecisionsApi.invalidate(token, activeTreatmentDecision.id, treatmentActionComment.trim()), "Décision de traitement invalidée."); }}>Invalider</Button>
+                <Button disabled={treatmentSaving} onClick={() => void performTreatmentAction(() => treatmentDecisionsApi.validateByCommittee(token, activeTreatmentDecision.id, treatmentActionComment.trim() || null), "Décision de traitement validée en Comité.")}>Valider en Comité</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="eval-finalized">
+              <strong>Option retenue : {TREATMENT_OPTION_LABEL[activeTreatmentDecision.option]}</strong>
+              <span>{activeTreatmentDecision.justification}</span>
+              {activeTreatmentDecision.comment && <span>Commentaire : {activeTreatmentDecision.comment}</span>}
+              <span>Validé par {resolveUser(activeTreatmentDecision.validatedBy)}{activeTreatmentDecision.validatedAt ? ` le ${new Date(activeTreatmentDecision.validatedAt).toLocaleDateString("fr-FR")}` : ""}</span>
+            </div>
+          )}
+
+          {treatmentDecisionHistory.length > 0 && (
+            <div className="eval-treatment-history">
+              <span className="eval-identification-label">Tentatives précédentes sur cette évaluation</span>
+              <div className="eval-history-list">
+                {treatmentDecisionHistory.map((decision) => (
+                  <div className="eval-history-item eval-treatment-history-item" key={decision.id}>
+                    <span className="eval-history-main">
+                      <strong>{TREATMENT_OPTION_LABEL[decision.option]}</strong>
+                      <small>{new Date(decision.createdAt).toLocaleDateString("fr-FR")}{decision.comment ? ` · ${decision.comment}` : ""}</small>
+                    </span>
+                    <StatusBadge label={TREATMENT_STATUS[decision.status].label} tone={TREATMENT_STATUS[decision.status].tone} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       {selectedEvaluation && <Card className="eval-scoring-card" header={<div className="eval-card-heading"><div><h2>Compléter l'évaluation</h2><p>{selectedEvaluation.subCategory} · {TYPE_LABEL[selectedEvaluation.evaluationType]}</p></div><StatusBadge label={STATUS[selectedEvaluation.status].label} tone={STATUS[selectedEvaluation.status].tone} /></div>}>
         {!isDraft ? <div className="eval-finalized"><strong>Cette évaluation est finalisée.</strong><span>Conformément au cycle de vie métier, une nouvelle cotation doit être créée pour modifier le score.</span>
