@@ -350,3 +350,17 @@ Statut : **déductions à confirmer par le PO.**
 - Complément PO (DECISION-016) : chaque niveau 1..N de la probabilité et
   de chaque axe d'impact porte son propre descriptif, saisi à la création
   du Dispositif.
+
+## Comité asynchrone — défauts proposés (2026-10-08, non arbitrés)
+
+Quorum majorité simple des éligibles (≥ 3, jamais 1) ; majorité des
+exprimés ; égalité → relance puis séance ; abstention motivée comptée au
+quorum ; un rejet motivé ouvre « Retourné » ; échéance 10 jours ouvrés
+(3–30), relances 50 % / 90 %, une prolongation motivée ; l'échéance ne
+clôt pas, elle escalade ; groupe vide → envoi refusé ; auteurs, RO, DEL,
+EXEC exclus du vote. Invariants : jamais de validation tacite, jamais un
+seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
+`validateByCommittee` valide sur l'appel d'un seul membre.
+
+32. Le silence n'est jamais un accord : une échéance déclenche une
+    escalade, jamais une validation.
