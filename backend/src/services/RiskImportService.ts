@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { RiskService } from "./RiskService.js";
 import { requirePermission } from "../domain/permissions.js";
 import { ValidationError } from "../domain/errors/DomainErrors.js";
+import { assertSafeXlsxArchive } from "../infrastructure/zipArchiveGuard.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 // Mirrors apps-script-legacy/02_Colonnes.gs's HEADERS_RISQUES alias lists
@@ -41,6 +42,7 @@ function normalizeHeader(value: unknown): string {
 }
 
 async function parseRows(buffer: Buffer): Promise<{ row: number; process: string; description: string }[]> {
+  assertSafeXlsxArchive(buffer);
   const workbook = new ExcelJS.Workbook();
   // exceljs's bundled .d.ts pins to a Buffer<ArrayBuffer> generic
   // instantiation that structurally conflicts with @types/node 22's
