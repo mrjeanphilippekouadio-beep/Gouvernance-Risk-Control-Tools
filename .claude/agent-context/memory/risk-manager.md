@@ -328,3 +328,22 @@ Statut : **déductions à confirmer par le PO.**
 
 30. Quand le PO tranche qui décide, une question « qui propose » se résout
     en supprimant l'étape ; au plus une recommandation non contraignante.
+
+## Arbitrage PO sur Q9, Q10, Q11 (2026-10-08, DECISION-016)
+
+- Q9 : ma déduction est retenue.
+- Q10 : « équipe risque » = groupe fixe **Risk Manager**, jamais vide ;
+  groupes **Risk Committee** et **Audit**, qui peuvent être vides ; les
+  autres groupes sont les départements (plus des groupes techniques).
+- Q11 : ma grille N×M n'est **pas** retenue. Le PO : probabilité et chaque
+  axe d'impact (7 au maximum) partagent la même taille d'échelle (3, 4, 5
+  ou 6, choisie à la création du Dispositif) ; chaque axe a ses propres
+  niveaux décrits. Impact retenu = MAX des axes (§6) inchangé.
+- Configuration : tenue par le groupe Risk Manager, tracée ; approbateur
+  configurable entre Audit et Comité.
+- Encore ouverts : conflit de rôles d'un membre Risk Manager sur son propre
+  risque ; groupe approbateur vide.
+
+31. Avant de proposer une structure d'échelle, demander ce que le PO
+    entend par « corrélé » : chez lui, c'est « même taille d'échelle », pas
+    une grille croisée.
