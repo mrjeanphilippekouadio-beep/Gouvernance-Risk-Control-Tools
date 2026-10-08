@@ -1,6 +1,6 @@
 # RM V1 — Projet d'amendement du contrat (modes de cotation, RO / DEL / EXEC)
 
-**Statut : PROJET, non appliqué.** Le contrat `.claude/agent-context/RISK_MANAGEMENT_V1_FINAL_DECISIONS.md` n'est pas modifié. Le PO valide d'abord ce projet.
+**Statut : APPLIQUÉ le 2026-10-08, avec les arbitrages du PO (DECISION-015).** Le texte qui fait foi est désormais le contrat `.claude/agent-context/RISK_MANAGEMENT_V1_FINAL_DECISIONS.md`. Écarts entre ce projet et le texte appliqué : revue de l'Inhérent « retenu » ou « retourné / rejeté avec annotation » (pas « amendé ») ; qui note la Maîtrise devient un paramètre du Dispositif ; contributions limitées au mode Participatif, faites par la personne désignée par le Risk Owner ; seuil de criticité faible inscrit à la création du Dispositif ; le Comité n'étant pas disponible spontanément, un changement reste en DRAFT jusqu'à sa séance.
 Auteur : Risk Manager (A13), 2026-10-08. Base : DECISION-014 (questions A à H, plus deux compléments), DECISION-006, DECISION-013.
 Distinction utilisée : **[PO]** = décidé par le PO. **[À VALIDER PO]** = ma proposition, au-delà de ce qu'il a dit.
 

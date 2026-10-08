@@ -293,3 +293,21 @@ dont la revue explicite de l'Inhérent L1 en plus de l'annotation.
 28. Un paramètre du dispositif ne peut jamais abaisser un invariant ; tout
     changement est une nouvelle version, motivée, approuvée par un tiers,
     avec effet au cycle suivant.
+
+## Arbitrage PO sur le projet d'amendement (2026-10-08, DECISION-015)
+
+Contrat amendé (§4, §5, §7, §8, §10, §16, §17). Écarts avec mon projet :
+la revue de l'Inhérent L1 est « retenu » ou « retourné / rejeté avec
+annotation » (pas « amendé » par l'équipe risque) ; qui note la Maîtrise
+est un paramètre du Dispositif (le PO refuse toute valeur figée : une
+organisation en sous-effectif doit pouvoir s'adapter) ; contributions
+seulement en mode Participatif, faites par la personne que désigne le
+Risk Owner (Délégué, Exécuteur ou lui-même) ; seuil de criticité faible
+inscrit à la création du Dispositif ; le Comité n'est pas disponible
+spontanément, un changement de paramètre attend sa séance en DRAFT.
+Restent ouvertes : Q9, Q10, Q11.
+
+29. Le PO veut un dispositif configurable par le client : proposer des
+    valeurs par défaut et des invariants, jamais une règle de répartition
+    figée ; ne défendre comme non paramétrable que ce qui relève d'un
+    invariant (séparation des tâches, traçabilité).
