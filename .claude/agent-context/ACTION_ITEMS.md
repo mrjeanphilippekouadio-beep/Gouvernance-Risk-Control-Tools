@@ -135,6 +135,7 @@ pour l'usage.
 | HUMAN @ux-designer | **Expérience utilisateur globale du Dispositif (UX Designer, 2026-10-08)** : `docs/ux/RM-V1-Experience-Dispositif.md` — file « À faire » par acteur, un seul écran d'évaluation éditable selon le mode et le rôle, défauts et pré-remplissage, interdits impossibles à saisir, refus → fenêtre DECISION-011 ; checklist + formulaire linéaire plutôt qu'un assistant ; 12 contrats backend listés. Questions au PO : (1) checklist + formulaire plutôt qu'assistant ? (2) notifications V1 : application seule ou aussi e-mail ? (3) « Retourné » et « Rejeté » : deux états distincts ? (4) règle de clôture et échéance du Comité asynchrone ? (5) Appétence et Grilles dans « Risques » ou dans « Dispositif » ? | 2026-10-08 | **Tranché par le PO (DECISION-017)** : assistant pas à pas par défaut + configuration directe pour experts ; notifications application + e-mail ; Retourné ≠ Rejeté ; Comité asynchrone configurable (défauts à proposer) ; appétence et grilles dans le Dispositif, Dispositifs par défaut activables. Défauts du Comité asynchrone proposés par le Risk Manager (2026-10-08, mémoire risk-manager) : quorum = majorité simple des éligibles (≥ 3, jamais 1) ; décision à la majorité des exprimés ; égalité → relance puis séance ; abstention motivée ; un rejet motivé suffit à ouvrir « Retourné » ; échéance 10 jours ouvrés (3–30), relances à 50 % et 90 %, une prolongation motivée ; à l'échéance sans quorum → escalade, jamais de validation tacite ; groupe vide → envoi refusé ; RO/DEL/EXEC et auteurs exclus du vote. **Ouvert — HUMAN : valider ces défauts et 3 questions (quorum de 2 pour les petites structures ? le responsable de la fonction risque peut-il être membre du Comité ? rétractation de vote ?) ; @ux-designer : intégrer DECISION-017 avant la maquette Penpot.** |
 | HUMAN @orchestrator | **Nouvelle fonctionnalité annoncée par le PO (2026-10-08) : import de fichiers Excel / CSV d'évidences pour le contrôle interne** — les métiers consignent leurs informations dans des fichiers Excel/CSV ; récupérer automatiquement ces données et les persister en base, pour évaluation/analyse des évidences. Cahier des charges reçu : `docs/specs/CDC-module-evidences-excel.md` (v1.0, 15 décisions à prendre en §33). | 2026-10-08 | Cadrage Architecte : `docs/architecture/EVD-Import-Excel-cadrage.md` — lots EVD-1 (socle preuve : SHA-256, doublon, audit des téléchargements, `evidence.download`, S), EVD-2 (analyse sans écriture, S), EVD-3 (dataset et versions de schéma, M), EVD-4 (import JSONB + lineage, M), EVD-5 (assistant frontend 4 écrans, M) ; synchrone, plafonds 5 Mo / 20 000 lignes, `exceljs` déjà présent ; étapes 11a–11e de la séquence, piste parallèle hors chemin critique RM. **Ouvert — HUMAN : décisions §33 n° 3-4 (champs canoniques / libres), 8 (qui crée une version de schéma), 9 (qui supprime une évidence), 11 (lignes invalides par défaut), 12 (report de la clé métier) ; HUMAN + @compliance : n° 5 (conservation) ; HUMAN + @privacy : n° 10 et 14 (données personnelles, confidentialité) ; @security : accepter les risques résiduels (bombe de décompression, pas d'antivirus).** |
 | HUMAN @orchestrator | **Roadmap V1 et balayage de préparation des 16 agents (2026-10-08)** : `docs/ROADMAP-V1.md` (releases R0 à R5 + piste EVD). 14 agents prêts avec réserves ; Privacy bloqué sur B-4, fenêtre DECISION-011 et EVD-1/4 ; Infrastructure et Release Manager bloqués pour la mise en production seulement. | 2026-10-08 | **Ouvert — HUMAN : GO de lancement de R0 ; périmètre V1 (étape 18, B-4, piste EVD) ; sens du masquage ; OD-4 ; défauts du Comité ; accès Penpot, IDs des dossiers Drive, fournisseur e-mail ; testeurs de la recette.** |
+| @orchestrator HUMAN | **Cockpit de pilotage publié (2026-10-08, DECISION-021)** : artefact « Pilotage GRC Tools » https://claude.ai/artifact/LQgXExeGTqAHxijeSrSRf3 (source `docs/pilotage/pilotage-grc-tools.html`) — état global, roadmap V1 (R0–R5 + EVD), arbitrages à trancher, une section par agent, journal des livraisons ; base partagée (`project`, `releases`, `agents`, `questions`, `deliveries`). **Protocole** : après chaque livraison d'agent, l'orchestrateur met à jour la base (statut de l'agent, items de release, nouvelles questions, ligne de journal) ; chaque réponse du PO saisie dans la page est relue par l'orchestrateur et inscrite au Decision Log ici avant toute action. 12 arbitrages ouverts au 2026-10-08 (q01 GO R0 … q12 échec d'audit). | 2026-10-08 | **Ouvert — HUMAN : répondre aux arbitrages dans la page ; @orchestrator : tenir la base à jour à chaque livraison.** |
 | @dev-backend @security HUMAN | **Bombe de décompression déjà exposée en production (Security, 2026-10-08)** : `RiskImportService.ts:52` charge tout le classeur `exceljs` en mémoire avant le plafond de lignes (`riskImport.routes.ts:7`, 10 Mo) ; utilisateur authentifié ; ~CVSS 6,5 (sous le seuil d'escalade 7). | 2026-10-08 | **Ouvert — correctif R0.3 de la roadmap (contrôle de la taille décompressée, plafond), à lancer au GO.** |
 | @infrastructure @dev-backend HUMAN | **Authentification Google Drive en production non prouvée (Infrastructure, 2026-10-08)** : `googleDriveAuth.ts` et `env.ts:101` interdisent la clé JSON en production et supposent l'identité Cloud Run, alors que la production tourne sur Render ; le dépôt d'évidences en production peut échouer. | 2026-10-08 | **Ouvert — à vérifier (R0.4) ; décision HUMAN sur le mécanisme d'identité Drive en production.** |
 | HUMAN @architect @risk-manager | **P3 configurable = amender l'invariant 5 du §10 (Architecte, 2026-10-08).** Un paramètre ne peut pas abaisser un invariant (invariant 8) : rendre l'auto-désignation configurable exige de réécrire l'invariant 5 en « jamais auto-approuvés ; une auto-proposition n'est permise que si le Dispositif l'autorise ». Paramètre « auto-désignation permise » désactivé par défaut, approuvé par le Comité ; si activé : approbation par un autre membre du groupe Risk Manager (`approved_by <> requested_by`), motif, audit, cumul marqué ; refus si aucun autre approbateur. B-0 (refus strict) reste compatible. | 2026-10-08 | **Ouvert — HUMAN : valider l'amendement de l'invariant 5.** |
@@ -529,6 +530,42 @@ RELATED: DECISION-017, DECISION-018, DECISION-019, contrat §14,
   `docs/architecture/RM-V1-Sequence-actions.md` étape 19.
 OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ
+```
+
+```text
+DECISION-021
+DATE: 2026-10-08
+QUESTION: Réponses du PO à la roadmap V1 (`docs/ROADMAP-V1.md` §4).
+DECISION:
+  Périmètre V1 — tout ce qui est cité : étape 18 (Traitement, Suivi,
+    Réévaluation, Meeting), B-4 signalement confidentiel, piste EVD ;
+    **plus Userback en staging (PR #95) et TestSprite**.
+  B-4 — la condition est l'avis des juristes internes.
+  Masquage (import Excel) — appliqué **à l'affichage** dans
+    l'application ; prévoir un mécanisme qui supporte les deux modes
+    (à l'affichage ou à l'enregistrement), choisi par configuration
+    applicative ou depuis une interface d'administration, pour ne pas
+    modifier le code.
+  R0 — correction de la faille de l'import de risques ; Drive en
+    production : permettre l'authentification implicite (clé de service
+    fournie par configuration) **ou** la connexion d'un autre service
+    (ex. identité Cloud Run), au choix par configuration ; modifier le
+    comportement des suppressions (dossier « supprimé », jamais la
+    corbeille).
+  Drive — le PO fournit les identifiants de dossiers ; ce seront des
+    dossiers vides, l'organisation interne revient à l'application.
+  Penpot — via MCP si connecté (il ne l'est pas dans cette session),
+    sinon connexion sécurisée sans exposer de secret ni de jeton.
+  OD-4 — proposition demandée fondée sur COSO ERM et ISO 31000.
+  Comité asynchrone — options à reproposer.
+  Roadmap — à publier en **artefact** : page d'accueil (état global du
+    projet) + une section par agent pour suivre et répondre à leurs
+    questions et aux arbitrages, mise à jour à chaque livraison d'agent.
+RELATED: DECISION-012, DECISION-017, DECISION-019, DECISION-020,
+  `docs/ROADMAP-V1.md`.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ en partie — GO formel de R0 à reconfirmer ; OD-4 et
+  Comité en proposition.
 ```
 
 | @release-manager | **URGENT — `main` a 27 commits jamais poussés sur `origin`, aucune PR ouverte pour le Lot 1 RACI malgré un feu vert QA + Security complet (SEC-016 CLOSED).** Vérifié le 2026-09-29 : dernière PR mergée = #15 (`security/fix-sec-009-015`, 2026-09-28). Tout ce qui a suivi (SEC-016, 3 docs d'architecture cible, ADR-002, Lot 1 RACI complet avec revue QA/Security) est resté en local sur `main`, sans branche ni PR. Working tree en plus non propre (fichiers modifiés/non trackés : `ACTION_ITEMS.md`, `SHARED_LOG.md`, `CLAUDE.md`, design system, `RisksPage.tsx`, `RaciPanel.tsx`/`.css`, `api/raci.ts`/`users.ts`, `ADR-003...`). Rollback de migration `027_raci_assignments.sql` jamais testé/tracé non plus (déjà exigé dans la DoD proposée le 28/09). Recommandation : ouvrir la PR du Lot 1 RACI (+ éventuellement une PR séparée pour les 3 docs d'architecture/ADR-002/ADR-003) avant tout nouveau lot, pour ne pas accumuler davantage de commits non tracés. | 2026-09-29 | **Résolu — PR #16 ouverte, 22 commits, mergée par le PO le 2026-09-29.** Lots A/B/C exécutés en parallèle/séquence (voir DECISION-005 ci-dessous pour le détail complet) : Lot 1 RACI + charte graphique + docs architecture poussés, fuite Privacy corrigée, `GrcObjectType` créé et `RaciEntityType` migré dessus, middleware `ModuleToggle` câblé, 20 tests `BrandingService` ajoutés, rollback de migration établi comme convention projet (027+028 `.down.sql` + `README.md` + correctif du runner). 405 tests verts sur toute la série, working tree propre. |
