@@ -1,7 +1,6 @@
 import { createServer } from "node:http";
 import express from "express";
 import cors from "cors";
-import { pinoHttp } from "pino-http";
 import { env, getLocalAuthUsers } from "./config/env.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { pool } from "./infrastructure/database/pool.js";
@@ -135,10 +134,15 @@ import { authMiddleware } from "./api/middleware/auth.js";
 import { moduleGuard } from "./api/middleware/moduleGuard.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
 import { authAttemptRateLimiter } from "./api/middleware/rateLimit.js";
+import { httpLogger } from "./api/middleware/httpLogger.js";
 import { securityHeadersMiddleware } from "./api/middleware/securityHeaders.js";
 
 const app = express();
 app.disable("x-powered-by");
+// Number of reverse proxies in front of the app (TRUST_PROXY_HOPS in env.ts).
+// Without it, req.ip is the proxy's address and the rate limiters below put
+// every user in the same bucket.
+app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
 // Baseline security headers for the API.
 app.use((_req, res, next) => {
@@ -148,7 +152,7 @@ app.use((_req, res, next) => {
   next();
 });
 
-app.use(pinoHttp());
+app.use(httpLogger());
 // See securityHeaders.ts doc comment for why CSP/COEP/CORP are tuned down
 // from helmet's defaults. Everything else (HSTS, no-sniff, frameguard,
 // referrer-policy, etc.) stays at helmet's secure defaults.
