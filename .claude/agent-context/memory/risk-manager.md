@@ -311,3 +311,20 @@ Restent ouvertes : Q9, Q10, Q11.
     valeurs par défaut et des invariants, jamais une règle de répartition
     figée ; ne défendre comme non paramétrable que ce qui relève d'un
     invariant (séparation des tâches, traçabilité).
+
+## Q9, Q10, Q11 déduites des positions du PO (2026-10-08, sixième passage)
+
+Statut : **déductions à confirmer par le PO.**
+- Q9 : pas de proposeur distinct ; le Risk Owner (ou le Délégué en
+  délégation datée) enregistre la Treatment Decision ; l'équipe risque peut
+  joindre une recommandation non contraignante ; invariant, pas paramètre.
+- Q10 : « équipe risque » = rôle RBAC, tout membre sur tout risque du
+  tenant, permissions par étape ; recommandé : un membre qui est RO, DEL ou
+  EXEC d'un risque ne saisit ni ne revoit ce risque.
+- Q11 : grille probabilité × niveau d'impact retenu, cellules optionnelles,
+  repli sur `probabilityLabels` ; paramètre de la Rating Scale.
+- À arbitrer par moi (Architecte, F-9) : la surcharge d'appétence ne doit
+  jamais faire disparaître un dépassement (invariant 8).
+
+30. Quand le PO tranche qui décide, une question « qui propose » se résout
+    en supprimant l'étape ; au plus une recommandation non contraignante.
