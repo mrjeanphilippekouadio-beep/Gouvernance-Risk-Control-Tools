@@ -3,6 +3,8 @@
 > Statut : **REFERENCE DE TRAVAIL VALIDEE**
 >
 > Ce document consolide les décisions métier, UX et architecture arrêtées avant l'implémentation frontend. Il complète les Decision Logs existants ; il ne remplace pas les décisions antérieures.
+>
+> **Amendement du 2026-10-08** (DECISION-014 et DECISION-015, `.claude/agent-context/ACTION_ITEMS.md`) : modes de cotation, rôles Risk Owner / Délégué / Exécuteur, paramètres du Dispositif. Paragraphes touchés : §4, §5, §7, §8, §10, §16, §17 (Phase 4). Origine : `docs/architecture/RM-V1-Modes-cotation-objections.md` et `docs/architecture/RM-V1-Amendement-contrat-modes-PROJET.md`.
 
 ## 1. Gouvernance de conception
 
@@ -90,6 +92,8 @@ Les autres anciens onglets/pages ne sont pas considérés comme définitifs : il
 
 L'identification officielle relève du Risk Owner.
 
+Le Risk Owner est un responsable métier (directeur de département, chef de projet, manager). Il est désigné au niveau du **Processus**, avec un **Délégué** quand l'effectif du département le permet ; les risques du Processus en héritent. Une surcharge sur un risque donné remplace toujours la paire Risk Owner + Délégué ensemble. La désignation est faite par la direction du département, approuvée par l'équipe risque et tracée (auteur, motif, valeur précédente, approbateur).
+
 L'Analyse est une étape distincte de l'Identification et de l'Évaluation. Elle sert notamment à documenter causes, événements, impacts potentiels, contexte et contrôles connus.
 
 Le contexte est cumulatif :
@@ -116,9 +120,17 @@ L'Évaluation couvre :
 - comparaison à l'appétence ;
 - décision de validation.
 
-Le Risk Owner reste le seul décideur des cotations Inherent et Résiduel.
+La saisie de l'Inhérent, de la Maîtrise et du Résiduel est attribuée selon le mode effectif de l'évaluation (§7). L'équipe risque saisit le Résiduel dans tous les modes.
 
-> Contribution ≠ Cotation ≠ Décision ≠ Validation.
+Le Risk Owner décide du traitement ; il ne cote pas. Le Délégué remplace le Risk Owner en son absence ou par délégation datée ; il ne valide jamais ses propres actes ; la responsabilité reste au Risk Owner.
+
+Un acteur ne valide jamais ce qu'il a saisi, revu ou exécuté : le validateur est différent de tous les auteurs de l'évaluation. Par défaut, le validateur est le responsable de la fonction risque, et le Comité au-delà du seuil de passage Comité (§8) ; ce choix est un paramètre du Dispositif (§10).
+
+**Revue de l'Inhérent saisi par la 1re ligne** (mode effectif Participatif) : un membre de l'équipe risque, différent de l'auteur, le **retient**, ou le **retourne / rejette avec une annotation obligatoire** ; un Inhérent retourné revient à la 1re ligne pour une nouvelle saisie. Tant que l'Inhérent n'est pas retenu, le Résiduel ne s'appuie pas dessus.
+
+**Maîtrise** : qui la note est un **paramètre du Dispositif**, jamais une valeur figée en code (une organisation peut manquer de personnes pour séparer les saisies). Quand deux acteurs notent la même cellule, les deux saisies sont conservées, celle désignée par le paramètre fait foi (par défaut : l'équipe risque), un commentaire est obligatoire en cas d'écart, sans moyenne.
+
+> Contribution ≠ Saisie ≠ Décision de traitement ≠ Validation.
 
 La maîtrise globale utilise la règle **MIN non-compensatoire**. Le backend reste l'autorité métier ; le frontend ne recalcule pas la vérité métier.
 
@@ -138,27 +150,30 @@ Le frontend doit donc itérer dynamiquement sur les axes retournés par le backe
 
 Modes :
 
-- Classique ;
-- Participatif ;
-- Hybride.
+- **Classique** : l'équipe risque saisit l'Inhérent, la Maîtrise et le Résiduel ;
+- **Participatif** : l'Exécuteur du contrôle (1re ligne) saisit l'Inhérent et sa part de Maîtrise ; l'équipe risque revoit l'Inhérent (§5), saisit la Maîtrise selon le paramètre du Dispositif et le Résiduel ;
+- **Hybride** : politique du Dispositif qui permet de choisir Classique ou Participatif risque par risque.
 
-Ils ne créent pas trois workflows métier différents.
+Ils ne créent pas trois workflows métier différents : les étapes sont identiques, seule l'attribution de la saisie change. Le mode **effectif** d'une évaluation est toujours Classique ou Participatif, jamais Hybride, et il est figé sur l'évaluation.
 
-Contributions possibles :
+En mode effectif Participatif, l'équipe risque peut commenter ou annoter l'Inhérent saisi par la 1re ligne. Une annotation ne remplace pas la revue explicite (retenu, ou retourné / rejeté) du §5.
 
-- Signalement ;
-- Identification ;
-- Analyse ;
-- Inherent ;
-- Maîtrise.
+Contributions :
 
-Aucune contribution sur le Résiduel. Le contributeur apporte de l'information et ne cote jamais à la place du Risk Owner.
+- elles interviennent sur les risques évalués en mode effectif **Participatif** ;
+- elles sont faites par la personne désignée par le Risk Owner : le Délégué, l'Exécuteur du contrôle ou le Risk Owner lui-même, toujours selon les règles du Dispositif ;
+- types : Identification ; Analyse ; Inherent ; Maîtrise ;
+- le **Signalement** reste ouvert indépendamment du mode et du Dispositif (§10, DECISION-012).
+
+Aucune contribution ni saisie de 1re ligne sur le Résiduel. Une contribution apporte de l'information et ne cote jamais. La saisie de l'Inhérent par la 1re ligne n'est pas une contribution : c'est une auto-évaluation soumise à la revue du §5.
+
+Rôles d'organisation (Risk Owner, Délégué, Exécuteur du contrôle) et lignes de défense (L1, L2, L3) sont deux axes distincts. L'Exécuteur est porté par le Contrôle et relié à un utilisateur ; un contrôle sans Exécuteur relié ne permet pas la cotation Participative.
 
 ## 8. Appétence et Treatment Decision
 
 L'appétence est une référence de décision dans le cycle d'évaluation.
 
-Un dépassement peut déclencher une Treatment Decision, rattachée à l'évaluation qui l'a déclenchée.
+Un dépassement peut déclencher une Treatment Decision, rattachée à l'évaluation qui l'a déclenchée. Le Risk Owner décide de la Treatment Decision (qui la propose reste à trancher).
 
 Options validées :
 
@@ -213,6 +228,41 @@ Proposition technique :
 - technique : `RiskFramework` / `risk_frameworks`.
 
 L'évaluation doit conserver le lien vers le Dispositif/version applicable et sa lineage/snapshot.
+
+### Paramètres, invariants et gouvernance (amendement 2026-10-08)
+
+Le Dispositif est **configurable** : le client final peut demander des modifications. Ses paramètres sont fixés à la création du Dispositif, avant le premier risque, avec des valeurs par défaut :
+
+| Paramètre | Valeur par défaut |
+|---|---|
+| Mode par défaut (tenant, puis Processus — DECISION-006) | Classique |
+| Politique Hybride (choix du mode par risque) | Désactivée |
+| Qui note la Maîtrise, et quelle saisie fait foi | Selon le mode (§7) ; l'équipe risque fait foi |
+| Cumul Risk Owner + Exécuteur | Autorisé jusqu'au seuil de criticité « faible » ; au-delà, exception approuvée et revue à chaque cycle |
+| Seuil de criticité « faible » | Inscrit à la création du Dispositif |
+| Cumul Délégué + Exécuteur | Autorisé, le Délégué ne validant pas sa propre exécution |
+| Délégué | Recommandé, jamais bloquant (« Non désigné (équipe trop réduite) ») |
+| Durée d'une délégation datée | Fixée par le client |
+| Validateur | Responsable de la fonction risque ; Comité au-delà du seuil (§8) |
+| Désignation des rôles | Direction du département ; approbation par l'équipe risque |
+| Approbateur d'un changement de paramètre de séparation des tâches | Comité |
+| Échelles, descriptions de probabilité, appétence, seuils Comité | Déjà paramétrables |
+
+**Invariants** (aucun paramètre ne peut les modifier) :
+
+1. On ne valide jamais ce qu'on a saisi, revu ou exécuté ; le validateur est hors de tous les auteurs.
+2. Risk Owner ≠ Délégué ; pas de Délégué sans Risk Owner.
+3. Le Résiduel est saisi par l'équipe risque ; aucune contribution ni saisie de 1re ligne sur le Résiduel.
+4. Le mode effectif d'une évaluation est Classique ou Participatif, jamais Hybride.
+5. Toute désignation (Risk Owner, Délégué, Exécuteur) et tout changement de paramètre sont tracés (auteur, motif, valeur précédente, approbateur), approuvés par un tiers, jamais auto-attribués ni auto-approuvés.
+6. Tout cumul de rôles est marqué visiblement.
+7. Les champs d'attribution sont forcés côté serveur ; l'audit est append-only ; l'historique d'une évaluation n'est jamais réécrit.
+8. Un paramètre ne peut jamais abaisser un invariant, ni être modifié pour faire disparaître un dépassement d'appétence.
+9. Un changement ne touche que les cycles à venir ; les évaluations en cours gardent leur instantané.
+
+**Gouvernance d'un changement de paramètre** : l'administrateur du Dispositif (`riskframework.update`) le demande, avec un motif écrit ; le responsable de la fonction risque, différent du demandeur, l'approuve, ou le Comité pour les paramètres de séparation des tâches. Le changement crée une nouvelle version du Dispositif (`DRAFT → ACTIVE`), jamais une modification en place. Le Comité n'étant pas disponible à tout moment, la version reste en `DRAFT` jusqu'à sa séance ; rien n'impose une décision immédiate, puisque l'effet n'intervient qu'au cycle suivant. L'audit conserve l'ancienne et la nouvelle valeur.
+
+Le mode d'un risque donné ne peut différer de celui du Processus que si la politique Hybride l'autorise ; ce choix est motivé, approuvé et prend effet au cycle suivant. Le Dispositif n'est jamais redéfini risque par risque : il est résolu et affiché à l'ajout du risque. Les paramètres et les désignations en vigueur sont figés par instantané dans chaque évaluation.
 
 Permissions cibles :
 
@@ -297,7 +347,7 @@ Ne pas :
 - créer un nouveau Design System ;
 - créer une autre source de vérité ;
 - implémenter le serveur WebSocket ;
-- décider seul des règles maker-checker, Comité ou Dispositif ;
+- décider seul des règles maker-checker, Comité, Dispositif ou paramètres du Dispositif ;
 - utiliser l'ancien frontend comme définition du produit.
 
 Si un contrat manque :
@@ -351,8 +401,8 @@ Ordre recommandé :
 
 1. Identification ;
 2. Analyse ;
-3. Évaluation Inherent ;
-4. Maîtrise ;
+3. Évaluation Inherent (saisie selon le mode, revue de la 1re ligne — §5 et §7) ;
+4. Maîtrise (selon le paramètre du Dispositif) ;
 5. Résiduel ;
 6. Appétence ;
 7. Treatment Decision ;
