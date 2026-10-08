@@ -45,6 +45,11 @@ Statut d'une étape :
 | 9 | **B-6 Dispositif** : plan inchangé, avec une FK vers la version d'échelle (B-9) et le correctif F-8. L'approbateur d'activation appartient au groupe configuré (Audit ou Comité) et diffère du demandeur. Cette règle remplace `riskframework.activate.committee` | 3 (P1, P6), 7, 8 | A06, A07 | QA, Security, Compliance | PO |
 | 10 | **B-5 Attribution RO/DEL/EXEC** : l'approbation est donnée par le groupe Risk Manager. La règle du plafond de cumul se branche dès que B-6 est mergé | 3 (P3, P4), 7 | A06, A07 | QA, Security, Compliance | PO |
 | 11 | **DECISION-011, fenêtre de refus** : cadrage, puis revues Security et Privacy avant tout code, puis backend (la réponse 403 porte la permission manquante ; une route liste les détenteurs actifs du tenant avec nom et e-mail seulement) | 7 | A05, A10, A24, puis A06 | Security, Privacy, puis QA | PRÊT (cadrage) |
+| 11a | **EVD-0 Import Excel d'évidences, arbitrages** : décisions §33 du CDC qui reviennent au PO (3, 4, 5, 8, 9, 10, 11, 12, 14), avec avis Security, Privacy et Compliance sur le cadrage `EVD-Import-Excel-cadrage.md`. Piste parallèle, **hors chemin critique RM** | — | HUMAN ; A10, A24, A14 | Decision Log | PO |
+| 11b | **EVD-1 Socle preuve xlsx** (S) : xlsx dans l'allowlist, SHA-256/taille/MIME, doublon par hash, `getContent`, audit du téléchargement, `evidence.download` (HUMAN l'accorde par SQL aux rôles qui ont `evidence.read`) | 11a (décisions 1, 2, 5, 9) | A06, A07 ; HUMAN pour les droits | QA, Security, Compliance | PO |
+| 11c | **EVD-2 Analyse (S) puis EVD-3 Dataset et versions de schéma (M)** | 11b | A06, A07 | QA, Security | PO |
+| 11d | **EVD-4 Import, records JSONB et lineage** (M) | 11c ; décisions 10, 11 | A06, A07 | QA, Security, Privacy, Compliance | PO |
+| 11e | **EVD-5 Assistant d'import frontend** (M) | 11d ; maquette A04 | dev-frontend | QA, Security | Après 11d |
 | 12 | **B-2 Hybride** : retirer `process.evaluationmode.set` (F-10). Ne pas activer Hybride en production avant B-1 | 3 (P1, P2), 9, 10 | A06, A07 | QA, Security | PO |
 | 13 | **B-1 Saisie selon le mode** : corrige F-12 et le commentaire « moyenne » (le code applique `Math.min`) ; A08 adapte les fixtures. Avant le déploiement, HUMAN complète les données (OD-8, reformulée : Processus avec un RO, contrôles avec un EXEC relié) | 3 (P5), 9, 10 | A06, A07 ; HUMAN pour les données | QA, Security, Compliance | PO |
 | 14 | **B-7 Treatment Decision réalignée** : le RO ou le DEL effectif enregistre la décision ; recommandation non contraignante de l'équipe risque (sans migration) | 10 | A06 | QA, Security | PRÊT après 10 |
@@ -59,6 +64,8 @@ Statut d'une étape :
 **Peut partir tout de suite** : 1, 2, 4 (déjà en cours), 6, 7 (hors départements), 8 et le cadrage de 11. Pour le code (6, 7, 8), il faut le go de lancement du PO, puisque la ligne ACTION_ITEMS du plan de lots le réserve.
 
 **Chemin critique** : 2 → 3 → 7/8 → 9 → 10 → 13 → 16. L'étape 4 doit être terminée avant 15 et 16.
+
+**Piste EVD (11a à 11e)** : elle ne dépend que d'Evidence et de ControlExecution, qui existent déjà. Elle ne dépend ni de B-8 (les permissions passent par les rôles existants), ni de DECISION-011, ni des notifications de DECISION-017 (l'import est synchrone). S'il n'y a qu'un seul A06, elle passe après le chemin critique. En parallèle, il faut un worktree dédié, et le numéro de migration se revérifie à la fusion, puisque B-8, B-9 et B-6 en consomment. Elle peut aller en production sans attendre l'étape 20 : il suffit de ses propres gates puis de l'étape 21.
 
 ## 3. Arbitrages PO ouverts et étapes qu'ils débloquent
 
