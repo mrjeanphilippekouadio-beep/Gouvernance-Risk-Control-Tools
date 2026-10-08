@@ -3,29 +3,32 @@ export type GoogleDriveAuthOptions = {
   keyFile?: string;
 };
 
+export type GoogleDriveAuthMode = "adc" | "key_file";
+
+const SCOPES = ["https://www.googleapis.com/auth/drive"];
+
 /**
- * Production Cloud Run must authenticate Google APIs through the assigned
- * user-managed service account (Application Default Credentials), not a
- * long-lived JSON service-account key mounted into the container.
- *
- * A key file remains supported for local development/legacy environments.
+ * adc: Application Default Credentials (Cloud Run service identity). A key
+ * file path alongside it is ambiguous and rejected.
+ * key_file: JSON service-account key (local dev, or a Render secret file in
+ * production); the path is mandatory.
+ * If `authMode` is omitted it is inferred from the presence of the path.
  */
 export function resolveGoogleDriveAuthOptions(
-  nodeEnv: string,
+  _nodeEnv: string,
   credentialsJsonPath?: string,
+  authMode: GoogleDriveAuthMode = credentialsJsonPath ? "key_file" : "adc",
 ): GoogleDriveAuthOptions {
-  if (nodeEnv === "production" && credentialsJsonPath) {
+  if (authMode === "key_file") {
+    if (!credentialsJsonPath) {
+      throw new Error("GOOGLE_DRIVE_AUTH_MODE=key_file requires GOOGLE_DRIVE_CREDENTIALS_PATH.");
+    }
+    return { keyFile: credentialsJsonPath, scopes: SCOPES };
+  }
+  if (credentialsJsonPath) {
     throw new Error(
-      "Production Google Drive authentication must use the Cloud Run service identity; GOOGLE_DRIVE_CREDENTIALS_PATH must not be set.",
+      "GOOGLE_DRIVE_AUTH_MODE=adc must not be combined with GOOGLE_DRIVE_CREDENTIALS_PATH; use key_file.",
     );
   }
-
-  return credentialsJsonPath
-    ? {
-        keyFile: credentialsJsonPath,
-        scopes: ["https://www.googleapis.com/auth/drive"],
-      }
-    : {
-        scopes: ["https://www.googleapis.com/auth/drive"],
-      };
+  return { scopes: SCOPES };
 }

@@ -30,9 +30,16 @@ const EnvSchema = z.object({
   LOCAL_AUTH_TOKEN_SECRET: z.string().min(32).optional(),
   LOCAL_AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
 
-  // Optional local-development compatibility. Production Cloud Run uses
-  // the assigned service identity (Application Default Credentials) instead.
-  GOOGLE_DRIVE_CREDENTIALS_PATH: z.string().optional(),
+  // Document storage. Only Google Drive is implemented; swap by adding a
+  // case in server.ts, services stay untouched.
+  DOCUMENT_STORAGE_PROVIDER: z.enum(["google_drive"]).default("google_drive"),
+  // Shared Drive folders: active evidence / "deleted" evidence (moved, never trashed).
+  DRIVE_ACTIVE_FOLDER_ID: z.string().min(1).optional(),
+  DRIVE_DELETED_FOLDER_ID: z.string().min(1).optional(),
+  // adc = Application Default Credentials (Cloud Run identity);
+  // key_file = service-account JSON key (local dev, or Render secret file).
+  GOOGLE_DRIVE_AUTH_MODE: z.enum(["adc", "key_file"]).default("adc"),
+  GOOGLE_DRIVE_CREDENTIALS_PATH: z.string().min(1).optional(),
 
   CORS_ALLOWED_ORIGINS: z
     .string()
@@ -98,9 +105,18 @@ if (env.AUTH_PROVIDER === "local") {
   }
 }
 
-if (process.env.NODE_ENV === "production" && process.env.GOOGLE_DRIVE_CREDENTIALS_PATH) {
+if (env.GOOGLE_DRIVE_AUTH_MODE === "key_file" && !env.GOOGLE_DRIVE_CREDENTIALS_PATH) {
+  console.error("Invalid configuration: GOOGLE_DRIVE_CREDENTIALS_PATH is required when GOOGLE_DRIVE_AUTH_MODE=key_file.");
+  process.exit(1);
+}
+
+if (
+  process.env.NODE_ENV === "production" &&
+  env.GOOGLE_DRIVE_AUTH_MODE === "adc" &&
+  env.GOOGLE_DRIVE_CREDENTIALS_PATH
+) {
   console.error(
-    "Invalid production configuration: GOOGLE_DRIVE_CREDENTIALS_PATH must not be set; use the Cloud Run service identity.",
+    "Invalid production configuration: GOOGLE_DRIVE_CREDENTIALS_PATH must not be set with GOOGLE_DRIVE_AUTH_MODE=adc; set GOOGLE_DRIVE_AUTH_MODE=key_file to use a key file.",
   );
   process.exit(1);
 }

@@ -1,32 +1,47 @@
 import { Readable } from "node:stream";
-import { google } from "googleapis";
+import { google, type drive_v3 } from "googleapis";
 import { GoogleAuth } from "google-auth-library";
-import { resolveGoogleDriveAuthOptions } from "./googleDriveAuth.js";
+import { resolveGoogleDriveAuthOptions, type GoogleDriveAuthMode } from "./googleDriveAuth.js";
 import type { DocumentStorage, StoredDocumentRef } from "./DocumentStorage.js";
 
 /**
  * Google Drive-backed implementation of DocumentStorage.
  *
- * Expects a service account with domain-wide delegation (or access to a
- * shared drive) — never the frontend's user credentials. One shared
- * drive folder per tenant, resolved via `tenantFolderResolver` so the
- * domain never has to know Drive folder IDs (ADR-001: "cette preuve
- * appartient à cette exécution de contrôle", pas "cette preuve se
- * trouve dans le dossier X").
+ * Expects a service account with access to the Shared Drives (role "Content
+ * manager") — never the frontend's user credentials. The upload folder is
+ * `activeFolderId` when configured, otherwise the per-tenant folder resolved
+ * via `tenantFolderResolver`, so the domain never has to know Drive folder
+ * IDs (ADR-001).
  */
 export class GoogleDriveStorage implements DocumentStorage {
   private readonly auth: GoogleAuth;
+  private readonly tenantFolderResolver: (tenantId: string) => Promise<string>;
+  private readonly activeFolderId?: string;
+  private readonly deletedFolderId?: string;
 
-  constructor(
-    private readonly tenantFolderResolver: (tenantId: string) => Promise<string>,
-    credentialsJsonPath?: string,
-  ) {
+  constructor(opts: {
+    tenantFolderResolver: (tenantId: string) => Promise<string>;
+    /** Shared Drive "active" folder; overrides the per-tenant resolver when set. */
+    activeFolderId?: string;
+    /** Shared Drive "deleted" folder; required for delete(). */
+    deletedFolderId?: string;
+    authMode?: GoogleDriveAuthMode;
+    credentialsJsonPath?: string;
+  }) {
+    this.tenantFolderResolver = opts.tenantFolderResolver;
+    this.activeFolderId = opts.activeFolderId;
+    this.deletedFolderId = opts.deletedFolderId;
     this.auth = new GoogleAuth(
-      resolveGoogleDriveAuthOptions(process.env.NODE_ENV ?? "development", credentialsJsonPath),
+      resolveGoogleDriveAuthOptions(
+        process.env.NODE_ENV ?? "development",
+        opts.credentialsJsonPath,
+        opts.authMode,
+      ),
     );
   }
 
-  private async drive() {
+  /** Protected so tests can inject a fake Drive client. */
+  protected async drive(): Promise<drive_v3.Drive> {
     const client = await this.auth.getClient();
     return google.drive({ version: "v3", auth: client as never });
   }
@@ -38,7 +53,8 @@ export class GoogleDriveStorage implements DocumentStorage {
     content: Buffer;
   }): Promise<StoredDocumentRef> {
     const drive = await this.drive();
-    const folderId = await this.tenantFolderResolver(params.tenantId);
+    const folderId =
+      this.activeFolderId ?? (await this.tenantFolderResolver(params.tenantId));
 
     const res = await drive.files.create({
       requestBody: {
@@ -50,6 +66,7 @@ export class GoogleDriveStorage implements DocumentStorage {
         body: Readable.from(params.content),
       },
       fields: "id, webViewLink",
+      supportsAllDrives: true,
     });
 
     const fileId = res.data.id;
@@ -66,20 +83,36 @@ export class GoogleDriveStorage implements DocumentStorage {
 
   async getUrl(storageFileId: string): Promise<string> {
     const drive = await this.drive();
-    const res = await drive.files.get({ fileId: storageFileId, fields: "webViewLink" });
+    const res = await drive.files.get({
+      fileId: storageFileId,
+      fields: "webViewLink",
+      supportsAllDrives: true,
+    });
     return res.data.webViewLink ?? `https://drive.google.com/file/d/${storageFileId}/view`;
   }
 
   /**
-   * SEC-008: moves the file to Drive's trash instead of permanently
-   * deleting it — GRC evidence is proof of a control having been
-   * performed, and CLAUDE.md's soft-delete-only rule applies to it too.
-   * A permanent `drive.files.delete` here made the underlying proof
-   * unrecoverable the moment `evidence.delete` was called, even though
-   * the Postgres row itself was only ever soft-deleted.
+   * SEC-008: "deleting" evidence MOVES the file from its current folder to the
+   * Shared Drive "deleted" folder — never Drive's trash, never a permanent
+   * delete. GRC evidence is proof a control was performed, and CLAUDE.md's
+   * soft-delete-only rule applies to it too. No silent fallback: without
+   * DRIVE_DELETED_FOLDER_ID this throws.
    */
   async delete(storageFileId: string): Promise<void> {
+    if (!this.deletedFolderId) {
+      throw new Error("DRIVE_DELETED_FOLDER_ID is not configured; refusing to delete evidence file.");
+    }
     const drive = await this.drive();
-    await drive.files.update({ fileId: storageFileId, requestBody: { trashed: true } });
+    const current = await drive.files.get({
+      fileId: storageFileId,
+      fields: "parents",
+      supportsAllDrives: true,
+    });
+    await drive.files.update({
+      fileId: storageFileId,
+      addParents: this.deletedFolderId,
+      removeParents: (current.data.parents ?? []).join(","),
+      supportsAllDrives: true,
+    });
   }
 }

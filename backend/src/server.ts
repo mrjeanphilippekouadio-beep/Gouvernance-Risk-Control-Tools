@@ -45,6 +45,7 @@ import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
 import { LocalIdentityProvider } from "./infrastructure/identity/LocalIdentityProvider.js";
 import { localAuthRouter } from "./api/v1/localAuth.routes.js";
+import type { DocumentStorage } from "./infrastructure/storage/DocumentStorage.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
 import { EvidenceService } from "./services/EvidenceService.js";
@@ -329,10 +330,19 @@ const riskDeviceViewService = new RiskDeviceViewService(
   riskAppetiteService,
 );
 
-const documentStorage = new GoogleDriveStorage(
-  (tenantId) => tenantRepository.getDriveFolderId(tenantId),
-  env.GOOGLE_DRIVE_CREDENTIALS_PATH,
-);
+function createDocumentStorage(): DocumentStorage {
+  switch (env.DOCUMENT_STORAGE_PROVIDER) {
+    case "google_drive":
+      return new GoogleDriveStorage({
+        tenantFolderResolver: (tenantId) => tenantRepository.getDriveFolderId(tenantId),
+        activeFolderId: env.DRIVE_ACTIVE_FOLDER_ID,
+        deletedFolderId: env.DRIVE_DELETED_FOLDER_ID,
+        authMode: env.GOOGLE_DRIVE_AUTH_MODE,
+        credentialsJsonPath: env.GOOGLE_DRIVE_CREDENTIALS_PATH,
+      });
+  }
+}
+const documentStorage = createDocumentStorage();
 const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository, executionRepository);
 
 const dashboardScopeResolver = new DashboardScopeResolver(raciAssignmentRepository, riskRepository);
