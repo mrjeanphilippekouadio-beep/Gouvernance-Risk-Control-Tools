@@ -92,3 +92,23 @@ juriste/DPO.** Statut global UNDER_ASSESSMENT.
 ## Arbitrage PO (2026-10-08)
 
 Le PO a retenu le **« signalement confidentiel »** (à côté du nominatif), conformément à l'avis Privacy ; le libellé « anonyme » n'est pas utilisé. La validation juridique est confiée aux **juristes internes de Djamo**. Les exigences techniques et points juridiques listés ci-dessus restent les conditions du lot B-4.
+
+## Avis EVD — données personnelles et fichiers confidentiels (2026-10-08)
+
+Statut : **proposition, en attente PO** (décisions §33 n° 10 et 14 du
+cahier `docs/specs/CDC-module-evidences-excel.md`). Déclaration « données
+personnelles oui / non / ne sait pas » (ne sait pas = oui) ; colonne
+persistée / ignorée / masquée, valeurs ignorées jamais copiées (ni en
+JSONB ni dans les erreurs) ; dataset `confidential` à lecture restreinte ;
+masquage en liste ; journal de lecture sans valeurs. Le fichier original
+est la preuve : jamais anonymisé (SHA-256) ; les lignes dérivées peuvent
+être purgées ou pseudonymisées à échéance. Le soft delete masque sans
+effacer (base, sauvegardes, PITR, corbeille Drive). Protections requises
+dès EVD-1 (le fichier est une donnée personnelle dès l'upload). À faire
+qualifier : localisation Neon US / Drive ou GCS. Conflit à trancher avant
+tout Bucket Lock GCS : rétention verrouillée de 10 ans vs effacement.
+
+8. Un plancher de protection (lecture confidentielle toujours journalisée,
+   aucune valeur personnelle dans les logs ou l'audit) n'est jamais
+   paramétrable à la baisse ; la classification se relève librement et ne
+   s'abaisse que par la fonction risque, tracée.
