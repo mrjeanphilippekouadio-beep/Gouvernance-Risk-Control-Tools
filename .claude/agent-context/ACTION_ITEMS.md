@@ -531,6 +531,42 @@ OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ
 ```
 
+```text
+DECISION-021
+DATE: 2026-10-08
+QUESTION: Réponses du PO à la roadmap V1 (`docs/ROADMAP-V1.md` §4).
+DECISION:
+  Périmètre V1 — tout ce qui est cité : étape 18 (Traitement, Suivi,
+    Réévaluation, Meeting), B-4 signalement confidentiel, piste EVD ;
+    **plus Userback en staging (PR #95) et TestSprite**.
+  B-4 — la condition est l'avis des juristes internes.
+  Masquage (import Excel) — appliqué **à l'affichage** dans
+    l'application ; prévoir un mécanisme qui supporte les deux modes
+    (à l'affichage ou à l'enregistrement), choisi par configuration
+    applicative ou depuis une interface d'administration, pour ne pas
+    modifier le code.
+  R0 — correction de la faille de l'import de risques ; Drive en
+    production : permettre l'authentification implicite (clé de service
+    fournie par configuration) **ou** la connexion d'un autre service
+    (ex. identité Cloud Run), au choix par configuration ; modifier le
+    comportement des suppressions (dossier « supprimé », jamais la
+    corbeille).
+  Drive — le PO fournit les identifiants de dossiers ; ce seront des
+    dossiers vides, l'organisation interne revient à l'application.
+  Penpot — via MCP si connecté (il ne l'est pas dans cette session),
+    sinon connexion sécurisée sans exposer de secret ni de jeton.
+  OD-4 — proposition demandée fondée sur COSO ERM et ISO 31000.
+  Comité asynchrone — options à reproposer.
+  Roadmap — à publier en **artefact** : page d'accueil (état global du
+    projet) + une section par agent pour suivre et répondre à leurs
+    questions et aux arbitrages, mise à jour à chaque livraison d'agent.
+RELATED: DECISION-012, DECISION-017, DECISION-019, DECISION-020,
+  `docs/ROADMAP-V1.md`.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ en partie — GO formel de R0 à reconfirmer ; OD-4 et
+  Comité en proposition.
+```
+
 | @release-manager | **URGENT — `main` a 27 commits jamais poussés sur `origin`, aucune PR ouverte pour le Lot 1 RACI malgré un feu vert QA + Security complet (SEC-016 CLOSED).** Vérifié le 2026-09-29 : dernière PR mergée = #15 (`security/fix-sec-009-015`, 2026-09-28). Tout ce qui a suivi (SEC-016, 3 docs d'architecture cible, ADR-002, Lot 1 RACI complet avec revue QA/Security) est resté en local sur `main`, sans branche ni PR. Working tree en plus non propre (fichiers modifiés/non trackés : `ACTION_ITEMS.md`, `SHARED_LOG.md`, `CLAUDE.md`, design system, `RisksPage.tsx`, `RaciPanel.tsx`/`.css`, `api/raci.ts`/`users.ts`, `ADR-003...`). Rollback de migration `027_raci_assignments.sql` jamais testé/tracé non plus (déjà exigé dans la DoD proposée le 28/09). Recommandation : ouvrir la PR du Lot 1 RACI (+ éventuellement une PR séparée pour les 3 docs d'architecture/ADR-002/ADR-003) avant tout nouveau lot, pour ne pas accumuler davantage de commits non tracés. | 2026-09-29 | **Résolu — PR #16 ouverte, 22 commits, mergée par le PO le 2026-09-29.** Lots A/B/C exécutés en parallèle/séquence (voir DECISION-005 ci-dessous pour le détail complet) : Lot 1 RACI + charte graphique + docs architecture poussés, fuite Privacy corrigée, `GrcObjectType` créé et `RaciEntityType` migré dessus, middleware `ModuleToggle` câblé, 20 tests `BrandingService` ajoutés, rollback de migration établi comme convention projet (027+028 `.down.sql` + `README.md` + correctif du runner). 405 tests verts sur toute la série, working tree propre. |
 | @tous | **DECISION-004 — Balayage complet des 15 agents (2026-09-29), confirmation croisée du problème central de DECISION-003.** 7 agents indépendants (architect, product-manager, dev-backend, dev-db, security, compliance, audit) ont chacun, depuis leur propre angle, confirmé par preuve code la même divergence de whitelists polymorphes — désormais **7 whitelists connues**, pas 5 : `ActionPlanSourceType`, `ActionLinkResourceType`, `RaciEntityType` (6e, déjà livrée avant DECISION-003 — @product-manager), `NotificationResourceType` (7e, périmètre différent avec `RISK_EVALUATION`/`REVIEW_CYCLE` — @dev-backend), plus RACI/Comments/Evidence-links/Finding prévues. **Divergence de casse en plus de la couverture** : RACI en `PascalCase` (`'Risk'`), les autres en `SNAKE_CASE` majuscule (`'RISK'`) — @dev-db, @dev-backend. `@security` ajoute : le risque n'est pas que l'énum diverge, c'est que la fonction de résolution tenant-scopée est dupliquée à la main à chaque whitelist — recommande de centraliser aussi le **résolveur**, pas seulement le type. `@compliance` qualifie la divergence de `REGULATORY_GAP` mineur (pas juste dette technique) et demande une vérification de non-régression sur les données réelles existantes au moment de la création de `GrcObjectType` (aucune ligne en base ne doit devenir invalide sous la whitelist unifiée). Décision à prendre par `@architect` avant d'écrire `GrcObjectType.ts` : casse canonique retenue (majuscule recommandée, 5 whitelists sur 7 déjà dans cette casse) et si `NotificationResourceType` (périmètre différent) entre dans l'unification ou reste à part. | 2026-09-29 | **Résolu — `@architect` a tranché : SNAKE_CASE majuscule, `NotificationResourceType` inclus. `backend/src/domain/GrcObjectType.ts` créé, `RaciEntityType` migré dessus (migration `028`, PR #16). Restent à migrer plus tard, seulement au moment où ces modules seront exposés (pas anticipé) : `ActionPlanSourceType`/`ActionLinkResourceType`, `NotificationResourceType` lui-même (dérivation recommandée par l'architecte, pas faite), Comments/Evidence-links/Finding.** |
 | @privacy | **PRIV-CH-DASH-001 — portée élargie (2026-09-29).** Confirmé toujours ouvert et non corrigé (`RiskOwnershipService.listOwners` consomme toujours `getById` sans vérifier `deletedAt`). La portée initiale ("avant le dashboard consolidé") est trop étroite : le pattern `*ViewService` que DECISION-003 généralise (10-15 repositories composés par fiche) multiplie mécaniquement le nombre de résolutions d'identité, donc le nombre de points de fuite potentiels. Exigence reformulée : la matrice widget × donnée × permission ET le correctif `getById` doivent être faits avant **tout** premier `*ViewService` codé (Risk 360, Dashboard, ou `RiskDeviceViewService`), pas seulement avant l'écran Dashboard nommément. | 2026-09-27 | **Partiellement résolu (2026-09-29)** — `RiskOwnershipService.listOwners` corrigé (masquage d'un owner suspendu, PR #16). La partie plus large (matrice widget × donnée × permission avant tout futur `*ViewService`) reste ouverte — aucun `*ViewService` codé à ce jour, condition à satisfaire au moment venu, pas avant. |
