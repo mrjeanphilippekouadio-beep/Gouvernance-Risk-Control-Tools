@@ -1,11 +1,11 @@
 <title>Pilotage GRC Tools</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <style>
-/* Layout: cockpit — en-tête projet, arbitrages en attente, releases en couloirs, puis un onglet par agent ACF. Tokens repris du design system GRC Tools (packages/design-system/src/tokens.css). */
+/* Layout: application à vues — barre latérale (desktop) ou barre d'onglets en bas (mobile), une vue à la fois : Accueil, Arbitrages (liste + détail), Roadmap, Agents (liste + détail), Configuration, Journal. Tokens repris du design system GRC Tools. */
 :root{
   --bg:#f8f7fc; --surface:#ffffff; --surface-2:#f2effb; --border:#e0dbf1;
   --fg:#1b1a2c; --fg-2:#54536d; --fg-3:#7a7993;
-  --accent:#2a3fff; --accent-bg:#e3e5ff;
+  --accent:#2a3fff; --accent-bg:#e3e5ff; --on-accent:#ffffff;
   --ok:#1e7a46; --ok-bg:#e7f5ec; --warn:#8a5a00; --warn-bg:#fcf1d9;
   --bad:#b3261e; --bad-bg:#fbeae9; --neutral:#5a6472; --neutral-bg:#eef0f2;
   --font-display:"Plus Jakarta Sans","IBM Plex Sans",system-ui,sans-serif;
@@ -16,69 +16,99 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#12111c; --surface:#1b1a2a; --surface-2:#222136; --border:#33314d;
   --fg:#ecebf7; --fg-2:#b4b2cc; --fg-3:#8b89a6;
-  --accent:#8f9bff; --accent-bg:#262b5e;
+  --accent:#8f9bff; --accent-bg:#262b5e; --on-accent:#12111c;
   --ok:#6fd39b; --ok-bg:#16301f; --warn:#f0bf5a; --warn-bg:#352812;
   --bad:#f08b84; --bad-bg:#3a1a18; --neutral:#a7b0bd; --neutral-bg:#262a31;
   color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#12111c; --surface:#1b1a2a; --surface-2:#222136; --border:#33314d;
   --fg:#ecebf7; --fg-2:#b4b2cc; --fg-3:#8b89a6;
-  --accent:#8f9bff; --accent-bg:#262b5e;
+  --accent:#8f9bff; --accent-bg:#262b5e; --on-accent:#12111c;
   --ok:#6fd39b; --ok-bg:#16301f; --warn:#f0bf5a; --warn-bg:#352812;
   --bad:#f08b84; --bad-bg:#3a1a18; --neutral:#a7b0bd; --neutral-bg:#262a31;
   color-scheme:dark}
 *{box-sizing:border-box}
+html,body{height:100%}
 body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--font-ui)}
-.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:24px 64px;display:flex;flex-direction:column;gap:28px}
 h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
-h1{font-size:clamp(26px,4vw,34px);font-weight:800;letter-spacing:-.01em}
-h2{font-size:19px;font-weight:700}
-h3{font-size:15px;font-weight:700}
+h1{font-size:24px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:18px;font-weight:700}
+h3{font-size:14.5px;font-weight:700}
 p{margin:0}
 .eyebrow{font:600 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3)}
 .muted{color:var(--fg-2)}
 .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
-header.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px}
-header.top .lead{max-width:62ch;display:flex;flex-direction:column;gap:8px}
-.updated{font:500 12px var(--font-mono);color:var(--fg-3)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button{font:600 13.5px var(--font-ui);border-radius:6px;padding:7px 14px;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent)}
+button.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.app{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100%}
+.nav{position:sticky;top:0;height:100vh;height:100dvh;display:flex;flex-direction:column;gap:4px;padding:20px 12px;border-right:1px solid var(--border);background:var(--surface)}
+.brand{padding:4px 10px 16px;display:flex;flex-direction:column;gap:4px}
+.brand strong{font:800 16px var(--font-display)}
+.nav a{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:6px;color:var(--fg-2);text-decoration:none;font-weight:500;min-height:40px}
+.nav a:hover{background:var(--surface-2);color:var(--fg)}
+.nav a[aria-current="page"]{background:var(--accent-bg);color:var(--accent);font-weight:700}
+.badge{min-width:22px;padding:0 7px;border-radius:99px;background:var(--warn-bg);color:var(--warn);font:700 11.5px/20px var(--font-mono);text-align:center}
+.badge:empty{display:none}
+.nav .foot{margin-top:auto;padding:10px;font:500 11.5px var(--font-mono);color:var(--fg-3)}
+main{min-width:0;padding-inline:28px;padding-block:24px 48px}
+.view{display:flex;flex-direction:column;gap:18px;max-width:1120px}
+.view-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:10px}
+.view-head h1:focus{outline:none}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:99px;font:600 11.5px/1.6 var(--font-ui);white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.s-done,.s-ready,.s-answered{color:var(--ok);background:var(--ok-bg)}
+.s-in_progress{color:var(--accent);background:var(--accent-bg)}
+.s-reserves,.s-waiting,.s-open{color:var(--warn);background:var(--warn-bg)}
+.s-blocked{color:var(--bad);background:var(--bad-bg)}
+.s-todo,.s-later,.s-refused{color:var(--neutral);background:var(--neutral-bg)}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .kpi .v{font:700 26px/1 var(--font-display);font-variant-numeric:tabular-nums}
 .kpi .l{font-size:12.5px;color:var(--fg-2)}
 .bar{height:6px;border-radius:99px;background:var(--surface-2);overflow:hidden}
 .bar>i{display:block;height:100%;background:var(--accent);border-radius:99px}
-section{display:flex;flex-direction:column;gap:14px}
-.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:99px;font:600 11.5px/1.6 var(--font-ui);white-space:nowrap}
-.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-.s-done,.s-ready{color:var(--ok);background:var(--ok-bg)}
-.s-in_progress{color:var(--accent);background:var(--accent-bg)}
-.s-reserves,.s-waiting{color:var(--warn);background:var(--warn-bg)}
-.s-blocked{color:var(--bad);background:var(--bad-bg)}
-.s-todo,.s-later{color:var(--neutral);background:var(--neutral-bg)}
-.s-open{color:var(--warn);background:var(--warn-bg)}
-.s-answered{color:var(--ok);background:var(--ok-bg)}
-.queue{display:flex;flex-direction:column;gap:10px}
-.q{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
-.q.answered{border-left-color:var(--ok)}
-.q-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
-.q-title{font-weight:600}
-.q-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px;color:var(--fg-2)}
-.q-context{font-size:14px;color:var(--fg-2);max-width:80ch}
-.opts{display:flex;flex-direction:column;gap:6px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0;color:inherit;text-decoration:none}
+a.card:hover{border-color:var(--accent)}
+.card .go,a.go{margin-top:auto;font-weight:600;color:var(--accent);font-size:13.5px}
+.card ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.card li{display:flex;justify-content:space-between;gap:8px}
+.split{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);gap:16px;align-items:start}
+.list{display:flex;flex-direction:column;gap:6px;position:sticky;top:12px;max-height:calc(100vh - 140px);overflow:auto;padding-right:2px}
+.stack{display:flex;flex-direction:column;gap:6px}
+.tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{background:transparent;color:var(--fg-2);border:1px solid var(--border);padding:4px 11px;font-size:12.5px;border-radius:99px}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+input.search{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font:13.5px var(--font-ui)}
+.row-item{display:flex;flex-direction:column;gap:4px;text-align:left;width:100%;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:6px;padding:9px 11px;font-weight:500}
+.row-item:hover{border-color:var(--accent)}
+.row-item[aria-current="true"]{border-color:var(--accent);background:var(--accent-bg)}
+.row-item.p-start{border-left-color:var(--bad)}
+.row-item.p-release{border-left-color:var(--warn)}
+.row-item.p-done{border-left-color:var(--ok)}
+.row-item .t{font-size:14px;font-weight:600;line-height:1.35}
+.row-item .m{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--fg-2)}
+.group-label{font:600 11px var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--fg-3);padding:8px 2px 2px}
+.detail{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);min-width:0;display:flex;flex-direction:column}
+.detail.empty{padding:20px;border-style:dashed;color:var(--fg-2)}
+.detail-head{position:sticky;top:0;z-index:1;background:var(--surface);border-bottom:1px solid var(--border);border-radius:var(--radius) var(--radius) 0 0;padding:14px 18px;display:flex;flex-direction:column;gap:10px}
+.detail-body{padding:16px 18px 20px;display:flex;flex-direction:column;gap:14px}
+.back{display:none;align-self:flex-start}
+.ctx{font-size:14.5px;color:var(--fg-2);max-width:78ch}
+.ctx.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.linkbtn{background:none;border:none;color:var(--accent);padding:0;font-weight:600;font-size:13px;align-self:flex-start}
 .opt{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);font-size:14px;cursor:pointer}
 .opt input{margin-top:4px}
-.opt.rec{border-color:var(--accent)}
-.opt .tag{font:600 10.5px var(--font-mono);color:var(--accent);text-transform:uppercase;letter-spacing:.06em}
-textarea{width:100%;min-height:64px;resize:vertical;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font:14px/1.5 var(--font-ui)}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-button{font:600 13.5px var(--font-ui);border-radius:6px;padding:7px 14px;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:#fff}
-button.ghost{background:transparent;color:var(--accent)}
-button:disabled{opacity:.5;cursor:not-allowed}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.answer{font-size:14px;padding:8px 10px;border-radius:6px;background:var(--ok-bg);color:var(--fg)}
+.opt.rec{border-color:var(--accent);cursor:default}
+.tag{font:600 10.5px var(--font-mono);color:var(--accent);text-transform:uppercase;letter-spacing:.06em}
+textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font:14px/1.5 var(--font-ui)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.answer{font-size:14px;padding:10px 12px;border-radius:6px;background:var(--ok-bg)}
 .answer b{color:var(--ok)}
 .notice{font-size:13px;color:var(--fg-2)}
+.empty{padding:20px;border:1px dashed var(--border);border-radius:var(--radius);color:var(--fg-2);font-size:14px}
 .lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 .lane{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
 .lane-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
@@ -88,333 +118,396 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .dot{width:9px;height:9px;border-radius:50%;margin-top:6px;background:var(--neutral)}
 .dot.done{background:var(--ok)}.dot.in_progress{background:var(--accent)}.dot.blocked{background:var(--bad)}.dot.waiting{background:var(--warn)}
 .items small{display:block;color:var(--fg-3);font:500 11.5px var(--font-mono)}
-.agents{display:grid;grid-template-columns:minmax(220px,280px) 1fr;gap:16px;align-items:start}
-.agent-list{display:flex;flex-direction:column;gap:4px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
-.agent-btn{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;width:100%;background:transparent;color:var(--fg);border:1px solid transparent;padding:8px 10px;font-weight:500}
-.agent-btn:hover{background:var(--surface-2)}
-.agent-btn[aria-current="true"]{background:var(--surface);border-color:var(--border);font-weight:700}
-.agent-btn .n{font:600 11px var(--font-mono);color:var(--warn)}
-.agent-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:16px;min-width:0}
-.agent-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:flex-start}
 .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
 .box h3{font-size:12px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.07em;color:var(--fg-3);margin-bottom:6px}
 .box ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px}
-.log{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--border)}
-.log-row{display:grid;grid-template-columns:110px 150px 1fr;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px}
-.empty{padding:18px;border:1px dashed var(--border);border-radius:var(--radius);color:var(--fg-2);font-size:14px}
-.tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tab{background:transparent;color:var(--fg-2);border:1px solid var(--border);padding:5px 12px}
-.tab[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
-@media (max-width:760px){
-  .agents{grid-template-columns:1fr}
-  .agent-list{position:static;flex-direction:row;overflow-x:auto;padding-bottom:4px}
-  .agent-btn{width:auto;white-space:nowrap}
+.field{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-bottom:1px solid var(--border)}
+.field input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font:13px var(--font-mono)}
+.log-row{display:grid;grid-template-columns:110px 160px 1fr;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13.5px}
+.tabbar{display:none}
+@media (max-width:768px){
+  .app{grid-template-columns:1fr}
+  .nav{display:none}
+  main{padding-inline:16px;padding-block:16px calc(84px + env(safe-area-inset-bottom,0px))}
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--surface);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,0px)}
+  .tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:56px;color:var(--fg-2);text-decoration:none;font-size:11.5px;font-weight:600;position:relative}
+  .tabbar a[aria-current="page"]{color:var(--accent)}
+  .tabbar .badge{position:absolute;top:6px;right:calc(50% - 30px);font-size:10px;line-height:16px;min-width:18px}
+  .split{grid-template-columns:1fr}
+  .list{position:static;max-height:none}
+  .split.has-detail .list{display:none}
+  .split:not(.has-detail) .detail{display:none}
+  .back{display:inline-flex}
+  .lanes{grid-auto-flow:column;grid-auto-columns:85%;grid-template-columns:none;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:6px}
+  .lane{scroll-snap-align:start}
   .log-row{grid-template-columns:1fr;gap:2px}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 </style>
 
-<div class="wrap">
-  <header class="top">
-    <div class="lead">
-      <span class="eyebrow">GRC Tools · Djamo · Product Owner : Jean-Philippe</span>
-      <h1>Pilotage GRC Tools</h1>
-      <p class="muted" id="headline">Chargement de l'état du projet…</p>
-    </div>
-    <span class="updated" id="updated"></span>
-  </header>
-
-  <div class="kpis" id="kpis" aria-live="polite"></div>
-
-  <section aria-labelledby="h-queue">
-    <div class="sec-head">
-      <h2 id="h-queue">Arbitrages en attente</h2>
-      <div class="tabs" role="group" aria-label="Filtrer les arbitrages">
-        <button class="tab" data-filter="open" aria-pressed="true">À trancher</button>
-        <button class="tab" data-filter="answered" aria-pressed="false">Tranchés</button>
-      </div>
-    </div>
-    <p class="notice" id="write-note"></p>
-    <div class="queue" id="queue"></div>
-  </section>
-
-  <section aria-labelledby="h-rel">
-    <div class="sec-head"><h2 id="h-rel">Roadmap V1</h2><span class="muted" style="font-size:13px">V2 : WebSocket et retours du client</span></div>
-    <div class="lanes" id="lanes"></div>
-  </section>
-
-  <section aria-labelledby="h-agents" id="agents-section">
-    <div class="sec-head"><h2 id="h-agents">Agents</h2><span class="muted" style="font-size:13px">Statut, étapes, risques et questions de chaque rôle ACF</span></div>
-    <div class="agents">
-      <nav class="agent-list" id="agent-list" aria-label="Agents"></nav>
-      <div class="agent-panel" id="agent-panel"><div class="empty">Les agents apparaîtront ici dès que l'orchestrateur aura publié leur état.</div></div>
-    </div>
-  </section>
-
-  <section aria-labelledby="h-conf">
-    <div class="sec-head"><h2 id="h-conf">Configuration</h2><span class="muted" style="font-size:13px">Valeurs non secrètes, et suivi des secrets à créer</span></div>
-    <p class="notice"><strong>Ne saisissez jamais la valeur d'un secret ici</strong> (mot de passe, clé, jeton) : cette page est lisible par tous ceux qui y ont accès. Les secrets se créent directement dans Render ou dans les Environments GitHub ; cochez-les ici une fois créés.</p>
-    <div class="cols" id="conf"></div>
-  </section>
-
-  <section aria-labelledby="h-log">
-    <div class="sec-head"><h2 id="h-log">Journal des livraisons</h2></div>
-    <div class="log" id="log"></div>
-  </section>
+<div class="app">
+  <nav class="nav" aria-label="Sections du pilotage">
+    <div class="brand"><span class="eyebrow">GRC Tools · Djamo</span><strong>Pilotage</strong></div>
+    <a href="#accueil" data-view="accueil">Accueil</a>
+    <a href="#arbitrages" data-view="arbitrages">Arbitrages <span class="badge" data-badge="open"></span></a>
+    <a href="#roadmap" data-view="roadmap">Roadmap</a>
+    <a href="#agents" data-view="agents">Agents <span class="badge" data-badge="agents"></span></a>
+    <a href="#configuration" data-view="configuration">Configuration <span class="badge" data-badge="conf"></span></a>
+    <a href="#journal" data-view="journal">Journal</a>
+    <div class="foot" id="updated"></div>
+  </nav>
+  <main id="main"></main>
+  <nav class="tabbar" aria-label="Sections du pilotage">
+    <a href="#accueil" data-view="accueil">Accueil</a>
+    <a href="#arbitrages" data-view="arbitrages">Arbitrages<span class="badge" data-badge="open"></span></a>
+    <a href="#roadmap" data-view="roadmap">Roadmap</a>
+    <a href="#agents" data-view="agents">Agents</a>
+    <a href="#configuration" data-view="configuration">Plus</a>
+  </nav>
 </div>
 
 <script>
 (function(){
-  const STATUS = {
-    done:"Livré", in_progress:"En cours", todo:"À faire", blocked:"Bloqué", waiting:"En attente", later:"Plus tard",
-    ready:"Prêt", reserves:"Prêt avec réserves", open:"À trancher", answered:"Tranché"
-  };
-  const state = { project:null, releases:[], agents:[], questions:[], deliveries:[], variables:[], secrets:[], filter:"open", agent:null, db:null, user:null, canWrite:null, names:{} };
+  const STATUS = { done:"Livré", in_progress:"En cours", todo:"À faire", blocked:"Bloqué", waiting:"En attente", later:"Plus tard",
+    ready:"Prêt", reserves:"Prêt avec réserves", open:"À trancher", answered:"Tranché", refused:"Refusé" };
+  const PRIO = { start:"Bloque le démarrage", release:"Bloque une release", later:"Peut attendre" };
+  const PRIO_ORDER = { start:0, release:1, later:2 };
+  const VIEWS = ["accueil","arbitrages","roadmap","agents","configuration","journal"];
+  const S = { project:null, releases:[], agents:[], questions:[], deliveries:[], variables:[], secrets:[],
+    db:null, user:null, canWrite:null, names:{}, view:"accueil", sel:{ arbitrages:null, agents:null }, qFilter:"open", qSearch:"", aSearch:"", confMissing:false };
   const $ = s => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-  const pill = s => el("span", "pill s-" + s, STATUS[s] || s);
+  const pill = s => el("span","pill s-" + s, STATUS[s] || s);
   const fmt = iso => { try { return new Date(iso).toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"numeric"}); } catch(e){ return iso || ""; } };
+  const agentName = id => { const a = S.agents.find(x => x.id === id); return a ? a.name : id; };
+  const qState = q => q.status !== "answered" ? "open" : (q.decision === "refused" ? "refused" : "answered");
+  const openQs = () => S.questions.filter(q => q.status !== "answered");
+  const prio = q => PRIO_ORDER[q.priority] ?? 1;
+  const sortQ = list => list.slice().sort((a,b) => (prio(a) - prio(b)) || ((a.order||0)-(b.order||0)));
+  const narrow = () => window.matchMedia("(max-width:768px)").matches;
 
-  try { const h = location.hash.slice(1); if (h) state.agent = h; } catch(e){}
+  /* ---------- routage par ancre : #vue ou #vue/id ---------- */
+  function parseHash(){
+    let h = ""; try { h = decodeURIComponent(location.hash.slice(1)); } catch(e){}
+    if (!h) { try { h = localStorage.getItem("pilotage.view") || ""; } catch(e){} }
+    const parts = h.split("/"); const v = parts[0], id = parts[1];
+    S.view = VIEWS.includes(v) ? v : "accueil";
+    if (S.view === "arbitrages" || S.view === "agents") S.sel[S.view] = id || null;
+  }
+  function go(view, id, focus){
+    S.view = view;
+    if (view === "arbitrages" || view === "agents") S.sel[view] = id || null;
+    const h = view + ((view === "arbitrages" || view === "agents") && S.sel[view] ? "/" + S.sel[view] : "");
+    try { history.replaceState(null,"","#" + h); } catch(e){}
+    try { localStorage.setItem("pilotage.view", h); } catch(e){}
+    render(focus !== false);
+  }
+  window.addEventListener("hashchange", () => { parseHash(); render(true); });
+  document.addEventListener("click", e => {
+    const a = e.target.closest("a[data-view]"); if (!a) return;
+    e.preventDefault(); go(a.dataset.view, a.dataset.id || null);
+  });
 
-  function renderHeader(){
-    const p = state.project;
-    $("#headline").textContent = p ? p.headline : "Aucun état publié pour l'instant.";
-    $("#updated").textContent = p && p.updatedAt ? "Mis à jour le " + fmt(p.updatedAt) : "";
-    const k = $("#kpis"); k.replaceChildren();
-    const open = state.questions.filter(q => q.status === "open").length;
-    const ready = state.agents.filter(a => a.status === "ready" || a.status === "reserves").length;
-    const items = state.releases.flatMap(r => r.items || []);
+  /* ---------- éléments communs ---------- */
+  function head(title, sub, right){
+    const h = el("div","view-head"); const t = el("div");
+    const h1 = el("h1",null,title); h1.tabIndex = -1; h1.id = "view-title"; t.append(h1);
+    if (sub) t.append(el("p","muted",sub)); h.append(t); if (right) h.append(right); return h;
+  }
+  function viewLink(cls, view, label, id){ const a = el("a",cls,label); a.href = "#" + view + (id ? "/" + id : ""); a.dataset.view = view; if (id) a.dataset.id = id; return a; }
+  function qRow(q){
+    const b = el("button","row-item p-" + (q.status === "answered" ? "done" : (q.priority || "release"))); b.type = "button";
+    b.setAttribute("aria-current", String(S.view === "arbitrages" && q.id === S.sel.arbitrages));
+    b.append(el("span","t",q.title));
+    const m = el("span","m"); m.append(el("span","mono",q.ref || q.id), pill(qState(q)));
+    if (q.blocks && q.status !== "answered") m.append(el("span",null,"Bloque : " + q.blocks));
+    b.append(m); b.onclick = () => go("arbitrages", q.id); return b;
+  }
+
+  /* ---------- Accueil ---------- */
+  function viewAccueil(v){
+    const p = S.project;
+    v.append(head("Pilotage GRC Tools", p ? p.headline : "Chargement de l'état du projet…"));
+    const k = el("div","kpis");
+    const items = S.releases.flatMap(r => r.items || []);
     const done = items.filter(i => i.status === "done").length;
     const pct = p && typeof p.progress === "number" ? p.progress : (items.length ? Math.round(done*100/items.length) : 0);
-    const tiles = [
-      [pct + " %", "Avancement global estimé", pct],
-      [p ? p.currentRelease : "—", "Release en cours"],
-      [String(open), "Arbitrages à trancher"],
-      [ready + " / " + state.agents.length, "Agents prêts pour le GO"],
-    ];
-    tiles.forEach(([v,l,bar]) => {
-      const t = el("div","kpi"); t.append(el("span","v",v), el("span","l",l));
+    const ready = S.agents.filter(a => a.status === "ready" || a.status === "reserves").length;
+    [[pct + " %","Avancement global estimé",pct],[p && p.currentRelease ? p.currentRelease : "—","Release en cours"],[String(openQs().length),"Arbitrages à trancher"],[ready + " / " + S.agents.length,"Agents prêts pour le GO"]].forEach(([val,l,bar]) => {
+      const t = el("div","kpi"); t.append(el("span","v",val), el("span","l",l));
       if (typeof bar === "number"){ const b = el("div","bar"); const i = el("i"); i.style.width = Math.max(0,Math.min(100,bar)) + "%"; b.append(i); t.append(b); }
       k.append(t);
     });
+    v.append(k);
+    const cards = el("div","cards");
+    const oq = sortQ(openQs()); const blocking = oq.filter(q => q.priority === "start");
+    const c1 = viewLink("card","arbitrages","");
+    c1.append(el("h2",null, oq.length + " arbitrage" + (oq.length > 1 ? "s" : "") + " à trancher"));
+    c1.append(el("p", blocking.length ? null : "muted", blocking.length ? "Bloque le démarrage : " + blocking.map(q => q.title).join(", ") + "." : "Aucun ne bloque le démarrage."));
+    c1.append(el("span","go","Ouvrir les arbitrages →")); cards.append(c1);
+    const cur = S.releases.slice().sort((a,b)=>(a.order||0)-(b.order||0)).find(r => r.status !== "done");
+    const c2 = viewLink("card","roadmap","");
+    if (cur){ const its = cur.items||[]; const d = its.filter(i => i.status === "done").length;
+      const hh = el("div","actions"); hh.append(el("h2",null, cur.code + " — " + cur.title), pill(cur.status)); c2.append(hh);
+      const b = el("div","bar"); const i = el("i"); i.style.width = (its.length ? Math.round(d*100/its.length) : 0) + "%"; b.append(i); c2.append(b);
+      c2.append(el("p","muted", d + " / " + its.length + " livrés" + (cur.note ? " · " + cur.note : "")));
+    } else c2.append(el("h2",null,"Roadmap"));
+    c2.append(el("span","go","Voir la roadmap →")); cards.append(c2);
+    const c3 = viewLink("card","agents","");
+    const att = S.agents.filter(a => a.status === "blocked" || openQs().some(q => (q.agents||[]).includes(a.id))).sort((a,b)=>(a.order||0)-(b.order||0));
+    c3.append(el("h2",null,"Agents qui attendent"));
+    const ul3 = el("ul"); att.slice(0,6).forEach(a => { const li = el("li"); li.append(el("span",null,a.name), pill(a.status)); ul3.append(li); });
+    if (att.length > 6) ul3.append(el("li","muted","et " + (att.length - 6) + " autres"));
+    if (!att.length) ul3.append(el("li","muted","Aucun agent en attente."));
+    c3.append(ul3, el("span","go","Voir les agents →")); cards.append(c3);
+    const missV = S.variables.filter(x => !x.value).length, missS = S.secrets.filter(x => x.status !== "created").length;
+    const c4 = viewLink("card","configuration","");
+    c4.append(el("h2",null,"Configuration"), el("p", missV + missS ? null : "muted", missV + missS ? missV + " valeur" + (missV>1?"s":"") + " à saisir · " + missS + " secret" + (missS>1?"s":"") + " à créer" : "Tout est renseigné."));
+    c4.append(el("span","go","Compléter →")); cards.append(c4);
+    const c5 = viewLink("card","journal","");
+    c5.append(el("h2",null,"Dernières livraisons"));
+    const ul5 = el("ul"); S.deliveries.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,5).forEach(d => { const li = el("li"); li.append(el("span",null,d.title), el("span","mono muted",fmt(d.date))); ul5.append(li); });
+    if (!S.deliveries.length) ul5.append(el("li","muted","Aucune livraison pour l'instant."));
+    c5.append(ul5, el("span","go","Tout le journal →")); cards.append(c5);
+    v.append(cards);
   }
 
-  function agentName(id){ const a = state.agents.find(x => x.id === id); return a ? a.name : id; }
-
-  function questionCard(q){
-    const c = el("article","q" + (q.status === "answered" ? " answered" : ""));
-    const head = el("div","q-head");
-    head.append(el("span","q-title",q.title), pill(q.status));
-    const meta = el("div","q-meta");
-    meta.append(el("span","mono", q.ref || q.id), el("span",null,"· " + (q.agents||[]).map(agentName).join(", ")));
-    if (q.blocks) meta.append(el("span",null,"· bloque : " + q.blocks));
-    c.append(head, meta);
-    if (q.context) c.append(el("p","q-context",q.context));
+  /* ---------- Arbitrages ---------- */
+  function questionDetail(q){
+    const d = el("section","detail"); d.setAttribute("aria-label","Détail de l'arbitrage");
+    const h = el("div","detail-head");
+    const back = el("button","ghost back","← Tous les arbitrages"); back.onclick = () => go("arbitrages", null); h.append(back);
+    const top = el("div","actions"); top.append(el("span","mono muted",q.ref || q.id), pill(qState(q)));
+    if (q.priority && q.status !== "answered") top.append(el("span","pill " + (q.priority === "start" ? "s-blocked" : q.priority === "release" ? "s-open" : "s-todo"), PRIO[q.priority]));
+    h.append(top, el("h2",null,q.title));
+    h.append(el("p","notice", "Rôles : " + (q.agents||[]).map(agentName).join(", ") + (q.blocks ? " · bloque : " + q.blocks : "")));
+    const body = el("div","detail-body");
+    if (q.context){
+      const c = el("p","ctx clamp",q.context); body.append(c);
+      const more = el("button","linkbtn","Lire la suite"); more.type = "button";
+      more.onclick = () => { c.classList.toggle("clamp"); more.textContent = c.classList.contains("clamp") ? "Lire la suite" : "Réduire"; };
+      body.append(more);
+    }
     if (q.status === "answered"){
-      const a = el("div","answer"); const b = el("b",null,"Réponse : "); a.append(b, document.createTextNode(q.answer || ""));
-      const who = q.answeredBy ? (state.names[q.answeredBy] || "un membre") : "";
-      if (q.answeredAt) a.append(el("div","q-meta", "Tranché le " + fmt(q.answeredAt) + (who ? " par " + who : "")));
-      c.append(a);
-      if (state.canWrite) { const r = el("div","row"); const btn = el("button","ghost","Modifier la réponse"); btn.onclick = () => reopen(q, btn); r.append(btn); c.append(r); }
-      return c;
+      const a = el("div","answer"); a.append(el("b",null, q.decision === "refused" ? "Refusé : " : "Réponse : "), document.createTextNode(q.answer || ""));
+      const who = q.answeredBy ? (S.names[q.answeredBy] || "un membre") : "";
+      if (q.answeredAt) a.append(el("div","notice","Tranché le " + fmt(q.answeredAt) + (who ? " par " + who : "")));
+      body.append(a);
+      if (S.canWrite){ const b = el("button","ghost","Rouvrir et modifier"); b.onclick = async () => { b.disabled = true; try { await S.db.doc("questions/" + q.id).update({ status:"open" }); } catch(e){ b.disabled = false; } }; h.append(b); }
+      d.append(h, body); return d;
     }
-    const name = "q-" + q.id;
-    if (q.recommendation) {
-      const rec = el("div","opt rec"); const txt = el("span"); txt.append(el("span","tag","Recommandation "), document.createElement("br"), document.createTextNode(q.recommendation)); rec.append(txt); c.append(rec);
-    }
+    if (q.recommendation){ const r = el("div","opt rec"); const t = el("span"); t.append(el("span","tag","Recommandation"), document.createElement("br"), document.createTextNode(q.recommendation)); r.append(t); body.append(r); }
     const others = (q.options||[]).filter(o => o !== q.recommendation);
-    const form = el("div","opts"); form.hidden = true;
+    const form = el("div","stack"); form.hidden = true;
     let chosen = null;
-    others.forEach((o, i) => {
-      const lab = el("label","opt");
-      const r = document.createElement("input"); r.type = "radio"; r.name = name; r.id = name + "-" + i; r.value = o;
-      r.onchange = () => { chosen = o; };
-      lab.append(r, el("span",null,o)); form.append(lab);
-    });
-    const ta = document.createElement("textarea"); ta.id = name + "-note";
-    ta.setAttribute("aria-label","Commentaire pour " + q.title);
+    others.forEach((o,i) => { const lab = el("label","opt"); const r = document.createElement("input"); r.type = "radio"; r.name = "q-" + q.id; r.id = "q-" + q.id + "-" + i; r.onchange = () => { chosen = o; }; lab.append(r, el("span",null,o)); form.append(lab); });
+    const ta = document.createElement("textarea"); ta.id = "q-" + q.id + "-note"; ta.setAttribute("aria-label","Commentaire"); form.append(ta);
+    body.append(form);
     const msg = el("span","notice");
-    const save = async (decision, text) => {
-      msg.textContent = "Enregistrement…"; btns.forEach(b => b.disabled = true);
-      try {
-        const uid = state.user ? await state.user.id() : null;
-        await state.db.doc("questions/" + q.id).update({ status:"answered", decision, answer:text, answeredBy:uid, answeredAt:new Date().toISOString() });
-        msg.textContent = "Réponse enregistrée. L'orchestrateur la reprendra au prochain passage.";
-      } catch(e){ btns.forEach(b => b.disabled = false); msg.textContent = "Enregistrement refusé : vous n'avez peut-être pas le droit d'écrire sur cette page."; }
-    };
-    const row = el("div","row");
+    const acts = el("div","actions");
     const bOk = el("button",null, q.recommendation ? "Valider la recommandation" : "Valider");
     const bNo = el("button","ghost","Refuser");
     const bOther = el("button","ghost","Autre réponse");
     const bSend = el("button",null,"Enregistrer"); bSend.hidden = true;
-    const btns = [bOk,bNo,bOther,bSend];
-    let mode = null;
+    const btns = [bOk,bNo,bOther,bSend]; let mode = null;
     const open = (m, ph) => { mode = m; form.hidden = false; ta.placeholder = ph; bSend.hidden = false; ta.focus(); };
-    bOk.onclick = () => {
-      if (q.recommendation) save("accepted", q.recommendation + (ta.value.trim() ? " — " + ta.value.trim() : ""));
-      else open("accepted","Votre réponse (par exemple les identifiants demandés)");
+    const save = async (decision, text) => {
+      msg.textContent = "Enregistrement…"; btns.forEach(b => b.disabled = true);
+      try {
+        const uid = S.user ? await S.user.id() : null;
+        await S.db.doc("questions/" + q.id).update({ status:"answered", decision, answer:text, answeredBy:uid, answeredAt:new Date().toISOString() });
+        const next = sortQ(openQs()).find(x => x.id !== q.id);
+        go("arbitrages", next && !narrow() ? next.id : null, false);
+      } catch(e){ btns.forEach(b => b.disabled = false); msg.textContent = "Enregistrement refusé : vous n'avez peut-être pas le droit d'écrire sur cette page."; }
     };
+    bOk.onclick = () => q.recommendation ? save("accepted", q.recommendation + (ta.value.trim() ? " — " + ta.value.trim() : "")) : open("accepted","Votre réponse (par exemple les identifiants demandés)");
     bNo.onclick = () => open("refused","Pourquoi ? Ce commentaire est obligatoire.");
     bOther.onclick = () => open("other","Votre réponse, ou un complément à l'option choisie");
     bSend.onclick = () => {
       const note = ta.value.trim();
       if (mode === "refused" && !note){ msg.textContent = "Indiquez la raison du refus."; return; }
-      const text = (mode === "refused" ? "Refusé : " : "") + [chosen, note].filter(Boolean).join(" — ");
-      if (!text.replace("Refusé : ","")){ msg.textContent = "Choisissez une option ou écrivez une réponse."; return; }
-      save(mode, text);
+      const core = [chosen, note].filter(Boolean).join(" — ");
+      if (!core){ msg.textContent = "Choisissez une option ou écrivez une réponse."; return; }
+      save(mode, (mode === "refused" ? "Refusé : " : "") + core);
     };
-    if (!state.canWrite) btns.forEach(b => b.disabled = true);
-    form.append(ta);
-    row.append(bOk, bNo, bOther, bSend, msg);
-    c.append(form, row);
-    return c;
+    if (!S.canWrite) btns.forEach(b => b.disabled = true);
+    acts.append(bOk,bNo,bOther,bSend,msg); h.append(acts);
+    if (S.canWrite === false) h.append(el("p","notice","Lecture seule : seuls les contributeurs de cette page peuvent répondre."));
+    d.append(h, body); return d;
   }
 
-  async function reopen(q, btn){
-    btn.disabled = true;
-    try { await state.db.doc("questions/" + q.id).update({ status:"open" }); } catch(e){ btn.disabled = false; }
+  function viewArbitrages(v){
+    v.append(head("Arbitrages","Classés par priorité : ce qui bloque le démarrage d'abord. Vos réponses sont reprises par l'orchestrateur et inscrites au Decision Log."));
+    const split = el("div","split"); const list = el("div","list");
+    const tools = el("div","tools");
+    [["open","À trancher"],["start","Bloquants"],["all","Tous"]].forEach(([k,l]) => { const c = el("button","chip",l); c.type = "button"; c.setAttribute("aria-pressed", String(S.qFilter === k)); c.onclick = () => { S.qFilter = k; render(false); }; tools.append(c); });
+    const s = document.createElement("input"); s.type = "search"; s.className = "search"; s.id = "q-search"; s.placeholder = "Rechercher un arbitrage"; s.value = S.qSearch; s.setAttribute("aria-label","Rechercher un arbitrage");
+    const lb = el("div","stack");
+    const fill = () => {
+      lb.replaceChildren();
+      const term = S.qSearch.trim().toLowerCase();
+      let qs = S.questions.filter(q => !term || (q.title + " " + (q.ref||"") + " " + (q.context||"")).toLowerCase().includes(term));
+      if (S.qFilter === "open") qs = qs.filter(q => q.status !== "answered");
+      if (S.qFilter === "start") qs = qs.filter(q => q.status !== "answered" && q.priority === "start");
+      const pending = sortQ(qs.filter(q => q.status !== "answered"));
+      const closed = qs.filter(q => q.status === "answered").sort((a,b)=>(a.order||0)-(b.order||0));
+      if (!pending.length && !closed.length) lb.append(el("div","empty", S.qFilter === "open" ? "Aucun arbitrage en attente." : "Aucun résultat."));
+      pending.forEach(q => lb.append(qRow(q)));
+      if (closed.length){ lb.append(el("div","group-label","Tranchés (" + closed.length + ")")); closed.forEach(q => lb.append(qRow(q))); }
+    };
+    s.oninput = () => { S.qSearch = s.value; fill(); };
+    list.append(tools, s, lb); fill(); split.append(list);
+    let q = S.questions.find(x => x.id === S.sel.arbitrages);
+    if (!q && !narrow()) q = sortQ(openQs())[0] || S.questions[0];
+    if (q){ split.classList.toggle("has-detail", !!S.sel.arbitrages); split.append(questionDetail(q)); }
+    else split.append(el("div","detail empty","Choisissez un arbitrage dans la liste."));
+    v.append(split);
   }
 
-  function renderQueue(){
-    const box = $("#queue"); box.replaceChildren();
-    const list = state.questions.filter(q => q.status === state.filter).sort((a,b) => (a.order||0)-(b.order||0));
-    if (!list.length){ box.append(el("div","empty", state.filter === "open" ? "Aucun arbitrage en attente." : "Aucun arbitrage tranché pour l'instant.")); return; }
-    list.forEach(q => box.append(questionCard(q)));
-  }
-
-  function renderLanes(){
-    const box = $("#lanes"); box.replaceChildren();
-    if (!state.releases.length){ box.append(el("div","empty","La roadmap apparaîtra ici.")); return; }
-    state.releases.slice().sort((a,b)=>(a.order||0)-(b.order||0)).forEach(r => {
-      const lane = el("article","lane");
-      const head = el("div","lane-head");
-      const t = el("div"); t.append(el("div","lane-code",r.code), el("h3",null,r.title));
-      head.append(t, pill(r.status)); lane.append(head);
+  /* ---------- Roadmap ---------- */
+  function viewRoadmap(v){
+    v.append(head("Roadmap V1","V2 : WebSocket et retours du client."));
+    const box = el("div","lanes");
+    if (!S.releases.length) box.append(el("div","empty","La roadmap apparaîtra ici."));
+    S.releases.slice().sort((a,b)=>(a.order||0)-(b.order||0)).forEach(r => {
+      const lane = el("article","lane"); lane.id = "roadmap-" + r.id;
+      const h = el("div","lane-head"); const t = el("div"); t.append(el("div","lane-code",r.code), el("h3",null,r.title)); h.append(t, pill(r.status)); lane.append(h);
       if (r.note) lane.append(el("p","muted",r.note));
       const ul = el("ul","items");
-      (r.items||[]).forEach(i => {
-        const li = el("li"); li.append(el("span","dot " + (i.status||"todo")));
-        const d = el("div"); d.append(document.createTextNode(i.label)); d.append(el("small",null,[i.owner, i.size, STATUS[i.status]||""].filter(Boolean).join(" · ")));
-        li.append(d); ul.append(li);
-      });
+      (r.items||[]).forEach(i => { const li = el("li"); li.append(el("span","dot " + (i.status||"todo"))); const d = el("div"); d.append(document.createTextNode(i.label), el("small",null,[i.owner,i.size,STATUS[i.status]||""].filter(Boolean).join(" · "))); li.append(d); ul.append(li); });
       lane.append(ul); box.append(lane);
     });
+    v.append(box);
   }
 
-  function renderAgents(){
-    const nav = $("#agent-list"); nav.replaceChildren();
-    const agents = state.agents.slice().sort((a,b)=>(a.order||0)-(b.order||0));
-    if (!agents.length) return;
-    if (!state.agent || !agents.find(a => a.id === state.agent)) state.agent = agents[0].id;
-    agents.forEach(a => {
-      const open = state.questions.filter(q => q.status === "open" && (q.agents||[]).includes(a.id)).length;
-      const b = el("button","agent-btn"); b.type = "button";
-      b.setAttribute("aria-current", String(a.id === state.agent));
-      b.append(el("span",null,a.name)); if (open) b.append(el("span","n",open + " ?"));
-      b.onclick = () => { state.agent = a.id; try { history.replaceState(null,"","#" + a.id); } catch(e){} renderAgents(); };
-      nav.append(b);
-    });
-    const a = agents.find(x => x.id === state.agent);
-    const p = $("#agent-panel"); p.replaceChildren();
-    const head = el("div","agent-head");
-    const t = el("div"); t.append(el("span","eyebrow",[a.code,a.team].filter(Boolean).join(" · ")), el("h2",null,a.name));
-    head.append(t, pill(a.status)); p.append(head);
-    if (a.summary) p.append(el("p",null,a.summary));
+  /* ---------- Agents ---------- */
+  function viewAgents(v){
+    v.append(head("Agents","Statut, étapes, risques et arbitrages de chaque rôle ACF."));
+    const split = el("div","split"); const list = el("div","list");
+    const s = document.createElement("input"); s.type = "search"; s.className = "search"; s.id = "a-search"; s.placeholder = "Rechercher un agent"; s.value = S.aSearch; s.setAttribute("aria-label","Rechercher un agent");
+    const lb = el("div","stack");
+    const fill = () => { lb.replaceChildren(); const term = S.aSearch.trim().toLowerCase();
+      S.agents.filter(a => !term || (a.name + " " + (a.team||"") + " " + (a.code||"")).toLowerCase().includes(term)).sort((a,b)=>(a.order||0)-(b.order||0)).forEach(a => {
+        const open = openQs().filter(q => (q.agents||[]).includes(a.id)).length;
+        const b = el("button","row-item p-" + (a.status === "blocked" ? "start" : open ? "release" : "done")); b.type = "button"; b.setAttribute("aria-current", String(a.id === S.sel.agents));
+        b.append(el("span","t",a.name)); const m = el("span","m"); m.append(pill(a.status)); if (open) m.append(el("span",null, open + " arbitrage" + (open>1?"s":"") + " en attente")); b.append(m);
+        b.onclick = () => go("agents", a.id); lb.append(b); }); };
+    s.oninput = () => { S.aSearch = s.value; fill(); };
+    list.append(s, lb); fill(); split.append(list);
+    let a = S.agents.find(x => x.id === S.sel.agents);
+    if (!a && !narrow()) a = S.agents.slice().sort((x,y)=>(x.order||0)-(y.order||0))[0];
+    if (a){
+      split.classList.toggle("has-detail", !!S.sel.agents);
+      const d = el("section","detail"); const h = el("div","detail-head");
+      const back = el("button","ghost back","← Tous les agents"); back.onclick = () => go("agents", null); h.append(back);
+      const t = el("div","actions"); t.append(el("span","eyebrow",[a.code,a.team].filter(Boolean).join(" · ")), pill(a.status)); h.append(t, el("h2",null,a.name));
+      if (a.summary) h.append(el("p","muted",a.summary));
+      const body = el("div","detail-body"); const cols = el("div","cols");
+      [["Étapes portées",a.steps],["Risques et réserves",a.risks],["Besoins",a.needs],["Vérifié dans le code",a.checked]].forEach(([title,lst]) => { if (!lst || !lst.length) return; const bx = el("div","box"); bx.append(el("h3",null,title)); const ul = el("ul"); lst.forEach(x => ul.append(el("li",null,x))); bx.append(ul); cols.append(bx); });
+      body.append(cols);
+      const qs = sortQ(S.questions.filter(q => (q.agents||[]).includes(a.id)));
+      if (qs.length){ const bx = el("div","box stack"); bx.append(el("h3",null,"Arbitrages liés")); qs.forEach(q => bx.append(qRow(q))); body.append(bx); }
+      if (a.updatedAt) body.append(el("p","notice","Dernière mise à jour : " + fmt(a.updatedAt)));
+      d.append(h, body); split.append(d);
+    } else split.append(el("div","detail empty","Choisissez un agent."));
+    v.append(split);
+  }
+
+  /* ---------- Configuration ---------- */
+  function viewConfiguration(v){
+    const right = el("div","tools"); const c = el("button","chip","Manquants uniquement"); c.type = "button"; c.setAttribute("aria-pressed", String(S.confMissing)); c.onclick = () => { S.confMissing = !S.confMissing; render(false); }; right.append(c);
+    v.append(head("Configuration","Valeurs non secrètes à saisir, et suivi des secrets à créer hors de cette page.", right));
+    v.append(el("p","notice","Ne saisissez jamais la valeur d'un secret ici (mot de passe, clé, jeton) : cette page est lisible par tous ceux qui y ont accès. Créez les secrets dans Render ou dans les Environments GitHub, puis cochez-les."));
     const cols = el("div","cols");
-    [["Étapes portées",a.steps],["Risques et réserves",a.risks],["Besoins",a.needs],["Vérifié dans le code",a.checked]].forEach(([h,list]) => {
-      if (!list || !list.length) return;
-      const box = el("div","box"); box.append(el("h3",null,h));
-      const ul = el("ul"); list.forEach(x => ul.append(el("li",null,x))); box.append(ul); cols.append(box);
-    });
-    p.append(cols);
-    const qs = state.questions.filter(q => (q.agents||[]).includes(a.id)).sort((x,y)=>(x.order||0)-(y.order||0));
-    if (qs.length){ p.append(el("h3",null,"Questions et arbitrages de ce rôle")); qs.forEach(q => p.append(questionCard(q))); }
-    if (a.updatedAt) p.append(el("p","updated","Dernière mise à jour : " + fmt(a.updatedAt)));
-  }
-
-  function renderConf(){
-    const box = $("#conf"); if (!box) return; box.replaceChildren();
-    const vars = state.variables.slice().sort((a,b)=>(a.order||0)-(b.order||0));
-    const secs = state.secrets.slice().sort((a,b)=>(a.order||0)-(b.order||0));
-    const vb = el("div","box"); vb.append(el("h3",null,"Variables"));
-    if (!vars.length) vb.append(el("p","muted","Aucune variable demandée."));
-    vars.forEach(v => {
-      const wrap = el("div","opts"); wrap.style.marginBottom = "10px";
-      const lab = el("label",null); lab.htmlFor = "var-" + v.id; lab.append(el("span","mono",v.key + " · " + v.env));
-      if (v.description) lab.append(el("div","q-meta",v.description));
-      const inp = document.createElement("input"); inp.id = "var-" + v.id; inp.value = v.value || ""; inp.placeholder = "Valeur";
-      inp.style.cssText = "width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font:13px var(--font-mono)";
-      const row = el("div","row"); const b = el("button","ghost","Enregistrer"); const m = el("span","notice");
-      b.onclick = async () => {
-        const val = inp.value.trim();
+    const vb = el("section","detail"); const vh = el("div","detail-head"); vh.append(el("h2",null,"Variables")); const vbody = el("div","detail-body");
+    const vars = S.variables.filter(x => !S.confMissing || !x.value).sort((a,b)=>(a.order||0)-(b.order||0));
+    if (!vars.length) vbody.append(el("p","muted", S.confMissing ? "Toutes les valeurs sont saisies." : "Aucune variable demandée."));
+    vars.forEach(x => {
+      const f = el("div","field"); const lab = el("label"); lab.htmlFor = "var-" + x.id; lab.append(el("span","mono",x.key + " · " + x.env)); f.append(lab);
+      if (x.description) f.append(el("span","notice",x.description));
+      const inp = document.createElement("input"); inp.id = "var-" + x.id; inp.value = x.value || ""; inp.placeholder = "Valeur";
+      const row = el("div","actions"); const b = el("button","ghost","Enregistrer"); const m = el("span","notice");
+      b.onclick = async () => { const val = inp.value.trim();
         if (/^(sk|pk|AKIA|ghp_|xox)|-----BEGIN|password|secret/i.test(val)){ m.textContent = "Cette valeur ressemble à un secret : créez-la dans Render ou GitHub, pas ici."; return; }
         b.disabled = true; m.textContent = "Enregistrement…";
-        try { await state.db.doc("variables/" + v.id).update({ value: val, updatedAt: new Date().toISOString() }); m.textContent = "Enregistré."; } catch(e){ m.textContent = "Enregistrement refusé."; }
-        b.disabled = false;
-      };
-      if (!state.canWrite){ inp.disabled = true; b.disabled = true; }
-      row.append(b, m); wrap.append(lab, inp, row); vb.append(wrap);
+        try { await S.db.doc("variables/" + x.id).update({ value: val, updatedAt: new Date().toISOString() }); m.textContent = "Enregistré."; } catch(e){ m.textContent = "Enregistrement refusé."; }
+        b.disabled = false; };
+      if (!S.canWrite){ inp.disabled = true; b.disabled = true; }
+      row.append(b, m); f.append(inp, row); vbody.append(f);
     });
-    const sb = el("div","box"); sb.append(el("h3",null,"Secrets à créer hors de cette page"));
-    if (!secs.length) sb.append(el("p","muted","Aucun secret demandé."));
-    secs.forEach(x => {
-      const lab = el("label","opt");
-      const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "sec-" + x.id; cb.checked = x.status === "created";
-      cb.disabled = !state.canWrite;
-      cb.onchange = async () => { cb.disabled = true; try { await state.db.doc("secrets/" + x.id).update({ status: cb.checked ? "created" : "todo", updatedAt: new Date().toISOString() }); } catch(e){ cb.checked = !cb.checked; } cb.disabled = false; };
-      const t = el("span"); t.append(el("span","mono",x.key + " · " + x.env), document.createElement("br"), document.createTextNode((x.where ? "Où : " + x.where + ". " : "") + (x.description || "")));
-      lab.append(cb, t); sb.append(lab);
-    });
-    box.append(vb, sb);
+    vb.append(vh, vbody);
+    const sb = el("section","detail"); const sh = el("div","detail-head"); sh.append(el("h2",null,"Secrets à créer")); const sbody = el("div","detail-body");
+    const secs = S.secrets.filter(x => !S.confMissing || x.status !== "created").sort((a,b)=>(a.order||0)-(b.order||0));
+    if (!secs.length) sbody.append(el("p","muted", S.confMissing ? "Tous les secrets sont créés." : "Aucun secret demandé."));
+    secs.forEach(x => { const lab = el("label","opt"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "sec-" + x.id; cb.checked = x.status === "created"; cb.disabled = !S.canWrite;
+      cb.onchange = async () => { cb.disabled = true; try { await S.db.doc("secrets/" + x.id).update({ status: cb.checked ? "created" : "todo", updatedAt: new Date().toISOString() }); } catch(e){ cb.checked = !cb.checked; } cb.disabled = false; };
+      const t = el("span"); t.append(el("span","mono",x.key + " · " + x.env), document.createElement("br"), document.createTextNode((x.where ? "Où : " + x.where + ". " : "") + (x.description || ""))); lab.append(cb, t); sbody.append(lab); });
+    sb.append(sh, sbody);
+    cols.append(vb, sb); v.append(cols);
+    v.append(viewLink("go","journal","Ouvrir le journal des livraisons →"));
   }
 
-  function renderLog(){
-    const box = $("#log"); box.replaceChildren();
-    const list = state.deliveries.slice().sort((a,b)=> String(b.date).localeCompare(String(a.date)));
-    if (!list.length){ box.append(el("div","empty","Les livraisons des agents seront journalisées ici.")); return; }
+  /* ---------- Journal ---------- */
+  function viewJournal(v){
+    v.append(head("Journal des livraisons"));
+    const box = el("div");
+    const list = S.deliveries.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    if (!list.length) box.append(el("div","empty","Les livraisons des agents seront journalisées ici."));
     list.forEach(d => { const r = el("div","log-row"); r.append(el("span","mono",fmt(d.date)), el("span",null,agentName(d.agent)), el("span",null,d.title)); box.append(r); });
+    v.append(box);
   }
+
+  /* ---------- rendu ---------- */
+  let pending = false;
+  const typing = () => { const a = document.activeElement; return a && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && a.type === "text")) && a.value.trim() !== ""; };
+  function badges(){
+    const n = openQs().length; const blocked = S.agents.filter(a => a.status === "blocked").length;
+    const conf = S.variables.filter(x => !x.value).length + S.secrets.filter(x => x.status !== "created").length;
+    document.querySelectorAll('[data-badge="open"]').forEach(b => b.textContent = n ? String(n) : "");
+    document.querySelectorAll('[data-badge="agents"]').forEach(b => b.textContent = blocked ? String(blocked) : "");
+    document.querySelectorAll('[data-badge="conf"]').forEach(b => b.textContent = conf ? String(conf) : "");
+    document.querySelectorAll(".nav a[data-view], .tabbar a[data-view]").forEach(a => {
+      const on = a.dataset.view === S.view || (S.view === "journal" && a.dataset.view === "configuration" && !!a.closest(".tabbar"));
+      if (on) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current");
+    });
+    $("#updated").textContent = S.project && S.project.updatedAt ? "Mis à jour le " + fmt(S.project.updatedAt) : "";
+  }
+  function render(focus){
+    badges();
+    if (typing()) { pending = true; return; }
+    pending = false;
+    const v = el("div","view");
+    ({accueil:viewAccueil, arbitrages:viewArbitrages, roadmap:viewRoadmap, agents:viewAgents, configuration:viewConfiguration, journal:viewJournal})[S.view](v);
+    const active = document.activeElement; const keep = active && active.type === "search" ? active.id : null;
+    $("#main").replaceChildren(v);
+    if (keep){ const s = document.getElementById(keep); if (s){ s.focus(); s.setSelectionRange(s.value.length, s.value.length); } }
+    else if (focus){ const t = $("#view-title"); if (t) t.focus(); window.scrollTo(0,0); }
+  }
+  document.addEventListener("focusout", () => setTimeout(() => { if (pending && !typing()) render(false); }, 0));
 
   async function resolveNames(){
-    if (!state.user) return;
-    const ids = [...new Set(state.questions.map(q => q.answeredBy).filter(Boolean))];
-    if (!ids.length) return;
-    try { const ps = await state.user.profiles(ids); ids.forEach(id => { state.names[id] = (ps[id] && ps[id].name) || "un membre"; }); } catch(e){}
+    if (!S.user) return;
+    const ids = [...new Set(S.questions.map(q => q.answeredBy).filter(Boolean))]; if (!ids.length) return;
+    try { const ps = await S.user.profiles(ids); ids.forEach(id => { S.names[id] = (ps[id] && ps[id].name) || "un membre"; }); } catch(e){}
   }
 
-  let pending = false;
-  const typing = () => { const a = document.activeElement; return a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT") && a.value.trim() !== ""; };
-  function renderAll(){
-    renderHeader(); renderLanes(); renderLog();
-    if (typing()) { pending = true; return; }
-    pending = false; renderQueue(); renderAgents(); renderConf();
-  }
-  document.addEventListener("focusout", () => setTimeout(() => { if (pending && !typing()) renderAll(); }, 0));
-
-  document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
-    state.filter = t.dataset.filter;
-    document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-pressed", String(x === t)));
-    renderQueue();
-  });
-
-  renderAll();
+  parseHash(); render(false);
 
   (async () => {
     const claude = window.claude;
-    if (!claude || !claude.use) { $("#headline").textContent = "Cette page doit être ouverte sur claude.ai pour afficher l'état du projet."; return; }
+    if (!claude || !claude.use){ S.project = { headline:"Cette page doit être ouverte sur claude.ai pour afficher l'état du projet." }; render(false); return; }
     const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
-    state.db = db; state.user = user;
-    if (!db){ $("#headline").textContent = "Connectez-vous à claude.ai pour voir l'état du projet."; return; }
+    S.db = db; S.user = user;
+    if (!db){ S.project = { headline:"Connectez-vous à claude.ai pour voir l'état du projet." }; render(false); return; }
     let can = null; try { can = user ? await user.can("data.write") : null; } catch(e){}
-    state.canWrite = can !== false;
-    $("#write-note").textContent = state.canWrite ? "Vos réponses sont enregistrées ici et reprises par l'orchestrateur, qui les inscrit au Decision Log." : "Lecture seule : seuls les contributeurs de cette page peuvent répondre.";
-    db.doc("project/status").onSnapshot(s => { state.project = s.exists ? s.data() : null; renderHeader(); });
-    const sub = (name, key, after) => db.collection(name).onSnapshot(snap => {
-      state[key] = snap.docs.map(d => Object.assign({ id:d.id }, d.data()));
-      (after ? after() : Promise.resolve()).then(renderAll);
+    S.canWrite = can !== false;
+    db.doc("project/status").onSnapshot(s => { S.project = s.exists ? s.data() : null; render(false); });
+    const sub = (name, after) => db.collection(name).onSnapshot(snap => {
+      S[name] = snap.docs.map(d => Object.assign({ id:d.id }, d.data()));
+      (after ? after() : Promise.resolve()).then(() => render(false));
     });
-    sub("releases","releases"); sub("agents","agents"); sub("variables","variables"); sub("secrets","secrets"); sub("deliveries","deliveries"); sub("questions","questions", resolveNames);
+    ["releases","agents","deliveries","variables","secrets"].forEach(n => sub(n));
+    sub("questions", resolveNames);
   })();
 })();
 </script>
