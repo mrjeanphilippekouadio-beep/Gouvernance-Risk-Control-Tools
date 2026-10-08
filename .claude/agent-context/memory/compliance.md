@@ -76,3 +76,7 @@ juriste.** Aucun texte source consulté ; références de principe.
 - **COMPLIANCE_BLOCK** annoncé si B-4 part en production sans les points
   1 à 4 et 6 validés, ou si le libellé « anonyme » est affiché alors que
   l'identité est stockée.
+
+## Arbitrage PO (2026-10-08)
+
+Le PO a retenu le **« signalement confidentiel »** (à côté du nominatif), conformément à l'avis Compliance ; le libellé « anonyme » n'est pas utilisé. La validation juridique est confiée aux **juristes internes de Djamo**. Les exigences techniques et points juridiques listés ci-dessus restent les conditions du lot B-4.

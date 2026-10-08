@@ -88,3 +88,7 @@ juriste/DPO.** Statut global UNDER_ASSESSMENT.
   BCEAO et loi anticorruption ; articulation LBC/FT ; effacement face à
   l'append-only et à la conservation de preuve ; durées par catégorie ;
   applicabilité réelle du RGPD ; texte d'information.
+
+## Arbitrage PO (2026-10-08)
+
+Le PO a retenu le **« signalement confidentiel »** (à côté du nominatif), conformément à l'avis Privacy ; le libellé « anonyme » n'est pas utilisé. La validation juridique est confiée aux **juristes internes de Djamo**. Les exigences techniques et points juridiques listés ci-dessus restent les conditions du lot B-4.
