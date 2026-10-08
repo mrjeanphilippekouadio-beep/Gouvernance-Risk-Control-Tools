@@ -193,3 +193,15 @@ littérale dans une décision consignée.
     yeux : distinguer écrit et interprétation, demander la vérification.
 17. Le vocabulaire ISO diffère du produit (« analyse du risque » ISO =
     Évaluation du produit) : le préciser avant de mapper une clause.
+
+## Sources de référence disponibles
+
+- **COSO ERM 2017, synthèse en français (IFACI)** : repères et vérification
+  de mes références dans `docs/references/COSO-ERM-2017-synthese-notes.md`
+  (le PDF n'est pas dans le dépôt, copyright COSO et dépôt public).
+  Vérifié le 2026-10-08 : P2, P10-P14, P15-P17 confirmés ; « P11 aux
+  niveaux inhérent, cible et résiduel » non vérifiable avec la synthèse
+  (cadre complet requis). La traduction française dit « criticité » pour
+  « severity ».
+- **ISO 31000:2018** : pas encore disponible dans le dépôt (le PO n'a pas
+  réussi à charger ses documents) ; mes références ISO restent à vérifier.
