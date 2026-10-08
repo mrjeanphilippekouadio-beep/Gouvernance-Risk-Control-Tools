@@ -96,3 +96,33 @@ COMPLIANCE_BLOCK (pas de code).
    soumise à retenue, jamais une cotation qui fait foi sans challenge ; le
    mode de cotation et son changement sont des événements tracés,
    approuvés et révisés.
+
+## Avis sur le workflow RO / DEL / EXEC du PO (2026-10-08)
+
+Détail : `docs/architecture/RM-V1-Modes-cotation-objections.md` §6.
+Statut : **recommandation, en attente des réponses du PO.**
+
+- B-1 levée pour l'essentiel (RO = responsable de département) ; B-2 et B-3
+  ouvertes ; B-4 atténuée (le mode est fixé avant le risque).
+- **Objection n° 5 : cumul des rôles non gouverné.** Config 5 acceptable si
+  le DEL ne valide pas sa propre exécution ; configs 1 et 4 seulement avec
+  compensation (Maîtrise revue par la 2e ligne, cumul marqué, justifié,
+  approuvé par une autorité distincte, revu à chaque cycle, KRI,
+  échantillonnage par l'audit interne) ; config 1 déconseillée par défaut,
+  réservée aux risques faibles.
+- Règles minimales à ajouter à la règle d'or : validateur hors de tous les
+  auteurs ; ni RO ni DEL ne valide ce qu'il a exécuté ; désignations
+  permissionnées, motivées, auditées, jamais auto-attribuées ; périmètre du
+  DEL écrit ; absence de DEL visible et justifiée.
+- COMPLIANCE_BLOCK annoncé en production si : cumul sans marquage ni
+  validation tierce ; cotation qui fait foi sans validateur distinct ;
+  désignations non tracées ou auto-attribuables ; mode changé sans motif ni
+  approbateur.
+
+10. Un cumul exécution + responsabilité (RO + EXEC, DEL + EXEC) est une
+    exception déclarée, marquée, compensée et revue, jamais une
+    configuration par défaut ; « pas RO + DEL » ne suffit pas comme seule
+    règle de séparation.
+11. Les désignations de rôles (RO, DEL, EXEC) et leurs changements sont des
+    événements sensibles : permission dédiée, motif, approbateur distinct,
+    audit append-only.
