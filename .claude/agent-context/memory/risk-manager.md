@@ -124,3 +124,84 @@ Statut : **recommandations du 2026-10-08, en attente d'arbitrage PO**
 - Nombre d'auto-désignations de Risk Owner ; part des risques dont le
   créateur est aussi l'owner.
 - Volume de contributions par contributeur (anti-spam).
+
+## Trous du contrat au regard d'ISO 31000:2018 et COSO ERM 2017 (2026-10-08)
+
+Statut : **recommandations, en attente d'arbitrage PO.** Réserve de
+sourcing : les normes ne sont pas dans le dépôt ; les références sont
+paraphrasées de mémoire et à vérifier sur les textes avant toute citation
+littérale dans une décision consignée.
+
+- **Fait vérifié dans le code** (`RiskEvaluationService.recordMasteryAssessment`) :
+  la Maîtrise est déjà saisie par ligne de défense configurée
+  (`masteryScale.defenseLines`) × trois dimensions (adéquation, exécution,
+  efficacité), et la maîtrise globale est le MIN non compensatoire. Le
+  commentaire de la méthode dit encore « moyenne » (périmé, famille F-5).
+- **Qui cote la Maîtrise.** ISO 31000 (6.4.1, 6.4.3, 5.4.3, 6.2) impose un
+  propriétaire accountable et un processus collaboratif limitant les biais,
+  sans dire qui cote l'efficacité ; COSO ERM (P10-P14, P2, P15-P17) laisse
+  la répartition des rôles à l'organisation ; les trois lignes (IIA 2020)
+  font de l'auto-évaluation d'un exécutant un biais classique et réservent
+  la note L3 à l'assurance indépendante. **Recommandation ferme** : l'owner
+  seul **enregistre** la Maîtrise (même parcours, même évaluateur), mais
+  chaque note de ligne s'appuie sur sa source : L1 ← exécutions de
+  contrôles ; L2 ← évaluations d'efficacité validées + contributions
+  Maîtrise retenues ; L3 ← conclusions d'audit. Note sans source ou en écart
+  → signalée `Evidence Missing` au validateur et au Comité (pas de blocage
+  en V1). Rejeté pour la V1 : « chaque ligne note sa ligne » (trois
+  écrivains + endossement = workflow par mode interdit par §7), gardé comme
+  évolution cible. Risque accepté à acter par le PO : l'owner reste juge et
+  partie sur L1.
+- **Qui édite l'Analyse.** ISO 6.4.2 (identification : sources, événements,
+  causes, conséquences), 6.4.1/6.2 (collaboratif), 6.7 (enregistrement) ;
+  attention, l'« analyse du risque » ISO couvre l'Évaluation du produit,
+  l'« Analyse » du produit correspond à 6.3 + 6.4.2. **Recommandation** :
+  l'owner seul édite l'Analyse officielle (`risk.analysis.update`) ; les
+  autres informent par la contribution ANALYSE (`target`) ; la 2e ligne
+  challenge sans réécrire. Règle unique : **les autres informent, l'owner
+  écrit.** Point à trancher par le PO : en CLASSIQUE, la consultation
+  attendue par ISO passe par le Meeting (§9) et l'owner (option
+  recommandée), plutôt que d'ouvrir Identification/Analyse dans les trois
+  modes (HYBRIDE se confondrait avec CLASSIQUE).
+- **Signalement anonyme ou nominatif (DECISION-012)** : cohérent avec COSO
+  Governance & Culture et ISO 6.2. Impacts : distinguer anonyme réel et
+  confidentiel (ne jamais promettre un anonymat que le système ne tient
+  pas) ; code de suivi remis au signalant ; KRI part d'anonymes et taux de
+  rejet au triage ; conversion toujours par triage humain + identification
+  officielle de l'owner.
+- **Changements par rapport à mes recommandations précédentes** : OD-2,
+  valeurs indicatives de la contribution Maîtrise par ligne de défense ×
+  dimension (lues dans la `masteryScale` active) ; OD-6, Maîtrise à l'owner
+  passe de repli à recommandation ferme ; OD-10, édition de l'Analyse
+  réservée à l'owner. Inchangés : OD-1 (avec le point CLASSIQUE), OD-3,
+  OD-4, OD-7, OD-9, OD-11.
+
+### Principes ajoutés (2026-10-08, second passage)
+
+11. La Maîtrise est structurée par ligne de défense × adéquation /
+    exécution / efficacité. Je lis les `defenseLines` de l'échelle active,
+    je ne suppose jamais trois lignes.
+12. Tenir l'accountability d'une saisie ne veut pas dire la renseigner
+    seul : l'owner enregistre, chaque ligne l'alimente par sa source.
+13. La séparation des lignes se traite par la source et la validation, pas
+    par un cran d'endossement (qui recrée un workflow par mode).
+14. Pour l'Analyse comme pour l'Identification : les autres informent,
+    l'owner écrit.
+15. Distinguer anonyme et confidentiel : ne jamais promettre à un
+    signalant un anonymat que le système ne tient pas.
+16. Ne jamais citer une norme comme texte vérifié sans l'avoir sous les
+    yeux : distinguer écrit et interprétation, demander la vérification.
+17. Le vocabulaire ISO diffère du produit (« analyse du risque » ISO =
+    Évaluation du produit) : le préciser avant de mapper une clause.
+
+## Sources de référence disponibles
+
+- **COSO ERM 2017, synthèse en français (IFACI)** : repères et vérification
+  de mes références dans `docs/references/COSO-ERM-2017-synthese-notes.md`
+  (le PDF n'est pas dans le dépôt, copyright COSO et dépôt public).
+  Vérifié le 2026-10-08 : P2, P10-P14, P15-P17 confirmés ; « P11 aux
+  niveaux inhérent, cible et résiduel » non vérifiable avec la synthèse
+  (cadre complet requis). La traduction française dit « criticité » pour
+  « severity ».
+- **ISO 31000:2018** : pas encore disponible dans le dépôt (le PO n'a pas
+  réussi à charger ses documents) ; mes références ISO restent à vérifier.
