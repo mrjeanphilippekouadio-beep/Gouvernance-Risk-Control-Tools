@@ -27,10 +27,50 @@ function fakeZip(entries: FakeEntry[]): Buffer {
   const cd = Buffer.concat(central);
   const eocd = Buffer.alloc(22);
   eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
   eocd.writeUInt16LE(entries.length, 10);
   eocd.writeUInt32LE(cd.length, 12);
   eocd.writeUInt32LE(local.length, 16);
   return Buffer.concat([local, cd, eocd]);
+}
+
+/** Real, consistent deflate zip; `localNames` and `declaredCount` let a test make it diverge. */
+function realZip(
+  entries: { name: string; raw: Buffer; localName?: string }[],
+  opts: { declaredCount?: number; trailing?: Buffer } = {},
+): Buffer {
+  const parts: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+  for (const e of entries) {
+    const name = Buffer.from(e.name);
+    const localName = Buffer.from(e.localName ?? e.name);
+    const data = deflateRawSync(e.raw);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt16LE(localName.length, 26);
+    const c = Buffer.alloc(46 + name.length);
+    c.writeUInt32LE(0x02014b50, 0);
+    c.writeUInt16LE(8, 10);
+    c.writeUInt32LE(data.length, 20);
+    c.writeUInt32LE(e.raw.length, 24);
+    c.writeUInt16LE(name.length, 28);
+    c.writeUInt32LE(offset, 42);
+    name.copy(c, 46);
+    central.push(c);
+    parts.push(local, localName, data);
+    offset += 30 + localName.length + data.length;
+  }
+  const cd = Buffer.concat(central);
+  const count = opts.declaredCount ?? entries.length;
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(count, 8);
+  eocd.writeUInt16LE(count, 10);
+  eocd.writeUInt32LE(cd.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, cd, eocd, ...(opts.trailing ? [opts.trailing] : [])]);
 }
 
 const workbookEntry: FakeEntry = { name: "xl/workbook.xml", compressed: 100, uncompressed: 300 };
@@ -49,12 +89,12 @@ describe("assertSafeXlsxArchive", () => {
   });
 
   it("rejects an excessive declared total decompressed size", () => {
-    const zip = fakeZip([workbookEntry, { name: "xl/a.xml", compressed: 20 * MB, uncompressed: 30 * MB }, { name: "xl/b.xml", compressed: 20 * MB, uncompressed: 30 * MB }]);
+    const zip = fakeZip([workbookEntry, { name: "xl/a.xml", compressed: 8 * MB, uncompressed: 15 * MB }, { name: "xl/b.xml", compressed: 8 * MB, uncompressed: 15 * MB }]);
     expect(() => assertSafeXlsxArchive(zip)).toThrow(/decompressed size/);
   });
 
   it("rejects an entry with an excessive compression ratio", () => {
-    const zip = fakeZip([workbookEntry, { name: "xl/sheets/sheet1.xml", compressed: 20_000, uncompressed: 20 * MB }]);
+    const zip = fakeZip([workbookEntry, { name: "xl/sheets/sheet1.xml", compressed: 20_000, uncompressed: 10 * MB }]);
     expect(() => assertSafeXlsxArchive(zip)).toThrow(/compression ratio/);
   });
 
@@ -103,6 +143,7 @@ describe("assertSafeXlsxArchive", () => {
     const cd = Buffer.concat(central);
     const eocd = Buffer.alloc(22);
     eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(entries.length, 8);
     eocd.writeUInt16LE(entries.length, 10);
     eocd.writeUInt32LE(cd.length, 12);
     eocd.writeUInt32LE(offset, 16);
@@ -112,5 +153,35 @@ describe("assertSafeXlsxArchive", () => {
   it("rejects Zip64 sentinel values", () => {
     const zip = fakeZip([workbookEntry, { name: "xl/big.xml", compressed: 10, uncompressed: 0xffffffff }]);
     expect(() => assertSafeXlsxArchive(zip)).toThrow(/Zip64/);
+  });
+
+  describe("layout where the guard and JSZip could read different entries", () => {
+    const wb = { name: "xl/workbook.xml", raw: Buffer.from("<w/>") };
+    const sheet = { name: "xl/worksheets/sheet1.xml", raw: Buffer.from("<s/>") };
+
+    it("accepts a consistent hand-built archive", () => {
+      expect(() => assertSafeXlsxArchive(realZip([wb, sheet]))).not.toThrow();
+    });
+
+    it("rejects duplicate entry names", () => {
+      expect(() => assertSafeXlsxArchive(realZip([wb, sheet, sheet]))).toThrow(/inconsistent archive/);
+    });
+
+    it("rejects an entry count lower than the real number of entries", () => {
+      expect(() => assertSafeXlsxArchive(realZip([wb, sheet], { declaredCount: 1 }))).toThrow(/inconsistent archive/);
+    });
+
+    it("rejects bytes after the end of the archive", () => {
+      expect(() => assertSafeXlsxArchive(realZip([wb, sheet], { trailing: Buffer.from("xx") }))).toThrow(/inconsistent archive/);
+    });
+
+    it("rejects a local header whose name differs from the central directory", () => {
+      expect(() => assertSafeXlsxArchive(realZip([wb, { ...sheet, localName: "xl/worksheets/sheet2.xml" }]))).toThrow(/inconsistent archive/);
+    });
+
+    it("rejects a truncated archive", () => {
+      const zip = realZip([wb, sheet]);
+      expect(() => assertSafeXlsxArchive(zip.subarray(0, zip.length - 5))).toThrow(ValidationError);
+    });
   });
 });
