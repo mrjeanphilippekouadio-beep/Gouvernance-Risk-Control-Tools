@@ -138,6 +138,7 @@ pour l'usage.
 | @orchestrator HUMAN | **Cockpit de pilotage publié (2026-10-08, DECISION-021)** : artefact « Pilotage GRC Tools » https://claude.ai/artifact/LQgXExeGTqAHxijeSrSRf3 (source `docs/pilotage/pilotage-grc-tools.html`) — état global, roadmap V1 (R0–R5 + EVD), arbitrages à trancher, une section par agent, journal des livraisons ; base partagée (`project`, `releases`, `agents`, `questions`, `deliveries`). **Protocole** : après chaque livraison d'agent, l'orchestrateur met à jour la base (statut de l'agent, items de release, nouvelles questions, ligne de journal) ; chaque réponse du PO saisie dans la page est relue par l'orchestrateur et inscrite au Decision Log ici avant toute action. 12 arbitrages ouverts au 2026-10-08 (q01 GO R0 … q12 échec d'audit). | 2026-10-08 | **Ouvert — HUMAN : répondre aux arbitrages dans la page ; @orchestrator : tenir la base à jour à chaque livraison.** |
 | HUMAN @ux-designer @architect | **Nouvelle fonctionnalité PO (2026-10-08) : reprise du registre des risques (Excel / Google Sheets) après création du Dispositif, et organisation de l'Administration.** Cadrage : `docs/architecture/ADMIN-et-RRI-cadrage.md` — réglages de plateforme dans l'Administration, réglages du Dispositif dans l'espace Dispositif, raccourcis seulement dans les sections ; lot RRI (moteur partagé avec l'import d'évidences, brouillon, cotations en historique « reprise », Google Sheets par téléchargement .xlsx au MVP). | 2026-10-08 | **Ouvert — HUMAN : arbitrages q13 à q16 dans la page de pilotage.** |
 | @dev-backend @security HUMAN | **Bombe de décompression déjà exposée en production (Security, 2026-10-08)** : `RiskImportService.ts:52` charge tout le classeur `exceljs` en mémoire avant le plafond de lignes (`riskImport.routes.ts:7`, 10 Mo) ; utilisateur authentifié ; ~CVSS 6,5 (sous le seuil d'escalade 7). | 2026-10-08 | **Ouvert — correctif R0.3 de la roadmap (contrôle de la taille décompressée, plafond), à lancer au GO.** |
+| HUMAN @architect | **RRI — confirmation q17 (2026-10-08, DECISION-027)** : les réponses q14 à q16 tranchent le rapprochement colonnes / objets par le client et les propositions de cotation (si matrice P × I identique), sans se prononcer sur : objets importés en brouillon activés par l'équipe risque ; périmètre risques, processus et contrôles ; Google Sheets par .xlsx en V1, lien direct en V1.1. | 2026-10-08 | **Ouvert — HUMAN : confirmer q17 dans la page de pilotage (non bloquant avant R3).** |
 | @infrastructure @dev-backend HUMAN | **Authentification Google Drive en production non prouvée (Infrastructure, 2026-10-08)** : `googleDriveAuth.ts` et `env.ts:101` interdisent la clé JSON en production et supposent l'identité Cloud Run, alors que la production tourne sur Render ; le dépôt d'évidences en production peut échouer. | 2026-10-08 | **Ouvert — à vérifier (R0.4) ; décision HUMAN sur le mécanisme d'identité Drive en production.** |
 | HUMAN @architect @risk-manager | **P3 configurable = amender l'invariant 5 du §10 (Architecte, 2026-10-08).** Un paramètre ne peut pas abaisser un invariant (invariant 8) : rendre l'auto-désignation configurable exige de réécrire l'invariant 5 en « jamais auto-approuvés ; une auto-proposition n'est permise que si le Dispositif l'autorise ». Paramètre « auto-désignation permise » désactivé par défaut, approuvé par le Comité ; si activé : approbation par un autre membre du groupe Risk Manager (`approved_by <> requested_by`), motif, audit, cumul marqué ; refus si aucun autre approbateur. B-0 (refus strict) reste compatible. | 2026-10-08 | **Ouvert — HUMAN : valider l'amendement de l'invariant 5.** |
 | HUMAN @architect | **P4 validé par l'Architecte (2026-10-08) avec un modèle plus simple** : `departments` reste l'entité métier (déjà cible de 5 FK) ; `roles.department_id` (nullable, unique par tenant) fait d'un groupe le groupe d'un département ; `processes.department_id` corrige F-11 ; la « direction du département » = membres du groupe rattaché ; `Department.riskOwner` (texte libre) gardé en lecture seule puis obsolète. Porté par B-8, utilisé par B-5. | 2026-10-08 | **Ouvert — HUMAN : confirmer ce modèle (P4 était conditionné à la validation Architecte).** |
@@ -649,6 +650,86 @@ DECISION: Envoi **configurable depuis l'administration** : fournisseur par
 RELATED: DECISION-017, DECISION-022, DECISION-023, lot B-11.
 OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ
+```
+
+```text
+DECISION-025
+DATE: 2026-10-08
+QUESTION: Arbitrages saisis par le PO dans la page de pilotage (q01, q02,
+  q03, q04, q06, q11, q12, q13), relus par l'orchestrateur le 2026-10-08.
+DECISION:
+  q01 — **GO pour tout R0** (R0.1 à R0.6) : B-0, correctif de l'import de
+    risques, suppression vers le dossier Drive « supprimé » avec
+    authentification Drive configurable, resynchronisation Git, README et
+    runbook.
+  q02 — Fenêtre de refus : noms masqués pour les permissions sensibles
+    uniquement (levée d'identité des signalements, journal d'audit,
+    gestion des rôles) ; « Contactez la fonction conformité » à la place.
+  q03 — Les trois protections gratuites : sauvegarde quotidienne de la
+    base de production par GitHub Actions (30 jours), rollback écrit et
+    testé en staging, mise en veille Render acceptée.
+  q04 — OD-4 : le Risk Owner statue sur chaque contribution (Délégué
+    désignable par le Dispositif, jamais l'auteur) ; Retenue / Écartée
+    (motif) / Sans suite ; append-only ; configurable.
+  q06 — Procédure de migration tenue par le PO ; recette métier par
+    Charles Kouassi et Aboubacar Ouattara.
+  q11 — Antivirus en deux temps : contrôles V1 sur Render (.xlsx seul,
+    signature, plafonds de taille et de ratio, formules jamais exécutées,
+    module antivirus branchable désactivé) ; ClamAV ou service cloud à la
+    migration.
+  q12 — Échec d'écriture de l'audit : l'action est bloquée (même
+    transaction), pas de trace pas d'accès pour les consultations
+    confidentielles, alerte à l'équipe risque et au support.
+  q13 — Plateforme dans l'Administration, Dispositif dans son espace,
+    raccourcis seulement dans les sections.
+  Variables saisies dans la page : identifiants des dossiers Drive
+    « actif » / « supprimé » pour staging et production. Les secrets
+    (clés de compte de service Drive, e-mail, TestSprite) restent à
+    poser dans Render / GitHub par le PO.
+RELATED: DECISION-021, DECISION-022, ROADMAP-V1 R0, OD-4, AUD-002, EVD-2.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — R0 lancé le 2026-10-08.
+```
+
+```text
+DECISION-026
+DATE: 2026-10-08
+QUESTION: Comité asynchrone — option par défaut (q05, B-12).
+DECISION: Le PO ne fixe pas d'option par défaut. Le Dispositif propose des
+  **règles prédéfinies** (A Léger, B Standard, C Strict, telles que
+  décrites dans q05) **et permet de créer une règle personnalisée** :
+  groupes qui valident, quorum, majorité, délai, relances. Les règles
+  fixes restent non configurables : jamais de validation tacite, jamais
+  un seul membre, auteurs et RO / Délégué / Exécuteur exclus du vote,
+  vote motivé et tracé, escalade à l'échéance, groupe vide refusé.
+RELATED: B-12, F-14 (`validateByCommittee` à un seul membre).
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — à intégrer à l'amendement de contrat étape 2.
+```
+
+```text
+DECISION-027
+DATE: 2026-10-08
+QUESTION: Reprise du registre (RRI) — q14, q15, q16.
+DECISION:
+  q14 — À l'import, **vérification des colonnes et rapprochement avec le
+    Dispositif** : le client fait lui-même le lien entre les objets de son
+    fichier et ceux du système (ex. « process », « processus », libellés
+    de processus, d'axes, de niveaux), pour absorber les nomenclatures
+    changeantes. Aucun rapprochement implicite.
+  q15 / q16 — Les cotations du fichier deviennent des **propositions de
+    cotation** quand la matrice P × I du fichier est la même que celle du
+    Dispositif ; sinon elles restent en historique « reprise ». Une
+    proposition reste soumise au parcours normal (revue, validation par
+    un tiers) : l'import ne contourne jamais le maker-checker.
+  Non tranché explicitement (recommandations maintenues par défaut,
+    question de confirmation q17 posée dans la page) : objets importés en
+    brouillon activés par l'équipe risque ; périmètre risques, processus
+    et contrôles ; Google Sheets par téléchargement .xlsx en V1, lien
+    direct en V1.1.
+RELATED: `docs/architecture/ADMIN-et-RRI-cadrage.md`, lot RRI (R3).
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ en partie — confirmation q17 ouverte.
 ```
 
 | @release-manager | **URGENT — `main` a 27 commits jamais poussés sur `origin`, aucune PR ouverte pour le Lot 1 RACI malgré un feu vert QA + Security complet (SEC-016 CLOSED).** Vérifié le 2026-09-29 : dernière PR mergée = #15 (`security/fix-sec-009-015`, 2026-09-28). Tout ce qui a suivi (SEC-016, 3 docs d'architecture cible, ADR-002, Lot 1 RACI complet avec revue QA/Security) est resté en local sur `main`, sans branche ni PR. Working tree en plus non propre (fichiers modifiés/non trackés : `ACTION_ITEMS.md`, `SHARED_LOG.md`, `CLAUDE.md`, design system, `RisksPage.tsx`, `RaciPanel.tsx`/`.css`, `api/raci.ts`/`users.ts`, `ADR-003...`). Rollback de migration `027_raci_assignments.sql` jamais testé/tracé non plus (déjà exigé dans la DoD proposée le 28/09). Recommandation : ouvrir la PR du Lot 1 RACI (+ éventuellement une PR séparée pour les 3 docs d'architecture/ADR-002/ADR-003) avant tout nouveau lot, pour ne pas accumuler davantage de commits non tracés. | 2026-09-29 | **Résolu — PR #16 ouverte, 22 commits, mergée par le PO le 2026-09-29.** Lots A/B/C exécutés en parallèle/séquence (voir DECISION-005 ci-dessous pour le détail complet) : Lot 1 RACI + charte graphique + docs architecture poussés, fuite Privacy corrigée, `GrcObjectType` créé et `RaciEntityType` migré dessus, middleware `ModuleToggle` câblé, 20 tests `BrandingService` ajoutés, rollback de migration établi comme convention projet (027+028 `.down.sql` + `README.md` + correctif du runner). 405 tests verts sur toute la série, working tree propre. |
