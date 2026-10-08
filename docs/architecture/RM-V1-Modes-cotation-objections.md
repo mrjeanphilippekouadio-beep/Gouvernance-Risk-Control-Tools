@@ -1,7 +1,8 @@
 # RM V1 — Position du PO sur les modes de cotation : objections des rôles
 
-**Statut** : consultation close le 2026-10-08, **en attente des réponses du
-PO** aux questions de la section 3. Aucun code ni modification du contrat
+**Statut** : consultation close le 2026-10-08 ; workflow cible du PO
+(section 6) soumis aux mêmes rôles le même jour ; **en attente des réponses
+du PO** aux questions de la section 6.5 (qui remplacent la section 3). Aucun code ni modification du contrat
 `RISK_MANAGEMENT_V1_FINAL_DECISIONS.md` avant ces réponses.
 
 Rôles consultés (lecture seule) : Architecte, Risk Manager, Compliance, UX
@@ -142,3 +143,133 @@ valeur précédente) ; critères écrits de choix du mode ; revue périodique ;
 moyen entre saisie L1 et valeur retenue) ; confirmation par les juristes
 internes de ce que la BCEAO exige sur l'indépendance des fonctions de
 contrôle pour l'agrément de Djamo.
+
+## 6. Workflow cible du PO : RO / DEL / EXEC (2026-10-08, second tour)
+
+### 6.1 Position du PO (texte reçu, résumé fidèle)
+
+Avant de créer un risque, on définit dans l'ordre :
+
+1. le fonctionnement du dispositif : Classique, Participatif ou Hybride ;
+2. les processus, assignés à des Risk Owners, avec systématiquement un
+   délégué si l'effectif du département le permet ;
+3. l'exécuteur de chaque contrôle, qui peut être l'une des trois personnes.
+
+Le Risk Owner est en pratique un chef de projet, un directeur de
+département ou un manager.
+
+| Config | Organisation | User A (Manager) | User B (Adjoint) | User C (Opérateur) |
+|---|---|---|---|---|
+| 1 | Petite structure / PME (cumul total) | RO + EXEC | — | — |
+| 2 | Structure agile (supervision directe) | RO | — | EXEC |
+| 3 | Grande entreprise (séparation stricte) | RO | DEL | EXEC |
+| 4 | Sensible / confidentiel (contrôle top management) | RO + EXEC | DEL | — |
+| 5 | Délégation complète (adjoint terrain) | RO | DEL + EXEC | — |
+
+Règle d'or du PO : RO + EXEC autorisé ; DEL + EXEC autorisé ; **RO + DEL
+interdit** (on ne se délègue pas à soi-même).
+
+### 6.2 Questions de la section 3 tranchées
+
+- **Q1** — le Risk Owner est un responsable métier (lecture B). Reste à
+  confirmer qu'il ne cote pas et décide du traitement.
+- **Q7** — le dispositif est posé avant le risque, pas redéfini risque par
+  risque : compatible §10 (résolu et affiché à l'ajout).
+- **Q4** en partie — L1 = l'exécuteur du contrôle, désigné parmi RO, DEL ou
+  un opérateur ; un risque couvert par plusieurs contrôles a plusieurs
+  exécuteurs.
+- **Q6** en partie — le mode vient du dispositif, fixé en premier.
+- Non touchées : Q2, Q3, Q5, Q8, Q9, Q10, Q11.
+
+### 6.3 Ce que disent les cinq rôles
+
+**Accord** : l'ordre de configuration est cohérent ; la matrice est
+réalisable sans complexité particulière ; le délégué est recommandé, jamais
+bloquant (UX : « Non désigné (équipe trop réduite) », visible dans la liste
+des processus).
+
+**Modèle de données (Architecte, Risk Manager, Frontend convergents)** :
+
+- Aujourd'hui `Process.owner` (`Process.ts:24`), `Department.riskOwner`
+  (`Department.ts:12-13`) et `Control.executor` (`Control.ts:31`) sont du
+  texte libre ; seul `Risk.ownerId` est relié à un utilisateur
+  (`Risk.ts:31`) ; aucun délégué n'existe ; `superiorOwnerId` est le N+1
+  d'escalade, pas un délégué. La RACI (`027`) n'est pas réutilisable.
+- Recommandé : **RO et DEL portés par le Processus**, hérités par ses
+  risques, surcharge possible sur le risque **par paire** (RO et DEL
+  ensemble) ; **EXEC porté par le Contrôle** et relié à un utilisateur,
+  à côté du texte libre existant, sans reprise automatique des données.
+- RO/DEL/EXEC (rôles d'organisation) et L1/L2/L3 (lignes de défense) sont
+  deux axes distincts à ne pas fusionner (Risk Manager).
+
+**La règle d'or ne suffit pas (Risk Manager, Compliance, Architecte)** :
+
+- Aucun acteur ne valide ce qu'il a saisi ou exécuté ; le validateur est
+  différent de **tous** les auteurs de l'évaluation (le code ne compare
+  qu'un seul `evaluatorId`, `RiskEvaluationService.ts:432`, `:472`, `:524`).
+- Pas de DEL sans RO ; personne ne se désigne lui-même ; toute désignation
+  RO/DEL/EXEC est permissionnée, motivée et auditée.
+- Les pouvoirs du délégué ne sont pas définis (remplace le RO en son
+  absence ? agit en permanence ? valide ?).
+
+**Séparation des tâches (Compliance, nouvelle objection n° 5 ; Risk
+Manager)** :
+
+- Configs 1 et 4 (RO + EXEC) : auto-évaluation de la Maîtrise par le
+  responsable du risque. Acceptables seulement avec compensation : Maîtrise
+  revue par l'équipe risque, cumul marqué visiblement, justifié, approuvé et
+  revu à chaque cycle, KRI de suivi.
+- Config 1 (cumul total) : personne n'est disponible pour valider dans la
+  matrice ; validateur extérieur nécessaire (responsable de la fonction
+  risque ou Comité). Compliance la déconseille comme configuration par
+  défaut et propose de la réserver aux risques faibles.
+- Config 4 « Sensible » : le Risk Manager relève qu'elle autorise le cumul
+  là où la sensibilité appellerait le plus de séparation.
+- Config 5 (DEL + EXEC) : acceptable si le DEL ne valide pas sa propre
+  exécution.
+- COMPLIANCE_BLOCK annoncé en production si un cumul est autorisé sans
+  marquage ni validation tierce, ou si les désignations ne sont pas tracées.
+
+**Interface (UX, Frontend)** : RO / DEL en choix exclusif par personne
+(l'interdit devient impossible à saisir), EXEC indépendant, badges neutres
+« RO + EXEC » / « DEL + EXEC » ; checklist « Prêt à créer des risques ? »
+plutôt qu'un assistant ; la règle vit dans le service, le front la reflète
+seulement, avec un code d'erreur stable et une liste d'éligibles fournie par
+le backend. Pour DECISION-011, RO et DEL sont les bons interlocuteurs pour
+un refus sur le périmètre métier, l'équipe risque pour un refus de saisie.
+
+### 6.4 Impact sur les lots
+
+- **Nouveau lot B-5 « Attribution RO / DEL / EXEC »** (Architecte, taille
+  M) : migration (`processes.owner_user_id`, `processes.delegate_user_id`,
+  `risks.delegate_id`, `controls.executor_user_id`), désignations,
+  règle d'or dans le service et en contrainte DB, résolution de l'héritage.
+  Prérequis de B-1. Peut partir après les réponses aux questions A à C
+  ci-dessous.
+- **B-0 / DECISION-013** : à reformuler — la désignation du RO se fait au
+  niveau du Processus ; la clause « owner détenteur de
+  `riskevaluation.create` » devient caduque si le RO ne cote pas. Le
+  correctif F-1 (`assignOwner` sous `risk.update`) reste nécessaire.
+- **B-1** : caduc tel que conçu ; devient « acteur autorisé pour l'étape
+  selon le mode » (Participatif : un EXEC d'un contrôle couvrant le risque ;
+  Résiduel : l'équipe risque).
+- **B-2, B-3, B-4** : inchangés par rapport à la section 2.
+
+### 6.5 Questions au PO (remplacent la section 3)
+
+| # | Question | Recommandation des rôles |
+|---|---|---|
+| A | RO et DEL portés par le **Processus**, avec surcharge possible sur un risque ? | Oui, surcharge par paire seulement (Architecte, Risk Manager) |
+| B | **Le RO cote-t-il**, ou décide-t-il seulement du traitement (ex-Q1) ? | Il décide du traitement ; l'équipe risque cote (tous) |
+| C | **Pouvoirs du délégué** : remplace le RO en son absence, agit en permanence, ou valide ? | Remplace le RO (absence ou délégation datée), ne valide jamais ses propres actes ; la responsabilité reste au RO (Risk Manager) |
+| D | **Cumul RO + EXEC** (configs 1 et 4) : autorisé pour tout risque, ou plafonné par criticité avec exception approuvée ? Config 4 « Sensible » maintenue ? | Plafonné ; Maîtrise revue par l'équipe risque ; cumul marqué et approuvé ; config 4 à revoir (Compliance, Risk Manager) |
+| E | **Qui valide** (ex-Q5), notamment en config 1 et en Classique ? | Une personne hors de tous les auteurs : responsable de la fonction risque, ou Comité au-delà du seuil (tous) |
+| F | **Qui désigne** RO, DEL et EXEC, et qui approuve un changement ? | Direction du département, approbation par l'équipe risque, trace complète (Compliance) |
+| G | Le DEL peut-il être aussi le **N+1 d'escalade** ? | Non (Architecte, Frontend) |
+| H | Les champs texte libres existants (`Control.executor`, `Process.owner`) sont-ils conservés à côté des nouveaux liens ? | Oui, sans reprise automatique ; un contrôle sans exécuteur relié ne permet pas la cotation Participative (Architecte) |
+
+Restent ouvertes de la section 3 : Q2 (saisie L1 officielle ou retenue),
+Q3 (Maîtrise à deux acteurs — Risk Manager : mêmes cellules, la valeur de
+l'équipe risque fait foi avec commentaire sur écart), Q8, Q9, Q10, Q11.
+Les échelles et l'appétence doivent être posées avec le dispositif, avant
+les processus (Risk Manager).

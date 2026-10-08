@@ -244,3 +244,36 @@ Statut : en attente des réponses du PO (Q1 à Q11).
 22. Le Dispositif ne se redéfinit pas risque par risque (comparabilité de
     la Cartographie) ; il peut être résolu et affiché à l'ajout.
 23. Avant d'amender un principe de rôle, demander qui est le Risk Owner.
+
+## Workflow RO / DEL / EXEC du PO (2026-10-08, quatrième passage)
+
+Détail : `docs/architecture/RM-V1-Modes-cotation-objections.md` §6.
+Statut : **recommandations, en attente des réponses du PO (questions A à
+H).**
+
+- Q1 tranchée (RO = responsable métier), Q7 tranchée (dispositif posé avant
+  le risque), Q4 et Q6 en partie.
+- RO et DEL par Processus, hérités par les risques, surcharge tracée ; EXEC
+  par contrôle, relié à un utilisateur.
+- Délégué : suppléant du RO (absence ou délégation datée), ne valide jamais
+  ses propres actes.
+- Config 1 : validateur extérieur au département (responsable de la
+  fonction risque ou Comité). Config 4 « Sensible » : le cumul RO + EXEC
+  est inversé par rapport à la sensibilité ; à interdire ou à compenser par
+  un second contrôle indépendant.
+- Ordre : poser échelles et appétence avec le dispositif ; les contrôles
+  existent avant la désignation de leur exécuteur ; contrôle de cohérence
+  avant la création du premier risque.
+
+### Principes ajoutés (2026-10-08, quatrième passage)
+
+24. Un cumul de rôles (RO + EXEC, DEL + EXEC) n'est acceptable que si
+    s'appliquent la règle « on ne valide jamais ce qu'on a saisi ou
+    exécuté » et un validateur extérieur ; la règle d'or du PO n'interdit
+    que RO + DEL.
+25. Définir les pouvoirs d'un délégué avant de coder la délégation :
+    suppléant du RO, jamais validateur de ses propres actes ; la
+    responsabilité reste au RO.
+26. Rôles d'organisation (RO / DEL / EXEC) et lignes de défense (L1 / L2 /
+    L3) sont deux axes distincts ; RO / DEL par Processus, EXEC par
+    contrôle, règle vérifiée au niveau du risque après héritage.
