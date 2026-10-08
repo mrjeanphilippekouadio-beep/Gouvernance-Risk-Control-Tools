@@ -1,0 +1,55 @@
+name: Migrate database
+
+# Applies database/postgresql/migrations/*.sql to the Neon database of the
+# branch that was pushed: staging -> Neon grc-staging, main -> Neon
+# grc-production. Decided by the PO on 2026-10-08 (ACTION_ITEMS.md
+# Decision Log, DECISION-009).
+#
+# This is the "separate, controlled mechanism" required by
+# docs/RETEX_PRODUCTION_RENDER_NEON.md §16.1: the migration credential
+# (grc_migrator_runtime) lives only in the GitHub Environment secrets below,
+# never in the Render web service.
+#
+# Required GitHub Environments ("staging" and "production"), each with:
+#   MIGRATION_DATABASE_URL  connection string of grc_migrator_runtime
+#   DATABASE_URL            connection string of grc_app_runtime (only used by
+#                           the runner to check the two roles are distinct)
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main, staging]
+    paths:
+      - "database/postgresql/migrations/**"
+  workflow_dispatch:
+
+# Never run two migrations against the same database at once.
+concurrency:
+  group: migrate-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: github.ref_name == 'staging' || github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      # NODE_ENV=production makes the runner refuse to run unless the
+      # migration and runtime roles are distinct and the runtime role is safe.
+      - run: npm run migrate
+        env:
+          NODE_ENV: production
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

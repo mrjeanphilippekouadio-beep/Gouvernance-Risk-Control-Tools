@@ -46,3 +46,29 @@ describe("SEC: GitHub Actions least privilege", () => {
     expect(workflow).not.toContain("GOOGLE_DRIVE_CREDENTIALS_PATH");
   });
 });
+
+const migrateWorkflow = readFileSync(
+  resolve(process.cwd(), "../.github/workflows/migrate.yml"),
+  "utf8",
+);
+
+describe("SEC: database migration workflow", () => {
+  it("defaults the GITHUB_TOKEN to read-only repository contents", () => {
+    expect(migrateWorkflow).toMatch(/permissions:\s*\n\s+contents:\s+read/);
+    expect(migrateWorkflow).not.toMatch(/:\s*write/);
+  });
+
+  it("never runs on pull requests, so untrusted branches cannot reach the database secrets", () => {
+    expect(migrateWorkflow).not.toContain("pull_request");
+  });
+
+  it("reads credentials only from GitHub Environment secrets, never literal connection strings", () => {
+    expect(migrateWorkflow).toMatch(/environment:/);
+    expect(migrateWorkflow).toContain("MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}");
+    expect(migrateWorkflow).not.toMatch(/postgres(ql)?:\/\//);
+  });
+
+  it("runs the migration runner in production mode so role separation is enforced", () => {
+    expect(migrateWorkflow).toMatch(/NODE_ENV:\s*production/);
+  });
+});
