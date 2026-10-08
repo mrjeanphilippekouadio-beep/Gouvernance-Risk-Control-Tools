@@ -39,6 +39,11 @@ const EnvSchema = z.object({
     .default("http://localhost:5173")
     .transform((value) => value.split(",").map((origin) => origin.trim())),
 
+  // Reverse proxies between the client and the app, used to resolve the real
+  // client IP (Express "trust proxy"). 0 = no proxy (local dev). Render =
+  // Cloudflare + Render proxy + in-container proxy = 3.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_CHAT_ID: z.string().optional(),
 });
