@@ -347,3 +347,6 @@ Statut : **déductions à confirmer par le PO.**
 31. Avant de proposer une structure d'échelle, demander ce que le PO
     entend par « corrélé » : chez lui, c'est « même taille d'échelle », pas
     une grille croisée.
+- Complément PO (DECISION-016) : chaque niveau 1..N de la probabilité et
+  de chaque axe d'impact porte son propre descriptif, saisi à la création
+  du Dispositif.
