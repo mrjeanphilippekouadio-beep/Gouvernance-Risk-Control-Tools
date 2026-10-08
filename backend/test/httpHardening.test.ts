@@ -96,6 +96,27 @@ describe("rate limiting", () => {
     expect(okAfter.status).toBe(200);
   });
 
+  it("does not count errors returned to an authenticated caller, but still counts unauthenticated failures", async () => {
+    const app = express();
+    app.use(authAttemptRateLimiter());
+    // Stands in for authMiddleware having resolved an identity before the route's permission check.
+    app.get("/forbidden-for-role", (req, res) => {
+      req.user = { userId: "u1" } as typeof req.user;
+      res.status(403).json({ error: "Missing permission" });
+    });
+    app.post("/auth/local", (_req, res) => res.status(403).json({ error: "Invalid local credentials" }));
+
+    const listening = await listen(app);
+    server = listening.server;
+
+    // Recorded after the response is sent, so check the counter on the following request.
+    await fetch(`${listening.baseUrl}/forbidden-for-role`);
+    expect((await fetch(`${listening.baseUrl}/forbidden-for-role`)).headers.get("ratelimit-remaining")).toBe("49");
+
+    await fetch(`${listening.baseUrl}/auth/local`, { method: "POST" });
+    expect((await fetch(`${listening.baseUrl}/auth/local`, { method: "POST" })).headers.get("ratelimit-remaining")).toBe("48");
+  });
+
   it("throttles a costly endpoint after its configured limit regardless of outcome", async () => {
     const app = express();
     app.get("/costly", costlyOperationRateLimiter(), (_req, res) => res.json({ ok: true }));

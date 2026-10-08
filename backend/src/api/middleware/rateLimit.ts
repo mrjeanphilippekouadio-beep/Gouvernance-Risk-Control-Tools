@@ -16,6 +16,14 @@ import rateLimit from "express-rate-limit";
  * error status (expired/invalid/missing token → 401, but also any other
  * 4xx/5xx) do. This throttles credential-stuffing / token-guessing without
  * punishing legitimate heavy users of the API.
+ *
+ * Errors returned to an already-authenticated caller (`req.user` set by
+ * authMiddleware: a 403 from a permission check, a 404, a 400) are not
+ * authentication attempts and do not count either — otherwise a user
+ * browsing screens their role cannot open locks themselves out (seen on
+ * staging 2026-10-08). Failures without an identity still count: missing
+ * or invalid token (401) and a wrong local-auth password (403 on
+ * /auth/local, which runs before any identity exists).
  */
 export function authAttemptRateLimiter() {
   return rateLimit({
@@ -24,6 +32,7 @@ export function authAttemptRateLimiter() {
     standardHeaders: true,
     legacyHeaders: false,
     skipSuccessfulRequests: true,
+    requestWasSuccessful: (req, res) => res.statusCode < 400 || req.user !== undefined,
     message: { error: "Too many failed requests, please try again later" },
   });
 }
