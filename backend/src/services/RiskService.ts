@@ -167,11 +167,11 @@ export class RiskService {
     const before = await this.get(actor, id);
 
     if (ownerId) {
-      if (ownerId === actor.userId) {
+      if (sameUserId(ownerId, actor.userId)) {
         throw new ValidationError("You cannot designate yourself as risk owner");
       }
       await this.assertActiveUser(actor.tenantId, ownerId, "owner");
-      if (before.superiorOwnerId && before.superiorOwnerId === ownerId) {
+      if (before.superiorOwnerId && sameUserId(before.superiorOwnerId, ownerId)) {
         throw new ValidationError("The risk owner cannot be the same person as the superior owner (N+1)");
       }
     }
@@ -223,11 +223,11 @@ export class RiskService {
     const before = await this.get(actor, id);
 
     if (superiorOwnerId) {
-      if (superiorOwnerId === actor.userId) {
+      if (sameUserId(superiorOwnerId, actor.userId)) {
         throw new ValidationError("You cannot designate yourself as superior owner (N+1)");
       }
       await this.assertActiveUser(actor.tenantId, superiorOwnerId, "superior owner");
-      if (before.ownerId && before.ownerId === superiorOwnerId) {
+      if (before.ownerId && sameUserId(before.ownerId, superiorOwnerId)) {
         throw new ValidationError("The superior owner (N+1) cannot be the same person as the risk owner");
       }
     }
@@ -348,4 +348,14 @@ function isValidTransition(from: Risk["status"], to: Risk["status"]): boolean {
 
 export function newRequestId(): string {
   return `REQ-${randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+/**
+ * SEC-B0-1: Postgres accepts the same uuid in upper case, braced or
+ * without dashes, so a plain string comparison with actor.userId could be
+ * bypassed. Compare the normalised forms instead.
+ */
+function sameUserId(a: string, b: string): boolean {
+  const normalise = (id: string) => id.toLowerCase().replace(/[{}-]/g, "");
+  return normalise(a) === normalise(b);
 }

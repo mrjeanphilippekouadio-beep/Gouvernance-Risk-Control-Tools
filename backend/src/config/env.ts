@@ -105,6 +105,19 @@ if (env.AUTH_PROVIDER === "local") {
   }
 }
 
+// SEC-R04-2: without both folders, evidence deletion fails after the row is
+// already soft-deleted, leaving Postgres and Drive out of sync.
+if (
+  process.env.NODE_ENV === "production" &&
+  env.DOCUMENT_STORAGE_PROVIDER === "google_drive" &&
+  (!env.DRIVE_ACTIVE_FOLDER_ID || !env.DRIVE_DELETED_FOLDER_ID)
+) {
+  console.error(
+    "Invalid production configuration: DRIVE_ACTIVE_FOLDER_ID and DRIVE_DELETED_FOLDER_ID are required with DOCUMENT_STORAGE_PROVIDER=google_drive.",
+  );
+  process.exit(1);
+}
+
 if (env.GOOGLE_DRIVE_AUTH_MODE === "key_file" && !env.GOOGLE_DRIVE_CREDENTIALS_PATH) {
   console.error("Invalid configuration: GOOGLE_DRIVE_CREDENTIALS_PATH is required when GOOGLE_DRIVE_AUTH_MODE=key_file.");
   process.exit(1);

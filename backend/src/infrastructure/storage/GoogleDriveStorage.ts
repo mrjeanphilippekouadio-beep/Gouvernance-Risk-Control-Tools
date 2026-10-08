@@ -108,10 +108,18 @@ export class GoogleDriveStorage implements DocumentStorage {
       fields: "parents",
       supportsAllDrives: true,
     });
+    const parents = current.data.parents ?? [];
+    // Replayed delete: the file is already in the "deleted" folder.
+    if (parents.includes(this.deletedFolderId)) return;
+    // SEC-R04-1: only ever move a file out of the active folder, never out of
+    // another folder the service account happens to reach.
+    if (this.activeFolderId && !parents.includes(this.activeFolderId)) {
+      throw new Error(`Drive file ${storageFileId} is not in the active evidence folder; refusing to move it.`);
+    }
     await drive.files.update({
       fileId: storageFileId,
       addParents: this.deletedFolderId,
-      removeParents: (current.data.parents ?? []).join(","),
+      removeParents: this.activeFolderId ?? parents.join(","),
       supportsAllDrives: true,
     });
   }
