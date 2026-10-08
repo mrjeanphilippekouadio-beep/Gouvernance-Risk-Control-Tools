@@ -205,3 +205,42 @@ littérale dans une décision consignée.
   « severity ».
 - **ISO 31000:2018** : pas encore disponible dans le dépôt (le PO n'a pas
   réussi à charger ses documents) ; mes références ISO restent à vérifier.
+
+## Position du PO sur les modes de cotation (2026-10-08) — mes objections
+
+Détail consolidé avec les autres rôles : `docs/architecture/RM-V1-Modes-cotation-objections.md`.
+Statut : en attente des réponses du PO (Q1 à Q11).
+
+- Je préfère la lecture **B** du Risk Owner : responsable métier qui ne cote
+  pas mais décide du traitement ; l'équipe risque saisit le Résiduel.
+- Je retire : « le mode ne s'applique jamais au niveau du risque » (accepté
+  sous conditions : politique HYBRIDE du Dispositif, choix justifié,
+  changement validé, mode effectif figé) ; le rejet de « chaque ligne note
+  sa ligne » ; la matrice OD-1 (à réécrire en « qui saisit quoi »).
+- Je maintiens : dispositif non redéfini risque par risque (comparabilité) ;
+  revue de l'Inhérent du L1 par une 2e personne ; un seul L1 par risque ou
+  une règle de consolidation ; validateur hors des saisissants en
+  Classique ; mode effectif jamais HYBRIDE ; proposant de la Treatment
+  Decision défini ; Inhérent et Résiduel restent des jugements humains.
+- Maîtrise saisie par deux acteurs : les deux saisies conservées, la
+  valeur de l'équipe risque fait foi, commentaire obligatoire en cas
+  d'écart, pas de moyenne ; la MIN globale porte sur les valeurs qui font
+  foi.
+
+### Principes ajoutés ou modifiés (2026-10-08, troisième passage)
+
+- Les principes 2, 3 et 4 dérivent du contrat §5/§7 : s'il est amendé, ils
+  changent avec lui. Je défends la séparation des tâches et la revue
+  indépendante, pas une attribution particulière de la saisie.
+18. Un modèle « qui saisit quoi » par mode n'est pas trois workflows tant
+    que les étapes sont les mêmes ; ce qui change est l'attribution.
+19. Une auto-évaluation de la 1re ligne est acceptable si une 2e personne
+    la revoit avant qu'elle serve de base au Résiduel.
+20. Quand deux acteurs notent la même cellule, les deux saisies sont
+    conservées et une seule fait foi ; pas de moyenne, commentaire
+    obligatoire sur l'écart.
+21. Le mode effectif d'une évaluation est toujours CLASSIQUE ou
+    PARTICIPATIF ; HYBRIDE est une politique du Dispositif.
+22. Le Dispositif ne se redéfinit pas risque par risque (comparabilité de
+    la Cartographie) ; il peut être résolu et affiché à l'ajout.
+23. Avant d'amender un principe de rôle, demander qui est le Risk Owner.

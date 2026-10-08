@@ -80,3 +80,19 @@ juriste.** Aucun texte source consulté ; références de principe.
 ## Arbitrage PO (2026-10-08)
 
 Le PO a retenu le **« signalement confidentiel »** (à côté du nominatif), conformément à l'avis Compliance ; le libellé « anonyme » n'est pas utilisé. La validation juridique est confiée aux **juristes internes de Djamo**. Les exigences techniques et points juridiques listés ci-dessus restent les conditions du lot B-4.
+
+## Avis sur la position du PO relative aux modes de cotation (2026-10-08)
+
+Détail consolidé : `docs/architecture/RM-V1-Modes-cotation-objections.md`.
+Objections bloquantes avant amendement du contrat : (B-1) responsable de la
+cotation indéterminé (qui est le Risk Owner) ; (B-2) saisie L1 sans
+validation par un tiers ; (B-3) Classique sans validateur distinct ; (B-4)
+choix du mode non tracé ni gouverné. Non bloquantes : justification du
+« Résiduel toujours à la 2e ligne », Maîtrise à deux acteurs, comparabilité
+dans les rapports, KRI, tests de sensibilité, charge de la 2e ligne. Aucun
+COMPLIANCE_BLOCK (pas de code).
+
+9. Une saisie de la 1re ligne est une contribution ou une auto-évaluation
+   soumise à retenue, jamais une cotation qui fait foi sans challenge ; le
+   mode de cotation et son changement sont des événements tracés,
+   approuvés et révisés.
