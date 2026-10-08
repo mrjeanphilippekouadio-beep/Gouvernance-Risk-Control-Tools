@@ -277,3 +277,19 @@ H).**
 26. Rôles d'organisation (RO / DEL / EXEC) et lignes de défense (L1 / L2 /
     L3) sont deux axes distincts ; RO / DEL par Processus, EXEC par
     contrôle, règle vérifiée au niveau du risque après héritage.
+
+## Projet d'amendement du contrat (2026-10-08, cinquième passage)
+
+Projet : `docs/architecture/RM-V1-Amendement-contrat-modes-PROJET.md`
+(§5, §7, §10 réécrits ou complétés ; §4, §8, §16, §17 touchés ; paramètres
+du dispositif avec valeurs par défaut ; 9 invariants ; gouvernance des
+changements de paramètres). **En attente de validation PO** ; le contrat
+n'est pas modifié. Sept points marqués « À VALIDER PO » (§6 du projet),
+dont la revue explicite de l'Inhérent L1 en plus de l'annotation.
+
+27. Une annotation n'est pas une revue : seule une action explicite et
+    tracée (« retenu » / « amendé avec commentaire ») prouve qu'une 2e
+    personne a revu une saisie avant son usage.
+28. Un paramètre du dispositif ne peut jamais abaisser un invariant ; tout
+    changement est une nouvelle version, motivée, approuvée par un tiers,
+    avec effet au cycle suivant.
