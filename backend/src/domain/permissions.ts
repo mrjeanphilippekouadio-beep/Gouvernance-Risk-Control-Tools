@@ -129,6 +129,15 @@ export type Permission =
   | "config.update"
   /** ACT-221/222/223/224/225: module toggles, tenant management, regulatory frameworks, risk categories, Excel import — super-admin-ish operations. */
   | "config.manage"
+  /**
+   * RISK_MANAGEMENT_V1 §8 (Lot A): recalibrating the Committee score
+   * thresholds is distinct from toggling the pass-through obligation
+   * itself — the latter is a governance-weight act (SEC-013/SEC-014
+   * family: a terminal/high-stakes side effect needs its own permission,
+   * never config.update) — kept as two separate permissions on purpose.
+   */
+  | "config.committeethreshold.set"
+  | "config.committeeenforcement.set"
   | "notification.read"
   | "governance.read"
   | "governance.create"
@@ -164,7 +173,19 @@ export type Permission =
   | "audit.finding.read"
   | "audit.finding.create"
   | "audit.finding.update"
-  | "audit.finding.close";
+  | "audit.finding.close"
+  /**
+   * RISK_MANAGEMENT_V1 §8/§12 (Lot B): TreatmentDecision. Ordinary
+   * maker-checker (confirm/invalidate) is covered by a single
+   * treatmentdecision.validate permission — same two-outcome act as
+   * riskevaluation.validate/reject. Committee pass-through gets its own
+   * dedicated permission, never folded into the one above, same family
+   * as riskevaluation.validate.committee.
+   */
+  | "treatmentdecision.read"
+  | "treatmentdecision.create"
+  | "treatmentdecision.validate"
+  | "treatmentdecision.validate.committee";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -249,6 +270,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   "config.read",
   "config.update",
   "config.manage",
+  "config.committeethreshold.set",
+  "config.committeeenforcement.set",
   "notification.read",
   "governance.read",
   "governance.create",
@@ -265,6 +288,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "audit.finding.create",
   "audit.finding.update",
   "audit.finding.close",
+  "treatmentdecision.read",
+  "treatmentdecision.create",
+  "treatmentdecision.validate",
+  "treatmentdecision.validate.committee",
 ];
 
 /**

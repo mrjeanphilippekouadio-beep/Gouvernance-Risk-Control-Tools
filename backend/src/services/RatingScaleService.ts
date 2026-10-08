@@ -1,5 +1,6 @@
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
+import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type {
   CreateRatingScaleInput,
   RatingScale,
@@ -67,7 +68,19 @@ function assertThresholds(thresholds: ScoreThreshold[], fieldName: string): void
   }
 }
 
-function assertActive(scale: RatingScale): void {
+/**
+ * R-01: a rating scale is only mutable in DRAFT. Once ACTIVE, every
+ * evaluation created under it snapshots `ratingScaleId`/`ratingScaleVersion`
+ * expecting that version's content to stay fixed — allowing in-place edits
+ * on an ACTIVE scale (the previous behavior here only blocked ARCHIVED)
+ * would silently rewrite the methodology behind already-scored
+ * evaluations and historical Cartography bands. Changing a methodology
+ * now always means: create a new DRAFT version, then activateVersion.
+ */
+function assertMutable(scale: RatingScale): void {
+  if (scale.status === "ACTIVE") {
+    throw new ValidationError("Cannot modify an active rating scale — create a new version instead");
+  }
   if (scale.status === "ARCHIVED") {
     throw new ValidationError("Cannot modify an archived rating scale — create a new version instead");
   }
@@ -86,6 +99,16 @@ export class RatingScaleService {
   constructor(
     private readonly ratingScales: RatingScaleRepository,
     private readonly audit: AuditRepository,
+    /**
+     * R-01: mandatory, not optional — `disable()`'s guard against
+     * soft-deleting a scale that evaluations still reference (so an
+     * ARCHIVED version's historical interpretability, readable via
+     * getById regardless of status, can never be revoked) must not
+     * depend on whether a caller happened to wire it. A fresh
+     * RatingScaleService can no longer be constructed without this
+     * protection in place.
+     */
+    private readonly riskEvaluations: Pick<RiskEvaluationRepository, "existsForRatingScale">,
   ) {}
 
   async create(
@@ -142,7 +165,7 @@ export class RatingScaleService {
   ): Promise<RatingScale> {
     requirePermission(actor, "ratingscale.update");
     const before = await this.get(actor, id);
-    assertActive(before);
+    assertMutable(before);
     assertThresholds(input.thresholds, "thresholds");
 
     const after = await this.ratingScales.updateThresholds(actor.tenantId, id, input.thresholds);
@@ -158,7 +181,7 @@ export class RatingScaleService {
   ): Promise<RatingScale> {
     requirePermission(actor, "ratingscale.update");
     const before = await this.get(actor, id);
-    assertActive(before);
+    assertMutable(before);
 
     if (!Array.isArray(input.axes) || input.axes.length === 0) {
       throw new ValidationError("axes must be a non-empty array");
@@ -190,7 +213,7 @@ export class RatingScaleService {
   ): Promise<RatingScale> {
     requirePermission(actor, "ratingscale.update");
     const before = await this.get(actor, id);
-    assertActive(before);
+    assertMutable(before);
     assertLevels(input.levels, "velocity levels", LEVEL_BOUNDS);
 
     const after = await this.ratingScales.updateVelocity(actor.tenantId, id, input.levels);
@@ -206,7 +229,7 @@ export class RatingScaleService {
   ): Promise<RatingScale> {
     requirePermission(actor, "ratingscale.update");
     const before = await this.get(actor, id);
-    assertActive(before);
+    assertMutable(before);
     assertLevels(input.levels, "persistence levels", LEVEL_BOUNDS);
 
     const after = await this.ratingScales.updatePersistence(actor.tenantId, id, input.levels);
@@ -222,7 +245,7 @@ export class RatingScaleService {
   ): Promise<RatingScale> {
     requirePermission(actor, "ratingscale.update");
     const before = await this.get(actor, id);
-    assertActive(before);
+    assertMutable(before);
     assertLevels(input.levels, "mastery levels", MASTERY_LEVEL_BOUNDS);
     if (!Array.isArray(input.defenseLines) || input.defenseLines.length === 0) {
       throw new ValidationError("defenseLines must be a non-empty array");
@@ -274,13 +297,30 @@ export class RatingScaleService {
     return after;
   }
 
-  /** ACT-177: soft-delete. The currently ACTIVE methodology must be replaced (activateVersion on a new one) before it can be disabled. */
+  /**
+   * ACT-177: soft-delete. The currently ACTIVE methodology must be
+   * replaced (activateVersion on a new one) before it can be disabled.
+   *
+   * R-01: a version — ACTIVE or already ARCHIVED — that at least one
+   * evaluation still references by `ratingScaleId` can never be
+   * soft-deleted. `getById` ignores `status` and only filters
+   * `deleted_at`, which is precisely what keeps an ARCHIVED version
+   * historically readable (Cartography, evaluation detail) — a
+   * soft-delete would make `getById` return null and silently fall back
+   * to default criticality bands / "no longer exists" for evaluations
+   * that were already scored under it.
+   */
   async disable(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<void> {
     requirePermission(actor, "ratingscale.delete");
     if (!reason.trim()) throw new ValidationError("A reason is required to disable a rating scale");
     const before = await this.get(actor, id);
     if (before.status === "ACTIVE") {
       throw new ValidationError("Cannot disable the active rating scale — activate a replacement first");
+    }
+    if (await this.riskEvaluations.existsForRatingScale(actor.tenantId, id)) {
+      throw new ValidationError(
+        "Cannot disable a rating scale that is still referenced by one or more evaluations — its history must remain interpretable",
+      );
     }
 
     await this.ratingScales.softDelete(actor.tenantId, id, actor.userId, reason);

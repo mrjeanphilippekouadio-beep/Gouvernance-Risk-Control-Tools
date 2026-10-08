@@ -22,11 +22,13 @@ function inMemoryRiskAppetiteRepository(): RiskAppetiteRepository {
       const a = byId.get(id);
       return a && a.tenantId === tenantId && !a.deletedAt ? a : null;
     },
-    async getBySubCategory(tenantId, subCategory, entity) {
+    async getBySubCategory(tenantId, subCategory, entity, options) {
       const id = byKey.get(key(tenantId, subCategory, entity));
       if (!id) return null;
       const a = byId.get(id);
-      return a && !a.deletedAt ? a : null;
+      if (!a || a.deletedAt) return null;
+      if (options?.activeOnly && !a.active) return null;
+      return a;
     },
     async list(tenantId, options) {
       return [...byId.values()].filter(
@@ -236,6 +238,46 @@ describe("RiskAppetiteService", () => {
       const service = new RiskAppetiteService(inMemoryRiskAppetiteRepository(), inMemoryAuditRepository());
       const noRead: AuthenticatedUser = { ...actor, userId: "user-4", roles: [] };
       await expect(service.getApplicable(noRead, "Fraude interne", null)).rejects.toThrow(ForbiddenError);
+    });
+
+    it("P-04: does not return a threshold that has been deactivated (active: false) but not soft-deleted", async () => {
+      const service = new RiskAppetiteService(inMemoryRiskAppetiteRepository(), inMemoryAuditRepository());
+      await service.setThreshold(
+        actor,
+        "Fraude interne",
+        { threshold: 10, methodologyVersion: "v1", active: false },
+        "REQ-1",
+      );
+
+      await expect(service.getApplicable(readOnlyActor, "Fraude interne", null)).resolves.toBeNull();
+    });
+
+    it("P-04: returns the active threshold again once reactivated", async () => {
+      const service = new RiskAppetiteService(inMemoryRiskAppetiteRepository(), inMemoryAuditRepository());
+      await service.setThreshold(
+        actor,
+        "Fraude interne",
+        { threshold: 10, methodologyVersion: "v1", active: false },
+        "REQ-1",
+      );
+      await service.setThreshold(actor, "Fraude interne", { threshold: 11, methodologyVersion: "v2" }, "REQ-2");
+
+      const applicable = await service.getApplicable(readOnlyActor, "Fraude interne", null);
+      expect(applicable?.threshold).toBe(11);
+    });
+
+    it("P-04: with several thresholds, only the active one for the matching (subCategory, entity) is applicable", async () => {
+      const service = new RiskAppetiteService(inMemoryRiskAppetiteRepository(), inMemoryAuditRepository());
+      await service.setThreshold(actor, "Fraude interne", { threshold: 10, methodologyVersion: "v1" }, "REQ-1");
+      await service.setThreshold(
+        actor,
+        "Risque de change",
+        { threshold: 8, methodologyVersion: "v1", active: false },
+        "REQ-2",
+      );
+
+      await expect(service.getApplicable(readOnlyActor, "Fraude interne", null)).resolves.toMatchObject({ threshold: 10 });
+      await expect(service.getApplicable(readOnlyActor, "Risque de change", null)).resolves.toBeNull();
     });
   });
 

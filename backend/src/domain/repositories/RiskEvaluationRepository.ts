@@ -26,4 +26,13 @@ export interface RiskEvaluationRepository {
   recordRejection(tenantId: string, id: string, validatedBy: string, comment: string): Promise<RiskEvaluation>;
   /** ACT-253: terminal, distinct from recordValidation — Comité des Risques / Direction validation for Majeur/Critique residual scores. */
   recordCommitteeValidation(tenantId: string, id: string, validatedBy: string, comment: string | null): Promise<RiskEvaluation>;
+
+  /**
+   * R-01: whether any evaluation in this tenant (any status — a BROUILLON
+   * still needs its rating scale readable, not just finalized ones)
+   * captured `ratingScaleId`. Used to refuse soft-deleting a rating scale
+   * that is still referenced, so historical interpretability can never be
+   * silently revoked.
+   */
+  existsForRatingScale(tenantId: string, ratingScaleId: string): Promise<boolean>;
 }

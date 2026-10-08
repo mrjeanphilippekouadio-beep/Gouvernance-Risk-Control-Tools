@@ -106,10 +106,15 @@ export class RiskAppetiteService {
    * exposed publicly and permission-gated, so a `*ViewService` never has to
    * reach into `RiskAppetiteRepository` directly to answer "what's the
    * active threshold right now".
+   *
+   * P-04: a threshold deactivated via `active: false` (SEC-014's terminal
+   * transition, gated on riskappetite.delete) is not soft-deleted, so it
+   * must be explicitly excluded here — otherwise Risk 360 would display a
+   * threshold that is no longer applicable as if it were current.
    */
   async getApplicable(actor: AuthenticatedUser, subCategory: string, entity: string | null): Promise<RiskAppetite | null> {
     requirePermission(actor, "riskappetite.read");
-    return this.appetites.getBySubCategory(actor.tenantId, subCategory, entity);
+    return this.appetites.getBySubCategory(actor.tenantId, subCategory, entity, { activeOnly: true });
   }
 
   /** GET /appetite/:id — direct lookup, not exposed by ACT-168's route but useful for e.g. archive's before-state. */

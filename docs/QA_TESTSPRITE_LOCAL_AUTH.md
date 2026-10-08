@@ -119,3 +119,23 @@ Ils doivent :
 - vérifier que `AUTH_PROVIDER=local` est impossible en production ;
 - couvrir le login local et les appels authentifiés par des tests ;
 - remettre `AUTH_PROVIDER=google` avant toute promotion vers l'environnement normal.
+
+
+## Multi-account staging QA
+
+STAGING supports multiple deterministic QA accounts through the secret
+environment variable `LOCAL_AUTH_USERS_JSON`. The value is a JSON array:
+
+```json
+[
+  {"email":"qagrctest@gmail.com","passwordHash":"scrypt$<salt>$<derived-key>"},
+  {"email":"another.qa@djamo.io","passwordHash":"scrypt$<salt>$<derived-key>"}
+]
+```
+
+There is intentionally **no comma/semicolon account separator**. JSON is used
+to avoid ambiguous parsing and accidental credential splitting.
+
+The backend authenticates the supplied email/password, then resolves the
+user's tenant, roles, permissions and dashboard scope from the staging
+database. Roles are never supplied by the browser.

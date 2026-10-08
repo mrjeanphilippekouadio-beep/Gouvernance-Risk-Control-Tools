@@ -24,10 +24,19 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 const FALLBACK_EVALUATION_MODE: EvaluationMode = "CLASSIQUE";
 
 const EVALUATION_TYPES: RiskEvaluationType[] = ["AD_HOC", "ANNUELLE", "ANTICIPEE"];
-const MIN_APPETITE_THRESHOLD = 1;
-const MAX_APPETITE_THRESHOLD = 25;
-/** ACT-253: Majeur (15-19) and Critique (20-25) are contiguous — a single floor covers both bands. */
-const COMMITTEE_VALIDATION_MIN_SCORE = 15;
+/** Exported for ConfigService's committee-threshold bounds validation — reused, never redefined (RISK_MANAGEMENT_V1 §8, Lot A). */
+export const MIN_APPETITE_THRESHOLD = 1;
+export const MAX_APPETITE_THRESHOLD = 25;
+/**
+ * Lot A (RISK_MANAGEMENT_V1 §8) — these are the fail-closed defaults used
+ * when no ConfigRepository is wired or no Config row exists yet for the
+ * tenant. They mirror the pre-Lot-A hardcoded constant (15, always
+ * enforced) so a test/caller that never configures Config never silently
+ * reopens the authorization gap this lot closes. Never make these more
+ * permissive.
+ */
+const COMMITTEE_EVALUATION_MIN_SCORE_DEFAULT = 15;
+const COMMITTEE_EVALUATION_ENFORCED_DEFAULT = true;
 
 export interface InherentScoringRequest {
   probability: number;
@@ -424,6 +433,14 @@ export class RiskEvaluationService {
       throw new ForbiddenError("An evaluator cannot validate their own risk evaluation");
     }
 
+    const { minScore, enforced } = await this.resolveCommitteeEvaluationSettings(actor.tenantId);
+    if (enforced && before.residualScore >= minScore) {
+      throw new ValidationError(
+        `This evaluation scored ${before.residualScore}, at or above the committee threshold (${minScore}) — ` +
+          `it must be validated through POST /risk-evaluations/:id/validate-committee, not this endpoint`,
+      );
+    }
+
     const after = await this.evaluations.recordValidation(actor.tenantId, id, actor.userId, comment);
 
     await this.audit.record({
@@ -476,10 +493,14 @@ export class RiskEvaluationService {
   /**
    * ACT-253: distinct terminal status from validate()/VALIDATED — a
    * separate "Comité des Risques / Direction" maker-checker for
-   * significant risks only (residual score in Majeur 15-19 or Critique
-   * 20-25), gated by its own permission (riskevaluation.validate.committee,
-   * never riskevaluation.validate). Purely additive: validate()/reject()
-   * and their permission are unchanged.
+   * significant risks only (residual score at or above the configurable
+   * committee threshold, default 15 — see
+   * resolveCommitteeEvaluationSettings), gated by its own permission
+   * (riskevaluation.validate.committee, never riskevaluation.validate).
+   * The permission split is unchanged since ACT-253; as of Lot A
+   * (RISK_MANAGEMENT_V1 §8), validate() now also refuses evaluations at or
+   * above the same threshold when committeeEvaluationEnforced is true,
+   * so this is no longer "purely additive" with no effect on validate().
    */
   async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string): Promise<RiskEvaluation> {
     requirePermission(actor, "riskevaluation.validate.committee");
@@ -491,9 +512,13 @@ export class RiskEvaluationService {
     if (before.residualScore === null) {
       throw new ValidationError("Cannot validate an evaluation before residual scoring is completed");
     }
-    if (before.residualScore < COMMITTEE_VALIDATION_MIN_SCORE) {
+    // Lot A (§8): the Committee floor is checked unconditionally here, independent of
+    // committeeEvaluationEnforced — disabling the *obligation* in validate() must never
+    // loosen access to Committee validation itself.
+    const { minScore } = await this.resolveCommitteeEvaluationSettings(actor.tenantId);
+    if (before.residualScore < minScore) {
       throw new ValidationError(
-        `Committee validation only applies to Majeur (15-19) or Critique (20-25) residual scores (this evaluation scored ${before.residualScore})`,
+        `Committee validation only applies to residual scores at or above the committee threshold (${minScore}) (this evaluation scored ${before.residualScore})`,
       );
     }
     if (before.evaluatorId === actor.userId) {
@@ -547,6 +572,26 @@ export class RiskEvaluationService {
     if (!this.configs) return FALLBACK_EVALUATION_MODE;
     const config = await this.configs.getByTenant(tenantId);
     return config?.evaluationMode ?? FALLBACK_EVALUATION_MODE;
+  }
+
+  /**
+   * Lot A (RISK_MANAGEMENT_V1 §8) — replaces the old hardcoded
+   * COMMITTEE_VALIDATION_MIN_SCORE constant. Fail-closed: no
+   * ConfigRepository wired, or no Config row saved yet for the tenant,
+   * always resolves to the blocking defaults (15, enforced) — never the
+   * permissive ones. Same "degrade, never throw" posture as
+   * resolveTenantDefaultEvaluationMode, but the degrade direction here is
+   * deliberately the opposite (stricter, not laxer).
+   */
+  private async resolveCommitteeEvaluationSettings(tenantId: string): Promise<{ minScore: number; enforced: boolean }> {
+    if (!this.configs) {
+      return { minScore: COMMITTEE_EVALUATION_MIN_SCORE_DEFAULT, enforced: COMMITTEE_EVALUATION_ENFORCED_DEFAULT };
+    }
+    const config = await this.configs.getByTenant(tenantId);
+    return {
+      minScore: config?.committeeEvaluationMinScore ?? COMMITTEE_EVALUATION_MIN_SCORE_DEFAULT,
+      enforced: config?.committeeEvaluationEnforced ?? COMMITTEE_EVALUATION_ENFORCED_DEFAULT,
+    };
   }
 
   private async resolveActiveRatingScale(tenantId: string): Promise<RatingScale> {

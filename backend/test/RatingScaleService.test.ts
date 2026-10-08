@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { RatingScaleService } from "../src/services/RatingScaleService.js";
 import type { RatingScaleRepository } from "../src/domain/repositories/RatingScaleRepository.js";
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
+import type { RiskEvaluationRepository } from "../src/domain/repositories/RiskEvaluationRepository.js";
 import type { RatingScale } from "../src/domain/entities/RatingScale.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
@@ -107,6 +108,15 @@ function inMemoryRatingScaleRepository(): RatingScaleRepository {
   };
 }
 
+/** R-01: controllable fake — reports whether `ratingScaleId` is referenced, as a real RiskEvaluationRepository would for disable()'s guard. */
+function inMemoryRiskEvaluationRepository(referencedRatingScaleIds: Set<string> = new Set()): Pick<RiskEvaluationRepository, "existsForRatingScale"> {
+  return {
+    async existsForRatingScale(_tenantId, ratingScaleId) {
+      return referencedRatingScaleIds.has(ratingScaleId);
+    },
+  };
+}
+
 function inMemoryAuditRepository(): AuditRepository {
   return {
     async record() {},
@@ -130,7 +140,7 @@ const actor: AuthenticatedUser = {
 const readOnlyActor: AuthenticatedUser = { ...actor, userId: "user-2", roles: ["ratingscale.read"] };
 
 function newService() {
-  return new RatingScaleService(inMemoryRatingScaleRepository(), inMemoryAuditRepository());
+  return new RatingScaleService(inMemoryRatingScaleRepository(), inMemoryAuditRepository(), inMemoryRiskEvaluationRepository());
 }
 
 async function createBaseScale(service: RatingScaleService) {
@@ -364,5 +374,125 @@ describe("RatingScaleService", () => {
     await expect(
       service.updateThresholds(actor, v1.id, { thresholds: [{ label: "Faible", min: 1, max: 25 }] }, "REQ-27"),
     ).rejects.toThrow(ValidationError);
+  });
+
+  describe("R-01 — immutability of an ACTIVE rating scale", () => {
+    it("rejects updateThresholds on an ACTIVE scale", async () => {
+      const service = newService();
+      const scale = await createBaseScale(service);
+      await service.activateVersion(actor, scale.id, "REQ-28");
+
+      await expect(
+        service.updateThresholds(actor, scale.id, { thresholds: [{ label: "Faible", min: 1, max: 25 }] }, "REQ-29"),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("rejects updateImpactAxes on an ACTIVE scale", async () => {
+      const service = newService();
+      const scale = await createBaseScale(service);
+      await service.activateVersion(actor, scale.id, "REQ-30");
+
+      await expect(
+        service.updateImpactAxes(
+          actor,
+          scale.id,
+          { axes: [{ code: "FINANCIAL", label: "Financier", order: 1 }] },
+          "REQ-31",
+        ),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("rejects updateVelocity, updatePersistence and updateMastery on an ACTIVE scale", async () => {
+      const service = newService();
+      const scale = await createBaseScale(service);
+      await service.activateVersion(actor, scale.id, "REQ-32");
+      const levels = [1, 2, 3, 4, 5].map((level) => ({ level, label: `Level ${level}` }));
+
+      await expect(service.updateVelocity(actor, scale.id, { levels }, "REQ-33")).rejects.toThrow(ValidationError);
+      await expect(service.updatePersistence(actor, scale.id, { levels }, "REQ-34")).rejects.toThrow(ValidationError);
+      await expect(
+        service.updateMastery(
+          actor,
+          scale.id,
+          { levels: [{ level: 1, label: "Inadéquat" }, { level: 2, label: "Partiel" }, { level: 3, label: "Adéquat" }], defenseLines: ["L1", "L2", "L3"] },
+          "REQ-35",
+        ),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("still allows creating and activating a new DRAFT version — the existing versioning mechanism is untouched", async () => {
+      const service = newService();
+      const v1 = await createBaseScale(service);
+      await service.activateVersion(actor, v1.id, "REQ-36");
+
+      const v2 = await service.create(
+        actor,
+        { name: "Djamo Risk Scale", version: "2026.2", probabilityLevels: 5, impactLevels: 5 },
+        "REQ-37",
+      );
+      expect(v2.status).toBe("DRAFT");
+      const updatedV2 = await service.updateThresholds(
+        actor,
+        v2.id,
+        { thresholds: [{ label: "Faible", min: 1, max: 25 }] },
+        "REQ-38",
+      );
+      expect(updatedV2.criticalityThresholds).toHaveLength(1);
+
+      const activatedV2 = await service.activateVersion(actor, v2.id, "REQ-39");
+      expect(activatedV2.status).toBe("ACTIVE");
+      const archivedV1 = await service.get(actor, v1.id);
+      expect(archivedV1.status).toBe("ARCHIVED");
+    });
+
+    it("an evaluation created under v1 stays interpretable after v2 becomes ACTIVE — v1 remains readable, unmodified, by id and version", async () => {
+      const service = newService();
+      const v1 = await createBaseScale(service);
+      const activeV1 = await service.activateVersion(actor, v1.id, "REQ-40");
+      // Simulate what RiskEvaluationService.create snapshots at inherent-scoring time.
+      const snapshot = { ratingScaleId: activeV1.id, ratingScaleVersion: activeV1.version };
+
+      const v2 = await service.create(
+        actor,
+        { name: "Djamo Risk Scale", version: "2026.2", probabilityLevels: 5, impactLevels: 5 },
+        "REQ-41",
+      );
+      await service.activateVersion(actor, v2.id, "REQ-42");
+
+      const stillReadable = await service.get(actor, snapshot.ratingScaleId);
+      expect(stillReadable.status).toBe("ARCHIVED");
+      expect(stillReadable.version).toBe(snapshot.ratingScaleVersion);
+      expect(stillReadable.probabilityLevels).toBe(5); // unchanged — R-01 blocked any in-place edit while it was ACTIVE
+    });
+  });
+
+  describe("R-01 — disable() refuses to remove a version still referenced by an evaluation", () => {
+    it("rejects disable when existsForRatingScale reports a reference", async () => {
+      const ratingScales = inMemoryRatingScaleRepository();
+      const audit = inMemoryAuditRepository();
+      const bootstrap = new RatingScaleService(ratingScales, audit, inMemoryRiskEvaluationRepository());
+      const scale = await createBaseScale(bootstrap);
+
+      const referenced = inMemoryRiskEvaluationRepository(new Set([scale.id]));
+      const guardedService = new RatingScaleService(ratingScales, audit, referenced);
+
+      await expect(guardedService.disable(actor, scale.id, "cleanup", "REQ-43")).rejects.toThrow(ValidationError);
+    });
+
+    it("still allows disable when no evaluation references the scale", async () => {
+      const ratingScales = inMemoryRatingScaleRepository();
+      const audit = inMemoryAuditRepository();
+      const notReferenced = inMemoryRiskEvaluationRepository(new Set());
+      const service = new RatingScaleService(ratingScales, audit, notReferenced);
+      const scale = await createBaseScale(service);
+
+      await service.disable(actor, scale.id, "created by mistake", "REQ-44");
+      await expect(service.get(actor, scale.id)).rejects.toThrow();
+    });
+
+    // R-01 follow-up: RiskEvaluationRepository is now a required constructor
+    // parameter (not `riskEvaluations?:` anymore) — a RatingScaleService can
+    // no longer be built without this guard wired, so there is no "not
+    // wired" case left to test here (TypeScript rejects it at compile time).
   });
 });

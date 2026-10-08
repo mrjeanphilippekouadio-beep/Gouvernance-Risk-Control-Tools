@@ -276,4 +276,14 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
     if (!row) throw new NotFoundError("RiskEvaluation", id);
     return toDomain(row);
   }
+
+  async existsForRatingScale(tenantId: string, ratingScaleId: string): Promise<boolean> {
+    const { rows } = await this.pool.query<{ exists: boolean }>(
+      `SELECT EXISTS(
+         SELECT 1 FROM risk_evaluations WHERE tenant_id = $1 AND rating_scale_id = $2
+       ) AS exists`,
+      [tenantId, ratingScaleId],
+    );
+    return rows[0]?.exists ?? false;
+  }
 }

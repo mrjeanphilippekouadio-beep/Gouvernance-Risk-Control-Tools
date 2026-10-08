@@ -390,6 +390,9 @@ function inMemoryRiskEvaluationRepository(): RiskEvaluationRepository {
       store.set(id, updated);
       return updated;
     },
+    async existsForRatingScale(tenantId, ratingScaleId) {
+      return [...store.values()].some((e) => e.tenantId === tenantId && e.ratingScaleId === ratingScaleId);
+    },
   };
 }
 
@@ -595,11 +598,26 @@ describe("RiskEvaluationService.validateByCommittee (ACT-253, additive)", () => 
     await expect(service.validateByCommittee(committeeActor, scored.id, null, "REQ-9")).rejects.toThrow(ValidationError);
   });
 
-  it("does not affect the existing validate()/reject() methods or their permission — plain VALIDATED still works", async () => {
+  // Lot A (RISK_MANAGEMENT_V1 §8, ACTION_ITEMS.md "E-1") deliberately changes this test's
+  // original assertion. Before Lot A, plain validate() never checked the committee
+  // threshold at all — a holder of riskevaluation.validate could finalize a Majeur/Critique
+  // evaluation (score 16, here) without ever going through committee, a real authorization
+  // gap. After Lot A, with no ConfigRepository wired (newRiskEvaluationService() below passes
+  // none), the fail-closed defaults apply (minScore 15, enforced true) and validate() now
+  // refuses this exact case, pointing the caller at validate-committee instead. This is the
+  // lot's intended effect, not a regression — see RiskEvaluationService.validate().
+  it("Lot A: validate() now refuses a Majeur/Critique score and points to validate-committee instead", async () => {
     const service = newRiskEvaluationService();
     const scored = await scoreToLevel(service, 4, 4);
     const validatorOnly: AuthenticatedUser = { ...evaluatorActor, userId: "user-validator", roles: ["riskevaluation.read", "riskevaluation.validate"] };
-    const validated = await service.validate(validatorOnly, scored.id, "OK", "REQ-10");
+    await expect(service.validate(validatorOnly, scored.id, "OK", "REQ-10")).rejects.toThrow(ValidationError);
+  });
+
+  it("validate() still succeeds below the committee threshold", async () => {
+    const service = newRiskEvaluationService();
+    const scored = await scoreToLevel(service, 2, 2); // 4 — well below the default threshold (15)
+    const validatorOnly: AuthenticatedUser = { ...evaluatorActor, userId: "user-validator", roles: ["riskevaluation.read", "riskevaluation.validate"] };
+    const validated = await service.validate(validatorOnly, scored.id, "OK", "REQ-11");
     expect(validated.status).toBe("VALIDATED");
   });
 });

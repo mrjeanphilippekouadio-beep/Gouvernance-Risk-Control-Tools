@@ -25,6 +25,17 @@ const UpdateEvaluationModeBody = z.object({
   reason: z.string().min(1),
 });
 
+const UpdateCommitteeThresholdsBody = z.object({
+  evaluationMinScore: z.number().int().optional(),
+  treatmentMinScore: z.number().int().nullable().optional(),
+  reason: z.string().min(1),
+});
+
+const UpdateCommitteeEnforcementBody = z.object({
+  enforced: z.boolean(),
+  reason: z.string().min(1),
+});
+
 /** ACT-220 (PUT /config), ACT-226 (PUT /config/appetite-mode) and DIV-06 (PUT /config/evaluation-mode) — see ConfigService for what's deliberately not wired yet. */
 export function configRouter(configService: ConfigService): Router {
   const router = Router();
@@ -63,6 +74,32 @@ export function configRouter(configService: ConfigService): Router {
     try {
       const body = UpdateEvaluationModeBody.parse(req.body);
       const config = await configService.updateEvaluationMode(req.user, body.mode, body.reason, req.requestId);
+      res.json({ data: config });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Lot A (RISK_MANAGEMENT_V1 §8): committee thresholds + enforcement toggle, two distinct endpoints/permissions — see ConfigService.
+  router.put("/committee-thresholds", async (req, res, next) => {
+    try {
+      const body = UpdateCommitteeThresholdsBody.parse(req.body);
+      const config = await configService.updateCommitteeThresholds(
+        req.user,
+        { evaluationMinScore: body.evaluationMinScore, treatmentMinScore: body.treatmentMinScore },
+        body.reason,
+        req.requestId,
+      );
+      res.json({ data: config });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/committee-enforcement", async (req, res, next) => {
+    try {
+      const body = UpdateCommitteeEnforcementBody.parse(req.body);
+      const config = await configService.setCommitteeEnforcement(req.user, body.enforced, body.reason, req.requestId);
       res.json({ data: config });
     } catch (err) {
       next(err);

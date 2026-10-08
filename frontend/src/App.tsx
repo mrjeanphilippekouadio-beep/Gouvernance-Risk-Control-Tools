@@ -83,7 +83,11 @@ function App() {
   const [view, setView] = useState<View>("cartography");
   const [evaluationRiskId, setEvaluationRiskId] = useState<string | undefined>();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const token = AUTH_PROVIDER === "local" ? localAuth.token : (idToken ?? devToken);
+  const sessionIdentity = AUTH_PROVIDER === "local"
+    ? formatIdentity(localAuth.email)
+    : getGoogleIdentity(idToken ?? devToken);
   const errorPath = window.location.pathname;
 
   if (errorPath === "/400" || errorPath === "/error/400") return <ErrorPage code={400} />;
@@ -153,8 +157,19 @@ function App() {
             <strong>{PAGE_TITLES[view]}</strong>
           </div>
           <div className="topbar-actions">
-            <span className="topbar-status"><span />Connecté</span>
-            <Button onClick={AUTH_PROVIDER === "local" ? localAuth.signOut : idToken ? signOut : () => setDevToken("")}>Déconnexion</Button>
+            <button type="button" className="topbar-user" aria-label="Ouvrir les actions de session" aria-expanded={logoutOpen} onClick={() => setLogoutOpen((open) => !open)}>
+              <span className="topbar-user-avatar">{getInitials(sessionIdentity)}</span>
+              <span className="topbar-user-copy"><strong>{sessionIdentity || "Utilisateur"}</strong><small>Accès authentifié</small></span>
+              <span className="topbar-user-chevron" aria-hidden="true">⌄</span>
+            </button>
+            {logoutOpen && <div className="topbar-session-popover" role="menu">
+              <button type="button" className="topbar-session-action" role="menuitem" onClick={() => {
+                setLogoutOpen(false);
+                if (AUTH_PROVIDER === "local") localAuth.signOut();
+                else if (idToken) signOut();
+                else setDevToken("");
+              }}><span aria-hidden="true">↪</span>Déconnexion</button>
+            </div>}
           </div>
         </header>
 
@@ -188,6 +203,43 @@ function App() {
       <FeedbackWidget token={token} />
     </div>
   );
+}
+
+function formatIdentity(identity: string): string {
+  const value = identity.trim();
+  if (!value) return "Utilisateur";
+  if (!value.includes("@")) return value;
+  const localPart = value.split("@")[0];
+  return localPart
+    .replace(/[._-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getInitials(identity: string): string {
+  const value = identity.trim();
+  if (!value) return "U";
+  const localPart = value.includes("@") ? value.split("@")[0] : value;
+  const parts = localPart
+    .replace(/[._-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return parts[0].slice(0, 2).toUpperCase();
+}
+
+function getGoogleIdentity(token: string | null): string {
+  if (!token) return "";
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return "";
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")) ) as { name?: string; email?: string };
+    return claims.name?.trim() || claims.email?.trim() || "";
+  } catch {
+    return "";
+  }
 }
 
 function Icon({ name }: { name: string }) {
@@ -238,7 +290,7 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
                 aria-expanded={open}
                 title={collapsed ? group.label : undefined}
               >
-                {!collapsed && <><span className={open ? "group-chevron open" : "group-chevron"}>›</span><span>{group.label}</span><span className="group-count">{group.items.length}</span></>}
+                {!collapsed && <><span>{group.label}</span><span className="group-count">{group.items.length}</span></>}
               </button>
               {(open || collapsed) && (
                 <div className="sidebar-group-items">
@@ -256,6 +308,7 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
                           if (item.available) {
                             setView(item.id);
                             setMobileNavOpen(false);
+                            if (collapsed) setCollapsed(false);
                             if (item.id !== group.items[0]?.id) setOpenGroup(group.label);
                           }
                         }}
@@ -271,7 +324,6 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
           );
         })}
       </nav>
-      {!collapsed && <div className="sidebar-footer"><span className="sidebar-avatar">JP</span><div><strong>Session active</strong><small>Accès authentifié</small></div><span className="sidebar-footer-dot" /></div>}
     </aside>
   );
 }

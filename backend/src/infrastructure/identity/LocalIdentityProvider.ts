@@ -2,6 +2,11 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import type { AuthenticatedUser, IdentityProvider } from "./IdentityProvider.js";
 import { ForbiddenError } from "../../domain/errors/DomainErrors.js";
 
+export interface LocalAuthUser {
+  email: string;
+  passwordHash: string;
+}
+
 export interface LocalAuthMembershipLookup {
   (email: string): Promise<AuthenticatedUser | null>;
 }
@@ -36,8 +41,13 @@ function verifyPassword(password: string, encoded: string): boolean {
   const [, salt, expectedHex] = parts;
   if (!salt || !expectedHex) return false;
   const actual = scryptSync(password, salt, 64);
-  const expected = Buffer.from(expectedHex, "hex");
-  return expected.length === actual.length && timingSafeEqual(actual, expected);
+  if (!/^[0-9a-f]+$/i.test(expectedHex)) return false;
+  try {
+    const expected = Buffer.from(expectedHex, "hex");
+    return expected.length === actual.length && timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -49,25 +59,37 @@ function verifyPassword(password: string, encoded: string): boolean {
  * from the browser.
  */
 export class LocalIdentityProvider implements IdentityProvider {
+  private readonly usersByEmail: Map<string, LocalAuthUser>;
+
   constructor(
-    private readonly configuredEmail: string,
-    private readonly passwordHash: string,
+    users: LocalAuthUser[],
     private readonly tokenSecret: string,
     private readonly tokenTtlSeconds: number,
     private readonly lookupMembership: LocalAuthMembershipLookup,
-  ) {}
+  ) {
+    this.usersByEmail = new Map();
+
+    for (const user of users) {
+      const email = user.email.trim().toLowerCase();
+      if (!email || !user.passwordHash) throw new Error("Invalid local-auth user configuration");
+      if (this.usersByEmail.has(email)) throw new Error(`Duplicate local-auth email configured: ${email}`);
+      this.usersByEmail.set(email, { email, passwordHash: user.passwordHash });
+    }
+
+    if (this.usersByEmail.size === 0) throw new Error("At least one local-auth user must be configured");
+  }
 
   async authenticate(email: string, password: string): Promise<string> {
-    if (email.trim().toLowerCase() !== this.configuredEmail.toLowerCase()) {
-      throw new ForbiddenError("Invalid local credentials");
-    }
-    if (!verifyPassword(password, this.passwordHash)) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const configuredUser = this.usersByEmail.get(normalizedEmail);
+
+    if (!configuredUser || !verifyPassword(password, configuredUser.passwordHash)) {
       throw new ForbiddenError("Invalid local credentials");
     }
 
-    const membership = await this.lookupMembership(this.configuredEmail);
+    const membership = await this.lookupMembership(configuredUser.email);
     if (!membership) {
-      throw new ForbiddenError(`No tenant membership found for ${this.configuredEmail}`);
+      throw new ForbiddenError(`No tenant membership found for ${configuredUser.email}`);
     }
 
     return this.issueToken(membership);

@@ -1,0 +1,10 @@
+.scales-detail{display:flex;flex-direction:column;gap:14px}
+.scales-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.scales-detail-head h2{font-size:15px;margin:0 0 4px}
+.scales-detail-head p{font-size:12px;color:var(--gs-text-secondary);line-height:1.5;max-width:60ch}
+.scales-row-input{width:100%;box-sizing:border-box;border:1px solid var(--gs-border);border-radius:8px;background:#fff;padding:7px 9px;color:var(--gs-text);font:12px var(--gs-font-ui)}
+.scales-row-actions{display:flex;gap:6px;justify-content:flex-end}
+.scales-add-row{align-self:flex-start}
+.scales-section-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:4px}
+.scales-readonly-value{font-size:12px;color:var(--gs-text)}
+.scales-mastery-note{font-size:11px;color:var(--gs-text-secondary);line-height:1.5}

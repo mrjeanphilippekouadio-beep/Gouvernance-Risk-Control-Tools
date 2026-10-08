@@ -126,3 +126,20 @@ polymorphe non contrainte, cf. commentaire de tête de 027).
   constraint de `module_toggles.module_name` (sans `'AUDIT'`). Sûr
   uniquement si aucune ligne `module_toggles` n'a encore
   `module_name = 'AUDIT'` au moment du rollback.
+- `044_audit_log_escalate.down.sql` — restaure l'ancienne `CHECK`
+  constraint de `audit_log.action` (sans `'ESCALATE'`). Sûr uniquement
+  si aucune ligne `audit_log` n'a encore `action = 'ESCALATE'` au
+  moment du rollback (sinon l'`ADD CONSTRAINT` échoue).
+- `045_committee_thresholds.down.sql` — `ALTER TABLE configs DROP
+  COLUMN` sur les 3 colonnes ajoutées (`committee_evaluation_min_score`,
+  `committee_treatment_min_score`, `committee_evaluation_enforced`).
+  Non destructif tant qu'aucun tenant n'a encore écrit de valeur
+  différente du défaut (`15` / `NULL` / `true`) au moment du rollback —
+  à vérifier avant d'exécuter en environnement partagé si
+  `ConfigService.updateCommitteeThresholds`/`setCommitteeEnforcement` a
+  déjà été appelé.
+- `046_treatment_decisions.down.sql` — `DROP TABLE treatment_decisions`.
+  Destructif : supprime tout l'historique des décisions de traitement
+  (toutes les propositions, confirmations, invalidations et validations
+  Comité). Non destructif pour `risk_evaluations`/`risks` (aucune FK
+  entrante depuis ces tables vers `treatment_decisions`).

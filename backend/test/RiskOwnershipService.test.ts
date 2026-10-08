@@ -109,6 +109,9 @@ function fakeRiskEvaluationRepository(evaluationsByRisk: Map<string, RiskEvaluat
     async recordCommitteeValidation() {
       throw new Error("not implemented");
     },
+    async existsForRatingScale() {
+      return false;
+    },
   };
 }
 
