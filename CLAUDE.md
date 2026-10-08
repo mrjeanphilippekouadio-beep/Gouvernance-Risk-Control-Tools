@@ -310,8 +310,10 @@ dispatch. Avant de dispatcher un travail réel à un agent frais :
    agent qui a écrit le code testé.
 7. **Consulte `.claude/agent-context/`** avant de rédiger le prompt de
    dispatch : `SHARED_LOG.md` (grep le tag `@<rôle>` de l'agent que tu
-   dispatches) et `ACTION_ITEMS.md` (un point déjà ouvert sur son
-   périmètre ?). Après le dispatch, si l'agent a pris une décision qui
+   dispatches), `ACTION_ITEMS.md` (un point déjà ouvert sur son
+   périmètre ?) et, s'il existe, `memory/<rôle>.md` (mémoire dédiée du
+   rôle : ses principes et positions passées, à faire lire en premier par
+   l'agent dispatché, puis à mettre à jour après son retour). Après le dispatch, si l'agent a pris une décision qui
    concerne le périmètre d'un autre rôle (même non dispatché), ajoute
    une entrée dans `SHARED_LOG.md` avec le bon tag — c'est le mécanisme
    de "mise en copie" qui permet à un agent jamais appelé de ne pas
