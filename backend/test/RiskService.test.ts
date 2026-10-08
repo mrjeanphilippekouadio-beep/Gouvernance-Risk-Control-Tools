@@ -241,7 +241,7 @@ const actor: AuthenticatedUser = {
   tenantId: "tenant-1",
   email: "jp@example.com",
   displayName: "JP",
-  roles: ["risk.read", "risk.create", "risk.update", "risk.delete"],
+  roles: ["risk.read", "risk.create", "risk.update", "risk.delete", "risk.owner.assign"],
 };
 
 describe("RiskService", () => {
@@ -410,16 +410,42 @@ describe("RiskService", () => {
       expect(updated.ownerId).toBe(owner.id);
     });
 
-    it("rejects an actor without risk.update permission", async () => {
+    it("rejects an actor without risk.owner.assign permission (risk.update is not enough)", async () => {
       const repo = inMemoryRiskRepository();
       const owner = activeUser();
       const service = new RiskService(repo, inMemoryAuditRepository(), undefined, inMemoryUserRepository([owner]));
       const risk = await service.create(actor, { process: "P", description: "D" }, "REQ-31");
 
-      const readOnlyActor = { ...actor, roles: ["risk.read"] };
+      const readOnlyActor = { ...actor, roles: ["risk.read", "risk.update"] };
       await expect(service.assignOwner(readOnlyActor, risk.id, owner.id, "REQ-32")).rejects.toThrow(
         ForbiddenError,
       );
+    });
+  });
+
+  describe("B-0 self-designation and permission gate", () => {
+    it("refuses the actor designating themselves as owner", async () => {
+      const self = activeUser();
+      const me = { ...actor, userId: self.id };
+      const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository(), undefined, inMemoryUserRepository([self]));
+      const risk = await service.create(me, { process: "P", description: "D" }, "REQ-B0-1");
+      await expect(service.assignOwner(me, risk.id, self.id, "REQ-B0-2")).rejects.toThrow(ValidationError);
+    });
+
+    it("refuses the actor designating themselves as superior owner", async () => {
+      const self = activeUser();
+      const me = { ...actor, userId: self.id };
+      const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository(), undefined, inMemoryUserRepository([self]));
+      const risk = await service.create(me, { process: "P", description: "D" }, "REQ-B0-3");
+      await expect(service.assignSuperiorOwner(me, risk.id, self.id, "REQ-B0-4")).rejects.toThrow(ValidationError);
+    });
+
+    it("rejects assignSuperiorOwner with risk.update but without risk.owner.assign", async () => {
+      const superior = activeUser();
+      const service = new RiskService(inMemoryRiskRepository(), inMemoryAuditRepository(), undefined, inMemoryUserRepository([superior]));
+      const risk = await service.create(actor, { process: "P", description: "D" }, "REQ-B0-5");
+      const noAssign = { ...actor, roles: ["risk.read", "risk.update"] };
+      await expect(service.assignSuperiorOwner(noAssign, risk.id, superior.id, "REQ-B0-6")).rejects.toThrow(ForbiddenError);
     });
   });
 

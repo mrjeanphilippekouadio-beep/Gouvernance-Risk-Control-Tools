@@ -163,10 +163,13 @@ export class RiskService {
    * suspended one).
    */
   async assignOwner(actor: AuthenticatedUser, id: string, ownerId: string | null, requestId: string): Promise<Risk> {
-    requirePermission(actor, "risk.update");
+    requirePermission(actor, "risk.owner.assign");
     const before = await this.get(actor, id);
 
     if (ownerId) {
+      if (ownerId === actor.userId) {
+        throw new ValidationError("You cannot designate yourself as risk owner");
+      }
       await this.assertActiveUser(actor.tenantId, ownerId, "owner");
       if (before.superiorOwnerId && before.superiorOwnerId === ownerId) {
         throw new ValidationError("The risk owner cannot be the same person as the superior owner (N+1)");
@@ -216,10 +219,13 @@ export class RiskService {
     superiorOwnerId: string | null,
     requestId: string,
   ): Promise<Risk> {
-    requirePermission(actor, "risk.update");
+    requirePermission(actor, "risk.owner.assign");
     const before = await this.get(actor, id);
 
     if (superiorOwnerId) {
+      if (superiorOwnerId === actor.userId) {
+        throw new ValidationError("You cannot designate yourself as superior owner (N+1)");
+      }
       await this.assertActiveUser(actor.tenantId, superiorOwnerId, "superior owner");
       if (before.ownerId && before.ownerId === superiorOwnerId) {
         throw new ValidationError("The superior owner (N+1) cannot be the same person as the risk owner");
