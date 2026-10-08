@@ -1,3 +1,4 @@
+import { inflateRawSync } from "node:zlib";
 import { ValidationError } from "../domain/errors/DomainErrors.js";
 
 const MAX_UNCOMPRESSED_TOTAL = 50 * 1024 * 1024;
@@ -11,6 +12,7 @@ const CENTRAL_ENTRY_SIGNATURE = 0x02014b50;
 const EOCD_MIN_SIZE = 22;
 const EOCD_MAX_SEARCH = EOCD_MIN_SIZE + 0xffff;
 const CENTRAL_ENTRY_FIXED_SIZE = 46;
+const LOCAL_HEADER_FIXED_SIZE = 30;
 
 /**
  * Inspects an OOXML (.xlsx) zip's central directory WITHOUT decompressing
@@ -20,6 +22,8 @@ const CENTRAL_ENTRY_FIXED_SIZE = 46;
  */
 export function assertSafeXlsxArchive(buffer: Buffer): void {
   const bad = (msg: string) => new ValidationError(`Invalid Excel file: ${msg}`);
+  const inconsistent = () => bad("inconsistent archive");
+  const entries: { method: number; compressed: number; uncompressed: number; localOffset: number }[] = [];
 
   if (buffer.length < EOCD_MIN_SIZE || buffer.readUInt32LE(0) !== ZIP_LOCAL_SIGNATURE) {
     throw bad("not a .xlsx (zip) archive");
@@ -70,8 +74,37 @@ export function assertSafeXlsxArchive(buffer: Buffer): void {
       throw bad("suspicious compression ratio");
     }
 
+    entries.push({
+      method: buffer.readUInt16LE(pos + 10),
+      compressed,
+      uncompressed,
+      localOffset: buffer.readUInt32LE(pos + 42),
+    });
     pos += CENTRAL_ENTRY_FIXED_SIZE + nameLen + extraLen + commentLen;
   }
 
   if (!hasWorkbook) throw bad("xl/workbook.xml is missing");
+
+  // Declared sizes can lie: really inflate each entry with output capped at
+  // its declared size, so memory/CPU stay bounded by MAX_UNCOMPRESSED_TOTAL.
+  for (const e of entries) {
+    if (e.localOffset + LOCAL_HEADER_FIXED_SIZE > buffer.length || buffer.readUInt32LE(e.localOffset) !== ZIP_LOCAL_SIGNATURE) {
+      throw inconsistent();
+    }
+    const start = e.localOffset + LOCAL_HEADER_FIXED_SIZE + buffer.readUInt16LE(e.localOffset + 26) + buffer.readUInt16LE(e.localOffset + 28);
+    if (start + e.compressed > buffer.length) throw inconsistent();
+    const data = buffer.subarray(start, start + e.compressed);
+    if (e.method === 0) {
+      if (data.length !== e.uncompressed) throw inconsistent();
+    } else if (e.method === 8) {
+      try {
+        const out = inflateRawSync(data, { maxOutputLength: e.uncompressed + 1 });
+        if (out.length !== e.uncompressed) throw inconsistent();
+      } catch {
+        throw inconsistent();
+      }
+    } else {
+      throw bad("unsupported compression method");
+    }
+  }
 }

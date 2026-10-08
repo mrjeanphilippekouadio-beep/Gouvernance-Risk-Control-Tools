@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { deflateRawSync } from "node:zlib";
 import ExcelJS from "exceljs";
 import { assertSafeXlsxArchive } from "../src/infrastructure/zipArchiveGuard.js";
 import { ValidationError } from "../src/domain/errors/DomainErrors.js";
@@ -70,6 +71,42 @@ describe("assertSafeXlsxArchive", () => {
   it("rejects an archive without xl/workbook.xml", () => {
     const zip = fakeZip([{ name: "word/document.xml", compressed: 100, uncompressed: 300 }]);
     expect(() => assertSafeXlsxArchive(zip)).toThrow(/workbook\.xml/);
+  });
+
+  it("rejects an entry that under-declares its size (real deflate data larger than declared)", () => {
+    const entries = [
+      { name: "xl/workbook.xml", raw: Buffer.from("<w/>"), declared: 4 },
+      { name: "xl/sheets/sheet1.xml", raw: Buffer.alloc(MB), declared: 10 },
+    ];
+    const parts: Buffer[] = [];
+    const central: Buffer[] = [];
+    let offset = 0;
+    for (const e of entries) {
+      const name = Buffer.from(e.name);
+      const data = deflateRawSync(e.raw);
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt16LE(8, 8);
+      local.writeUInt16LE(name.length, 26);
+      const c = Buffer.alloc(46 + name.length);
+      c.writeUInt32LE(0x02014b50, 0);
+      c.writeUInt16LE(8, 10);
+      c.writeUInt32LE(data.length, 20);
+      c.writeUInt32LE(e.declared, 24);
+      c.writeUInt16LE(name.length, 28);
+      c.writeUInt32LE(offset, 42);
+      name.copy(c, 46);
+      central.push(c);
+      parts.push(local, name, data);
+      offset += 30 + name.length + data.length;
+    }
+    const cd = Buffer.concat(central);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(entries.length, 10);
+    eocd.writeUInt32LE(cd.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    expect(() => assertSafeXlsxArchive(Buffer.concat([...parts, cd, eocd]))).toThrow(/inconsistent archive/);
   });
 
   it("rejects Zip64 sentinel values", () => {
