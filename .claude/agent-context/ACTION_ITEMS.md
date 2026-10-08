@@ -128,7 +128,7 @@ pour l'usage.
 | @privacy @security @architect @risk-manager | **DECISION-012 à cadrer — signalement anonyme ou nominatif, au choix du signalant (PO, 2026-10-08).** Point technique à trancher avant le lot B-4 : « anonyme » peut vouloir dire (a) **anonymat réel** : aucune identité stockée (pas de `contributed_by`), donc aucun suivi possible du signalant, risque d'abus non traçable, et exception explicite à la règle CLAUDE.md « attribution forcée côté serveur » ; ou (b) **confidentialité** : identité stockée mais visible seulement d'un rôle restreint (ex. conformité), jamais de l'owner ni de la file de triage. Le choix a des conséquences légales (protection des lanceurs d'alerte, droit d'accès RGPD / loi ivoirienne sur les données personnelles) : avis Privacy et Compliance requis, Security pour l'anti-abus (rate limiting, journal sans identité). | 2026-10-08 | **Modalité tranchée par le PO (2026-10-08, DECISION-012 complétée)** : signalement **« confidentiel »** (pseudonymisé, identité stockée à part et levée réservée à la conformité) ou **« nominatif »** ; le libellé « anonyme » n'est pas utilisé. Validation juridique confiée par le PO aux **juristes internes de Djamo** (points listés dans `memory/compliance.md` et `memory/privacy.md`). **Ouvert — HUMAN : retour des juristes internes ; PRIVACY_ASSESSMENT + décision DPIA ; avant tout code de B-4.** |
 | @dev-backend | **Commentaire périmé dans `RiskEvaluationService.recordMasteryAssessment`** (« maîtrise globale = moyenne » alors que le code applique `Math.min`, vérifié le 2026-10-08 par l'orchestrateur ; même famille que F-5 du passage Architecte). | 2026-10-08 | **Ouvert — à corriger dans le prochain lot qui touche ce fichier (B-1).** |
 | @architect @risk-manager @compliance @ux-designer @dev-frontend (HUMAN) | **Position du PO sur les modes de cotation (2026-10-08), proposée comme modification d'une seule partie du contrat `RISK_MANAGEMENT_V1_FINAL_DECISIONS.md` (§5/§7), en consultation pour objections.** (1) L1 = l'exécutant du contrôle. (2) Trois modes de cotation, enregistrés en configuration au même titre que les échelles (paires 4/6, impaires 3/5) et la description des probabilités corrélée aux impacts. (3) Le **Résiduel** est toujours saisi par un membre de **l'équipe risque**. (4) **Classique** : l'équipe risque fait tout. (5) **Participatif** : Inhérent et Maîtrise par l'exécutant L1 ; Résiduel et Maîtrise par l'équipe risque. (6) **Hybride** : dans un même dispositif, le mode se choisit risque par risque. (7) Le dispositif et ses paramètres sont définis à chaque ajout de risque. Remplace la question OD-6 telle que formulée par le passage Architecte ; interagit avec OD-1, OD-7, E-10 et les lots B-1 à B-3. | 2026-10-08 | **Consultation close (2026-10-08) — 11 questions au PO, voir `docs/architecture/RM-V1-Modes-cotation-objections.md` §3.** Convergence des cinq rôles : contradiction avec le contrat §5/§7/§10 ; décisions bloquantes : Q1 qui est le Risk Owner, Q2 saisie L1 officielle ou retenue, Q3 Maîtrise à deux acteurs, Q7 dispositif à l'ajout du risque. Lot B-1 suspendu, B-2/B-3 à reformuler, B-0/B-4 inchangés. **Ouvert — HUMAN : répondre à Q1 à Q11, puis décider de l'amendement de cette seule partie du contrat.** |
-| @architect @risk-manager @compliance @ux-designer @dev-frontend @dev-backend (HUMAN) | **Workflow cible du PO RO / DEL / EXEC (2026-10-08)** — dispositif (mode) → processus avec Risk Owner et délégué → exécuteur de contrôle → risque ; matrice de 5 configurations ; règle d'or « RO + DEL interdit ». Second tour de consultation des cinq rôles : `docs/architecture/RM-V1-Modes-cotation-objections.md` §6. | 2026-10-08 | Q1 et Q7 tranchées. Convergence : RO/DEL sur le Processus, EXEC sur le Contrôle ; la règle d'or ne suffit pas (validateur hors de tous les auteurs, désignations tracées) ; cumul RO + EXEC (configs 1 et 4) seulement avec compensation (Compliance, objection n° 5). Nouveau lot B-5 proposé, prérequis de B-1. **Ouvert — HUMAN : répondre aux questions A à H (§6.5), puis amendement §5/§7/§10 rédigé par le Risk Manager et soumis au PO.** |
+| @architect @risk-manager @compliance @ux-designer @dev-frontend @dev-backend (HUMAN) | **Workflow cible du PO RO / DEL / EXEC (2026-10-08)** — dispositif (mode) → processus avec Risk Owner et délégué → exécuteur de contrôle → risque ; matrice de 5 configurations ; règle d'or « RO + DEL interdit ». Second tour de consultation des cinq rôles : `docs/architecture/RM-V1-Modes-cotation-objections.md` §6. | 2026-10-08 | Q1 et Q7 tranchées. Convergence : RO/DEL sur le Processus, EXEC sur le Contrôle ; la règle d'or ne suffit pas (validateur hors de tous les auteurs, désignations tracées) ; cumul RO + EXEC (configs 1 et 4) seulement avec compensation (Compliance, objection n° 5). Nouveau lot B-5 proposé, prérequis de B-1. Questions A à H validées par le PO (DECISION-014), avec dispositif configurable et annotations de l'équipe risque sur l'Inhérent L1. **Ouvert — @risk-manager : rédiger l'amendement §5/§7/§10 ; HUMAN : le valider avant toute modification du contrat.** |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
@@ -285,6 +285,38 @@ RELATED: DECISION-011 (fenêtre « qui peut faire / à qui demander »),
   finding F-1, lot B-0.
 OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ
+```
+
+```text
+DECISION-014
+DATE: 2026-10-08
+QUESTION: Workflow RO / DEL / EXEC — questions A à H de
+  `docs/architecture/RM-V1-Modes-cotation-objections.md` §6.5.
+DECISION: Le PO valide les recommandations des rôles sur A à H (« Je suis
+  ok pour les recommandations ») :
+  A. RO et DEL portés par le Processus, surcharge sur le risque par paire ;
+  B. le RO décide du traitement, l'équipe risque cote ;
+  C. le DEL remplace le RO (absence ou délégation datée), ne valide
+     jamais ses propres actes, la responsabilité reste au RO ;
+  D. cumul RO + EXEC plafonné, Maîtrise revue par l'équipe risque, cumul
+     marqué et approuvé, config 4 à revoir ;
+  E. validateur hors de tous les auteurs (responsable de la fonction
+     risque, Comité au-delà du seuil) ;
+  F. désignation par la direction du département, approbation par
+     l'équipe risque, trace complète ;
+  G. le DEL n'est pas le N+1 d'escalade ;
+  H. champs texte libres conservés, sans reprise automatique.
+  Deux compléments du PO :
+  1. Le dispositif doit rester **configurable** : le client final peut
+     demander des modifications. Les choix ci-dessus sont des valeurs par
+     défaut paramétrables, pas des règles figées en code.
+  2. En Hybride et Participatif, l'équipe risque peut **commenter ou
+     annoter** l'Inhérent saisi par la 1re ligne.
+RELATED: DECISION-006 (mode par Processus), DECISION-013 (OD-9, à
+  reformuler au niveau Processus), lots B-0, B-1, B-5.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — amendement du contrat §5/§7/§10 à rédiger par le Risk
+  Manager et à soumettre au PO avant toute modification du contrat.
 ```
 
 | @release-manager | **URGENT — `main` a 27 commits jamais poussés sur `origin`, aucune PR ouverte pour le Lot 1 RACI malgré un feu vert QA + Security complet (SEC-016 CLOSED).** Vérifié le 2026-09-29 : dernière PR mergée = #15 (`security/fix-sec-009-015`, 2026-09-28). Tout ce qui a suivi (SEC-016, 3 docs d'architecture cible, ADR-002, Lot 1 RACI complet avec revue QA/Security) est resté en local sur `main`, sans branche ni PR. Working tree en plus non propre (fichiers modifiés/non trackés : `ACTION_ITEMS.md`, `SHARED_LOG.md`, `CLAUDE.md`, design system, `RisksPage.tsx`, `RaciPanel.tsx`/`.css`, `api/raci.ts`/`users.ts`, `ADR-003...`). Rollback de migration `027_raci_assignments.sql` jamais testé/tracé non plus (déjà exigé dans la DoD proposée le 28/09). Recommandation : ouvrir la PR du Lot 1 RACI (+ éventuellement une PR séparée pour les 3 docs d'architecture/ADR-002/ADR-003) avant tout nouveau lot, pour ne pas accumuler davantage de commits non tracés. | 2026-09-29 | **Résolu — PR #16 ouverte, 22 commits, mergée par le PO le 2026-09-29.** Lots A/B/C exécutés en parallèle/séquence (voir DECISION-005 ci-dessous pour le détail complet) : Lot 1 RACI + charte graphique + docs architecture poussés, fuite Privacy corrigée, `GrcObjectType` créé et `RaciEntityType` migré dessus, middleware `ModuleToggle` câblé, 20 tests `BrandingService` ajoutés, rollback de migration établi comme convention projet (027+028 `.down.sql` + `README.md` + correctif du runner). 405 tests verts sur toute la série, working tree propre. |
