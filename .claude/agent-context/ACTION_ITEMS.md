@@ -500,6 +500,34 @@ STATUS: DÉCIDÉ — clé de rapprochement et données personnelles en attente
   de la réponse du PO aux explications.
 ```
 
+```text
+DECISION-020
+DATE: 2026-10-08
+QUESTION: Données personnelles et clé de rapprochement (import Excel),
+  temps réel.
+DECISION:
+  Données personnelles — l'exécutant du contrôle choisit, par colonne, de
+    **masquer** les valeurs (remplacement par des X ou des *) ; le
+    masquage est le mode par défaut. **« Ignorer »** (colonne jamais
+    persistée) reste disponible comme **option de configuration**. Le
+    fichier original reste conservé en entier. Reste de l'avis Privacy
+    retenu (déclaration oui / non / ne sait pas, dataset confidentiel,
+    lectures tracées sans valeurs).
+  Clé de rapprochement — facultative par défaut ; le Dispositif ou le
+    contrôle peut la rendre obligatoire pour certains jeux de données ;
+    l'assistant propose une colonne à valeurs uniques au premier import ;
+    la clé est figée avec la version du schéma. Le code doit rester
+    facile à faire évoluer et la règle **configurable depuis une
+    interface**.
+  Temps réel — la V1 est livrée **WebSocket-ready** (contrat §14) ; le
+    WebSocket lui-même est un élément de la **V2**, avec les retours
+    futurs du client.
+RELATED: DECISION-017, DECISION-018, DECISION-019, contrat §14,
+  `docs/architecture/RM-V1-Sequence-actions.md` étape 19.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ
+```
+
 | @release-manager | **URGENT — `main` a 27 commits jamais poussés sur `origin`, aucune PR ouverte pour le Lot 1 RACI malgré un feu vert QA + Security complet (SEC-016 CLOSED).** Vérifié le 2026-09-29 : dernière PR mergée = #15 (`security/fix-sec-009-015`, 2026-09-28). Tout ce qui a suivi (SEC-016, 3 docs d'architecture cible, ADR-002, Lot 1 RACI complet avec revue QA/Security) est resté en local sur `main`, sans branche ni PR. Working tree en plus non propre (fichiers modifiés/non trackés : `ACTION_ITEMS.md`, `SHARED_LOG.md`, `CLAUDE.md`, design system, `RisksPage.tsx`, `RaciPanel.tsx`/`.css`, `api/raci.ts`/`users.ts`, `ADR-003...`). Rollback de migration `027_raci_assignments.sql` jamais testé/tracé non plus (déjà exigé dans la DoD proposée le 28/09). Recommandation : ouvrir la PR du Lot 1 RACI (+ éventuellement une PR séparée pour les 3 docs d'architecture/ADR-002/ADR-003) avant tout nouveau lot, pour ne pas accumuler davantage de commits non tracés. | 2026-09-29 | **Résolu — PR #16 ouverte, 22 commits, mergée par le PO le 2026-09-29.** Lots A/B/C exécutés en parallèle/séquence (voir DECISION-005 ci-dessous pour le détail complet) : Lot 1 RACI + charte graphique + docs architecture poussés, fuite Privacy corrigée, `GrcObjectType` créé et `RaciEntityType` migré dessus, middleware `ModuleToggle` câblé, 20 tests `BrandingService` ajoutés, rollback de migration établi comme convention projet (027+028 `.down.sql` + `README.md` + correctif du runner). 405 tests verts sur toute la série, working tree propre. |
 | @tous | **DECISION-004 — Balayage complet des 15 agents (2026-09-29), confirmation croisée du problème central de DECISION-003.** 7 agents indépendants (architect, product-manager, dev-backend, dev-db, security, compliance, audit) ont chacun, depuis leur propre angle, confirmé par preuve code la même divergence de whitelists polymorphes — désormais **7 whitelists connues**, pas 5 : `ActionPlanSourceType`, `ActionLinkResourceType`, `RaciEntityType` (6e, déjà livrée avant DECISION-003 — @product-manager), `NotificationResourceType` (7e, périmètre différent avec `RISK_EVALUATION`/`REVIEW_CYCLE` — @dev-backend), plus RACI/Comments/Evidence-links/Finding prévues. **Divergence de casse en plus de la couverture** : RACI en `PascalCase` (`'Risk'`), les autres en `SNAKE_CASE` majuscule (`'RISK'`) — @dev-db, @dev-backend. `@security` ajoute : le risque n'est pas que l'énum diverge, c'est que la fonction de résolution tenant-scopée est dupliquée à la main à chaque whitelist — recommande de centraliser aussi le **résolveur**, pas seulement le type. `@compliance` qualifie la divergence de `REGULATORY_GAP` mineur (pas juste dette technique) et demande une vérification de non-régression sur les données réelles existantes au moment de la création de `GrcObjectType` (aucune ligne en base ne doit devenir invalide sous la whitelist unifiée). Décision à prendre par `@architect` avant d'écrire `GrcObjectType.ts` : casse canonique retenue (majuscule recommandée, 5 whitelists sur 7 déjà dans cette casse) et si `NotificationResourceType` (périmètre différent) entre dans l'unification ou reste à part. | 2026-09-29 | **Résolu — `@architect` a tranché : SNAKE_CASE majuscule, `NotificationResourceType` inclus. `backend/src/domain/GrcObjectType.ts` créé, `RaciEntityType` migré dessus (migration `028`, PR #16). Restent à migrer plus tard, seulement au moment où ces modules seront exposés (pas anticipé) : `ActionPlanSourceType`/`ActionLinkResourceType`, `NotificationResourceType` lui-même (dérivation recommandée par l'architecte, pas faite), Comments/Evidence-links/Finding.** |
 | @privacy | **PRIV-CH-DASH-001 — portée élargie (2026-09-29).** Confirmé toujours ouvert et non corrigé (`RiskOwnershipService.listOwners` consomme toujours `getById` sans vérifier `deletedAt`). La portée initiale ("avant le dashboard consolidé") est trop étroite : le pattern `*ViewService` que DECISION-003 généralise (10-15 repositories composés par fiche) multiplie mécaniquement le nombre de résolutions d'identité, donc le nombre de points de fuite potentiels. Exigence reformulée : la matrice widget × donnée × permission ET le correctif `getById` doivent être faits avant **tout** premier `*ViewService` codé (Risk 360, Dashboard, ou `RiskDeviceViewService`), pas seulement avant l'écran Dashboard nommément. | 2026-09-27 | **Partiellement résolu (2026-09-29)** — `RiskOwnershipService.listOwners` corrigé (masquage d'un owner suspendu, PR #16). La partie plus large (matrice widget × donnée × permission avant tout futur `*ViewService`) reste ouverte — aucun `*ViewService` codé à ce jour, condition à satisfaire au moment venu, pas avant. |
