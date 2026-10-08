@@ -151,6 +151,12 @@ button:disabled{opacity:.5;cursor:not-allowed}
     </div>
   </section>
 
+  <section aria-labelledby="h-conf">
+    <div class="sec-head"><h2 id="h-conf">Configuration</h2><span class="muted" style="font-size:13px">Valeurs non secrètes, et suivi des secrets à créer</span></div>
+    <p class="notice"><strong>Ne saisissez jamais la valeur d'un secret ici</strong> (mot de passe, clé, jeton) : cette page est lisible par tous ceux qui y ont accès. Les secrets se créent directement dans Render ou dans les Environments GitHub ; cochez-les ici une fois créés.</p>
+    <div class="cols" id="conf"></div>
+  </section>
+
   <section aria-labelledby="h-log">
     <div class="sec-head"><h2 id="h-log">Journal des livraisons</h2></div>
     <div class="log" id="log"></div>
@@ -163,7 +169,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
     done:"Livré", in_progress:"En cours", todo:"À faire", blocked:"Bloqué", waiting:"En attente", later:"Plus tard",
     ready:"Prêt", reserves:"Prêt avec réserves", open:"À trancher", answered:"Tranché"
   };
-  const state = { project:null, releases:[], agents:[], questions:[], deliveries:[], filter:"open", agent:null, db:null, user:null, canWrite:null, names:{} };
+  const state = { project:null, releases:[], agents:[], questions:[], deliveries:[], variables:[], secrets:[], filter:"open", agent:null, db:null, user:null, canWrite:null, names:{} };
   const $ = s => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const pill = s => el("span", "pill s-" + s, STATUS[s] || s);
@@ -214,39 +220,54 @@ button:disabled{opacity:.5;cursor:not-allowed}
       return c;
     }
     const name = "q-" + q.id;
-    let chosen = null;
-    if (q.options && q.options.length){
-      const opts = el("div","opts");
-      q.options.forEach((o, i) => {
-        const lab = el("label","opt" + (o === q.recommendation ? " rec" : ""));
-        const r = document.createElement("input"); r.type = "radio"; r.name = name; r.id = name + "-" + i; r.value = o;
-        r.onchange = () => { chosen = o; };
-        const txt = el("span"); if (o === q.recommendation) txt.append(el("span","tag","Recommandé "), document.createElement("br"));
-        txt.append(document.createTextNode(o));
-        lab.append(r, txt); opts.append(lab);
-      });
-      c.append(opts);
-    } else if (q.recommendation) {
-      c.append(el("p","q-context","Recommandation : " + q.recommendation));
+    if (q.recommendation) {
+      const rec = el("div","opt rec"); const txt = el("span"); txt.append(el("span","tag","Recommandation "), document.createElement("br"), document.createTextNode(q.recommendation)); rec.append(txt); c.append(rec);
     }
-    const ta = document.createElement("textarea"); ta.id = name + "-note"; ta.placeholder = "Votre réponse ou un complément (facultatif si une option est choisie)";
-    ta.setAttribute("aria-label","Réponse à " + q.title);
-    const row = el("div","row");
-    const send = el("button",null,"Enregistrer la réponse");
+    const others = (q.options||[]).filter(o => o !== q.recommendation);
+    const form = el("div","opts"); form.hidden = true;
+    let chosen = null;
+    others.forEach((o, i) => {
+      const lab = el("label","opt");
+      const r = document.createElement("input"); r.type = "radio"; r.name = name; r.id = name + "-" + i; r.value = o;
+      r.onchange = () => { chosen = o; };
+      lab.append(r, el("span",null,o)); form.append(lab);
+    });
+    const ta = document.createElement("textarea"); ta.id = name + "-note";
+    ta.setAttribute("aria-label","Commentaire pour " + q.title);
     const msg = el("span","notice");
-    send.onclick = async () => {
-      const text = [chosen, ta.value.trim()].filter(Boolean).join(" — ");
-      if (!text){ msg.textContent = "Choisissez une option ou écrivez une réponse."; return; }
-      send.disabled = true; msg.textContent = "Enregistrement…";
+    const save = async (decision, text) => {
+      msg.textContent = "Enregistrement…"; btns.forEach(b => b.disabled = true);
       try {
         const uid = state.user ? await state.user.id() : null;
-        await state.db.doc("questions/" + q.id).update({ status:"answered", answer:text, answeredBy:uid, answeredAt:new Date().toISOString() });
+        await state.db.doc("questions/" + q.id).update({ status:"answered", decision, answer:text, answeredBy:uid, answeredAt:new Date().toISOString() });
         msg.textContent = "Réponse enregistrée. L'orchestrateur la reprendra au prochain passage.";
-      } catch(e){ send.disabled = false; msg.textContent = "Enregistrement refusé : vous n'avez peut-être pas le droit d'écrire sur cette page."; }
+      } catch(e){ btns.forEach(b => b.disabled = false); msg.textContent = "Enregistrement refusé : vous n'avez peut-être pas le droit d'écrire sur cette page."; }
     };
-    if (!state.canWrite){ send.disabled = true; ta.disabled = true; }
-    row.append(send, msg);
-    c.append(ta, row);
+    const row = el("div","row");
+    const bOk = el("button",null, q.recommendation ? "Valider la recommandation" : "Valider");
+    const bNo = el("button","ghost","Refuser");
+    const bOther = el("button","ghost","Autre réponse");
+    const bSend = el("button",null,"Enregistrer"); bSend.hidden = true;
+    const btns = [bOk,bNo,bOther,bSend];
+    let mode = null;
+    const open = (m, ph) => { mode = m; form.hidden = false; ta.placeholder = ph; bSend.hidden = false; ta.focus(); };
+    bOk.onclick = () => {
+      if (q.recommendation) save("accepted", q.recommendation + (ta.value.trim() ? " — " + ta.value.trim() : ""));
+      else open("accepted","Votre réponse (par exemple les identifiants demandés)");
+    };
+    bNo.onclick = () => open("refused","Pourquoi ? Ce commentaire est obligatoire.");
+    bOther.onclick = () => open("other","Votre réponse, ou un complément à l'option choisie");
+    bSend.onclick = () => {
+      const note = ta.value.trim();
+      if (mode === "refused" && !note){ msg.textContent = "Indiquez la raison du refus."; return; }
+      const text = (mode === "refused" ? "Refusé : " : "") + [chosen, note].filter(Boolean).join(" — ");
+      if (!text.replace("Refusé : ","")){ msg.textContent = "Choisissez une option ou écrivez une réponse."; return; }
+      save(mode, text);
+    };
+    if (!state.canWrite) btns.forEach(b => b.disabled = true);
+    form.append(ta);
+    row.append(bOk, bNo, bOther, bSend, msg);
+    c.append(form, row);
     return c;
   }
 
@@ -312,6 +333,42 @@ button:disabled{opacity:.5;cursor:not-allowed}
     if (a.updatedAt) p.append(el("p","updated","Dernière mise à jour : " + fmt(a.updatedAt)));
   }
 
+  function renderConf(){
+    const box = $("#conf"); if (!box) return; box.replaceChildren();
+    const vars = state.variables.slice().sort((a,b)=>(a.order||0)-(b.order||0));
+    const secs = state.secrets.slice().sort((a,b)=>(a.order||0)-(b.order||0));
+    const vb = el("div","box"); vb.append(el("h3",null,"Variables"));
+    if (!vars.length) vb.append(el("p","muted","Aucune variable demandée."));
+    vars.forEach(v => {
+      const wrap = el("div","opts"); wrap.style.marginBottom = "10px";
+      const lab = el("label",null); lab.htmlFor = "var-" + v.id; lab.append(el("span","mono",v.key + " · " + v.env));
+      if (v.description) lab.append(el("div","q-meta",v.description));
+      const inp = document.createElement("input"); inp.id = "var-" + v.id; inp.value = v.value || ""; inp.placeholder = "Valeur";
+      inp.style.cssText = "width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font:13px var(--font-mono)";
+      const row = el("div","row"); const b = el("button","ghost","Enregistrer"); const m = el("span","notice");
+      b.onclick = async () => {
+        const val = inp.value.trim();
+        if (/^(sk|pk|AKIA|ghp_|xox)|-----BEGIN|password|secret/i.test(val)){ m.textContent = "Cette valeur ressemble à un secret : créez-la dans Render ou GitHub, pas ici."; return; }
+        b.disabled = true; m.textContent = "Enregistrement…";
+        try { await state.db.doc("variables/" + v.id).update({ value: val, updatedAt: new Date().toISOString() }); m.textContent = "Enregistré."; } catch(e){ m.textContent = "Enregistrement refusé."; }
+        b.disabled = false;
+      };
+      if (!state.canWrite){ inp.disabled = true; b.disabled = true; }
+      row.append(b, m); wrap.append(lab, inp, row); vb.append(wrap);
+    });
+    const sb = el("div","box"); sb.append(el("h3",null,"Secrets à créer hors de cette page"));
+    if (!secs.length) sb.append(el("p","muted","Aucun secret demandé."));
+    secs.forEach(x => {
+      const lab = el("label","opt");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "sec-" + x.id; cb.checked = x.status === "created";
+      cb.disabled = !state.canWrite;
+      cb.onchange = async () => { cb.disabled = true; try { await state.db.doc("secrets/" + x.id).update({ status: cb.checked ? "created" : "todo", updatedAt: new Date().toISOString() }); } catch(e){ cb.checked = !cb.checked; } cb.disabled = false; };
+      const t = el("span"); t.append(el("span","mono",x.key + " · " + x.env), document.createElement("br"), document.createTextNode((x.where ? "Où : " + x.where + ". " : "") + (x.description || "")));
+      lab.append(cb, t); sb.append(lab);
+    });
+    box.append(vb, sb);
+  }
+
   function renderLog(){
     const box = $("#log"); box.replaceChildren();
     const list = state.deliveries.slice().sort((a,b)=> String(b.date).localeCompare(String(a.date)));
@@ -327,11 +384,11 @@ button:disabled{opacity:.5;cursor:not-allowed}
   }
 
   let pending = false;
-  const typing = () => { const a = document.activeElement; return a && a.tagName === "TEXTAREA" && a.value.trim() !== ""; };
+  const typing = () => { const a = document.activeElement; return a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT") && a.value.trim() !== ""; };
   function renderAll(){
     renderHeader(); renderLanes(); renderLog();
     if (typing()) { pending = true; return; }
-    pending = false; renderQueue(); renderAgents();
+    pending = false; renderQueue(); renderAgents(); renderConf();
   }
   document.addEventListener("focusout", () => setTimeout(() => { if (pending && !typing()) renderAll(); }, 0));
 
@@ -357,7 +414,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
       state[key] = snap.docs.map(d => Object.assign({ id:d.id }, d.data()));
       (after ? after() : Promise.resolve()).then(renderAll);
     });
-    sub("releases","releases"); sub("agents","agents"); sub("deliveries","deliveries"); sub("questions","questions", resolveNames);
+    sub("releases","releases"); sub("agents","agents"); sub("variables","variables"); sub("secrets","secrets"); sub("deliveries","deliveries"); sub("questions","questions", resolveNames);
   })();
 })();
 </script>
