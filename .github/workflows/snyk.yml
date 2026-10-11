@@ -62,4 +62,5 @@ jobs:
 
       - name: Explain skipped scan
         if: ${{ env.SNYK_TOKEN == '' }}
-        run: echo "::notice::Snyk scan skipped: configure the SNYK_TOKEN repository Actions secret."
+        run: |
+          echo "::notice::Snyk scan skipped: configure the SNYK_TOKEN repository Actions secret."
