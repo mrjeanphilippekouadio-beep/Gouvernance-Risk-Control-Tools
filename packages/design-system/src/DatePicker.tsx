@@ -126,8 +126,10 @@ export function DatePicker({
           disabled={disabled}
           placeholder={placeholder}
           value={selected ? new Intl.DateTimeFormat(locale).format(selected) : ""}
+          role="combobox"
           aria-haspopup="dialog"
           aria-expanded={open}
+          aria-controls={open ? `${id}-popover` : undefined}
           onClick={() => !disabled && setOpen((current) => !current)}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -140,7 +142,7 @@ export function DatePicker({
       </div>
 
       {open && (
-        <div className="gs-datepicker-popover" role="dialog" aria-label={monthTitle}>
+        <div id={`${id}-popover`} className="gs-datepicker-popover" role="dialog" aria-label={monthTitle}>
           <div className="gs-datepicker-head">
             <button type="button" aria-label="Mois précédent" onClick={() => shiftMonth(-1)}>
               <ChevronLeft aria-hidden="true" />

@@ -11,16 +11,16 @@
   transition: box-shadow 150ms ease, transform 100ms ease, background-color 150ms ease, border-color 150ms ease;
 }
 
-.btn:not(:disabled):hover {
+.btn:not(:is(:disabled, [aria-disabled="true"])):hover {
   box-shadow: var(--gs-elev-2);
 }
 
-.btn:not(:disabled):active {
+.btn:not(:is(:disabled, [aria-disabled="true"])):active {
   box-shadow: var(--gs-elev-1);
   transform: translateY(1px);
 }
 
-.btn:disabled {
+.btn:is(:disabled, [aria-disabled="true"]) {
   cursor: not-allowed;
   opacity: 0.6;
   box-shadow: none;
@@ -34,13 +34,13 @@
   box-shadow: var(--gs-elev-2);
 }
 
-.btn-primary:not(:disabled):hover {
+.btn-primary:not(:is(:disabled, [aria-disabled="true"])):hover {
   background: var(--gs-primary-hover);
   border-color: var(--gs-primary-hover);
   box-shadow: var(--gs-elev-3);
 }
 
-.btn-primary:not(:disabled):active {
+.btn-primary:not(:is(:disabled, [aria-disabled="true"])):active {
   box-shadow: var(--gs-elev-1);
 }
 
@@ -50,7 +50,7 @@
   color: var(--gs-text);
 }
 
-.btn-secondary:not(:disabled):hover {
+.btn-secondary:not(:is(:disabled, [aria-disabled="true"])):hover {
   background: #ffffff;
   border-color: var(--gs-text-disabled);
 }
@@ -62,7 +62,35 @@
   box-shadow: none;
 }
 
-.btn-destructive:not(:disabled):hover {
+.btn-destructive:not(:is(:disabled, [aria-disabled="true"])):hover {
   background: var(--gs-danger-bg);
   box-shadow: var(--gs-elev-1);
+}
+
+.btn[aria-busy="true"] {
+  cursor: progress;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: var(--gs-space-2);
+  vertical-align: -0.15em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 700ms linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-spinner {
+    animation-duration: 2s;
+  }
 }
