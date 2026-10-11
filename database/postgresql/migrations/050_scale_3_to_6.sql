@@ -13,21 +13,43 @@
 -- archiving). They are enforced in RatingScaleService.create /
 -- updateImpactAxes, i.e. on new versions only.
 
-ALTER TABLE rating_scales DROP CONSTRAINT rating_scales_probability_levels_check;
-ALTER TABLE rating_scales ADD CONSTRAINT rating_scales_probability_levels_check
-  CHECK (probability_levels BETWEEN 1 AND 6);
-ALTER TABLE rating_scales DROP CONSTRAINT rating_scales_impact_levels_check;
-ALTER TABLE rating_scales ADD CONSTRAINT rating_scales_impact_levels_check
-  CHECK (impact_levels BETWEEN 1 AND 6);
+-- Constraint names are NOT assumed (incident staging 2026-10-11: the first
+-- version of this file did DROP CONSTRAINT risks_probability_check by name and
+-- failed with "constraint ... does not exist"; root cause: those CHECKs live on
+-- risk_assessments (003), not risks, which has no probability/impact columns). For each (table, column) we drop
+-- every single-column CHECK on that column in the current schema (looked up in
+-- pg_constraint: contype='c', conkey = {that column}; multi-column CHECKs and
+-- NOT NULL are untouched), then add the canonical-named 1..6 constraint.
+DO $$
+DECLARE
+  t record;
+  c record;
+BEGIN
+  FOR t IN
+    SELECT * FROM (VALUES
+      ('rating_scales', 'probability_levels', 'rating_scales_probability_levels_check'),
+      ('rating_scales', 'impact_levels',      'rating_scales_impact_levels_check'),
+      ('risk_assessments', 'probability',        'risk_assessments_probability_check'),
+      ('risk_assessments', 'impact',             'risk_assessments_impact_check'),
+      ('risk_assessments', 'residual_probability', 'risk_assessments_residual_probability_check'),
+      ('risk_assessments', 'residual_impact',    'risk_assessments_residual_impact_check')
+    ) AS v(tbl, col, new_name)
+  LOOP
+    FOR c IN
+      SELECT con.conname
+      FROM pg_constraint con
+      JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attname = t.col AND NOT a.attisdropped
+      WHERE con.contype = 'c'
+        AND con.conrelid = (quote_ident(current_schema()) || '.' || quote_ident(t.tbl))::regclass
+        AND con.conkey = ARRAY[a.attnum]
+    LOOP
+      EXECUTE format('ALTER TABLE %I.%I DROP CONSTRAINT %I', current_schema(), t.tbl, c.conname);
+    END LOOP;
 
-ALTER TABLE risks DROP CONSTRAINT risks_probability_check;
-ALTER TABLE risks ADD CONSTRAINT risks_probability_check CHECK (probability BETWEEN 1 AND 6);
-ALTER TABLE risks DROP CONSTRAINT risks_impact_check;
-ALTER TABLE risks ADD CONSTRAINT risks_impact_check CHECK (impact BETWEEN 1 AND 6);
-ALTER TABLE risks DROP CONSTRAINT risks_residual_probability_check;
-ALTER TABLE risks ADD CONSTRAINT risks_residual_probability_check CHECK (residual_probability BETWEEN 1 AND 6);
-ALTER TABLE risks DROP CONSTRAINT risks_residual_impact_check;
-ALTER TABLE risks ADD CONSTRAINT risks_residual_impact_check CHECK (residual_impact BETWEEN 1 AND 6);
+    EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I CHECK (%I BETWEEN 1 AND 6)',
+                   current_schema(), t.tbl, t.new_name, t.col);
+  END LOOP;
+END $$;
 
 -- Not touched (flagged to PO): score caps of 25 elsewhere (risk appetite threshold,
 -- configs.committee_*_min_score, default criticality bands); see dev-backend memory.
