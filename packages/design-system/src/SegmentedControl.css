@@ -22,6 +22,6 @@
 
 .gs-seg-btn-active {
   background: var(--gs-primary);
-  color: #fff;
+  color: var(--gs-on-primary);
   font-weight: 600;
 }

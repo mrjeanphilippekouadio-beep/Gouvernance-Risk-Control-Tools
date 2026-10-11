@@ -12,6 +12,9 @@ interface TabsProps<T extends string> {
 }
 
 /**
+ * Navigation between pages, not a tablist (`aria-current="page"`, no
+ * `role="tab"`): real tabs only when a screen needs them.
+ *
  * Fixes a real accessibility bug (DESIGN_NOTES.md section 1): the previous
  * pattern used `disabled={isActive}` to mark the current tab, which pulls
  * it out of the tab order and gets announced as "disabled" rather than
