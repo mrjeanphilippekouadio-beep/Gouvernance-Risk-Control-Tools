@@ -78,6 +78,26 @@ describe("appetite and committee ceilings follow the active scale", () => {
   });
 });
 
+describe("config first write keeps the scale-based Committee default (PR #157 review)", () => {
+  const cumulActor = { ...actor, roles: [...actor.roles, "config.cumul.set"] };
+  const repo = (existing: object | null) => {
+    const writes: Record<string, unknown>[] = [];
+    return { writes, repo: { async getByTenant() { return existing; }, async upsert(_t: string, p: Record<string, unknown>) { writes.push(p); return { version: 1, ...p }; } } as never };
+  };
+
+  it.each([[3, 5], [6, 21]])("no config row on a %ix%i scale: first save writes threshold %i, not the column default 15", async (n, expected) => {
+    const r = repo(null);
+    await new ConfigService(r.repo, audit as never, scaleRepo([scale(n)])).setCommitteeAuditCumul(cumulActor, false, "why", "r");
+    expect(r.writes[0]).toEqual({ committeeAuditCumulAllowed: false, committeeEvaluationMinScore: expected });
+  });
+
+  it("existing config row: the stored threshold is left untouched", async () => {
+    const r = repo({ committeeEvaluationMinScore: 12 });
+    await new ConfigService(r.repo, audit as never, scaleRepo([scale(3)])).setCommitteeAuditCumul(cumulActor, false, "why", "r");
+    expect(r.writes[0]).toEqual({ committeeAuditCumulAllowed: false });
+  });
+});
+
 describe("rating scale: thresholds ceiling and mandatory descriptors", () => {
   const svc = (s: RatingScale) => new RatingScaleService(scaleRepo([s]), audit as never, { async existsForRatingScale() { return false; } });
 

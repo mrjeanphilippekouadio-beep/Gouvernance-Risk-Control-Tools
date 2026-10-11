@@ -384,6 +384,7 @@ export class DashboardService {
 
   /** GET /dashboard/risk-owner?user_id=me — always the caller's own risks (RiskRepository.list's ownerId filter); there is no path here to view another user's owner dashboard. */
   async getRiskOwnerView(actor: AuthenticatedUser): Promise<RiskOwnerDashboard> {
+    const bandsCache = new Map<string, Promise<ScoreThreshold[]>>();
     requirePermission(actor, "dashboard.read");
 
     const ownedRisks = await this.risks.list(actor.tenantId, { ownerId: actor.userId });
@@ -394,7 +395,7 @@ export class DashboardService {
       })),
     );
     const riskSummaries = await Promise.all(
-      withEvaluations.map(({ risk, evaluation }) => this.buildRiskSummary(actor.tenantId, risk, evaluation)),
+      withEvaluations.map(({ risk, evaluation }) => this.buildRiskSummary(actor.tenantId, risk, evaluation, bandsCache)),
     );
 
     const ownedRiskIds = new Set(ownedRisks.map((r) => r.id));
@@ -492,6 +493,7 @@ export class DashboardService {
 
   /** GET /dashboard/executive — cross-entity consolidated view, gated behind dashboard.executive, scoped per DashboardScopeResolver. */
   async getExecutiveView(actor: AuthenticatedUser, options?: { topN?: number }): Promise<ExecutiveDashboard> {
+    const bandsCache = new Map<string, Promise<ScoreThreshold[]>>();
     requirePermission(actor, "dashboard.executive");
     const topN = options?.topN ?? 10;
     const scope = await this.resolveScope(actor);
@@ -515,7 +517,7 @@ export class DashboardService {
       [...scored]
         .sort((a, b) => b.score - a.score)
         .slice(0, topN)
-        .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation)),
+        .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation, bandsCache)),
     );
     const criticalKris = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
     const openAnomaliesCount = this.countOpenAnomalies(allAnomalies, scope, scopedRiskIds);
@@ -534,6 +536,7 @@ export class DashboardService {
 
   /** GET /reports/risk-committee — board-pack view: top-N risks, KRIs in Orange/Rouge, overdue actions. Reuses the same helpers as getExecutiveView rather than re-querying. */
   async getRiskCommitteeReport(actor: AuthenticatedUser, options?: { topN?: number }): Promise<RiskCommitteeReport> {
+    const bandsCache = new Map<string, Promise<ScoreThreshold[]>>();
     requirePermission(actor, "dashboard.executive");
     const topN = options?.topN ?? 10;
     const scope = await this.resolveScope(actor);
@@ -554,7 +557,7 @@ export class DashboardService {
       [...scored]
         .sort((a, b) => b.score - a.score)
         .slice(0, topN)
-        .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation)),
+        .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation, bandsCache)),
     );
     const krisInAlert = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
 
@@ -586,6 +589,7 @@ export class DashboardService {
    * workaround) and needs A05/A13 sign-off, not a unilateral call here.
    */
   async getConsolidatedReport(actor: AuthenticatedUser, entityFilter?: string[]): Promise<ConsolidatedReport> {
+    const bandsCache = new Map<string, Promise<ScoreThreshold[]>>();
     requirePermission(actor, "dashboard.executive");
     const scope = await this.resolveScope(actor);
     const scopeSummary = this.scopeSummary(scope);
@@ -614,7 +618,7 @@ export class DashboardService {
           [...entityScored]
             .sort((a, b) => b.score - a.score)
             .slice(0, 5)
-            .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation)),
+            .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation, bandsCache)),
         );
         return {
           entity,
@@ -806,7 +810,17 @@ export class DashboardService {
     return { process: risk.process, resolvedVia: "processText" };
   }
 
-  private async resolveBands(tenantId: string, ratingScaleId: string | null): Promise<ScoreThreshold[]> {
+  private resolveBands(tenantId: string, ratingScaleId: string | null, cache?: Map<string, Promise<ScoreThreshold[]>>): Promise<ScoreThreshold[]> {
+    if (!cache || !ratingScaleId) return this.loadBands(tenantId, ratingScaleId);
+    let bands = cache.get(ratingScaleId);
+    if (!bands) {
+      bands = this.loadBands(tenantId, ratingScaleId);
+      cache.set(ratingScaleId, bands);
+    }
+    return bands;
+  }
+
+  private async loadBands(tenantId: string, ratingScaleId: string | null): Promise<ScoreThreshold[]> {
     const fallback = defaultCriticalityBands(DEFAULT_MATRIX_SIZE);
     if (!ratingScaleId || !this.ratingScales) return fallback;
     const scale = await this.ratingScales.getById(tenantId, ratingScaleId);
@@ -820,6 +834,8 @@ export class DashboardService {
     tenantId: string,
     risk: Risk,
     evaluation: RiskEvaluation | null,
+    /** One per request: summaries over many risks share one or two scales. */
+    bandsCache?: Map<string, Promise<ScoreThreshold[]>>,
   ): Promise<DashboardRiskSummary> {
     const score = evaluation ? evaluation.residualScore ?? evaluation.inherentScore : null;
     const { process, resolvedVia } = await this.resolveProcessLabel(tenantId, risk);
@@ -836,7 +852,7 @@ export class DashboardService {
       // Safe: getMostRecentAuthoritativeEvaluation only ever returns an
       // evaluation whose status is in AUTHORITATIVE_EVALUATION_STATUSES.
       evaluationStatus: evaluation ? (evaluation.status as AuthoritativeEvaluationStatus) : null,
-      criticality: score !== null ? deriveCriticality(score, await this.resolveBands(tenantId, evaluation?.ratingScaleId ?? null)) : null,
+      criticality: score !== null ? deriveCriticality(score, await this.resolveBands(tenantId, evaluation?.ratingScaleId ?? null, bandsCache)) : null,
       subCategory: evaluation?.subCategory ?? null,
       entity: evaluation?.entity ?? null,
       appetiteExceeded: evaluation?.appetiteExceeded ?? null,

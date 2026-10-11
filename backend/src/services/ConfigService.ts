@@ -78,6 +78,18 @@ export class ConfigService {
     private readonly ratingScales?: Pick<RatingScaleRepository, "list">,
   ) {}
 
+  /**
+   * The first write creates the tenant's row, whose column DEFAULT for the Committee threshold is
+   * 15 (migration 045). Write the scale-based default instead, so that saving an unrelated setting
+   * never silently changes the threshold `get()` was reporting (5 on a 3×3 scale, 21 on 6×6).
+   */
+  private async upsertConfig(tenantId: string, patch: Parameters<ConfigRepository["upsert"]>[1], updatedBy: string): Promise<Config> {
+    if (patch.committeeEvaluationMinScore === undefined && !(await this.configs.getByTenant(tenantId))) {
+      patch = { ...patch, committeeEvaluationMinScore: defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, tenantId)) };
+    }
+    return this.configs.upsert(tenantId, patch, updatedBy);
+  }
+
   async get(actor: AuthenticatedUser): Promise<Config> {
     requirePermission(actor, "config.read");
     return (await this.configs.getByTenant(actor.tenantId)) ?? defaultConfig(actor.tenantId, defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, actor.tenantId)));
@@ -112,7 +124,7 @@ export class ConfigService {
     if (input.levelThresholds !== undefined) assertValidThresholds(input.levelThresholds);
 
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, input, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, input, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -143,7 +155,7 @@ export class ConfigService {
     if (!APPETITE_MODES.includes(mode)) throw new ValidationError(`Unknown appetite mode: ${mode}`);
 
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, { appetiteMode: mode }, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, { appetiteMode: mode }, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -174,7 +186,7 @@ export class ConfigService {
     if (!EVALUATION_MODES.includes(mode)) throw new ValidationError(`Unknown evaluation mode: ${mode}`);
 
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, { evaluationMode: mode }, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, { evaluationMode: mode }, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -242,7 +254,7 @@ export class ConfigService {
     if (patch.treatmentMinScore !== undefined) configPatch.committeeTreatmentMinScore = patch.treatmentMinScore;
 
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, configPatch, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, configPatch, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -275,7 +287,7 @@ export class ConfigService {
     }
 
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, { committeeEvaluationEnforced: enforced }, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, { committeeEvaluationEnforced: enforced }, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -304,7 +316,7 @@ export class ConfigService {
       throw new ValidationError("A reason is required to change the Committee + Audit cumul setting");
     }
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId);
     await this.audit.record({
       tenantId: actor.tenantId,
       userId: actor.userId,
