@@ -45,7 +45,7 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       # NODE_ENV=production makes the runner refuse to run unless the
       # migration and runtime roles are distinct and the runtime role is safe.
       - run: npm run migrate
