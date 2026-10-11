@@ -141,6 +141,8 @@ export type Permission =
    */
   | "config.committeethreshold.set"
   | "config.committeeenforcement.set"
+  /** DECISION-042 q58: allow/forbid the Committee + Audit cumul (sensitive tenant setting, application administrator). */
+  | "config.cumul.set"
   | "notification.read"
   | "governance.read"
   | "governance.create"
@@ -285,6 +287,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "config.manage",
   "config.committeethreshold.set",
   "config.committeeenforcement.set",
+  "config.cumul.set",
   "notification.read",
   "governance.read",
   "governance.create",

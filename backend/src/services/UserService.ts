@@ -14,6 +14,8 @@ import type { Permission } from "../domain/permissions.js";
 export interface UserDetail extends User {
   fixedGroups: SystemGroup[];
   riskManagerAndCommittee: boolean;
+  /** DECISION-042 q63: application administrator (role/user management permissions) AND Risk Manager group. */
+  administratorAndRiskManager: boolean;
 }
 
 /** B-8 bis (F-B8-06): a role disabled during suspension whose assignment remains. */
@@ -158,6 +160,7 @@ export class UserService {
       ...user,
       fixedGroups,
       riskManagerAndCommittee: fixedGroups.includes("RISK_MANAGER") && fixedGroups.includes("RISK_COMMITTEE"),
+      administratorAndRiskManager: this.roleService ? await this.roleService.isAdminAndRiskManager(actor.tenantId, id) : false,
     };
   }
 

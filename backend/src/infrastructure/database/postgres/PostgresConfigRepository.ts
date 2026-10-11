@@ -22,6 +22,7 @@ interface ConfigRow {
   committee_evaluation_min_score: number;
   committee_treatment_min_score: number | null;
   committee_evaluation_enforced: boolean;
+  committee_audit_cumul_allowed: boolean;
   version: number;
   updated_by: string | null;
   created_at: Date;
@@ -40,6 +41,7 @@ function toDomain(row: ConfigRow): Config {
     committeeEvaluationMinScore: row.committee_evaluation_min_score,
     committeeTreatmentMinScore: row.committee_treatment_min_score,
     committeeEvaluationEnforced: row.committee_evaluation_enforced,
+    committeeAuditCumulAllowed: row.committee_audit_cumul_allowed,
     version: row.version,
     updatedBy: row.updated_by,
     createdAt: row.created_at,
@@ -80,6 +82,7 @@ export class PostgresConfigRepository implements ConfigRepository {
         committee_evaluation_min_score: patch.committeeEvaluationMinScore,
         committee_treatment_min_score: patch.committeeTreatmentMinScore,
         committee_evaluation_enforced: patch.committeeEvaluationEnforced,
+        committee_audit_cumul_allowed: patch.committeeAuditCumulAllowed,
       },
       3,
     );

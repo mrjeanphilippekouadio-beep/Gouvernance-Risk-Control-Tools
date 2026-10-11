@@ -36,6 +36,7 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     committeeEvaluationMinScore: committeeMinScore,
     committeeTreatmentMinScore: null,
     committeeEvaluationEnforced: true,
+    committeeAuditCumulAllowed: true,
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),
@@ -288,6 +289,33 @@ export class ConfigService {
       requestId,
     });
 
+    return after;
+  }
+
+  /**
+   * PUT /config/committee-audit-cumul — DECISION-042 §1 (q58). Allows or forbids one user
+   * being in both the Committee and Audit groups (allowed by default). Takes effect on later
+   * assignments only; existing double members are not removed. Sensitive setting (Compliance):
+   * dedicated permission, mandatory reason, audited. Risk Manager + Audit is not affected by it.
+   */
+  async setCommitteeAuditCumul(actor: AuthenticatedUser, allowed: boolean, reason: string, requestId: string): Promise<Config> {
+    requirePermission(actor, "config.cumul.set");
+    if (!reason.trim()) {
+      throw new ValidationError("A reason is required to change the Committee + Audit cumul setting");
+    }
+    const before = await this.get(actor);
+    const after = await this.configs.upsert(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId);
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Config",
+      entityId: after.id,
+      action: "UPDATE",
+      oldValue: before,
+      newValue: after,
+      reason,
+      requestId,
+    });
     return after;
   }
 }

@@ -72,6 +72,8 @@ export interface Config {
   committeeTreatmentMinScore: number | null;
   /** Default true — the Committee pass-through obligation on riskevaluation.validate() is on by default. */
   committeeEvaluationEnforced: boolean;
+  /** DECISION-042 §1 (q58): may a user be in both the Committee and Audit groups? Default true. Risk Manager + Audit is always refused, whatever this says. */
+  committeeAuditCumulAllowed: boolean;
   /** 0 means "default, never explicitly saved" — see DEFAULT_CONFIG in ConfigService. */
   version: number;
   updatedBy: string | null;
@@ -96,4 +98,5 @@ export interface ConfigPatch {
   committeeEvaluationMinScore?: number;
   committeeTreatmentMinScore?: number | null;
   committeeEvaluationEnforced?: boolean;
+  committeeAuditCumulAllowed?: boolean;
 }
