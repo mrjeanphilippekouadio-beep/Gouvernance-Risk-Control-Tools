@@ -18,15 +18,15 @@ import type {
 } from "../domain/entities/RiskEvaluation.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
+import { maxScoreForSize } from "../domain/scoring.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 /** Mirrors ConfigService's own defaultConfig()/030_evaluation_mode.sql's DB default — the tenant-wide fallback when no Config row exists yet and/or no ConfigRepository is wired. */
 const FALLBACK_EVALUATION_MODE: EvaluationMode = "CLASSIQUE";
 
 const EVALUATION_TYPES: RiskEvaluationType[] = ["AD_HOC", "ANNUELLE", "ANTICIPEE"];
-/** Exported for ConfigService's committee-threshold bounds validation — reused, never redefined (RISK_MANAGEMENT_V1 §8, Lot A). */
+/** Exported for ConfigService's committee-threshold bounds validation. The upper bound is n² of the active scale (B-9 bis), see domain/scoring.ts. */
 export const MIN_APPETITE_THRESHOLD = 1;
-export const MAX_APPETITE_THRESHOLD = 25;
 /**
  * Lot A (RISK_MANAGEMENT_V1 §8) — these are the fail-closed defaults used
  * when no ConfigRepository is wired or no Config row exists yet for the
@@ -362,7 +362,7 @@ export class RiskEvaluationService {
 
     let override: number | null = input.appetiteOverride ?? null;
     if (override !== null) {
-      assertIntegerInRange(override, MIN_APPETITE_THRESHOLD, MAX_APPETITE_THRESHOLD, "appetiteOverride");
+      assertIntegerInRange(override, MIN_APPETITE_THRESHOLD, maxScoreForSize(ratingScale.impactLevels), "appetiteOverride");
     }
 
     const applied = override ?? suggested;

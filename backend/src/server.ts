@@ -264,7 +264,7 @@ const roleService = new RoleService(roleRepository, auditRepository, userReposit
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
-const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository, riskCategoryRepository);
+const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository, riskCategoryRepository, ratingScaleRepository);
 const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository, riskEvaluationRepository);
 const riskEvaluationService = new RiskEvaluationService(
   riskEvaluationRepository,
@@ -366,7 +366,7 @@ const dashboardService = new DashboardService(
   dashboardScopeResolver,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
-const configService = new ConfigService(configRepository, auditRepository);
+const configService = new ConfigService(configRepository, auditRepository, ratingScaleRepository);
 const moduleToggleService = new ModuleToggleService(moduleToggleRepository, auditRepository);
 const tenantService = new TenantService(tenantRepository, auditRepository);
 const regulatoryFrameworkService = new RegulatoryFrameworkService(regulatoryFrameworkRepository, auditRepository);
