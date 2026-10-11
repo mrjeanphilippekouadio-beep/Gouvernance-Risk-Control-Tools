@@ -31,12 +31,18 @@ export function FormField({ label, htmlFor, help, error, required, disabled, rea
 
   let control = children;
   const only = Children.count(children) === 1 ? Children.toArray(children)[0] : null;
-  if (isValidElement(only) && only.type !== Fragment) {
+  // Only native form controls and components are wired; a wrapper such as
+  // a <div> around several elements is left untouched.
+  const wirable =
+    isValidElement(only) &&
+    only.type !== Fragment &&
+    (typeof only.type !== "string" || ["input", "select", "textarea"].includes(only.type));
+  if (wirable && isValidElement(only)) {
     const element = only as ReactElement<Record<string, unknown>>;
     const existing = element.props["aria-describedby"] as string | undefined;
     control = cloneElement(element, {
       "aria-describedby": [existing, messageId].filter(Boolean).join(" ") || undefined,
-      "aria-invalid": error ? true : undefined,
+      "aria-invalid": error ? true : element.props["aria-invalid"],
       ...(required ? { required: true } : {}),
       ...(disabled ? { disabled: true } : {}),
       ...(readOnly ? { readOnly: true } : {}),

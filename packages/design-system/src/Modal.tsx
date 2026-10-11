@@ -34,7 +34,10 @@ export function Modal({ open, onClose, title, children, actions, busy }: ModalPr
     if (!element) return;
     if (open && !element.open) {
       element.showModal();
-      if (!element.querySelector("[autofocus]")) titleRef.current?.focus();
+      // Keep the focus showModal() gave to a field (React `autoFocus` sets
+      // no attribute, so only the active element tells); else the title.
+      const focused = document.activeElement;
+      if (!(focused && focused !== element && element.contains(focused))) titleRef.current?.focus();
     }
     if (!open && element.open) element.close();
   }, [open]);

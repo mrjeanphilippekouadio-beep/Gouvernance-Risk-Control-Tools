@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from "react";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import "./FormField.css";
 import "./Fields.css";
 import "./ScaleEditor.css";
@@ -37,7 +37,13 @@ const cellText = (value: ScaleValue, axis: string, level: string) => value[axis]
  */
 export function ScaleEditor({ levels, axes, value, onChange, minLevels, maxLevels, maxAxes, ariaLabel }: ScaleEditorProps) {
   const refs = useRef<Record<string, HTMLTextAreaElement | null>>({});
-  const [active, setActive] = useState<[number, number]>([0, 0]);
+  const [rawActive, setActive] = useState<[number, number]>([0, 0]);
+  // Keep the single tab stop inside the grid when axes or levels are removed.
+  const active: [number, number] = [
+    Math.min(rawActive[0], Math.max(axes.length - 1, 0)),
+    Math.min(rawActive[1], Math.max(levels.length - 1, 0)),
+  ];
+  const idPrefix = useId();
 
   const total = levels.length * axes.length;
   const filled = axes.reduce((n, a) => n + levels.filter((l) => cellText(value, a.id, l.id).trim() !== "").length, 0);
@@ -110,7 +116,7 @@ export function ScaleEditor({ levels, axes, value, onChange, minLevels, maxLevel
                 <th scope="row">{a.label}</th>
                 {levels.map((l, col) => {
                   const text = cellText(value, a.id, l.id);
-                  const emptyId = `${a.id}-${l.id}-empty`;
+                  const emptyId = `${idPrefix}-${a.id}-${l.id}-empty`;
                   return (
                     <td key={l.id}>
                       <textarea
