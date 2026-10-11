@@ -395,3 +395,25 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
   client et/ou du Dispositif. Section 13 ramenée à q37 (proposition
   d'escalade, en attente du PO). Principe 33 : une décision du PO prime sur
   mon garde-fou recommandé (ici deux approbateurs -> une personne).
+- 2026-10-11 : **DECISION-038 point 1 (q37) et point 2 (texte final
+  validé).** Quorum du Comité impossible : envoi refusé ; décision par la
+  fonction risque (responsable du service risque en suppléance, garde-fous
+  q35) ; s'il est concerné, Audit si son groupe n'est pas vide, sinon un
+  autre membre Risk Manager non concerné ; **jamais l'administrateur du
+  client** (peut être de l'équipe technique) ; motif, trace, Audit notifié,
+  journal des décisions prises en l'absence du Comité, jamais de validation
+  tacite. Texte étape 2 **intégré au contrat** `RISK_MANAGEMENT_V1_FINAL_DECISIONS.md`
+  (version « étape 2 intégrée, 2026-10-11, DECISION-033 à 038 ») : en-tête,
+  §4, §5 (groupes, responsable, suppléance, conflit de rôles, Rejeté, import),
+  §6, §7 (statuts de contribution), §8 (Treatment Decision, Comité
+  asynchrone A/B/C, Audit), §10 (Dispositif porte l'échelle, assistant,
+  première activation, table, invariants 5, 7, 10, gouvernance), §13, §14,
+  §17 (Phase 6 en V2). Projet passé à « VALIDÉ par le PO ». Séquence : étapes
+  2 et 3 (P1-P6, DECISION-018/019) FAIT. Relecture A03 à suivre.
+  **Vigilance ouverte** : la règle « Premier Dispositif » cite encore
+  l'administrateur du client (même motif que q37 a priori) ; le PO n'a
+  tranché que q37, texte inchangé, à confirmer.
+
+34. Quand le PO écarte un acteur pour un motif de nature (ex. administrateur
+    = possible équipe technique), vérifier ce motif sur les autres règles du
+    même document avant de conclure ; signaler sans modifier.
