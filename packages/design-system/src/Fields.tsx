@@ -63,14 +63,24 @@ export function Select({ options, placeholder, readOnly, className, ...rest }: S
 interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {
   label: ReactNode;
   hint?: string;
+  /** Mixed state (e.g. "select all" with a partial selection). */
+  indeterminate?: boolean;
 }
 
-export function Checkbox({ label, hint, className, id, disabled, ...rest }: CheckboxProps) {
+export function Checkbox({ label, hint, className, id, disabled, indeterminate, ...rest }: CheckboxProps) {
   const auto = useId();
   const inputId = id ?? auto;
   return (
     <label className={cx("gs-choice", className)} htmlFor={inputId} data-disabled={disabled || undefined}>
-      <input type="checkbox" id={inputId} disabled={disabled} {...rest} />
+      <input
+        type="checkbox"
+        id={inputId}
+        disabled={disabled}
+        {...rest}
+        ref={(el) => {
+          if (el) el.indeterminate = Boolean(indeterminate);
+        }}
+      />
       <span>
         {label}
         {hint && <span className="gs-choice-hint">{hint}</span>}

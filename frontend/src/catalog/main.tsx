@@ -8,6 +8,7 @@ import {
   BarChart,
   BubbleChart,
   Breadcrumb,
+  BulkActionBar,
   Button,
   Card,
   Checkbox,
@@ -30,6 +31,7 @@ import {
   Grid,
   GridItem,
   LineChart,
+  MatrixView,
   Menu,
   MessageBanner,
   Modal,
@@ -44,6 +46,7 @@ import {
   Table,
   Tabs,
   Timeline,
+  VersionComparison,
 } from '@djamo/design-system'
 import '../index.css'
 import './catalog.css'
@@ -106,6 +109,9 @@ function Catalog() {
   const [date, setDate] = useState<string | null>(null)
   const [slider, setSlider] = useState(40)
   const [modal, setModal] = useState(false)
+  const [modalSize, setModalSize] = useState<'md' | 'lg' | null>(null)
+  const [selected, setSelected] = useState<string[]>(['2'])
+  const [sort, setSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' })
   const [loading, setLoading] = useState(false)
   const [radio, setRadio] = useState('a')
   const [step, setStep] = useState('s2')
@@ -119,10 +125,22 @@ function Catalog() {
         Données d'exemple factices. Utilisez la touche Tab pour voir l'anneau de focus clavier.
       </p>
 
+      <Section title="Jetons ajoutés (vague 2)">
+        <p style={{ fontFamily: 'var(--gs-font-display)', fontSize: 'var(--gs-font-size-display)', fontWeight: 700, margin: 0 }}>
+          Titre d'exemple 30 px (--gs-font-size-display)
+        </p>
+        <p style={{ padding: 'var(--gs-space-2-5)', background: 'var(--gs-bg-surface)', display: 'inline-block' }}>
+          Marge intérieure 12 px (--gs-space-2-5)
+        </p>
+      </Section>
+
       <Section title="Button">
         <div className="catalog-row">
           <Variant title="Primaire"><Button variant="primary">Exemple</Button></Variant>
           <Variant title="Secondaire"><Button>Exemple</Button></Variant>
+          <Variant title="Petit (32 px)"><Button size="sm" variant="primary">Exemple</Button></Variant>
+          <Variant title="Moyen (40 px, défaut)"><Button variant="primary">Exemple</Button></Variant>
+          <Variant title="Grand (48 px)"><Button size="lg" variant="primary">Exemple</Button></Variant>
           <Variant title="Destructif"><Button variant="destructive">Exemple</Button></Variant>
           <Variant title="Désactivé"><Button disabled>Exemple</Button></Variant>
           <Variant title="Désactivé avec raison">
@@ -159,6 +177,40 @@ function Catalog() {
         <Variant title="Par défaut (légende masquée)">
           <Table columns={columns} rows={rows} rowKey={(r) => r.id} loading={false} emptyMessage="Exemple : aucune ligne" caption="Exemple de tableau" />
         </Variant>
+        <Variant title="Compact et zébré">
+          <Table columns={columns} rows={rows} rowKey={(r) => r.id} loading={false} emptyMessage="Exemple : aucune ligne" caption="Exemple de tableau compact" density="compact" striped />
+        </Variant>
+        <Variant title="Sélection (ligne sélectionnée) et tri">
+          <BulkActionBar count={selected.length} onClear={() => setSelected([])}>
+            <Button size="sm" variant="primary">Action d'exemple</Button>
+          </BulkActionBar>
+          <Table
+            columns={[{ ...columns[0], sortable: true }, columns[1]]}
+            rows={rows}
+            rowKey={(r) => r.id}
+            loading={false}
+            emptyMessage="Exemple : aucune ligne"
+            caption="Exemple de tableau sélectionnable"
+            selectedKeys={selected}
+            onSelectionChange={setSelected}
+            selectionLabel={(r) => `Sélectionner ${r.name}`}
+            sort={sort}
+            onSort={(key) => setSort((s) => ({ key, direction: s.direction === 'asc' ? 'desc' : 'asc' }))}
+          />
+        </Variant>
+        <Variant title="Comparaison de versions">
+          <VersionComparison changes={[{ field: 'Champ exemple 1', before: 'Valeur A', after: 'Valeur B' }, { field: 'Champ exemple 2', before: null, after: 'Valeur C' }]} />
+        </Variant>
+        <Variant title="Matrice (taille variable)">
+          <MatrixView
+            caption="Exemple de matrice"
+            rowTitle="Ligne"
+            columnTitle="Colonne"
+            rows={['Ligne 1', 'Ligne 2', 'Ligne 3']}
+            columns={['Col. 1', 'Col. 2', 'Col. 3', 'Col. 4']}
+            cell={(r, c) => ({ value: String((r + 1) * (c + 1)), label: `Exemple ${(r + 1) * (c + 1)}`, tone: (['info', 'success', 'warning', 'danger'] as const)[Math.min(3, Math.floor(((r + 1) * (c + 1)) / 4))] })}
+          />
+        </Variant>
         <Variant title="Chargement">
           <Table columns={columns} rows={noRows} rowKey={(r) => r.id} loading emptyMessage="Exemple : aucune ligne" />
         </Variant>
@@ -188,7 +240,7 @@ function Catalog() {
       </Section>
 
       <Section title="Tabs, SegmentedControl, Breadcrumb, Pagination">
-        <Tabs items={[{ value: 'a', label: 'Exemple A' }, { value: 'b', label: 'Exemple B' }]} active={tab} onChange={setTab} />
+        <Tabs items={[{ value: 'a', label: 'Exemple A' }, { value: 'b', label: 'Exemple B' }, { value: 'c', label: 'Désactivé', disabled: true, disabledReason: "Exemple de raison : onglet indisponible" }]} active={tab} onChange={setTab} />
         <p />
         <SegmentedControl ariaLabel="Exemple" options={[{ value: 'a', label: 'Exemple A' }, { value: 'b', label: 'Exemple B' }]} value={seg} onChange={setSeg} />
         <p />
@@ -208,6 +260,13 @@ function Catalog() {
         <Modal open={modal} onClose={() => setModal(false)} title="Exemple de fenêtre" actions={<Button variant="primary" onClick={() => setModal(false)}>Fermer</Button>}>
           Contenu d'exemple. Échap ferme la fenêtre.
         </Modal>
+        <div className="catalog-row">
+          <Button onClick={() => setModalSize('md')}>Fenêtre moyenne (560 px)</Button>
+          <Button onClick={() => setModalSize('lg')}>Fenêtre large (800 px)</Button>
+        </div>
+        <Modal open={modalSize !== null} size={modalSize ?? 'md'} onClose={() => setModalSize(null)} title="Exemple de fenêtre large" actions={<Button variant="primary" onClick={() => setModalSize(null)}>Fermer</Button>}>
+          Contenu d'exemple pour une fenêtre plus large.
+        </Modal>
       </Section>
 
       <Section title="DatePicker, FileUpload, Slider">
@@ -224,6 +283,8 @@ function Catalog() {
       <Section title="Card, Panel, Timeline, Grid">
         <div className="catalog-row">
           <Card header="Exemple" footer={<Button>Action</Button>}>Contenu d'exemple</Card>
+          <Card header="Sélectionnée" selected>Contenu d'exemple</Card>
+          <Card header="Désactivée" disabled>Contenu d'exemple</Card>
           <Panel title="Exemple" tabs={[{ value: 'a', label: 'Exemple' }]} activeTab="a" onTabChange={() => {}}>
             <PanelRow>Ligne d'exemple</PanelRow>
           </Panel>

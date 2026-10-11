@@ -1,0 +1,25 @@
+.gs-bulkbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--gs-space-2);
+  padding: var(--gs-space-2) var(--gs-space-3);
+  margin-top: var(--gs-space-3);
+  background: var(--gs-primary-bg);
+  border: 1px solid var(--gs-primary);
+  border-radius: var(--gs-radius-card);
+  font-family: var(--gs-font-ui);
+  font-size: var(--gs-font-size-body);
+  color: var(--gs-text);
+}
+
+.gs-bulkbar-count {
+  font-weight: 700;
+}
+
+.gs-bulkbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gs-space-2);
+}

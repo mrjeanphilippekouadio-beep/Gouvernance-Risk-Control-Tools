@@ -34,3 +34,11 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 - DEFECT-B8-01 (MAJOR, confirmé, signalé par A06) : `UserService.suspend` d'un dernier membre RM contourne l'invariant (le `user_roles` reste actif ; `countActiveAssignments` compte aussi les suspendus). Test `it.fails` : suite verte tant que le défaut existe, rouge le jour du correctif (alors passer en `it`). Corriger côté service/repo, pas côté test.
 - Migration 049 relue, non exécutée : voir rapport (adoption par nom sensible à la casse ; groupes créés vides => RM vide à la naissance ; `update` concurrent sur départements peut remonter une 23505 brute).
 - Pratique : un fake de repo doit refléter la garde atomique du vrai repo (`minRemaining`) ; helper de setup qui assigne doit utiliser un autre acteur que le membre (maker-checker).
+
+## 2026-10-11 — QA-ds2 (design system vague 2, commit 48d6107)
+
+- `packages/design-system/src/QA-ds2.test.tsx` : 57 tests dont 2 `it.fails`. Suite DS : 166 pass + 2 expected fail (168). Builds DS et frontend OK.
+- DEFECT-DS2-01 (MINOR) : `Card disabled` ne pose que `aria-disabled` sur un div sans rôle ; les enfants restent cliquables alors que le doc dit « not interactive ». `it.fails`.
+- DEFECT-DS2-02 (MINOR) : l'id de la raison d'un onglet désactivé est construit depuis `item.value` ; une valeur avec espace casse l'IDREF. `it.fails`.
+- Observations (épinglées, non défauts) : clés de ligne dupliquées partagent la sélection ; select-all supprime les clés périmées alors qu'un toggle les conserve ; `""` n'est pas rendu « (vide) » dans VersionComparison ; objets en valeur font planter le rendu ; `BulkActionBar count=NaN` s'affiche ; `.btn` a padding vertical 0 (min-height seul), un libellé sur plusieurs lignes colle aux bords ; `.topbar-actions .btn{padding:7px 10px}` (mobile) garde min-height 40px.
+- Pratique : en jsdom `new URL(..., import.meta.url)` échoue pour lire un CSS ; utiliser `readFileSync("src/X.css")` (cwd = package).

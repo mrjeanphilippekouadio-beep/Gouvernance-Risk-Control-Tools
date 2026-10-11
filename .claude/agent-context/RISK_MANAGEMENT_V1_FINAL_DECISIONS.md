@@ -4,11 +4,13 @@
 >
 > Ce document consolide les décisions métier, UX et architecture arrêtées avant l'implémentation frontend. Il complète les Decision Logs existants ; il ne remplace pas les décisions antérieures.
 >
-> **Version : étape 2 intégrée, 2026-10-11 (DECISION-033 à DECISION-038).** Texte validé par le PO (DECISION-038 point 2). Source : `docs/architecture/RM-V1-Contrat-etape2-PROJET.md`.
+> **Version : étape 2 intégrée, 2026-10-11 (DECISION-033 à DECISION-039).** Texte validé par le PO (DECISION-038 point 2). Source : `docs/architecture/RM-V1-Contrat-etape2-PROJET.md`.
+>
+> **Version DECISION-039 (2026-10-11)** : la règle q37 (quorum du Comité impossible) est révisée et remplace DECISION-038 point 1 (§8 : Audit, puis responsable du risque, avec consultation s'il est concerné). q41 confirmé (un Comité vide peut être approbateur, la suppléance s'applique : §5, §10). Questions induites en attente du PO : `RM-V1-Contrat-etape2-PROJET.md`, section 13.
 >
 > **Amendement du 2026-10-08** (DECISION-014 et DECISION-015, `.claude/agent-context/ACTION_ITEMS.md`) : modes de cotation, rôles Risk Owner / Délégué / Exécuteur, paramètres du Dispositif. Paragraphes touchés : §4, §5, §7, §8, §10, §16, §17 (Phase 4). Origine : `docs/architecture/RM-V1-Modes-cotation-objections.md` et `docs/architecture/RM-V1-Amendement-contrat-modes-PROJET.md`.
 >
-> **Amendement du 2026-10-11** (étape 2, DECISION-016 à 020, 025, 026, 027, 029, 030, 033 à 038) : échelle, axes et descriptifs dans le Dispositif ; groupes ; approbateur configurable ; auto-proposition de désignation ; Comité asynchrone ; état « Rejeté » ; statuts des contributions ; temps réel reporté en V2. Paragraphes touchés : §4, §5, §6, §7, §8, §10, §13, §14, §17.
+> **Amendement du 2026-10-11** (étape 2, DECISION-016 à 020, 025, 026, 027, 029, 030, 033 à 039) : échelle, axes et descriptifs dans le Dispositif ; groupes ; approbateur configurable ; auto-proposition de désignation ; Comité asynchrone ; état « Rejeté » ; statuts des contributions ; temps réel reporté en V2. Paragraphes touchés : §4, §5, §6, §7, §8, §10, §13, §14, §17.
 
 ## 1. Gouvernance de conception
 
@@ -215,7 +217,7 @@ Deux seuils de Comité sont indépendants :
 
 Ils sont configurables et ne doivent pas être traités comme une constante métier unique.
 
-**Vote du Comité à distance.** Le Comité peut valider par vote asynchrone, sans séance. À la création du Dispositif, le client choisit une règle parmi trois règles prédéfinies, ou crée une **règle personnalisée** (groupes qui valident, quorum, majorité, délai, relances). Aucune règle n'est imposée par défaut. Une règle personnalisée n'est limitée que par les règles fixes ci-dessous. Si le quorum est impossible (par exemple parce que presque tous les éligibles sont exclus du vote), l'envoi est refusé. La décision revient alors à la fonction risque : le responsable du service risque (groupe Risk Manager, accès à tous les risques) en suppléance, avec les garde-fous du §5 (q35) ; s'il est concerné, Audit si son groupe n'est pas vide, sinon un autre membre du groupe Risk Manager non concerné. Jamais l'administrateur du client (il peut être une personne de l'équipe technique). Motif obligatoire et trace ; Audit est notifié ; la décision est inscrite au journal des décisions prises en l'absence du Comité ; jamais de validation tacite (DECISION-038).
+**Vote du Comité à distance.** Le Comité peut valider par vote asynchrone, sans séance. À la création du Dispositif, le client choisit une règle parmi trois règles prédéfinies, ou crée une **règle personnalisée** (groupes qui valident, quorum, majorité, délai, relances). Aucune règle n'est imposée par défaut. Une règle personnalisée n'est limitée que par les règles fixes ci-dessous. Si le quorum est impossible (trop de votants exclus du vote, ou échéance dépassée), l'envoi au Comité est refusé et la demande passe à Audit. Si le groupe Audit est vide, elle passe au responsable du risque (membre du groupe Risk Manager). S'il est lui-même concerné, il décide avec la consultation d'un autre membre du groupe Risk Manager (paramètre configurable dans l'administration). La décision est inscrite au journal des décisions prises en l'absence du Comité ; jamais de validation tacite ; jamais l'administrateur du client (DECISION-039 point 3, qui remplace DECISION-038 point 1).
 
 | Règle | Pour qui | Décision | Quorum | Délai | Relances |
 |---|---|---|---|---|---|

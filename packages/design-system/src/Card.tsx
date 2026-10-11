@@ -8,6 +8,10 @@ interface CardProps {
   footer?: ReactNode;
   children?: ReactNode;
   className?: string;
+  /** Selected state: thicker primary border + hidden "Sélectionné" text (not colour alone). */
+  selected?: boolean;
+  /** Unavailable state: muted, not interactive. */
+  disabled?: boolean;
 }
 
 /**
@@ -15,9 +19,14 @@ interface CardProps {
  * The `max-width` the artifact demo carried is intentionally not baked in —
  * width belongs to the layout using the card, not to the card.
  */
-export function Card({ header, footer, children, className }: CardProps) {
+export function Card({ header, footer, children, className, selected, disabled }: CardProps) {
+  const classes = ["gs-card", selected && "gs-card-selected", disabled && "gs-card-disabled", className];
   return (
-    <div className={["gs-card", className].filter(Boolean).join(" ")}>
+    <div className={classes.filter(Boolean).join(" ")} data-selected={selected || undefined} aria-disabled={disabled || undefined}
+      inert={disabled || undefined}
+      onClickCapture={disabled ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
+    >
+      {selected && <span className="gs-visually-hidden">Sélectionné.</span>}
       {header !== undefined && <div className="gs-card-head">{header}</div>}
       {children !== undefined && <div className="gs-card-body">{children}</div>}
       {footer !== undefined && <div className="gs-card-foot">{footer}</div>}

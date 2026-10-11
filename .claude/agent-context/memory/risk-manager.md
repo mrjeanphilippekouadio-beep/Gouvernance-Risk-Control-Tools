@@ -414,6 +414,28 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
   l'administrateur du client (même motif que q37 a priori) ; le PO n'a
   tranché que q37, texte inchangé, à confirmer.
 
+- 2026-10-11 : **DECISION-039 point 3 : q37 RÉVISÉE** (remplace
+  DECISION-038 §1). Quorum impossible (votants exclus ou échéance) : envoi
+  refusé, demande à Audit ; Audit vide -> responsable du risque (groupe Risk
+  Manager) ; concerné -> il décide AVEC CONSULTATION d'un autre membre
+  (paramètre configurable) ; journal des décisions prises en l'absence du
+  Comité ; jamais tacite ; jamais l'administrateur. Point 5 (q41) : Comité
+  vide choisi comme approbateur, suppléance applicable (texte déjà conforme).
+  Reporté dans le projet étape 2 (statut, résumé 9, 6.2, sources, sections
+  11/13) et le contrat (en-tête, §8) avec les mots du PO. Questions Q-37a à
+  Q-37i posées au PO, non tranchées : sens de « consultation » (ma
+  recommandation : obligatoire, motivée, tracée, escalade HUMAN en cas de
+  désaccord, non désactivable), contenu et défaut du paramètre (forme avis /
+  co-signature, jamais « aucune »), tension avec q35 et invariant 1 (le
+  concerné décide), « responsable du risque » ambigu, deux chemins pour un
+  Comité indisponible, règle de vote d'Audit, perte de « motif / Audit
+  notifié », sort des votes déjà émis, « Premier Dispositif » cite encore
+  l'administrateur.
+
+35. Une règle d'escalade où le décideur peut être concerné par l'acte
+    contredit « on ne valide jamais ce qu'on a saisi » : exiger au minimum une
+    consultation obligatoire tracée, non désactivable par paramètre.
+
 34. Quand le PO écarte un acteur pour un motif de nature (ex. administrateur
     = possible équipe technique), vérifier ce motif sur les autres règles du
     même document avant de conclure ; signaler sans modifier.

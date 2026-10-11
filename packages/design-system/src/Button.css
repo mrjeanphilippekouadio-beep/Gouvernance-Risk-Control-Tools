@@ -3,7 +3,11 @@
   font-size: var(--gs-font-size-body);
   font-weight: 500;
   line-height: 1.2;
-  padding: 11px var(--gs-space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: var(--gs-space-2) var(--gs-space-4);
   border-radius: var(--gs-radius-btn);
   border: 1px solid transparent;
   cursor: pointer;
@@ -93,4 +97,15 @@
   .btn-spinner {
     animation-duration: 2s;
   }
+}
+
+.btn-sm {
+  min-height: 32px;
+  padding: var(--gs-space-1) var(--gs-space-2-5);
+}
+
+.btn-lg {
+  min-height: 48px;
+  padding: var(--gs-space-2) var(--gs-space-5);
+  font-size: var(--gs-font-size-subtitle);
 }

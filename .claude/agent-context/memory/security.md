@@ -61,3 +61,8 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - `z.guid()` suffisant (regex 8-4-4-4-12 stricte, accepte ids de seed, tout ce qu'il passe est un uuid Postgres valide). 23505 mappé sur la seule contrainte `roles_active_department_idx`, message fixe, pas de fuite.
 - Nouveaux INFO : F-B8-05 (pré-contrôle service refuse la révocation d'un suspendu, fail closed), F-B8-06 (`role.disable` sur rôle de suspendus : user_roles orphelins, réactivation sans permissions de ce rôle, réduction jamais élévation).
 - Leçon : un retest de garde de cardinalité = vérifier (1) tous les chemins qui changent l'état « actif », (2) que les deux écrivains partagent le MÊME verrou, (3) l'effet de bord du changement de définition de « actif » sur les autres consommateurs du compteur (ici `disable`). Non rejoué sur vraie base Postgres.
+
+## Revue DS vague 2 (2026-10-11, commit 48d6107, statique) : PASS avec réserves, aucune escalade (max 2,1)
+- Aucun package.json/lockfile touché, aucun sink HTML, aucun href ajouté, clés de sélection absentes du DOM, catalogue factice, aucun calcul métier. `Breadcrumb`/`Menu` ont un `href` antérieur : filtrer `javascript:` quand les URLs viendront du backend.
+- F-DS2-01 LOW 2,1 : `VersionComparison` plante (pas XSS) si le diff backend contient un objet (types TS effacés, pas d'Error Boundary). F-DS2-02..04 INFO (clés = contenu, `ref` écrasable dans Checkbox, ReactNode libres).
+- Leçon : pour un composant d'affichage de données backend, les types TS ne protègent pas à l'exécution ; React échappe les strings mais lève sur les objets. Vérifier l'Error Boundary et la normalisation au bord.
