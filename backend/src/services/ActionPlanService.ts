@@ -398,7 +398,7 @@ export class ActionPlanService {
     }
     if (this.evidences) {
       const evidence = await this.evidences.getById(actor.tenantId, evidenceId);
-      if (!evidence) throw new ValidationError(`Evidence ${evidenceId} does not exist in this tenant`);
+      if (!evidence || evidence.status === "DELETED") throw new ValidationError(`Evidence ${evidenceId} does not exist in this tenant`);
     }
 
     const after = await this.actions.close(actor.tenantId, id, actor.userId, evidenceId, comment?.trim() || null);
