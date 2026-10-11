@@ -148,7 +148,7 @@ pour l'usage.
 | @dev-backend @compliance HUMAN | **COMP-EVD1-2 — suppression d'une évidence sur demande conforme à DECISION-018 n° 9** : motif obligatoire (aujourd'hui `reason: null`), `deleted_at`/`deleted_by`, demande traitée par le groupe Risk Manager (demandeur ≠ traitant), `evidence.delete` réservée ; décision HUMAN sur le refus de supprimer une preuve qui alimente des records importés (EVD-4). | 2026-10-11 | **Ouvert — lot suivant, avant toute suppression sur demande en production.** |
 | @infrastructure @compliance HUMAN | **COMP-EVD1-4 — protection du stockage des preuves** : rétention ou verrouillage sur les deux Drive partagés, droits du compte de service sans suppression définitive, journaux d'activité Drive conservés, politique de purge écrite, archivage après 1 an (DECISION-018 n° 5) derrière `DocumentStorage`. | 2026-10-11 | **Ouvert — lot Infra/Conservation.** |
 | @dev-backend HUMAN | **COMP-EVD1-5 — rattrapage des empreintes des évidences historiques** : script hors migration (relecture par `getContent`, hash marqué « établi a posteriori », trace dans `audit_log`) ; écriture de masse à valider par HUMAN avant exécution. Ajouter le KRI « % évidences avec empreinte ». | 2026-10-11 | **Ouvert — lot de rattrapage dédié.** |
-| HUMAN @risk-manager @product-manager | **Étape 2 du contrat (R1.1) — 11 questions ouvertes Q-E2-1 à Q-E2-11** dans `docs/architecture/RM-V1-Contrat-etape2-PROJET.md` (rédaction Risk Manager, relecture Product Manager, 2026-10-11), reportées dans la page de pilotage (q23 à q33). Bloquent : R1.2 (Q-E2-1, -2), R1.3 (-3), R1.4 (-4, -5, -6), R2 (-7, -8, -9), R3 (-10, -11). Le texte du projet doit aussi être validé par le PO avant report dans le contrat. | 2026-10-11 | **Ouvert — HUMAN : répondre aux questions et valider le texte.** |
+| HUMAN @risk-manager @product-manager | **Étape 2 du contrat (R1.1) — 11 questions ouvertes Q-E2-1 à Q-E2-11** dans `docs/architecture/RM-V1-Contrat-etape2-PROJET.md` (rédaction Risk Manager, relecture Product Manager, 2026-10-11), reportées dans la page de pilotage (q23 à q33). Bloquent : R1.2 (Q-E2-1, -2), R1.3 (-3), R1.4 (-4, -5, -6), R2 (-7, -8, -9), R3 (-10, -11). Le texte du projet doit aussi être validé par le PO avant report dans le contrat. | 2026-10-11 | **Questions répondues (DECISION-034, 2026-10-11). Ouvert — HUMAN : valider le texte final.** |
 | @dev-backend @security | **Évidence supprimée acceptée comme preuve de clôture d'un plan d'action (Security, revue EVD-1, 2026-10-11, préexistant)** : `ActionPlanService.ts:399-401` vérifie l'évidence de clôture par `getById` sans contrôler `status !== 'DELETED'`. | 2026-10-11 | **Ouvert — petit correctif à prévoir hors EVD-1.** |
 | @infrastructure @security HUMAN | **Partage des fichiers sur les Drive partagés (Security, revue EVD-1, 2026-10-11)** : le lien Drive stocké est un lien statique ; si les Drive partagés sont ouverts à tout le domaine, `evidence.download` et son audit se contournent hors application. Vérifier que l'accès aux 4 Drive partagés est limité au compte de service et aux administrateurs nommés. | 2026-10-11 | **Ouvert — HUMAN : vérifier les membres des Drive partagés.** |
 | @infrastructure @dev-backend HUMAN | **Authentification Google Drive en production non prouvée (Infrastructure, 2026-10-08)** : `googleDriveAuth.ts` et `env.ts:101` interdisent la clé JSON en production et supposent l'identité Cloud Run, alors que la production tourne sur Render ; le dépôt d'évidences en production peut échouer. | 2026-10-08 | **Ouvert — à vérifier (R0.4) ; décision HUMAN sur le mécanisme d'identité Drive en production.** |
@@ -857,6 +857,49 @@ RELATED: DECISION-016, DECISION-019 (P3 : auto-proposition activée par
 OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ (principe) — garde-fous à confirmer ; à reporter dans le
   projet d'étape 2.
+```
+
+```
+DECISION-034
+DATE: 2026-10-11
+QUESTION: Étape 2 du contrat — Q-E2-1 à Q-E2-11 (page de pilotage q23 à
+  q33).
+DECISION (réponses du PO, verbatim résumé) :
+  q23 / Q-E2-1 — La direction du département est le membre du groupe
+    hiérarchiquement au-dessus des autres (directeur ou head of) ; il
+    voit le travail des membres sur les risques, les contrôles et les
+    objets qu'ils détiennent ou ont créés.
+  q24 / Q-E2-2 — Le responsable de la fonction risque est le responsable
+    du service risque : droits sur tous les risques, les contrôles et
+    l'administration ; il peut suppléer le Comité si le groupe Comité est
+    vide (voir DECISION-033).
+  q25 / Q-E2-3 — Un Dispositif est choisi une seule fois à la création ;
+    les risques sont affichés par Dispositif, un à la fois.
+  q26 / Q-E2-4 — « Les changements sont au niveau du risque et l'audit est
+    notifié si le groupe n'est pas vide ; comportement par défaut ; on
+    pourra choisir l'audit et/ou le comité. » (interprétation à vérifier
+    dans le texte : par défaut la fonction risque approuve et Audit est
+    notifié ; le Dispositif peut exiger l'approbation d'Audit et/ou du
+    Comité).
+  q27 / Q-E2-5 — Audit : mêmes règles de vote que le Comité, avec
+    avertissement et indicateur.
+  q28 / Q-E2-6 — Premier Dispositif : on demande d'abord de créer un
+    utilisateur dans le groupe risque au niveau hiérarchique le plus
+    élevé ; à défaut, l'administrateur du client (différent du
+    demandeur), avec motif et trace, une seule fois.
+  q29 / Q-E2-7 — Règle personnalisée : planchers fixes seulement ; quorum
+    impossible = envoi refusé puis escalade.
+  q30 / Q-E2-8 — Rejet = comme un retour, gardé en historique et compté.
+  q31 / Q-E2-9 — Revue sans autre membre : l'approbateur choisi au
+    Dispositif, avec alerte à l'équipe risque.
+  q32 / Q-E2-10 — « Sans suite » sans commentaire, avec possibilité de
+    le retirer s'il n'est pas pertinent.
+  q33 / Q-E2-11 — Auteur d'une cotation importée = la personne qui
+    importe ; Résiduel importé par l'équipe risque seulement.
+RELATED: DECISION-033, `docs/architecture/RM-V1-Contrat-etape2-PROJET.md`.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — à intégrer au projet d'étape 2 ; le texte final reste à
+  valider par le PO avant report dans le contrat.
 ```
 
 | @release-manager | **URGENT — `main` a 27 commits jamais poussés sur `origin`, aucune PR ouverte pour le Lot 1 RACI malgré un feu vert QA + Security complet (SEC-016 CLOSED).** Vérifié le 2026-09-29 : dernière PR mergée = #15 (`security/fix-sec-009-015`, 2026-09-28). Tout ce qui a suivi (SEC-016, 3 docs d'architecture cible, ADR-002, Lot 1 RACI complet avec revue QA/Security) est resté en local sur `main`, sans branche ni PR. Working tree en plus non propre (fichiers modifiés/non trackés : `ACTION_ITEMS.md`, `SHARED_LOG.md`, `CLAUDE.md`, design system, `RisksPage.tsx`, `RaciPanel.tsx`/`.css`, `api/raci.ts`/`users.ts`, `ADR-003...`). Rollback de migration `027_raci_assignments.sql` jamais testé/tracé non plus (déjà exigé dans la DoD proposée le 28/09). Recommandation : ouvrir la PR du Lot 1 RACI (+ éventuellement une PR séparée pour les 3 docs d'architecture/ADR-002/ADR-003) avant tout nouveau lot, pour ne pas accumuler davantage de commits non tracés. | 2026-09-29 | **Résolu — PR #16 ouverte, 22 commits, mergée par le PO le 2026-09-29.** Lots A/B/C exécutés en parallèle/séquence (voir DECISION-005 ci-dessous pour le détail complet) : Lot 1 RACI + charte graphique + docs architecture poussés, fuite Privacy corrigée, `GrcObjectType` créé et `RaciEntityType` migré dessus, middleware `ModuleToggle` câblé, 20 tests `BrandingService` ajoutés, rollback de migration établi comme convention projet (027+028 `.down.sql` + `README.md` + correctif du runner). 405 tests verts sur toute la série, working tree propre. |
