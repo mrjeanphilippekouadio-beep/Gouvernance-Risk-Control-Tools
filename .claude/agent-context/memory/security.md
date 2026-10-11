@@ -48,3 +48,10 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - Plafonds 25 : tous les gardes sont `>=` (Comité) ou `>` (appétit), clamp vers la dernière bande en criticité : un score 30 n'échappe à rien (fail-closed). Limite fonctionnelle : appétit ne peut pas dépasser 25. Leçon : pour un plafond élargi, vérifier le SENS de la comparaison (plancher vs plafond) avant de conclure à un contournement.
 - `.down.sql` : aucun des 23 n'a de BEGIN ; le runner ignore les downs ; recommander `psql --single-transaction`.
 - Tracker (7bis) : F-B9-01 (A06), décision PO/Risk Manager sur appétit/Comité pour 6x6.
+
+## Revue B-8 groupes fixes (2026-10-11, commit efefbb1, statique) : PASS sauf point 4
+- Maker-checker, non-suppression/renommage, FOR UPDATE de `revokeFromUser`, IDOR `departmentId`, tenant scoping : PASS. Aucune escalade HUMAN (max 3,8).
+- F-B8-01 LOW 3,8 : `UserService.suspend` ne révoque pas `user_roles` et `countActiveAssignments` ne joint pas `users.deleted_at` : l'invariant « Risk Manager jamais vide » compte les suspendus (dans les deux sens). Impact borné car les groupes ont `permissions = '{}'` et un admin `role.assign` peut recréer le membre. Reco : joindre users actifs + garde dans suspend.
+- F-B8-02 INFO : la migration adopte tout rôle actif nommé « Risk Manager / Risk Committee / Audit » sans toucher aux permissions (pas d'élévation, mais rôle figé et non désactivable) ; contrôle pré-migration à faire en prod.
+- F-B8-03 INFO : `departmentId` pas `.uuid()` donc 500 ; 23505 en course donc 500. F-B8-04 INFO : groupes amorcés sans audit.
+- Leçon : un invariant de cardinalité (« jamais vide ») doit compter les membres ACTIFS (jointure utilisateur), et être appliqué sur tous les chemins qui retirent un membre (suspension incluse), pas seulement sur la révocation de rôle.

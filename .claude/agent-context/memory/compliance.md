@@ -142,6 +142,16 @@ légal « à confirmer par les juristes ».
   Manager : écart avec DECISION-018 n° 9, à traiter avant la mise en prod
   de la suppression sur demande (lot suivant).
 - Historique sans hash : rattrapage conseillé, jamais de hash inventé.
+## Passage Compliance B-8 groupes fixes (2026-10-11, branche feat/b8-groups, efefbb1)
+
+Détail : `docs/security/compliance-B8.md`. Verdict : conforme avec réserves, aucun bloquant de merge. Statut : recommandation, en attente du PO (6 questions).
+- Cumul Risk Manager + Audit : non interdit par le contrat, aucune garde dans le code ; je recommande de l'interdire (2e vs 3e ligne), cumul avec Committee à arbitrer.
+- « Risk Manager jamais vide » : atomique au retrait, mais contourné par `UserService.suspend` (user_roles non révoqués, comptage sans statut utilisateur). À corriger avant B-9.
+- Audit des affectations : ROLE_CHANGE présent, `grantedBy` forcé, mais `reason: null` et audit hors transaction (invariant 7).
+- Groupes à zéro permission : conforme (moindre privilège) ; ne pas accorder de droits avant arbitrage PO.
+- Processus.department_id nullable : acceptable seulement avec rattrapage tracké (ACTION_ITEMS), puis NOT NULL.
+13. Un groupe de la 3e ligne (Audit) ne doit pas être administrable ni peuplé par la seule 2e ligne sans motif et tiers ; un invariant « jamais vide » se compte sur des membres actifs, pas sur des lignes de table.
+
 12. Un hash calculé à l'upload prouve l'identité du contenu depuis ce
     moment, pas son authenticité d'origine ni sa non-altération sur Drive
     tant qu'il n'est pas recontrôlé.
