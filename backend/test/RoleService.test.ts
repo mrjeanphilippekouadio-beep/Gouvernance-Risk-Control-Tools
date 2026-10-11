@@ -329,6 +329,22 @@ describe("RoleService", () => {
       await expect(service.revokeFromUser(admin, group.id, "u1", "REQ-1")).rejects.toThrow(ValidationError);
     });
 
+    it("F-B8-05: revoking a suspended member succeeds while another active member remains; the last active one is still refused", async () => {
+      const suspended = new Set(["u2"]);
+      const repo = inMemoryRoleRepository(suspended);
+      const mkUser = (id: string, deletedAt: Date | null) => ({ id, tenantId: admin.tenantId, deletedAt }) as User;
+      const users = inMemoryUserRepository([mkUser("u1", null), mkUser("u2", new Date())]);
+      const service = new RoleService(repo, inMemoryAuditRepository(), users, departments);
+      const group = await repo.create({ tenantId: admin.tenantId, name: "RM", permissions: [], systemGroup: "RISK_MANAGER" } as never);
+      const other = await service.create(admin, { name: "Other", permissions: ["audit.read"] }, "REQ-o");
+      for (const userId of ["u1", "u2"]) {
+        await service.assignToUser(admin, group.id, userId, "REQ-a");
+        await service.assignToUser(admin, other.id, userId, "REQ-a");
+      }
+      await service.revokeFromUser(admin, group.id, "u2", "REQ-1");
+      await expect(service.revokeFromUser(admin, group.id, "u1", "REQ-2")).rejects.toThrow(ValidationError);
+    });
+
     it("F-B8-01: refuses to suspend the last active Risk Manager member", async () => {
       const { service, group } = await withGroup("RISK_MANAGER");
       await service.revokeFromUser(admin, group.id, "u1", "REQ-1");

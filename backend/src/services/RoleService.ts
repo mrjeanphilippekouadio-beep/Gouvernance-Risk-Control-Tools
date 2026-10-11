@@ -226,8 +226,15 @@ export class RoleService {
     // B-8: the Risk Manager group is never left empty (Committee and Audit may be).
     // Checked here for a clear error, and again atomically in the repository.
     const isRiskManagerGroup = role.systemGroup === "RISK_MANAGER";
-    if (isRiskManagerGroup && (await this.roles.countActiveAssignments(actor.tenantId, roleId)) <= 1) {
-      throw new ValidationError("Cannot remove the last member of the Risk Manager group");
+    if (isRiskManagerGroup) {
+      // F-B8-05: the count excludes suspended users, so a suspended target is not in it.
+      // Refuse only if no OTHER active member would remain (fail closed without a UserRepository).
+      const active = await this.roles.countActiveAssignments(actor.tenantId, roleId);
+      const target = this.users ? await this.users.getById(actor.tenantId, userId) : null;
+      const targetCounted = !target || !target.deletedAt;
+      if ((targetCounted ? active - 1 : active) < 1) {
+        throw new ValidationError("Cannot remove the last member of the Risk Manager group");
+      }
     }
 
     const remaining = await this.roles.listForUser(actor.tenantId, userId);
