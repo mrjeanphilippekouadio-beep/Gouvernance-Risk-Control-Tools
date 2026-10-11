@@ -1,0 +1,39 @@
+name: ZAP Full Scan
+
+# Default-deny token policy, same convention as ci.yml — the job only
+# needs to read the checkout and write its own scan issue (disabled below).
+permissions:
+  contents: read
+
+# Manual trigger only. This runs ZAP's *active* scan (real XSS/SQLi/etc.
+# payloads against the target) — never wire this to push/pull_request.
+# Safe here because ZAP_TARGET_URL points at an environment whose DB only
+# holds test data, never real user records.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "GitHub environment holding ZAP_TARGET_URL"
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+
+jobs:
+  zap-full-scan:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: ZAP Full Scan
+        uses: zaproxy/action-full-scan@bee4e5be916301228d2b1b2dcad73aab6fa6a25b # v0.13.0
+        with:
+          target: ${{ secrets.ZAP_TARGET_URL }}
+          # No issues/PR writes (contents:read only above, enforced at the
+          # permission layer even if this were left at its default `true`).
+          allow_issue_writing: false
+          fail_action: false
+          # Action uploads the HTML/MD/JSON report itself as this artifact.
+          artifact_name: zap-full-scan-report
