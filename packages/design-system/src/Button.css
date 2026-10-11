@@ -29,7 +29,7 @@
 .btn-primary {
   background: var(--gs-primary);
   border-color: var(--gs-primary);
-  color: #ffffff;
+  color: var(--gs-on-primary);
   border-radius: var(--gs-radius-pill);
   box-shadow: var(--gs-elev-2);
 }

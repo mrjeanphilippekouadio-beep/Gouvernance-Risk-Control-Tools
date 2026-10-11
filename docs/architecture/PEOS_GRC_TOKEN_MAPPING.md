@@ -35,7 +35,7 @@ GRC `@djamo/design-system` provides the implementation tokens actually consumed 
 | `--gs-danger` | `semantic.feedback.error.accent` | MAPPED WITH VALUE DIVERGENCE | Keep GRC `#B3261E`. |
 | `--gs-warning` | `semantic.feedback.warning.accent` | MAPPED WITH VALUE DIVERGENCE | Keep GRC `#8A5A00`. |
 | `--gs-success` | `semantic.feedback.success.accent` | MAPPED WITH VALUE DIVERGENCE | Keep GRC `#1E7A46`. |
-| `--gs-info` | `semantic.feedback.info.accent` | CONFLICT / MAPPED ROLE | PEOS distinguishes info from primary; GRC currently aliases info to primary. Do not change without human decision. |
+| `--gs-info` | `semantic.feedback.info.accent` | MAPPED WITH VALUE DIVERGENCE | Resolved by DECISION-030 (q21): info is distinct from primary. GRC value `#0C6BA5` (4.99:1 on `--gs-info-bg`, 5.06:1 on `--gs-bg-surface`, WCAG 2.1 AA). Not a PEOS Foundation value. |
 | `--gs-radius-btn` | GRC-specific brand/component choice | GRC SPECIFIC | 10 px; no PEOS equivalent proven. |
 | `--gs-radius-card` | GRC-specific brand/component choice | GRC SPECIFIC | 14 px; no PEOS equivalent proven. |
 
@@ -50,7 +50,8 @@ GRC `@djamo/design-system` provides the implementation tokens actually consumed 
 | `--gs-success-bg` | Use existing GRC value; do not infer a PEOS replacement. |
 | `--gs-neutral` | Use existing GRC value; do not infer a PEOS replacement. |
 | `--gs-neutral-bg` | Use existing GRC value; do not infer a PEOS replacement. |
-| `--gs-info-bg` | Use existing GRC value; do not infer a PEOS replacement. |
+| `--gs-info-bg` | `#E4F1FA`, paired with `--gs-info` (DECISION-030); do not infer a PEOS replacement. |
+| `--gs-on-primary` | `#FFFFFF`, text/icon on a primary fill (DECISION-030); no proven PEOS equivalent. Not for white surfaces. |
 | `--gs-font-display` | GRC-specific brand role; keep Plus Jakarta Sans. |
 | `--gs-font-size-title` | GRC implementation scale; use existing token. |
 | `--gs-font-size-subtitle` | GRC implementation scale; use existing token. |

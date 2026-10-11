@@ -66,11 +66,11 @@
 }
 
 .gs-msg-info {
-  border-color: var(--gs-primary);
-  background: var(--gs-primary-bg);
+  border-color: var(--gs-info);
+  background: var(--gs-info-bg);
 }
 
 .gs-msg-info .gs-msg-head,
 .gs-msg-info .gs-msg-icon {
-  color: var(--gs-primary-hover);
+  color: var(--gs-info);
 }

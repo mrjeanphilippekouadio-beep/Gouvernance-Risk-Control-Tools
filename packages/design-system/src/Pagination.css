@@ -29,14 +29,14 @@
 .gs-pagination-page-active {
   background: var(--gs-primary);
   border-color: var(--gs-primary);
-  color: #fff;
+  color: var(--gs-on-primary);
   font-weight: 700;
 }
 
 .gs-pagination-page-active:hover {
   background: var(--gs-primary-hover);
   border-color: var(--gs-primary-hover);
-  color: #fff;
+  color: var(--gs-on-primary);
 }
 
 .gs-pagination-nav {
