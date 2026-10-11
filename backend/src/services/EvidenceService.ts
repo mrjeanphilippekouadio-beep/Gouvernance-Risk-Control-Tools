@@ -8,6 +8,7 @@ import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import { MAX_DOCUMENT_BYTES, type DocumentStorage } from "../infrastructure/storage/DocumentStorage.js";
 import { validateEvidenceFile, XLSX_MIME } from "./evidenceFileValidation.js";
+import { analyzeXlsx, MAX_ANALYSIS_BYTES, type SheetAnalysis } from "./xlsxAnalysis.js";
 
 /** List view: no Drive reference, since reaching the file requires evidence.download. */
 export type EvidenceSummary = Omit<Evidence, "driveFileId" | "driveUrl">;
@@ -173,6 +174,32 @@ export class EvidenceService {
     });
     // Tenant ownership already confirmed above — only now do we touch Drive.
     return this.storage.getUrl(evidence.driveFileId);
+  }
+
+  /**
+   * EVD-2: read-only structure analysis of a stored xlsx. No DB or Drive
+   * write, no audit (cadrage: "Aucune écriture"). Drive is only reached
+   * after the tenant-scoped lookup, and the bytes must match the SHA-256
+   * recorded at upload before they are parsed.
+   */
+  async analyze(
+    actor: AuthenticatedUser,
+    id: string,
+  ): Promise<{ evidenceId: string; fileName: string; sha256: string; sheets: SheetAnalysis[] }> {
+    requirePermission(actor, "evidence.import");
+    const evidence = await this.getOwnedOrThrow(actor, id);
+    if (evidence.mimeType !== XLSX_MIME) throw new ValidationError("Only xlsx evidences can be analyzed");
+    if (!evidence.sha256) throw new ValidationError("Evidence has no recorded SHA-256; it cannot be analyzed");
+    if (evidence.fileSize !== null && evidence.fileSize > MAX_ANALYSIS_BYTES) {
+      throw new ValidationError(`File exceeds the ${MAX_ANALYSIS_BYTES / (1024 * 1024)}MB analysis limit`);
+    }
+    const content = await this.storage.getContent(evidence.driveFileId);
+    if (createHash("sha256").update(content).digest("hex") !== evidence.sha256) {
+      throw new ConflictError("The stored file no longer matches its recorded SHA-256; analysis refused");
+    }
+    // No confidentiality / personal-data flag exists on Evidence yet (dataset arrives in EVD-3): examples returned for all.
+    const sheets = await analyzeXlsx(content, true);
+    return { evidenceId: evidence.id, fileName: evidence.fileName, sha256: evidence.sha256, sheets };
   }
 
   async delete(actor: AuthenticatedUser, id: string, requestId: string): Promise<void> {

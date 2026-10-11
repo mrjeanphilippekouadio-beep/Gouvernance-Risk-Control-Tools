@@ -68,6 +68,14 @@ export function evidencesRouter(evidenceService: EvidenceService): Router {
     }
   });
 
+  router.post("/:id/analysis", costlyOperationRateLimiter(), async (req, res, next) => {
+    try {
+      res.json({ data: await evidenceService.analyze(req.user, req.params["id"] as string) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.delete("/:id", async (req, res, next) => {
     try {
       await evidenceService.delete(req.user, req.params["id"] as string, req.requestId);

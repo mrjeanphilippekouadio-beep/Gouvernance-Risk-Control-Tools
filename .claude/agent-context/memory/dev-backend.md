@@ -104,3 +104,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - F-B8t-04 : aucune transaction inter-repos dans le repo -> choix simple : `reopen` seulement si l'application des droits échoue ; une fois appliqués, un échec d'audit est loggé et renvoyé SANS reopen (statut APPROVED = droits appliqués). Limite : l'événement d'audit manquant n'est pas rejoué.
 - Fakes de tests B8ter/QA-B8quater : `listAssignments` ajouté (méthode requise de l'interface réelle, fail-closed plutôt que `?.`).
 - Leçon : un heredoc dans une commande composée est refusé ; Write d'un script dans le scratchpad (nom unique : edit.py existait déjà).
+
+## 2026-10-11 EVD-2 « Analyse » (branche wt/evd2, base 720b606, aucune migration)
+
+- `POST /api/v1/evidences/:id/analysis` (permission `evidence.import`, limiteur `costlyOperationRateLimiter`) -> `EvidenceService.analyze` : permission, lookup tenant-scopé (`getOwnedOrThrow`), refus si non xlsx / sans sha256 / `fileSize` > 5 Mo, PUIS `getContent`, contrôle SHA-256 (409 si altéré), PUIS `analyzeXlsx` (`services/xlsxAnalysis.ts` : plafond 5 Mo, `assertSafeXlsxArchive`, exceljs, 50 feuilles, 20 000 lignes, 50 colonnes). Le plafond de lecture Drive 25 Mo (`getContent`) est celui d'EVD-1.
+- Aucune écriture, aucun audit (cadrage : « Aucune écriture »). Question ouverte : auditer la lecture du contenu comme `DOWNLOAD` ?
+- Exemples toujours renvoyés : aucun indicateur `confidential`/données personnelles n'existe sur `Evidence` (décision 14 du cadrage, dataset EVD-3). Signalé, non inventé.
+- Formules : on lit `result` en cache, jamais évaluées. Colonnes entièrement vides (en-tête ET données) non listées ; colonne avec en-tête et sans donnée : `isEmpty: true`.
+- `evidence.import` NON ajouté aux groupes fixes : HUMAN l'accorde par SQL.
+- Leçon : commande bash composée avec heredoc python refusée dans le worktree -> Write/Edit directement.
