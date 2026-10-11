@@ -152,6 +152,16 @@ Détail : `docs/security/compliance-B8.md`. Verdict : conforme avec réserves, a
 - Processus.department_id nullable : acceptable seulement avec rattrapage tracké (ACTION_ITEMS), puis NOT NULL.
 13. Un groupe de la 3e ligne (Audit) ne doit pas être administrable ni peuplé par la seule 2e ligne sans motif et tiers ; un invariant « jamais vide » se compte sur des membres actifs, pas sur des lignes de table.
 
+## Revue DECISION-040 (2026-10-11)
+
+Détail : `docs/security/compliance-DECISION-040.md`. Verdict : conforme avec réserves, aucun bloquant. Statut : recommandation, en attente du PO (q58 à q61). Pas de texte BCEAO consulté.
+- Gitar a raison sur un seul point : Audit (3e ligne) décideur en repli ; garde-fous : marquage, indicateur, ratification a posteriori par le Comité.
+- « Aucun quorum » doit viser la décision de repli, pas le vote du Comité (DECISION-026 : « jamais un seul membre » est fixe).
+- Réglages de cumul, quorum et circuit : événements sensibles (permission, motif, trace). Administrateur = RM : cumul marqué, tiers notifié.
+- Fenêtre « droits perdus » : nom d'affichage seul, déclenchée par action refusée, audit, avis Privacy.
+14. La souplesse voulue par le PO se garde par des paramètres à défaut sûr, des alertes et des indicateurs, pas par des interdictions ; ce qu'on ne règle pas : auto-validation, silence valant accord.
+15. La 3e ligne ne décide pas en gestion du risque sans marquage et ratification ; un groupe « vide » se compte en membres actifs.
+
 12. Un hash calculé à l'upload prouve l'identité du contenu depuis ce
     moment, pas son authenticité d'origine ni sa non-altération sur Drive
     tant qu'il n'est pas recontrôlé.
