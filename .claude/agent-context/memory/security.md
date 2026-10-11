@@ -35,3 +35,9 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - 17 couples route/champ rejoués sur vrais routeurs : 1 Mo de `{}` = 400 en 56-174 ms (avant 2,1 s / 540 Mo), imbriqué 16-54 ms, valides > max 6-16 ms. Aucun `z.array` nu hors `env.ts`.
 - Leçon : le garde-fou par regex (`z.array(` dans `api/v1`) est contournable (`.array()`, `z.record`, `z.tuple`, hors `api/v1`) ; un retest doit toujours évaluer le test garde-fou, pas seulement le correctif.
 - Notés non traités : `z.string()` sans `.max()` (~60), `limit` négatif audit-log, branding multer sans files/parts, `coveredRiskIds` max 1000 vs sélection UI. `express.json` 256 ko = durcissement optionnel.
+
+## Mini-lot DECISION-038 (2026-10-11, commit 620e759, revue statique) : PASS 1 et 2, point 3 INFO
+- `limit` audit-logs borné zod 1..500 : ferme la réserve S-1 (b). `from`/`to` = `new Date()` non validé, 500 générique sur date invalide (INFO). Les autres filtres sont paramétrés et tenant-scopés.
+- `ActionPlanService.close` : DELETED = même message/400 que inexistant, lookup tenant-scopé, pas d'oracle ; `evidenceId` n'entre que par `close()`. Résidu : TOCTOU minime, évidence supprimée après clôture.
+- KRI `Number()` brut : le repository normalise (`>0`, floor, pageSize <= 100, paramétré). Pire cas : `page=1e20`/`Infinity` donne OFFSET invalide, 500 générique. CVSS effectif 0 ; pas d'escalade.
+- Leçon : un `Number()` brut n'est pas un défaut en soi ; suivre la valeur jusqu'au SQL avant de coter (ici la normalisation du repository neutralise négatifs/NaN/énormes sauf OFFSET non représentable).
