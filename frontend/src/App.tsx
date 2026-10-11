@@ -12,6 +12,7 @@ import { ControlsPage } from "./features/controls/ControlsPage";
 import { ControlMonitoringPage } from "./features/controls/ControlMonitoringPage";
 import { AuditFindingsPage } from "./features/audit/AuditFindingsPage";
 import { ActionPlansPage } from "./features/actions/ActionPlansPage";
+import { NotificationCenter } from "./features/notifications/NotificationCenter";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import { useLocalSignIn } from "./auth/useLocalSignIn";
@@ -158,6 +159,7 @@ function App() {
             <strong>{PAGE_TITLES[view]}</strong>
           </div>
           <div className="topbar-actions">
+            <NotificationCenter token={token} onNavigate={go} />
             <button type="button" className="topbar-user" aria-label="Ouvrir les actions de session" aria-expanded={logoutOpen} onClick={() => setLogoutOpen((open) => !open)}>
               <span className="topbar-user-avatar">{getInitials(sessionIdentity)}</span>
               <span className="topbar-user-copy"><strong>{sessionIdentity || "Utilisateur"}</strong><small>Accès authentifié</small></span>
