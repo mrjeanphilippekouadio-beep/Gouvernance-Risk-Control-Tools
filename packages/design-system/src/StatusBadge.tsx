@@ -25,7 +25,7 @@ const ICONS = {
  * the accessible name.
  */
 export function StatusBadge({ label, tone }: StatusBadgeProps) {
-  const Icon = ICONS[tone];
+  const Icon = ICONS[tone] ?? ICONS.neutral;
   return (
     <span className={`status-badge status-badge-${tone}`}>
       <Icon className="status-badge-icon" aria-hidden="true" />
