@@ -41,3 +41,10 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - `ActionPlanService.close` : DELETED = même message/400 que inexistant, lookup tenant-scopé, pas d'oracle ; `evidenceId` n'entre que par `close()`. Résidu : TOCTOU minime, évidence supprimée après clôture.
 - KRI `Number()` brut : le repository normalise (`>0`, floor, pageSize <= 100, paramétré). Pire cas : `page=1e20`/`Infinity` donne OFFSET invalide, 500 générique. CVSS effectif 0 ; pas d'escalade.
 - Leçon : un `Number()` brut n'est pas un défaut en soi ; suivre la valeur jusqu'au SQL avant de coter (ici la normalisation du repository neutralise négatifs/NaN/énormes sauf OFFSET non représentable).
+
+## Revue B-9 échelle 3 à 6 (2026-10-11, commit 21cd420, revue statique) : PASS, aucune escalade (max CVSS 2,7)
+- `boundedArray` OK (6/7), mais `ScaleLevelSchema.label` sans `.max()` : stockage JSONB + audit (old+new) = F-B9-01 LOW 2,7. Même classe que S-1 (a) ; pousser `.max()` sur tous les `label`/`code` de config.
+- R-01 tenu côté service (`assertMutable`) mais `setJsonColumn` n'a pas `AND status='DRAFT'` : TOCTOU pré-existant, F-B9-02 INFO 2,2.
+- Plafonds 25 : tous les gardes sont `>=` (Comité) ou `>` (appétit), clamp vers la dernière bande en criticité : un score 30 n'échappe à rien (fail-closed). Limite fonctionnelle : appétit ne peut pas dépasser 25. Leçon : pour un plafond élargi, vérifier le SENS de la comparaison (plancher vs plafond) avant de conclure à un contournement.
+- `.down.sql` : aucun des 23 n'a de BEGIN ; le runner ignore les downs ; recommander `psql --single-transaction`.
+- Tracker (7bis) : F-B9-01 (A06), décision PO/Risk Manager sur appétit/Comité pour 6x6.
