@@ -148,6 +148,7 @@ pour l'usage.
 | @dev-backend @compliance HUMAN | **COMP-EVD1-2 — suppression d'une évidence sur demande conforme à DECISION-018 n° 9** : motif obligatoire (aujourd'hui `reason: null`), `deleted_at`/`deleted_by`, demande traitée par le groupe Risk Manager (demandeur ≠ traitant), `evidence.delete` réservée ; décision HUMAN sur le refus de supprimer une preuve qui alimente des records importés (EVD-4). | 2026-10-11 | **Ouvert — lot suivant, avant toute suppression sur demande en production.** |
 | @infrastructure @compliance HUMAN | **COMP-EVD1-4 — protection du stockage des preuves** : rétention ou verrouillage sur les deux Drive partagés, droits du compte de service sans suppression définitive, journaux d'activité Drive conservés, politique de purge écrite, archivage après 1 an (DECISION-018 n° 5) derrière `DocumentStorage`. | 2026-10-11 | **Ouvert — lot Infra/Conservation.** |
 | @dev-backend HUMAN | **COMP-EVD1-5 — rattrapage des empreintes des évidences historiques** : script hors migration (relecture par `getContent`, hash marqué « établi a posteriori », trace dans `audit_log`) ; écriture de masse à valider par HUMAN avant exécution. Ajouter le KRI « % évidences avec empreinte ». | 2026-10-11 | **Ouvert — lot de rattrapage dédié.** |
+| HUMAN @risk-manager @product-manager | **Étape 2 du contrat (R1.1) — 11 questions ouvertes Q-E2-1 à Q-E2-11** dans `docs/architecture/RM-V1-Contrat-etape2-PROJET.md` (rédaction Risk Manager, relecture Product Manager, 2026-10-11), reportées dans la page de pilotage (q23 à q33). Bloquent : R1.2 (Q-E2-1, -2), R1.3 (-3), R1.4 (-4, -5, -6), R2 (-7, -8, -9), R3 (-10, -11). Le texte du projet doit aussi être validé par le PO avant report dans le contrat. | 2026-10-11 | **Ouvert — HUMAN : répondre aux questions et valider le texte.** |
 | @dev-backend @security | **Évidence supprimée acceptée comme preuve de clôture d'un plan d'action (Security, revue EVD-1, 2026-10-11, préexistant)** : `ActionPlanService.ts:399-401` vérifie l'évidence de clôture par `getById` sans contrôler `status !== 'DELETED'`. | 2026-10-11 | **Ouvert — petit correctif à prévoir hors EVD-1.** |
 | @infrastructure @security HUMAN | **Partage des fichiers sur les Drive partagés (Security, revue EVD-1, 2026-10-11)** : le lien Drive stocké est un lien statique ; si les Drive partagés sont ouverts à tout le domaine, `evidence.download` et son audit se contournent hors application. Vérifier que l'accès aux 4 Drive partagés est limité au compte de service et aux administrateurs nommés. | 2026-10-11 | **Ouvert — HUMAN : vérifier les membres des Drive partagés.** |
 | @infrastructure @dev-backend HUMAN | **Authentification Google Drive en production non prouvée (Infrastructure, 2026-10-08)** : `googleDriveAuth.ts` et `env.ts:101` interdisent la clé JSON en production et supposent l'identité Cloud Run, alors que la production tourne sur Render ; le dépôt d'évidences en production peut échouer. | 2026-10-08 | **Ouvert — à vérifier (R0.4) ; décision HUMAN sur le mécanisme d'identité Drive en production.** |
@@ -714,6 +715,13 @@ DECISION: Le PO ne fixe pas d'option par défaut. Le Dispositif propose des
   un seul membre, auteurs et RO / Délégué / Exécuteur exclus du vote,
   vote motivé et tracé, escalade à l'échéance, groupe vide refusé.
 RELATED: B-12, F-14 (`validateByCommittee` à un seul membre).
+COMPLÉMENT (réponse PO à q05, page de pilotage, 2026-10-08) — Règles
+  prédéfinies : A Léger (petite structure) : 2 votants d'accord, 5 jours ;
+  B Standard : majorité des votants, au moins 3, 10 jours, relances à 50 %
+  et 90 % ; C Strict : unanimité, au moins 2/3 des éligibles et 4 minimum,
+  15 jours. Quorum de 2 seulement en option A ; le responsable de la
+  fonction risque peut être membre du Comité mais ne vote pas sur ce qu'il
+  a saisi ; un vote peut être retiré tant que la décision n'est pas close.
 OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ — à intégrer à l'amendement de contrat étape 2.
 ```
