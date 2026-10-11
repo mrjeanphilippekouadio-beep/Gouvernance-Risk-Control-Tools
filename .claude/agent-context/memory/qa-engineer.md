@@ -13,3 +13,11 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 ## Historique
 
 - 2026-10-11 — QA-S1 (11 tests multer/MulterError), QA-S1-zod (15 tests de bornes `boundedArray`). Aucun défaut trouvé.
+
+## 2026-10-11 — QA-B9 (échelle 3 à 6, DECISION-038), branche feat/b9-scale-qa
+
+- `backend/test/QA-B9-scale.test.ts` : 50 tests (bornes 2/3/6/7, tailles inégales, 7 vs 8 axes, descriptifs en trop/en moins, ACTIVE/ARCHIVED immuables, version héritée 1..5 lisible/activable/archivable/désactivable, évaluation 6x6 = score 36, isolation tenant, audit par mutation, routes). Suite complète : 898 pass + 1 expected fail.
+- Défaut connu (MAJOR, déjà signalé par A06) : `MAX_APPETITE_THRESHOLD = 25` (RiskEvaluationService, RiskAppetiteService, route `riskAppetite`) non élargi ; un seuil d'appétence ne peut pas dépasser 25 alors que le score max d'une échelle 6x6 est 36 (bandes de criticité par défaut 1-25 aussi). Posé en `it.fails` : retirer `.fails` à la correction. Décision PO requise.
+- Observation : `levelLabels` d'axe optionnel, donc « un descriptif par niveau et par axe » n'est exigé que s'il est fourni (test d'épinglage).
+- Intention CVE de QA-S1-zod toujours couverte : les bornes 7/8 et 6/7 sont testées avec max+1 et des tableaux de `{}` (y compris `levelLabels` imbriqué), le garde `boundedArray.test.ts` passe.
+- Principe ajouté : quand une borne métier change, tester aussi les plafonds dérivés ailleurs (seuils, bandes), pas seulement le champ modifié.
