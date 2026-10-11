@@ -10,3 +10,6 @@ import { z } from "zod";
 export function boundedArray<T extends z.ZodType>(element: T, max: number, min = 0) {
   return z.array(z.unknown()).min(min).max(max).pipe(z.array(element));
 }
+
+/** Shared by the scale's `defenseLines` and the mastery assessment's `lines` (one entry per defense line). */
+export const MAX_DEFENSE_LINES = 50;

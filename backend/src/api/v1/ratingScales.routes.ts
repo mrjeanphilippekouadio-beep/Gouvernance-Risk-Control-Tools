@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { boundedArray } from "../validation.js";
+import { boundedArray, MAX_DEFENSE_LINES } from "../validation.js";
 import type { RatingScaleService } from "../../services/RatingScaleService.js";
 
 const ScaleLevelSchema = z.object({
@@ -44,7 +44,7 @@ const UpdateLevelsBody = z.object({
 
 const UpdateMasteryBody = z.object({
   levels: boundedArray(ScaleLevelSchema, 50),
-  defenseLines: boundedArray(z.string().min(1), 50),
+  defenseLines: boundedArray(z.string().min(1), MAX_DEFENSE_LINES),
   thresholds: boundedArray(ScoreThresholdSchema, 50).nullish(),
 });
 

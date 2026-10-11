@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { boundedArray } from "../validation.js";
+import { boundedArray, MAX_DEFENSE_LINES } from "../validation.js";
 import type { RiskEvaluationService } from "../../services/RiskEvaluationService.js";
 import type { RiskEvaluationViewService } from "../../services/RiskEvaluationViewService.js";
 import type { TreatmentDecisionService } from "../../services/TreatmentDecisionService.js";
@@ -38,7 +38,7 @@ const InherentScoringBody = z.object({
 });
 
 const MasteryAssessmentBody = z.object({
-  lines: boundedArray(MasteryLineScoreSchema, 20),
+  lines: boundedArray(MasteryLineScoreSchema, MAX_DEFENSE_LINES),
 });
 
 const ResidualScoringBody = z.object({
