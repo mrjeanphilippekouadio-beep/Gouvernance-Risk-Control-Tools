@@ -7,11 +7,12 @@ import type {
   SetRiskAppetiteInput,
 } from "../domain/entities/RiskAppetite.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
 import { requirePermission } from "../domain/permissions.js";
+import { resolveMaxScore } from "./scoreCeiling.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 const MIN_THRESHOLD = 1;
-const MAX_THRESHOLD = 25;
 
 /**
  * ACT-165 (define/redefine a threshold) and ACT-168 (consult the active
@@ -36,6 +37,8 @@ export class RiskAppetiteService {
      * `subCategoryId` to ever be accepted.
      */
     private readonly riskCategories?: RiskCategoryRepository,
+    /** B-9 bis: optional; without it the threshold ceiling stays at the historical 25. Wired in server.ts. */
+    private readonly ratingScales?: Pick<RatingScaleRepository, "list">,
   ) {}
 
   /**
@@ -61,8 +64,9 @@ export class RiskAppetiteService {
     const trimmedSubCategory = subCategory.trim();
     if (!trimmedSubCategory) throw new ValidationError("sous_categorie is required");
 
-    if (!Number.isInteger(input.threshold) || input.threshold < MIN_THRESHOLD || input.threshold > MAX_THRESHOLD) {
-      throw new ValidationError(`threshold (seuil) must be an integer between ${MIN_THRESHOLD} and ${MAX_THRESHOLD}`);
+    const maxThreshold = await resolveMaxScore(this.ratingScales, actor.tenantId);
+    if (!Number.isInteger(input.threshold) || input.threshold < MIN_THRESHOLD || input.threshold > maxThreshold) {
+      throw new ValidationError(`threshold (seuil) must be an integer between ${MIN_THRESHOLD} and ${maxThreshold}`);
     }
     if (!input.methodologyVersion?.trim()) {
       throw new ValidationError("methodologyVersion is required");

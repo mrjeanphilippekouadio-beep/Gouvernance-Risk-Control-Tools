@@ -74,7 +74,9 @@ export class ProcessService {
     requirePermission(actor, "process.create");
     if (!input.name.trim()) throw new ValidationError("name is required");
     await this.validateHierarchy(actor.tenantId, input.level, input.parentId ?? null, null);
-    if (input.departmentId) await this.assertDepartmentExists(actor.tenantId, input.departmentId);
+    // B-8 bis (q46): every new process is attached to a department (DB column stays nullable until existing rows are attached).
+    if (!input.departmentId) throw new ValidationError("departmentId is required");
+    await this.assertDepartmentExists(actor.tenantId, input.departmentId);
 
     const process = await this.processes.create({ ...input, tenantId: actor.tenantId });
 
@@ -129,6 +131,10 @@ export class ProcessService {
       await this.validateHierarchy(actor.tenantId, level, parentId, id);
     }
 
+    // B-8 ter: a process attached to a department can be moved, never detached (q46).
+    if (input.departmentId === null && before.departmentId) {
+      throw new ValidationError("departmentId cannot be removed once a process is attached to a department");
+    }
     if (input.departmentId) await this.assertDepartmentExists(actor.tenantId, input.departmentId);
 
     const after = await this.processes.update(actor.tenantId, id, input);

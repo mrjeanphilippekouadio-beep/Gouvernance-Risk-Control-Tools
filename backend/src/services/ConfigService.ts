@@ -4,7 +4,10 @@ import type { Config, AppetiteMode, EvaluationMode, UpdateMethodologyInput } fro
 import { ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
-import { MIN_APPETITE_THRESHOLD, MAX_APPETITE_THRESHOLD } from "./RiskEvaluationService.js";
+import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
+import { MIN_APPETITE_THRESHOLD } from "./RiskEvaluationService.js";
+import { defaultCommitteeThreshold } from "../domain/scoring.js";
+import { resolveMaxScore } from "./scoreCeiling.js";
 
 const SCORE_FORMULAS = ["P_X_I", "WEIGHTED_SUM"] as const;
 const IMPACT_RETENU_RULES = ["MAX", "AVERAGE", "WEIGHTED_SUM"] as const;
@@ -19,7 +22,7 @@ const EVALUATION_MODES = ["CLASSIQUE", "PARTICIPATIF"] as const;
  * which always computes a suggestion but never blocks an override).
  * `version: 0` and `id: null` mark it as not-yet-persisted.
  */
-function defaultConfig(tenantId: string): Config {
+function defaultConfig(tenantId: string, committeeMinScore: number): Config {
   return {
     id: "",
     tenantId,
@@ -30,9 +33,10 @@ function defaultConfig(tenantId: string): Config {
     evaluationMode: "CLASSIQUE",
     // Lot A (RISK_MANAGEMENT_V1 §8): reproduces the pre-Lot-A hardcoded behavior exactly
     // (COMMITTEE_VALIDATION_MIN_SCORE = 15, always enforced) — see 045_committee_thresholds.sql.
-    committeeEvaluationMinScore: 15,
+    committeeEvaluationMinScore: committeeMinScore,
     committeeTreatmentMinScore: null,
     committeeEvaluationEnforced: true,
+    committeeAuditCumulAllowed: true,
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),
@@ -70,11 +74,25 @@ export class ConfigService {
   constructor(
     private readonly configs: ConfigRepository,
     private readonly audit: AuditRepository,
+    /** B-9 bis: optional; without it the committee ceiling stays at the historical 25. Wired in server.ts. */
+    private readonly ratingScales?: Pick<RatingScaleRepository, "list">,
   ) {}
+
+  /**
+   * The first write creates the tenant's row, whose column DEFAULT for the Committee threshold is
+   * 15 (migration 045). Write the scale-based default instead, so that saving an unrelated setting
+   * never silently changes the threshold `get()` was reporting (5 on a 3×3 scale, 21 on 6×6).
+   */
+  private async upsertConfig(tenantId: string, patch: Parameters<ConfigRepository["upsert"]>[1], updatedBy: string): Promise<Config> {
+    if (patch.committeeEvaluationMinScore === undefined && !(await this.configs.getByTenant(tenantId))) {
+      patch = { ...patch, committeeEvaluationMinScore: defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, tenantId)) };
+    }
+    return this.configs.upsert(tenantId, patch, updatedBy);
+  }
 
   async get(actor: AuthenticatedUser): Promise<Config> {
     requirePermission(actor, "config.read");
-    return (await this.configs.getByTenant(actor.tenantId)) ?? defaultConfig(actor.tenantId);
+    return (await this.configs.getByTenant(actor.tenantId)) ?? defaultConfig(actor.tenantId, defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, actor.tenantId)));
   }
 
   /**
@@ -106,7 +124,7 @@ export class ConfigService {
     if (input.levelThresholds !== undefined) assertValidThresholds(input.levelThresholds);
 
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, input, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, input, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -137,7 +155,7 @@ export class ConfigService {
     if (!APPETITE_MODES.includes(mode)) throw new ValidationError(`Unknown appetite mode: ${mode}`);
 
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, { appetiteMode: mode }, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, { appetiteMode: mode }, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -168,7 +186,7 @@ export class ConfigService {
     if (!EVALUATION_MODES.includes(mode)) throw new ValidationError(`Unknown evaluation mode: ${mode}`);
 
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, { evaluationMode: mode }, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, { evaluationMode: mode }, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -201,6 +219,7 @@ export class ConfigService {
     requestId: string,
   ): Promise<Config> {
     requirePermission(actor, "config.committeethreshold.set");
+    const MAX_APPETITE_THRESHOLD = await resolveMaxScore(this.ratingScales, actor.tenantId);
     if (!reason.trim()) {
       throw new ValidationError("A reason is required to change the committee thresholds — this affects which risk evaluations can reach committee validation");
     }
@@ -235,7 +254,7 @@ export class ConfigService {
     if (patch.treatmentMinScore !== undefined) configPatch.committeeTreatmentMinScore = patch.treatmentMinScore;
 
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, configPatch, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, configPatch, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -268,7 +287,7 @@ export class ConfigService {
     }
 
     const before = await this.get(actor);
-    const after = await this.configs.upsert(actor.tenantId, { committeeEvaluationEnforced: enforced }, actor.userId);
+    const after = await this.upsertConfig(actor.tenantId, { committeeEvaluationEnforced: enforced }, actor.userId);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -282,6 +301,33 @@ export class ConfigService {
       requestId,
     });
 
+    return after;
+  }
+
+  /**
+   * PUT /config/committee-audit-cumul — DECISION-042 §1 (q58). Allows or forbids one user
+   * being in both the Committee and Audit groups (allowed by default). Takes effect on later
+   * assignments only; existing double members are not removed. Sensitive setting (Compliance):
+   * dedicated permission, mandatory reason, audited. Risk Manager + Audit is not affected by it.
+   */
+  async setCommitteeAuditCumul(actor: AuthenticatedUser, allowed: boolean, reason: string, requestId: string): Promise<Config> {
+    requirePermission(actor, "config.cumul.set");
+    if (!reason.trim()) {
+      throw new ValidationError("A reason is required to change the Committee + Audit cumul setting");
+    }
+    const before = await this.get(actor);
+    const after = await this.upsertConfig(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId);
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Config",
+      entityId: after.id,
+      action: "UPDATE",
+      oldValue: before,
+      newValue: after,
+      reason,
+      requestId,
+    });
     return after;
   }
 }

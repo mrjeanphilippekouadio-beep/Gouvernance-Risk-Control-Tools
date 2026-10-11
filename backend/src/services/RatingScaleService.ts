@@ -14,6 +14,9 @@ import type {
 } from "../domain/entities/RatingScale.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
+import type { RiskAppetiteRepository } from "../domain/repositories/RiskAppetiteRepository.js";
+import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
+import { maxScoreForScale } from "../domain/scoring.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 const LEVEL_BOUNDS = { min: 1, max: 5 } as const;
@@ -36,6 +39,21 @@ function assertDescriptors(levels: ScaleLevel[], fieldName: string, size: number
   assertLevels(levels, fieldName, { min: 1, max: size });
   if (levels.length !== size) {
     throw new ValidationError(`${fieldName} must have exactly one descriptor per level (${size})`);
+  }
+}
+
+/**
+ * B-9 bis (q50): descriptors are optional in DRAFT but mandatory to activate — probability,
+ * impact, and every impact axis (when axes are configured) need one non-empty descriptor per level.
+ */
+function assertReadyToActivate(scale: RatingScale): void {
+  if (!scale.probabilityLabels) throw new ValidationError("probabilityLabels are required to activate a rating scale");
+  assertDescriptors(scale.probabilityLabels, "probabilityLabels", scale.probabilityLevels);
+  if (!scale.impactLabels) throw new ValidationError("impactLabels are required to activate a rating scale");
+  assertDescriptors(scale.impactLabels, "impactLabels", scale.impactLevels);
+  for (const axis of scale.impactAxes?.axes ?? []) {
+    if (!axis.levelLabels) throw new ValidationError(`axis ${axis.code} levelLabels are required to activate a rating scale`);
+    assertDescriptors(axis.levelLabels, `axis ${axis.code} levelLabels`, scale.impactLevels);
   }
 }
 
@@ -123,6 +141,12 @@ export class RatingScaleService {
      * protection in place.
      */
     private readonly riskEvaluations: Pick<RiskEvaluationRepository, "existsForRatingScale">,
+    /**
+     * F-B9b-01: optional (guarded) so existing construction sites keep working. When wired,
+     * activateVersion refuses a scale whose ceiling is below an active appetite / Comité threshold.
+     */
+    private readonly riskAppetites?: Pick<RiskAppetiteRepository, "list">,
+    private readonly configs?: Pick<ConfigRepository, "getByTenant">,
   ) {}
 
   async create(
@@ -185,6 +209,11 @@ export class RatingScaleService {
     const before = await this.get(actor, id);
     assertMutable(before);
     assertThresholds(input.thresholds, "thresholds");
+    // B-9 bis (q49): no band may reach above the matrix's score ceiling n².
+    const ceiling = maxScoreForScale(before);
+    if (input.thresholds.some((t) => t.max > ceiling)) {
+      throw new ValidationError(`thresholds cannot exceed the maximum score of this scale (${ceiling})`);
+    }
 
     const after = await this.ratingScales.updateThresholds(actor.tenantId, id, input.thresholds);
     await this.recordUpdate(actor, id, before, after, requestId);
@@ -291,6 +320,33 @@ export class RatingScaleService {
   }
 
   /**
+   * F-B9b-01 (fail-closed): an active threshold above the new scale's ceiling could never be
+   * reached, silently disabling the appetite / Comité control. Refuse the activation instead.
+   */
+  private async assertThresholdsFitCeiling(tenantId: string, scale: RatingScale): Promise<void> {
+    const ceiling = maxScoreForScale(scale);
+    const over: string[] = [];
+    for (const b of scale.criticalityThresholds ?? []) {
+      if (b.max > ceiling) over.push(`bande "${b.label}" (${b.max})`);
+    }
+    if (this.riskAppetites) {
+      for (const a of await this.riskAppetites.list(tenantId, { activeOnly: true })) {
+        if (a.threshold > ceiling) over.push(`appétence "${a.subCategory}" (${a.threshold})`);
+      }
+    }
+    const config = this.configs ? await this.configs.getByTenant(tenantId) : null;
+    if (config && config.committeeEvaluationMinScore > ceiling) over.push(`seuil Comité évaluation (${config.committeeEvaluationMinScore})`);
+    if (config && config.committeeTreatmentMinScore !== null && config.committeeTreatmentMinScore > ceiling) {
+      over.push(`seuil Comité traitement (${config.committeeTreatmentMinScore})`);
+    }
+    if (over.length > 0) {
+      throw new ValidationError(
+        `Cannot activate: these thresholds exceed the maximum score of the new scale (${ceiling}): ${over.join(", ")}. Lower them first, then activate.`,
+      );
+    }
+  }
+
+  /**
    * ACT-176: activates `id` and archives whatever scale was previously
    * ACTIVE for this tenant, atomically. Never a generic `update()` path —
    * this is the only way status can move to ACTIVE or (as a side effect)
@@ -302,6 +358,8 @@ export class RatingScaleService {
     if (before.status === "ARCHIVED") {
       throw new ValidationError("Cannot re-activate an archived rating scale — create a new version instead");
     }
+    assertReadyToActivate(before);
+    await this.assertThresholdsFitCeiling(actor.tenantId, before);
 
     const after = await this.ratingScales.activateAndArchivePrevious(actor.tenantId, id);
 

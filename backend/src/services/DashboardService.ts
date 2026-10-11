@@ -35,6 +35,9 @@ import { computeKpiStatus, type Kpi, type KpiStatus } from "../domain/entities/K
 
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
+import { DEFAULT_MATRIX_SIZE, defaultBandsForMaxScore, defaultCriticalityBands, maxScoreForScale } from "../domain/scoring.js";
+import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
+import type { ScoreThreshold } from "../domain/entities/RatingScale.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { DashboardScopeMode, RiskScope } from "../domain/entities/DashboardScope.js";
 import type { DashboardScopeResolver } from "./DashboardScopeResolver.js";
@@ -43,31 +46,12 @@ import type { DashboardScopeResolver } from "./DashboardScopeResolver.js";
 // Shared read models
 // ---------------------------------------------------------------------
 
-/**
- * Fixed fallback bands over the 1-25 score range, identical to
- * CartographyService's DEFAULT_CRITICALITY_BANDS. Deliberately NOT
- * wired to RatingScaleRepository here: CartographyService already owns
- * the "resolve the tenant's configured, methodology-versioned bands"
- * concern (ACT-181), and re-implementing that exact resolution here
- * would be the kind of duplicated aggregation logic this batch's brief
- * explicitly warns against. Dashboard/Reporting only need a rough
- * qualitative label for ranking/highlighting, not the heatmap's
- * methodology-accurate legend — if that ever changes, inject
- * RatingScaleRepository and reuse the exact same resolution instead of
- * hand-rolling a second one.
- */
-const DEFAULT_CRITICALITY_BANDS: { label: string; min: number; max: number }[] = [
-  { label: "Faible", min: 1, max: 4 },
-  { label: "Modéré", min: 5, max: 9 },
-  { label: "Élevé", min: 10, max: 15 },
-  { label: "Critique", min: 16, max: 25 },
-];
-
-function deriveCriticality(score: number): string {
-  const match = DEFAULT_CRITICALITY_BANDS.find((b) => score >= b.min && score <= b.max);
+/** Rough qualitative label for ranking/highlighting, from the bands of the evaluation's scale (see resolveBands). Out-of-range scores clamp to the first/last band. */
+function deriveCriticality(score: number, bands: ScoreThreshold[]): string {
+  const match = bands.find((b) => score >= b.min && score <= b.max);
   if (match) return match.label;
-  const first = DEFAULT_CRITICALITY_BANDS[0]!;
-  const last = DEFAULT_CRITICALITY_BANDS[DEFAULT_CRITICALITY_BANDS.length - 1]!;
+  const first = bands[0]!;
+  const last = bands[bands.length - 1]!;
   return score < first.min ? first.label : last.label;
 }
 
@@ -299,6 +283,11 @@ export class DashboardService {
      * behavior), so existing construction sites keep working unchanged.
      */
     private readonly scopeResolver?: DashboardScopeResolver,
+    /**
+     * B-9 bis: optional — criticality bands of the scale CAPTURED by the evaluation (configured
+     * bands, else defaults for its size), like CartographyService. Absent: 5x5 bands.
+     */
+    private readonly ratingScales?: Pick<RatingScaleRepository, "getById">,
   ) {}
 
   // -- ACT-080 ---------------------------------------------------------
@@ -395,6 +384,7 @@ export class DashboardService {
 
   /** GET /dashboard/risk-owner?user_id=me — always the caller's own risks (RiskRepository.list's ownerId filter); there is no path here to view another user's owner dashboard. */
   async getRiskOwnerView(actor: AuthenticatedUser): Promise<RiskOwnerDashboard> {
+    const bandsCache = new Map<string, Promise<ScoreThreshold[]>>();
     requirePermission(actor, "dashboard.read");
 
     const ownedRisks = await this.risks.list(actor.tenantId, { ownerId: actor.userId });
@@ -405,7 +395,7 @@ export class DashboardService {
       })),
     );
     const riskSummaries = await Promise.all(
-      withEvaluations.map(({ risk, evaluation }) => this.buildRiskSummary(actor.tenantId, risk, evaluation)),
+      withEvaluations.map(({ risk, evaluation }) => this.buildRiskSummary(actor.tenantId, risk, evaluation, bandsCache)),
     );
 
     const ownedRiskIds = new Set(ownedRisks.map((r) => r.id));
@@ -503,6 +493,7 @@ export class DashboardService {
 
   /** GET /dashboard/executive — cross-entity consolidated view, gated behind dashboard.executive, scoped per DashboardScopeResolver. */
   async getExecutiveView(actor: AuthenticatedUser, options?: { topN?: number }): Promise<ExecutiveDashboard> {
+    const bandsCache = new Map<string, Promise<ScoreThreshold[]>>();
     requirePermission(actor, "dashboard.executive");
     const topN = options?.topN ?? 10;
     const scope = await this.resolveScope(actor);
@@ -526,7 +517,7 @@ export class DashboardService {
       [...scored]
         .sort((a, b) => b.score - a.score)
         .slice(0, topN)
-        .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation)),
+        .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation, bandsCache)),
     );
     const criticalKris = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
     const openAnomaliesCount = this.countOpenAnomalies(allAnomalies, scope, scopedRiskIds);
@@ -545,6 +536,7 @@ export class DashboardService {
 
   /** GET /reports/risk-committee — board-pack view: top-N risks, KRIs in Orange/Rouge, overdue actions. Reuses the same helpers as getExecutiveView rather than re-querying. */
   async getRiskCommitteeReport(actor: AuthenticatedUser, options?: { topN?: number }): Promise<RiskCommitteeReport> {
+    const bandsCache = new Map<string, Promise<ScoreThreshold[]>>();
     requirePermission(actor, "dashboard.executive");
     const topN = options?.topN ?? 10;
     const scope = await this.resolveScope(actor);
@@ -565,7 +557,7 @@ export class DashboardService {
       [...scored]
         .sort((a, b) => b.score - a.score)
         .slice(0, topN)
-        .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation)),
+        .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation, bandsCache)),
     );
     const krisInAlert = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
 
@@ -597,6 +589,7 @@ export class DashboardService {
    * workaround) and needs A05/A13 sign-off, not a unilateral call here.
    */
   async getConsolidatedReport(actor: AuthenticatedUser, entityFilter?: string[]): Promise<ConsolidatedReport> {
+    const bandsCache = new Map<string, Promise<ScoreThreshold[]>>();
     requirePermission(actor, "dashboard.executive");
     const scope = await this.resolveScope(actor);
     const scopeSummary = this.scopeSummary(scope);
@@ -625,7 +618,7 @@ export class DashboardService {
           [...entityScored]
             .sort((a, b) => b.score - a.score)
             .slice(0, 5)
-            .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation)),
+            .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation, bandsCache)),
         );
         return {
           entity,
@@ -817,10 +810,32 @@ export class DashboardService {
     return { process: risk.process, resolvedVia: "processText" };
   }
 
+  private resolveBands(tenantId: string, ratingScaleId: string | null, cache?: Map<string, Promise<ScoreThreshold[]>>): Promise<ScoreThreshold[]> {
+    if (!cache || !ratingScaleId) return this.loadBands(tenantId, ratingScaleId);
+    let bands = cache.get(ratingScaleId);
+    if (!bands) {
+      bands = this.loadBands(tenantId, ratingScaleId);
+      cache.set(ratingScaleId, bands);
+    }
+    return bands;
+  }
+
+  private async loadBands(tenantId: string, ratingScaleId: string | null): Promise<ScoreThreshold[]> {
+    const fallback = defaultCriticalityBands(DEFAULT_MATRIX_SIZE);
+    if (!ratingScaleId || !this.ratingScales) return fallback;
+    const scale = await this.ratingScales.getById(tenantId, ratingScaleId);
+    if (!scale) return fallback;
+    return scale.criticalityThresholds && scale.criticalityThresholds.length > 0
+      ? scale.criticalityThresholds
+      : defaultBandsForMaxScore(maxScoreForScale(scale));
+  }
+
   private async buildRiskSummary(
     tenantId: string,
     risk: Risk,
     evaluation: RiskEvaluation | null,
+    /** One per request: summaries over many risks share one or two scales. */
+    bandsCache?: Map<string, Promise<ScoreThreshold[]>>,
   ): Promise<DashboardRiskSummary> {
     const score = evaluation ? evaluation.residualScore ?? evaluation.inherentScore : null;
     const { process, resolvedVia } = await this.resolveProcessLabel(tenantId, risk);
@@ -837,7 +852,7 @@ export class DashboardService {
       // Safe: getMostRecentAuthoritativeEvaluation only ever returns an
       // evaluation whose status is in AUTHORITATIVE_EVALUATION_STATUSES.
       evaluationStatus: evaluation ? (evaluation.status as AuthoritativeEvaluationStatus) : null,
-      criticality: score !== null ? deriveCriticality(score) : null,
+      criticality: score !== null ? deriveCriticality(score, await this.resolveBands(tenantId, evaluation?.ratingScaleId ?? null, bandsCache)) : null,
       subCategory: evaluation?.subCategory ?? null,
       entity: evaluation?.entity ?? null,
       appetiteExceeded: evaluation?.appetiteExceeded ?? null,

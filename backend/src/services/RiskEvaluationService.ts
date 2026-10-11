@@ -18,15 +18,16 @@ import type {
 } from "../domain/entities/RiskEvaluation.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
+import { defaultCommitteeThreshold, maxScoreForScale } from "../domain/scoring.js";
+import { resolveMaxScore } from "./scoreCeiling.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 /** Mirrors ConfigService's own defaultConfig()/030_evaluation_mode.sql's DB default — the tenant-wide fallback when no Config row exists yet and/or no ConfigRepository is wired. */
 const FALLBACK_EVALUATION_MODE: EvaluationMode = "CLASSIQUE";
 
 const EVALUATION_TYPES: RiskEvaluationType[] = ["AD_HOC", "ANNUELLE", "ANTICIPEE"];
-/** Exported for ConfigService's committee-threshold bounds validation — reused, never redefined (RISK_MANAGEMENT_V1 §8, Lot A). */
+/** Exported for ConfigService's committee-threshold bounds validation. The upper bound is n² of the active scale (B-9 bis), see domain/scoring.ts. */
 export const MIN_APPETITE_THRESHOLD = 1;
-export const MAX_APPETITE_THRESHOLD = 25;
 /**
  * Lot A (RISK_MANAGEMENT_V1 §8) — these are the fail-closed defaults used
  * when no ConfigRepository is wired or no Config row exists yet for the
@@ -35,7 +36,6 @@ export const MAX_APPETITE_THRESHOLD = 25;
  * reopens the authorization gap this lot closes. Never make these more
  * permissive.
  */
-const COMMITTEE_EVALUATION_MIN_SCORE_DEFAULT = 15;
 const COMMITTEE_EVALUATION_ENFORCED_DEFAULT = true;
 
 export interface InherentScoringRequest {
@@ -362,7 +362,7 @@ export class RiskEvaluationService {
 
     let override: number | null = input.appetiteOverride ?? null;
     if (override !== null) {
-      assertIntegerInRange(override, MIN_APPETITE_THRESHOLD, MAX_APPETITE_THRESHOLD, "appetiteOverride");
+      assertIntegerInRange(override, MIN_APPETITE_THRESHOLD, maxScoreForScale(ratingScale), "appetiteOverride");
     }
 
     const applied = override ?? suggested;
@@ -584,12 +584,14 @@ export class RiskEvaluationService {
    * deliberately the opposite (stricter, not laxer).
    */
   private async resolveCommitteeEvaluationSettings(tenantId: string): Promise<{ minScore: number; enforced: boolean }> {
+    // Default follows the ACTIVE matrix size (15 for 5x5); a configured value is never replaced.
+    const defaultMinScore = defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, tenantId));
     if (!this.configs) {
-      return { minScore: COMMITTEE_EVALUATION_MIN_SCORE_DEFAULT, enforced: COMMITTEE_EVALUATION_ENFORCED_DEFAULT };
+      return { minScore: defaultMinScore, enforced: COMMITTEE_EVALUATION_ENFORCED_DEFAULT };
     }
     const config = await this.configs.getByTenant(tenantId);
     return {
-      minScore: config?.committeeEvaluationMinScore ?? COMMITTEE_EVALUATION_MIN_SCORE_DEFAULT,
+      minScore: config?.committeeEvaluationMinScore ?? defaultMinScore,
       enforced: config?.committeeEvaluationEnforced ?? COMMITTEE_EVALUATION_ENFORCED_DEFAULT,
     };
   }

@@ -12,6 +12,7 @@ import type { ScoreThreshold } from "../domain/entities/RatingScale.js";
 import type { Process } from "../domain/entities/Process.js";
 import { ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
+import { DEFAULT_MATRIX_SIZE, defaultBandsForMaxScore, defaultCriticalityBands, maxScoreForScale } from "../domain/scoring.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 export type CartographyVersion = "inherent" | "residual";
@@ -86,19 +87,20 @@ export interface CartographyCompareResult {
   residual: CartographyDataPoint[];
 }
 
-/**
- * Fixed fallback bands over the 1-25 score range used elsewhere in this
- * codebase (see RiskEvaluationService's MIN/MAX_APPETITE_THRESHOLD) —
- * applied only when no RatingScaleRepository is injected, or the
- * evaluation's captured rating scale has no `criticalityThresholds`
- * configured for its methodology.
- */
-const DEFAULT_CRITICALITY_BANDS: ScoreThreshold[] = [
-  { label: "Faible", min: 1, max: 4 },
-  { label: "Modéré", min: 5, max: 9 },
-  { label: "Élevé", min: 10, max: 15 },
-  { label: "Critique", min: 16, max: 25 },
-];
+/** DECISION-041: the active scale as the Cartography page needs it (grid size + EFFECTIVE color bands). */
+export interface CartographyActiveScale {
+  scaleId: string;
+  name: string;
+  version: string;
+  /** n of the n x n grid; null only for a legacy scale with probabilityLevels != impactLevels (use the two fields below). */
+  size: number | null;
+  probabilityLevels: number;
+  impactLevels: number;
+  maxScore: number;
+  /** Configured criticalityThresholds, else defaultBandsForMaxScore(maxScore). */
+  bands: ScoreThreshold[];
+  bandsSource: "CONFIGURED" | "DEFAULT";
+}
 
 function deriveCriticality(score: number, bands: ScoreThreshold[]): string {
   const match = bands.find((b) => score >= b.min && score <= b.max);
@@ -146,7 +148,7 @@ export class CartographyService {
     private readonly risks: RiskRepository,
     private readonly evaluations: RiskEvaluationRepository,
     /**
-     * Optional — degrades to DEFAULT_CRITICALITY_BANDS when absent. Used
+     * Optional — degrades to defaultCriticalityBands(n) when absent. Used
      * to resolve `RatingScale.criticalityThresholds` (labeled score bands
      * such as Faible/Modéré/Élevé/Critique), captured via the evaluation's
      * own `ratingScaleId` so a later methodology change never retroactively
@@ -181,6 +183,27 @@ export class CartographyService {
     requirePermission(actor, "cartography.read");
     this.assertOwnerFilterSupported(filters);
     return this.computeDataPoints(actor, version, filters);
+  }
+
+  /** DECISION-041: active scale of the tenant with its effective bands, or null when none is active (the page then shows no grid). */
+  async getActiveScale(actor: AuthenticatedUser): Promise<CartographyActiveScale | null> {
+    requirePermission(actor, "cartography.read");
+    if (!this.ratingScales) return null;
+    const active = (await this.ratingScales.list(actor.tenantId)).find((s) => s.status === "ACTIVE");
+    if (!active) return null;
+    const maxScore = maxScoreForScale(active);
+    const configured = active.criticalityThresholds && active.criticalityThresholds.length > 0 ? active.criticalityThresholds : null;
+    return {
+      scaleId: active.id,
+      name: active.name,
+      version: active.version,
+      size: active.probabilityLevels === active.impactLevels ? active.probabilityLevels : null,
+      probabilityLevels: active.probabilityLevels,
+      impactLevels: active.impactLevels,
+      maxScore,
+      bands: configured ?? defaultBandsForMaxScore(maxScore),
+      bandsSource: configured ? "CONFIGURED" : "DEFAULT",
+    };
   }
 
   /** ACT-184: inherent + residual data points for the same filtered risk set, one response. */
@@ -306,7 +329,7 @@ export class CartographyService {
     ratingScaleId: string | null,
     cache: Map<string, ScoreThreshold[]>,
   ): Promise<ScoreThreshold[]> {
-    if (!ratingScaleId || !this.ratingScales) return DEFAULT_CRITICALITY_BANDS;
+    if (!ratingScaleId || !this.ratingScales) return defaultCriticalityBands(DEFAULT_MATRIX_SIZE);
     const cached = cache.get(ratingScaleId);
     if (cached) return cached;
 
@@ -314,7 +337,7 @@ export class CartographyService {
     const bands =
       scale?.criticalityThresholds && scale.criticalityThresholds.length > 0
         ? scale.criticalityThresholds
-        : DEFAULT_CRITICALITY_BANDS;
+        : scale ? defaultBandsForMaxScore(maxScoreForScale(scale)) : defaultCriticalityBands(DEFAULT_MATRIX_SIZE);
     cache.set(ratingScaleId, bands);
     return bands;
   }

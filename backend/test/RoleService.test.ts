@@ -176,13 +176,13 @@ describe("RoleService", () => {
   it("refuses to let an admin assign a role to themselves", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
     const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-5");
-    await expect(service.assignToUser(admin, role.id, admin.userId, "REQ-6")).rejects.toThrow(ForbiddenError);
+    await expect(service.assignToUser(admin, role.id, admin.userId, "REQ-6", "motif de test")).rejects.toThrow(ForbiddenError);
   });
 
   it("assigns a role to another user, granting it via listForUser", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
     const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-7");
-    await service.assignToUser(admin, role.id, "user-1", "REQ-8");
+    await service.assignToUser(admin, role.id, "user-1", "REQ-8", "motif de test");
     const userRoles = await service.listForUser(admin, "user-1");
     expect(userRoles.map((r) => r.id)).toContain(role.id);
   });
@@ -190,22 +190,22 @@ describe("RoleService", () => {
   it("refuses to disable a role that still has active assignments", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
     const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-9");
-    await service.assignToUser(admin, role.id, "user-1", "REQ-10");
+    await service.assignToUser(admin, role.id, "user-1", "REQ-10", "motif de test");
     await expect(service.disable(admin, role.id, "REQ-11")).rejects.toThrow(ValidationError);
   });
 
   it("refuses to revoke a user's last active role", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
     const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-12");
-    await service.assignToUser(admin, role.id, "user-1", "REQ-13");
-    await expect(service.revokeFromUser(otherAdmin, role.id, "user-1", "REQ-14")).rejects.toThrow(ValidationError);
+    await service.assignToUser(admin, role.id, "user-1", "REQ-13", "motif de test");
+    await expect(service.revokeFromUser(otherAdmin, role.id, "user-1", "REQ-14", "motif de test")).rejects.toThrow(ValidationError);
   });
 
   it("refuses to let an admin revoke their own role", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
     const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-15");
-    await service.assignToUser(otherAdmin, role.id, admin.userId, "REQ-16");
-    await expect(service.revokeFromUser(admin, role.id, admin.userId, "REQ-17")).rejects.toThrow(ForbiddenError);
+    await service.assignToUser(otherAdmin, role.id, admin.userId, "REQ-16", "motif de test");
+    await expect(service.revokeFromUser(admin, role.id, admin.userId, "REQ-17", "motif de test")).rejects.toThrow(ForbiddenError);
   });
 
   describe("dashboardScopeMode (@architect design, 2026-09-30)", () => {
@@ -272,7 +272,7 @@ describe("RoleService", () => {
         inMemoryUserRepository([targetUser]),
       );
       const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-18");
-      await service.assignToUser(admin, role.id, targetUser.id, "REQ-19");
+      await service.assignToUser(admin, role.id, targetUser.id, "REQ-19", "motif de test");
 
       const permissions = await service.getEffectivePermissions(admin, targetUser.id);
 
@@ -316,17 +316,17 @@ describe("RoleService", () => {
         systemGroup,
       } as never);
       // Every member also holds a second role so the "last active role" rule is not what blocks the revoke.
-      const other = await service.create(admin, { name: "Other", permissions: ["audit.read"] }, "REQ-o");
+      const other = await service.create(admin, { name: "Other", permissions: ["risk.read"] }, "REQ-o");
       for (const userId of ["u1", "u2"]) {
-        await service.assignToUser(admin, group.id, userId, "REQ-a");
-        await service.assignToUser(admin, other.id, userId, "REQ-a");
+        await service.assignToUser(admin, group.id, userId, "REQ-a", "motif de test");
+        await service.assignToUser(admin, other.id, userId, "REQ-a", "motif de test");
       }
       return { service, group };
     }
 
     it("F-B8-01: a suspended member does not count — RM = {u1 active, u2 suspended}, revoking u1 is refused", async () => {
       const { service, group } = await withGroup("RISK_MANAGER", new Set(["u2"]));
-      await expect(service.revokeFromUser(admin, group.id, "u1", "REQ-1")).rejects.toThrow(ValidationError);
+      await expect(service.revokeFromUser(admin, group.id, "u1", "REQ-1", "motif de test")).rejects.toThrow(ValidationError);
     });
 
     it("F-B8-05: revoking a suspended member succeeds while another active member remains; the last active one is still refused", async () => {
@@ -336,18 +336,18 @@ describe("RoleService", () => {
       const users = inMemoryUserRepository([mkUser("u1", null), mkUser("u2", new Date())]);
       const service = new RoleService(repo, inMemoryAuditRepository(), users, departments);
       const group = await repo.create({ tenantId: admin.tenantId, name: "RM", permissions: [], systemGroup: "RISK_MANAGER" } as never);
-      const other = await service.create(admin, { name: "Other", permissions: ["audit.read"] }, "REQ-o");
+      const other = await service.create(admin, { name: "Other", permissions: ["risk.read"] }, "REQ-o");
       for (const userId of ["u1", "u2"]) {
-        await service.assignToUser(admin, group.id, userId, "REQ-a");
-        await service.assignToUser(admin, other.id, userId, "REQ-a");
+        await service.assignToUser(admin, group.id, userId, "REQ-a", "motif de test");
+        await service.assignToUser(admin, other.id, userId, "REQ-a", "motif de test");
       }
-      await service.revokeFromUser(admin, group.id, "u2", "REQ-1");
-      await expect(service.revokeFromUser(admin, group.id, "u1", "REQ-2")).rejects.toThrow(ValidationError);
+      await service.revokeFromUser(admin, group.id, "u2", "REQ-1", "motif de test");
+      await expect(service.revokeFromUser(admin, group.id, "u1", "REQ-2", "motif de test")).rejects.toThrow(ValidationError);
     });
 
     it("F-B8-01: refuses to suspend the last active Risk Manager member", async () => {
       const { service, group } = await withGroup("RISK_MANAGER");
-      await service.revokeFromUser(admin, group.id, "u1", "REQ-1");
+      await service.revokeFromUser(admin, group.id, "u1", "REQ-1", "motif de test");
       await expect(service.assertNotLastRiskManager(admin.tenantId, "u2")).rejects.toThrow(ValidationError);
     });
 
@@ -359,14 +359,14 @@ describe("RoleService", () => {
 
     it("never lets the Risk Manager group become empty", async () => {
       const { service, group } = await withGroup("RISK_MANAGER");
-      await service.revokeFromUser(admin, group.id, "u1", "REQ-1");
-      await expect(service.revokeFromUser(admin, group.id, "u2", "REQ-2")).rejects.toThrow(ValidationError);
+      await service.revokeFromUser(admin, group.id, "u1", "REQ-1", "motif de test");
+      await expect(service.revokeFromUser(admin, group.id, "u2", "REQ-2", "motif de test")).rejects.toThrow(ValidationError);
     });
 
     it("lets the Risk Committee group become empty", async () => {
       const { service, group } = await withGroup("RISK_COMMITTEE");
-      await service.revokeFromUser(admin, group.id, "u1", "REQ-1");
-      await service.revokeFromUser(admin, group.id, "u2", "REQ-2");
+      await service.revokeFromUser(admin, group.id, "u1", "REQ-1", "motif de test");
+      await service.revokeFromUser(admin, group.id, "u2", "REQ-2", "motif de test");
     });
 
     it("links a role to a department only once, and only to a real department", async () => {

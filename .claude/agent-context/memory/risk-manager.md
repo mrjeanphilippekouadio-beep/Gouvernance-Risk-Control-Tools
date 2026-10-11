@@ -432,6 +432,14 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
   notifié », sort des votes déjà émis, « Premier Dispositif » cite encore
   l'administrateur.
 
+- 2026-10-11 : **DECISION-040 (q42 à q57) intégrée** au projet étape 2 et au contrat. Un seul circuit : Comité, Audit, fonction risque, journalisé ; remplace q31 et la suppléance q41. « Consultation » = co-signature (q52) ; responsable exclu s'il est demandeur/auteur. Pas de quorum forcé par défaut (q55) : règle ouverte q61. Premier Dispositif : administrateur retiré (q51). Taille de matrice et descriptifs (q49, q50) sans décrire la Cartographie (q59). Ouvertes : q58 à q61 plus R1 à R3 de la revue A14 (q62, q63). Incohérences signalées sans trancher : Audit « lecture seule » mais décideur ; entrée dans Comité sans approbateur (q44) alors que seul le Comité active l'auto-proposition ; « droits larges » du Risk Manager (q42) contre la suppression de ce droit en 3.1 ; premier Dispositif « différent du demandeur » impossible si un seul Risk Manager ; « jamais un seul membre » contre q55 ; garde-fou auto-proposition non repris sous q54. Leçon : dans les consignes d'un dispatch, « §n » peut viser le point n de la décision, pas la section du contrat ; vérifier.
+
+- 2026-10-11 : **DECISION-041 et DECISION-042 intégrées** (projet étape 2 + contrat, textes remplacés barrés). Échelle toujours carrée, Cartographie en grille n×n sans grille avant Dispositif activé, visuel inchangé ; q58 (RM+Audit interdit, RM+Comité autorisé, seul réglage Comité+Audit autorisé par défaut) ; q60 ; q61/R1 (majorité des exprimés à l'échéance avec au moins un vote d'un non-concerné, quorum activable) ; q62 ; q63 ; q64 ; q65 ; q66 ; q67 ; q68 (co-signature toujours exigée) ; q69. Invariant 10 reformulé : « jamais un seul membre » = ne pas solliciter un groupe de moins de deux éligibles ; le repli est un autre régime (marqué, ratifié). **Cette précision est ma rédaction, pas la décision.** Nouvelles incohérences N1 à N7 listées au projet §13.1 sans arbitrage : vote unique possible (N1), cumul Comité+Audit sur une même décision (N2), ratification sans délai (N3), circuit sans maillon disponible (N4), Audit approbateur en repli (N5), premier Dispositif avec un seul RM (N6), tiers prévenu inexistant à l'amorçage (N7). Le rapprochement des incohérences 7 et 8 d'origine avec q69/q62-q63 est ma lecture.
+
+37. Quand une décision du PO répond à un conflit entre invariants, ne pas reformuler l'invariant en silence : marquer la précision comme rédaction et lister la tension résiduelle.
+
+36. Une décision qui retire une règle (quorum, approbateur) doit être confrontée aux invariants du contrat avant intégration ; signaler sans trancher.
+
 35. Une règle d'escalade où le décideur peut être concerné par l'acte
     contredit « on ne valide jamais ce qu'on a saisi » : exiger au minimum une
     consultation obligatoire tracée, non désactivable par paramètre.

@@ -8,6 +8,11 @@ import type { RatingScale } from "../src/domain/entities/RatingScale.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 
+// B-9 bis (q50): activation requires descriptors; the double fills them in when a test does not care.
+function defaultDescriptors(n: number) {
+  return Array.from({ length: n }, (_, i) => ({ level: i + 1, label: `N${i + 1}` }));
+}
+
 function inMemoryRatingScaleRepository(): RatingScaleRepository {
   const store = new Map<string, RatingScale>();
   return {
@@ -28,9 +33,9 @@ function inMemoryRatingScaleRepository(): RatingScaleRepository {
         version: input.version,
         status: "DRAFT",
         probabilityLevels: input.probabilityLevels,
-        probabilityLabels: input.probabilityLabels ?? null,
+        probabilityLabels: input.probabilityLabels ?? defaultDescriptors(input.probabilityLevels),
         impactLevels: input.impactLevels,
-        impactLabels: input.impactLabels ?? null,
+        impactLabels: input.impactLabels ?? defaultDescriptors(input.impactLevels),
         criticalityThresholds: null,
         impactAxes: null,
         velocityLevels: null,

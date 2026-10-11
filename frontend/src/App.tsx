@@ -15,6 +15,7 @@ import { ActionPlansPage } from "./features/actions/ActionPlansPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import { useLocalSignIn } from "./auth/useLocalSignIn";
+import { PermissionDeniedDialog } from "./features/errors/PermissionDeniedDialog";
 import { ErrorPage } from "./features/errors/ErrorPages";
 import "./App.css";
 
@@ -201,6 +202,7 @@ function App() {
       </div>
       {mobileNavOpen && <button type="button" aria-label="Fermer la navigation" className="nav-scrim" onClick={() => setMobileNavOpen(false)} />}
       <FeedbackWidget token={token} />
+      <PermissionDeniedDialog token={token} />
     </div>
   );
 }

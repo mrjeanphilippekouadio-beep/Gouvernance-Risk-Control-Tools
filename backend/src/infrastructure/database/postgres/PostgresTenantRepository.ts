@@ -3,6 +3,7 @@ import type { TenantRepository } from "../../../domain/repositories/TenantReposi
 import type { CreateTenantInput, DeploymentMode, Tenant, UpdateTenantInput } from "../../../domain/entities/Tenant.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
+import { FIXED_GROUP_PERMISSIONS } from "../../../domain/fixedGroupPermissions.js";
 
 interface TenantRow {
   id: string;
@@ -65,15 +66,22 @@ export class PostgresTenantRepository implements TenantRepository {
        ), groups AS (
          -- B-8: every tenant has its three fixed groups from day one (same rows as migration 049).
          INSERT INTO roles (tenant_id, name, description, permissions, system_group)
-         SELECT t.id, g.name, g.description, '{}', g.system_group
+         SELECT t.id, g.name, g.description, g.permissions, g.system_group
          FROM t CROSS JOIN (VALUES
-           ('Risk Manager',   'Groupe fixe : équipe risque (jamais vide)', 'RISK_MANAGER'),
-           ('Risk Committee', 'Groupe fixe : Comité des risques (peut être vide)', 'RISK_COMMITTEE'),
-           ('Audit',          'Groupe fixe : Audit (peut être vide)', 'AUDIT')
-         ) AS g (name, description, system_group)
+           ('Risk Manager',   'Groupe fixe : équipe risque (jamais vide)', 'RISK_MANAGER', $3::text[]),
+           ('Risk Committee', 'Groupe fixe : Comité des risques (peut être vide)', 'RISK_COMMITTEE', $4::text[]),
+           ('Audit',          'Groupe fixe : Audit (peut être vide)', 'AUDIT', $5::text[])
+         ) AS g (name, description, system_group, permissions)
        )
        SELECT * FROM t`,
-      [input.name, input.deploymentMode ?? "managed_saas"],
+      [
+        input.name,
+        input.deploymentMode ?? "managed_saas",
+        // B-8 ter: the q42 rights of migration 051, from the single TS source.
+        FIXED_GROUP_PERMISSIONS.RISK_MANAGER,
+        FIXED_GROUP_PERMISSIONS.RISK_COMMITTEE,
+        FIXED_GROUP_PERMISSIONS.AUDIT,
+      ],
     );
     const row = rows[0];
     if (!row) throw new Error("Insert into tenants returned no row");

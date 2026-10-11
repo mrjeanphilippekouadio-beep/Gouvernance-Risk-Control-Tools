@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
+import { ABSOLUTE_MAX_SCORE } from "../../domain/scoring.js";
 import type { RiskAppetiteService } from "../../services/RiskAppetiteService.js";
 
 const SetRiskAppetiteBody = z.object({
   subCategoryId: z.string().nullish(),
   entity: z.string().trim().min(1).nullish(),
-  threshold: z.number().int().min(1).max(25),
+  threshold: z.number().int().min(1).max(ABSOLUTE_MAX_SCORE),
   methodologyVersion: z.string().min(1),
   description: z.string().nullish(),
   active: z.boolean().optional(),

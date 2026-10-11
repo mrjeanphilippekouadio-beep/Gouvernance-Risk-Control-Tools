@@ -16,21 +16,9 @@ VALUES (
   ARRAY[
     'risk.read', 'risk.create', 'risk.update', 'risk.delete', 'risk.owner.assign',
     'feedback.read', 'feedback.update',
-    'role.read', 'role.create', 'role.update', 'role.delete', 'role.assign'
+    'role.read', 'role.create', 'role.update', 'role.delete', 'role.assign',
+    'rolegroup.audit.update'
   ]
-)
-ON CONFLICT DO NOTHING;
-
--- Built-in "Auditeur" role (CLAUDE.md "Domaine Audit" gap, ACT-071):
--- read-only access to the audit trail, assignable via
--- POST /api/v1/roles/:id/assign like any other role.
-INSERT INTO roles (id, tenant_id, name, description, permissions)
-VALUES (
-  '00000000-0000-0000-0000-000000000003',
-  '00000000-0000-0000-0000-000000000001',
-  'Auditeur',
-  'Accès lecture seule à l''audit trail (ACT-071)',
-  ARRAY['audit.read']
 )
 ON CONFLICT DO NOTHING;
 
@@ -38,9 +26,12 @@ ON CONFLICT DO NOTHING;
 -- at migration time; this seed tenant is inserted after).
 INSERT INTO roles (tenant_id, name, description, permissions, system_group)
 VALUES
-  ('00000000-0000-0000-0000-000000000001', 'Risk Manager', 'Groupe fixe : équipe risque (jamais vide)', '{}', 'RISK_MANAGER'),
-  ('00000000-0000-0000-0000-000000000001', 'Risk Committee', 'Groupe fixe : Comité des risques (peut être vide)', '{}', 'RISK_COMMITTEE'),
-  ('00000000-0000-0000-0000-000000000001', 'Audit', 'Groupe fixe : Audit (peut être vide)', '{}', 'AUDIT')
+  ('00000000-0000-0000-0000-000000000001', 'Risk Manager', 'Groupe fixe : équipe risque (jamais vide)',
+    ARRAY['risk.read','risk.create','risk.update','risk.delete','risk.escalate','risk.owner.assign','riskevaluation.read','riskevaluation.create','riskevaluation.update','riskevaluation.validate','control.read','kri.read','actionplan.read','dashboard.read','dashboard.executive','cartography.read','process.read','department.read'], 'RISK_MANAGER'),
+  ('00000000-0000-0000-0000-000000000001', 'Risk Committee', 'Groupe fixe : Comité des risques (peut être vide)',
+    ARRAY['risk.read','riskevaluation.read','control.read','kri.read','actionplan.read','dashboard.read','dashboard.executive','cartography.read','riskevaluation.validate.committee','treatmentdecision.validate.committee','rolegroup.audit.validate'], 'RISK_COMMITTEE'),
+  ('00000000-0000-0000-0000-000000000001', 'Audit', 'Groupe fixe : Audit (peut être vide)',
+    ARRAY['risk.read','riskevaluation.read','control.read','kri.read','actionplan.read','dashboard.read','dashboard.executive','cartography.read','audit.read','audit.mission.read','audit.finding.read','rolegroup.audit.validate'], 'AUDIT')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO users (id, tenant_id, email, display_name, roles)
@@ -56,13 +47,12 @@ ON CONFLICT DO NOTHING;
 INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by)
 SELECT
   '00000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000003',
+  (SELECT id FROM roles WHERE tenant_id = '00000000-0000-0000-0000-000000000001' AND system_group = 'AUDIT' AND deleted_at IS NULL),
   '00000000-0000-0000-0000-000000000004',
   '00000000-0000-0000-0000-000000000002'
 WHERE NOT EXISTS (
-  SELECT 1 FROM user_roles
-  WHERE tenant_id = '00000000-0000-0000-0000-000000000001'
-    AND role_id = '00000000-0000-0000-0000-000000000003'
+  SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id AND r.system_group = 'AUDIT'
+  WHERE ur.tenant_id = '00000000-0000-0000-0000-000000000001'
     AND user_id = '00000000-0000-0000-0000-000000000004'
     AND revoked_at IS NULL
 );

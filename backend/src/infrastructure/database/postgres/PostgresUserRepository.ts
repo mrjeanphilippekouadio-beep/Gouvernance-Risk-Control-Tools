@@ -167,4 +167,23 @@ export class PostgresUserRepository implements UserRepository {
     );
     if (!rowCount) throw new NotFoundError("User", id);
   }
+
+  async listWithPermission(
+    tenantId: string,
+    permission: string,
+    excludeUserId: string,
+  ): Promise<Array<{ id: string; displayName: string }>> {
+    const { rows } = await this.pool.query<{ id: string; display_name: string }>(
+      `SELECT u.id, u.display_name FROM users u
+       WHERE u.tenant_id = $1 AND u.deleted_at IS NULL AND u.id <> $3
+         AND ($2 = ANY(u.roles) OR EXISTS (
+           SELECT 1 FROM user_roles ur
+           JOIN roles r ON r.id = ur.role_id AND r.tenant_id = ur.tenant_id AND r.deleted_at IS NULL
+           WHERE ur.tenant_id = u.tenant_id AND ur.user_id = u.id AND ur.revoked_at IS NULL
+             AND $2 = ANY(r.permissions)))
+       ORDER BY u.display_name`,
+      [tenantId, permission, excludeUserId],
+    );
+    return rows.map((r) => ({ id: r.id, displayName: r.display_name }));
+  }
 }

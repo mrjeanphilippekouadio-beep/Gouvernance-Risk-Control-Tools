@@ -7,6 +7,7 @@ const CreateUserBody = z.object({
   displayName: z.string().min(1),
   roleId: z.string().min(1),
   departmentId: z.string().nullish(),
+  reason: z.string().trim().min(1).max(500).optional(),
 });
 
 const PaginationQuery = z.object({
@@ -46,7 +47,7 @@ export function usersRouter(userService: UserService): Router {
 
   router.get("/:id", async (req, res, next) => {
     try {
-      const user = await userService.get(req.user, req.params["id"] as string);
+      const user = await userService.getDetail(req.user, req.params["id"] as string);
       res.json({ data: user });
     } catch (err) {
       next(err);

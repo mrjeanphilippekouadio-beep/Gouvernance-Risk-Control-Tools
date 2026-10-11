@@ -6,6 +6,24 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { RoleService } from "./RoleService.js";
+import type { NotificationService } from "./NotificationService.js";
+import type { SystemGroup } from "../domain/entities/Role.js";
+import type { Permission } from "../domain/permissions.js";
+
+/** B-8 bis (q43): user sheet with the fixed groups and the allowed Risk Manager + Committee cumul flagged. */
+export interface UserDetail extends User {
+  fixedGroups: SystemGroup[];
+  riskManagerAndCommittee: boolean;
+  /** DECISION-042 q63: application administrator (role/user management permissions) AND Risk Manager group. */
+  administratorAndRiskManager: boolean;
+}
+
+/** B-8 bis (F-B8-06): a role disabled during suspension whose assignment remains. */
+export interface LostRole {
+  id: string;
+  name: string;
+  permissions: Permission[];
+}
 
 export interface CreateUserWithRoleInput {
   email: string;
@@ -14,6 +32,8 @@ export interface CreateUserWithRoleInput {
   roleId: string;
   /** Architect audit (2026-09-30): optional department attachment, validated against the actor's tenant — see assertDepartmentExists. */
   departmentId?: string | null;
+  /** B-8 bis (q44): mandatory when the initial role is one of the fixed groups. */
+  reason?: string;
 }
 
 export interface ListUsersOptions {
@@ -53,6 +73,8 @@ export class UserService {
      * real repository for `departmentId` to ever be accepted.
      */
     private readonly departments?: DepartmentRepository,
+    /** B-8 bis (F-B8-06): notifies the reactivated user of lost rights; skipped when absent. */
+    private readonly notifications?: NotificationService,
   ) {}
 
   /**
@@ -82,6 +104,9 @@ export class UserService {
       throw new ValidationError("Role assignment is not configured — cannot create a user without an initial role");
     }
     await this.assertDepartmentExists(actor.tenantId, input.departmentId);
+    // B8bis-01: every rule checkable in advance (role exists, reason for a fixed group, cumul) runs
+    // BEFORE the user row exists, so a refusal leaves no orphan account.
+    await this.roleService.assertAssignable(actor, input.roleId, null, input.reason);
 
     const user = await this.users.create({
       tenantId: actor.tenantId,
@@ -96,7 +121,7 @@ export class UserService {
     // throws (unknown roleId, or the actor lacks role.assign/role.read),
     // the user row already exists without a role; the caller sees the
     // error and can retry the assignment via RoleService directly.
-    await this.roleService.assignToUser(actor, input.roleId, user.id, requestId);
+    await this.roleService.assignToUser(actor, input.roleId, user.id, requestId, input.reason);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -125,6 +150,18 @@ export class UserService {
     const user = await this.users.getById(actor.tenantId, id);
     if (!user) throw new NotFoundError("User", id);
     return user;
+  }
+
+  /** B-8 bis (q43): the user sheet, with fixed-group membership and the Risk Manager + Committee cumul. */
+  async getDetail(actor: AuthenticatedUser, id: string): Promise<UserDetail> {
+    const user = await this.get(actor, id);
+    const fixedGroups = this.roleService ? await this.roleService.fixedGroupsOf(actor.tenantId, id) : [];
+    return {
+      ...user,
+      fixedGroups,
+      riskManagerAndCommittee: fixedGroups.includes("RISK_MANAGER") && fixedGroups.includes("RISK_COMMITTEE"),
+      administratorAndRiskManager: this.roleService ? await this.roleService.isAdminAndRiskManager(actor.tenantId, id) : false,
+    };
   }
 
   /** ACT-105: admin-only, tenant-scoped, paginated. */
@@ -205,7 +242,11 @@ export class UserService {
    * `effectiveness.validate` get their own permission as the
    * counter-action to a terminal transition.
    */
-  async reactivate(actor: AuthenticatedUser, id: string, requestId: string): Promise<User> {
+  async reactivate(
+    actor: AuthenticatedUser,
+    id: string,
+    requestId: string,
+  ): Promise<User & { lostRoles: LostRole[] }> {
     requirePermission(actor, "user.reactivate");
     const before = await this.users.getById(actor.tenantId, id);
     if (!before) throw new NotFoundError("User", id);
@@ -215,6 +256,10 @@ export class UserService {
     const after = await this.users.getById(actor.tenantId, id);
     if (!after) throw new NotFoundError("User", id);
 
+    // F-B8-06: rights lost because a role was disabled while the user was suspended.
+    const lost = this.roleService ? await this.roleService.listLostRoles(actor.tenantId, id) : [];
+    const lostRoles: LostRole[] = lost.map((r) => ({ id: r.id, name: r.name, permissions: r.permissions }));
+
     await this.audit.record({
       tenantId: actor.tenantId,
       userId: actor.userId,
@@ -222,12 +267,29 @@ export class UserService {
       entityId: id,
       action: "UPDATE",
       oldValue: before,
-      newValue: after,
+      newValue: lostRoles.length > 0 ? { ...after, lostRoles: lostRoles.map((r) => r.name) } : after,
       reason: null,
       requestId,
     });
 
-    return after;
+    if (lostRoles.length > 0) {
+      // B8bis-04: the reactivation is already committed and audited; a notification failure is logged, not fatal.
+      try {
+        await this.notifications?.record({
+          tenantId: actor.tenantId,
+          recipientUserId: id,
+          resourceType: "MANAGEMENT",
+          eventType: "RIGHTS_LOST_ON_REACTIVATION",
+          message: `Des droits ont été perdus pendant la suspension (rôles désactivés : ${lostRoles.map((r) => r.name).join(", ")}).`.slice(0, 1500),
+          triggeredBy: actor.userId,
+          requestId,
+        });
+      } catch (err) {
+        console.error(`Reactivation of user ${id}: lost-rights notification failed (requestId ${requestId})`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    return { ...after, lostRoles };
   }
 
   /**

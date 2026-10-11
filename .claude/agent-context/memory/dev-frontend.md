@@ -20,6 +20,13 @@ Créée le 2026-10-11 (vague 2 du design system). À lire en premier par tout ag
 
 M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M13 vote de comité, M16 récapitulatif d'import, M17 centre de notifications ; E11 ligne cliquable au clavier, E13 responsive, E18-E22 (flèches Tabs/Panel/Menu, slot action MessageBanner), E23 Timeline annoncée, E24 FileUpload états, E25-E28 sidebar/ContextRail packagés ; rayons 2/4/8/16 (décision d'alignement non prise).
 
+## 2026-10-11 — F-B8-06 fenêtre « Vous n'avez pas ce droit » (`wt/lostrights`)
+
+- État réel du frontend : la fenêtre de refus DECISION-011 / masquage q02 n'EXISTE PAS encore côté frontend (ACTION_ITEMS ouvert) et il n'y a aucun centre de notifications (ni client API). Rien à recouvrir dans le code ; la fenêtre ajoutée est la seule gestion globale d'un 403.
+- Le 403 ne porte la permission que dans le texte `Missing permission: x` : `ApiError.missingPermission` la parse (null sinon, jamais devinée). Déclenchement seulement sur écritures (non-GET) : les GET 403 dégradent volontairement (annuaires).
+- `PermissionDeniedDialog` (Modal DS) dans `App.tsx`, via `onPermissionDenied` (abonné unique) dans `api/client.ts`. Les écrans qui gèrent déjà le 403 (RaciPanel readOnly) continuent de le faire en plus.
+- Aucune suite de tests frontend ; `npm install` nécessaire dans un worktree neuf avant `npm run build` (plugin-react manquant sinon).
+
 ## Leçons correctifs vague 2 (QA/Sécu, branche `fix/ds-wave2`)
 
 - Les types TS sont effacés à l'exécution : tout composant qui affiche une valeur venue de l'API doit tolérer un objet (jamais passer un non-scalaire à React comme enfant) -> `VersionComparison` affiche « (valeur complexe) ».
@@ -28,3 +35,9 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - Ids ARIA dérivés de l'index, jamais d'une valeur libre (espaces = IDREF coupé).
 - `.btn` inline-flex : garder un padding vertical, hauteurs en `min-height`.
 - Les tests qui lisent le CSS avec `node:fs` exigent `/// <reference types="node" />` pour le typecheck du package.
+
+## 2026-10-11 — DECISION-041 heatmap Cartographie suit l'échelle active (`wt/carto`)
+
+- Précision de la règle « ne jamais toucher la Cartographie » : elle vise le VISUEL (couleurs, typo, disposition, légende), pas la logique de grille. La taille suit `GET /api/v1/cartography/scale` (`api/cartography.ts`) ; `data: null` => aucune grille + MessageBanner info (le DS n'a pas de composant EmptyState).
+- Couleur d'une case = bande backend contenant `p*i` (plus de `ceil(x*y/5)`), bandes mappées par position sur la palette z1..z5 répartie linéairement (`round(1 + idx*4/(n-1))`) ; n≠4 accepté sans cas particulier.
+- Plus aucun recadrage `Math.min(5,…)` des valeurs d'évaluation : un risque hors échelle est listé sous la grille (`cart-note`), jamais placé en silence sur la bordure.
