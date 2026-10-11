@@ -1,0 +1,17 @@
+.gs-refusal-action,
+.gs-refusal-contact {
+  font-weight: 700;
+  color: var(--gs-text);
+}
+
+.gs-refusal-heading {
+  font-size: 13px;
+  font-weight: 700;
+  margin: var(--gs-space-3) 0 var(--gs-space-1);
+  color: var(--gs-text);
+}
+
+.gs-refusal-list {
+  margin: 0;
+  padding-left: var(--gs-space-4);
+}
