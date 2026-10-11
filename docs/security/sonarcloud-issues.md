@@ -82,7 +82,7 @@ Top règles : `javascript:S6653` (1)
 | `Web:S5256` | `apps-script-legacy/` | 3 | Accepté | Accessibilité de l'UI legacy gelée (remplacée par le frontend React) ; non sécurité |
 | `typescript:S2871` | `frontend/` | 2 | Réel | Bug fonctionnel mineur (tri par ordre UTF-16 au lieu de locale), non sécurité |
 | `docker:S6505` | `backend/` | 2 | Réel | CVSS ~4.4 (durcissement supply chain ; seuls esbuild/fsevents ont un script d'install) |
-| `typescript:S5693` | `backend/` | 2 | Accepté | `fileSize` déjà borné (multer), route authentifiée + rate-limitée ; reste `files/fields/parts` non bornés (memoryStorage) |
+| `typescript:S5693` | `backend/` | 2 | Accepté | `fileSize` déjà borné (multer), route authentifiée + rate-limitée ; `files/fields/parts` bornés depuis le lot S1 (PR #147). Sonar peut maintenir l’alerte (seuil par défaut inférieur à 25 Mo / 10 Mo) → marquer « Safe » avec cette justification au prochain scan |
 | `tssecurity:S5145` | `backend/` | 2 | Accepté | Script CLI opérateur (telegramAsk/Poll), jamais exposé HTTP ; entrée = argv/réponse API Telegram ; CVSS ~2.0 si exploité |
 | `githubactions:S8541` | `.github/` | 1 | Réel | CVSS ~3.7 (semgrep épinglé `==` mais sans hash ni `--only-binary`) |
 | `githubactions:S8544` | `.github/` | 1 | Réel | CVSS ~3.7 (semgrep épinglé `==` mais sans hash ni `--only-binary`) |
