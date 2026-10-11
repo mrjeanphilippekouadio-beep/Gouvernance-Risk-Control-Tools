@@ -38,11 +38,12 @@ jobs:
         # stable image is run directly with the plan mounted in.
         run: |
           mkdir -p report
-          # The image runs as its own non-root "zap" user, which doesn't
-          # own this bind-mounted directory (first run failed with
-          # AccessDeniedException writing report_html.html) — open it up
-          # so the container can write into it regardless of its UID.
-          chmod 777 report
+          # The image runs as its own non-root "zap" user, uid 1000
+          # (docker/Dockerfile-stable: `useradd -u 1000 ... zap`), which
+          # doesn't own this bind-mounted directory by default (first run
+          # failed with AccessDeniedException writing report_html.html).
+          # Hand it over to that exact uid rather than opening it to everyone.
+          sudo chown 1000:1000 report
           docker run --rm \
             -v "${{ github.workspace }}:/zap/wrk/:rw" \
             -e ZAP_TARGET_URL="${{ secrets.ZAP_TARGET_URL }}" \
