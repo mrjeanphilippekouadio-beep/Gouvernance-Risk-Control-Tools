@@ -17,11 +17,25 @@ import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 const LEVEL_BOUNDS = { min: 1, max: 5 } as const;
+/** B-9 (F-13): size of the probability scale and of every impact axis — one value for both, 3 to 6. */
+const SCALE_SIZE_BOUNDS = { min: 3, max: 6 } as const;
+/** B-9: ceiling, never a count to assume (the axes in use come from the scale itself). */
+const MAX_IMPACT_AXES = 7;
 const MASTERY_LEVEL_BOUNDS = { min: 1, max: 3 } as const;
 
 function assertDimension(value: number, fieldName: string): void {
-  if (!Number.isInteger(value) || value < LEVEL_BOUNDS.min || value > LEVEL_BOUNDS.max) {
-    throw new ValidationError(`${fieldName} must be an integer between ${LEVEL_BOUNDS.min} and ${LEVEL_BOUNDS.max}`);
+  if (!Number.isInteger(value) || value < SCALE_SIZE_BOUNDS.min || value > SCALE_SIZE_BOUNDS.max) {
+    throw new ValidationError(
+      `${fieldName} must be an integer between ${SCALE_SIZE_BOUNDS.min} and ${SCALE_SIZE_BOUNDS.max}`,
+    );
+  }
+}
+
+/** B-9: one descriptor per level, so exactly `size` entries (assertLevels alone accepts fewer). */
+function assertDescriptors(levels: ScaleLevel[], fieldName: string, size: number): void {
+  assertLevels(levels, fieldName, { min: 1, max: size });
+  if (levels.length !== size) {
+    throw new ValidationError(`${fieldName} must have exactly one descriptor per level (${size})`);
   }
 }
 
@@ -121,11 +135,15 @@ export class RatingScaleService {
     if (!input.version.trim()) throw new ValidationError("version is required");
     assertDimension(input.probabilityLevels, "probabilityLevels");
     assertDimension(input.impactLevels, "impactLevels");
+    // B-9 / contract §6: probability and every impact axis share one scale size.
+    if (input.probabilityLevels !== input.impactLevels) {
+      throw new ValidationError("probabilityLevels and impactLevels must be equal");
+    }
     if (input.probabilityLabels) {
-      assertLevels(input.probabilityLabels, "probabilityLabels", { min: 1, max: input.probabilityLevels });
+      assertDescriptors(input.probabilityLabels, "probabilityLabels", input.probabilityLevels);
     }
     if (input.impactLabels) {
-      assertLevels(input.impactLabels, "impactLabels", { min: 1, max: input.impactLevels });
+      assertDescriptors(input.impactLabels, "impactLabels", input.impactLevels);
     }
 
     const scale = await this.ratingScales.create({ ...input, tenantId: actor.tenantId });
@@ -186,6 +204,9 @@ export class RatingScaleService {
     if (!Array.isArray(input.axes) || input.axes.length === 0) {
       throw new ValidationError("axes must be a non-empty array");
     }
+    if (input.axes.length > MAX_IMPACT_AXES) {
+      throw new ValidationError(`axes cannot have more than ${MAX_IMPACT_AXES} impact axes`);
+    }
     const codes = new Set<string>();
     const orders = new Set<number>();
     for (const axis of input.axes) {
@@ -193,6 +214,8 @@ export class RatingScaleService {
       if (!axis.label?.trim()) throw new ValidationError("each impact axis requires a non-empty label");
       if (codes.has(axis.code)) throw new ValidationError(`duplicate impact axis code: ${axis.code}`);
       if (orders.has(axis.order)) throw new ValidationError(`duplicate impact axis order: ${axis.order}`);
+      // B-9: when supplied, an axis carries one descriptor per level of the scale's impact size.
+      if (axis.levelLabels) assertDescriptors(axis.levelLabels, `axis ${axis.code} levelLabels`, before.impactLevels);
       codes.add(axis.code);
       orders.add(axis.order);
     }

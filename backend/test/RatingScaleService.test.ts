@@ -158,9 +158,50 @@ describe("RatingScaleService", () => {
 
   it("rejects an out-of-range dimension", async () => {
     const service = newService();
+    for (const n of [2, 7]) {
+      await expect(
+        service.create(actor, { name: "Bad", version: "v1", probabilityLevels: n, impactLevels: n }, "REQ-2"),
+      ).rejects.toThrow(ValidationError);
+    }
+  });
+
+  it("accepts sizes 3 to 6 and rejects different probability/impact sizes (B-9)", async () => {
+    const service = newService();
+    const six = await service.create(actor, { name: "S", version: "v6", probabilityLevels: 6, impactLevels: 6 }, "REQ-2");
+    expect(six.impactLevels).toBe(6);
     await expect(
-      service.create(actor, { name: "Bad", version: "v1", probabilityLevels: 6, impactLevels: 5 }, "REQ-2"),
+      service.create(actor, { name: "Bad", version: "v1", probabilityLevels: 4, impactLevels: 5 }, "REQ-2"),
+    ).rejects.toThrow(/must be equal/);
+  });
+
+  it("requires exactly one descriptor per level for probability labels (B-9)", async () => {
+    const service = newService();
+    const labels = (n: number) => Array.from({ length: n }, (_, i) => ({ level: i + 1, label: `L${i + 1}` }));
+    await expect(
+      service.create(actor, { name: "S", version: "v4", probabilityLevels: 4, impactLevels: 4, probabilityLabels: labels(3) }, "REQ-2"),
     ).rejects.toThrow(ValidationError);
+    const ok = await service.create(
+      actor,
+      { name: "S", version: "v4b", probabilityLevels: 4, impactLevels: 4, probabilityLabels: labels(4), impactLabels: labels(4) },
+      "REQ-2",
+    );
+    expect(ok.probabilityLabels).toHaveLength(4);
+  });
+
+  it("limits impact axes to 7 and checks per-axis descriptors against the scale size (B-9)", async () => {
+    const service = newService();
+    const scale = await service.create(actor, { name: "S", version: "v3", probabilityLevels: 3, impactLevels: 3 }, "REQ-2");
+    const mk = (i: number, n = 3) => ({
+      code: `A${i}`,
+      label: `Axe ${i}`,
+      order: i,
+      levelLabels: Array.from({ length: n }, (_, k) => ({ level: k + 1, label: `N${k + 1}` })),
+    });
+    const eight = Array.from({ length: 8 }, (_, i) => mk(i + 1));
+    await expect(service.updateImpactAxes(actor, scale.id, { axes: eight }, "REQ-6")).rejects.toThrow(ValidationError);
+    await expect(service.updateImpactAxes(actor, scale.id, { axes: [mk(1, 2)] }, "REQ-6")).rejects.toThrow(ValidationError);
+    const ok = await service.updateImpactAxes(actor, scale.id, { axes: eight.slice(0, 7) }, "REQ-6");
+    expect(ok.impactAxes?.axes).toHaveLength(7);
   });
 
   it("rejects creation without the ratingscale.create permission", async () => {

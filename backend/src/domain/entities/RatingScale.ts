@@ -39,6 +39,8 @@ export interface ImpactAxis {
   code: string;
   label: string;
   order: number;
+  /** B-9: one descriptor per level (1..impactLevels) for this axis. Optional so pre-B-9 versions stay valid. */
+  levelLabels?: ScaleLevel[];
 }
 
 export type RetainedImpactRule = "MAX" | "AVERAGE" | "WEIGHTED_SUM";
@@ -66,10 +68,10 @@ export interface RatingScale {
   name: string;
   version: string;
   status: RatingScaleStatus;
-  /** n_proba, 1-5. */
+  /** n_proba, 3-6 on new versions (legacy rows may hold 1-5); always equal to impactLevels on new versions. */
   probabilityLevels: number;
   probabilityLabels: ScaleLevel[] | null;
-  /** n_impact, 1-5. */
+  /** n_impact, same size as probabilityLevels on new versions. */
   impactLevels: number;
   impactLabels: ScaleLevel[] | null;
   criticalityThresholds: ScoreThreshold[] | null;

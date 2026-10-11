@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
-import { boundedArray, MAX_DEFENSE_LINES } from "../validation.js";
+import { boundedArray, MAX_DEFENSE_LINES, MAX_IMPACT_AXES, MAX_SCALE_SIZE } from "../validation.js";
 import type { RatingScaleService } from "../../services/RatingScaleService.js";
 
 const ScaleLevelSchema = z.object({
   level: z.number().int(),
-  label: z.string().min(1),
+  label: z.string().min(1).max(200),
 });
 
 const ScoreThresholdSchema = z.object({
@@ -15,18 +15,19 @@ const ScoreThresholdSchema = z.object({
 });
 
 const ImpactAxisSchema = z.object({
-  code: z.string().min(1),
-  label: z.string().min(1),
+  code: z.string().min(1).max(200),
+  label: z.string().min(1).max(200),
   order: z.number().int(),
+  levelLabels: boundedArray(ScaleLevelSchema, MAX_SCALE_SIZE).optional(),
 });
 
 const CreateRatingScaleBody = z.object({
-  name: z.string().min(1),
-  version: z.string().min(1),
+  name: z.string().min(1).max(120),
+  version: z.string().min(1).max(120),
   probabilityLevels: z.number().int(),
   impactLevels: z.number().int(),
-  probabilityLabels: boundedArray(ScaleLevelSchema, 50).nullish(),
-  impactLabels: boundedArray(ScaleLevelSchema, 50).nullish(),
+  probabilityLabels: boundedArray(ScaleLevelSchema, MAX_SCALE_SIZE).nullish(),
+  impactLabels: boundedArray(ScaleLevelSchema, MAX_SCALE_SIZE).nullish(),
 });
 
 const UpdateThresholdsBody = z.object({
@@ -34,7 +35,7 @@ const UpdateThresholdsBody = z.object({
 });
 
 const UpdateImpactAxesBody = z.object({
-  axes: boundedArray(ImpactAxisSchema, 20),
+  axes: boundedArray(ImpactAxisSchema, MAX_IMPACT_AXES),
   retainedImpactRule: z.enum(["MAX", "AVERAGE", "WEIGHTED_SUM"]).optional(),
 });
 

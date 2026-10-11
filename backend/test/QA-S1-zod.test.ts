@@ -72,13 +72,13 @@ describe("rating scales: boundaries", () => {
     expect((await send(url, "PUT", {})).status).toBe(400);
   });
 
-  it("impact-axes: 20 accepted, 21 -> 400", async () => {
+  it("impact-axes: 7 accepted, 8 -> 400 (B-9)", async () => {
     const svc = mk();
     const base = await start("/rs", ratingScalesRouter(svc as unknown as RatingScaleService));
     const ax = (i: number) => ({ code: `A${i}`, label: `Axe ${i}`, order: i });
     const url = `${base}/rs/s1/impact-axes`;
-    expect((await send(url, "PUT", { axes: Array.from({ length: 20 }, (_, i) => ax(i)) })).status).toBe(200);
-    const ko = await send(url, "PUT", { axes: Array.from({ length: 21 }, (_, i) => ax(i)) });
+    expect((await send(url, "PUT", { axes: Array.from({ length: 7 }, (_, i) => ax(i)) })).status).toBe(200);
+    const ko = await send(url, "PUT", { axes: Array.from({ length: 8 }, (_, i) => ax(i)) });
     expect(ko.status).toBe(400);
     expect(ko.json.error).toBe("Requête invalide.");
   });
@@ -99,14 +99,28 @@ describe("rating scales: boundaries", () => {
     expect((await send(url, "PUT", { levels, defenseLines: ["1L"], thresholds: Array.from({ length: 51 }, (_, i) => th(i)) })).status).toBe(400);
   });
 
-  it("create scale: labels nullish kept (null/absent ok); 50 ok, 51 -> 400", async () => {
+  it("F-B9-01: label/code capped at 200, name/version at 120 -> 400 beyond", async () => {
+    const svc = { ...mk(), create: vi.fn().mockResolvedValue({ id: "s1" }) };
+    const base = await start("/rs", ratingScalesRouter(svc as unknown as RatingScaleService));
+    const core = { name: "Echelle", version: "v1", probabilityLevels: 3, impactLevels: 3 };
+    const long = "x".repeat(201);
+    expect((await send(`${base}/rs`, "POST", { ...core, probabilityLabels: [{ level: 1, label: "x".repeat(200) }] })).status).toBe(201);
+    expect((await send(`${base}/rs`, "POST", { ...core, probabilityLabels: [{ level: 1, label: long }] })).status).toBe(400);
+    expect((await send(`${base}/rs`, "POST", { ...core, name: "x".repeat(121) })).status).toBe(400);
+    expect((await send(`${base}/rs`, "POST", { ...core, version: "x".repeat(121) })).status).toBe(400);
+    const axesUrl = `${base}/rs/s1/impact-axes`;
+    expect((await send(axesUrl, "PUT", { axes: [{ code: long, label: "A", order: 1 }] })).status).toBe(400);
+    expect((await send(axesUrl, "PUT", { axes: [{ code: "A", label: long, order: 1 }] })).status).toBe(400);
+  });
+
+  it("create scale: labels nullish kept (null/absent ok); 6 ok, 7 -> 400 (B-9)", async () => {
     const svc = { create: vi.fn().mockResolvedValue({ id: "s1" }) };
     const base = await start("/rs", ratingScalesRouter(svc as unknown as RatingScaleService));
     const core = { name: "Echelle", version: "v1", probabilityLevels: 4, impactLevels: 4 };
     expect((await send(`${base}/rs`, "POST", core)).status).toBe(201);
     expect((await send(`${base}/rs`, "POST", { ...core, probabilityLabels: null, impactLabels: null })).status).toBe(201);
-    expect((await send(`${base}/rs`, "POST", { ...core, probabilityLabels: Array.from({ length: 50 }, (_, i) => lvl(i)) })).status).toBe(201);
-    expect((await send(`${base}/rs`, "POST", { ...core, impactLabels: Array.from({ length: 51 }, (_, i) => lvl(i)) })).status).toBe(400);
+    expect((await send(`${base}/rs`, "POST", { ...core, probabilityLabels: Array.from({ length: 6 }, (_, i) => lvl(i)) })).status).toBe(201);
+    expect((await send(`${base}/rs`, "POST", { ...core, impactLabels: Array.from({ length: 7 }, (_, i) => lvl(i)) })).status).toBe(400);
   });
 
   it("E2E frontend payload: saveMastery with empty draft -> thresholds null, passed through intact", async () => {
