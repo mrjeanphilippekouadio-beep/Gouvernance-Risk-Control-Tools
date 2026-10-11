@@ -20,6 +20,13 @@ Créée le 2026-10-11 (vague 2 du design system). À lire en premier par tout ag
 
 M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M13 vote de comité, M16 récapitulatif d'import, M17 centre de notifications ; E11 ligne cliquable au clavier, E13 responsive, E18-E22 (flèches Tabs/Panel/Menu, slot action MessageBanner), E23 Timeline annoncée, E24 FileUpload états, E25-E28 sidebar/ContextRail packagés ; rayons 2/4/8/16 (décision d'alignement non prise).
 
+## 2026-10-11 — F-B8-06 fenêtre « Vous n'avez pas ce droit » (`wt/lostrights`)
+
+- État réel du frontend : la fenêtre de refus DECISION-011 / masquage q02 n'EXISTE PAS encore côté frontend (ACTION_ITEMS ouvert) et il n'y a aucun centre de notifications (ni client API). Rien à recouvrir dans le code ; la fenêtre ajoutée est la seule gestion globale d'un 403.
+- Le 403 ne porte la permission que dans le texte `Missing permission: x` : `ApiError.missingPermission` la parse (null sinon, jamais devinée). Déclenchement seulement sur écritures (non-GET) : les GET 403 dégradent volontairement (annuaires).
+- `PermissionDeniedDialog` (Modal DS) dans `App.tsx`, via `onPermissionDenied` (abonné unique) dans `api/client.ts`. Les écrans qui gèrent déjà le 403 (RaciPanel readOnly) continuent de le faire en plus.
+- Aucune suite de tests frontend ; `npm install` nécessaire dans un worktree neuf avant `npm run build` (plugin-react manquant sinon).
+
 ## Leçons correctifs vague 2 (QA/Sécu, branche `fix/ds-wave2`)
 
 - Les types TS sont effacés à l'exécution : tout composant qui affiche une valeur venue de l'API doit tolérer un objet (jamais passer un non-scalaire à React comme enfant) -> `VersionComparison` affiche « (valeur complexe) ».

@@ -16,7 +16,15 @@ export interface CreateRoleInput {
   permissions: string[];
 }
 
+export interface Grantors {
+  permission: string;
+  grantors: { displayName: string }[];
+}
+
 export const rolesApi = {
+  grantors: (token: string, permission: string) =>
+    apiRequest<Grantors>(`/api/v1/roles/grantors?permission=${encodeURIComponent(permission)}`, { token }),
+
   list: (token: string, includeDisabled = false) =>
     apiRequest<Role[]>(`/api/v1/roles${includeDisabled ? "?includeDisabled=true" : ""}`, { token }),
 
