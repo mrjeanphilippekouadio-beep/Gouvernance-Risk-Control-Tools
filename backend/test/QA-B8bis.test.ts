@@ -504,7 +504,6 @@ describe("QA-B8bis Audit-group permission changes (q45)", () => {
       await w.member(w.groups.AUDIT, "aud");
       const res = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "kri.read"], "R");
       if (res.status !== "PENDING") throw new Error("setup");
-      const broken = world({ failRoleUpdateFor: "never" }); void broken;
       const real = w.roleRepo.update;
       w.roleRepo.update = async () => { throw new Error("db down"); };
       await expect(w.roleService.decideAuditPermissionChange(actor("aud", VALIDATE), res.changeId, true, "R")).rejects.toThrow("db down");
@@ -786,7 +785,7 @@ describe("QA-B8bis ActionPlanService self-validation (point signalé par A06)", 
   }
   const closer = (id: string) => actor(id, ["actionplan.validate"]);
 
-  it("INFIRMS the claim: the creator cannot close their own action (403), and nothing is closed", async () => {
+  it("the A06 claim is INFIRMED for the creator: the creator cannot close their own action (403), and nothing is closed", async () => {
     const { service, closes } = aw(plan("rm1", "someone"));
     await expect(service.close(closer("rm1"), "ap1", "ev-1", "ok", "R1")).rejects.toThrow(ForbiddenError);
     expect(closes).toEqual([]);
@@ -799,10 +798,12 @@ describe("QA-B8bis ActionPlanService self-validation (point signalé par A06)", 
     expect(closes).toEqual(["rm2"]);
   });
 
-  it("OBSERVATION: the control is creator-based only; the responsible user (executor) who did not create the action can close it", async () => {
+  // F-B8b-06 (Security review B-8 bis, confirmed by QA): the control only compares with createdBy, so the RESPONSIBLE user (executor of the
+  // action) who did not create it can close it with their own evidence. Expected by the maker-checker principle: executor != closer.
+  it.fails("KNOWN GAP F-B8b-06: the responsible user cannot close their own action", async () => {
     const { service, closes } = aw(plan("rm1", "exec"));
-    await service.close(closer("exec"), "ap1", "ev-1", "ok", "R3");
-    expect(closes).toEqual(["exec"]);
+    await expect(service.close(closer("exec"), "ap1", "ev-1", "ok", "R3")).rejects.toThrow(ForbiddenError);
+    expect(closes).toEqual([]);
   });
 });
 
@@ -812,7 +813,7 @@ describe("QA-B8bis migration 051 (static review, never applied)", () => {
   const up = readFileSync(`${dir}051_group_permissions.sql`, "utf8");
   const down = readFileSync(`${dir}051_group_permissions.down.sql`, "utf8");
   const stmt = (group: string) => {
-    const m = up.match(new RegExp(`UPDATE roles SET permissions = ARRAY\\[([\\s\\S]*?)\\]\\s*WHERE system_group = '${group}'([^;]*);`));
+    const m = up.match(new RegExp(`UPDATE roles SET permissions = ARRAY\\[([^\\]]*)\\]\\s*WHERE system_group = '${group}'([^;]*);`));
     if (!m) throw new Error(`no statement for ${group}`);
     return { perms: [...m[1]!.matchAll(/'([^']+)'/g)].map((x) => x[1]!), where: m[2]! };
   };
