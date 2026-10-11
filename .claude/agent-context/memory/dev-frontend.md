@@ -35,3 +35,9 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - Ids ARIA dérivés de l'index, jamais d'une valeur libre (espaces = IDREF coupé).
 - `.btn` inline-flex : garder un padding vertical, hauteurs en `min-height`.
 - Les tests qui lisent le CSS avec `node:fs` exigent `/// <reference types="node" />` pour le typecheck du package.
+
+## 2026-10-11 — DECISION-041 heatmap Cartographie suit l'échelle active (`wt/carto`)
+
+- Précision de la règle « ne jamais toucher la Cartographie » : elle vise le VISUEL (couleurs, typo, disposition, légende), pas la logique de grille. La taille suit `GET /api/v1/cartography/scale` (`api/cartography.ts`) ; `data: null` => aucune grille + MessageBanner info (le DS n'a pas de composant EmptyState).
+- Couleur d'une case = bande backend contenant `p*i` (plus de `ceil(x*y/5)`), bandes mappées par position sur la palette z1..z5 répartie linéairement (`round(1 + idx*4/(n-1))`) ; n≠4 accepté sans cas particulier.
+- Plus aucun recadrage `Math.min(5,…)` des valeurs d'évaluation : un risque hors échelle est listé sous la grille (`cart-note`), jamais placé en silence sur la bordure.
