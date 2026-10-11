@@ -99,6 +99,8 @@ export type Permission =
   | "kri.delete"
   /** ACT-125: distinct workflow action beyond risk.update, mirroring execution.validate/riskevaluation.validate. */
   | "risk.escalate"
+  /** B-0: designating owner / N+1 is a distinct gate, not the widely-held risk.update (self-designation refused in the service). */
+  | "risk.owner.assign"
   | "actionplan.read"
   | "actionplan.create"
   | "actionplan.update"
@@ -258,6 +260,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "kri.update",
   "kri.delete",
   "risk.escalate",
+  "risk.owner.assign",
   "actionplan.read",
   "actionplan.create",
   "actionplan.update",

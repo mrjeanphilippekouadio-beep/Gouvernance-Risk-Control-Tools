@@ -14,7 +14,7 @@ VALUES (
   'dev@example.com',
   'Dev User',
   ARRAY[
-    'risk.read', 'risk.create', 'risk.update', 'risk.delete',
+    'risk.read', 'risk.create', 'risk.update', 'risk.delete', 'risk.owner.assign',
     'feedback.read', 'feedback.update',
     'role.read', 'role.create', 'role.update', 'role.delete', 'role.assign'
   ]

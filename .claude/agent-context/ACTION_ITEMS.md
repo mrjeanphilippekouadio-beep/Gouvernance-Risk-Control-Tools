@@ -21,7 +21,7 @@ pour l'usage.
 | @dev-db | Cross-review des 9 migrations déjà écrites par A06 sans spawn (016 à 022), pour constituer le track record avant de figer la règle "pas de spawn pour les cas simples". | 2026-09-27 | **Résolu (2026-09-29)** — les 7 migrations sont conformes (`tenant_id` partout, aucun `DELETE` physique hors exception documentée, index cohérents avec les patterns de requête réels). Règle "pas de spawn pour cas simples" validée comme sûre à figer, avec réserve explicite pour les cas destructifs (`ALTER` destructif, `DROP`, changement de type) ou touchant une politique de rétention légale — pas rencontrés dans 016-022. |
 | @audit | Vérifier la conformité append-only/soft-delete/tenant_id sur les 9 modules livrés, en complément de la revue sécurité. | 2026-09-27 | **Résolu (2026-09-29)** — conforme sur les 9 modules (Risk, Evidence, Control, ControlExecution, ControlEffectivenessAssessment, Anomaly, Department, Process, RACI). Chaque module respecte son propre pattern d'écriture déclaré, aucun `DELETE FROM` physique hors exception documentée, `tenant_id` systématiquement scopé sur `actor.tenantId`. |
 | @compliance | Cadrer réellement l'exigence de purge RGPD de l'audit trail (ACT-072), actuellement "Post-MVP" sans étude. **Lien établi le 2026-09-28 (agent dispatché réellement) avec le module Audit UX** : ne pas mocker un bouton "purger" ou une politique de rétention explicite sur le premier écran Audit tant qu'ACT-072 n'a pas au moins statué sur l'hypothèse par défaut (conservation stricte 10 ans BCEAO, purge différée hors périmètre RGPD applicable, ou anonymisation) — pas besoin de résoudre tout ACT-072 avant, juste ce cadrage minimal, au moment où Audit arrivera dans la séquence des 29 écrans. Proposition livrée (2026-09-29) — `docs/architecture/ACT-072-cadrage-propose.md` : 3 options rédigées, recommandation assumée = Option C (restriction de visibilité par masquage, pas de purge automatisée — évite de construire un mécanisme de suppression sur une base légale RGPD non vérifiée pour ce SFD ivoirien). Confirmation PO (2026-09-29) : go donné pour adopter l'Option C comme hypothèse de travail par défaut. **Confirmation finale PO (2026-09-30)** : "mon go suffit" — le PO assume explicitement sa décision comme l'arbitrage définitif, pas seulement une hypothèse de travail en attendant un avis juridique séparé. Statut ACT-072 passé de `EVIDENCE_REQUIRED` à `RESOLVED` (Option C, décision PO assumée) — reste néanmoins : aucun bouton de suppression physique à maquetter/coder (l'Option C elle-même l'exclut, ce n'est pas une réserve en attente). Voir addendum dans `docs/architecture/ACT-072-cadrage-propose.md`. | 2026-09-27 | **CLOSED — Option C actée comme décision finale du PO, pas une hypothèse provisoire.** |
-| @compliance | **Consultation dashboard/rythme UX du 2026-09-28 (agent dispatché réellement).** Gap process trouvé : `CLAUDE.md` point 8 ("QA/Security après chaque batch") ne nomme pas Compliance — recommande d'ajouter Compliance à ce point, avec une règle explicite de gating liée à la GRC Trigger Matrix (`product-manager.md` §64), plutôt que de compter sur une déduction implicite. Rejoint le point déjà ouvert `@product-manager` sur la définition de "statué". **Module Audit** : déclenche 2 lignes fermes/probables de la matrice §64 ("Nouveau traitement de données" = Oui sans condition ; "Nouvelle API" = Selon impact, jugé réel ici — conservation ≥10 ans BCEAO, piste d'audit nominative, périmètre LBC/FT potentiel déjà signalé silencieux dans le CDC v0.1). **Pas de blocage positionnel** sur l'ordre des 29 modules — Audit peut rester en dernier — mais deux conditions avant que son premier écran passe de "en maquettage" à "statué" : (1) trancher la contradiction de modélisation du CDC v0.1 (Finding→ActionPlan vs Constats→Recommandations) avant le début du maquettage spécifiquement de ce module (le choix Figma option B — maquette = référentiel vivant — signifie que la maquette fige le modèle que le code héritera ensuite), (2) une première revue Compliance légère dès le premier écran maquetté, avant qu'il soit déclaré statué. | 2026-09-28 | **Condition 1 résolue (2026-09-29)** — la contradiction Finding→ActionPlan est déjà tranchée dans `GRC_Target_Domain_Model.md` §9.2 (confirmé par `@audit` lors du balayage). **Condition 2 reste ouverte** : revue Compliance légère au premier écran Audit maquetté, pas avant — Audit n'a pas encore démarré. |
+| @compliance | **Consultation dashboard/rythme UX du 2026-09-28 (agent dispatché réellement).** Gap process trouvé : `CLAUDE.md` point 8 ("QA/Security après chaque batch") ne nomme pas Compliance — recommande d'ajouter Compliance à ce point, avec une règle explicite de gating liée à la GRC Trigger Matrix (`product-manager.md` §64), plutôt que de compter sur une déduction implicite. Rejoint le point déjà ouvert `@product-manager` sur la définition de "statué". **Module Audit** : déclenche 2 lignes fermes/probables de la matrice §64 ("Nouveau traitement de données" = Oui sans condition ; "Nouvelle API" = Selon impact, jugé réel ici — conservation ≥10 ans BCEAO, piste d'audit nominative, périmètre LBC/FT potentiel déjà signalé silencieux dans le CDC v0.1). **Pas de blocage positionnel** sur l'ordre des 29 modules — Audit peut rester en dernier — mais deux conditions avant que son premier écran passe de "en maquettage" à "statué" : (1) trancher la contradiction de modélisation du CDC v0.1 (Finding→ActionPlan vs Constats→Recommandations) avant le début du maquettage spécifiquement de ce module (le choix Figma option B — maquette = référentiel vivant — signifie que la maquette fige le modèle que le code héritera ensuite), (2) une première revue Compliance légère dès le premier écran maquetté, avant qu'il soit déclaré statué. | 2026-09-28 | **Condition 1 résolue (2026-09-29)** — la contradiction Finding→ActionPlan est déjà tranchée dans `GRC_Target_Domain_Model.md` §9.2 (confirmé par `@audit` lors du balayage). **Condition 2 EN RETARD** : Aucune revue Compliance n'a eu lieu avant le merge des PR #71 (`baaeae1`, 2026-09-30) et #72 (`0fde9ec`, 2026-09-30) sur `main`. Les deux écrans Audit (Exécutions & Efficacité + Constats & Recommandations) sont mergés sans trace d'entrée `@compliance` dans `SHARED_LOG.md` après le 2026-09-28. Condition 2 stipulait "revue Compliance légère dès le premier écran maquetté, avant qu'il soit déclaré statué" — ce n'est désormais plus un blocage à lever avant le code, mais une revue à rattraper rétroactivement sur les deux PR déjà en production. |
 | @privacy | Première revue : UserManagement et RiskOwnership manipulent désormais de vraies données utilisateur (email, nom, qui possède quel risque). | 2026-09-27 | **Résolu par absorption (confirmé par l'agent lui-même, balayage du 2026-09-29)** — remplacé par PRIV-CH-DASH-001, plus précis et actionnable. |
 | @ux-designer | Maquette V3 publiée au même lien après retour explicite du Product Owner : « inspire-toi du site public réel du client » (djamo.com/en-ci). Bleu de marque réel `#2A3FFF` remplace l'argile placeholder `#B5533A` de la V2 comme unique accent de marque/action ; surfaces de carte/panneau teintées lavande pâle au lieu de blanc/crème plat (écho dilué aux blocs périwinkle du site) ; boutons pilule à padding généreux ; titres en Plus Jakarta Sans (équivalent Google Fonts de GT Walsheim Pro, police de marque payante non chargeable) à la place de Source Serif 4, IBM Plex Sans/Mono inchangés. Palette sémantique de statut (danger/warning/success/neutral) **inchangée** — ne doit jamais se confondre avec l'accent de marque. Délibérément écarté : photo lifestyle, accent vert « épargne »/touches jaune-orangé décoratives, sections à fond noir quasi-pur, traits serpentins décoratifs — détail et justification complets dans l'entrée `@ux-designer` du 2026-09-28 (V3) de `SHARED_LOG.md` et dans le changelog de l'artefact lui-même. Artefact : **https://claude.ai/artifact/JBwqMEpRi8FSQqb6dmZy57** (Version 3, puis **V4** — voir addendum ci-dessous). Structure/navigation/sélecteur d'échelle de la V2 **inchangés**. **Figma reste bloqué, statut inchangé** : outils MCP `mcp__figma__get_figma_data`/`download_figma_images` disponibles en lecture seule, mais **aucun fileKey/URL fourni ni trouvé** — reste sur le Product Owner de transmettre un lien de fichier existant ; aucun fileKey n'a été inventé pour contourner ce blocage. Portage de la palette/typo V3 dans `frontend/src/design-system/tokens.css` **non fait** — hors du périmètre de ce retour, à valider explicitement avant tout patch de `frontend/`. **Addendum V4 (2026-09-28)** — retour PO sur V3 : « je m'attendais à être bluffé, je ne l'ai pas été ». 4 corrections précises livrées au même lien (Version 4) : libellés de champ passés de Plex Mono à Plex Sans (mono réservée aux valeurs numériques) ; nav latérale en noir plein gras + pictogramme SVG par entrée ; heatmap Cartography à bandes de criticité nettement plus contrastées et points de risque en couleur unique (accent de marque, résiduel distingué par un anneau, pas une teinte) ; animations GSAP réellement présentes sur scores/barre d'appétence/points de heatmap/sélecteur d'échelle/tableau — demande faite en V2/V3 et enfin honorée. Détail complet dans l'entrée `@ux-designer` du 2026-09-28 (V4) de `SHARED_LOG.md`. | 2026-09-27 | **Résolu (portage) le 2026-09-28** — charte itérée jusqu'à V6 dans l'artefact (au-delà de V4 : V5 polish élévation/typo, V6 purge Plex Mono + preview heatmap/dérivation score/tendance, voir `SHARED_LOG.md`) ; **DECISION-001 ci-dessous** : le PO a donné le go explicite, port effectué dans `frontend/src/design-system/tokens.css` (valeurs de tokens uniquement, aucun composant `.tsx` modifié — palette `#2A3FFF`, Plus Jakarta Sans/IBM Plex Sans/Mono, radius 8px). **Figma abandonné définitivement (décision PO, 2026-09-30)** : "laisse tomber Figma on reste sur l'artefact" — l'Option B (HTML/CSS commentable = référentiel vivant) est actée comme choix final, pas provisoire en attendant un lien. Nouvelle exigence associée : chaque nouvel écran doit être ajouté clairement dans l'artefact `grc-review.html`, pas seulement maquetté ailleurs. |
 | @product-manager | Valider a posteriori la priorisation des 3 batches déjà livrés, ou ajuster la suite du backlog (Dashboard, Config, Reporting, Notification, JournalGlobal, Governance restent à 0 %). | 2026-09-27 | **Résolu par absorption (confirmé par l'agent lui-même, balayage du 2026-09-29)** — remplacé par la ligne 37 (CDC v0.1), elle-même désormais réduite à un seul point non-actionnable (voir ligne 37). |
@@ -138,6 +138,11 @@ pour l'usage.
 | @orchestrator HUMAN | **Cockpit de pilotage publié (2026-10-08, DECISION-021)** : artefact « Pilotage GRC Tools » https://claude.ai/artifact/LQgXExeGTqAHxijeSrSRf3 (source `docs/pilotage/pilotage-grc-tools.html`) — état global, roadmap V1 (R0–R5 + EVD), arbitrages à trancher, une section par agent, journal des livraisons ; base partagée (`project`, `releases`, `agents`, `questions`, `deliveries`). **Protocole** : après chaque livraison d'agent, l'orchestrateur met à jour la base (statut de l'agent, items de release, nouvelles questions, ligne de journal) ; chaque réponse du PO saisie dans la page est relue par l'orchestrateur et inscrite au Decision Log ici avant toute action. 12 arbitrages ouverts au 2026-10-08 (q01 GO R0 … q12 échec d'audit). | 2026-10-08 | **Ouvert — HUMAN : répondre aux arbitrages dans la page ; @orchestrator : tenir la base à jour à chaque livraison.** |
 | HUMAN @ux-designer @architect | **Nouvelle fonctionnalité PO (2026-10-08) : reprise du registre des risques (Excel / Google Sheets) après création du Dispositif, et organisation de l'Administration.** Cadrage : `docs/architecture/ADMIN-et-RRI-cadrage.md` — réglages de plateforme dans l'Administration, réglages du Dispositif dans l'espace Dispositif, raccourcis seulement dans les sections ; lot RRI (moteur partagé avec l'import d'évidences, brouillon, cotations en historique « reprise », Google Sheets par téléchargement .xlsx au MVP). | 2026-10-08 | **Ouvert — HUMAN : arbitrages q13 à q16 dans la page de pilotage.** |
 | @dev-backend @security HUMAN | **Bombe de décompression déjà exposée en production (Security, 2026-10-08)** : `RiskImportService.ts:52` charge tout le classeur `exceljs` en mémoire avant le plafond de lignes (`riskImport.routes.ts:7`, 10 Mo) ; utilisateur authentifié ; ~CVSS 6,5 (sous le seuil d'escalade 7). | 2026-10-08 | **Ouvert — correctif R0.3 de la roadmap (contrôle de la taille décompressée, plafond), à lancer au GO.** |
+| HUMAN @architect | **RRI — confirmation q17 (2026-10-08, DECISION-027)** : les réponses q14 à q16 tranchent le rapprochement colonnes / objets par le client et les propositions de cotation (si matrice P × I identique), sans se prononcer sur : objets importés en brouillon activés par l'équipe risque ; périmètre risques, processus et contrôles ; Google Sheets par .xlsx en V1, lien direct en V1.1. | 2026-10-08 | **Résolu (2026-10-08) — q17 confirmée, DECISION-029.** |
+| HUMAN @security | **Migration 047 (B-0) — revue des rôles avant fusion dans `staging` (2026-10-08)** : le workflow `migrate.yml` (DECISION-009) applique automatiquement toute migration fusionnée dans `staging`. La 047 accorde `risk.owner.assign` aux rôles détenteurs de `role.assign` et aux rôles nommés exactement « Risk Manager » (resserrée après SEC-B0-2). Le PO vérifie la liste réelle des rôles de staging/production ; tout autre rôle qui doit désigner des Risk Owners reçoit la permission à la main. | 2026-10-08 | **Résolu (2026-10-08) — q18 validée, DECISION-029.** |
+| HUMAN @risk-manager @security | **SEC-R04-3 — clé de compte de service Drive longue durée sur Render (2026-10-08)** : sur Render, pas d'identité de plateforme ; la clé JSON (Secret File) est longue durée, contrairement à l'ADC Cloud Run. Mesures : compte de service membre des deux Shared Drives seulement, clé dédiée et tournée, jamais dans le dépôt ; dossiers globaux acceptables tant que mono-tenant, à bloquer avant tout multi-tenant. Risque résiduel à accepter par le PO jusqu'à la migration Cloud Run / AWS. | 2026-10-08 | **Résolu (2026-10-08) — risque accepté avec mesures (q19, DECISION-029).** |
+| @documentation @dev-db HUMAN | **Écarts relevés par le runbook de migration (R0.6, 2026-10-08)** : pas de workflow de sauvegarde quotidienne (décidée en q03, à livrer en R5) ; 043 et 044_risk_idempotency sans `.down.sql` ; deux fichiers numérotés 044 ; le rollback doit utiliser `MIGRATION_DATABASE_URL` et non `DATABASE_URL` ; procédures de rollback et de branche preview jamais exécutées de bout en bout. | 2026-10-08 | **Ouvert — à traiter avant R5 ; détail dans `docs/runbook/migrations.md` §9.** |
+| HUMAN @ux-designer @dev-frontend | **Design system V1 — inventaire et audit (2026-10-11, DECISION-028)** : `docs/ux/DS-V1-inventaire.md` — 28 écarts (11 accessibilité), 18 composants manquants, 3 vagues ; audit technique : build OK, 0 test, pas de catalogue visuel, focus clavier non stylé sur Button/Menu/Tabs/Pagination/SegmentedControl/Modal. Points ouverts : (1) cible WCAG 2.1 AA comme critère de sortie (q20) ; (2) `--gs-info` alias de primary alors que PEOS distingue info et primary ; (3) pas de token « blanc / texte sur primaire » (8 `#fff` en dur) ; (4) Tabs = navigation (`aria-current`) ou vrais onglets. | 2026-10-11 | **Ouvert — HUMAN : q20 et q21 dans la page de pilotage.** |
 | @infrastructure @dev-backend HUMAN | **Authentification Google Drive en production non prouvée (Infrastructure, 2026-10-08)** : `googleDriveAuth.ts` et `env.ts:101` interdisent la clé JSON en production et supposent l'identité Cloud Run, alors que la production tourne sur Render ; le dépôt d'évidences en production peut échouer. | 2026-10-08 | **Ouvert — à vérifier (R0.4) ; décision HUMAN sur le mécanisme d'identité Drive en production.** |
 | HUMAN @architect @risk-manager | **P3 configurable = amender l'invariant 5 du §10 (Architecte, 2026-10-08).** Un paramètre ne peut pas abaisser un invariant (invariant 8) : rendre l'auto-désignation configurable exige de réécrire l'invariant 5 en « jamais auto-approuvés ; une auto-proposition n'est permise que si le Dispositif l'autorise ». Paramètre « auto-désignation permise » désactivé par défaut, approuvé par le Comité ; si activé : approbation par un autre membre du groupe Risk Manager (`approved_by <> requested_by`), motif, audit, cumul marqué ; refus si aucun autre approbateur. B-0 (refus strict) reste compatible. | 2026-10-08 | **Ouvert — HUMAN : valider l'amendement de l'invariant 5.** |
 | HUMAN @architect | **P4 validé par l'Architecte (2026-10-08) avec un modèle plus simple** : `departments` reste l'entité métier (déjà cible de 5 FK) ; `roles.department_id` (nullable, unique par tenant) fait d'un groupe le groupe d'un département ; `processes.department_id` corrige F-11 ; la « direction du département » = membres du groupe rattaché ; `Department.riskOwner` (texte libre) gardé en lecture seule puis obsolète. Porté par B-8, utilisé par B-5. | 2026-10-08 | **Ouvert — HUMAN : confirmer ce modèle (P4 était conditionné à la validation Architecte).** |
@@ -647,6 +652,126 @@ DECISION: Envoi **configurable depuis l'administration** : fournisseur par
   nom affiché « GRC Tools » s'affiche, mais l'adresse reste visible ; pour
   la masquer, utiliser une adresse dédiée.
 RELATED: DECISION-017, DECISION-022, DECISION-023, lot B-11.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ
+```
+
+```text
+DECISION-025
+DATE: 2026-10-08
+QUESTION: Arbitrages saisis par le PO dans la page de pilotage (q01, q02,
+  q03, q04, q06, q11, q12, q13), relus par l'orchestrateur le 2026-10-08.
+DECISION:
+  q01 — **GO pour tout R0** (R0.1 à R0.6) : B-0, correctif de l'import de
+    risques, suppression vers le dossier Drive « supprimé » avec
+    authentification Drive configurable, resynchronisation Git, README et
+    runbook.
+  q02 — Fenêtre de refus : noms masqués pour les permissions sensibles
+    uniquement (levée d'identité des signalements, journal d'audit,
+    gestion des rôles) ; « Contactez la fonction conformité » à la place.
+  q03 — Les trois protections gratuites : sauvegarde quotidienne de la
+    base de production par GitHub Actions (30 jours), rollback écrit et
+    testé en staging, mise en veille Render acceptée.
+  q04 — OD-4 : le Risk Owner statue sur chaque contribution (Délégué
+    désignable par le Dispositif, jamais l'auteur) ; Retenue / Écartée
+    (motif) / Sans suite ; append-only ; configurable.
+  q06 — Procédure de migration tenue par le PO ; recette métier par
+    Charles Kouassi et Aboubacar Ouattara.
+  q11 — Antivirus en deux temps : contrôles V1 sur Render (.xlsx seul,
+    signature, plafonds de taille et de ratio, formules jamais exécutées,
+    module antivirus branchable désactivé) ; ClamAV ou service cloud à la
+    migration.
+  q12 — Échec d'écriture de l'audit : l'action est bloquée (même
+    transaction), pas de trace pas d'accès pour les consultations
+    confidentielles, alerte à l'équipe risque et au support.
+  q13 — Plateforme dans l'Administration, Dispositif dans son espace,
+    raccourcis seulement dans les sections.
+  Variables saisies dans la page : identifiants des dossiers Drive
+    « actif » / « supprimé » pour staging et production. Les secrets
+    (clés de compte de service Drive, e-mail, TestSprite) restent à
+    poser dans Render / GitHub par le PO.
+RELATED: DECISION-021, DECISION-022, ROADMAP-V1 R0, OD-4, AUD-002, EVD-2.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — R0 lancé le 2026-10-08.
+```
+
+```text
+DECISION-026
+DATE: 2026-10-08
+QUESTION: Comité asynchrone — option par défaut (q05, B-12).
+DECISION: Le PO ne fixe pas d'option par défaut. Le Dispositif propose des
+  **règles prédéfinies** (A Léger, B Standard, C Strict, telles que
+  décrites dans q05) **et permet de créer une règle personnalisée** :
+  groupes qui valident, quorum, majorité, délai, relances. Les règles
+  fixes restent non configurables : jamais de validation tacite, jamais
+  un seul membre, auteurs et RO / Délégué / Exécuteur exclus du vote,
+  vote motivé et tracé, escalade à l'échéance, groupe vide refusé.
+RELATED: B-12, F-14 (`validateByCommittee` à un seul membre).
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — à intégrer à l'amendement de contrat étape 2.
+```
+
+```text
+DECISION-027
+DATE: 2026-10-08
+QUESTION: Reprise du registre (RRI) — q14, q15, q16.
+DECISION:
+  q14 — À l'import, **vérification des colonnes et rapprochement avec le
+    Dispositif** : le client fait lui-même le lien entre les objets de son
+    fichier et ceux du système (ex. « process », « processus », libellés
+    de processus, d'axes, de niveaux), pour absorber les nomenclatures
+    changeantes. Aucun rapprochement implicite.
+  q15 / q16 — Les cotations du fichier deviennent des **propositions de
+    cotation** quand la matrice P × I du fichier est la même que celle du
+    Dispositif ; sinon elles restent en historique « reprise ». Une
+    proposition reste soumise au parcours normal (revue, validation par
+    un tiers) : l'import ne contourne jamais le maker-checker.
+  Non tranché explicitement (recommandations maintenues par défaut,
+    question de confirmation q17 posée dans la page) : objets importés en
+    brouillon activés par l'équipe risque ; périmètre risques, processus
+    et contrôles ; Google Sheets par téléchargement .xlsx en V1, lien
+    direct en V1.1.
+RELATED: `docs/architecture/ADMIN-et-RRI-cadrage.md`, lot RRI (R3).
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ en partie — confirmation q17 ouverte.
+```
+
+```text
+DECISION-028
+DATE: 2026-10-08
+QUESTION: Revue des maquettes Penpot alors que le serveur MCP Penpot ne
+  tourne que sur le terminal du PO (inaccessible depuis la session cloud).
+DECISION: Le frontend avance d'abord sur le **design system**
+  (`packages/design-system`) dans la session cloud ; la **revue Penpot du
+  front** se fait ensuite dans une session Claude Code locale du PO (MCP
+  Penpot disponible), lancée avec `claude remote-control` depuis le dossier
+  du dépôt pour la piloter aussi depuis l'application. Échange par le
+  dépôt : la session locale écrit ses constats dans un fichier de revue ou
+  en commentaires de PR, la session cloud corrige. Pas de tunnel exposant
+  le serveur MCP Penpot ou son jeton sur Internet.
+RELATED: DECISION-022 (Penpot), ROADMAP-V1 F-lots.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — audit du design system lancé (UX + Dev Frontend).
+```
+
+```text
+DECISION-029
+DATE: 2026-10-08
+QUESTION: Arbitrages q17, q18, q19 saisis dans la page de pilotage.
+DECISION:
+  q17 — RRI : les trois points sont confirmés (objets importés en
+    brouillon activés par l'équipe risque ; V1 = risques, processus et
+    contrôles ; Google Sheets par téléchargement .xlsx en V1, lien direct
+    en V1.1). Clôt la confirmation ouverte de DECISION-027.
+  q18 — Migration 047 validée telle quelle : `risk.owner.assign` pour les
+    détenteurs de `role.assign` et les rôles nommés exactement « Risk
+    Manager ». Débloque la fusion de la PR #140 dans `staging`.
+  q19 — Clé de compte de service Drive longue durée sur Render acceptée
+    jusqu'à la migration Cloud Run / AWS, avec mesures : compte dédié
+    membre des deux dossiers partagés seulement, rotation tous les 90 jours
+    et à chaque départ d'une personne ayant accès à Render, jamais dans le
+    dépôt ni la page de pilotage.
+RELATED: DECISION-025, DECISION-027, SEC-R04-3, PR #140.
 OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ
 ```
