@@ -79,3 +79,30 @@ describe("GoogleDriveStorage.delete", () => {
     expect(storage.calls).toEqual([]);
   });
 });
+
+describe("GoogleDriveStorage.checkFolders", () => {
+  it("reports each configured folder as OK", async () => {
+    const storage = new FakeDriveStorage({
+      tenantFolderResolver: async () => "tenant-folder",
+      activeFolderId: "active-folder",
+      deletedFolderId: "deleted-folder",
+    });
+    expect(await storage.checkFolders()).toEqual(["active folder: OK", "deleted folder: OK"]);
+  });
+
+  it("reports a failure with its status only, and a missing folder as not configured", async () => {
+    class Denied extends GoogleDriveStorage {
+      protected override async drive() {
+        return {
+          files: {
+            get: async () => {
+              throw Object.assign(new Error("File not found: secret-detail"), { code: 404 });
+            },
+          },
+        } as never;
+      }
+    }
+    const storage = new Denied({ tenantFolderResolver: async () => "t", activeFolderId: "active-folder" });
+    expect(await storage.checkFolders()).toEqual(["active folder: FAILED (404)", "deleted folder: not configured"]);
+  });
+});
