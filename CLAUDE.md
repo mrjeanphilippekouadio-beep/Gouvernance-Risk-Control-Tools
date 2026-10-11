@@ -301,7 +301,7 @@ dispatch. Avant de dispatcher un travail réel à un agent frais :
    ils ajoutent des tests) — solution la plus simple qui fonctionne,
    jamais d'abstraction spéculative ni de dépendance non nécessaire.
    Consigne permanente du Product Owner, valable sur ce projet et tous
-   les suivants (voir `~/.agentic-framework/agents/dev-backend/LEARNINGS.md`).
+   les suivants (à porter dans PEOS, voir étape 7).
 6. **Demande une vérification avant de rapporter fini** :
    `npm run typecheck && npm test` côté backend, `npm run build` côté
    frontend, systématiquement avant de considérer une tâche terminée.
@@ -312,16 +312,27 @@ dispatch. Avant de dispatcher un travail réel à un agent frais :
 7. **Consulte `.claude/agent-context/`** avant de rédiger le prompt de
    dispatch : `SHARED_LOG.md` (grep le tag `@<rôle>` de l'agent que tu
    dispatches), `ACTION_ITEMS.md` (un point déjà ouvert sur son
-   périmètre ?) et, s'il existe, `memory/<rôle>.md` (mémoire dédiée du
-   rôle : ses principes et positions passées, à faire lire en premier par
-   l'agent dispatché, puis à mettre à jour après son retour). Après le dispatch, si l'agent a pris une décision qui
+   périmètre ?) et `memory/<rôle>.md` (mémoire dédiée du rôle : ses
+   principes et positions passées, à faire lire en premier par l'agent
+   dispatché). **Cette mémoire est obligatoire, pas optionnelle** : si
+   elle n'existe pas, l'agent la crée à la fin de sa tâche ; dans tous
+   les cas, l'orchestrateur vérifie qu'elle a été mise à jour avant de
+   fusionner le travail de l'agent (incident du 2026-10-11 : dev-backend,
+   devops, qa-engineer et orchestrator n'avaient aucune mémoire — tout ce
+   qu'ils avaient appris était perdu). Après le dispatch, si l'agent a pris une décision qui
    concerne le périmètre d'un autre rôle (même non dispatché), ajoute
    une entrée dans `SHARED_LOG.md` avec le bon tag — c'est le mécanisme
    de "mise en copie" qui permet à un agent jamais appelé de ne pas
    repartir de zéro le jour où on l'active. Ce qui a une valeur au-delà
    de ce seul projet (une convention, une règle d'autorisation) se
-   reporte en plus dans `~/.agentic-framework/agents/<rôle>/LEARNINGS.md`
-   (en dehors du dépôt — survit au projet, alimente le suivant).
+   reporte en plus dans **PEOS** (dépôt `Personal-Engineering-OS`), où
+   vivent les modèles d'agents : fiche `patterns/<domaine>/PATTERN-*.md`
+   au statut `candidate`, anonymisée selon
+   `docs/knowledge/PROMOTION_POLICY.md`, référencée par rôle dans
+   `agents/ROLE_KNOWLEDGE.yaml` pour être chargée à la création de
+   l'agent, puis validée par HUMAN via PR. L'ancien chemin
+   `~/.agentic-framework/` est abandonné : hors dépôt, il ne survit pas
+   à une session cloud.
 7bis. **Toute décision "en attente de validation PO/HUMAN explicite"
    est un item trackable, pas une phrase de conclusion.** Incident du
    2026-09-28 (root cause dans `ACTION_ITEMS.md`, entrée

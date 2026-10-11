@@ -4,7 +4,11 @@
 >
 > Ce document consolide les décisions métier, UX et architecture arrêtées avant l'implémentation frontend. Il complète les Decision Logs existants ; il ne remplace pas les décisions antérieures.
 >
+> **Version : étape 2 intégrée, 2026-10-11 (DECISION-033 à DECISION-038).** Texte validé par le PO (DECISION-038 point 2). Source : `docs/architecture/RM-V1-Contrat-etape2-PROJET.md`.
+>
 > **Amendement du 2026-10-08** (DECISION-014 et DECISION-015, `.claude/agent-context/ACTION_ITEMS.md`) : modes de cotation, rôles Risk Owner / Délégué / Exécuteur, paramètres du Dispositif. Paragraphes touchés : §4, §5, §7, §8, §10, §16, §17 (Phase 4). Origine : `docs/architecture/RM-V1-Modes-cotation-objections.md` et `docs/architecture/RM-V1-Amendement-contrat-modes-PROJET.md`.
+>
+> **Amendement du 2026-10-11** (étape 2, DECISION-016 à 020, 025, 026, 027, 029, 030, 033 à 038) : échelle, axes et descriptifs dans le Dispositif ; groupes ; approbateur configurable ; auto-proposition de désignation ; Comité asynchrone ; état « Rejeté » ; statuts des contributions ; temps réel reporté en V2. Paragraphes touchés : §4, §5, §6, §7, §8, §10, §13, §14, §17.
 
 ## 1. Gouvernance de conception
 
@@ -92,7 +96,7 @@ Les autres anciens onglets/pages ne sont pas considérés comme définitifs : il
 
 L'identification officielle relève du Risk Owner.
 
-Le Risk Owner est un responsable métier (directeur de département, chef de projet, manager). Il est désigné au niveau du **Processus**, avec un **Délégué** quand l'effectif du département le permet ; les risques du Processus en héritent. Une surcharge sur un risque donné remplace toujours la paire Risk Owner + Délégué ensemble. La désignation est faite par la direction du département, approuvée par l'équipe risque et tracée (auteur, motif, valeur précédente, approbateur).
+Le Risk Owner est un responsable métier (directeur de département, chef de projet, manager). Il est désigné au niveau du **Processus**, avec un **Délégué** quand l'effectif du département le permet ; les risques du Processus en héritent. Une surcharge sur un risque donné remplace toujours la paire Risk Owner + Délégué ensemble. La désignation est proposée par la direction du département, approuvée par l'équipe risque (groupe Risk Manager) et tracée (auteur, motif, valeur précédente, approbateur). **La direction du département est le membre du groupe hiérarchiquement au-dessus des autres (directeur ou head of) ; il voit le travail des membres sur les risques, les contrôles et les objets qu'ils détiennent ou ont créés.** Chaque Processus est rattaché à un département.
 
 L'Analyse est une étape distincte de l'Identification et de l'Évaluation. Elle sert notamment à documenter causes, événements, impacts potentiels, contexte et contrôles connus.
 
@@ -122,11 +126,21 @@ L'Évaluation couvre :
 
 La saisie de l'Inhérent, de la Maîtrise et du Résiduel est attribuée selon le mode effectif de l'évaluation (§7). L'équipe risque saisit le Résiduel dans tous les modes.
 
+**Groupes.** L'« équipe risque » est le groupe fixe **Risk Manager**. Il ne peut jamais être vide (on ne peut donc pas retirer son dernier membre). Deux autres groupes fixes existent, **Risk Committee** et **Audit** ; ils peuvent être vides. Les départements sont aussi des groupes.
+
+**Responsable de la fonction risque.** Le « responsable de la fonction risque » est le responsable du service risque : il a des droits sur tous les risques, les contrôles et l'administration. Il peut suppléer le Comité si le groupe Risk Committee est vide.
+
+**Suppléance du Comité.** Si le groupe Risk Committee est vide, une personne au moins de la fonction risque (groupe Risk Manager) prend en charge ce que le Comité aurait approuvé (DECISION-035, q35). Garde-fous : jamais le demandeur ; jamais sur un acte dont cette personne est l'auteur, le Risk Owner, le Délégué ou l'Exécuteur ; jamais pour activer l'auto-proposition de désignation ; motif obligatoire et trace. La suppléance est inscrite au **journal des décisions prises en l'absence du Comité** ; elle remplace l'envoi refusé de la règle « groupe vide refusé » sans le supprimer, et est tracée comme telle.
+
+**Conflit de rôles.** Un membre du groupe Risk Manager qui est Risk Owner, Délégué ou Exécuteur d'un risque ne saisit ni ne revoit ce risque. Un autre membre du groupe le fait. Si toute l'équipe risque est concernée, la revue passe à Audit si son groupe n'est pas vide ; ensuite au Comité, puis à la suppléance (règles ci-dessus). L'équipe risque est alertée (signe de sous-effectif). Les groupes Comité et Audit ont chacun un journal des décisions prises en leur absence. Sur les autres risques, ce membre agit normalement. Le cumul est marqué visiblement (invariant 6).
+
+**Reprise d'un registre (import).** À l'import, le client relie lui-même les colonnes de son fichier aux objets du Dispositif ; aucun rapprochement n'est implicite. Les objets importés (risques, processus, contrôles) arrivent en brouillon et sont activés par l'équipe risque. Les cotations du fichier deviennent des propositions de cotation quand la matrice probabilité × impact du fichier est la même que celle du Dispositif ; sinon elles restent en historique « reprise ». Une proposition suit le parcours normal (revue, validation par un tiers) : l'import ne contourne jamais le maker-checker. L'auteur d'une cotation importée est la personne qui importe. Seule l'équipe risque importe un Résiduel. En V1, le fichier est un .xlsx (le lien direct vers un tableur en ligne est prévu en V1.1).
+
 Le Risk Owner décide du traitement ; il ne cote pas. Le Délégué remplace le Risk Owner en son absence ou par délégation datée ; il ne valide jamais ses propres actes ; la responsabilité reste au Risk Owner.
 
 Un acteur ne valide jamais ce qu'il a saisi, revu ou exécuté : le validateur est différent de tous les auteurs de l'évaluation. Par défaut, le validateur est le responsable de la fonction risque, et le Comité au-delà du seuil de passage Comité (§8) ; ce choix est un paramètre du Dispositif (§10).
 
-**Revue de l'Inhérent saisi par la 1re ligne** (mode effectif Participatif) : un membre de l'équipe risque, différent de l'auteur, le **retient**, ou le **retourne / rejette avec une annotation obligatoire** ; un Inhérent retourné revient à la 1re ligne pour une nouvelle saisie. Tant que l'Inhérent n'est pas retenu, le Résiduel ne s'appuie pas dessus.
+**Revue de l'Inhérent saisi par la 1re ligne** (mode effectif Participatif) : un membre de l'équipe risque, différent de l'auteur, le **retient**, le **retourne** ou le **rejette**. Une annotation est obligatoire pour un retour et pour un rejet. **Retourné** : on demande ou on apporte une précision. **Rejeté** : la saisie n'est pas applicable ou n'est pas bonne. Un Inhérent retourné ou rejeté revient à la 1re ligne pour une nouvelle saisie ; un rejet est comme un retour, mais il est gardé en historique et compté. Tant que l'Inhérent n'est pas retenu, le Résiduel ne s'appuie pas dessus.
 
 **Maîtrise** : qui la note est un **paramètre du Dispositif**, jamais une valeur figée en code (une organisation peut manquer de personnes pour séparer les saisies). Quand deux acteurs notent la même cellule, les deux saisies sont conservées, celle désignée par le paramètre fait foi (par défaut : l'équipe risque), un commentaire est obligatoire en cas d'écart, sans moyenne.
 
@@ -136,15 +150,23 @@ La maîtrise globale utilise la règle **MIN non-compensatoire**. Le backend res
 
 ## 6. Axes d'impact
 
-Le nombre d'axes d'impact **n'est pas fixe**. Il est déterminé par la Rating Scale active.
+Les axes d'impact (financier, réglementaire, opérationnel, etc.) et l'échelle sont choisis **à la création du Dispositif**. L'échelle a une taille de **3, 4, 5 ou 6** niveaux. La **probabilité et chaque axe d'impact ont la même taille d'échelle** (exemple : échelle de 4, probabilité sur 4 et chaque axe sur 4). Il y a **7 axes au maximum** ; ce chiffre est un plafond, jamais un nombre à supposer.
+
+**Chaque niveau porte son propre descriptif**, pour la probabilité et pour chaque axe (exemple : échelle de 5, donc 5 descriptifs pour la probabilité et 5 par axe). Les descriptifs sont saisis à la création du Dispositif.
+
+Le nombre d'axes reste déterminé par l'échelle du Dispositif applicable, jamais par le code.
 
 ```
 Impact retenu = MAX(valeur de tous les axes configurés)
 ```
 
-Le frontend doit donc itérer dynamiquement sur les axes retournés par le backend.
+Le frontend itère dynamiquement sur les axes retournés par le backend.
 
 **Aucun code ne doit supposer 7 axes.**
+
+Un changement d'échelle, d'axe ou de descriptif crée une nouvelle version du Dispositif et ne touche que les cycles à venir (invariant 9).
+
+**Affichage.** Le Dispositif est choisi à la création de l'espace client et/ou à la création du Dispositif ; les risques sont affichés par Dispositif, un à la fois.
 
 ## 7. Modes et contributions
 
@@ -163,6 +185,7 @@ Contributions :
 - elles interviennent sur les risques évalués en mode effectif **Participatif** ;
 - elles sont faites par la personne désignée par le Risk Owner : le Délégué, l'Exécuteur du contrôle ou le Risk Owner lui-même, toujours selon les règles du Dispositif ;
 - types : Identification ; Analyse ; Inherent ; Maîtrise ;
+- **statut d'une contribution.** Le Risk Owner statue sur chaque contribution : **Retenue** ou **Écartée** (motif obligatoire). « Sans suite » est retiré. Le Dispositif permet de créer des statuts de contribution personnalisés ; tout statut d'écartement porte une trace. Le Délégué peut statuer si le Dispositif le prévoit ; l'auteur de la contribution ne statue jamais sur la sienne. Chaque décision est conservée en historique (append-only). Cette règle est configurable dans le Dispositif. « Retenue » qualifie l'information reçue, jamais la cotation (Contribution ≠ Saisie) ;
 - le **Signalement** reste ouvert indépendamment du mode et du Dispositif (§10, DECISION-012).
 
 Aucune contribution ni saisie de 1re ligne sur le Résiduel. Une contribution apporte de l'information et ne cote jamais. La saisie de l'Inhérent par la 1re ligne n'est pas une contribution : c'est une auto-évaluation soumise à la revue du §5.
@@ -173,7 +196,7 @@ Rôles d'organisation (Risk Owner, Délégué, Exécuteur du contrôle) et ligne
 
 L'appétence est une référence de décision dans le cycle d'évaluation.
 
-Un dépassement peut déclencher une Treatment Decision, rattachée à l'évaluation qui l'a déclenchée. Le Risk Owner décide de la Treatment Decision (qui la propose reste à trancher).
+Un dépassement peut déclencher une Treatment Decision, rattachée à l'évaluation qui l'a déclenchée. **Le Risk Owner enregistre la Treatment Decision** ; le Délégué le fait quand le §5 l'autorise (absence ou délégation datée). **Il n'y a pas de proposeur distinct.** L'équipe risque peut joindre une **recommandation non contraignante**. La Treatment Decision est ensuite validée par un tiers, selon le §5.
 
 Options validées :
 
@@ -192,6 +215,26 @@ Deux seuils de Comité sont indépendants :
 
 Ils sont configurables et ne doivent pas être traités comme une constante métier unique.
 
+**Vote du Comité à distance.** Le Comité peut valider par vote asynchrone, sans séance. À la création du Dispositif, le client choisit une règle parmi trois règles prédéfinies, ou crée une **règle personnalisée** (groupes qui valident, quorum, majorité, délai, relances). Aucune règle n'est imposée par défaut. Une règle personnalisée n'est limitée que par les règles fixes ci-dessous. Si le quorum est impossible (par exemple parce que presque tous les éligibles sont exclus du vote), l'envoi est refusé. La décision revient alors à la fonction risque : le responsable du service risque (groupe Risk Manager, accès à tous les risques) en suppléance, avec les garde-fous du §5 (q35) ; s'il est concerné, Audit si son groupe n'est pas vide, sinon un autre membre du groupe Risk Manager non concerné. Jamais l'administrateur du client (il peut être une personne de l'équipe technique). Motif obligatoire et trace ; Audit est notifié ; la décision est inscrite au journal des décisions prises en l'absence du Comité ; jamais de validation tacite (DECISION-038).
+
+| Règle | Pour qui | Décision | Quorum | Délai | Relances |
+|---|---|---|---|---|---|
+| **A Léger** | petite structure | 2 votants d'accord | 2 | 5 jours | — |
+| **B Standard** | structure moyenne | majorité des votants | au moins 3 | 10 jours | à 50 % et à 90 % du délai |
+| **C Strict** | grande structure ou très régulée | unanimité | au moins 2/3 des éligibles, 4 minimum | 15 jours | — |
+
+Règles fixes, qu'aucune règle ne peut changer :
+
+- jamais de validation tacite : le silence n'est pas un accord ;
+- à l'échéance, escalade : jamais de clôture automatique ;
+- jamais un seul membre ; un quorum de 2 n'existe que dans la règle A ;
+- les auteurs et le Risk Owner, le Délégué et l'Exécuteur concernés ne votent pas ;
+- chaque vote est motivé et tracé (append-only) ; un vote peut être retiré tant que la décision n'est pas close, le retrait étant lui aussi tracé ;
+- un groupe vide ne peut pas être sollicité (l'envoi est refusé) ;
+- le responsable de la fonction risque peut être membre du Comité, mais ne vote pas sur ce qu'il a saisi.
+
+**Audit.** Quand Audit est l'approbateur choisi, il vote avec les mêmes règles que le Comité (règles A, B, C ou personnalisée, mêmes règles fixes). L'écran de création affiche un avertissement sur l'indépendance d'Audit, et un indicateur suit la part des changements approuvés par Audit.
+
 ## 9. Meeting
 
 Le Meeting est une capacité transverse : ni mode d'évaluation, ni étape obligatoire, ni étape supplémentaire du stepper.
@@ -204,7 +247,7 @@ Le Meeting DJAMO est la source de vérité métier. Les calendriers externes son
 
 Le **Dispositif** est le cadre méthodologique de référence qui rend une évaluation interprétable et comparable.
 
-Il est distinct du Risque, du Processus, de l'Évaluation, de l'Appétence, du Meeting et de Risk 360.
+Il est distinct du Risque, du Processus, de l'Évaluation, du Meeting et de Risk 360. Il **porte** l'échelle, les grilles de cotation et l'appétence : ce sont des paramètres du Dispositif, versionnés avec lui.
 
 ### Règles validées
 
@@ -216,6 +259,9 @@ Il est distinct du Risque, du Processus, de l'Évaluation, de l'Appétence, du M
 - Le Dispositif est versionné : `DRAFT → ACTIVE → ARCHIVED`.
 - L'historique d'une évaluation ne doit jamais être réécrit par une modification ultérieure du Dispositif.
 - Le contexte méthodologique applicable doit être conservé dans l'évaluation.
+- La création d'un Dispositif se fait par un **assistant pas à pas**, activé par défaut. Une configuration directe reste possible pour les utilisateurs experts.
+- L'organisation peut **activer un Dispositif par défaut** fourni avec l'outil. Un Dispositif par défaut respecte les invariants comme tous les autres.
+- **Première activation.** Pour activer le tout premier Dispositif, on demande d'abord de créer un utilisateur dans le groupe risque au niveau hiérarchique le plus élevé. À défaut, l'administrateur du client, différent du demandeur, l'active, avec motif et trace, **une seule fois**.
 
 ### Traduction technique validée
 
@@ -235,18 +281,24 @@ Le Dispositif est **configurable** : le client final peut demander des modificat
 
 | Paramètre | Valeur par défaut |
 |---|---|
-| Mode par défaut (tenant, puis Processus — DECISION-006) | Classique |
+| Mode par défaut porté par le Dispositif, puis Processus (DECISION-006) | Classique (`Config.evaluationMode` devient obsolète) |
+| Changement de mode d'un Processus | Validé par la fonction risque (`process.evaluationmode.set` est retiré) |
 | Politique Hybride (choix du mode par risque) | Désactivée |
 | Qui note la Maîtrise, et quelle saisie fait foi | Selon le mode (§7) ; l'équipe risque fait foi |
 | Cumul Risk Owner + Exécuteur | Autorisé jusqu'au seuil de criticité « faible » ; au-delà, exception approuvée et revue à chaque cycle |
-| Seuil de criticité « faible » | Inscrit à la création du Dispositif |
+| Seuil de criticité « faible » | Inscrit à la création du Dispositif ; configurable par le groupe Risk Manager, tout changement est tracé et approuvé |
 | Cumul Délégué + Exécuteur | Autorisé, le Délégué ne validant pas sa propre exécution |
 | Délégué | Recommandé, jamais bloquant (« Non désigné (équipe trop réduite) ») |
 | Durée d'une délégation datée | Fixée par le client |
 | Validateur | Responsable de la fonction risque ; Comité au-delà du seuil (§8) |
 | Désignation des rôles | Direction du département ; approbation par l'équipe risque |
-| Approbateur d'un changement de paramètre de séparation des tâches | Comité |
-| Échelles, descriptions de probabilité, appétence, seuils Comité | Déjà paramétrables |
+| Approbateur d'un changement de paramètre | Par défaut : la fonction risque approuve et Audit est notifié si son groupe n'est pas vide. Le Dispositif peut exiger l'approbation d'Audit et/ou du Comité. Audit vote avec les règles du Comité (§8) |
+| Échelle et axes | Taille 3, 4, 5 ou 6 ; 7 axes au maximum ; fixés à la création (§6) |
+| Descriptifs des niveaux | Un descriptif par niveau, pour la probabilité et pour chaque axe, saisi à la création |
+| Appétence et grilles de cotation | Paramètres du Dispositif |
+| Seuils de passage Comité (§8) | Paramètres du Dispositif, figés dans l'instantané de chaque évaluation |
+| Règle du Comité asynchrone | Règle prédéfinie (A, B, C) ou personnalisée, choisie à la création (§8) |
+| Auto-proposition de désignation | Désactivée par défaut. Seul le Comité l'active (invariant 5) |
 
 **Invariants** (aucun paramètre ne peut les modifier) :
 
@@ -254,13 +306,14 @@ Le Dispositif est **configurable** : le client final peut demander des modificat
 2. Risk Owner ≠ Délégué ; pas de Délégué sans Risk Owner.
 3. Le Résiduel est saisi par l'équipe risque ; aucune contribution ni saisie de 1re ligne sur le Résiduel.
 4. Le mode effectif d'une évaluation est Classique ou Participatif, jamais Hybride.
-5. Toute désignation (Risk Owner, Délégué, Exécuteur) et tout changement de paramètre sont tracés (auteur, motif, valeur précédente, approbateur), approuvés par un tiers, jamais auto-attribués ni auto-approuvés.
+5. Toute désignation (Risk Owner, Délégué, Exécuteur) et tout changement de paramètre sont tracés (auteur, motif, valeur précédente, approbateur) et approuvés par un tiers. **Rien n'est jamais auto-approuvé.** Une **auto-proposition** (se désigner soi-même) n'est permise que si le Dispositif l'autorise. Ce paramètre est désactivé par défaut et son activation est décidée par le Comité. Quand il est activé : un **autre membre du groupe Risk Manager** approuve, avec motif et audit, et le cumul est marqué. S'il n'y a aucun autre approbateur, la demande est refusée. Un Comité vide ne peut pas l'activer, même en suppléance (§5).
 6. Tout cumul de rôles est marqué visiblement.
-7. Les champs d'attribution sont forcés côté serveur ; l'audit est append-only ; l'historique d'une évaluation n'est jamais réécrit.
+7. Les champs d'attribution sont forcés côté serveur ; l'audit est append-only ; l'historique d'une évaluation n'est jamais réécrit. **Si l'écriture de l'audit échoue, l'action est bloquée** (l'action et son audit sont dans la même transaction) ; une consultation confidentielle sans trace est refusée ; l'équipe risque et le support sont alertés.
 8. Un paramètre ne peut jamais abaisser un invariant, ni être modifié pour faire disparaître un dépassement d'appétence.
 9. Un changement ne touche que les cycles à venir ; les évaluations en cours gardent leur instantané.
+10. Quelle que soit la règle de Comité choisie (prédéfinie ou personnalisée) : jamais de validation tacite ni de clôture automatique (escalade à l'échéance), jamais un seul membre, auteurs et Risk Owner / Délégué / Exécuteur exclus du vote, vote motivé et tracé, groupe vide refusé.
 
-**Gouvernance d'un changement de paramètre** : l'administrateur du Dispositif (`riskframework.update`) le demande, avec un motif écrit ; le responsable de la fonction risque, différent du demandeur, l'approuve, ou le Comité pour les paramètres de séparation des tâches. Le changement crée une nouvelle version du Dispositif (`DRAFT → ACTIVE`), jamais une modification en place. Le Comité n'étant pas disponible à tout moment, la version reste en `DRAFT` jusqu'à sa séance ; rien n'impose une décision immédiate, puisque l'effet n'intervient qu'au cycle suivant. L'audit conserve l'ancienne et la nouvelle valeur.
+**Gouvernance d'un changement de paramètre** : les possibilités de configuration sont détenues par la fonction risque (groupe Risk Manager) et tracées. Le changement est demandé avec un motif écrit. **Par défaut, la fonction risque approuve le changement, différente du demandeur, et Audit est notifié si son groupe n'est pas vide. Le Dispositif peut exiger l'approbation d'Audit et/ou du Comité.** Quand l'approbateur est Audit, il vote avec les règles du Comité (§8). Si le groupe Comité est vide, une personne au moins de la fonction risque prend en charge ce que le Comité aurait approuvé, avec les garde-fous et le journal du §5. On ne peut pas vider un groupe déjà choisi comme approbateur ; pour le Comité, la suppléance s'applique s'il est vide. Le changement crée une nouvelle version du Dispositif (`DRAFT → ACTIVE`), jamais une modification en place. Tant que l'approbateur n'a pas décidé, la version reste en `DRAFT` ; rien n'impose une décision immédiate, puisque l'effet n'intervient qu'au cycle suivant. Quand l'approbateur est le Comité, il décide en séance ou par vote asynchrone selon sa règle (§8). L'audit conserve l'ancienne et la nouvelle valeur.
 
 Le mode d'un risque donné ne peut différer de celui du Processus que si la politique Hybride l'autorise ; ce choix est motivé, approuvé et prend effet au cycle suivant. Le Dispositif n'est jamais redéfini risque par risque : il est résolu et affiché à l'ajout du risque. Les paramètres et les désignations en vigueur sont figés par instantané dans chaque évaluation.
 
@@ -309,9 +362,17 @@ L'expérience doit privilégier :
 
 Le Dispositif peut être présenté comme **Référentiel méthodologique** dans l'UX. Dans l'évaluation, il apparaît comme contexte en lecture seule et ne devient pas une étape de cotation.
 
+Autres points validés :
+
+- création du Dispositif par un assistant pas à pas, configuration directe pour les experts ;
+- notifications dans l'application et par e-mail ;
+- accessibilité : WCAG 2.1 AA est le critère de sortie de chaque composant (tests automatiques et passe visuelle pour les contrastes).
+
 Penpot est la référence visuelle avant implémentation.
 
 ## 14. WebSocket-ready
+
+La V1 est livrée **WebSocket-ready** : abstraction `RealtimeClient`, REST autoritaire, stratégie de resynchronisation, événements métier nommés et versionnés. **Le serveur WebSocket fait partie de la V2**, avec les retours futurs du client (DECISION-020). Le contrat événementiel complet et les tests temps réel suivent le serveur, donc la V2.
 
 Le frontend doit être préparé pour le temps réel sans implémenter le WebSocket dans le premier lot.
 
@@ -421,7 +482,9 @@ Ordre recommandé :
 17. audit ;
 18. historique.
 
-### Phase 6 — Temps réel
+### Phase 6 — Temps réel (reportée en V2, DECISION-020)
+
+En V1, seule la préparation du §14 est livrée. Les étapes 19 à 23 restent listées pour la V2.
 
 19. Contrat événementiel Architect + Backend.
 20. WebSocket backend.
@@ -435,7 +498,7 @@ Ordre recommandé :
 25. QA UX / Penpot.
 26. QA sécurité / permissions.
 27. QA historique / audit.
-28. QA realtime.
+28. QA realtime (en V1, vérifie seulement que la V1 est WebSocket-ready).
 29. Validation Risk Manager.
 30. Validation UX.
 31. Validation Architecte.

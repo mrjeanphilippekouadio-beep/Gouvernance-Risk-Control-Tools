@@ -36,9 +36,13 @@ ait à le lui redemander à chaque fois. Deux fichiers :
 Ce dossier est **local à ce dépôt** — il disparaît avec le projet. Ce
 qui a une valeur au-delà de ce seul projet (une convention, une règle
 d'autorisation, un pattern qui a marché ou pas) doit être remonté par
-l'orchestrateur dans `~/.agentic-framework/agents/<role>/LEARNINGS.md`
-(en dehors du dépôt, voir son propre README) — c'est ce dossier-là qui
-survit au projet et enrichit le suivant.
+l'orchestrateur (via A21) dans **PEOS**, le dépôt `Personal-Engineering-OS`
+où vivent les modèles d'agents : fiche `patterns/<domaine>/PATTERN-*.md`
+anonymisée, référencée par rôle dans `agents/ROLE_KNOWLEDGE.yaml`, validée
+par le PO en PR (voir `docs/knowledge/PROMOTION_POLICY.md` de PEOS). C'est
+ce dépôt-là qui survit au projet et renforce chaque agent dès sa création.
+L'ancien chemin `~/.agentic-framework/` est abandonné : hors dépôt, il ne
+survit pas à une session cloud.
 
 *Mis en place le 27 septembre 2026, à la demande explicite du Product
 Owner — voir `RETEX_MULTI_AGENTS.md` pour le contexte complet de cette

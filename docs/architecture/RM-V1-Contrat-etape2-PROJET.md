@@ -1,9 +1,9 @@
 # RM V1 — Étape 2 : projet de report des décisions dans le contrat
 
-**Statut : PROJET, réponses du PO intégrées (2026-10-11, dont DECISION-035), en attente de validation finale du PO ; seul le point q37 reste à valider.** Le contrat `.claude/agent-context/RISK_MANAGEMENT_V1_FINAL_DECISIONS.md` n'est pas modifié.
+**Statut : VALIDÉ par le PO (DECISION-038, 2026-10-11).** Le point q37 est tranché (DECISION-038 point 1) et le texte final de l'étape 2 est validé (point 2). Ce texte est reporté dans le contrat `.claude/agent-context/RISK_MANAGEMENT_V1_FINAL_DECISIONS.md`.
 Auteur : Risk Manager (A13), 2026-10-11. Relu par le Product Manager (A03) le 2026-10-11 : voir la section 12. Tâche R1.1 de `docs/ROADMAP-V1.md`, étape 2 de `docs/architecture/RM-V1-Sequence-actions.md`.
-Décisions reportées : DECISION-016 à 020, plus les décisions suivantes qui touchent le contrat (021, 025, 026, 027, 029, 030), plus les réponses du PO aux questions Q-E2-1 à Q-E2-11 (DECISION-033 et DECISION-034, 2026-10-11), plus les confirmations q34 à q39 (DECISION-035, 2026-10-11).
-Distinction utilisée : **[PO]** = décidé par le PO, repris tel quel (avec la référence de la décision). **[Rédaction]** = conséquence formulée par le rédacteur, pas écrite dans une décision : le PO la valide ou la refuse avec le reste. **Interprétation à confirmer** = lecture d'une réponse du PO qui n'est pas certaine : elle est reprise dans la section 13 (aucune pour l'instant ; seule la proposition q37 y figure).
+Décisions reportées : DECISION-016 à 020, plus les décisions suivantes qui touchent le contrat (021, 025, 026, 027, 029, 030), plus les réponses du PO aux questions Q-E2-1 à Q-E2-11 (DECISION-033 et DECISION-034, 2026-10-11), plus les confirmations q34 à q39 (DECISION-035, 2026-10-11), plus la validation de q37 et du texte final (DECISION-038, 2026-10-11).
+Distinction utilisée : **[PO]** = décidé par le PO, repris tel quel (avec la référence de la décision). **[Rédaction]** = conséquence formulée par le rédacteur, pas écrite dans une décision ; le texte final est validé par DECISION-038 point 2. **Interprétation à confirmer** = lecture d'une réponse du PO qui n'est pas certaine (aucune ne reste).
 Le cadre de la page Cartographie n'est pas touché par ce projet.
 
 ---
@@ -18,7 +18,7 @@ Le cadre de la page Cartographie n'est pas touché par ce projet.
 6. **Un membre de l'équipe risque ne revoit pas un risque dont il est Risk Owner, Délégué ou Exécuteur.** Un autre membre s'en charge. Si toute l'équipe risque est concernée, la revue passe à Audit si son groupe n'est pas vide, puis au Comité, puis à la suppléance ; l'équipe risque est alertée. Sur les autres risques, il travaille normalement.
 7. **Le Risk Owner enregistre lui-même la décision de traitement.** Il n'y a plus de « proposeur ». L'équipe risque peut seulement joindre une recommandation qui ne lie personne.
 8. **« Retourné » et « Rejeté » sont deux états différents, avec le même effet pratique.** Retourné : on demande ou on apporte une précision. Rejeté : la saisie n'est pas applicable ou n'est pas bonne. Après un rejet, la saisie revient à la 1re ligne comme après un retour ; le rejet reste en historique et est compté.
-9. **Le Comité peut voter à distance, avec une règle choisie à la création du Dispositif** : A Léger (2 votants d'accord, 5 jours), B Standard (majorité, 3 votants au moins, 10 jours), C Strict (unanimité, 15 jours), ou une règle personnalisée (seuls les planchers fixes s'imposent ; si le quorum est impossible, l'envoi est refusé puis escalade ; destinataire : proposition en attente, q37). Le PO ne fixe pas de règle par défaut. Dans toutes les règles : pas de validation par silence, jamais un seul membre, auteurs et Risk Owner / Délégué / Exécuteur ne votent pas, vote motivé et tracé, escalade à l'échéance (jamais de clôture automatique), groupe vide refusé. Un vote peut être retiré tant que la décision n'est pas close.
+9. **Le Comité peut voter à distance, avec une règle choisie à la création du Dispositif** : A Léger (2 votants d'accord, 5 jours), B Standard (majorité, 3 votants au moins, 10 jours), C Strict (unanimité, 15 jours), ou une règle personnalisée (seuls les planchers fixes s'imposent ; si le quorum est impossible, l'envoi est refusé et la décision revient à la fonction risque, jamais à l'administrateur du client : le responsable du service risque en suppléance, avec les garde-fous q35 ; s'il est concerné, Audit si son groupe n'est pas vide, sinon un autre membre du groupe Risk Manager non concerné ; motif, trace, Audit notifié, journal des décisions prises en l'absence du Comité, DECISION-038). Le PO ne fixe pas de règle par défaut. Dans toutes les règles : pas de validation par silence, jamais un seul membre, auteurs et Risk Owner / Délégué / Exécuteur ne votent pas, vote motivé et tracé, escalade à l'échéance (jamais de clôture automatique), groupe vide refusé. Un vote peut être retiré tant que la décision n'est pas close.
 10. **Le Risk Owner statue sur chaque contribution** (retenue ou écartée avec motif ; « Sans suite » est retiré ; le Dispositif permet de créer des statuts de contribution personnalisés, et tout statut d'écartement porte une trace). L'import d'un registre ne contourne jamais la revue : l'auteur d'une cotation importée est la personne qui importe, et seule l'équipe risque importe un Résiduel.
 11. **Premier Dispositif.** On demande d'abord de créer un utilisateur dans le groupe risque au niveau hiérarchique le plus élevé ; à défaut, l'administrateur du client (différent du demandeur) l'active, avec motif et trace, une seule fois.
 12. Si l'audit ne peut pas être écrit, l'action est bloquée. Le temps réel (WebSocket) passe en V2.
@@ -159,7 +159,7 @@ Note : le détail technique (colonnes, tables) n'a pas sa place dans le contrat.
 ### 6.2 Comité asynchrone (nouveau paragraphe, après « Deux seuils de Comité sont indépendants »)
 
 **Texte proposé**
-> **Vote du Comité à distance.** Le Comité peut valider par vote asynchrone, sans séance. À la création du Dispositif, le client choisit une règle parmi trois règles prédéfinies, ou crée une **règle personnalisée** (groupes qui valident, quorum, majorité, délai, relances). Aucune règle n'est imposée par défaut. **Une règle personnalisée n'est limitée que par les règles fixes ci-dessous. Si le quorum est impossible (par exemple parce que presque tous les éligibles sont exclus du vote), l'envoi est refusé, puis il y a escalade.** *(Proposition en attente (q37), à valider par le PO : si le quorum est impossible, l'envoi est refusé et la décision est prise par le responsable du service risque en suppléance (règles de 3.1). S'il est concerné, la décision revient à Audit si son groupe n'est pas vide, sinon à l'administrateur du client, avec motif. Audit est notifié dans tous les cas. La décision est inscrite au journal des décisions prises en l'absence du Comité. Jamais de validation tacite.)*
+> **Vote du Comité à distance.** Le Comité peut valider par vote asynchrone, sans séance. À la création du Dispositif, le client choisit une règle parmi trois règles prédéfinies, ou crée une **règle personnalisée** (groupes qui valident, quorum, majorité, délai, relances). Aucune règle n'est imposée par défaut. **Une règle personnalisée n'est limitée que par les règles fixes ci-dessous. Si le quorum est impossible (par exemple parce que presque tous les éligibles sont exclus du vote), l'envoi est refusé. La décision revient alors à la fonction risque : le responsable du service risque (groupe Risk Manager, accès à tous les risques) en suppléance, avec les garde-fous de 3.1 (q35) ; s'il est concerné, Audit si son groupe n'est pas vide, sinon un autre membre du groupe Risk Manager non concerné. Jamais l'administrateur du client (il peut être une personne de l'équipe technique). Motif obligatoire et trace ; Audit est notifié ; la décision est inscrite au journal des décisions prises en l'absence du Comité ; jamais de validation tacite.** **[PO, DECISION-038 point 1]**
 >
 > | Règle | Pour qui | Décision | Quorum | Délai | Relances |
 > |---|---|---|---|---|---|
@@ -178,7 +178,7 @@ Note : le détail technique (colonnes, tables) n'a pas sa place dans le contrat.
 >
 > **Audit.** Quand Audit est l'approbateur choisi, il vote avec les mêmes règles que le Comité (règles A, B, C ou personnalisée, mêmes règles fixes). L'écran de création affiche un avertissement sur l'indépendance d'Audit, et un indicateur suit la part des changements approuvés par Audit.
 
-**Décision source** : DECISION-026 (q05, B-12), réponses du PO à q05 et aux trois questions de DECISION-017 point 4 (cockpit, transmises par l'orchestrateur A02 ; pas encore inscrites dans le Decision Log, voir section 12) ; DECISION-034 (q29 / Q-E2-7 pour la règle personnalisée, q27 / Q-E2-5 pour Audit). **[PO]** pour tout le tableau, toutes les règles fixes, la phrase sur la règle personnalisée et le paragraphe Audit. **[Rédaction]** : « le retrait étant lui aussi tracé » (conséquence de « vote tracé ») ; les cellules « — » signifient « non précisé par le PO », pas « sans relance ». La cohérence avec le plancher « jamais un seul membre » (le quorum de 2 reste donc le minimum) est vérifiée. Vers qui se fait l'escalade quand le quorum est impossible : section 13.
+**Décision source** : DECISION-026 (q05, B-12), réponses du PO à q05 et aux trois questions de DECISION-017 point 4 (cockpit, transmises par l'orchestrateur A02 ; pas encore inscrites dans le Decision Log, voir section 12) ; DECISION-034 (q29 / Q-E2-7 pour la règle personnalisée, q27 / Q-E2-5 pour Audit). **[PO]** pour tout le tableau, toutes les règles fixes, la phrase sur la règle personnalisée et le paragraphe Audit. **[Rédaction]** : « le retrait étant lui aussi tracé » (conséquence de « vote tracé ») ; les cellules « — » signifient « non précisé par le PO », pas « sans relance ». La cohérence avec le plancher « jamais un seul membre » (le quorum de 2 reste donc le minimum) est vérifiée. Vers qui se fait l'escalade quand le quorum est impossible : DECISION-038 point 1 **[PO]** (le dernier recours « administrateur du client » de la proposition initiale a été refusé par le PO).
 
 ---
 
@@ -346,7 +346,7 @@ Effet : 7.2, puce « Première activation ».
 
 **Q-E2-7 (q29). Limites d'une règle de Comité personnalisée.**
 Réponse du PO : planchers fixes seulement ; quorum impossible = envoi refusé puis escalade.
-Effet : 6.2, deux phrases ajoutées. La destination de l'escalade : proposition en attente (q37), section 13.
+Effet : 6.2, deux phrases ajoutées. La destination de l'escalade (q37) est tranchée par DECISION-038 point 1 et reportée en 6.2.
 
 **Q-E2-8 (q30). Que devient une saisie « Rejetée » ?**
 Réponse du PO : rejet = comme un retour, gardé en historique et compté.
@@ -386,16 +386,18 @@ Fait depuis par l'orchestrateur : la réponse du PO à q05 est inscrite (DECISIO
 
 ## 13. Points restant à confirmer par le PO
 
-Seules les lectures douteuses sont listées ; aucune règle n'est inventée pour les combler.
+Aucun point ne reste à confirmer.
 
-Points q34, q35, q36, q38 et q39 tranchés par DECISION-035 (2026-10-11) et reportés dans le texte. Reste un seul point.
+Points q34, q35, q36, q38 et q39 tranchés par DECISION-035 (2026-10-11) et reportés dans le texte.
 
-1. **Q-E2-7 / q29 / q37. Proposition en attente (q37), à valider par le PO.** Quand le quorum d'une règle de Comité est impossible : l'envoi est refusé ; la décision est prise par le responsable du service risque en suppléance (règles de 3.1, q35) ; s'il est concerné, Audit décide si son groupe n'est pas vide, sinon l'administrateur du client, avec motif ; Audit est notifié dans tous les cas ; la décision est inscrite au journal des décisions prises en l'absence du Comité ; jamais de validation tacite. Le PO valide-t-il cette proposition ?
+1. **Q-E2-7 / q29 / q37. Tranché par DECISION-038 point 1 (2026-10-11).** Quand le quorum d'une règle de Comité est impossible : l'envoi est refusé ; la décision revient à la fonction risque, jamais à l'administrateur du client (il peut être une personne de l'équipe technique). Le responsable du service risque (groupe Risk Manager, accès à tous les risques) décide en suppléance, avec les garde-fous q35 ; s'il est concerné, Audit si son groupe n'est pas vide, sinon un autre membre du groupe Risk Manager non concerné. Motif, trace, Audit notifié, journal des décisions prises en l'absence du Comité, jamais de validation tacite. Reporté en 6.2.
+
+**Vigilance signalée au PO (non tranchée, texte inchangé).** La règle « Premier Dispositif » (résumé point 11, 7.2, Q-E2-6) cite encore l'administrateur du client comme dernier recours d'activation. DECISION-038 écarte l'administrateur du client pour q37 au motif qu'il peut être une personne de l'équipe technique ; le même motif vaut a priori pour la première activation. Le PO n'a tranché que q37 : à confirmer par le PO si cette règle doit rester telle quelle.
 
 ---
 
 ## Suite
 
-1. Le PO lit le résumé et la section 13, et valide ou corrige la proposition q37.
-2. Il valide, refuse ou modifie le texte ; la décision est inscrite au Decision Log (règle 7bis).
-3. Après validation, l'Orchestrateur applique le texte dans le contrat (A03 relit, R1.1) et l'étape 2 est marquée terminée dans `RM-V1-Sequence-actions.md`. Elle débloque B-9 et B-6 (étapes 8 et 9).
+1. Fait : le PO a validé q37 et le texte final (DECISION-038, 2026-10-11).
+2. Fait : le texte est reporté dans le contrat (A13), l'étape 2 est marquée FAIT dans `RM-V1-Sequence-actions.md`.
+3. À faire : relecture A03 (R1.1). L'étape 2 débloque B-9 et B-6 (étapes 8 et 9).

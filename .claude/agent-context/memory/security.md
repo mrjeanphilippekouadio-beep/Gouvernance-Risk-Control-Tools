@@ -35,3 +35,23 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - 17 couples route/champ rejoués sur vrais routeurs : 1 Mo de `{}` = 400 en 56-174 ms (avant 2,1 s / 540 Mo), imbriqué 16-54 ms, valides > max 6-16 ms. Aucun `z.array` nu hors `env.ts`.
 - Leçon : le garde-fou par regex (`z.array(` dans `api/v1`) est contournable (`.array()`, `z.record`, `z.tuple`, hors `api/v1`) ; un retest doit toujours évaluer le test garde-fou, pas seulement le correctif.
 - Notés non traités : `z.string()` sans `.max()` (~60), `limit` négatif audit-log, branding multer sans files/parts, `coveredRiskIds` max 1000 vs sélection UI. `express.json` 256 ko = durcissement optionnel.
+
+## Mini-lot DECISION-038 (2026-10-11, commit 620e759, revue statique) : PASS 1 et 2, point 3 INFO
+- `limit` audit-logs borné zod 1..500 : ferme la réserve S-1 (b). `from`/`to` = `new Date()` non validé, 500 générique sur date invalide (INFO). Les autres filtres sont paramétrés et tenant-scopés.
+- `ActionPlanService.close` : DELETED = même message/400 que inexistant, lookup tenant-scopé, pas d'oracle ; `evidenceId` n'entre que par `close()`. Résidu : TOCTOU minime, évidence supprimée après clôture.
+- KRI `Number()` brut : le repository normalise (`>0`, floor, pageSize <= 100, paramétré). Pire cas : `page=1e20`/`Infinity` donne OFFSET invalide, 500 générique. CVSS effectif 0 ; pas d'escalade.
+- Leçon : un `Number()` brut n'est pas un défaut en soi ; suivre la valeur jusqu'au SQL avant de coter (ici la normalisation du repository neutralise négatifs/NaN/énormes sauf OFFSET non représentable).
+
+## Revue B-9 échelle 3 à 6 (2026-10-11, commit 21cd420, revue statique) : PASS, aucune escalade (max CVSS 2,7)
+- `boundedArray` OK (6/7), mais `ScaleLevelSchema.label` sans `.max()` : stockage JSONB + audit (old+new) = F-B9-01 LOW 2,7. Même classe que S-1 (a) ; pousser `.max()` sur tous les `label`/`code` de config.
+- R-01 tenu côté service (`assertMutable`) mais `setJsonColumn` n'a pas `AND status='DRAFT'` : TOCTOU pré-existant, F-B9-02 INFO 2,2.
+- Plafonds 25 : tous les gardes sont `>=` (Comité) ou `>` (appétit), clamp vers la dernière bande en criticité : un score 30 n'échappe à rien (fail-closed). Limite fonctionnelle : appétit ne peut pas dépasser 25. Leçon : pour un plafond élargi, vérifier le SENS de la comparaison (plancher vs plafond) avant de conclure à un contournement.
+- `.down.sql` : aucun des 23 n'a de BEGIN ; le runner ignore les downs ; recommander `psql --single-transaction`.
+- Tracker (7bis) : F-B9-01 (A06), décision PO/Risk Manager sur appétit/Comité pour 6x6.
+
+## Revue B-8 groupes fixes (2026-10-11, commit efefbb1, statique) : PASS sauf point 4
+- Maker-checker, non-suppression/renommage, FOR UPDATE de `revokeFromUser`, IDOR `departmentId`, tenant scoping : PASS. Aucune escalade HUMAN (max 3,8).
+- F-B8-01 LOW 3,8 : `UserService.suspend` ne révoque pas `user_roles` et `countActiveAssignments` ne joint pas `users.deleted_at` : l'invariant « Risk Manager jamais vide » compte les suspendus (dans les deux sens). Impact borné car les groupes ont `permissions = '{}'` et un admin `role.assign` peut recréer le membre. Reco : joindre users actifs + garde dans suspend.
+- F-B8-02 INFO : la migration adopte tout rôle actif nommé « Risk Manager / Risk Committee / Audit » sans toucher aux permissions (pas d'élévation, mais rôle figé et non désactivable) ; contrôle pré-migration à faire en prod.
+- F-B8-03 INFO : `departmentId` pas `.uuid()` donc 500 ; 23505 en course donc 500. F-B8-04 INFO : groupes amorcés sans audit.
+- Leçon : un invariant de cardinalité (« jamais vide ») doit compter les membres ACTIFS (jointure utilisateur), et être appliqué sur tous les chemins qui retirent un membre (suspension incluse), pas seulement sur la révocation de rôle.

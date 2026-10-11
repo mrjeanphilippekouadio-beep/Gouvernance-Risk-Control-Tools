@@ -749,6 +749,18 @@ describe("ActionPlanService.close (ACT-195) — mandatory evidence + maker-check
     await expect(service.close(otherUser, created.id, "missing-evidence", null, "REQ-37")).rejects.toThrow(ValidationError);
   });
 
+  it("rejects a DELETED evidence as closing proof (same error as missing)", async () => {
+    const service = buildService({ evidences: fakeEvidenceRepository([evidence({ status: "DELETED" })]) });
+    const created = await service.create(
+      creator,
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      "REQ-36b",
+    );
+    await expect(service.close(otherUser, created.id, "evidence-1", null, "REQ-37b")).rejects.toThrow(
+      "Evidence evidence-1 does not exist in this tenant",
+    );
+  });
+
   it("maker-checker: rejects the creator closing their own action", async () => {
     const service = buildService();
     const created = await service.create(
