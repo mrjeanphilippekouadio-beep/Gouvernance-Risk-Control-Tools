@@ -66,3 +66,9 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - Aucun package.json/lockfile touché, aucun sink HTML, aucun href ajouté, clés de sélection absentes du DOM, catalogue factice, aucun calcul métier. `Breadcrumb`/`Menu` ont un `href` antérieur : filtrer `javascript:` quand les URLs viendront du backend.
 - F-DS2-01 LOW 2,1 : `VersionComparison` plante (pas XSS) si le diff backend contient un objet (types TS effacés, pas d'Error Boundary). F-DS2-02..04 INFO (clés = contenu, `ref` écrasable dans Checkbox, ReactNode libres).
 - Leçon : pour un composant d'affichage de données backend, les types TS ne protègent pas à l'exécution ; React échappe les strings mais lève sur les objets. Vérifier l'Error Boundary et la normalisation au bord.
+
+## Revue B-9 bis plafond n² (2026-10-11, commit 300ff8f, statique) : PASS avec réserves, aucune escalade (max 2,1)
+- Scoping tenant de `resolveMaxScore` OK (`list(actor.tenantId)`, ACTIVE unique). Permissions inchangées (activateVersion = `ratingscale.delete`). Tous les points d'écriture de score plafonné valident côté service, plafond immuable (impactLevels figé). Migration 052 : SQL dynamique à littéraux + `%I`, noms de CHECK lus dans `pg_constraint`, pas d'injection ni de DROP deviné.
+- F-B9b-01 LOW 2,1 : seuils d'appétence/Comité stockés non revalidés quand une échelle plus petite est activée : fail-open silencieux (appétit `>`, Comité `>=`, seuil 30 jamais atteint sous 5×5). Reco A06 : contrôle à `activateVersion` ; arbitrage Risk Manager. INFO : routes sans borne 36 sur comité/bandes, plafond sur `impactLevels` seul (legacy p≠i), Dashboard 5×5.
+- Leçon : un plafond dérivé d'une configuration mutable protège l'ÉCRITURE, pas les valeurs déjà stockées ; vérifier le sens fail-open/closed quand la config se RÉDUIT (plafond plus bas que la valeur stockée).
+- Tracker (7bis) : F-B9b-01 (A06 + Risk Manager). Migration 052 à rejouer sur staging, lister les CHECK existants avant.
