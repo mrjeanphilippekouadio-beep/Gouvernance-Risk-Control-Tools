@@ -10,7 +10,12 @@ export interface RoleRepository {
   /** Used by ACT-112: a role can't be disabled while a user is still actively assigned to it. */
   countActiveAssignments(tenantId: string, roleId: string): Promise<number>;
   assignToUser(tenantId: string, roleId: string, userId: string, grantedBy: string): Promise<RoleAssignment>;
-  revokeFromUser(tenantId: string, roleId: string, userId: string): Promise<void>;
+  /**
+   * `minRemaining`: refuse (ValidationError) when fewer than that many active
+   * members would remain after the revoke — checked atomically (B-8: the
+   * Risk Manager group is never left empty).
+   */
+  revokeFromUser(tenantId: string, roleId: string, userId: string, options?: { minRemaining?: number }): Promise<void>;
   listForUser(tenantId: string, userId: string): Promise<Role[]>;
   listAssignments(tenantId: string, roleId: string): Promise<RoleAssignment[]>;
 }

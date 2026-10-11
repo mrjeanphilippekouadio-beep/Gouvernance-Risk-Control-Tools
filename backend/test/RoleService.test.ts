@@ -5,11 +5,14 @@ import type { RoleRepository } from "../src/domain/repositories/RoleRepository.j
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
 import type { UserRepository } from "../src/domain/repositories/UserRepository.js";
 import type { Role, RoleAssignment } from "../src/domain/entities/Role.js";
+import type { DepartmentRepository } from "../src/domain/repositories/DepartmentRepository.js";
+import type { Department } from "../src/domain/entities/Department.js";
 import type { User } from "../src/domain/entities/User.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 
-function inMemoryRoleRepository(): RoleRepository {
+/** `suspended`: user ids treated as suspended (users.deleted_at set) — mirrors the Postgres JOIN on users. */
+function inMemoryRoleRepository(suspended: ReadonlySet<string> = new Set()): RoleRepository {
   const roles = new Map<string, Role>();
   const assignments = new Map<string, RoleAssignment>();
 
@@ -34,6 +37,8 @@ function inMemoryRoleRepository(): RoleRepository {
         description: input.description ?? null,
         permissions: input.permissions,
         dashboardScopeMode: input.dashboardScopeMode ?? "GLOBAL",
+        systemGroup: (input as { systemGroup?: Role["systemGroup"] }).systemGroup ?? null,
+        departmentId: input.departmentId ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
         deletedAt: null,
@@ -54,8 +59,9 @@ function inMemoryRoleRepository(): RoleRepository {
       roles.set(id, { ...existing, deletedAt: new Date() });
     },
     async countActiveAssignments(tenantId, roleId) {
-      return [...assignments.values()].filter((a) => a.tenantId === tenantId && a.roleId === roleId && !a.revokedAt)
-        .length;
+      return [...assignments.values()].filter(
+        (a) => a.tenantId === tenantId && a.roleId === roleId && !a.revokedAt && !suspended.has(a.userId),
+      ).length;
     },
     async assignToUser(tenantId, roleId, userId, grantedBy) {
       const assignment: RoleAssignment = {
@@ -290,6 +296,96 @@ describe("RoleService", () => {
       await expect(service.getEffectivePermissions(admin, targetUser.id)).rejects.toThrow(
         "requires a UserRepository",
       );
+    });
+  });
+
+  describe("fixed groups and department groups (B-8)", () => {
+    const departments = {
+      async getById(_tenantId: string, id: string) {
+        return id === "dept-1" || id === "dept-2" ? ({ id } as Department) : null;
+      },
+    } as unknown as DepartmentRepository;
+
+    async function withGroup(systemGroup: "RISK_MANAGER" | "RISK_COMMITTEE", suspended: Set<string> = new Set()) {
+      const repo = inMemoryRoleRepository(suspended);
+      const service = new RoleService(repo, inMemoryAuditRepository(), undefined, departments);
+      const group = await repo.create({
+        tenantId: admin.tenantId,
+        name: systemGroup,
+        permissions: [],
+        systemGroup,
+      } as never);
+      // Every member also holds a second role so the "last active role" rule is not what blocks the revoke.
+      const other = await service.create(admin, { name: "Other", permissions: ["audit.read"] }, "REQ-o");
+      for (const userId of ["u1", "u2"]) {
+        await service.assignToUser(admin, group.id, userId, "REQ-a");
+        await service.assignToUser(admin, other.id, userId, "REQ-a");
+      }
+      return { service, group };
+    }
+
+    it("F-B8-01: a suspended member does not count — RM = {u1 active, u2 suspended}, revoking u1 is refused", async () => {
+      const { service, group } = await withGroup("RISK_MANAGER", new Set(["u2"]));
+      await expect(service.revokeFromUser(admin, group.id, "u1", "REQ-1")).rejects.toThrow(ValidationError);
+    });
+
+    it("F-B8-05: revoking a suspended member succeeds while another active member remains; the last active one is still refused", async () => {
+      const suspended = new Set(["u2"]);
+      const repo = inMemoryRoleRepository(suspended);
+      const mkUser = (id: string, deletedAt: Date | null) => ({ id, tenantId: admin.tenantId, deletedAt }) as User;
+      const users = inMemoryUserRepository([mkUser("u1", null), mkUser("u2", new Date())]);
+      const service = new RoleService(repo, inMemoryAuditRepository(), users, departments);
+      const group = await repo.create({ tenantId: admin.tenantId, name: "RM", permissions: [], systemGroup: "RISK_MANAGER" } as never);
+      const other = await service.create(admin, { name: "Other", permissions: ["audit.read"] }, "REQ-o");
+      for (const userId of ["u1", "u2"]) {
+        await service.assignToUser(admin, group.id, userId, "REQ-a");
+        await service.assignToUser(admin, other.id, userId, "REQ-a");
+      }
+      await service.revokeFromUser(admin, group.id, "u2", "REQ-1");
+      await expect(service.revokeFromUser(admin, group.id, "u1", "REQ-2")).rejects.toThrow(ValidationError);
+    });
+
+    it("F-B8-01: refuses to suspend the last active Risk Manager member", async () => {
+      const { service, group } = await withGroup("RISK_MANAGER");
+      await service.revokeFromUser(admin, group.id, "u1", "REQ-1");
+      await expect(service.assertNotLastRiskManager(admin.tenantId, "u2")).rejects.toThrow(ValidationError);
+    });
+
+    it("refuses to disable or rename a fixed group", async () => {
+      const { service, group } = await withGroup("RISK_MANAGER");
+      await expect(service.disable(admin, group.id, "REQ-d")).rejects.toThrow(ValidationError);
+      await expect(service.update(admin, group.id, { name: "Renamed" }, "REQ-r")).rejects.toThrow(ValidationError);
+    });
+
+    it("never lets the Risk Manager group become empty", async () => {
+      const { service, group } = await withGroup("RISK_MANAGER");
+      await service.revokeFromUser(admin, group.id, "u1", "REQ-1");
+      await expect(service.revokeFromUser(admin, group.id, "u2", "REQ-2")).rejects.toThrow(ValidationError);
+    });
+
+    it("lets the Risk Committee group become empty", async () => {
+      const { service, group } = await withGroup("RISK_COMMITTEE");
+      await service.revokeFromUser(admin, group.id, "u1", "REQ-1");
+      await service.revokeFromUser(admin, group.id, "u2", "REQ-2");
+    });
+
+    it("links a role to a department only once, and only to a real department", async () => {
+      const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository(), undefined, departments);
+      const role = await service.create(admin, { name: "Finance", permissions: ["audit.read"], departmentId: "dept-1" }, "REQ-1");
+      expect(role.departmentId).toBe("dept-1");
+      await expect(
+        service.create(admin, { name: "Finance 2", permissions: ["audit.read"], departmentId: "dept-1" }, "REQ-2"),
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        service.create(admin, { name: "Ghost", permissions: ["audit.read"], departmentId: "nope" }, "REQ-3"),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("fails closed when a departmentId is given without a DepartmentRepository", async () => {
+      const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
+      await expect(
+        service.create(admin, { name: "Finance", permissions: ["audit.read"], departmentId: "dept-1" }, "REQ-1"),
+      ).rejects.toThrow("requires a DepartmentRepository");
     });
   });
 });

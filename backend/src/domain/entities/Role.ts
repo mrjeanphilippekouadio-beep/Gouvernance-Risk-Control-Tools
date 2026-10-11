@@ -1,6 +1,9 @@
 import type { Permission } from "../permissions.js";
 import type { DashboardScopeMode } from "./DashboardScope.js";
 
+/** B-8: the three fixed groups every tenant has (migration 049). */
+export type SystemGroup = "RISK_MANAGER" | "RISK_COMMITTEE" | "AUDIT";
+
 /**
  * Named, admin-defined bundle of permissions (ACT-110 to ACT-118).
  * Updated in place like Department/Process — a role's permission set
@@ -21,6 +24,10 @@ export interface Role {
    * (risks.process_id backfill not done) — see RoleService.
    */
   dashboardScopeMode: DashboardScopeMode;
+  /** Non-null for the three fixed groups: never disabled, never renamed. */
+  systemGroup: SystemGroup | null;
+  /** Non-null when this role is the group of a department (unique per tenant). */
+  departmentId: string | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -33,6 +40,7 @@ export interface CreateRoleInput {
   permissions: Permission[];
   /** Defaults to GLOBAL when omitted — see Role.dashboardScopeMode. */
   dashboardScopeMode?: DashboardScopeMode;
+  departmentId?: string | null;
 }
 
 export interface UpdateRoleInput {
@@ -40,6 +48,7 @@ export interface UpdateRoleInput {
   description?: string | null;
   permissions?: Permission[];
   dashboardScopeMode?: DashboardScopeMode;
+  departmentId?: string | null;
 }
 
 /**

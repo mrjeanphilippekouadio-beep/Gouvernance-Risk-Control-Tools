@@ -283,6 +283,15 @@ describe("UserService", () => {
     ).rejects.toThrow(ValidationError);
   });
 
+  it("F-B8-01: suspend fails closed without a RoleService (Risk Manager guard)", async () => {
+    const { userService: withRbac, roleService } = makeServices();
+    const role = await seedRole(roleService, admin);
+    const user = await withRbac.create(admin, { email: "fc@djamo.com", displayName: "FC", roleId: role.id }, "REQ-fc1");
+    const userRepo = (withRbac as unknown as { users: ConstructorParameters<typeof UserService>[0] }).users;
+    const bare = new UserService(userRepo, inMemoryAuditRepository());
+    await expect(bare.suspend(admin, user.id, "REQ-fc2")).rejects.toThrow("requires a RoleService");
+  });
+
   it("refuses to let an actor suspend their own account", async () => {
     const { userService } = makeServices();
     await expect(userService.suspend(admin, admin.userId, "REQ-6")).rejects.toThrow(ForbiddenError);

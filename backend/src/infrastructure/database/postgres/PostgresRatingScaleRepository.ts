@@ -8,7 +8,7 @@ import type {
   ScaleLevel,
   ScoreThreshold,
 } from "../../../domain/entities/RatingScale.js";
-import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 
 interface RatingScaleRow {
   id: string;
@@ -112,12 +112,20 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
   ): Promise<RatingScale> {
     const { rows } = await this.pool.query<RatingScaleRow>(
       `UPDATE rating_scales SET ${column} = $3, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL AND status = 'DRAFT'
        RETURNING *`,
       [tenantId, id, JSON.stringify(value)],
     );
     const row = rows[0];
-    if (!row) throw new NotFoundError("RatingScale", id);
+    if (!row) {
+      // R-01 defense in depth: 0 rows = missing, or no longer DRAFT (same refusal as assertMutable).
+      const { rows: existing } = await this.pool.query(
+        `SELECT 1 FROM rating_scales WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
+        [tenantId, id],
+      );
+      if (existing.length === 0) throw new NotFoundError("RatingScale", id);
+      throw new ValidationError("Cannot modify a rating scale that is not a draft — create a new version instead");
+    }
     return toDomain(row);
   }
 

@@ -13,3 +13,6 @@ export function boundedArray<T extends z.ZodType>(element: T, max: number, min =
 
 /** Shared by the scale's `defenseLines` and the mastery assessment's `lines` (one entry per defense line). */
 export const MAX_DEFENSE_LINES = 50;
+/** B-9: impact scale size ceiling (6 levels) and impact axes ceiling (7 axes) — mirrored in RatingScaleService. */
+export const MAX_SCALE_SIZE = 6;
+export const MAX_IMPACT_AXES = 7;
