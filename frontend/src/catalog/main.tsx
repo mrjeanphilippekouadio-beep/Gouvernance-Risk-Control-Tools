@@ -1,3 +1,6 @@
+// Design-system catalog, served publicly with the static site. Keep it to
+// placeholder data: no API calls, no real data, no import.meta.env (security
+// review DS-1a); otherwise exclude this entry from the production build.
 import { StrictMode, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
