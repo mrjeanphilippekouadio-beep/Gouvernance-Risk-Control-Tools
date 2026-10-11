@@ -37,20 +37,36 @@ jobs:
         # which zaproxy/action-full-scan does not expose — so the ZAP
         # stable image is run directly with the plan mounted in.
         run: |
-          mkdir -p report
+          mkdir -p report zap-home
           # The image runs as its own non-root "zap" user, uid 1000
           # (docker/Dockerfile-stable: `useradd -u 1000 ... zap`), which
           # doesn't own this bind-mounted directory by default (first run
           # failed with AccessDeniedException writing report_html.html).
           # Hand it over to that exact uid rather than opening it to everyone.
-          sudo chown 1000:1000 report
+          sudo chown 1000:1000 report zap-home
+          set +e
           docker run --rm \
             -v "${{ github.workspace }}:/zap/wrk/:rw" \
+            -v "${{ github.workspace }}/zap-home:/home/zap/.ZAP:rw" \
             -e ZAP_TARGET_URL="${{ secrets.ZAP_TARGET_URL }}" \
             -e ZAP_TEST_EMAIL="qagrctest@gmail.com" \
             -e ZAP_TEST_PASSWORD="${{ secrets.ZAP_TEST_PASSWORD }}" \
             ghcr.io/zaproxy/zaproxy:stable \
             zap.sh -cmd -autorun /zap/wrk/.github/zap/automation-plan.yaml
+          rc=$?
+          set -e
+          # zap.log has the per-request authentication detail the reports
+          # don't (which login/poll attempts failed and why) — copy it
+          # alongside the reports so it's in the uploaded artifact.
+          cp zap-home/zap.log report/zap.log 2>/dev/null || true
+          # No exitStatus job in the plan, so ZAP uses its own default exit
+          # codes: 0 ok, 2 warnings found (expected — don't fail the build
+          # just because alerts exist), 1 a real plan/execution error.
+          echo "ZAP exit code: $rc"
+          if [ "$rc" = "1" ]; then
+            echo "::error::ZAP automation plan failed to execute (see log above)"
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
