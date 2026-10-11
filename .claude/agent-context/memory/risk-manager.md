@@ -386,3 +386,12 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
   (DECISION-019 P3). Lecture de q26 (fonction risque approuve par défaut,
   Audit notifié, Dispositif peut exiger Audit et/ou Comité) marquée
   « interprétation à confirmer ». Cartographie non touchée.
+- 2026-10-11 : DECISION-035 (q34 à q39) intégrée au projet d'étape 2 :
+  lecture de q26 validée ; suppléance du Comité vide par une personne au
+  moins (garde-fous maintenus) ; ordre de revue Audit, Comité, suppléance
+  (ordre après Audit en [Rédaction]) ; journaux des décisions prises en
+  l'absence du Comité et d'Audit ; « Sans suite » retiré, statuts de
+  contribution personnalisés ; Dispositif choisi à la création de l'espace
+  client et/ou du Dispositif. Section 13 ramenée à q37 (proposition
+  d'escalade, en attente du PO). Principe 33 : une décision du PO prime sur
+  mon garde-fou recommandé (ici deux approbateurs -> une personne).

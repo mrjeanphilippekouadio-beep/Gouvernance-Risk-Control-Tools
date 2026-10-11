@@ -3,7 +3,7 @@
 **Statut : PROJET, réponses du PO intégrées (2026-10-11, dont DECISION-035), en attente de validation finale du PO ; seul le point q37 reste à valider.** Le contrat `.claude/agent-context/RISK_MANAGEMENT_V1_FINAL_DECISIONS.md` n'est pas modifié.
 Auteur : Risk Manager (A13), 2026-10-11. Relu par le Product Manager (A03) le 2026-10-11 : voir la section 12. Tâche R1.1 de `docs/ROADMAP-V1.md`, étape 2 de `docs/architecture/RM-V1-Sequence-actions.md`.
 Décisions reportées : DECISION-016 à 020, plus les décisions suivantes qui touchent le contrat (021, 025, 026, 027, 029, 030), plus les réponses du PO aux questions Q-E2-1 à Q-E2-11 (DECISION-033 et DECISION-034, 2026-10-11), plus les confirmations q34 à q39 (DECISION-035, 2026-10-11).
-Distinction utilisée : **[PO]** = décidé par le PO, repris tel quel (avec la référence de la décision). **[Rédaction]** = conséquence formulée par le rédacteur, pas écrite dans une décision : le PO la valide ou la refuse avec le reste. **Interprétation à confirmer** = lecture d'une réponse du PO qui n'est pas certaine : elle est reprise dans la section 13.
+Distinction utilisée : **[PO]** = décidé par le PO, repris tel quel (avec la référence de la décision). **[Rédaction]** = conséquence formulée par le rédacteur, pas écrite dans une décision : le PO la valide ou la refuse avec le reste. **Interprétation à confirmer** = lecture d'une réponse du PO qui n'est pas certaine : elle est reprise dans la section 13 (aucune pour l'instant ; seule la proposition q37 y figure).
 Le cadre de la page Cartographie n'est pas touché par ce projet.
 
 ---
@@ -254,9 +254,9 @@ Lignes modifiées ou ajoutées. Les autres lignes ne changent pas.
 > […] l'administrateur du Dispositif (`riskframework.update`) le demande, avec un motif écrit ; le responsable de la fonction risque, différent du demandeur, l'approuve, ou le Comité pour les paramètres de séparation des tâches. Le changement crée une nouvelle version du Dispositif (`DRAFT → ACTIVE`), jamais une modification en place. Le Comité n'étant pas disponible à tout moment, la version reste en `DRAFT` jusqu'à sa séance ; rien n'impose une décision immédiate, puisque l'effet n'intervient qu'au cycle suivant. L'audit conserve l'ancienne et la nouvelle valeur.
 
 **Texte proposé**
-> […] Les possibilités de configuration sont détenues par la fonction risque (groupe Risk Manager) et tracées. Le changement est demandé avec un motif écrit. **Par défaut, la fonction risque approuve le changement, différente du demandeur, et Audit est notifié si son groupe n'est pas vide. Le Dispositif peut exiger l'approbation d'Audit et/ou du Comité.** *(Interprétation à confirmer, voir section 13 : « les changements sont au niveau du risque » est lu comme « la fonction risque approuve », la notification d'Audit n'est pas une approbation, et « et/ou » veut dire que le Dispositif peut exiger l'un, l'autre ou les deux.)* Quand l'approbateur est Audit, il vote avec les règles du Comité (§8). Si le groupe Comité est vide, la fonction risque prend en charge ce que le Comité aurait approuvé (3.1). *(Rédaction : on ne peut pas vider un groupe déjà choisi comme approbateur ; la réponse sur le Comité vide (DECISION-033) rend la règle « un groupe vide ne peut pas être choisi » à reconfirmer pour le Comité, voir section 13.)* Le changement crée une nouvelle version du Dispositif (`DRAFT → ACTIVE`), jamais une modification en place. Tant que l'approbateur n'a pas décidé, la version reste en `DRAFT` ; rien n'impose une décision immédiate, puisque l'effet n'intervient qu'au cycle suivant. Quand l'approbateur est le Comité, il décide en séance ou par vote asynchrone selon sa règle (§8). L'audit conserve l'ancienne et la nouvelle valeur.
+> […] Les possibilités de configuration sont détenues par la fonction risque (groupe Risk Manager) et tracées. Le changement est demandé avec un motif écrit. **Par défaut, la fonction risque approuve le changement, différente du demandeur, et Audit est notifié si son groupe n'est pas vide. Le Dispositif peut exiger l'approbation d'Audit et/ou du Comité.** **[PO, q34 : lecture validée]** Quand l'approbateur est Audit, il vote avec les règles du Comité (§8). Si le groupe Comité est vide, une personne au moins de la fonction risque prend en charge ce que le Comité aurait approuvé, avec les garde-fous et le journal de 3.1 **[PO, q35]**. *(Rédaction : on ne peut pas vider un groupe déjà choisi comme approbateur ; pour le Comité, la suppléance s'applique s'il est vide.)* Le changement crée une nouvelle version du Dispositif (`DRAFT → ACTIVE`), jamais une modification en place. Tant que l'approbateur n'a pas décidé, la version reste en `DRAFT` ; rien n'impose une décision immédiate, puisque l'effet n'intervient qu'au cycle suivant. Quand l'approbateur est le Comité, il décide en séance ou par vote asynchrone selon sa règle (§8). L'audit conserve l'ancienne et la nouvelle valeur.
 
-**Décision source** : DECISION-016 (configuration tenue par le groupe Risk Manager, approbateur configurable), DECISION-018 (P6, groupe vide), DECISION-017 point 4 et DECISION-026 (Comité à distance), DECISION-033 (Comité vide), DECISION-034 (q26 / Q-E2-4, q27 / Q-E2-5). **[PO]** pour le contenu des réponses citées ; la lecture de q26 est une interprétation à confirmer. **[Rédaction]** : le vidage d'un groupe choisi, le renvoi au vote à distance, et le remplacement de « l'administrateur du Dispositif (`riskframework.update`) » par une formulation sans rôle nommé. Première activation : 7.2.
+**Décision source** : DECISION-016 (configuration tenue par le groupe Risk Manager, approbateur configurable), DECISION-018 (P6, groupe vide), DECISION-017 point 4 et DECISION-026 (Comité à distance), DECISION-033 (Comité vide), DECISION-034 (q26 / Q-E2-4, q27 / Q-E2-5), DECISION-035 (q34, q35). **[PO]** pour le contenu des réponses citées. **[Rédaction]** : le vidage d'un groupe choisi, le renvoi au vote à distance, et le remplacement de « l'administrateur du Dispositif (`riskframework.update`) » par une formulation sans rôle nommé. Première activation : 7.2.
 
 ### 7.8 Le reste de la ligne « Validateur » et « Désignation des rôles »
 
@@ -320,21 +320,21 @@ Effet : §4 (partie 2) : définition ajoutée, visibilité reprise. Aucune permi
 
 **Q-E2-2 (q24 + DECISION-033). Qui est « le responsable de la fonction risque » ?**
 Réponse du PO : le responsable du service risque ; droits sur tous les risques, les contrôles et l'administration ; il peut suppléer le Comité si le groupe Comité est vide. DECISION-033 : si le groupe Comité est vide, le groupe Risk Manager prend en charge ce que le Comité aurait approuvé (garde-fous proposés par l'orchestrateur, à confirmer par le PO).
-Effet : §5 (3.1) : définition et suppléance ; 7.8 : renvoi à 3.1. Conflits avec les règles fixes, voir ci-dessous.
+Effet : §5 (3.1) : définition et suppléance ; 7.8 : renvoi à 3.1. Conflits avec les règles fixes : levés par DECISION-035 (q35), voir ci-dessous.
 
-*Cohérence de DECISION-033 / q24 avec les règles fixes (conflits à lever, recommandations de garde-fou) :*
-- **Jamais un seul membre.** La suppléance, si elle revient à un seul approbateur, remplace un organe collégial par une personne. *Garde-fou recommandé* : la suppléance exige l'approbation de deux membres du groupe Risk Manager au moins, ni l'un ni l'autre n'étant le demandeur ; sinon l'envoi est refusé et escalade (même logique que Q-E2-7).
-- **Jamais validateur de ce qu'il a saisi.** Le responsable a des droits sur tous les risques et l'administration : il peut être demandeur et approbateur d'un même changement. *Garde-fou recommandé* : la suppléance ne s'applique jamais à un acte dont le responsable est l'auteur, le Risk Owner, le Délégué ou l'Exécuteur ; un autre membre approuve (c'est déjà le texte proposé de DECISION-033).
-- **Auto-proposition (DECISION-019 P3 : activée par le Comité).** Si le Comité est vide, la fonction risque pourrait activer sa propre auto-désignation, ce qui vide l'invariant 5. *Garde-fou recommandé* : la suppléance du Comité ne couvre jamais l'activation de l'auto-proposition ; si le Comité est vide, la demande est refusée ou renvoyée à HUMAN.
-- **« Groupe vide refusé ».** Cette règle (6.2, 7.7) interdit de solliciter un Comité vide ; la suppléance la contourne dans l'esprit. *Recommandation* : écrire que la suppléance remplace l'envoi refusé, sans le supprimer, et la tracer comme telle.
+*Cohérence de DECISION-033 / q24 avec les règles fixes, tranchée par DECISION-035 (q35, 2026-10-11) :*
+- **Jamais un seul membre.** **[PO, q35]** Une personne au moins de la fonction risque suffit pour la suppléance (la recommandation de deux approbateurs n'est pas retenue). Un demandeur ne peut pas être son propre suppléant.
+- **Jamais validateur de ce qu'il a saisi.** Le responsable a des droits sur tous les risques et l'administration : il peut être demandeur et approbateur d'un même changement. **[PO, q35]** La suppléance ne s'applique jamais à un acte dont la personne est l'auteur, le Risk Owner, le Délégué ou l'Exécuteur ; un autre membre approuve.
+- **Auto-proposition (DECISION-019 P3 : activée par le Comité).** Si le Comité est vide, la fonction risque pourrait activer sa propre auto-désignation, ce qui vide l'invariant 5. **[PO, q35]** La suppléance du Comité ne couvre jamais l'activation de l'auto-proposition.
+- **« Groupe vide refusé ».** Cette règle (6.2, 7.7) interdit de solliciter un Comité vide ; la suppléance la contourne dans l'esprit. **[Rédaction]** La suppléance remplace l'envoi refusé sans le supprimer et est tracée comme telle, au journal des décisions prises en l'absence du Comité (q36). Motif et trace obligatoires (q35).
 
 **Q-E2-3 (q25). Cartographie et tailles d'échelle différentes.**
-Réponse du PO : « Un Dispositif est choisi une seule fois à la création ; les risques sont affichés par Dispositif, un à la fois. »
+Réponse du PO : « Un Dispositif est choisi une seule fois à la création ; les risques sont affichés par Dispositif, un à la fois. » Précisé par DECISION-035 (q39) : choisi à la création de l'espace client et/ou du Dispositif.
 Effet : §6 (partie 4) : phrase « Affichage » ajoutée, et l'« effet de bord à confirmer » du projet initial est supprimé (réponse reçue). C'est une règle d'affichage : la page Cartographie n'est pas touchée et aucun changement d'écran n'est proposé.
 
 **Q-E2-4 (q26). L'approbateur choisi approuve-t-il tous les changements ?**
 Réponse du PO : « les changements sont au niveau du risque et l'audit est notifié si le groupe n'est pas vide, comportement par défaut ; on pourra choisir l'audit et/ou le comité. »
-Effet : 7.3 (ligne « Approbateur »), 7.7 et résumé (point 4). **Interprétation à confirmer** : par défaut la fonction risque approuve les changements et Audit est seulement notifié (si son groupe n'est pas vide) ; le Dispositif peut exiger l'approbation d'Audit, du Comité, ou des deux. Ce choix remplace la valeur « Comité par défaut » de ma recommandation.
+Effet : 7.3 (ligne « Approbateur »), 7.7 et résumé (point 4). **[PO, q34 : lecture validée]** Par défaut la fonction risque approuve les changements et Audit est seulement notifié (si son groupe n'est pas vide) ; le Dispositif peut exiger l'approbation d'Audit, du Comité, ou des deux. Ce choix remplace la valeur « Comité par défaut » de ma recommandation.
 
 **Q-E2-5 (q27). Quand l'approbateur est Audit, qui décide ?**
 Réponse du PO : Audit suit les mêmes règles de vote que le Comité, avec avertissement et indicateur.
@@ -346,7 +346,7 @@ Effet : 7.2, puce « Première activation ».
 
 **Q-E2-7 (q29). Limites d'une règle de Comité personnalisée.**
 Réponse du PO : planchers fixes seulement ; quorum impossible = envoi refusé puis escalade.
-Effet : 6.2, deux phrases ajoutées. La destination de l'escalade n'est pas précisée : section 13.
+Effet : 6.2, deux phrases ajoutées. La destination de l'escalade : proposition en attente (q37), section 13.
 
 **Q-E2-8 (q30). Que devient une saisie « Rejetée » ?**
 Réponse du PO : rejet = comme un retour, gardé en historique et compté.
@@ -354,11 +354,11 @@ Effet : 3.3 et résumé (point 8).
 
 **Q-E2-9 (q31). Revue d'un risque sans autre membre disponible.**
 Réponse du PO : l'approbateur choisi au Dispositif, avec alerte à l'équipe risque.
-Effet : 3.2 et résumé (point 6). Lien avec Q-E2-4 : voir section 13.
+Effet : 3.2 et résumé (point 6). Précisé par DECISION-035 (q36) : Audit si son groupe n'est pas vide, puis Comité, puis suppléance (ordre après Audit : [Rédaction]).
 
 **Q-E2-10 (q32). Contributions : « Sans suite ».**
-Réponse du PO : « Sans suite » sans commentaire, avec possibilité de le retirer s'il n'est pas pertinent.
-Effet : §7 (partie 5). **Interprétation à confirmer** : « le retirer » = annuler le statut, la trace restant en historique. La réponse ne traite pas la place du Délégué ni le contenu du réglage « configurable » : le texte de DECISION-025 est conservé tel quel.
+Réponse du PO : « Sans suite » sans commentaire, avec possibilité de le retirer s'il n'est pas pertinent. Confirmé par DECISION-035 (q38) : « Sans suite » est retiré ; le Dispositif permet de créer des statuts de contribution personnalisés.
+Effet : §7 (partie 5). Règle fixe maintenue : tout statut d'écartement porte une trace.
 
 **Q-E2-11 (q33). Reprise de registre : qui est l'auteur d'une proposition importée ?**
 Réponse du PO : l'auteur d'une cotation importée est la personne qui importe ; Résiduel importé par l'équipe risque seulement.
@@ -388,18 +388,14 @@ Fait depuis par l'orchestrateur : la réponse du PO à q05 est inscrite (DECISIO
 
 Seules les lectures douteuses sont listées ; aucune règle n'est inventée pour les combler.
 
-1. **Q-E2-4 / q26 (interprétation).** Par défaut, la fonction risque approuve les changements du Dispositif et Audit est seulement notifié si son groupe n'est pas vide ; le Dispositif peut exiger l'approbation d'Audit, du Comité ou des deux. Est-ce bien cela, et « au niveau du risque » désigne-t-il la fonction risque ?
-2. **DECISION-033 / q24 (garde-fous non confirmés).** Les garde-fous proposés par l'orchestrateur (autre membre que le demandeur, motif, audit, cumul marqué, un groupe Risk Manager d'un seul membre ne s'approuve pas) sont-ils validés ? Et le PO retient-il les trois garde-fous recommandés en section 11 : deux approbateurs au moins pour une suppléance, exclusion des actes dont le responsable est auteur ou concerné, et exclusion de l'activation de l'auto-proposition (DECISION-019 P3) ?
-3. **DECISION-033 / « groupe vide ».** Un Comité vide peut-il être choisi comme approbateur d'un Dispositif (la suppléance s'applique alors), ou la règle « un groupe vide ne peut pas être choisi » (7.7) reste-t-elle valable pour le Comité ?
-4. **Q-E2-9 / q31.** Si le Dispositif n'a que l'approbateur par défaut (la fonction risque elle-même, déjà concernée par le risque), qui revoit ? L'approbation d'Audit ou du Comité est-elle alors obligatoire, ou y a-t-il un autre recours ?
-5. **Q-E2-7 / q29.** Vers qui se fait l'escalade quand le quorum est impossible (l'approbateur choisi, HUMAN, autre) ?
-6. **Q-E2-10 / q32.** « Le retirer » signifie-t-il annuler le statut « Sans suite » (la contribution redevient à statuer) ? Et la place du Délégué ainsi que le contenu du réglage « configurable » restent à préciser.
-7. **Q-E2-3 / q25.** « Un Dispositif est choisi une seule fois à la création » : à la création du risque (hypothèse retenue pour l'affichage) ou à la création du Dispositif ?
+Points q34, q35, q36, q38 et q39 tranchés par DECISION-035 (2026-10-11) et reportés dans le texte. Reste un seul point.
+
+1. **Q-E2-7 / q29 / q37. Proposition en attente (q37), à valider par le PO.** Quand le quorum d'une règle de Comité est impossible : l'envoi est refusé ; la décision est prise par le responsable du service risque en suppléance (règles de 3.1, q35) ; s'il est concerné, Audit décide si son groupe n'est pas vide, sinon l'administrateur du client, avec motif ; Audit est notifié dans tous les cas ; la décision est inscrite au journal des décisions prises en l'absence du Comité ; jamais de validation tacite. Le PO valide-t-il cette proposition ?
 
 ---
 
 ## Suite
 
-1. Le PO lit le résumé et la section 13, et confirme ou corrige les points restants.
+1. Le PO lit le résumé et la section 13, et valide ou corrige la proposition q37.
 2. Il valide, refuse ou modifie le texte ; la décision est inscrite au Decision Log (règle 7bis).
 3. Après validation, l'Orchestrateur applique le texte dans le contrat (A03 relit, R1.1) et l'étape 2 est marquée terminée dans `RM-V1-Sequence-actions.md`. Elle débloque B-9 et B-6 (étapes 8 et 9).
