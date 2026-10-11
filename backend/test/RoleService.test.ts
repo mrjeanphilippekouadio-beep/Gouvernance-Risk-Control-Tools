@@ -11,7 +11,8 @@ import type { User } from "../src/domain/entities/User.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 
-function inMemoryRoleRepository(): RoleRepository {
+/** `suspended`: user ids treated as suspended (users.deleted_at set) — mirrors the Postgres JOIN on users. */
+function inMemoryRoleRepository(suspended: ReadonlySet<string> = new Set()): RoleRepository {
   const roles = new Map<string, Role>();
   const assignments = new Map<string, RoleAssignment>();
 
@@ -58,8 +59,9 @@ function inMemoryRoleRepository(): RoleRepository {
       roles.set(id, { ...existing, deletedAt: new Date() });
     },
     async countActiveAssignments(tenantId, roleId) {
-      return [...assignments.values()].filter((a) => a.tenantId === tenantId && a.roleId === roleId && !a.revokedAt)
-        .length;
+      return [...assignments.values()].filter(
+        (a) => a.tenantId === tenantId && a.roleId === roleId && !a.revokedAt && !suspended.has(a.userId),
+      ).length;
     },
     async assignToUser(tenantId, roleId, userId, grantedBy) {
       const assignment: RoleAssignment = {
@@ -304,8 +306,8 @@ describe("RoleService", () => {
       },
     } as unknown as DepartmentRepository;
 
-    async function withGroup(systemGroup: "RISK_MANAGER" | "RISK_COMMITTEE") {
-      const repo = inMemoryRoleRepository();
+    async function withGroup(systemGroup: "RISK_MANAGER" | "RISK_COMMITTEE", suspended: Set<string> = new Set()) {
+      const repo = inMemoryRoleRepository(suspended);
       const service = new RoleService(repo, inMemoryAuditRepository(), undefined, departments);
       const group = await repo.create({
         tenantId: admin.tenantId,
@@ -321,6 +323,17 @@ describe("RoleService", () => {
       }
       return { service, group };
     }
+
+    it("F-B8-01: a suspended member does not count — RM = {u1 active, u2 suspended}, revoking u1 is refused", async () => {
+      const { service, group } = await withGroup("RISK_MANAGER", new Set(["u2"]));
+      await expect(service.revokeFromUser(admin, group.id, "u1", "REQ-1")).rejects.toThrow(ValidationError);
+    });
+
+    it("F-B8-01: refuses to suspend the last active Risk Manager member", async () => {
+      const { service, group } = await withGroup("RISK_MANAGER");
+      await service.revokeFromUser(admin, group.id, "u1", "REQ-1");
+      await expect(service.assertNotLastRiskManager(admin.tenantId, "u2")).rejects.toThrow(ValidationError);
+    });
 
     it("refuses to disable or rename a fixed group", async () => {
       const { service, group } = await withGroup("RISK_MANAGER");

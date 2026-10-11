@@ -412,7 +412,7 @@ describe("QA-B8 known defect DEFECT-B8-01: suspending the last Risk Manager memb
   // Invariant asserted: after any admin action, the Risk Manager group keeps >= 1 non-suspended member.
   // `it.fails` keeps the suite green while the defect exists and turns RED the day it is fixed, which forces
   // this test to be switched to a plain `it`.
-  it.fails("suspending the only active Risk Manager member must be refused (group never empty)", async () => {
+  it("suspending the only active Risk Manager member must be refused (group never empty)", async () => {
     const repo = roleRepo();
     const audit = auditRepo();
     const roleService = new RoleService(repo, audit);

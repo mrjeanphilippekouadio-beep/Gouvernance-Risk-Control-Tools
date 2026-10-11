@@ -16,7 +16,7 @@ const CreateRoleBody = z.object({
   description: z.string().nullish(),
   permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1),
   dashboardScopeMode: DashboardScopeModeEnum.optional(),
-  departmentId: z.string().min(1).max(64).nullish(),
+  departmentId: z.guid().nullish(),
 });
 
 const UpdateRoleBody = z.object({
@@ -24,7 +24,7 @@ const UpdateRoleBody = z.object({
   description: z.string().nullish(),
   permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1).optional(),
   dashboardScopeMode: DashboardScopeModeEnum.optional(),
-  departmentId: z.string().min(1).max(64).nullish(),
+  departmentId: z.guid().nullish(),
 });
 
 const AssignmentBody = z.object({ userId: z.string().min(1) });

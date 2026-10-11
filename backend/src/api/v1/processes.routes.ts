@@ -25,7 +25,7 @@ const CreateProcessBody = z.object({
   documentReference: z.string().nullish(),
   owner: z.string().nullish(),
   active: z.boolean().optional(),
-  departmentId: z.string().min(1).max(64).nullish(),
+  departmentId: z.guid().nullish(),
 });
 
 const UpdateProcessBody = CreateProcessBody.partial();

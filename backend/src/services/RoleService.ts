@@ -250,6 +250,19 @@ export class RoleService {
     });
   }
 
+  /**
+   * F-B8-01: suspending a user removes them from every group in practice, so
+   * the Risk Manager "never empty" rule applies as for a revoke. Clear error
+   * here; the atomic guard is in UserRepository.suspend.
+   */
+  async assertNotLastRiskManager(tenantId: string, userId: string): Promise<void> {
+    const held = await this.roles.listForUser(tenantId, userId);
+    const rm = held.find((r) => r.systemGroup === "RISK_MANAGER");
+    if (rm && (await this.roles.countActiveAssignments(tenantId, rm.id)) <= 1) {
+      throw new ValidationError("Cannot remove the last member of the Risk Manager group");
+    }
+  }
+
   async listForUser(actor: AuthenticatedUser, userId: string): Promise<Role[]> {
     requirePermission(actor, "role.read");
     return this.roles.listForUser(actor.tenantId, userId);

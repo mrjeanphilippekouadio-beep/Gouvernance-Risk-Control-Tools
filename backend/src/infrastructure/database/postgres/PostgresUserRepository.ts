@@ -116,12 +116,48 @@ export class PostgresUserRepository implements UserRepository {
     return toDomain(row);
   }
 
+  /**
+   * F-B8-01: refuses to suspend the last active (non-suspended) member of the
+   * Risk Manager group. Same lock as PostgresRoleRepository.revokeFromUser
+   * (FOR UPDATE on the group's roles row) so a concurrent revoke/suspend
+   * cannot both pass the count. Always on: no service dependency needed.
+   */
   async suspend(tenantId: string, id: string): Promise<void> {
-    const { rowCount } = await this.pool.query(
-      `UPDATE users SET deleted_at = now() WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
-      [tenantId, id],
-    );
-    if (!rowCount) throw new NotFoundError("User", id);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows: groups } = await client.query<{ id: string }>(
+        `SELECT r.id FROM roles r
+         JOIN user_roles ur ON ur.role_id = r.id AND ur.tenant_id = r.tenant_id
+         WHERE r.tenant_id = $1 AND r.system_group = 'RISK_MANAGER' AND r.deleted_at IS NULL
+           AND ur.user_id = $2 AND ur.revoked_at IS NULL
+         FOR UPDATE OF r`,
+        [tenantId, id],
+      );
+      const group = groups[0];
+      if (group) {
+        const { rows } = await client.query<{ count: string }>(
+          `SELECT COUNT(*) AS count FROM user_roles ur
+           JOIN users u ON u.id = ur.user_id AND u.tenant_id = ur.tenant_id AND u.deleted_at IS NULL
+           WHERE ur.tenant_id = $1 AND ur.role_id = $2 AND ur.revoked_at IS NULL AND ur.user_id <> $3`,
+          [tenantId, group.id, id],
+        );
+        if (Number(rows[0]?.count ?? 0) < 1) {
+          throw new ValidationError("Cannot remove the last member of the Risk Manager group");
+        }
+      }
+      const { rowCount } = await client.query(
+        `UPDATE users SET deleted_at = now() WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
+        [tenantId, id],
+      );
+      if (!rowCount) throw new NotFoundError("User", id);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async reactivate(tenantId: string, id: string): Promise<void> {
