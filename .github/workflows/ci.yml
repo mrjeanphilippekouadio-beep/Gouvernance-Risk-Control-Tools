@@ -42,6 +42,7 @@ jobs:
       # lockfile; do not silently re-resolve dependencies in CI.
       - run: npm ci
       - run: npm audit --audit-level=high
+      - run: npm test --workspace=@djamo/design-system
       - run: npm run build --workspace=@djamo/design-system
       - run: npm run build --workspace=@grc-tools/frontend
       - run: npm run lint --workspace=@grc-tools/frontend
