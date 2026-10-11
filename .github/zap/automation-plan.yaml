@@ -1,0 +1,95 @@
+# OWASP ZAP Automation Framework plan — authenticated full scan.
+#
+# Why this exists: the unauthenticated full scan (zaproxy/action-full-scan)
+# only ever found the static SPA shell (8-9 endpoints, 100% GET) because
+# every real page/API call in this app sits behind the local QA login form
+# (#local-email / #local-password, rendered at "/" when
+# VITE_AUTH_PROVIDER=local — confirmed on staging by inspecting the built
+# JS bundle). This plan drives a real headless browser through that form
+# so the Ajax spider and active scan can reach the authenticated app.
+#
+# Login flow (backend/src/api/v1/localAuth.routes.ts):
+#   POST /api/v1/auth/local {"email","password"} -> {"accessToken","tokenType"}
+# Protected routes require header: Authorization: Bearer <accessToken>
+# (backend/src/api/middleware/auth.ts) — on failure they return JSON body
+# {"error":"Missing bearer token"} or {"error":"Invalid or expired token"}.
+# Verification target: GET /api/v1/users/me (any authenticated route works).
+#
+# ${ZAP_TARGET_URL} / ${ZAP_TEST_EMAIL} / ${ZAP_TEST_PASSWORD} are resolved
+# from the container's environment at run time (AF substitutes ${envvar}
+# anywhere in this file) — set them as -e flags in the workflow, never
+# hardcode credentials here.
+
+env:
+  contexts:
+    - name: grc-tools
+      urls:
+        - ${ZAP_TARGET_URL}
+      authentication:
+        method: "browser"
+        parameters:
+          loginPageUrl: ${ZAP_TARGET_URL}
+        verification:
+          method: "poll"
+          pollUrl: ${ZAP_TARGET_URL}/api/v1/users/me
+          loggedOutRegex: "\\Q\"error\":\"Missing bearer token\"\\E|\\Q\"error\":\"Invalid or expired token\"\\E"
+      sessionManagement:
+        # The app never persists the token to a cookie/localStorage (it's
+        # plain React state) — so raw HTTP replay (spider/active scan) needs
+        # the Bearer header re-attached per request from the JSON the login
+        # POST returned. Browser-driven steps (spiderAjax) get it for free
+        # since they share the same in-page JS state.
+        method: "headers"
+        parameters:
+          Authorization: "Bearer {%json:accessToken%}"
+      users:
+        - name: qa
+          credentials:
+            username: ${ZAP_TEST_EMAIL}
+            password: ${ZAP_TEST_PASSWORD}
+
+jobs:
+  - type: spider
+    parameters:
+      context: grc-tools
+      url: ${ZAP_TARGET_URL}
+      maxDuration: 2
+
+  - type: spiderAjax
+    parameters:
+      context: grc-tools
+      user: qa
+      url: ${ZAP_TARGET_URL}
+      maxDuration: 5
+      logoutAvoidance: true
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  - type: activeScan
+    parameters:
+      context: grc-tools
+      user: qa
+      maxScanDurationInMins: 30
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk/report
+      reportFile: report_html
+      reportTitle: "ZAP Full Scan (authenticated) — GRC Tools"
+
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: /zap/wrk/report
+      reportFile: report_md
+      reportTitle: "ZAP Full Scan (authenticated) — GRC Tools"
+
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk/report
+      reportFile: report_json
+      reportTitle: "ZAP Full Scan (authenticated) — GRC Tools"
