@@ -23,6 +23,9 @@ on:
 jobs:
   zap-full-scan:
     runs-on: ubuntu-latest
+    # Safety net: the Ajax spider has no hard default limit beyond -m below;
+    # bound the whole job so a stuck browser-driven crawl can't hang forever.
+    timeout-minutes: 60
     environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -31,6 +34,13 @@ jobs:
         uses: zaproxy/action-full-scan@bee4e5be916301228d2b1b2dcad73aab6fa6a25b # v0.13.0
         with:
           target: ${{ secrets.ZAP_TARGET_URL }}
+          # -j/--ajax-spider: the traditional spider only follows <a> links
+          # and found nothing on this React SPA (confirmed by the first run:
+          # 8 endpoints, all GET, no API routes reached). The Ajax spider
+          # drives a real browser so it executes the JS and discovers the
+          # client-side-routed pages and API calls the active scan needs.
+          # -m 5: cap the Ajax spider crawl at 5 minutes.
+          cmd_options: "-j --ajax-spider -m 5"
           # No issues/PR writes (contents:read only above, enforced at the
           # permission layer even if this were left at its default `true`).
           allow_issue_writing: false
