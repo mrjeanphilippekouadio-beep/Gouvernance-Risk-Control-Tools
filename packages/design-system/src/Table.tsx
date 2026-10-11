@@ -14,6 +14,8 @@ interface TableProps<T> {
   loading: boolean;
   /** Shown instead of the table body when `rows` is empty and not loading. */
   emptyMessage: string;
+  /** Accessible table name, rendered as a visually hidden `<caption>`. */
+  caption?: string;
 }
 
 /**
@@ -24,9 +26,13 @@ interface TableProps<T> {
  * needed at current data volumes — DESIGN_NOTES.md flags it as the next
  * addition once a screen actually needs it).
  */
-export function Table<T>({ columns, rows, rowKey, loading, emptyMessage }: TableProps<T>) {
+export function Table<T>({ columns, rows, rowKey, loading, emptyMessage, caption }: TableProps<T>) {
   if (loading) {
-    return <p className="table-status">Chargement…</p>;
+    return (
+      <p className="table-status" role="status" aria-busy="true">
+        Chargement…
+      </p>
+    );
   }
 
   if (rows.length === 0) {
@@ -36,10 +42,11 @@ export function Table<T>({ columns, rows, rowKey, loading, emptyMessage }: Table
   return (
     <div className="table-scroll">
       <table className="gs-table">
+        {caption && <caption className="gs-visually-hidden">{caption}</caption>}
         <thead>
           <tr>
             {columns.map((col) => (
-              <th key={col.key}>{col.header}</th>
+              <th key={col.key} scope="col">{col.header}</th>
             ))}
           </tr>
         </thead>
