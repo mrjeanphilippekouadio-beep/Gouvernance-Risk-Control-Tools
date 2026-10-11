@@ -266,7 +266,7 @@ const feedbackService = new FeedbackService(feedbackRepository, auditRepository,
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
 const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository, riskCategoryRepository, ratingScaleRepository);
-const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository, riskEvaluationRepository);
+const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository, riskEvaluationRepository, riskAppetiteRepository, configRepository);
 const riskEvaluationService = new RiskEvaluationService(
   riskEvaluationRepository,
   auditRepository,
@@ -364,6 +364,7 @@ const dashboardService = new DashboardService(
   kpiMeasureRepository,
   processRepository,
   dashboardScopeResolver,
+  ratingScaleRepository,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
 const configService = new ConfigService(configRepository, auditRepository, ratingScaleRepository);

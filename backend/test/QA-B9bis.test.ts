@@ -280,7 +280,7 @@ describe("D. RiskEvaluationService: appetiteOverride ceiling, suggested threshol
 
   // KNOWN GAP (MAJOR, A06 leftover "défaut Comité figé à 15"): the committee default (15) is not scaled to the scale size.
   // Oracle (q49 "seuils s'alignent"; E-1 gap): with enforcement on (default), a maximal residual score (the Critique band top) must go through the committee.
-  it.fails("KNOWN GAP (MAJOR): 3x3 max residual score 9 passes plain validate() because the default committee threshold stays 15 (> ceiling 9)", async () => {
+  it("FIXED (was KNOWN GAP) (MAJOR): 3x3 max residual score 9 passes plain validate() because the default committee threshold stays 15 (> ceiling 9)", async () => {
     const { svc, ev } = await build(3);
     await residual(svc, ev.id, 3);
     await expect(svc.validate(validator, ev.id, "ok", "r")).rejects.toThrow(/committee/);
@@ -329,12 +329,12 @@ describe("E. RatingScaleService.updateThresholds ceiling", () => {
 
   // KNOWN GAP (MINOR, legacy only): unequal legacy sizes (e.g. P=5, I=3, kept readable by B-9) have a real max score P*I = 15,
   // but every ceiling uses impactLevels^2 = 9. Bands up to 15 are refused, as are appetite thresholds and overrides above 9.
-  it.fails("KNOWN GAP (MINOR): legacy DRAFT P=5/I=3 refuses a band ending at 15 (real max score P*I)", async () => {
+  it("FIXED (was KNOWN GAP) (MINOR): legacy DRAFT P=5/I=3 refuses a band ending at 15 (real max score P*I)", async () => {
     const { svc } = rsService(repo([scale(3, { status: "DRAFT", probabilityLevels: 5, probabilityLabels: lv(5) })]));
     await expect(svc.updateThresholds(actor, "s1", { thresholds: band(15) }, "r")).resolves.toBeTruthy();
   });
 
-  it.fails("KNOWN GAP (MINOR): legacy ACTIVE P=5/I=3 refuses an appetite threshold of 15 (real max score P*I)", async () => {
+  it("FIXED (was KNOWN GAP) (MINOR): legacy ACTIVE P=5/I=3 refuses an appetite threshold of 15 (real max score P*I)", async () => {
     const svc = new RiskAppetiteService({ getBySubCategory: async () => null, upsert: async (i: never) => i } as never, auditSpy() as never, undefined, repo([scale(3, { probabilityLevels: 5 })]) as never);
     await expect(svc.setThreshold(actor, "Fraude", { threshold: 15, methodologyVersion: "v1" }, "r")).resolves.toBeTruthy();
   });
@@ -501,6 +501,8 @@ describe("H. DashboardService keeps 5x5 bands", () => {
     const svc = new DashboardService(
       anyRepo({ list: async () => [rk] }), anyRepo({ listForRisk: async () => [e] }), anyRepo({}), anyRepo({}), anyRepo({}), anyRepo({}),
       anyRepo({}), anyRepo({}), anyRepo({}), anyRepo({}), anyRepo({}), anyRepo({}), anyRepo({}), anyRepo({}),
+      undefined,
+      { async getById(_t: string, id: string) { return id === "s6" ? scale(6) : id === "s3" ? scale(3) : null; } },
     );
     const rows = await svc.getRisksOverview(user);
     return rows[0]!.criticality;
@@ -516,10 +518,10 @@ describe("H. DashboardService keeps 5x5 bands", () => {
 
   // KNOWN GAP (MAJOR, A06 leftover): the same 6x6 score gets two different labels in Cartography (Modéré, band 6-12) and Dashboard (Élevé, 5x5 band 10-15).
   // q49 "tout s'aligne sur la taille". On 3x3 the dashboard can never say "Critique" below 16 (max score is 9).
-  it.fails("KNOWN GAP (MAJOR): Dashboard label for a 6x6 score of 12 should be Modéré like Cartography (is Élevé)", async () => {
+  it("FIXED (was KNOWN GAP) (MAJOR): Dashboard label for a 6x6 score of 12 should be Modéré like Cartography (is Élevé)", async () => {
     expect(await labelOf(12, "s6")).toBe("Modéré");
   });
-  it.fails("KNOWN GAP (MAJOR): Dashboard label for a 3x3 max score of 9 should be Critique (is Modéré)", async () => {
+  it("FIXED (was KNOWN GAP) (MAJOR): Dashboard label for a 3x3 max score of 9 should be Critique (is Modéré)", async () => {
     expect(await labelOf(9, "s3")).toBe("Critique");
   });
 });
@@ -579,9 +581,44 @@ describe("I. migration 052 (static review of the SQL text, no database)", () => 
   // When a value > 25 exists, "ADD CONSTRAINT ... CHECK (... 25)" fails AFTER its DROP already committed: the column is left
   // WITHOUT any CHECK, psql carries on, and the final DELETE FROM schema_migrations still runs, marking 052 as rolled back.
   // The down must be atomic (BEGIN; ... COMMIT;) or the README must mandate `psql -1 -v ON_ERROR_STOP=1`. Same pattern in 050 down.
-  it.fails("KNOWN GAP (MAJOR): down file is wrapped in a single transaction (BEGIN ... COMMIT) so a failing ADD CONSTRAINT leaves the DROP rolled back", () => {
+  it("FIXED (was KNOWN GAP) (MAJOR): down file is wrapped in a single transaction (BEGIN ... COMMIT) so a failing ADD CONSTRAINT leaves the DROP rolled back", () => {
     expect(down).toMatch(/^\s*BEGIN;/im);
     expect(down).toMatch(/^\s*COMMIT;/im);
+  });
+});
+
+// ===================================================================== J. B-9 bis fixes (A06): F-B9b-01 + Comité default
+
+describe("J. F-B9b-01: activation refused when an active threshold exceeds the new ceiling", () => {
+  const full = (n: number) => ({ axes: [axis(1, lv(n)), axis(2, lv(n))], retainedImpactRule: "MAX" as const });
+  const build = (appetite: number | null, committee: { ev: number; tr: number | null } | null) => {
+    const r = repo([scale(6, { id: "prev" }), scale(5, { status: "DRAFT", impactAxes: full(5) })]);
+    const appetites = { async list() { return appetite === null ? [] : [{ subCategory: "Fraude", threshold: appetite, active: true }]; } };
+    const configs = { async getByTenant() { return committee ? { committeeEvaluationMinScore: committee.ev, committeeTreatmentMinScore: committee.tr } : null; } };
+    return { r, svc: new RatingScaleService(r as never, auditSpy() as never, noRef, appetites as never, configs as never) };
+  };
+
+  it("appetite 30 under 6x6, activating 5x5 -> refused, nothing archived", async () => {
+    const { r, svc } = build(30, null);
+    await expect(svc.activateVersion(actor, "s1", "r")).rejects.toThrow(/Fraude.*30|30.*Lower them first/s);
+    expect(r.calls.activate).toBe(0);
+    expect(r.store.get("prev")!.status).toBe("ACTIVE");
+  });
+  it("Comité thresholds above 25 -> refused (evaluation and treatment)", async () => {
+    await expect(build(null, { ev: 30, tr: null }).svc.activateVersion(actor, "s1", "r")).rejects.toThrow(/Comité évaluation/);
+    await expect(build(null, { ev: 15, tr: 28 }).svc.activateVersion(actor, "s1", "r")).rejects.toThrow(/Comité traitement/);
+  });
+  it("thresholds within the ceiling -> activates", async () => {
+    const { svc } = build(25, { ev: 15, tr: null });
+    expect((await svc.activateVersion(actor, "s1", "r")).status).toBe("ACTIVE");
+  });
+});
+
+describe("K. default Comité threshold follows the matrix size", () => {
+  it.each([[3, 5], [4, 9], [5, 15], [6, 21]])("n=%i -> %i (upper bound of the 3rd default band)", async (n, expected) => {
+    const { defaultCommitteeThreshold } = await import("../src/domain/scoring.js");
+    expect(defaultCommitteeThreshold(maxScoreForSize(n))).toBe(expected);
+    expect(defaultCriticalityBands(n)[2]!.max).toBe(expected);
   });
 });
 

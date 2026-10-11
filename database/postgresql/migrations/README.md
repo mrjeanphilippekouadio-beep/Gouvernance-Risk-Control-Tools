@@ -51,8 +51,13 @@ Manuellement, avec le client `psql` (ou tout client Postgres) pointé sur
 la même base que `DATABASE_URL` du backend :
 
 ```bash
-psql "$DATABASE_URL" -f database/postgresql/migrations/NNN_nom.down.sql
+psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f database/postgresql/migrations/NNN_nom.down.sql
 ```
+
+`-1 -v ON_ERROR_STOP=1` est obligatoire : sans lui, un `ADD CONSTRAINT` qui
+échoue laisse le `DROP` déjà validé, psql continue et le `DELETE FROM
+schema_migrations` final marque la migration comme annulée. Les down 050 et
+052 portent en plus leur propre `BEGIN; ... COMMIT;`.
 
 Le `.down.sql` doit se terminer par
 `DELETE FROM schema_migrations WHERE filename = 'NNN_nom.sql';` pour que

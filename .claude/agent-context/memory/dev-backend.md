@@ -62,3 +62,13 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Principe : ajouter une action d audit = elargir audit_log_action_check dans la meme migration.
 - Tests A08 existants adaptes (motif sur groupes fixes, departmentId sur creation de processus).
 - Non fait : activation du premier Dispositif (inexistante cote backend) ; perimetre tous les risques (q66) inchange.
+
+## 2026-10-11 B-9 bis correctifs (branche wt/b9fix, base dc3c855)
+
+- Down 050/052 enveloppés dans BEGIN/COMMIT ; README : `psql -1 -v ON_ERROR_STOP=1 -f`. Les up ne sont pas touchés.
+- `domain/scoring.ts` : `maxScoreForScale` (P x I), `defaultBandsForMaxScore`, `defaultCommitteeThreshold` (= borne haute de la 3e bande, 15 en 5x5). Utilisé par RiskEvaluationService (défaut sans config) et ConfigService.get (sans ligne). Limite : une ligne `configs` existante porte déjà 15 en base (DEFAULT SQL), indistinguable d'un 15 explicite : non modifiée.
+- DashboardService : 16e paramètre optionnel `ratingScales` (getById), bandes de l'échelle capturée par l'évaluation, repli 5x5.
+- Plafond = P x I partout (scoreCeiling, RatingScaleService, RiskEvaluationService, Cartography).
+- F-B9b-01 : `RatingScaleService.activateVersion` refuse si bande/appétence active/seuil Comité > plafond de la nouvelle échelle (params optionnels riskAppetites, configs, câblés dans server.ts). Conséquence : passer à une échelle plus petite que la 5x5 exige d'abaisser d'abord le seuil Comité (15 par défaut en base).
+- F-B9b-02 partiel : `.max(36)` sur seuils Comité, `label.max(200)`. Bornes `.max(36)` sur bandes NON posées : casse QA-S1-zod (bandes 1..50 acceptées par un test existant non modifiable).
+- Leçon : l'environnement refuse les commandes bash composées avec heredoc python + autres ; passer par un fichier script ou Edit.
