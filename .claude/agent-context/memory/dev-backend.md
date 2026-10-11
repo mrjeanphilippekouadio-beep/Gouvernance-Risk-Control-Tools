@@ -21,3 +21,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - ~60 `z.string()` sans `.max()`, `limit` négatif sur `GET /audit-logs`, upload `branding` sans `files`/`parts`, `express.json` 1 Mo → 256 ko : proposés au lot « dette Sonar ».
 - S-2 : `overrides` unzipper 0.12.5 (reporté, DECISION-037).
 - `ActionPlanService` accepte une évidence DELETED pour clôturer (lignes ~399-401).
+
+## 2026-10-11 — Mini-lot sécurité (DECISION-038 pt 4, branche `fix/sec-minilot`)
+
+- `GET /audit-logs` : `limit` parsé par `z.coerce.number().int().min(1).max(500)` (max = `MAX_LIMIT` de `AuditLogService`) ; hors bornes/non numérique → ZodError → 400. Avant : `Number(x) || undefined` laissait passer `-5` jusqu'au SQL. Le parsing n'était PAS partagé : les autres routes de liste (users, notifications, riskEvaluations) ont leur propre `PaginationQuery` zod déjà bornée 1..100 ; `kriMeasures` (`page`/`pageSize` via `Number()`) n'a pas été vérifiée, hors périmètre.
+- `ActionPlanService.close` : évidence `status === "DELETED"` refusée avec le même message que « introuvable ».
+- Principe : un `Number(query) || undefined` n'est pas une validation ; toujours zod borné sur les paramètres numériques de query.
+- Worktree sans `node_modules` : `npm ci --ignore-scripts` avant typecheck/test.
