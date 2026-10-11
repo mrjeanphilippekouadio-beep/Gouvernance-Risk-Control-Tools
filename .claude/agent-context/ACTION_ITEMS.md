@@ -149,6 +149,7 @@ pour l'usage.
 | @infrastructure @compliance HUMAN | **COMP-EVD1-4 — protection du stockage des preuves** : rétention ou verrouillage sur les deux Drive partagés, droits du compte de service sans suppression définitive, journaux d'activité Drive conservés, politique de purge écrite, archivage après 1 an (DECISION-018 n° 5) derrière `DocumentStorage`. | 2026-10-11 | **Ouvert — lot Infra/Conservation.** |
 | @dev-backend HUMAN | **COMP-EVD1-5 — rattrapage des empreintes des évidences historiques** : script hors migration (relecture par `getContent`, hash marqué « établi a posteriori », trace dans `audit_log`) ; écriture de masse à valider par HUMAN avant exécution. Ajouter le KRI « % évidences avec empreinte ». | 2026-10-11 | **Ouvert — lot de rattrapage dédié.** |
 | HUMAN @risk-manager @product-manager | **Étape 2 du contrat (R1.1) — 11 questions ouvertes Q-E2-1 à Q-E2-11** dans `docs/architecture/RM-V1-Contrat-etape2-PROJET.md` (rédaction Risk Manager, relecture Product Manager, 2026-10-11), reportées dans la page de pilotage (q23 à q33). Bloquent : R1.2 (Q-E2-1, -2), R1.3 (-3), R1.4 (-4, -5, -6), R2 (-7, -8, -9), R3 (-10, -11). Le texte du projet doit aussi être validé par le PO avant report dans le contrat. | 2026-10-11 | **Questions répondues (DECISION-034, 2026-10-11) et intégrées au projet. Ouvert — HUMAN : 6 confirmations (page de pilotage q34 à q39 : lecture de q26, garde-fous de la suppléance du Comité, revue quand toute l'équipe risque est concernée, destinataire de l'escalade, « Sans suite », sens de q25), puis validation du texte final.** |
+| HUMAN @ux-designer @dev-frontend | **Revue Penpot du design system (PO, 2026-10-11)** : `docs/ux/DS-V1-revue-penpot.md`. Faite sur une copie locale antérieure à la vague 1 : la plupart des « bloquants » sont déjà corrigés sur staging ; les écarts de couleur/police/rayon sont la marque Djamo validée (le fichier Penpot donne la structure, pas la marque). Vrais écarts restants listés en fin de fichier (tailles Button/Modal, Table zébrée/compacte/sélection, Tabs/Card désactivé et sélectionné, paliers 12px et display, 13 composants sans fiche Penpot). | 2026-10-11 | **Ouvert — HUMAN : GO de la vague 2 du design system sur ce périmètre.** |
 | @dev-backend @security | **Évidence supprimée acceptée comme preuve de clôture d'un plan d'action (Security, revue EVD-1, 2026-10-11, préexistant)** : `ActionPlanService.ts:399-401` vérifie l'évidence de clôture par `getById` sans contrôler `status !== 'DELETED'`. | 2026-10-11 | **Ouvert — petit correctif à prévoir hors EVD-1.** |
 | @infrastructure @security HUMAN | **Partage des fichiers sur les Drive partagés (Security, revue EVD-1, 2026-10-11)** : le lien Drive stocké est un lien statique ; si les Drive partagés sont ouverts à tout le domaine, `evidence.download` et son audit se contournent hors application. Vérifier que l'accès aux 4 Drive partagés est limité au compte de service et aux administrateurs nommés. | 2026-10-11 | **Ouvert — HUMAN : vérifier les membres des Drive partagés.** |
 | @infrastructure @dev-backend HUMAN | **Authentification Google Drive en production non prouvée (Infrastructure, 2026-10-08)** : `googleDriveAuth.ts` et `env.ts:101` interdisent la clé JSON en production et supposent l'identité Cloud Run, alors que la production tourne sur Render ; le dépôt d'évidences en production peut échouer. | 2026-10-08 | **Ouvert — à vérifier (R0.4) ; décision HUMAN sur le mécanisme d'identité Drive en production.** |
@@ -900,6 +901,36 @@ RELATED: DECISION-033, `docs/architecture/RM-V1-Contrat-etape2-PROJET.md`.
 OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ — à intégrer au projet d'étape 2 ; le texte final reste à
   valider par le PO avant report dans le contrat.
+```
+
+```
+DECISION-035
+DATE: 2026-10-11
+QUESTION: Étape 2 du contrat — confirmations q34 à q39 (page de pilotage).
+DECISION:
+  q34 — Lecture de q26 validée : par défaut la fonction risque approuve
+    les changements du Dispositif ; Audit est notifié (si son groupe
+    n'est pas vide) ; le Dispositif peut exiger en plus l'accord d'Audit
+    et/ou du Comité.
+  q35 — Suppléance d'un Comité vide par la fonction risque : **une
+    personne au moins** suffit (pas deux). Garde-fous non contestés,
+    maintenus : jamais le demandeur, jamais sur ce dont la personne est
+    auteur / RO / Délégué / Exécuteur, jamais pour activer
+    l'auto-proposition ; motif et trace.
+  q36 — Revue quand toute l'équipe risque est concernée : **Audit si son
+    groupe n'est pas vide** (sinon Comité, sinon suppléance — lecture de
+    l'orchestrateur). Les groupes Comité et Audit ont chacun un **journal
+    de toutes les décisions prises en leur absence**.
+  q37 — Le PO demande une proposition (destinataire de l'escalade quand
+    le quorum est impossible) → proposition en q37 de la page de pilotage.
+  q38 — « Sans suite » peut être retiré ; prévoir la possibilité de
+    **créer des statuts de contribution** personnalisés.
+  q39 — Le Dispositif est choisi à la création de l'espace client et/ou
+    à la création du Dispositif ; les risques s'affichent par Dispositif,
+    un à la fois.
+RELATED: DECISION-033, DECISION-034.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — q37 en attente de validation de la proposition.
 ```
 
 | @release-manager | **URGENT — `main` a 27 commits jamais poussés sur `origin`, aucune PR ouverte pour le Lot 1 RACI malgré un feu vert QA + Security complet (SEC-016 CLOSED).** Vérifié le 2026-09-29 : dernière PR mergée = #15 (`security/fix-sec-009-015`, 2026-09-28). Tout ce qui a suivi (SEC-016, 3 docs d'architecture cible, ADR-002, Lot 1 RACI complet avec revue QA/Security) est resté en local sur `main`, sans branche ni PR. Working tree en plus non propre (fichiers modifiés/non trackés : `ACTION_ITEMS.md`, `SHARED_LOG.md`, `CLAUDE.md`, design system, `RisksPage.tsx`, `RaciPanel.tsx`/`.css`, `api/raci.ts`/`users.ts`, `ADR-003...`). Rollback de migration `027_raci_assignments.sql` jamais testé/tracé non plus (déjà exigé dans la DoD proposée le 28/09). Recommandation : ouvrir la PR du Lot 1 RACI (+ éventuellement une PR séparée pour les 3 docs d'architecture/ADR-002/ADR-003) avant tout nouveau lot, pour ne pas accumuler davantage de commits non tracés. | 2026-09-29 | **Résolu — PR #16 ouverte, 22 commits, mergée par le PO le 2026-09-29.** Lots A/B/C exécutés en parallèle/séquence (voir DECISION-005 ci-dessous pour le détail complet) : Lot 1 RACI + charte graphique + docs architecture poussés, fuite Privacy corrigée, `GrcObjectType` créé et `RaciEntityType` migré dessus, middleware `ModuleToggle` câblé, 20 tests `BrandingService` ajoutés, rollback de migration établi comme convention projet (027+028 `.down.sql` + `README.md` + correctif du runner). 405 tests verts sur toute la série, working tree propre. |
