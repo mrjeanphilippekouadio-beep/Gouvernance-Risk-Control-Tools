@@ -4,8 +4,14 @@ import { z } from "zod";
 import type { EvidenceService } from "../../services/EvidenceService.js";
 import { ValidationError } from "../../domain/errors/DomainErrors.js";
 import { costlyOperationRateLimiter } from "../middleware/rateLimit.js";
+import { MAX_DOCUMENT_BYTES } from "../../infrastructure/storage/DocumentStorage.js";
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+// 1 file + 3 real text fields (documentType, controlExecutionId, allowDuplicate); headroom of 10 fields because
+// unknown client fields are tolerated and ignored (QA-EVD1), not rejected.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_DOCUMENT_BYTES, files: 1, fields: 10, parts: 11 },
+});
 
 const UploadMetadata = z.object({
   documentType: z.string().min(1),

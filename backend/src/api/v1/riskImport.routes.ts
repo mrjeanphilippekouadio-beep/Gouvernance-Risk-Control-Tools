@@ -4,7 +4,10 @@ import type { RiskImportService } from "../../services/RiskImportService.js";
 import { ValidationError } from "../../domain/errors/DomainErrors.js";
 import { costlyOperationRateLimiter } from "../middleware/rateLimit.js";
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0, parts: 1 }, // the only part is the xlsx file
+});
 
 /** ACT-225 — POST /import/excel split into a dry-run preview and a separate confirmed commit, per the backlog's explicit requirement. */
 export function riskImportRouter(riskImportService: RiskImportService): Router {
