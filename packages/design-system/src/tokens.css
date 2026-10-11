@@ -34,6 +34,8 @@
   --gs-primary: #2a3fff;
   --gs-primary-hover: #1f2fd6;
   --gs-primary-bg: #e3e5ff;
+  /* Text/icon colour on a --gs-primary (or --gs-primary-hover) fill */
+  --gs-on-primary: #ffffff;
 
   /* Status semantics — unchanged from the neutral direction: never
      concurrenced by the brand color (see DESIGN_NOTES.md 4.1, confirmed
@@ -46,8 +48,13 @@
   --gs-success-bg: #e7f5ec;
   --gs-neutral: #5a6472;
   --gs-neutral-bg: #eef0f2;
-  --gs-info: #2a3fff;
-  --gs-info-bg: #e3e5ff;
+  /* Information — DECISION-030 (q21): own hue (sky/steel blue), no longer an
+     alias of --gs-primary; lighter than primary (luminance ratio 1.13).
+     WCAG 2.1 AA contrast of --gs-info (#0c6ba5):
+       on --gs-info-bg (#e4f1fa) 4.99:1, on --gs-bg-surface (#f2effb) 5.06:1,
+       on --gs-bg-page (#f8f7fc) 5.38:1 (all >= 4.5:1). */
+  --gs-info: #0c6ba5;
+  --gs-info-bg: #e4f1fa;
 
   /* Spacing scale — every margin/padding in the design system draws from this */
   --gs-space-1: 4px;

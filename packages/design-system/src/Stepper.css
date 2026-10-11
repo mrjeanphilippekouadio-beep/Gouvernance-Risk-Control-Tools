@@ -55,7 +55,7 @@ button.gs-stepper-btn:disabled {
 .gs-stepper-current .gs-stepper-marker {
   background: var(--gs-primary);
   border-color: var(--gs-primary);
-  color: #fff;
+  color: var(--gs-on-primary);
 }
 
 .gs-stepper-done .gs-stepper-marker {

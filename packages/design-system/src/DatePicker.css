@@ -144,7 +144,7 @@
 .gs-datepicker-day-selected,
 .gs-datepicker-day-selected:hover {
   background: var(--gs-primary);
-  color: #fff;
+  color: var(--gs-on-primary);
   font-weight: 700;
 }
 
