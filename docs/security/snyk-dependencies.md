@@ -426,3 +426,59 @@ Aucune nouvelle. F-B8q-01 + F-B8t-02 (legacy/course) exigent deux comptes privil
 
 ### Statut
 F-B8t-01 RETEST_PASS (CLOSED côté sécurité). F-B8t-03 RETEST_PASS (CLOSED, résidus INFO). F-B8t-04 RETEST_PASS, résidu F-B8q-03 REMEDIATION_REQUIRED (LOW, A06). F-B8t-02 inchangé (LOW, ouvert), F-B8q-01 LOW (A06), F-B8q-02 INFO (A13/A14). À tracker (7bis) : F-B8q-01, F-B8q-03 (A06), F-B8q-02 (A13/A14). Rejouer le contrôle 6 de `B8-predeploy-checks.sql` sur staging.
+
+## Revue B-8 sexies + EVD-2 — 2026-10-11 (A10, `7c29441` et `aed8ec1`, tête `2cf4f48`, statique + PoC mesurés hors dépôt)
+
+**Escalade HUMAN : aucune.** Max CVSS 3.1 = 4,3 (F-EVD2-01 ; 6,5 si le conteneur est <= 512 Mo, toujours < 7). Aucun code modifié.
+
+### Verdict
+- **B-8 sexies : PASS avec résidu.** F-B8q-03 RETEST_PASS (résidu INFO). F-B8q-01 **RETEST_FAIL partiel** : le verrou ordonne l'INSERT et l'UPDATE mais ne ferme pas la fenêtre check-then-act (résidu signalé par A06 : confirmé, voir F-B8s-01).
+- **EVD-2 : PASS avec réserves.** Bombe, XXE, macros, formules, lookup tenant : sans écart. Réserves : mémoire (F-EVD2-01), exposition des exemples (F-EVD2-02), absence d'audit (F-EVD2-03).
+
+### B-8 sexies
+**F-B8s-01 — LOW 2,2 (AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:N), CONFIRMED par lecture, non rejoué sur Postgres.** `assignToUser` (service) appelle `assertAssignable` (lit `held` + `role`, rejoue `assertCumulRules`) AVANT `roles.assignToUser`, qui prend `FOR UPDATE` sur la seule ligne du rôle assigné. Deux fenêtres restent ouvertes :
+1. deux affectations simultanées de rôles DIFFÉRENTS au même utilisateur (ex. Risk Manager et Audit) verrouillent deux lignes `roles` distinctes, lisent chacune `held` sans l'autre, passent `assertNoCumul`, puis insèrent : cumul interdit créé. L'index `user_roles_active_idx` ne couvre que le MÊME rôle (c'est le 409 q65-02, correct) ;
+2. `update` (élargissement de droits) rejoue le cumul sur les titulaires lus avant son UPDATE ; une affectation concurrente du même rôle lit l'ancien rôle avant verrou : le verrou ne fait que sérialiser l'écriture, la décision a déjà été prise sur un état périmé.
+Exploitabilité : deux actions privilégiées (`role.assign`/`role.update`) dans la même fenêtre, ou un double-clic ; aucun gain externe, uniquement un cumul de gouvernance (même plafond que F-B8q-01 initial, la fenêtre est réduite mais pas supprimée). Reco A06 : exécuter la vérification SOUS verrou, soit verrouiller la ligne `users` de la cible (`FOR UPDATE`, un seul verrou commun à tous les rôles) puis relire `held` et rejouer `assertCumulRules` dans la transaction du repository, soit `pg_advisory_xact_lock(hashtext(tenant||user))`. Ordre de verrous fixe (user puis role) pour éviter un deadlock avec `update`. Test de régression : deux `assignToUser` parallèles (RM + Audit) sur un vrai Postgres, un seul doit réussir. Le garde `deleted_at IS NULL` + NotFound est correct (rôle désactivé entre-temps refusé).
+Points vérifiés OK : `ROLLBACK` dans le `catch` puis `release` en `finally` ; le 409 ne mappe que `user_roles_active_idx`, message fixe, sans fuite ; `COMMIT` avant la lecture de `rows[0]`, pas d'effet partiel.
+
+**F-B8q-03 — RETEST_PASS, résidu INFO 2,0.**
+- (a) échec ambigu : l'état stocké est relu et comparé en ensemble (longueur + inclusion) ; s'il égale le changement, APPROVED est conservé et l'audit est écrit. `before` a été lu avant l'UPDATE, donc l'instantané « avant » survit ; un faux positif (changement identique à l'état courant) est inoffensif (droits identiques). Si le `getById` initial lui-même échoue, `before` reste `null` et l'instantané est perdu (cas rare, INFO).
+- (b) `reopen` gardé par `NOT EXISTS` autre PENDING du même rôle, `false` loggé, erreur d'origine renvoyée : plus de violation d'index. Contournement tenté : un PENDING créé pendant la fenêtre ne peut plus écraser ni être écrasé. Résidu : le changement reste APPROVED sans droits appliqués et aucun chemin API ne le rejoue (`decide` exige PENDING). Fail-closed (aucun droit élargi à tort). La requête 7 de `B8-predeploy-checks.sql` le détecte (pas de ligne `APPROVE` en audit), mais aucune alerte automatique : à brancher avec A23 sur le log `could not be reopened`.
+- Requête 7 : SQL fixe, jointure sur `tenant_id`, attendue à 0 ligne ; à rejouer sur staging. Note : elle ne distingue pas « droits appliqués » de « non appliqués » ; l'opérateur doit comparer `roles.permissions`.
+
+Statut : F-B8q-01 -> REMEDIATION_REQUIRED (F-B8s-01, A06, LOW). F-B8q-03 -> CLOSED côté sécurité, résidu INFO suivi avec A23.
+
+### EVD-2 — `POST /api/v1/evidences/:id/analysis`
+Chaîne réelle : auth -> limiteur `costlyOperationRateLimiter` (30 / 15 min, clé IP par défaut, magasin mémoire par instance) -> `requirePermission("evidence.import")` -> `getOwnedOrThrow` (`WHERE tenant_id = $1 AND id = $2`, DELETED = 404) -> contrôles mimeType / sha256 présent / `fileSize <= 5 Mo` -> **seulement alors** `storage.getContent` (plafond Drive 25 Mo) -> SHA-256 recalculé (409 si différent) -> `analyzeXlsx` (plafond 5 Mo, `assertSafeXlsxArchive`, exceljs en mémoire, 50 feuilles / 20 000 lignes / 50 colonnes).
+
+**Passes sans écart (rejoués sur le vrai `analyzeXlsx`)**
+- Lookup tenant avant Drive : PASS. Un id d'un autre tenant donne 404 avant tout appel Drive ; `driveFileId` n'est jamais pris du client.
+- Bombe de décompression : PASS. Le garde lit le répertoire central, plafonne 20 Mo décompressés au total, 10 000 entrées, ratio 100 au-delà de 1 Mo, refuse Zip64, noms dupliqués, disposition ambiguë JSZip/garde, et inflate réellement chaque entrée avec `maxOutputLength = déclaré + 1` (taille déclarée mensongère détectée). PoC : feuille de 23,8 Mo décompressés -> 400 en 1 ms.
+- XXE / entités : PASS. Tout `<!DOCTYPE ... ENTITY>` (interne, `SYSTEM file:///etc/passwd`, expansion imbriquée type « billion laughs ») -> 400 « workbook could not be read », en ~20 ms ; le même classeur sans DOCTYPE est lu normalement (témoin). Aucune entité externe résolue, aucun contenu de fichier local dans la réponse.
+- Macros : `xl/vbaProject.bin` refusé (comparaison insensible à la casse) ; rien n'est exécuté de toute façon. Hyperliens et relations externes jamais suivis (aucun accès réseau dans le chemin).
+- Formules : PASS. `toScalar` lit `result` (valeur en cache), une formule sans résultat donne `null` ; test PoC : `HYPERLINK(...)` avec `<v>42</v>` rendu `42` de type number, aucune évaluation. Limite INFO : une cellule texte commençant par `=`/`+`/`@` est renvoyée telle quelle ; sûr en JSON/React, à neutraliser si un export CSV/xlsx de ces exemples est un jour ajouté.
+- Event loop : PoC, retard max mesuré 47-50 ms même sur le pire fichier (exceljs/sax cèdent la main) : pas de blocage comme le DoS zod.
+
+**F-EVD2-01 — MEDIUM 4,3 (AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:L ; 6,5 avec A:H si conteneur <= 512 Mo), CONFIRMED (PoC).** Les plafonds lignes/colonnes sont testés APRÈS `workbook.xlsx.load` (le plafond « avant parcours » protège le parcours, pas le chargement). Le garde d'archive laisse passer 20 Mo de XML décompressé (ratio <= 100 avec contenu non répétitif). Mesures sur la fonction réelle :
+| fichier | taille | durée | mémoire |
+|---|---|---|---|
+| 7 000 x 50 cellules texte (18,4 Mo XML) | 1,75 Mo | 1,46 s | heap 223 Mo, RSS 367 Mo |
+| 55 x 16 000 cellules vides stylées (17,4 Mo XML) | 2,28 Mo | 2,56 s | heap 310 Mo, RSS 473 Mo |
+Une seule requête amplifie ~140 à 200 fois ; 2 à 4 en parallèle (le limiteur est par IP, 30 par fenêtre et par instance) dépassent un conteneur de 512 Mo -> OOM de l'instance (disponibilité de tout le tenant). Préconditions : `evidence.import` (accordé par SQL par HUMAN, donc peu de comptes) + une évidence xlsx déjà stockée (`evidence.upload`, contrôle de type = magic bytes seulement). Reco A06 : (1) plafond décompressé spécifique à l'analyse (8 Mo au total, plafond par entrée) via un paramètre de `assertSafeXlsxArchive` ; (2) sémaphore global de 1 à 2 analyses simultanées par processus (503/429 sinon) ; (3) limiteur par utilisateur en plus de l'IP. Test de régression : le fichier « sparse » ci-dessus doit être refusé en 400 ; 5 appels parallèles ne dépassent pas N analyses actives. Confirmer la mémoire du service Cloud Run/Render (A09/A16).
+
+**F-EVD2-02 — MEDIUM 4,3 (AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N), CONFIRMED par lecture.** Contournement du contrôle `evidence.download` : `evidence.import` suffit à lire noms de colonnes et jusqu'à 3 valeurs distinctes x 50 colonnes x 50 feuilles (jusqu'à 7 500 valeurs de 100 caractères, pour un fichier dont le téléchargement est audité et soumis à `evidence.download`). Atténuants : `evidence.import` n'est dans aucun groupe fixe (HUMAN l'accorde), le périmètre est un seul tenant, le flux est tenant-scopé. Aggravants : aucun indicateur confidentiel n'existe, les preuves peuvent contenir des données personnelles (clients Djamo), et la lecture n'est pas auditée (F-EVD2-03). Voir la réponse (a).
+
+**F-EVD2-03 — LOW 3,1 (AV:N/AC:L/PR:L/UI:R/S:U/C:L/I:N/A:N), CONFIRMED par lecture.** Le contenu d'une preuve est lu depuis Drive et partiellement restitué sans trace, alors que `getUrl` journalise `DOWNLOAD` avant de libérer l'URL (fail-closed). Voir la réponse (b).
+
+**INFO** : `:id` non validé en uuid (id mal formé -> 500 générique via cast Postgres, comme les autres routes) ; `getContent` peut lire jusqu'à 25 Mo avant le refus à 5 Mo si `fileSize` est null (le cas est exclu par `fileSize !== null`, mais la valeur est celle déclarée à l'upload, pas celle de Drive : la vérification SHA-256 la rattrape) ; `fileName` renvoyé tel que stocké (React échappe).
+
+### Réponses aux questions d'A06
+**(a) Gravité et masquage : MEDIUM 4,3. Oui, masquer dès maintenant, sans attendre EVD-3.** Reco ferme : `analyze` ne renvoie des `examples` que si l'acteur détient AUSSI `evidence.download` (lecture du contenu = même niveau d'exposition que le téléchargement) ; sinon `analyzeXlsx(content, false)` (`examples: []`, déjà supporté par le code). Coût : une ligne, aucun indicateur à inventer, le flux d'import (types, en-têtes, nombre de lignes) reste utilisable. Quand EVD-3 apportera le flag, les exemples ne seront renvoyés que si `download` ET non confidentiel ; le flag restreint, il ne remplace pas la permission. Tant que le flag n'existe pas, `evidence.import` ne doit être accordé qu'à des titulaires de `evidence.download`. Test : acteur `import` seul -> `examples` vide ; `import`+`download` -> 3 exemples.
+**(b) Audit : oui, requis.** Inscrire `audit.record` AVANT de renvoyer la réponse (fail-closed comme `getUrl`), `entityType: "Evidence"`, `action: "READ"` (déjà dans l'union TS et la CHECK de la migration 051, aucune migration), `newValue: { fileName, sha256, sheetCount, examplesReturned: boolean }`, jamais les valeurs ; `requestId` comme les autres. Placement : après le contrôle SHA-256 et avant l'analyse (une lecture refusée par le garde est aussi un signal à garder). « Aucune écriture » du cadrage vise les données métier, pas la piste d'audit append-only. Distinguer ainsi `DOWNLOAD` (fichier) de `READ` (contenu analysé). Test : l'audit est écrit ; si `audit.record` échoue, pas de réponse ni d'exemples.
+
+### Chaînes d'attaque
+F-EVD2-02 + F-EVD2-03 : un compte `import` lit le contenu partiel d'une preuve sans `download` et sans trace. F-EVD2-01 + limiteur par IP : OOM de l'instance depuis un seul compte privilégié. Pas de chaîne vers l'extérieur.
+
+### Statut et tracker (7bis)
+F-B8s-01 (A06, LOW) ; F-EVD2-01 (A06, MEDIUM, + A09/A16 pour la mémoire du conteneur) ; F-EVD2-02 (A06, MEDIUM, reco (a)) ; F-EVD2-03 (A06, LOW, reco (b)) : REMEDIATION_REQUIRED. Retest attendu : fichier sparse/dense 400 ou refus de concurrence, `examples` vides sans `download`, ligne `READ` en audit, deux affectations parallèles RM + Audit sur Postgres réel. Non rejoué sur une vraie base ni avec Drive réel.
