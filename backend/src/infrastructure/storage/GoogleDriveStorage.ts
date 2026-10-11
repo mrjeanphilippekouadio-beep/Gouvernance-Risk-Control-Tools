@@ -123,4 +123,32 @@ export class GoogleDriveStorage implements DocumentStorage {
       supportsAllDrives: true,
     });
   }
+
+  /**
+   * Startup check: can the configured identity read both Shared Drive
+   * folders? Returns one line per folder; never throws and never includes
+   * credential material (only the HTTP status of a failure).
+   */
+  async checkFolders(): Promise<string[]> {
+    const folders = [
+      ["active", this.activeFolderId],
+      ["deleted", this.deletedFolderId],
+    ] as const;
+    const lines: string[] = [];
+    for (const [name, id] of folders) {
+      if (!id) {
+        lines.push(`${name} folder: not configured`);
+        continue;
+      }
+      try {
+        const drive = await this.drive();
+        await drive.files.get({ fileId: id, fields: "id", supportsAllDrives: true });
+        lines.push(`${name} folder: OK`);
+      } catch (err) {
+        const status = (err as { code?: unknown; status?: unknown }).code ?? (err as { status?: unknown }).status;
+        lines.push(`${name} folder: FAILED (${typeof status === "number" || typeof status === "string" ? status : "no access or no credentials"})`);
+      }
+    }
+    return lines;
+  }
 }

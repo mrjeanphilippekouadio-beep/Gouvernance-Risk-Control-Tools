@@ -593,6 +593,14 @@ async function startServer(): Promise<void> {
     // eslint-disable-next-line no-console
     console.log(`GRC Tools backend listening on port ${env.PORT} (${env.NODE_ENV})`);
   });
+
+  // Best-effort Drive access check, logged once at startup; never blocks.
+  if (documentStorage instanceof GoogleDriveStorage) {
+    void documentStorage.checkFolders().then((lines) => {
+      // eslint-disable-next-line no-console
+      console.log(`Drive access check (${env.GOOGLE_DRIVE_AUTH_MODE}): ${lines.join("; ")}`);
+    });
+  }
 }
 
 startServer().catch((err) => {
