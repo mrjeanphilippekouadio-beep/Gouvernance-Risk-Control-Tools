@@ -30,8 +30,8 @@ export function Tabs<T extends string>({ items, active, onChange }: TabsProps<T>
   const baseId = useId();
   return (
     <nav className="gs-tabs">
-      {items.map((item) => {
-        const reasonId = item.disabled && item.disabledReason ? `${baseId}-${item.value}` : undefined;
+      {items.map((item, index) => {
+        const reasonId = item.disabled && item.disabledReason ? `${baseId}-${index}` : undefined;
         const classes = ["gs-tab", item.value === active && "gs-tab-active", item.disabled && "gs-tab-disabled"];
         return (
           <span key={item.value} className="gs-tab-wrap">

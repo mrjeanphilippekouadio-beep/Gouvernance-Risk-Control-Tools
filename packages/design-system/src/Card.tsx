@@ -22,7 +22,10 @@ interface CardProps {
 export function Card({ header, footer, children, className, selected, disabled }: CardProps) {
   const classes = ["gs-card", selected && "gs-card-selected", disabled && "gs-card-disabled", className];
   return (
-    <div className={classes.filter(Boolean).join(" ")} data-selected={selected || undefined} aria-disabled={disabled || undefined}>
+    <div className={classes.filter(Boolean).join(" ")} data-selected={selected || undefined} aria-disabled={disabled || undefined}
+      inert={disabled || undefined}
+      onClickCapture={disabled ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
+    >
       {selected && <span className="gs-visually-hidden">Sélectionné.</span>}
       {header !== undefined && <div className="gs-card-head">{header}</div>}
       {children !== undefined && <div className="gs-card-body">{children}</div>}

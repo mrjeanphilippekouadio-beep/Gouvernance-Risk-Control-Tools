@@ -76,10 +76,10 @@ export function Checkbox({ label, hint, className, id, disabled, indeterminate, 
         type="checkbox"
         id={inputId}
         disabled={disabled}
+        {...rest}
         ref={(el) => {
           if (el) el.indeterminate = Boolean(indeterminate);
         }}
-        {...rest}
       />
       <span>
         {label}

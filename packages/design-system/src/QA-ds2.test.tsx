@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -237,7 +238,7 @@ describe("QA-ds2 Tabs disabled", () => {
   });
 
   // DEFECT-DS2-02 (MINOR): reason id is built from item.value; a value with a space splits the IDREF list.
-  it.fails("tab values containing spaces produce an aria-describedby id that still resolves", () => {
+  it("tab values containing spaces produce an aria-describedby id that still resolves", () => {
     render(<Tabs items={[{ value: "mon onglet", label: "X", disabled: true, disabledReason: "R" }]} active="zz" onChange={() => {}} />);
     const id = screen.getByRole("button", { name: "X" }).getAttribute("aria-describedby") as string;
     // aria-describedby is a space separated IDREF list: an id with a space is split into 2 refs.
@@ -372,14 +373,14 @@ describe("QA-ds2 VersionComparison", () => {
     expect(cellsOf(1)).toEqual(["e", "", "0"]);
   });
 
-  it("object values (contract violation, backend should serialize) crash the render rather than show [object Object]", () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(() => render(<VersionComparison changes={[{ field: "o", before: { a: 1 } as never, after: "x" }]} />)).toThrow(/Objects are not valid/);
+  it("object/array values render as a safe text node, never crash (F-DS2-01)", () => {
+    render(<VersionComparison changes={[{ field: "o", before: { a: 1 } as never, after: [1] as never }]} />);
+    expect(cellsOf(1)).toEqual(["o", "(valeur complexe)", "(valeur complexe)"]);
   });
 
-  it("numbers and booleans passed at runtime render (false is swallowed by React)", () => {
+  it("numbers and booleans are stringified, including false", () => {
     render(<VersionComparison changes={[{ field: "n", before: 0 as never, after: false as never }]} />);
-    expect(cellsOf(1)).toEqual(["n", "0", ""]);
+    expect(cellsOf(1)).toEqual(["n", "0", "false"]);
   });
 
   it("duplicate field names do not crash and both rows appear", () => {
@@ -445,7 +446,7 @@ describe("QA-ds2 Card states", () => {
 
   // Card.tsx documents "Unavailable state: muted, not interactive" but only sets
   // aria-disabled on a role-less div; children stay clickable. Gap reported to the dev.
-  it.fails("DEFECT-DS2-01: a button inside a disabled Card is not activatable", () => {
+  it("DEFECT-DS2-01: a button inside a disabled Card is not activatable", () => {
     const onClick = vi.fn();
     render(<Card disabled><button onClick={onClick}>go</button></Card>);
     fireEvent.click(screen.getByText("go"));
@@ -460,8 +461,8 @@ describe("QA-ds2 Card states", () => {
 
 describe("QA-ds2 Button.css regression guard (inline-flex)", () => {
   const css = readFileSync("src/Button.css", "utf8");
-  it("vertical padding is 0 so wrapped labels have no breathing room: min-height only", () => {
-    // Pins current state; see report (MINOR visual risk on multi-line labels).
-    expect(css).toMatch(/\.btn\s*{[^}]*padding:\s*0 var\(--gs-space-4\)/);
+  it("keeps vertical padding so wrapped labels breathe; heights stay min-height", () => {
+    expect(css).toMatch(/\.btn\s*{[^}]*padding:\s*var\(--gs-space-2\) var\(--gs-space-4\)/);
+    expect(css).toMatch(/min-height:\s*40px/);
   });
 });

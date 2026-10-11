@@ -2,7 +2,7 @@ import { Table } from "./Table";
 import type { TableColumn } from "./Table";
 
 export interface VersionChange {
-  /** Name of the field that changed. */
+  /** Name of the field that changed; also the React key, so it must be unique in the list. */
   field: string;
   /** Previous value as supplied by the backend; null when the field was empty. */
   before: string | null;
@@ -17,10 +17,18 @@ interface VersionComparisonProps {
 
 const EMPTY = "(vide)";
 
+/** Scalars as text; anything else (types are erased at runtime) never reaches React as an object. */
+function show(value: unknown): string {
+  if (value === null || value === undefined) return EMPTY;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return String(value);
+  return "(valeur complexe)";
+}
+
 const columns: TableColumn<VersionChange>[] = [
   { key: "field", header: "Champ modifié", render: (c) => c.field },
-  { key: "before", header: "Ancienne valeur", render: (c) => c.before ?? EMPTY },
-  { key: "after", header: "Nouvelle valeur", render: (c) => c.after ?? EMPTY },
+  { key: "before", header: "Ancienne valeur", render: (c) => show(c.before) },
+  { key: "after", header: "Nouvelle valeur", render: (c) => show(c.after) },
 ];
 
 /**

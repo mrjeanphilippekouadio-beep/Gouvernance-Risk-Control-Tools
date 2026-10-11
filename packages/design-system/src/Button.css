@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: center;
   min-height: 40px;
-  padding: 0 var(--gs-space-4);
+  padding: var(--gs-space-2) var(--gs-space-4);
   border-radius: var(--gs-radius-btn);
   border: 1px solid transparent;
   cursor: pointer;
@@ -101,11 +101,11 @@
 
 .btn-sm {
   min-height: 32px;
-  padding: 0 var(--gs-space-2-5);
+  padding: var(--gs-space-1) var(--gs-space-2-5);
 }
 
 .btn-lg {
   min-height: 48px;
-  padding: 0 var(--gs-space-5);
+  padding: var(--gs-space-2) var(--gs-space-5);
   font-size: var(--gs-font-size-subtitle);
 }
