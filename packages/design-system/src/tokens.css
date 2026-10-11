@@ -59,6 +59,7 @@
   /* Spacing scale — every margin/padding in the design system draws from this */
   --gs-space-1: 4px;
   --gs-space-2: 8px;
+  --gs-space-2-5: 12px;
   --gs-space-3: 16px;
   --gs-space-4: 24px;
   --gs-space-5: 32px;
@@ -69,6 +70,7 @@
   --gs-font-display: "Plus Jakarta Sans", "IBM Plex Sans", system-ui, sans-serif;
   --gs-font-ui: "IBM Plex Sans", system-ui, "Segoe UI", Roboto, sans-serif;
   --gs-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --gs-font-size-display: 30px;
   --gs-font-size-title: 20px;
   --gs-font-size-subtitle: 16px;
   --gs-font-size-body: 14px;

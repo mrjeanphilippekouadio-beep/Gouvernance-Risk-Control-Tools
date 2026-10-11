@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { useEffect, useId, useRef } from "react";
 import "./Modal.css";
 
+export type ModalSize = "sm" | "md" | "lg";
+
 interface ModalProps {
   open: boolean;
   /** Called on every dismissal — backdrop-less Escape, close button, native close. */
@@ -12,6 +14,8 @@ interface ModalProps {
   actions?: ReactNode;
   /** An action is in progress: sets `aria-busy` on the dialog. */
   busy?: boolean;
+  /** Width: "sm" 340 px (default), "md" 560 px, "lg" 800 px (capped to the viewport). */
+  size?: ModalSize;
 }
 
 /**
@@ -24,7 +28,7 @@ interface ModalProps {
  * (`aria-labelledby`) and the title receives focus on open, unless a
  * child sets `autofocus`.
  */
-export function Modal({ open, onClose, title, children, actions, busy }: ModalProps) {
+export function Modal({ open, onClose, title, children, actions, busy, size = "sm" }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
@@ -45,7 +49,7 @@ export function Modal({ open, onClose, title, children, actions, busy }: ModalPr
   return (
     <dialog
       ref={ref}
-      className="gs-modal"
+      className={size === "sm" ? "gs-modal" : `gs-modal gs-modal-${size}`}
       aria-labelledby={titleId}
       aria-busy={busy || undefined}
       onClose={onClose}

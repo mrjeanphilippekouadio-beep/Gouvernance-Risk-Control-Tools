@@ -50,3 +50,37 @@
   color: var(--gs-text-secondary);
   font-size: var(--gs-font-size-body);
 }
+
+.gs-table-compact th,
+.gs-table-compact td {
+  padding: var(--gs-space-1) var(--gs-space-2-5);
+}
+
+.gs-table-striped tbody tr:nth-child(even) td {
+  background: var(--gs-bg-surface);
+}
+
+.gs-table tbody tr.gs-table-row-selected td {
+  background: var(--gs-primary-bg);
+}
+
+.gs-table tbody tr.gs-table-row-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--gs-primary);
+}
+
+.gs-table-select {
+  width: 1%;
+}
+
+.gs-table-sort {
+  all: unset;
+  cursor: pointer;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+
+.gs-table-sort:focus-visible {
+  outline: 2px solid var(--gs-primary);
+  outline-offset: 2px;
+}
