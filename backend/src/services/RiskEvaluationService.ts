@@ -267,7 +267,7 @@ export class RiskEvaluationService {
     return after;
   }
 
-  /** ACT-152: adequacy/execution/effectiveness x L1/L2/L3, each 1-3; maîtrise globale = moyenne (config-fixed). */
+  /** ACT-152: adequacy/execution/effectiveness x L1/L2/L3, each 1-3; maîtrise globale = minimum des notes saisies (le maillon le plus faible). */
   async recordMasteryAssessment(
     actor: AuthenticatedUser,
     id: string,

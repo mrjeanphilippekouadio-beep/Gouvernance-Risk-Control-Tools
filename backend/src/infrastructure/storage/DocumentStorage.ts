@@ -1,3 +1,6 @@
+/** Upper bound for a stored document, enforced on upload and before reading content back. */
+export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
+
 export interface StoredDocumentRef {
   storageFileId: string;
   url: string;
@@ -17,5 +20,7 @@ export interface DocumentStorage {
     content: Buffer;
   }): Promise<StoredDocumentRef>;
   getUrl(storageFileId: string): Promise<string>;
+  /** Raw bytes. Callers must have verified tenant ownership of the id first. */
+  getContent(storageFileId: string): Promise<Buffer>;
   delete(storageFileId: string): Promise<void>;
 }

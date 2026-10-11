@@ -12,6 +12,7 @@ export type Permission =
   | "risk.update"
   | "risk.delete"
   | "evidence.read"
+  | "evidence.download"
   | "evidence.upload"
   | "evidence.delete"
   | "control.read"
@@ -200,6 +201,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "risk.update",
   "risk.delete",
   "evidence.read",
+  "evidence.download",
   "evidence.upload",
   "evidence.delete",
   "control.read",

@@ -1,9 +1,16 @@
 import { ValidationError } from "../domain/errors/DomainErrors.js";
 
+export const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
 const ALLOWED_TYPES = {
   "application/pdf": { extension: ".pdf", matches: (b: Buffer) => b.length >= 5 && b.subarray(0, 5).toString("ascii") === "%PDF-" },
   "image/png": { extension: ".png", matches: (b: Buffer) => b.length >= 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
   "image/jpeg": { extension: ".jpg", matches: (b: Buffer) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff, alternateExtensions: [".jpeg"] },
+  [XLSX_MIME]: {
+    extension: ".xlsx",
+    // xlsx is a ZIP container: local-file-header signature "PK\x03\x04".
+    matches: (b: Buffer) => b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04,
+  },
 } as const;
 
 /**
@@ -14,7 +21,7 @@ export function validateEvidenceFile(fileName: string, mimeType: string, content
   const normalizedMime = mimeType.trim().toLowerCase();
   const rule = ALLOWED_TYPES[normalizedMime as keyof typeof ALLOWED_TYPES];
   if (!rule) {
-    throw new ValidationError("Unsupported evidence file type. Allowed types: PDF, PNG, JPEG");
+    throw new ValidationError("Unsupported evidence file type. Allowed types: PDF, PNG, JPEG, XLSX");
   }
   const normalizedName = fileName.trim().toLowerCase();
   const extensions = "alternateExtensions" in rule

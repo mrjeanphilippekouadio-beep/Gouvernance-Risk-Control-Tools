@@ -364,3 +364,16 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
 
 32. Le silence n'est jamais un accord : une échéance déclenche une
     escalade, jamais une validation.
+
+## Étape 2 — projet de report dans le contrat (2026-10-11)
+
+- 2026-10-11 : rédigé `docs/architecture/RM-V1-Contrat-etape2-PROJET.md`
+  (R1.1) : DECISION-016 à 020 et 021/025/026/027/029/030 reportées en texte
+  proposé pour §4, §5, §6, §7, §8, §10 (dont invariants 5, 7 et un 10
+  proposé), §13, §14, §17. **Contrat non modifié, en attente de validation
+  PO.** 12 points non tranchables posés au PO, dont : périmètre de
+  l'approbateur Audit/Comité, règle de décision d'Audit et indépendance 3e
+  ligne, amorçage de la première activation, définition du « responsable de
+  la fonction risque », effet d'un « Rejeté », appétence dans le Dispositif,
+  comparabilité de la Cartographie entre tailles d'échelle. Détail des règles
+  Comité A/B/C (q05) absent du dépôt : à annexer.

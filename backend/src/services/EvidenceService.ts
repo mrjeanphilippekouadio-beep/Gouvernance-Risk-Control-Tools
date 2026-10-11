@@ -1,14 +1,22 @@
 import type { EvidenceRepository } from "../domain/repositories/EvidenceRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { ControlExecutionRepository } from "../domain/repositories/ControlExecutionRepository.js";
+import { createHash } from "node:crypto";
 import type { Evidence } from "../domain/entities/Evidence.js";
-import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
-import type { DocumentStorage } from "../infrastructure/storage/DocumentStorage.js";
-import { validateEvidenceFile } from "./evidenceFileValidation.js";
+import { MAX_DOCUMENT_BYTES, type DocumentStorage } from "../infrastructure/storage/DocumentStorage.js";
+import { validateEvidenceFile, XLSX_MIME } from "./evidenceFileValidation.js";
 
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB — generous for scanned evidence, not unbounded
+/** List view: no Drive reference, since reaching the file requires evidence.download. */
+export type EvidenceSummary = Omit<Evidence, "driveFileId" | "driveUrl">;
+
+function toSummary({ driveFileId: _f, driveUrl: _u, ...summary }: Evidence): EvidenceSummary {
+  return summary;
+}
+
+const MAX_UPLOAD_BYTES = MAX_DOCUMENT_BYTES; // 25 MB — generous for scanned evidence, not unbounded
 
 /**
  * Owns the one rule that keeps document access tenant-isolated: never
@@ -34,9 +42,11 @@ export class EvidenceService {
       content: Buffer;
       documentType: string;
       controlExecutionId: string | null;
+      /** Explicit client request to register a file whose hash already exists in the tenant. */
+      allowDuplicate?: boolean;
     },
     requestId: string,
-  ): Promise<Evidence> {
+  ): Promise<EvidenceSummary> {
     requirePermission(actor, "evidence.upload");
 
     if (!params.fileName.trim()) throw new ValidationError("fileName is required");
@@ -46,11 +56,29 @@ export class EvidenceService {
     }
     validateEvidenceFile(params.fileName, params.mimeType, params.content);
 
+    // A spreadsheet is only meaningful as proof of a specific control execution.
+    if (params.mimeType.trim().toLowerCase() === XLSX_MIME && !params.controlExecutionId) {
+      throw new ValidationError("controlExecutionId is required for an xlsx evidence");
+    }
+
     // SEC-004: don't attach evidence to another tenant's control execution.
     if (params.controlExecutionId && this.controlExecutions) {
       const execution = await this.controlExecutions.getById(actor.tenantId, params.controlExecutionId);
       if (!execution) {
         throw new ValidationError(`ControlExecution ${params.controlExecutionId} does not exist in this tenant`);
+      }
+    }
+
+    // Hash computed server-side; never trusted from the client.
+    const sha256 = createHash("sha256").update(params.content).digest("hex");
+    if (!params.allowDuplicate) {
+      const existing = await this.evidences.findBySha256?.(actor.tenantId, sha256);
+      if (existing) {
+        // Only an actor allowed to read evidences learns the existing id.
+        if (actor.roles.includes("evidence.read")) {
+          throw new ConflictError(`An identical file already exists as evidence ${existing.id}`, existing.id);
+        }
+        throw new ConflictError("Un fichier identique est déjà enregistré.");
       }
     }
 
@@ -71,6 +99,9 @@ export class EvidenceService {
         driveUrl: uploaded.url,
         documentType: params.documentType,
         uploadedBy: actor.userId,
+        sha256,
+        fileSize: params.content.byteLength,
+        mimeType: params.mimeType.trim().toLowerCase(),
       });
     } catch (persistError) {
       try {
@@ -116,12 +147,30 @@ export class EvidenceService {
       throw auditError;
     }
 
-    return evidence;
+    return toSummary(evidence);
   }
 
-  async getUrl(actor: AuthenticatedUser, id: string): Promise<string> {
+  async listForControlExecution(actor: AuthenticatedUser, controlExecutionId: string): Promise<EvidenceSummary[]> {
     requirePermission(actor, "evidence.read");
+    const items = await this.evidences.listForControlExecution(actor.tenantId, controlExecutionId);
+    return items.map(toSummary);
+  }
+
+  async getUrl(actor: AuthenticatedUser, id: string, requestId: string): Promise<string> {
+    requirePermission(actor, "evidence.download");
     const evidence = await this.getOwnedOrThrow(actor, id);
+    // Audited before the URL is released: if the trail can't be written, no download.
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Evidence",
+      entityId: id,
+      action: "DOWNLOAD",
+      oldValue: null,
+      newValue: { fileName: evidence.fileName, sha256: evidence.sha256 },
+      reason: null,
+      requestId,
+    });
     // Tenant ownership already confirmed above — only now do we touch Drive.
     return this.storage.getUrl(evidence.driveFileId);
   }

@@ -13,6 +13,10 @@ export interface Evidence {
   driveUrl: string;
   documentType: string;
   uploadedBy: string;
+  /** Null for rows uploaded before migration 048. */
+  sha256: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
   uploadedAt: Date;
   version: number;
   status: EvidenceStatus;
@@ -26,4 +30,7 @@ export interface CreateEvidenceInput {
   driveUrl: string;
   documentType: string;
   uploadedBy: string;
+  sha256: string;
+  fileSize: number;
+  mimeType: string;
 }

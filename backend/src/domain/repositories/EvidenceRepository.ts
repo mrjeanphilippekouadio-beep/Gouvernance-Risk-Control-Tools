@@ -9,6 +9,8 @@ export interface EvidenceRepository {
    */
   getById(tenantId: string, id: string): Promise<Evidence | null>;
   listForControlExecution(tenantId: string, controlExecutionId: string): Promise<Evidence[]>;
+  /** Oldest ACTIVE evidence of this tenant with this hash, if any. Optional so pre-EVD-1 fake repositories keep compiling; the Postgres repository implements it. */
+  findBySha256?(tenantId: string, sha256: string): Promise<Evidence | null>;
   create(input: CreateEvidenceInput): Promise<Evidence>;
   markDeleted(tenantId: string, id: string): Promise<void>;
   /** Restore an evidence row after an audit failure before external storage is touched. */
