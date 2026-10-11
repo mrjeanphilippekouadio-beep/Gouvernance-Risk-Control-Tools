@@ -169,7 +169,7 @@ pour l'usage.
 | HUMAN @dev-backend @security @compliance | **B-8 groupes fixes (R1.2, 2026-10-11) — questions PO soulevées par A06** : (1) les 3 groupes fixes sont créés **sans aucune permission** : quels droits pour Risk Manager, Risk Committee, Audit ? Le groupe Audit doit-il remplacer le rôle « Auditeur » (`audit.read`) ? (2) `processes.department_id` reste facultatif (données et UI existantes) alors que le contrat exige un rattachement : le rendre obligatoire quand, après le rattrapage F-11 ? (3) suspendre le dernier membre actif de Risk Manager via `UserService` contourne l'invariant « jamais vide » (revue Security/Compliance en cours) ; (4) le modèle P4 (ligne « P4 validé par l'Architecte ») est implémenté tel que proposé, confirmation PO toujours attendue. | 2026-10-11 | **Ouvert — HUMAN ; QA/Security/Compliance B-8 en cours.** |
 | HUMAN @risk-manager @dev-backend | **Plafonds de score à 25 alors que B-9 autorise une échelle 6×6 (score max 36)** (A06, 2026-10-11) : `MAX_APPETITE_THRESHOLD`/`MAX_THRESHOLD` = 25 (appétence), zod `threshold` ≤ 25, CHECK `committee_*_min_score` 1..25 (migration 045), bandes de criticité par défaut (« Critique » = 16–25) dans `CartographyService`/`DashboardService`. Tant que ce n'est pas aligné, une échelle 6 ne doit pas être activée. Petit lot dédié à prévoir (avec B-6 ou l'UI) ; **la Cartographie est concernée côté backend — consigne PO : ne pas toucher la page Cartographie, à confirmer pour ses bandes backend.** Également : `levelLabels` par axe facultatif — obligatoire à l'activation ou à la création du Dispositif (B-6, recommandé A06) ? | 2026-10-11 | **Ouvert — HUMAN : go du petit lot « score 36 » et périmètre Cartographie.** |
 | HUMAN @dev-backend @dev-db @compliance | **Compliance B-8 (A14, 2026-10-11) : CONFORME AVEC RÉSERVES, aucun bloquant** (`docs/security/compliance-B8.md`). Questions PO : (1) cumul Risk Manager + Audit interdit (A14 : oui) ? RM + Comité interdit ou autorisé avec cumul marqué ? (2) un membre **suspendu** compte-t-il dans « jamais vide » (A14 : non) — confirmé : `UserService.suspend` ne révoque pas les `user_roles` et le comptage ignore le statut ; refuser la suspension du dernier RM actif ? (3) droits des 3 groupes (reco A14 : RM larges sans auto-approbation + permission distincte « responsable de la fonction risque » ; Comité lecture + vote ; Audit lecture seule transverse) ; (4) motif obligatoire et approbateur tiers pour entrer/sortir d'un groupe fixe ? (5) qui modifie les permissions du groupe Audit (3e ligne) : l'équipe risque ou une autorité distincte ? (6) calendrier du rattrapage Processus → département (F-11) puis `NOT NULL`, qui rattache les processus existants ? Suivi technique : garde de cumul + correction suspension/comptage (A06), index d'unicité partiel `user_roles` actifs + rattrapage département (A07), audit hors transaction (invariant 7, lot transverse), adoption par nom à vérifier sur les données réelles avant prod. | 2026-10-11 | **Ouvert — HUMAN : questions 1 à 6.** |
-| @dev-backend @qa-engineer HUMAN | **Retest A10 B-8 (2026-10-11) : F-B8-01 et F-B8-03 CLOSED** (suspension/révocation du dernier Risk Manager actif refusées, sérialisées par `FOR UPDATE` sur la ligne `roles`). Nouveaux constats INFO, non bloquants : **F-B8-05** (CVSS 0) le pré-contrôle de `RoleService.revokeFromUser` ignore la cible — révoquer un membre suspendu est refusé tant qu'il ne reste qu'un actif (fail closed) ; **F-B8-06** (CVSS 2,0) un rôle détenu uniquement par des suspendus devient désactivable, leurs `user_roles` restent → à la réactivation l'utilisateur perd silencieusement ces droits (réduction, jamais élévation). Reco : A06 restreint le pré-contrôle aux cibles actives ; PO décide pour F-B8-06 (signaler/auditer à la réactivation, ou refuser `reactivate` sans rôle actif) ; A08 test de concurrence sur vraie base si souhaité. | 2026-10-11 | **F-B8-05 CORRIGÉ (A06, 2026-10-11, aussi relevé par Gitar sur PR #151) ; Ouvert — HUMAN (F-B8-06).** |
+| @dev-backend @qa-engineer HUMAN | **Retest A10 B-8 (2026-10-11) : F-B8-01 et F-B8-03 CLOSED** (suspension/révocation du dernier Risk Manager actif refusées, sérialisées par `FOR UPDATE` sur la ligne `roles`). Nouveaux constats INFO, non bloquants : **F-B8-05** (CVSS 0) le pré-contrôle de `RoleService.revokeFromUser` ignore la cible — révoquer un membre suspendu est refusé tant qu'il ne reste qu'un actif (fail closed) ; **F-B8-06** (CVSS 2,0) un rôle détenu uniquement par des suspendus devient désactivable, leurs `user_roles` restent → à la réactivation l'utilisateur perd silencieusement ces droits (réduction, jamais élévation). Reco : A06 restreint le pré-contrôle aux cibles actives ; PO décide pour F-B8-06 (signaler/auditer à la réactivation, ou refuser `reactivate` sans rôle actif) ; A08 test de concurrence sur vraie base si souhaité. | 2026-10-11 | **F-B8-05 CORRIGÉ ; F-B8-06 DÉCIDÉ (DECISION-039 §2 : prévenir + modal des utilisateurs habilités) — Ouvert A06 + Dev Frontend.** |
 | @devops @dev-db | **Incident migrate.yml staging (2026-10-11, PR #151)** : 049 appliquée, 050 en échec (`constraint risks_probability_check does not exist`) — les CHECK probability/impact sont sur `risk_assessments`, pas `risks` ; 050 annulée par sa transaction, rien d'enregistré. Corrigée par A07 (bloc `DO` sur `pg_constraint`, table corrigée, vérifiée sur Postgres 16 jetable). **Cause racine du non-détection** : la CI de PR crée une branche Neon mais n'y applique pas les migrations → proposer (A09) un job `npm run migrate` sur la branche Neon éphémère de PR. | 2026-10-11 | **050 appliquée sur staging (PR #152, migrate.yml run 5 vert, 2026-10-11). Ouvert — A09 (job migrations en CI de PR).** |
 ## Decision Log
 
@@ -1021,4 +1021,38 @@ DECISION:
 RELATED: DECISION-035, DECISION-036, DECISION-037.
 OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ — dispatches A13 (contrat), A06 ×3 (B-8, B-9, sécurité), A21 (PEOS).
+```
+
+```
+DECISION-039
+DATE: 2026-10-11
+QUESTION: PEOS domaine ; F-B8-06 (droits perdus à la réactivation) ;
+  réponses PO dans l'artefact Pilotage (q37 révisée, q40, q41).
+DECISION:
+  1. PEOS : la ligne « Source » des fiches garde « SaaS de
+     gouvernance/risques multi-tenant » (recommandation acceptée). PR #56
+     peut être fusionnée.
+  2. F-B8-06 : l'utilisateur réactivé qui a perdu des droits (rôle
+     désactivé pendant sa suspension) est PRÉVENU qu'il ne les a plus ;
+     quand il tente une action refusée, une fenêtre (modal) lui montre
+     les utilisateurs qui peuvent lui redonner ses droits.
+  3. q37 RÉVISÉE (remplace DECISION-038 §1) — quorum du Comité impossible
+     (trop de votants exclus ou échéance dépassée) : l'envoi au Comité
+     est refusé et la demande passe à AUDIT ; si le groupe Audit est
+     vide, elle passe au responsable du risque (membre du groupe Risk
+     Manager) ; s'il est lui-même concerné, il décide AVEC CONSULTATION
+     d'un autre membre du groupe Risk Manager (paramètre configurable
+     dans l'administration). Décision inscrite au journal « décisions
+     prises en l'absence du Comité » ; jamais de validation tacite.
+     Jamais l'administrateur du client.
+  4. q40 : GO vague 2 du design system sur le périmètre de
+     docs/ux/DS-V1-revue-penpot.md (tailles bouton/fenêtre, tableau
+     compact/zébré/sélectionné, états onglet/carte, palier 12px, titre
+     30px, puis les 18 composants manquants).
+  5. q41 : un Comité vide peut être choisi comme approbateur du
+     Dispositif ; la suppléance s'applique (texte actuel).
+RELATED: DECISION-038, F-B8-06.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — A13 (contrat q37), A06 + Dev Frontend (F-B8-06),
+  Dev Frontend + A04 (DS vague 2), A21/orchestrateur (merge PEOS #56).
 ```
