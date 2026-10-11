@@ -228,6 +228,7 @@ const processService = new ProcessService(
   riskRepository,
   controlRepository,
   processEvaluationModeRequestRepository,
+  departmentRepository,
 );
 const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
   processEvaluationModeRequestRepository,
@@ -259,7 +260,7 @@ const findingService = new FindingService(
   controlRepository,
   anomalyRepository,
 );
-const roleService = new RoleService(roleRepository, auditRepository, userRepository);
+const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);

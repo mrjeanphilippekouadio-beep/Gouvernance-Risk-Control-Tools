@@ -1,9 +1,9 @@
 import type { Pool } from "pg";
 import type { RoleRepository } from "../../../domain/repositories/RoleRepository.js";
-import type { CreateRoleInput, Role, RoleAssignment, UpdateRoleInput } from "../../../domain/entities/Role.js";
+import type { CreateRoleInput, Role, RoleAssignment, SystemGroup, UpdateRoleInput } from "../../../domain/entities/Role.js";
 import type { Permission } from "../../../domain/permissions.js";
 import type { DashboardScopeMode } from "../../../domain/entities/DashboardScope.js";
-import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 
 interface RoleRow {
@@ -13,6 +13,8 @@ interface RoleRow {
   description: string | null;
   permissions: string[];
   dashboard_scope_mode: DashboardScopeMode;
+  system_group: SystemGroup | null;
+  department_id: string | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -36,6 +38,8 @@ function toDomain(row: RoleRow): Role {
     description: row.description,
     permissions: row.permissions as Permission[],
     dashboardScopeMode: row.dashboard_scope_mode,
+    systemGroup: row.system_group,
+    departmentId: row.department_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -84,8 +88,8 @@ export class PostgresRoleRepository implements RoleRepository {
 
   async create(input: CreateRoleInput): Promise<Role> {
     const { rows } = await this.pool.query<RoleRow>(
-      `INSERT INTO roles (tenant_id, name, description, permissions, dashboard_scope_mode)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO roles (tenant_id, name, description, permissions, dashboard_scope_mode, department_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [
         input.tenantId,
@@ -93,6 +97,7 @@ export class PostgresRoleRepository implements RoleRepository {
         input.description ?? null,
         input.permissions,
         input.dashboardScopeMode ?? "GLOBAL",
+        input.departmentId ?? null,
       ],
     );
     const row = rows[0];
@@ -107,6 +112,7 @@ export class PostgresRoleRepository implements RoleRepository {
         description: input.description,
         permissions: input.permissions,
         dashboard_scope_mode: input.dashboardScopeMode,
+        department_id: input.departmentId,
       },
       3,
     );
@@ -157,13 +163,41 @@ export class PostgresRoleRepository implements RoleRepository {
     return assignmentToDomain(row);
   }
 
-  async revokeFromUser(tenantId: string, roleId: string, userId: string): Promise<void> {
-    const { rowCount } = await this.pool.query(
-      `UPDATE user_roles SET revoked_at = now()
-       WHERE tenant_id = $1 AND role_id = $2 AND user_id = $3 AND revoked_at IS NULL`,
-      [tenantId, roleId, userId],
-    );
-    if (!rowCount) throw new NotFoundError("RoleAssignment", `${roleId}:${userId}`);
+  async revokeFromUser(
+    tenantId: string,
+    roleId: string,
+    userId: string,
+    options?: { minRemaining?: number },
+  ): Promise<void> {
+    const minRemaining = options?.minRemaining ?? 0;
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      // Serialises concurrent revokes on the same role so the count below is reliable.
+      await client.query(`SELECT id FROM roles WHERE tenant_id = $1 AND id = $2 FOR UPDATE`, [tenantId, roleId]);
+      if (minRemaining > 0) {
+        const { rows } = await client.query<{ count: string }>(
+          `SELECT COUNT(*) AS count FROM user_roles
+           WHERE tenant_id = $1 AND role_id = $2 AND revoked_at IS NULL AND user_id <> $3`,
+          [tenantId, roleId, userId],
+        );
+        if (Number(rows[0]?.count ?? 0) < minRemaining) {
+          throw new ValidationError("Cannot remove the last member of this group");
+        }
+      }
+      const { rowCount } = await client.query(
+        `UPDATE user_roles SET revoked_at = now()
+         WHERE tenant_id = $1 AND role_id = $2 AND user_id = $3 AND revoked_at IS NULL`,
+        [tenantId, roleId, userId],
+      );
+      if (!rowCount) throw new NotFoundError("RoleAssignment", `${roleId}:${userId}`);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async listForUser(tenantId: string, userId: string): Promise<Role[]> {

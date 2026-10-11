@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { ProcessService } from "../src/services/ProcessService.js";
 import type { ProcessRepository } from "../src/domain/repositories/ProcessRepository.js";
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
+import type { DepartmentRepository } from "../src/domain/repositories/DepartmentRepository.js";
 import type { RiskRepository } from "../src/domain/repositories/RiskRepository.js";
 import type { ControlRepository } from "../src/domain/repositories/ControlRepository.js";
 import type { ProcessEvaluationModeRequestRepository } from "../src/domain/repositories/ProcessEvaluationModeRequestRepository.js";
@@ -36,6 +37,7 @@ function inMemoryProcessRepository(): ProcessRepository {
         owner: input.owner ?? null,
         active: input.active ?? true,
         evaluationMode: input.evaluationMode ?? null,
+        departmentId: input.departmentId ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
         deletedAt: null,
@@ -157,6 +159,48 @@ const actor: AuthenticatedUser = {
   displayName: "JP",
   roles: ["process.read", "process.create", "process.update", "process.delete"],
 };
+
+describe("ProcessService department link (B-8)", () => {
+  const departments = {
+    async getById(_tenantId: string, id: string) {
+      return id === "dept-1" ? ({ id } as never) : null;
+    },
+  } as unknown as DepartmentRepository;
+
+  it("attaches a process to an existing department", async () => {
+    const service = new ProcessService(
+      inMemoryProcessRepository(),
+      inMemoryAuditRepository(),
+      undefined,
+      undefined,
+      undefined,
+      departments,
+    );
+    const process = await service.create(actor, { level: "PROCESS", name: "P1", departmentId: "dept-1" }, "REQ-1");
+    expect(process.departmentId).toBe("dept-1");
+  });
+
+  it("rejects an unknown department", async () => {
+    const service = new ProcessService(
+      inMemoryProcessRepository(),
+      inMemoryAuditRepository(),
+      undefined,
+      undefined,
+      undefined,
+      departments,
+    );
+    await expect(
+      service.create(actor, { level: "PROCESS", name: "P1", departmentId: "nope" }, "REQ-2"),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it("fails closed when a departmentId is given without a DepartmentRepository", async () => {
+    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository());
+    await expect(
+      service.create(actor, { level: "PROCESS", name: "P1", departmentId: "dept-1" }, "REQ-3"),
+    ).rejects.toThrow("requires a DepartmentRepository");
+  });
+});
 
 describe("ProcessService", () => {
   it("creates a root PROCESS with no parent", async () => {
