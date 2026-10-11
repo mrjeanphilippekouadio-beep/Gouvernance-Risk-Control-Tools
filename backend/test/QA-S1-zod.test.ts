@@ -99,6 +99,20 @@ describe("rating scales: boundaries", () => {
     expect((await send(url, "PUT", { levels, defenseLines: ["1L"], thresholds: Array.from({ length: 51 }, (_, i) => th(i)) })).status).toBe(400);
   });
 
+  it("F-B9-01: label/code capped at 200, name/version at 120 -> 400 beyond", async () => {
+    const svc = { ...mk(), create: vi.fn().mockResolvedValue({ id: "s1" }) };
+    const base = await start("/rs", ratingScalesRouter(svc as unknown as RatingScaleService));
+    const core = { name: "Echelle", version: "v1", probabilityLevels: 3, impactLevels: 3 };
+    const long = "x".repeat(201);
+    expect((await send(`${base}/rs`, "POST", { ...core, probabilityLabels: [{ level: 1, label: "x".repeat(200) }] })).status).toBe(201);
+    expect((await send(`${base}/rs`, "POST", { ...core, probabilityLabels: [{ level: 1, label: long }] })).status).toBe(400);
+    expect((await send(`${base}/rs`, "POST", { ...core, name: "x".repeat(121) })).status).toBe(400);
+    expect((await send(`${base}/rs`, "POST", { ...core, version: "x".repeat(121) })).status).toBe(400);
+    const axesUrl = `${base}/rs/s1/impact-axes`;
+    expect((await send(axesUrl, "PUT", { axes: [{ code: long, label: "A", order: 1 }] })).status).toBe(400);
+    expect((await send(axesUrl, "PUT", { axes: [{ code: "A", label: long, order: 1 }] })).status).toBe(400);
+  });
+
   it("create scale: labels nullish kept (null/absent ok); 6 ok, 7 -> 400 (B-9)", async () => {
     const svc = { create: vi.fn().mockResolvedValue({ id: "s1" }) };
     const base = await start("/rs", ratingScalesRouter(svc as unknown as RatingScaleService));
