@@ -34,3 +34,26 @@
   padding: 12px 16px;
   border-top: 1px solid var(--gs-border);
 }
+
+.gs-card-selected {
+  border-color: var(--gs-primary);
+  box-shadow: 0 0 0 1px var(--gs-primary), var(--gs-elev-1);
+  background: var(--gs-primary-bg);
+}
+
+.gs-card-selected .gs-card-head {
+  background: var(--gs-primary-bg);
+}
+
+.gs-card-disabled {
+  background: var(--gs-bg-surface);
+  color: var(--gs-text-disabled);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.gs-card-disabled .gs-card-head,
+.gs-card-disabled .gs-card-body {
+  background: transparent;
+  color: var(--gs-text-disabled);
+}

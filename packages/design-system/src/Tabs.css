@@ -27,3 +27,14 @@
   font-weight: 700;
   border-bottom-color: var(--gs-primary);
 }
+
+.gs-tab-wrap {
+  display: inline-flex;
+}
+
+.gs-tab-disabled,
+.gs-tab-disabled:hover {
+  color: var(--gs-text-disabled);
+  cursor: not-allowed;
+  text-decoration: line-through;
+}

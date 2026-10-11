@@ -3,9 +3,12 @@ import { useId } from "react";
 import "./Button.css";
 
 export type ButtonVariant = "primary" | "secondary" | "destructive";
+export type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
+  /** Heights 32 / 40 / 48 px. Defaults to "md" (the historical size). */
+  size?: ButtonSize;
   /** Busy state: keeps the label, sets `aria-busy`, ignores clicks. */
   loading?: boolean;
   /**
@@ -25,6 +28,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  */
 export function Button({
   variant = "secondary",
+  size = "md",
   className,
   type = "button",
   loading = false,
@@ -36,7 +40,7 @@ export function Button({
 }: ButtonProps) {
   const reasonId = useId();
   const blocked = loading || Boolean(disabledReason);
-  const classes = ["btn", `btn-${variant}`, className].filter(Boolean).join(" ");
+  const classes = ["btn", `btn-${variant}`, size !== "md" ? `btn-${size}` : undefined, className].filter(Boolean).join(" ");
   const describedIds = [describedBy, disabledReason ? reasonId : undefined].filter(Boolean).join(" ") || undefined;
 
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {

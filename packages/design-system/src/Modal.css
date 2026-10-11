@@ -37,3 +37,11 @@
 .gs-modal-title:focus {
   outline: none;
 }
+
+.gs-modal-md {
+  width: 560px;
+}
+
+.gs-modal-lg {
+  width: 800px;
+}
