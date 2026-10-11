@@ -386,16 +386,18 @@ Fait depuis par l'orchestrateur : la réponse du PO à q05 est inscrite (DECISIO
 
 ## 13. Points restant à confirmer par le PO
 
-Seules les lectures douteuses sont listées ; aucune règle n'est inventée pour les combler.
+Aucun point ne reste à confirmer.
 
-Points q34, q35, q36, q38 et q39 tranchés par DECISION-035 (2026-10-11) et reportés dans le texte. Reste un seul point.
+Points q34, q35, q36, q38 et q39 tranchés par DECISION-035 (2026-10-11) et reportés dans le texte.
 
-1. **Q-E2-7 / q29 / q37. Proposition en attente (q37), à valider par le PO.** Quand le quorum d'une règle de Comité est impossible : l'envoi est refusé ; la décision est prise par le responsable du service risque en suppléance (règles de 3.1, q35) ; s'il est concerné, Audit décide si son groupe n'est pas vide, sinon l'administrateur du client, avec motif ; Audit est notifié dans tous les cas ; la décision est inscrite au journal des décisions prises en l'absence du Comité ; jamais de validation tacite. Le PO valide-t-il cette proposition ?
+1. **Q-E2-7 / q29 / q37. Tranché par DECISION-038 point 1 (2026-10-11).** Quand le quorum d'une règle de Comité est impossible : l'envoi est refusé ; la décision revient à la fonction risque, jamais à l'administrateur du client (il peut être une personne de l'équipe technique). Le responsable du service risque (groupe Risk Manager, accès à tous les risques) décide en suppléance, avec les garde-fous q35 ; s'il est concerné, Audit si son groupe n'est pas vide, sinon un autre membre du groupe Risk Manager non concerné. Motif, trace, Audit notifié, journal des décisions prises en l'absence du Comité, jamais de validation tacite. Reporté en 6.2.
+
+**Vigilance signalée au PO (non tranchée, texte inchangé).** La règle « Premier Dispositif » (résumé point 11, 7.2, Q-E2-6) cite encore l'administrateur du client comme dernier recours d'activation. DECISION-038 écarte l'administrateur du client pour q37 au motif qu'il peut être une personne de l'équipe technique ; le même motif vaut a priori pour la première activation. Le PO n'a tranché que q37 : à confirmer par le PO si cette règle doit rester telle quelle.
 
 ---
 
 ## Suite
 
-1. Le PO lit le résumé et la section 13, et valide ou corrige la proposition q37.
-2. Il valide, refuse ou modifie le texte ; la décision est inscrite au Decision Log (règle 7bis).
-3. Après validation, l'Orchestrateur applique le texte dans le contrat (A03 relit, R1.1) et l'étape 2 est marquée terminée dans `RM-V1-Sequence-actions.md`. Elle débloque B-9 et B-6 (étapes 8 et 9).
+1. Fait : le PO a validé q37 et le texte final (DECISION-038, 2026-10-11).
+2. Fait : le texte est reporté dans le contrat (A13), l'étape 2 est marquée FAIT dans `RM-V1-Sequence-actions.md`.
+3. À faire : relecture A03 (R1.1). L'étape 2 débloque B-9 et B-6 (étapes 8 et 9).
