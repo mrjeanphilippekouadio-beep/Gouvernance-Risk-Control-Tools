@@ -1,0 +1,56 @@
+.gs-collapsible {
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius-card);
+  background: var(--gs-bg-page);
+  font-family: var(--gs-font-ui);
+}
+
+.gs-collapsible-heading {
+  margin: 0;
+  font-size: var(--gs-font-size-body);
+}
+
+.gs-collapsible-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--gs-space-2);
+  width: 100%;
+  padding: var(--gs-space-2) var(--gs-space-3);
+  background: none;
+  border: 0;
+  border-radius: var(--gs-radius-card);
+  font: inherit;
+  font-weight: 700;
+  color: var(--gs-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gs-collapsible-btn:focus-visible {
+  outline: 2px solid var(--gs-primary);
+  outline-offset: 2px;
+}
+
+.gs-collapsible-icon {
+  transition: transform 0.15s;
+}
+
+.gs-collapsible-icon[data-open] {
+  transform: rotate(180deg);
+}
+
+.gs-collapsible-panel {
+  padding: 0 var(--gs-space-3) var(--gs-space-3);
+  color: var(--gs-text-secondary);
+  font-size: var(--gs-font-size-body);
+}
+
+.gs-collapsible-panel[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gs-collapsible-icon {
+    transition: none;
+  }
+}

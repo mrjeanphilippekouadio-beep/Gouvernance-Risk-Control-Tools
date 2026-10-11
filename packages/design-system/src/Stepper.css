@@ -1,0 +1,75 @@
+.gs-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gs-space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--gs-font-ui);
+}
+
+.gs-stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gs-space-2);
+  background: none;
+  border: 0;
+  padding: var(--gs-space-1) var(--gs-space-2);
+  border-radius: var(--gs-radius);
+  font: inherit;
+  font-size: var(--gs-font-size-body);
+  color: var(--gs-text-secondary);
+}
+
+button.gs-stepper-btn {
+  cursor: pointer;
+}
+
+button.gs-stepper-btn:disabled {
+  color: var(--gs-text-disabled);
+  cursor: not-allowed;
+}
+
+.gs-stepper-btn:focus-visible {
+  outline: 2px solid var(--gs-primary);
+  outline-offset: 2px;
+}
+
+.gs-stepper-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--gs-radius-pill);
+  border: 1px solid var(--gs-border);
+  font-family: var(--gs-font-mono);
+  font-size: 12px;
+}
+
+.gs-stepper-current .gs-stepper-btn {
+  color: var(--gs-text);
+  font-weight: 700;
+}
+
+.gs-stepper-current .gs-stepper-marker {
+  background: var(--gs-primary);
+  border-color: var(--gs-primary);
+  color: #fff;
+}
+
+.gs-stepper-done .gs-stepper-marker {
+  background: var(--gs-success-bg);
+  border-color: var(--gs-success);
+  color: var(--gs-success);
+}
+
+.gs-stepper-error .gs-stepper-btn {
+  color: var(--gs-danger);
+}
+
+.gs-stepper-error .gs-stepper-marker {
+  background: var(--gs-danger-bg);
+  border-color: var(--gs-danger);
+  color: var(--gs-danger);
+}

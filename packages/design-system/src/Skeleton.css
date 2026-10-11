@@ -1,0 +1,33 @@
+.gs-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gs-space-2);
+}
+
+.gs-skeleton-line {
+  display: block;
+  height: 14px;
+  border-radius: var(--gs-radius);
+  background: linear-gradient(90deg, var(--gs-bg-surface) 25%, var(--gs-border) 50%, var(--gs-bg-surface) 75%);
+  background-size: 200% 100%;
+  animation: gs-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.gs-skeleton-line[data-last="true"] {
+  width: 60%;
+}
+
+@keyframes gs-skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gs-skeleton-line {
+    animation: none;
+  }
+}

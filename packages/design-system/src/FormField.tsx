@@ -1,30 +1,75 @@
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
+import { Children, cloneElement, Fragment, isValidElement } from "react";
 import "./FormField.css";
 
 interface FormFieldProps {
   label: string;
+  /** `id` of the control — also the base of the help/error element ids. */
   htmlFor: string;
   help?: string;
   error?: string;
+  /** Marks the field as required (visible marker + `required` on the control). */
+  required?: boolean;
+  disabled?: boolean;
+  readOnly?: boolean;
   children: ReactNode;
 }
 
 /**
  * Single form-field pattern for the whole app: Label + Control + optional
  * help text + optional inline error — see DESIGN_NOTES.md section 5.2.
- * Replaces the two conventions that coexisted before (visible <label> in
- * FeedbackWidget vs. placeholder-only in RisksPage/RolesAdmin); resolves
- * in favor of the explicit <label>, the only accessible option and the
- * only one that stays legible once the field is filled in.
+ *
+ * The help and error texts are linked to the control (`aria-describedby`,
+ * `aria-invalid`) by cloning the single element child, so native controls
+ * and Input/Select/Textarea get them with no extra wiring. Wrapped or
+ * multiple children are left untouched (backward compatible).
  */
-export function FormField({ label, htmlFor, help, error, children }: FormFieldProps) {
+export function FormField({ label, htmlFor, help, error, required, disabled, readOnly, children }: FormFieldProps) {
+  const helpId = `${htmlFor}-help`;
+  const errorId = `${htmlFor}-error`;
+  const messageId = error ? errorId : help ? helpId : undefined;
+
+  let control = children;
+  const only = Children.count(children) === 1 ? Children.toArray(children)[0] : null;
+  // Only native form controls and components are wired; a wrapper such as
+  // a <div> around several elements is left untouched.
+  const wirable =
+    isValidElement(only) &&
+    only.type !== Fragment &&
+    (typeof only.type !== "string" || ["input", "select", "textarea"].includes(only.type));
+  if (wirable && isValidElement(only)) {
+    const element = only as ReactElement<Record<string, unknown>>;
+    const existing = element.props["aria-describedby"] as string | undefined;
+    control = cloneElement(element, {
+      "aria-describedby": [existing, messageId].filter(Boolean).join(" ") || undefined,
+      "aria-invalid": error ? true : element.props["aria-invalid"],
+      ...(required ? { required: true } : {}),
+      ...(disabled ? { disabled: true } : {}),
+      ...(readOnly ? { readOnly: true } : {}),
+    });
+  }
+
   return (
     <div className="form-field">
-      <label htmlFor={htmlFor}>{label}</label>
-      {children}
-      {help && !error && <p className="form-field__help">{help}</p>}
+      <label htmlFor={htmlFor}>
+        {label}
+        {required && (
+          <>
+            <span className="form-field__required" aria-hidden="true">
+              {" *"}
+            </span>
+            <span className="gs-visually-hidden"> (obligatoire)</span>
+          </>
+        )}
+      </label>
+      {control}
+      {help && !error && (
+        <p id={helpId} className="form-field__help">
+          {help}
+        </p>
+      )}
       {error && (
-        <p className="form-field__error" role="alert">
+        <p id={errorId} className="form-field__error" role="alert">
           {error}
         </p>
       )}

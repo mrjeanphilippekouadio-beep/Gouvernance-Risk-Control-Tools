@@ -10,6 +10,18 @@ import {
   Breadcrumb,
   Button,
   Card,
+  Checkbox,
+  ChecklistItem,
+  Collapsible,
+  Input,
+  RadioGroup,
+  RefusalDialog,
+  ScaleEditor,
+  Select,
+  Skeleton,
+  Stepper,
+  Textarea,
+  Tooltip,
   DashboardGrid,
   DatePicker,
   DoughnutChart,
@@ -75,6 +87,16 @@ const columns = [
 ]
 const noRows: Row[] = []
 
+const scaleLevels = [1, 2, 3].map((n) => ({ id: `l${n}`, label: `Niveau exemple ${n}` }))
+const scaleAxes = [{ id: 'a1', label: 'Axe exemple 1' }, { id: 'a2', label: 'Axe exemple 2' }]
+const selectOptions = [{ value: 'a', label: 'Option exemple A' }, { value: 'b', label: 'Option exemple B' }]
+const stepperSteps = [
+  { id: 's1', label: 'Étape exemple 1' },
+  { id: 's2', label: 'Étape exemple 2' },
+  { id: 's3', label: 'Étape exemple 3', error: true },
+  { id: 's4', label: 'Étape exemple 4' },
+]
+
 const labels = ['Exemple 1', 'Exemple 2', 'Exemple 3']
 
 function Catalog() {
@@ -85,6 +107,10 @@ function Catalog() {
   const [slider, setSlider] = useState(40)
   const [modal, setModal] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [radio, setRadio] = useState('a')
+  const [step, setStep] = useState('s2')
+  const [refusal, setRefusal] = useState<'none' | 'list' | 'sensitive'>('none')
+  const [scale, setScale] = useState<Record<string, Record<string, string>>>({ a1: { l1: "Texte d'exemple" } })
 
   return (
     <main className="catalog">
@@ -207,6 +233,65 @@ function Catalog() {
           <Card>Exemple</Card>
           <GridItem span={2}><Card>Exemple (2 colonnes)</Card></GridItem>
         </Grid>
+      </Section>
+
+      <Section title="Champs de saisie (FormField + Input, Select, Textarea, Checkbox, RadioGroup)">
+        <div className="catalog-row">
+          <FormField label="Texte" htmlFor="c-in" help="Aide d'exemple" required><Input id="c-in" /></FormField>
+          <FormField label="Erreur" htmlFor="c-err" error="Erreur d'exemple"><Input id="c-err" /></FormField>
+          <FormField label="Lecture seule" htmlFor="c-ro" readOnly><Input id="c-ro" defaultValue="Valeur d'exemple" /></FormField>
+          <FormField label="Désactivé" htmlFor="c-dis" disabled><Input id="c-dis" /></FormField>
+          <FormField label="Liste" htmlFor="c-sel"><Select id="c-sel" options={selectOptions} placeholder="Choisir" /></FormField>
+          <FormField label="Zone de texte" htmlFor="c-ta"><Textarea id="c-ta" /></FormField>
+          <Checkbox label="Case d'exemple" hint="Indication d'exemple" />
+          <RadioGroup legend="Choix d'exemple" name="c-radio" options={selectOptions} value={radio} onChange={setRadio} help="Aide d'exemple" />
+        </div>
+      </Section>
+
+      <Section title="Fenêtre de refus (RefusalDialog)">
+        <div className="catalog-row">
+          <Button onClick={() => setRefusal('list')}>Avec personnes autorisées</Button>
+          <Button onClick={() => setRefusal('sensitive')}>Permission sensible</Button>
+        </div>
+        <RefusalDialog
+          open={refusal === 'list'}
+          onClose={() => setRefusal('none')}
+          action="Action d'exemple"
+          reason="Raison d'exemple"
+          authorized={['Personne exemple A', 'Personne exemple B']}
+        />
+        <RefusalDialog
+          open={refusal === 'sensitive'}
+          onClose={() => setRefusal('none')}
+          action="Action d'exemple"
+          reason="Raison d'exemple"
+          sensitive
+        />
+      </Section>
+
+      <Section title="Stepper, Info-bulle, Squelette, Section repliable, Ligne de checklist">
+        <Stepper ariaLabel="Assistant d'exemple" steps={stepperSteps} current={step} onStepChange={setStep} />
+        <div className="catalog-row">
+          <Tooltip content="Texte d'info-bulle d'exemple"><Button>Survol ou focus</Button></Tooltip>
+          <div style={{ width: 320 }}><Skeleton /></div>
+        </div>
+        <Collapsible title="Section d'exemple">Contenu d'exemple</Collapsible>
+        <ChecklistItem label="Élément fait (exemple)" status="done" />
+        <ChecklistItem label="Élément à compléter (exemple)" status="todo" detail="Détail d'exemple" action={<a href="#catalog">Compléter</a>} />
+        <ChecklistItem label="Élément bloqué (exemple)" status="blocked" detail="Raison d'exemple" />
+      </Section>
+
+      <Section title="Éditeur d'échelle (ScaleEditor)">
+        <ScaleEditor
+          ariaLabel="Échelle d'exemple"
+          levels={scaleLevels}
+          axes={scaleAxes}
+          value={scale}
+          onChange={setScale}
+          minLevels={3}
+          maxLevels={6}
+          maxAxes={7}
+        />
       </Section>
 
       <Section title="Graphiques (valeurs d'exemple)">

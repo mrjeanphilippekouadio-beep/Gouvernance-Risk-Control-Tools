@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import "./Modal.css";
 
 interface ModalProps {
@@ -10,6 +10,8 @@ interface ModalProps {
   children?: ReactNode;
   /** Action row, usually a secondary "cancel" plus the confirming button. */
   actions?: ReactNode;
+  /** An action is in progress: sets `aria-busy` on the dialog. */
+  busy?: boolean;
 }
 
 /**
@@ -18,21 +20,40 @@ interface ModalProps {
  *
  * Built on the native `<dialog>` element: focus trapping, the inert
  * background, the `::backdrop` and Escape-to-close all come for free
- * instead of being re-implemented.
+ * instead of being re-implemented. The dialog is named by its title
+ * (`aria-labelledby`) and the title receives focus on open, unless a
+ * child sets `autofocus`.
  */
-export function Modal({ open, onClose, title, children, actions }: ModalProps) {
+export function Modal({ open, onClose, title, children, actions, busy }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    if (open && !element.open) element.showModal();
+    if (open && !element.open) {
+      element.showModal();
+      // Keep the focus showModal() gave to a field (React `autoFocus` sets
+      // no attribute, so only the active element tells); else the title.
+      const focused = document.activeElement;
+      if (!(focused && focused !== element && element.contains(focused))) titleRef.current?.focus();
+    }
     if (!open && element.open) element.close();
   }, [open]);
 
   return (
-    <dialog ref={ref} className="gs-modal" onClose={onClose} onCancel={onClose}>
-      <h2 className="gs-modal-title">{title}</h2>
+    <dialog
+      ref={ref}
+      className="gs-modal"
+      aria-labelledby={titleId}
+      aria-busy={busy || undefined}
+      onClose={onClose}
+      onCancel={onClose}
+    >
+      <h2 ref={titleRef} id={titleId} tabIndex={-1} className="gs-modal-title">
+        {title}
+      </h2>
       {children !== undefined && <div className="gs-modal-body">{children}</div>}
       {actions && <div className="gs-modal-actions">{actions}</div>}
     </dialog>
