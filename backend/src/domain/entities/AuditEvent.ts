@@ -14,7 +14,8 @@ export type AuditAction =
   | "STATUS_CHANGE"
   | "ROLE_CHANGE"
   | "PERMISSION_CHANGE"
-  | "DOWNLOAD";
+  | "DOWNLOAD"
+  | "READ";
 
 export interface AuditEvent {
   id: string;

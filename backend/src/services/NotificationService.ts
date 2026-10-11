@@ -20,6 +20,7 @@ const RESOURCE_TYPES: NotificationResourceType[] = [
   "ANOMALY",
   "RISK_EVALUATION",
   "REVIEW_CYCLE",
+  "MANAGEMENT",
 ];
 
 const MAX_EVENT_TYPE_LENGTH = 100;

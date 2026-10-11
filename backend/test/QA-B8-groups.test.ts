@@ -130,9 +130,9 @@ function setup() {
   /** Gives each user a second role so only the group rule (not "last active role") can block a revoke. */
   async function join(group: Role, userIds: string[]) {
     for (const u of userIds) {
-      await service.assignToUser({ ...admin, userId: "setup-admin" }, group.id, u, "R-j");
+      await service.assignToUser({ ...admin, userId: "setup-admin" }, group.id, u, "R-j", "motif de test");
       if (!(await repo.listForUser("tenant-1", u)).some((r) => r.id === filler.id)) {
-        await service.assignToUser({ ...admin, userId: "setup-admin" }, filler.id, u, "R-j");
+        await service.assignToUser({ ...admin, userId: "setup-admin" }, filler.id, u, "R-j", "motif de test");
       }
     }
     audit.events.length = 0;
@@ -177,10 +177,10 @@ describe("QA-B8 fixed groups", () => {
     it("refuses to remove the last member, accepts removing the second to last", async () => {
       const { service, groups, join, repo, audit } = setup();
       await join(groups.RISK_MANAGER, ["u1", "u2"]);
-      await service.revokeFromUser(admin, groups.RISK_MANAGER.id, "u1", "R5");
+      await service.revokeFromUser(admin, groups.RISK_MANAGER.id, "u1", "R5", "motif de test");
       expect(audit.events).toHaveLength(1);
       expect(audit.events[0]).toMatchObject({ entityType: "Role", action: "ROLE_CHANGE", userId: "admin-1", tenantId: "tenant-1" });
-      await expect(service.revokeFromUser(admin, groups.RISK_MANAGER.id, "u2", "R6")).rejects.toThrow(
+      await expect(service.revokeFromUser(admin, groups.RISK_MANAGER.id, "u2", "R6", "motif de test")).rejects.toThrow(
         /last member of the Risk Manager/,
       );
       expect(await repo.countActiveAssignments("tenant-1", groups.RISK_MANAGER.id)).toBe(1);
@@ -199,8 +199,8 @@ describe("QA-B8 fixed groups", () => {
       const { service, groups, join } = setup();
       await join(groups.RISK_MANAGER, ["u1"]);
       await join(groups.RISK_MANAGER, ["u2"]);
-      await service.revokeFromUser(admin, groups.RISK_MANAGER.id, "u1", "R7");
-      await expect(service.revokeFromUser(admin, groups.RISK_MANAGER.id, "u2", "R8")).rejects.toThrow(ValidationError);
+      await service.revokeFromUser(admin, groups.RISK_MANAGER.id, "u1", "R7", "motif de test");
+      await expect(service.revokeFromUser(admin, groups.RISK_MANAGER.id, "u2", "R8", "motif de test")).rejects.toThrow(ValidationError);
     });
   });
 
@@ -208,8 +208,8 @@ describe("QA-B8 fixed groups", () => {
     it("accepts removing every member, one by one, with an audit event each", async () => {
       const { service, groups, join, repo, audit } = setup();
       await join(groups[sg], ["u1", "u2"]);
-      await service.revokeFromUser(admin, groups[sg].id, "u1", "R9");
-      await service.revokeFromUser(admin, groups[sg].id, "u2", "R10");
+      await service.revokeFromUser(admin, groups[sg].id, "u1", "R9", "motif de test");
+      await service.revokeFromUser(admin, groups[sg].id, "u2", "R10", "motif de test");
       expect(await repo.countActiveAssignments("tenant-1", groups[sg].id)).toBe(0);
       expect(audit.events).toHaveLength(2);
     });
@@ -219,8 +219,8 @@ describe("QA-B8 fixed groups", () => {
     it.each(GROUPS)("%s: self-assign and self-revoke are refused", async (_n, sg) => {
       const { service, groups, join, repo, audit } = setup();
       await join(groups[sg], ["u1", "u2", "admin-1"]);
-      await expect(service.assignToUser(admin, groups[sg].id, "admin-1", "R11")).rejects.toThrow(ForbiddenError);
-      await expect(service.revokeFromUser(admin, groups[sg].id, "admin-1", "R12")).rejects.toThrow(ForbiddenError);
+      await expect(service.assignToUser(admin, groups[sg].id, "admin-1", "R11", "motif de test")).rejects.toThrow(ForbiddenError);
+      await expect(service.revokeFromUser(admin, groups[sg].id, "admin-1", "R12", "motif de test")).rejects.toThrow(ForbiddenError);
       expect(await repo.countActiveAssignments("tenant-1", groups[sg].id)).toBe(3);
       expect(audit.events).toHaveLength(0);
     });
@@ -228,8 +228,8 @@ describe("QA-B8 fixed groups", () => {
     it("a missing role.assign permission is refused", async () => {
       const { service, groups } = setup();
       const noPerm = { ...admin, userId: "admin-2", roles: ["role.read"] } as AuthenticatedUser;
-      await expect(service.assignToUser(noPerm, groups.AUDIT.id, "u9", "R13")).rejects.toThrow();
-      await expect(service.revokeFromUser(noPerm, groups.AUDIT.id, "u9", "R13")).rejects.toThrow();
+      await expect(service.assignToUser(noPerm, groups.AUDIT.id, "u9", "R13", "motif de test")).rejects.toThrow();
+      await expect(service.revokeFromUser(noPerm, groups.AUDIT.id, "u9", "R13", "motif de test")).rejects.toThrow();
     });
   });
 
@@ -303,8 +303,8 @@ describe("QA-B8 fixed groups", () => {
       await expect(service.get(otherTenantAdmin, id)).rejects.toThrow(NotFoundError);
       await expect(service.update(otherTenantAdmin, id, { description: "x" }, "R30")).rejects.toThrow(NotFoundError);
       await expect(service.disable(otherTenantAdmin, id, "R31")).rejects.toThrow(NotFoundError);
-      await expect(service.assignToUser(otherTenantAdmin, id, "u3", "R32")).rejects.toThrow(NotFoundError);
-      await expect(service.revokeFromUser(otherTenantAdmin, id, "u1", "R33")).rejects.toThrow(NotFoundError);
+      await expect(service.assignToUser(otherTenantAdmin, id, "u3", "R32", "motif de test")).rejects.toThrow(NotFoundError);
+      await expect(service.revokeFromUser(otherTenantAdmin, id, "u1", "R33", "motif de test")).rejects.toThrow(NotFoundError);
       expect(await service.list(otherTenantAdmin)).toHaveLength(0);
       expect(await repo.countActiveAssignments("tenant-1", id)).toBe(2);
       expect(audit.events).toHaveLength(0);
@@ -323,10 +323,10 @@ describe("QA-B8 fixed groups", () => {
       const { service, audit } = setup();
       const r = await service.create(admin, { name: "Custom", permissions: ["audit.read"] }, "A1");
       await service.update(admin, r.id, { description: "d" }, "A2");
-      await service.assignToUser(admin, r.id, "u1", "A3");
+      await service.assignToUser(admin, r.id, "u1", "A3", "motif de test");
       const other = await service.create(admin, { name: "Custom2", permissions: ["audit.read"] }, "A3b");
-      await service.assignToUser(admin, other.id, "u1", "A3c");
-      await service.revokeFromUser(admin, r.id, "u1", "A4");
+      await service.assignToUser(admin, other.id, "u1", "A3c", "motif de test");
+      await service.revokeFromUser(admin, r.id, "u1", "A4", "motif de test");
       await service.disable(admin, r.id, "A5");
       expect(audit.events.map((e) => e.action)).toEqual([
         "CREATE", "PERMISSION_CHANGE", "ROLE_CHANGE", "CREATE", "ROLE_CHANGE", "ROLE_CHANGE", "DELETE",
@@ -396,13 +396,15 @@ describe("QA-B8 ProcessService departmentId", () => {
   });
 
   it("fails closed without a DepartmentRepository (create and update); omitting departmentId still works", async () => {
-    const service = new ProcessService(processRepo(), auditRepo());
+    const repo = processRepo();
+    const service = new ProcessService(repo, auditRepo());
     await expect(service.create(actor, { level: "PROCESS", name: "P", departmentId: "dept-1" }, "P5")).rejects.toThrow(
       /requires a DepartmentRepository/,
     );
-    const p = await service.create(actor, { level: "PROCESS", name: "P" }, "P6");
+    // B-8 bis (q46): departmentId is now mandatory on creation.
+    await expect(service.create(actor, { level: "PROCESS", name: "P" }, "P6")).rejects.toThrow(/departmentId is required/);
+    const p = await repo.create({ tenantId: actor.tenantId, level: "PROCESS", name: "P" } as never);
     await expect(service.update(actor, p.id, { departmentId: "dept-1" }, "P7")).rejects.toThrow(/requires a DepartmentRepository/);
-    expect(p.departmentId).toBeNull();
   });
 });
 
@@ -417,7 +419,7 @@ describe("QA-B8 known defect DEFECT-B8-01: suspending the last Risk Manager memb
     const audit = auditRepo();
     const roleService = new RoleService(repo, audit);
     const rm = repo.seed({ tenantId: "tenant-1", name: "Risk Manager", systemGroup: "RISK_MANAGER" });
-    await roleService.assignToUser(admin, rm.id, "rm-1", "S1");
+    await roleService.assignToUser(admin, rm.id, "rm-1", "S1", "motif de test");
 
     const users: User[] = [
       { id: "rm-1", tenantId: "tenant-1", email: "rm@x.io", displayName: "RM", roles: [], createdAt: new Date(), deletedAt: null },

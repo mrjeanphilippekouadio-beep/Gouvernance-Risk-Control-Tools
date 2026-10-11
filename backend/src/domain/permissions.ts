@@ -188,7 +188,15 @@ export type Permission =
   | "treatmentdecision.read"
   | "treatmentdecision.create"
   | "treatmentdecision.validate"
-  | "treatmentdecision.validate.committee";
+  | "treatmentdecision.validate.committee"
+  /**
+   * B-8 bis (q45): changing the permissions of the fixed Audit group is reserved to
+   * the application administrator (never granted to a role of the risk team), and
+   * the change is validated by a member of Audit or of the Committee when the
+   * administrator is also a Risk Manager. Two distinct permissions, never role.update.
+   */
+  | "rolegroup.audit.update"
+  | "rolegroup.audit.validate";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -297,6 +305,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   "treatmentdecision.create",
   "treatmentdecision.validate",
   "treatmentdecision.validate.committee",
+  "rolegroup.audit.update",
+  "rolegroup.audit.validate",
 ];
 
 /**
