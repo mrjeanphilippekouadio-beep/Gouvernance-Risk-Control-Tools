@@ -10,6 +10,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 
 const UploadMetadata = z.object({
   documentType: z.string().min(1),
   controlExecutionId: z.string().nullish(),
+  // multipart fields arrive as strings
+  allowDuplicate: z.enum(["true", "false"]).optional(),
 });
 
 /**
@@ -32,6 +34,7 @@ export function evidencesRouter(evidenceService: EvidenceService): Router {
           content: req.file.buffer,
           documentType: metadata.documentType,
           controlExecutionId: metadata.controlExecutionId ?? null,
+          allowDuplicate: metadata.allowDuplicate === "true",
         },
         req.requestId,
       );
@@ -41,9 +44,18 @@ export function evidencesRouter(evidenceService: EvidenceService): Router {
     }
   });
 
+  router.get("/", async (req, res, next) => {
+    try {
+      const { controlExecutionId } = z.object({ controlExecutionId: z.string().min(1) }).parse(req.query);
+      res.json({ data: await evidenceService.listForControlExecution(req.user, controlExecutionId) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/:id/url", async (req, res, next) => {
     try {
-      const url = await evidenceService.getUrl(req.user, req.params["id"] as string);
+      const url = await evidenceService.getUrl(req.user, req.params["id"] as string, req.requestId);
       res.json({ data: { url } });
     } catch (err) {
       next(err);

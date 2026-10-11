@@ -91,6 +91,15 @@ export class GoogleDriveStorage implements DocumentStorage {
     return res.data.webViewLink ?? `https://drive.google.com/file/d/${storageFileId}/view`;
   }
 
+  async getContent(storageFileId: string): Promise<Buffer> {
+    const drive = await this.drive();
+    const res = await drive.files.get(
+      { fileId: storageFileId, alt: "media", supportsAllDrives: true },
+      { responseType: "arraybuffer" },
+    );
+    return Buffer.from(res.data as ArrayBuffer);
+  }
+
   /**
    * SEC-008: "deleting" evidence MOVES the file from its current folder to the
    * Shared Drive "deleted" folder — never Drive's trash, never a permanent

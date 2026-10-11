@@ -12,6 +12,14 @@ export class ValidationError extends Error {
   }
 }
 
+/** 409: the request is valid but clashes with existing state; `existingId` lets the client reuse it. */
+export class ConflictError extends Error {
+  constructor(message: string, readonly existingId?: string) {
+    super(message);
+    this.name = "ConflictError";
+  }
+}
+
 export class ForbiddenError extends Error {
   constructor(message = "Not authorized for this action") {
     super(message);

@@ -17,5 +17,7 @@ export interface DocumentStorage {
     content: Buffer;
   }): Promise<StoredDocumentRef>;
   getUrl(storageFileId: string): Promise<string>;
+  /** Raw bytes. Callers must have verified tenant ownership of the id first. */
+  getContent(storageFileId: string): Promise<Buffer>;
   delete(storageFileId: string): Promise<void>;
 }

@@ -13,7 +13,8 @@ export type AuditAction =
   | "ESCALATE"
   | "STATUS_CHANGE"
   | "ROLE_CHANGE"
-  | "PERMISSION_CHANGE";
+  | "PERMISSION_CHANGE"
+  | "DOWNLOAD";
 
 export interface AuditEvent {
   id: string;

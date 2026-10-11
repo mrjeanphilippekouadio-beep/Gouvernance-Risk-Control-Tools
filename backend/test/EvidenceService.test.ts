@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { EvidenceService } from "../src/services/EvidenceService.js";
 import type { EvidenceRepository } from "../src/domain/repositories/EvidenceRepository.js";
 import type { AuditRepository } from "../src/domain/repositories/AuditRepository.js";
 import type { DocumentStorage } from "../src/infrastructure/storage/DocumentStorage.js";
 import type { Evidence } from "../src/domain/entities/Evidence.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
-import { ForbiddenError, NotFoundError, ValidationError } from "../src/domain/errors/DomainErrors.js";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 
 function inMemoryEvidenceRepository(): EvidenceRepository {
   const store = new Map<string, Evidence>();
@@ -20,6 +20,9 @@ function inMemoryEvidenceRepository(): EvidenceRepository {
         (e) => e.tenantId === tenantId && e.controlExecutionId === controlExecutionId,
       );
     },
+    async findBySha256(tenantId, sha256) {
+      return [...store.values()].find((e) => e.tenantId === tenantId && e.sha256 === sha256 && e.status === "ACTIVE") ?? null;
+    },
     async create(input) {
       const evidence: Evidence = {
         id: randomUUID(),
@@ -30,6 +33,9 @@ function inMemoryEvidenceRepository(): EvidenceRepository {
         driveUrl: input.driveUrl,
         documentType: input.documentType,
         uploadedBy: input.uploadedBy,
+        sha256: input.sha256,
+        fileSize: input.fileSize,
+        mimeType: input.mimeType,
         uploadedAt: new Date(),
         version: 1,
         status: "ACTIVE",
@@ -60,6 +66,9 @@ function fakeDocumentStorage(): DocumentStorage & { deletedIds: string[] } {
     async getUrl(storageFileId) {
       return `https://drive.example/file/${storageFileId}`;
     },
+    async getContent() {
+      return Buffer.alloc(0);
+    },
     async delete(storageFileId) {
       deletedIds.push(storageFileId);
     },
@@ -80,7 +89,7 @@ const tenantAUser: AuthenticatedUser = {
   tenantId: "tenant-a",
   email: "a@example.com",
   displayName: "A",
-  roles: ["evidence.upload", "evidence.read", "evidence.delete"],
+  roles: ["evidence.upload", "evidence.read", "evidence.download", "evidence.delete"],
 };
 
 const tenantBUser: AuthenticatedUser = {
@@ -156,7 +165,7 @@ describe("EvidenceService", () => {
       "REQ-3",
     );
 
-    await expect(service.getUrl(tenantBUser, evidence.id)).rejects.toThrow(NotFoundError);
+    await expect(service.getUrl(tenantBUser, evidence.id, "REQ-3b")).rejects.toThrow(NotFoundError);
   });
 
   it("restores the evidence row and does not touch Drive when audit recording fails during delete", async () => {
@@ -208,5 +217,76 @@ describe("EvidenceService", () => {
         "REQ-6",
       ),
     ).rejects.toThrow(ForbiddenError);
+  });
+
+  const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  const xlsxBytes = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("fixture")]);
+
+  it("accepts an xlsx linked to an execution and records sha256, size and mime type", async () => {
+    const service = new EvidenceService(inMemoryEvidenceRepository(), fakeDocumentStorage(), inMemoryAuditRepository());
+    const evidence = await service.upload(
+      tenantAUser,
+      { fileName: "preuve.xlsx", mimeType: XLSX, content: xlsxBytes, documentType: "CONTROL_EVIDENCE", controlExecutionId: "exec-1" },
+      "REQ-X1",
+    );
+    expect(evidence.sha256).toBe(createHash("sha256").update(xlsxBytes).digest("hex"));
+    expect(evidence.fileSize).toBe(xlsxBytes.byteLength);
+    expect(evidence.mimeType).toBe(XLSX);
+  });
+
+  it("rejects an xlsx that is not linked to a control execution", async () => {
+    const service = new EvidenceService(inMemoryEvidenceRepository(), fakeDocumentStorage(), inMemoryAuditRepository());
+    await expect(
+      service.upload(
+        tenantAUser,
+        { fileName: "preuve.xlsx", mimeType: XLSX, content: xlsxBytes, documentType: "CONTROL_EVIDENCE", controlExecutionId: null },
+        "REQ-X2",
+      ),
+    ).rejects.toThrow(/controlExecutionId is required/);
+  });
+
+  it("answers 409 with the existing id on a duplicate hash, unless a new reference is explicitly requested", async () => {
+    const service = new EvidenceService(inMemoryEvidenceRepository(), fakeDocumentStorage(), inMemoryAuditRepository());
+    const params = { fileName: "preuve.xlsx", mimeType: XLSX, content: xlsxBytes, documentType: "CONTROL_EVIDENCE", controlExecutionId: "exec-1" };
+    const first = await service.upload(tenantAUser, params, "REQ-X3");
+
+    const err = await service.upload(tenantAUser, params, "REQ-X4").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictError);
+    expect((err as ConflictError).existingId).toBe(first.id);
+
+    const second = await service.upload(tenantAUser, { ...params, allowDuplicate: true }, "REQ-X5");
+    expect(second.id).not.toBe(first.id);
+    // Another tenant is never told about this tenant's file.
+    await expect(service.upload(tenantBUser, params, "REQ-X6")).resolves.toBeDefined();
+  });
+
+  it("audits a download without file content, and requires evidence.download", async () => {
+    const recorded: unknown[] = [];
+    const audit: AuditRepository = { ...inMemoryAuditRepository(), async record(e) { recorded.push(e); } };
+    const service = new EvidenceService(inMemoryEvidenceRepository(), fakeDocumentStorage(), audit);
+    const evidence = await service.upload(
+      tenantAUser,
+      { fileName: "preuve.xlsx", mimeType: XLSX, content: xlsxBytes, documentType: "CONTROL_EVIDENCE", controlExecutionId: "exec-1" },
+      "REQ-X7",
+    );
+    await service.getUrl(tenantAUser, evidence.id, "REQ-X8");
+    expect(recorded.at(-1)).toMatchObject({ action: "DOWNLOAD", entityId: evidence.id, requestId: "REQ-X8", tenantId: "tenant-a" });
+
+    const readOnly = { ...tenantAUser, roles: ["evidence.read"] };
+    await expect(service.getUrl(readOnly, evidence.id, "REQ-X9")).rejects.toThrow(ForbiddenError);
+  });
+
+  it("lists evidences of an execution without Drive references", async () => {
+    const service = new EvidenceService(inMemoryEvidenceRepository(), fakeDocumentStorage(), inMemoryAuditRepository());
+    await service.upload(
+      tenantAUser,
+      { fileName: "preuve.xlsx", mimeType: XLSX, content: xlsxBytes, documentType: "CONTROL_EVIDENCE", controlExecutionId: "exec-1" },
+      "REQ-X10",
+    );
+    const list = await service.listForControlExecution(tenantAUser, "exec-1");
+    expect(list).toHaveLength(1);
+    expect(list[0]).not.toHaveProperty("driveUrl");
+    expect(list[0]).not.toHaveProperty("driveFileId");
+    expect(await service.listForControlExecution(tenantBUser, "exec-1")).toHaveLength(0);
   });
 });

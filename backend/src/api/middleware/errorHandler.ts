@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { NotFoundError, ValidationError, ForbiddenError } from "../../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../../domain/errors/DomainErrors.js";
 
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   if (err instanceof ValidationError) {
@@ -8,6 +8,10 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   }
   if (err instanceof NotFoundError) {
     res.status(404).json({ error: err.message, requestId: req.requestId });
+    return;
+  }
+  if (err instanceof ConflictError) {
+    res.status(409).json({ error: err.message, existingId: err.existingId, requestId: req.requestId });
     return;
   }
   if (err instanceof ForbiddenError) {
