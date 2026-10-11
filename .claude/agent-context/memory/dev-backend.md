@@ -93,3 +93,14 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - `notifyValidators` refactoré en `notifyMembers` générique (best effort, erreur loggée).
 - DECISION-041 : `GET /cartography/scale` (permission `cartography.read`), `CartographyService.getActiveScale`.
 - Leçon : heredoc python composé refusé dans le worktree -> Write d'un script dans le scratchpad puis `python3 script`.
+
+## 2026-10-11 B-8 quinquies (branche wt/b8q5, base 00fbc3e, aucune migration)
+
+- `RoleService.assertCumulRules(tenantId, role, others, previous, reason)` = source unique des règles de cumul (RM+Audit, Comité+Audit selon réglage, admin+RM avec motif), appelée par `assertAssignable` ET par `update`. « Membre Audit » = groupe Audit OU permission `audit.*` effective (q58-01, dans les deux ordres).
+- `update(actor,id,input,requestId,reason?)` : si des permissions sont ajoutées, rejoue les règles pour chaque détenteur actif (`roles.listAssignments`, revokedAt null). Nouveau cumul admin+RM : `reason` exigé, inscrit dans l'audit PERMISSION_CHANGE, notification `ADMIN_RISK_MANAGER_CUMUL` par détenteur. Contrat API : `PATCH /roles/:id` accepte `reason` (optionnel, <= 500).
+- `ADMIN_PERMISSIONS` + `config.cumul.set`, `config.committeeenforcement.set` (config.manage/update NON touchés : F-B8t-06 au Risk Manager).
+- Assigner un rôle déjà détenu -> `ConflictError` (409) dans `assertAssignable`.
+- F-B8t-03 : approbation revérifie `isAuditGroupPermission` avant le claim (le PENDING reste rejetable) ; requête 6 ajoutée à `docs/security/B8-predeploy-checks.sql`.
+- F-B8t-04 : aucune transaction inter-repos dans le repo -> choix simple : `reopen` seulement si l'application des droits échoue ; une fois appliqués, un échec d'audit est loggé et renvoyé SANS reopen (statut APPROVED = droits appliqués). Limite : l'événement d'audit manquant n'est pas rejoué.
+- Fakes de tests B8ter/QA-B8quater : `listAssignments` ajouté (méthode requise de l'interface réelle, fail-closed plutôt que `?.`).
+- Leçon : un heredoc dans une commande composée est refusé ; Write d'un script dans le scratchpad (nom unique : edit.py existait déjà).
