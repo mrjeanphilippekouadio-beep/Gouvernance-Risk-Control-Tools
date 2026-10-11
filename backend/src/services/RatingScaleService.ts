@@ -14,6 +14,7 @@ import type {
 } from "../domain/entities/RatingScale.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
+import { maxScoreForSize } from "../domain/scoring.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 const LEVEL_BOUNDS = { min: 1, max: 5 } as const;
@@ -36,6 +37,21 @@ function assertDescriptors(levels: ScaleLevel[], fieldName: string, size: number
   assertLevels(levels, fieldName, { min: 1, max: size });
   if (levels.length !== size) {
     throw new ValidationError(`${fieldName} must have exactly one descriptor per level (${size})`);
+  }
+}
+
+/**
+ * B-9 bis (q50): descriptors are optional in DRAFT but mandatory to activate — probability,
+ * impact, and every impact axis (when axes are configured) need one non-empty descriptor per level.
+ */
+function assertReadyToActivate(scale: RatingScale): void {
+  if (!scale.probabilityLabels) throw new ValidationError("probabilityLabels are required to activate a rating scale");
+  assertDescriptors(scale.probabilityLabels, "probabilityLabels", scale.probabilityLevels);
+  if (!scale.impactLabels) throw new ValidationError("impactLabels are required to activate a rating scale");
+  assertDescriptors(scale.impactLabels, "impactLabels", scale.impactLevels);
+  for (const axis of scale.impactAxes?.axes ?? []) {
+    if (!axis.levelLabels) throw new ValidationError(`axis ${axis.code} levelLabels are required to activate a rating scale`);
+    assertDescriptors(axis.levelLabels, `axis ${axis.code} levelLabels`, scale.impactLevels);
   }
 }
 
@@ -185,6 +201,11 @@ export class RatingScaleService {
     const before = await this.get(actor, id);
     assertMutable(before);
     assertThresholds(input.thresholds, "thresholds");
+    // B-9 bis (q49): no band may reach above the matrix's score ceiling n².
+    const ceiling = maxScoreForSize(before.impactLevels);
+    if (input.thresholds.some((t) => t.max > ceiling)) {
+      throw new ValidationError(`thresholds cannot exceed the maximum score of this scale (${ceiling})`);
+    }
 
     const after = await this.ratingScales.updateThresholds(actor.tenantId, id, input.thresholds);
     await this.recordUpdate(actor, id, before, after, requestId);
@@ -302,6 +323,7 @@ export class RatingScaleService {
     if (before.status === "ARCHIVED") {
       throw new ValidationError("Cannot re-activate an archived rating scale — create a new version instead");
     }
+    assertReadyToActivate(before);
 
     const after = await this.ratingScales.activateAndArchivePrevious(actor.tenantId, id);
 

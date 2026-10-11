@@ -53,7 +53,7 @@ function scaleRepo(): RatingScaleRepository & { seed(s: RatingScale): void } {
       return [...store.values()].filter((s) => s.tenantId === t && !s.deletedAt && (o?.includeArchived || s.status !== "ARCHIVED"));
     },
     async create(i) {
-      return put(baseScale({ id: randomUUID(), tenantId: i.tenantId, name: i.name, version: i.version, probabilityLevels: i.probabilityLevels, probabilityLabels: i.probabilityLabels ?? null, impactLevels: i.impactLevels, impactLabels: i.impactLabels ?? null }));
+      return put(baseScale({ id: randomUUID(), tenantId: i.tenantId, name: i.name, version: i.version, probabilityLevels: i.probabilityLevels, probabilityLabels: i.probabilityLabels ?? lv(i.probabilityLevels), impactLevels: i.impactLevels, impactLabels: i.impactLabels ?? lv(i.impactLevels) }));
     },
     async updateThresholds(t, id, v) { return put({ ...own(t, id), criticalityThresholds: v }); },
     async updateImpactAxes(t, id, v) { return put({ ...own(t, id), impactAxes: v }); },
@@ -254,10 +254,10 @@ describe("B-9 legacy versions (1..5, unequal sizes) stay usable", () => {
     expect((await service.list(actor, true)).map((s) => s.id).sort()).toEqual(["l1", "l2"]);
   });
 
-  it("legacy DRAFT 5/3 activates (new rules not re-applied), previous ACTIVE is archived, audited STATUS_CHANGE", async () => {
+  it("legacy DRAFT 5/3 activates once its descriptors are complete (size rules not re-applied), previous ACTIVE is archived, audited STATUS_CHANGE", async () => {
     const { service, repo, audit } = setup();
     repo.seed(legacy({ id: "old", status: "ACTIVE", probabilityLevels: 5, impactLevels: 5 }));
-    repo.seed(legacy({ id: "dr", status: "DRAFT", probabilityLevels: 5, impactLevels: 3 }));
+    repo.seed(legacy({ id: "dr", status: "DRAFT", probabilityLevels: 5, impactLevels: 3, probabilityLabels: lv(5), impactLabels: lv(3) }));
     const out = await service.activateVersion(actor, "dr", "r");
     expect(out.status).toBe("ACTIVE");
     expect((await repo.getById(T1, "old"))?.status).toBe("ARCHIVED");
@@ -410,7 +410,7 @@ describe("B-9 evaluation on a 6x6 scale", () => {
   // KNOWN GAP flagged by A06 in migration 050 / dev-backend memory: score ceilings of 25 were not widened.
   // Oracle: on a 6x6 scale (max score 36) an appetite threshold must be settable up to 36.
   // it.fails keeps the suite green while the defect stays explicit; remove `.fails` when fixed.
-  it.fails("KNOWN GAP (MAJOR): appetiteOverride 36 should be accepted on a 6x6 scale, MAX_APPETITE_THRESHOLD is still 25", async () => {
+  it("appetiteOverride 36 accepted on a 6x6 scale (B-9 bis: ceiling = n², was KNOWN GAP)", async () => {
     const { svc, ev } = await build(6);
     await svc.recordInherentScoring(evaluator, ev.id, { probability: 6, impacts: imp(6, 6, 6) }, "r");
     const out = await svc.recordResidualScoring(

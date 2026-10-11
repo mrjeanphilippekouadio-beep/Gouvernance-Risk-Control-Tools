@@ -35,6 +35,7 @@ import { computeKpiStatus, type Kpi, type KpiStatus } from "../domain/entities/K
 
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
+import { DEFAULT_MATRIX_SIZE, defaultCriticalityBands } from "../domain/scoring.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { DashboardScopeMode, RiskScope } from "../domain/entities/DashboardScope.js";
 import type { DashboardScopeResolver } from "./DashboardScopeResolver.js";
@@ -44,24 +45,12 @@ import type { DashboardScopeResolver } from "./DashboardScopeResolver.js";
 // ---------------------------------------------------------------------
 
 /**
- * Fixed fallback bands over the 1-25 score range, identical to
- * CartographyService's DEFAULT_CRITICALITY_BANDS. Deliberately NOT
- * wired to RatingScaleRepository here: CartographyService already owns
- * the "resolve the tenant's configured, methodology-versioned bands"
- * concern (ACT-181), and re-implementing that exact resolution here
- * would be the kind of duplicated aggregation logic this batch's brief
- * explicitly warns against. Dashboard/Reporting only need a rough
- * qualitative label for ranking/highlighting, not the heatmap's
- * methodology-accurate legend — if that ever changes, inject
- * RatingScaleRepository and reuse the exact same resolution instead of
- * hand-rolling a second one.
+ * Rough qualitative label for ranking/highlighting. Deliberately NOT wired to
+ * RatingScaleRepository (CartographyService owns the methodology-versioned
+ * resolution): uses the default bands of the historical 5x5 matrix, see
+ * domain/scoring.ts. Scores of a larger matrix clamp to the last band.
  */
-const DEFAULT_CRITICALITY_BANDS: { label: string; min: number; max: number }[] = [
-  { label: "Faible", min: 1, max: 4 },
-  { label: "Modéré", min: 5, max: 9 },
-  { label: "Élevé", min: 10, max: 15 },
-  { label: "Critique", min: 16, max: 25 },
-];
+const DEFAULT_CRITICALITY_BANDS = defaultCriticalityBands(DEFAULT_MATRIX_SIZE);
 
 function deriveCriticality(score: number): string {
   const match = DEFAULT_CRITICALITY_BANDS.find((b) => score >= b.min && score <= b.max);

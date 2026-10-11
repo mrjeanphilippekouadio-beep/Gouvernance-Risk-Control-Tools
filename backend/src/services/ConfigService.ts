@@ -4,7 +4,9 @@ import type { Config, AppetiteMode, EvaluationMode, UpdateMethodologyInput } fro
 import { ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
-import { MIN_APPETITE_THRESHOLD, MAX_APPETITE_THRESHOLD } from "./RiskEvaluationService.js";
+import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
+import { MIN_APPETITE_THRESHOLD } from "./RiskEvaluationService.js";
+import { resolveMaxScore } from "./scoreCeiling.js";
 
 const SCORE_FORMULAS = ["P_X_I", "WEIGHTED_SUM"] as const;
 const IMPACT_RETENU_RULES = ["MAX", "AVERAGE", "WEIGHTED_SUM"] as const;
@@ -70,6 +72,8 @@ export class ConfigService {
   constructor(
     private readonly configs: ConfigRepository,
     private readonly audit: AuditRepository,
+    /** B-9 bis: optional; without it the committee ceiling stays at the historical 25. Wired in server.ts. */
+    private readonly ratingScales?: Pick<RatingScaleRepository, "list">,
   ) {}
 
   async get(actor: AuthenticatedUser): Promise<Config> {
@@ -201,6 +205,7 @@ export class ConfigService {
     requestId: string,
   ): Promise<Config> {
     requirePermission(actor, "config.committeethreshold.set");
+    const MAX_APPETITE_THRESHOLD = await resolveMaxScore(this.ratingScales, actor.tenantId);
     if (!reason.trim()) {
       throw new ValidationError("A reason is required to change the committee thresholds — this affects which risk evaluations can reach committee validation");
     }
