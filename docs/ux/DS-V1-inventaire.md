@@ -95,7 +95,7 @@ Taille : S = moins d'un jour, M = 1 à 3 jours, L = plus de 3 jours.
 
 Déjà tranchés par le PO (vérifié par l'orchestrateur dans le Decision Log) :
 
-1. **Création du Dispositif** : assistant pas à pas activé par défaut, avec configuration directe pour les experts (DECISION-017). Le Stepper (M4) passe donc en **vague 1**, partagé avec l'import EVD / RRI.
+1. **Création du Dispositif** : assistant pas à pas activé par défaut, avec configuration directe pour les experts (DECISION-017). Le Stepper (M5) passe donc en **vague 1**, partagé avec l'import EVD / RRI.
 2. **Notifications V1** : dans l'application **et** par e-mail (DECISION-017 ; envoi configurable, DECISION-024). La cloche et la file « À faire » restent la base ; l'e-mail est porté par B-11.
 3. **« Retourné » et « Rejeté »** : deux états distincts (DECISION-017).
 4. **Comité asynchrone** : règles prédéfinies (Léger, Standard, Strict) et règle personnalisée (groupes qui valident, quorum, majorité, délai, relances), avec des règles fixes non configurables (DECISION-026). Cela fixe le contenu de M13.
