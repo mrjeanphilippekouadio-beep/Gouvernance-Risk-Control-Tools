@@ -56,6 +56,9 @@ function world(opts: { cumul?: boolean | null; configThrows?: boolean; noNotifie
       held.set(userId, (held.get(userId) ?? []).filter((r) => r !== roleId));
     },
     async countActiveAssignments() { return 99; },
+    async listAssignments(_t: string, roleId: string) {
+      return [...held.entries()].filter(([, ids]) => ids.includes(roleId)).map(([userId]) => ({ userId, roleId, revokedAt: null }));
+    },
     async update(_t: string, id: string, input: { permissions?: Permission[] }) {
       const r = roles.find((x) => x.id === id)!;
       if (input.permissions) r.permissions = input.permissions;
@@ -180,14 +183,14 @@ describe("q58 Committee + Audit cumul setting: edge cases", () => {
     expect(asked).toEqual(["tenant-forbids", "tenant-ok"]);
   });
 
-  it.fails("KNOWN GAP q58-01 (MAJOR): the forbid setting is bypassed by an ordinary role carrying audit.* given to a Committee member", async () => {
+  it("FIXED (B-8 quinquies) q58-01 (MAJOR): the forbid setting is bypassed by an ordinary role carrying audit.* given to a Committee member", async () => {
     // EXPECTED: with the cumul forbidden, a Committee member cannot get effective audit permissions
     // (the Risk Manager + Audit rule already looks at effective audit.*, F-B8b-05; the q58 check looks only at systemGroup).
     const w = world({ cumul: false });
     await w.service.assignToUser(assigner, "co", "u1", "r", "motif");
     await expect(w.service.assignToUser(assigner, "auditish", "u1", "r")).rejects.toThrow(ValidationError);
   });
-  it.fails("KNOWN GAP q58-01 (MAJOR): same bypass in the other order (ordinary audit.* role first, then the Committee group)", async () => {
+  it("FIXED (B-8 quinquies) q58-01 (MAJOR): same bypass in the other order (ordinary audit.* role first, then the Committee group)", async () => {
     const w = world({ cumul: false });
     await w.service.assignToUser(assigner, "auditish", "u1", "r");
     await expect(w.service.assignToUser(assigner, "co", "u1", "r", "motif")).rejects.toThrow(ValidationError);
@@ -406,13 +409,13 @@ describe("q63 administrator + Risk Manager cumul: edge cases", () => {
     expect(w.held.get("new")).toEqual(["adm"]);
   });
 
-  it.fails("KNOWN GAP q63-02 (MINOR): a role carrying only config.cumul.set (settings administrator, documented as an application-administrator right) is not counted: Risk Manager + that role needs no reason", async () => {
+  it("FIXED (B-8 quinquies) q63-02 (MINOR): a role carrying only config.cumul.set (settings administrator, documented as an application-administrator right) is not counted: Risk Manager + that role needs no reason", async () => {
     const w = world({ extraRoles: [role("cfgadm", null, ["config.cumul.set"])] });
     w.held.set("u1", ["rm"]);
     await expect(w.service.assignToUser(assigner, "cfgadm", "u1", "r")).rejects.toThrow(/reason is required/);
   });
 
-  it.fails("KNOWN GAP q63-01 (known limit, MAJOR): RoleService.update adding an admin permission to a role held by a Risk Manager creates the cumul with no reason and no notification", async () => {
+  it("FIXED (B-8 quinquies) q63-01 (known limit, MAJOR): RoleService.update adding an admin permission to a role held by a Risk Manager creates the cumul with no reason and no notification", async () => {
     const w = world();
     w.held.set("aud", ["au"]);
     w.held.set("u1", ["rm", "plain"]);
@@ -460,7 +463,7 @@ describe("q65 Committee entry notification: edge cases", () => {
     expect(w.sent).toHaveLength(1);
   });
 
-  it.fails("KNOWN GAP q65-01 (MINOR, pre-existing): assigning a role the user already holds surfaces the raw unique violation as HTTP 500 (expected 4xx)", async () => {
+  it("FIXED (B-8 quinquies) q65-01 (MINOR, pre-existing): assigning a role the user already holds surfaces the raw unique violation as HTTP 500 (expected 4xx)", async () => {
     const w = world();
     await w.service.assignToUser(assigner, "plain", "u1", "r");
     const res = await serve((app) => app.use("/roles", rolesRouter(w.service)), assigner, "POST", "/roles/plain/assign", { userId: "u1" });

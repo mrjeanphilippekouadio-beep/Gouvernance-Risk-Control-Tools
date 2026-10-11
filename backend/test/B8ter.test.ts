@@ -34,6 +34,7 @@ function setup(extraRoles: Role[] = []) {
     async list() { return roles; },
     async create(i: Partial<Role>) { const r = { ...role("new", null), ...i } as Role; roles.push(r); return r; },
     async listForUser(_t: string, u: string) { return roles.filter((r) => (held.get(u) ?? []).includes(r.id)); },
+    async listAssignments(_t: string, roleId: string) { return [...held.entries()].filter(([, ids]) => ids.includes(roleId)).map(([userId]) => ({ userId, roleId, revokedAt: null })); },
     async assignToUser(_t: string, roleId: string, userId: string) {
       held.set(userId, [...(held.get(userId) ?? []), roleId]);
       return { id: "a", tenantId: "t1", roleId, userId, grantedBy: "x", grantedAt: new Date(), revokedAt: null };

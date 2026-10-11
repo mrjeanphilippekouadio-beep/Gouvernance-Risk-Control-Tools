@@ -26,6 +26,8 @@ const UpdateRoleBody = z.object({
   permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1).optional(),
   dashboardScopeMode: DashboardScopeModeEnum.optional(),
   departmentId: z.guid().nullish(),
+  /** F-B8t-01: required only when widening the role creates an administrator + Risk Manager cumul. */
+  reason: z.string().trim().min(1).max(500).optional(),
 });
 
 // B-8 bis (q44): validated and bounded here, required by the service for the 3 fixed groups.
@@ -160,7 +162,8 @@ export function rolesRouter(roleService: RoleService): Router {
   router.patch("/:id", async (req, res, next) => {
     try {
       const body = UpdateRoleBody.parse(req.body);
-      const role = await roleService.update(req.user, req.params["id"] as string, body, req.requestId);
+      const { reason, ...input } = body;
+      const role = await roleService.update(req.user, req.params["id"] as string, input, req.requestId, reason);
       res.json({ data: role });
     } catch (err) {
       next(err);

@@ -11,7 +11,7 @@ import {
   requirePermission,
   type Permission,
 } from "../domain/permissions.js";
-import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { NotificationService } from "./NotificationService.js";
@@ -35,7 +35,7 @@ const FORBIDDEN_CUMUL: Partial<Record<SystemGroup, SystemGroup>> = { RISK_MANAGE
 const ADMIN_PERMISSIONS: Permission[] = [
   "role.create", "role.update", "role.delete", "role.assign",
   "user.create", "user.update", "user.delete", "user.reactivate",
-  "rolegroup.audit.update",
+  "rolegroup.audit.update", "config.cumul.set", "config.committeeenforcement.set",
 ];
 const isAdministrator = (roles: Role[]): boolean => roles.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));
 const isRiskManagerMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "RISK_MANAGER");
@@ -204,7 +204,7 @@ export class RoleService {
    * role definition itself. An actor editing a role they hold must ask
    * another admin, same as assigning/revoking one on themselves.
    */
-  async update(actor: AuthenticatedUser, id: string, input: UpdateRoleInput, requestId: string): Promise<Role> {
+  async update(actor: AuthenticatedUser, id: string, input: UpdateRoleInput, requestId: string, reason?: string): Promise<Role> {
     requirePermission(actor, "role.update");
     const before = await this.get(actor, id);
 
@@ -234,6 +234,20 @@ export class RoleService {
     }
     assertDashboardScopeModeWritable(input.dashboardScopeMode);
 
+    // F-B8t-01: widening a role replays the cumul rules for each active holder with the resulting permissions.
+    const cumulUsers: string[] = [];
+    const cleanReason = reason?.trim() || null;
+    if (input.permissions !== undefined && input.permissions.some((p) => !before.permissions.includes(p))) {
+      const resulting: Role = { ...before, permissions: input.permissions };
+      for (const a of await this.roles.listAssignments(actor.tenantId, id)) {
+        if (a.revokedAt) continue;
+        const previous = await this.roles.listForUser(actor.tenantId, a.userId);
+        const others = previous.filter((r) => r.id !== id);
+        const res = await this.assertCumulRules(actor.tenantId, resulting, others, previous, reason);
+        if (res.createsAdminRiskManagerCumul) cumulUsers.push(a.userId);
+      }
+    }
+
     const after = await this.roles.update(actor.tenantId, id, input);
 
     await this.audit.record({
@@ -244,10 +258,14 @@ export class RoleService {
       action: "PERMISSION_CHANGE",
       oldValue: before,
       newValue: after,
-      reason: null,
+      reason: cleanReason,
       requestId,
     });
 
+    for (const userId of cumulUsers) {
+      await this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
+        "Un utilisateur cumule désormais l'administration de l'application et le groupe Risk Manager.", requestId);
+    }
     return after;
   }
 
@@ -292,23 +310,41 @@ export class RoleService {
     reason: string | undefined,
   ): Promise<{ role: Role; cleanReason: string | null; createsAdminRiskManagerCumul: boolean }> {
     const role = await this.get(actor, roleId);
-    let cleanReason = this.groupReason(role, reason);
+    const groupReason = this.groupReason(role, reason);
     const held = userId ? await this.roles.listForUser(actor.tenantId, userId) : [];
-    assertNoCumul(role, held);
+    if (held.some((r) => r.id === roleId)) throw new ConflictError(`This user already holds the role "${role.name}"`, roleId);
+    const { cleanReason, createsAdminRiskManagerCumul } = await this.assertCumulRules(actor.tenantId, role, held, held, reason);
+    return { role, cleanReason: cleanReason ?? groupReason, createsAdminRiskManagerCumul };
+  }
 
-    // q58: Committee + Audit is allowed unless the tenant forbids it. Risk Manager + Audit is handled above.
-    const other = role.systemGroup === "AUDIT" ? "RISK_COMMITTEE" : role.systemGroup === "RISK_COMMITTEE" ? "AUDIT" : null;
-    if (other && held.some((r) => r.systemGroup === other)) {
-      const cfg = await this.configs?.getByTenant(actor.tenantId);
+  /**
+   * The cumul rules, shared by an assignment and by a role update (F-B8t-01): `role` is the role as the
+   * user will hold it, `others` their other roles, `previous` the roles they held before the change.
+   */
+  private async assertCumulRules(
+    tenantId: string,
+    role: Role,
+    others: Role[],
+    previous: Role[],
+    reason: string | undefined,
+  ): Promise<{ cleanReason: string | null; createsAdminRiskManagerCumul: boolean }> {
+    assertNoCumul(role, others);
+
+    // q58: Committee + Audit (group or effective audit.*) is allowed unless the tenant forbids it. RM + Audit is handled above.
+    const isCommittee = (r: Role) => r.systemGroup === "RISK_COMMITTEE";
+    const isAuditMember = (r: Role) => r.systemGroup === "AUDIT" || r.permissions.some(isAuditPermission);
+    if ((isCommittee(role) && others.some(isAuditMember)) || (isAuditMember(role) && others.some(isCommittee))) {
+      const cfg = await this.configs?.getByTenant(tenantId);
       if (cfg && !cfg.committeeAuditCumulAllowed) {
-        throw new ValidationError("A user cannot be both in the Committee group and in the Audit group (setting of this tenant)");
+        throw new ValidationError("A user cannot be both in the Committee group and in the Audit group or hold audit permissions (setting of this tenant)");
       }
     }
 
     // q63: creating the administrator + Risk Manager cumul needs a reason and warns a third party.
-    const after = [...held, role];
+    const after = [...others, role];
     const createsAdminRiskManagerCumul =
-      isAdministrator(after) && isRiskManagerMember(after) && !(isAdministrator(held) && isRiskManagerMember(held));
+      isAdministrator(after) && isRiskManagerMember(after) && !(isAdministrator(previous) && isRiskManagerMember(previous));
+    let cleanReason: string | null = null;
     if (createsAdminRiskManagerCumul) {
       cleanReason = reason?.trim() || null;
       if (!cleanReason) throw new ValidationError("A reason is required to make a user both application administrator and Risk Manager");
@@ -316,7 +352,7 @@ export class RoleService {
         throw new ValidationError(`reason must be at most ${MAX_GROUP_REASON_LENGTH} characters`);
       }
     }
-    return { role, cleanReason, createsAdminRiskManagerCumul };
+    return { cleanReason, createsAdminRiskManagerCumul };
   }
 
   /** ACT-093/113: the actor can never assign a role to themselves — that's the maker-checker boundary. */
@@ -647,6 +683,14 @@ export class RoleService {
       throw new ForbiddenError("A Risk Manager cannot validate a change of the Audit group permissions");
     }
 
+    // F-B8t-03: the whitelist is checked again at approval (a PENDING stored before it existed must not be applied).
+    if (approve) {
+      const notReadOnly = change.permissions.filter((p) => !isAuditGroupPermission(p));
+      if (notReadOnly.length > 0) {
+        throw new ValidationError(`The Audit group is read-only: not allowed (${notReadOnly.join(", ")}) — reject this change`);
+      }
+    }
+
     const claimed = await this.permissionChanges.decide(
       actor.tenantId,
       changeId,
@@ -655,12 +699,26 @@ export class RoleService {
     );
     if (!claimed) throw new ValidationError("This change has already been decided");
 
-    // F-B8b-04: no cross-repository transaction exists; if the application fails the claim is undone,
-    // so the change is neither lost nor left APPROVED-but-not-applied.
+    // F-B8t-04: no cross-repository transaction exists. If the application itself fails the claim is undone
+    // (nothing was applied). Once the rights ARE applied the change is never reopened: a failed audit write
+    // is logged and the error returned, but the status stays APPROVED so it matches the stored rights.
+    let before: Role | null = null;
+    let after: Role | null = null;
+    if (approve) {
+      try {
+        before = await this.roles.getById(actor.tenantId, change.roleId);
+        after = await this.roles.update(actor.tenantId, change.roleId, { permissions: change.permissions });
+      } catch (err) {
+        try {
+          await this.permissionChanges.reopen?.(actor.tenantId, changeId);
+        } catch (reopenErr) {
+          console.error(`Audit-rights change ${changeId}: could not be reopened after a failed application`, reopenErr instanceof Error ? reopenErr.message : reopenErr);
+        }
+        throw err;
+      }
+    }
     try {
       if (approve) {
-        const before = await this.roles.getById(actor.tenantId, change.roleId);
-        const after = await this.roles.update(actor.tenantId, change.roleId, { permissions: change.permissions });
         await this.audit.record({
           tenantId: actor.tenantId,
           userId: actor.userId,
@@ -685,11 +743,7 @@ export class RoleService {
         requestId,
       });
     } catch (err) {
-      try {
-        await this.permissionChanges.reopen?.(actor.tenantId, changeId);
-      } catch (reopenErr) {
-        console.error(`Audit-rights change ${changeId}: could not be reopened after a failed decision`, reopenErr instanceof Error ? reopenErr.message : reopenErr);
-      }
+      console.error(`Audit-rights change ${changeId}: ${approve ? "APPROVED, rights applied" : "REJECTED"} but the audit write failed (requestId ${requestId})`, err instanceof Error ? err.message : err);
       throw err;
     }
   }

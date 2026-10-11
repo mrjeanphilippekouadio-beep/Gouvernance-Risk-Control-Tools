@@ -36,3 +36,9 @@ SELECT tenant_id, name, system_group, p AS permission
 FROM roles, unnest(permissions) AS p
 WHERE deleted_at IS NULL AND p LIKE 'rolegroup.audit.%'
   AND NOT (p = 'rolegroup.audit.validate' AND system_group IN ('AUDIT', 'RISK_COMMITTEE'));
+
+-- 6. F-B8t-03 : changements de droits Audit PENDING contenant une permission hors liste blanche (a rejeter avant la production). Attendu : 0 ligne.
+SELECT c.tenant_id, c.id AS change_id, c.role_id, p AS permission
+FROM role_permission_changes c, unnest(c.permissions) AS p
+WHERE c.status = 'PENDING'
+  AND NOT (p LIKE '%.read' OR p LIKE '%.download' OR p IN ('dashboard.executive', 'rolegroup.audit.validate'));
