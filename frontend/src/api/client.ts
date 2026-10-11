@@ -9,13 +9,31 @@ if (!API_BASE_URL) {
 export class ApiError extends Error {
   readonly status: number;
   readonly requestId: string | null;
+  /**
+   * Permission named by a 403 "Missing permission: x" message, else null.
+   * The backend exposes it only in that text today (DECISION-011 asks for a
+   * structured field); null means "unknown", never guessed.
+   */
+  readonly missingPermission: string | null;
 
   constructor(message: string, status: number, requestId: string | null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.requestId = requestId;
+    this.missingPermission = status === 403 ? (/^Missing permission: (\S+)$/.exec(message)?.[1] ?? null) : null;
   }
+}
+
+type DeniedListener = (permission: string) => void;
+let deniedListener: DeniedListener | null = null;
+
+/** Single subscriber (the app-level dialog). Returns an unsubscribe function. */
+export function onPermissionDenied(listener: DeniedListener): () => void {
+  deniedListener = listener;
+  return () => {
+    if (deniedListener === listener) deniedListener = null;
+  };
 }
 
 /**
@@ -41,7 +59,11 @@ export async function apiRequest<T>(
 
   if (!res.ok) {
     const payload = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(payload.error ?? "Request failed", res.status, requestId);
+    const error = new ApiError(payload.error ?? "Request failed", res.status, requestId);
+    // Refused write (F-B8-06): tell the dialog. GETs are excluded because several
+    // screens deliberately degrade on a 403 (directory lookups) without alarming the user.
+    if (error.missingPermission && (options.method ?? "GET") !== "GET") deniedListener?.(error.missingPermission);
+    throw error;
   }
 
   if (res.status === 204) return undefined as T;
