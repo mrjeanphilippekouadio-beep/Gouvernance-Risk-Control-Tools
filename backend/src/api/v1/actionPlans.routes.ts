@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { boundedArray } from "../validation.js";
 import type { ActionPlanService } from "../../services/ActionPlanService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
 import {
@@ -30,11 +31,12 @@ const ProgressBody = z.object({
 });
 
 const LinksBody = z.object({
-  links: z.array(
+  links: boundedArray(
     z.object({
       resourceType: LinkResourceType,
       resourceId: z.string().min(1),
     }),
+    200,
   ),
 });
 

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { boundedArray } from "../validation.js";
 import type { ControlService } from "../../services/ControlService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
 
@@ -9,7 +10,7 @@ const ControlStatus = z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]);
 const CreateControlBody = z.object({
   label: z.string().min(1),
   objective: z.string().nullish(),
-  coveredRiskIds: z.array(z.string()).min(1),
+  coveredRiskIds: boundedArray(z.string(), 1000, 1),
   process: z.string().nullish(),
   processId: z.string().nullish(),
   departmentId: z.string().nullish(),

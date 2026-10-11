@@ -144,6 +144,7 @@ both a general update and an archive/close action.
   it, even though the product is currently single-tenant.
 - Secrets only via env vars (`backend/.env`, `frontend/.env.local`),
   never committed — see `.gitignore`.
+- **Never a bare `z.array(...)` on HTTP input — always `boundedArray(el, max[, min])`** (`backend/src/api/validation.ts`). zod 4.6.5 (CVE-2023-54404, no fixed release) parses every element before any size check, so `.max(N)` alone does not stop a 1 MB body of `{}` from blocking the event loop ~2 s / ~540 MB; the helper checks length first. A guard test in `test/boundedArray.test.ts` fails on a bare `z.array` in `api/v1`.
 - **Never trust a client-supplied attribution field.** Any field naming
   who did something — `recordedBy`, `evaluatorId`, `createdBy`,
   `escalatedBy`, and anything shaped like it — must be forced
