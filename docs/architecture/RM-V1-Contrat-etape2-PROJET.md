@@ -431,6 +431,9 @@ Posées au PO dans l'artefact Pilotage (ligne `ACTION_ITEMS.md`, owner HUMAN, st
 - **q59. Cartographie (q49).** La taille de matrice doit s'aligner « visuellement côté frontend » ; cela entre en tension avec la consigne permanente du PO de ne pas modifier la page Cartographie. Le PO doit dire ce qui est autorisé. Aucune modification de la page n'est décrite dans ce document.
 - **q60. Refus de co-signer (q52).** Que se passe-t-il quand le membre sollicité refuse de co-signer (autre co-signataire, escalade, blocage) ?
 - **q61. Règle de décision par défaut sans quorum (q55, révise q27).** Sans quorum forcé, quelle règle de décision s'applique par défaut (qui décide, combien de voix, ou décision du responsable journalisée) ?
+- **R1 (revue Compliance A14, `docs/security/compliance-DECISION-040.md`), rattaché à q61. Portée de « pas de quorum ».** Désigne-t-il la décision de repli (circuit unique, 6.2) ou le vote du Comité lui-même ? Conflit apparent avec DECISION-026 et l'invariant 10 (« jamais un seul membre », quorum de 2 seulement en règle A). Non tranché.
+- **R2 / q62. Garde-fous des décisions prises en repli**, en particulier quand Audit (3e ligne) décide. A14 évoque marquage, indicateur et ratification a posteriori par le Comité ; ce sont des suggestions de la revue, non décidées. Non tranché.
+- **R3 / q63. Administrateur = Risk Manager.** Cumul auto-attribué à l'amorçage du premier Dispositif (q51) et à la modification des droits d'Audit (q45). A14 évoque marquage, motif et notification d'une tierce personne ; non décidé. Non tranché.
 
 ### 13.2 Historique : questions closes par DECISION-040
 
@@ -458,6 +461,6 @@ Q-37a et Q-37b (q52), Q-37c et Q-37d (q53), Q-37e et « cohérence avec q31 / 3.
 
 ## Suite
 
-1. Fait : le PO a validé le texte final (DECISION-038, 2026-10-11) et révisé q37 (DECISION-039 point 3). DECISION-040 (q42 à q57) est intégrée : Q-37a à Q-37i et la cohérence des chaînes d'escalade sont closes. Restent à confirmer : q58 à q61 (section 13.1).
+1. Fait : le PO a validé le texte final (DECISION-038, 2026-10-11) et révisé q37 (DECISION-039 point 3). DECISION-040 (q42 à q57) est intégrée : Q-37a à Q-37i et la cohérence des chaînes d'escalade sont closes. Restent à confirmer : q58 à q63 (section 13.1, dont R1 à R3 de la revue Compliance).
 2. Fait : le texte est reporté dans le contrat (A13), l'étape 2 est marquée FAIT dans `RM-V1-Sequence-actions.md`.
 3. À faire : relecture A03 (R1.1). L'étape 2 débloque B-9 et B-6 (étapes 8 et 9).
