@@ -41,6 +41,6 @@
 .core-tab{border:1px solid var(--gs-border);border-radius:8px;background:var(--gs-bg-surface);padding:9px 14px;color:var(--gs-text-secondary);font:600 12px var(--gs-font-ui);cursor:pointer}
 .core-tab--active{border-color:var(--gs-primary);background:var(--gs-primary-bg);color:var(--gs-primary)}
 .core-button{border:1px solid var(--gs-border);border-radius:8px;background:var(--gs-bg-surface);padding:9px 12px;color:var(--gs-text);font:600 12px var(--gs-font-ui);cursor:pointer;white-space:nowrap}
-.core-button--primary{border-color:var(--gs-primary);background:var(--gs-primary);color:#fff}
+.core-button--primary{border-color:var(--gs-primary);background:var(--gs-primary);color:var(--gs-on-primary)}
 .core-button:disabled{opacity:.55;cursor:not-allowed}
 .core-tab:focus-visible,.core-button:focus-visible{outline:2px solid var(--gs-primary);outline-offset:2px}

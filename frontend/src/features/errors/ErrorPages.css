@@ -102,7 +102,7 @@
 }
 
 .error-button--primary {
-  color: var(--gs-primary-contrast, #fff);
+  color: var(--gs-on-primary);
   background: var(--gs-primary, #4146a5);
 }
 .error-button--primary:hover { filter: brightness(.96); }
