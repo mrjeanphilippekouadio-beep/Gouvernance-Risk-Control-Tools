@@ -377,3 +377,12 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
   la fonction risque », effet d'un « Rejeté », appétence dans le Dispositif,
   comparabilité de la Cartographie entre tailles d'échelle. Détail des règles
   Comité A/B/C (q05) absent du dépôt : à annexer.
+- 2026-10-11 : réponses du PO (DECISION-033 et 034, Q-E2-1 à 11) intégrées
+  au projet d'étape 2 (section 11 devenue « Réponses du PO », section 13
+  « Points restant à confirmer » : 7 points). Conflits signalés avec
+  recommandation de garde-fou : la suppléance du Comité par la fonction
+  risque doit respecter « jamais un seul membre », « jamais validateur de ce
+  qu'on a saisi » et ne pas couvrir l'activation de l'auto-proposition
+  (DECISION-019 P3). Lecture de q26 (fonction risque approuve par défaut,
+  Audit notifié, Dispositif peut exiger Audit et/ou Comité) marquée
+  « interprétation à confirmer ». Cartographie non touchée.
