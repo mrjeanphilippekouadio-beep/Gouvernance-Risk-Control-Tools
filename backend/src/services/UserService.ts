@@ -179,6 +179,9 @@ export class UserService {
     const before = await this.users.getById(actor.tenantId, id);
     if (!before) throw new NotFoundError("User", id);
     if (before.deletedAt) throw new ValidationError("User is already suspended");
+    // F-B8-01: security rule, fail closed if RBAC is not wired.
+    if (!this.roleService) throw new Error("UserService.suspend requires a RoleService (Risk Manager group guard)");
+    await this.roleService.assertNotLastRiskManager(actor.tenantId, id);
 
     await this.users.suspend(actor.tenantId, id);
 

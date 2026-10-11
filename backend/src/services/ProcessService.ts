@@ -2,6 +2,7 @@ import type { ProcessRepository } from "../domain/repositories/ProcessRepository
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
+import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { ProcessEvaluationModeRequestRepository } from "../domain/repositories/ProcessEvaluationModeRequestRepository.js";
 import {
   PROCESS_LEVEL_BY_RANK,
@@ -43,7 +44,16 @@ export class ProcessService {
     private readonly risks?: RiskRepository,
     private readonly controls?: ControlRepository,
     private readonly evaluationModeRequests?: ProcessEvaluationModeRequestRepository,
+    /** B-8: validates `departmentId`; fails closed (throws) if a departmentId is given without it. */
+    private readonly departments?: DepartmentRepository,
   ) {}
+
+  private async assertDepartmentExists(tenantId: string, departmentId: string): Promise<void> {
+    if (!this.departments) throw new Error("ProcessService requires a DepartmentRepository to set departmentId");
+    if (!(await this.departments.getById(tenantId, departmentId))) {
+      throw new ValidationError(`Department ${departmentId} does not exist in this tenant`);
+    }
+  }
 
   /**
    * Governance finding (gouvernance refresh audit, 2026-09-29, DIV-06
@@ -64,6 +74,7 @@ export class ProcessService {
     requirePermission(actor, "process.create");
     if (!input.name.trim()) throw new ValidationError("name is required");
     await this.validateHierarchy(actor.tenantId, input.level, input.parentId ?? null, null);
+    if (input.departmentId) await this.assertDepartmentExists(actor.tenantId, input.departmentId);
 
     const process = await this.processes.create({ ...input, tenantId: actor.tenantId });
 
@@ -117,6 +128,8 @@ export class ProcessService {
       const parentId = input.parentId !== undefined ? input.parentId : before.parentId;
       await this.validateHierarchy(actor.tenantId, level, parentId, id);
     }
+
+    if (input.departmentId) await this.assertDepartmentExists(actor.tenantId, input.departmentId);
 
     const after = await this.processes.update(actor.tenantId, id, input);
 

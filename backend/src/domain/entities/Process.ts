@@ -29,6 +29,8 @@ export interface Process {
    * time only.
    */
   evaluationMode: EvaluationMode | null;
+  /** B-8: every Process belongs to a department (nullable only until existing data is backfilled). */
+  departmentId: string | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -47,6 +49,7 @@ export interface CreateProcessInput {
   owner?: string | null;
   active?: boolean;
   evaluationMode?: EvaluationMode | null;
+  departmentId?: string | null;
 }
 
 export interface UpdateProcessInput {
@@ -59,6 +62,7 @@ export interface UpdateProcessInput {
   owner?: string | null;
   active?: boolean;
   evaluationMode?: EvaluationMode | null;
+  departmentId?: string | null;
 }
 
 /** Rank order used to validate parent/child level matching — 1-indexed, matches NIVEAUX_PROCESSUS in the legacy code. */

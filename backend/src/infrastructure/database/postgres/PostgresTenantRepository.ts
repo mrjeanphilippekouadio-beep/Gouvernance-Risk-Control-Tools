@@ -58,9 +58,21 @@ export class PostgresTenantRepository implements TenantRepository {
 
   async create(input: CreateTenantInput): Promise<Tenant> {
     const { rows } = await this.pool.query<TenantRow>(
-      `INSERT INTO tenants (name, deployment_mode)
-       VALUES ($1, $2)
-       RETURNING id, name, deployment_mode, active, created_at, updated_at`,
+      `WITH t AS (
+         INSERT INTO tenants (name, deployment_mode)
+         VALUES ($1, $2)
+         RETURNING id, name, deployment_mode, active, created_at, updated_at
+       ), groups AS (
+         -- B-8: every tenant has its three fixed groups from day one (same rows as migration 049).
+         INSERT INTO roles (tenant_id, name, description, permissions, system_group)
+         SELECT t.id, g.name, g.description, '{}', g.system_group
+         FROM t CROSS JOIN (VALUES
+           ('Risk Manager',   'Groupe fixe : équipe risque (jamais vide)', 'RISK_MANAGER'),
+           ('Risk Committee', 'Groupe fixe : Comité des risques (peut être vide)', 'RISK_COMMITTEE'),
+           ('Audit',          'Groupe fixe : Audit (peut être vide)', 'AUDIT')
+         ) AS g (name, description, system_group)
+       )
+       SELECT * FROM t`,
       [input.name, input.deploymentMode ?? "managed_saas"],
     );
     const row = rows[0];

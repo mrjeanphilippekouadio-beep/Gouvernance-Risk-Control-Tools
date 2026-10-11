@@ -28,3 +28,9 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 - Observation : `levelLabels` d'axe optionnel, donc « un descriptif par niveau et par axe » n'est exigé que s'il est fourni (test d'épinglage).
 - Intention CVE de QA-S1-zod toujours couverte : les bornes 7/8 et 6/7 sont testées avec max+1 et des tableaux de `{}` (y compris `levelLabels` imbriqué), le garde `boundedArray.test.ts` passe.
 - Principe ajouté : quand une borne métier change, tester aussi les plafonds dérivés ailleurs (seuils, bandes), pas seulement le champ modifié.
+## 2026-10-11 — QA-B8 (lot B-8 groupes fixes, `backend/test/QA-B8-groups.test.ts`, 31 tests + 1 `it.fails`)
+
+- Aucun défaut dans le code de RoleService/ProcessService : les 3 groupes refusent disable/rename/departmentId, RM jamais vide (service + garde repo), Comité/Audit vidables, maker-checker intact, département d'un autre tenant / inexistant / déjà pris refusé, échec fermé sans DepartmentRepository, audit à chaque mutation, isolation tenant.
+- DEFECT-B8-01 (MAJOR, confirmé, signalé par A06) : `UserService.suspend` d'un dernier membre RM contourne l'invariant (le `user_roles` reste actif ; `countActiveAssignments` compte aussi les suspendus). Test `it.fails` : suite verte tant que le défaut existe, rouge le jour du correctif (alors passer en `it`). Corriger côté service/repo, pas côté test.
+- Migration 049 relue, non exécutée : voir rapport (adoption par nom sensible à la casse ; groupes créés vides => RM vide à la naissance ; `update` concurrent sur départements peut remonter une 23505 brute).
+- Pratique : un fake de repo doit refléter la garde atomique du vrai repo (`minRemaining`) ; helper de setup qui assigne doit utiliser un autre acteur que le membre (maker-checker).

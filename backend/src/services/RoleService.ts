@@ -1,6 +1,7 @@
 import type { RoleRepository } from "../domain/repositories/RoleRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
+import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { CreateRoleInput, Role, UpdateRoleInput } from "../domain/entities/Role.js";
 import {
   ALL_PERMISSIONS,
@@ -52,7 +53,23 @@ export class RoleService {
     private readonly roles: RoleRepository,
     private readonly audit: AuditRepository,
     private readonly users?: UserRepository,
+    /** B-8: needed only to link a role to a department; fails closed (throws) if a departmentId is given without it. */
+    private readonly departments?: DepartmentRepository,
   ) {}
+
+  /**
+   * B-8: a department's group must point at a live department of this
+   * tenant and be the only group of that department.
+   */
+  private async assertDepartmentLinkable(tenantId: string, departmentId: string, selfRoleId: string | null): Promise<void> {
+    if (!this.departments) throw new Error("RoleService requires a DepartmentRepository to link a role to a department");
+    const department = await this.departments.getById(tenantId, departmentId);
+    if (!department) throw new ValidationError(`Department ${departmentId} does not exist in this tenant`);
+    const roles = await this.roles.list(tenantId);
+    if (roles.some((r) => r.departmentId === departmentId && r.id !== selfRoleId)) {
+      throw new ValidationError("This department already has a group");
+    }
+  }
 
   async create(
     actor: AuthenticatedUser,
@@ -63,6 +80,7 @@ export class RoleService {
     if (!input.name.trim()) throw new ValidationError("name is required");
     assertKnownPermissions(input.permissions);
     assertDashboardScopeModeWritable(input.dashboardScopeMode);
+    if (input.departmentId) await this.assertDepartmentLinkable(actor.tenantId, input.departmentId, null);
 
     const existing = await this.roles.getByName(actor.tenantId, input.name);
     if (existing) throw new ValidationError(`A role named "${input.name}" already exists`);
@@ -117,6 +135,13 @@ export class RoleService {
     }
 
     if (input.name !== undefined && !input.name.trim()) throw new ValidationError("name cannot be empty");
+    if (before.systemGroup && input.name !== undefined && input.name !== before.name) {
+      throw new ValidationError(`"${before.name}" is a fixed group: it cannot be renamed`);
+    }
+    if (before.systemGroup && input.departmentId) {
+      throw new ValidationError(`"${before.name}" is a fixed group: it cannot be linked to a department`);
+    }
+    if (input.departmentId) await this.assertDepartmentLinkable(actor.tenantId, input.departmentId, id);
     if (input.permissions !== undefined) assertKnownPermissions(input.permissions);
     assertDashboardScopeModeWritable(input.dashboardScopeMode);
 
@@ -141,6 +166,9 @@ export class RoleService {
   async disable(actor: AuthenticatedUser, id: string, requestId: string): Promise<void> {
     requirePermission(actor, "role.delete");
     const before = await this.get(actor, id);
+    if (before.systemGroup) {
+      throw new ValidationError(`"${before.name}" is a fixed group: it cannot be disabled`);
+    }
 
     const activeCount = await this.roles.countActiveAssignments(actor.tenantId, id);
     if (activeCount > 0) {
@@ -195,12 +223,19 @@ export class RoleService {
     }
     const role = await this.get(actor, roleId);
 
+    // B-8: the Risk Manager group is never left empty (Committee and Audit may be).
+    // Checked here for a clear error, and again atomically in the repository.
+    const isRiskManagerGroup = role.systemGroup === "RISK_MANAGER";
+    if (isRiskManagerGroup && (await this.roles.countActiveAssignments(actor.tenantId, roleId)) <= 1) {
+      throw new ValidationError("Cannot remove the last member of the Risk Manager group");
+    }
+
     const remaining = await this.roles.listForUser(actor.tenantId, userId);
     if (remaining.length <= 1 && remaining.some((r) => r.id === roleId)) {
       throw new ValidationError("Cannot revoke the user's last active role");
     }
 
-    await this.roles.revokeFromUser(actor.tenantId, roleId, userId);
+    await this.roles.revokeFromUser(actor.tenantId, roleId, userId, isRiskManagerGroup ? { minRemaining: 1 } : undefined);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -213,6 +248,19 @@ export class RoleService {
       reason: null,
       requestId,
     });
+  }
+
+  /**
+   * F-B8-01: suspending a user removes them from every group in practice, so
+   * the Risk Manager "never empty" rule applies as for a revoke. Clear error
+   * here; the atomic guard is in UserRepository.suspend.
+   */
+  async assertNotLastRiskManager(tenantId: string, userId: string): Promise<void> {
+    const held = await this.roles.listForUser(tenantId, userId);
+    const rm = held.find((r) => r.systemGroup === "RISK_MANAGER");
+    if (rm && (await this.roles.countActiveAssignments(tenantId, rm.id)) <= 1) {
+      throw new ValidationError("Cannot remove the last member of the Risk Manager group");
+    }
   }
 
   async listForUser(actor: AuthenticatedUser, userId: string): Promise<Role[]> {
