@@ -259,3 +259,27 @@ SECURITY_RETEST F-B8-01 — ORIGINAL_RESULT : LOW 3,8 (suspendus comptés comme 
 - F-B8-01 CLOSED, F-B8-03 CLOSED, F-B8-02 et F-B8-04 inchangés (INFO, contrôle pré-migration A07).
 - Ce n'est pas un Security PASS de conformité : l'invariant (membre actif) reste une décision Risk Manager/PO.
 - À tracker (7bis) : F-B8-05, F-B8-06 (A06, optionnels) ; test de concurrence sur vraie base (A08) si souhaité.
+
+## Revue DS vague 2 — 2026-10-11 (A10, revue statique du commit `48d6107`)
+
+**Escalade HUMAN : aucune** (max CVSS 2,1). Verdict : **PASS avec réserves LOW/INFO**. Limite : revue statique du diff, composants non rendus avec des charges hostiles ; n'est pas un Security PASS de conformité.
+
+### Vérifications sans écart
+- **Dépendances** : aucun `package.json` ni lockfile touché par le commit. Aucune nouvelle dépendance.
+- **Sinks HTML** : aucun `dangerouslySetInnerHTML`, `innerHTML`, `eval` dans les fichiers du commit. Tout est rendu en nœuds texte React (échappés). Aucun `href`/`src` ajouté par la vague 2 (`Breadcrumb` et `Menu` portent un `href` d'origine antérieure : hors périmètre, à revoir quand un écran leur passera des URLs venant du backend, filtrer `javascript:`).
+- **Sélection de lignes** : `rowKey` n'est écrit nulle part dans le DOM (checkbox sans `name`/`value`/`id` dérivé de la clé) ; il ne sort que par le callback `onSelectionChange`. Pas de fuite de clé interne par le composant.
+- **`disabledReason` (Tabs, Button)** : rendu uniquement en texte, relié par `aria-describedby`, texte fourni par l'appelant. Pas de fuite par le composant ; règle d'usage : ne jamais y passer un message d'erreur backend brut ni l'énoncé d'une permission interne (`risk.archive` etc.).
+- **Catalogue** : données explicitement factices (« Exemple », « Valeur A »), aucun secret, e-mail, token, ni donnée réelle.
+- **Calcul métier** : aucun. `MatrixView` reçoit valeur/libellé/ton de l'appelant ; `VersionComparison` n'effectue aucun diff ; `Table` ne trie pas (`aria-sort` seulement) ; `BulkActionBar` n'agit pas. Le seul calcul est « tout sélectionner / indéterminé », purement d'affichage.
+
+### Constats
+- **F-DS2-01 (LOW, `AV:N/AC:H/PR:L/UI:R/S:U/C:N/I:N/A:L` = 2,1, CONFIDENCE PROBABLE)** — `VersionComparison` : les types `string | null` sont effacés à l'exécution. Un diff backend contenant un objet/tableau/nombre-objet dans `before`/`after` (ex. champ JSONB `label` d'une échelle, voir F-B9-01) fait lever à React « Objects are not valid as a React child » et démonte tout l'arbre faute d'Error Boundary : déni d'affichage de l'écran, pas de XSS. Les chaînes saisies par les utilisateurs sont, elles, correctement échappées. Reco A04/dev-frontend : au bord (hook de données), convertir en chaîne ou rejeter ; idéalement `String(v)` pour les scalaires et un libellé `(valeur complexe)` sinon ; poser une Error Boundary au niveau écran. Test de régression : `before: {a:1}` ne doit pas casser le rendu.
+- **F-DS2-02 (INFO, CVSS 0)** — clés React/sélection dérivées du contenu : `VersionComparison` (`rowKey = field`) et `MatrixView` (`key = libellé` d'en-tête) supposent l'unicité. Un doublon (`field` répété) produit des lignes écrasées/dupliquées et un `selectedKeys` ambigu pour `Table`. Intégrité d'affichage seulement ; l'appelant doit passer un identifiant unique (id de ligne), ce que le catalogue fait. Reco : documenter, ou clé composée `field#index`.
+- **F-DS2-03 (INFO)** — `Checkbox` : `{...rest}` est placé après `ref` ; en React 19 `ref` est une prop et un `ref` fourni par l'appelant écraserait le callback `indeterminate` (état visuel faux, pas de risque sécurité). Reco : placer `{...rest}` avant `ref`.
+- **F-DS2-04 (INFO)** — contenu libre : `Table.render`, `Card.header/footer`, `Modal.children`, `BulkActionBar.children` acceptent des `ReactNode`. Sûr tant que l'appelant ne passe pas de HTML brut. Règle à garder : le DS ne doit jamais exposer de prop de type « html string ».
+
+### Chaîne d'attaque
+Texte saisi hostile (`<img onerror>`) dans un champ versionné, remonté par le diff backend : rendu en texte inerte (échappé). La seule voie observée est le plantage F-DS2-01 si le backend émet un non-string.
+
+### Statut
+F-DS2-01 REMEDIATION_REQUIRED (LOW, A04/dev-frontend, non bloquant). F-DS2-02 à F-DS2-04 INFO. À tracker (7bis) : F-DS2-01 et la revue des `href` de `Breadcrumb`/`Menu` à l'arrivée du premier écran qui leur passe des URLs dynamiques.
