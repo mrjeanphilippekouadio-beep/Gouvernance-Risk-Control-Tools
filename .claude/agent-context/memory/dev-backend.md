@@ -28,3 +28,4 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - `ActionPlanService.close` : évidence `status === "DELETED"` refusée avec le même message que « introuvable ».
 - Principe : un `Number(query) || undefined` n'est pas une validation ; toujours zod borné sur les paramètres numériques de query.
 - Worktree sans `node_modules` : `npm ci --ignore-scripts` avant typecheck/test.
+- Suite (fix/sec-minilot-v2) : `from`/`to` de `GET /audit-logs` validés par zod (date non parsable → 400, vide/absent inchangé).
