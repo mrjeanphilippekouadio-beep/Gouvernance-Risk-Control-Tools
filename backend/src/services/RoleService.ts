@@ -2,7 +2,8 @@ import type { RoleRepository } from "../domain/repositories/RoleRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
-import type { CreateRoleInput, Role, UpdateRoleInput } from "../domain/entities/Role.js";
+import type { RolePermissionChangeRepository } from "../domain/repositories/RolePermissionChangeRepository.js";
+import type { CreateRoleInput, Role, SystemGroup, UpdateRoleInput } from "../domain/entities/Role.js";
 import {
   ALL_PERMISSIONS,
   BASE_PERMISSIONS,
@@ -13,6 +14,11 @@ import {
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { DashboardScopeMode } from "../domain/entities/DashboardScope.js";
+
+const MAX_GROUP_REASON_LENGTH = 500;
+
+/** B-8 bis (q43): hard-coded for now (configurable part waits for PO q58). Risk Manager and Audit never cumulate. */
+const FORBIDDEN_CUMUL: Partial<Record<SystemGroup, SystemGroup>> = { RISK_MANAGER: "AUDIT", AUDIT: "RISK_MANAGER" };
 
 function assertKnownPermissions(permissions: Permission[]): void {
   if (permissions.length === 0) throw new ValidationError("A role needs at least one permission");
@@ -55,7 +61,19 @@ export class RoleService {
     private readonly users?: UserRepository,
     /** B-8: needed only to link a role to a department; fails closed (throws) if a departmentId is given without it. */
     private readonly departments?: DepartmentRepository,
+    /** B-8 bis (q45): pending Audit-group permission changes; fails closed if a change must be queued without it. */
+    private readonly permissionChanges?: RolePermissionChangeRepository,
   ) {}
+
+  /** B-8 bis (q44): entering/leaving a fixed group needs a bounded, non-empty reason. */
+  private groupReason(role: Role, reason: string | undefined): string | null {
+    const r = reason?.trim() || null;
+    if (role.systemGroup && !r) throw new ValidationError("A reason is required to add or remove a member of a fixed group");
+    if (r && r.length > MAX_GROUP_REASON_LENGTH) {
+      throw new ValidationError(`reason must be at most ${MAX_GROUP_REASON_LENGTH} characters`);
+    }
+    return r;
+  }
 
   /**
    * B-8: a department's group must point at a live department of this
@@ -143,6 +161,9 @@ export class RoleService {
     }
     if (input.departmentId) await this.assertDepartmentLinkable(actor.tenantId, input.departmentId, id);
     if (input.permissions !== undefined) assertKnownPermissions(input.permissions);
+    if (before.systemGroup === "AUDIT" && input.permissions !== undefined) {
+      throw new ValidationError("The permissions of the Audit group are changed through its dedicated endpoint");
+    }
     assertDashboardScopeModeWritable(input.dashboardScopeMode);
 
     const after = await this.roles.update(actor.tenantId, id, input);
@@ -193,12 +214,26 @@ export class RoleService {
   }
 
   /** ACT-093/113: the actor can never assign a role to themselves — that's the maker-checker boundary. */
-  async assignToUser(actor: AuthenticatedUser, roleId: string, userId: string, requestId: string): Promise<void> {
+  async assignToUser(
+    actor: AuthenticatedUser,
+    roleId: string,
+    userId: string,
+    requestId: string,
+    reason?: string,
+  ): Promise<void> {
     requirePermission(actor, "role.assign");
     if (actor.userId === userId) {
       throw new ForbiddenError("You cannot assign a role to yourself — ask another admin");
     }
     const role = await this.get(actor, roleId);
+    const cleanReason = this.groupReason(role, reason);
+    const forbidden = role.systemGroup ? FORBIDDEN_CUMUL[role.systemGroup] : undefined;
+    if (forbidden) {
+      const held = await this.roles.listForUser(actor.tenantId, userId);
+      if (held.some((r) => r.systemGroup === forbidden)) {
+        throw new ValidationError("A user cannot be both in the Risk Manager group and in the Audit group");
+      }
+    }
 
     const assignment = await this.roles.assignToUser(actor.tenantId, roleId, userId, actor.userId);
 
@@ -210,18 +245,25 @@ export class RoleService {
       action: "ROLE_CHANGE",
       oldValue: null,
       newValue: { ...assignment, roleName: role.name },
-      reason: null,
+      reason: cleanReason,
       requestId,
     });
   }
 
   /** ACT-114: also refuses to leave a user with zero active roles. */
-  async revokeFromUser(actor: AuthenticatedUser, roleId: string, userId: string, requestId: string): Promise<void> {
+  async revokeFromUser(
+    actor: AuthenticatedUser,
+    roleId: string,
+    userId: string,
+    requestId: string,
+    reason?: string,
+  ): Promise<void> {
     requirePermission(actor, "role.assign");
     if (actor.userId === userId) {
       throw new ForbiddenError("You cannot revoke your own role — ask another admin");
     }
     const role = await this.get(actor, roleId);
+    const cleanReason = this.groupReason(role, reason);
 
     // B-8: the Risk Manager group is never left empty (Committee and Audit may be).
     // Checked here for a clear error, and again atomically in the repository.
@@ -252,7 +294,7 @@ export class RoleService {
       action: "ROLE_CHANGE",
       oldValue: { roleId, userId, roleName: role.name },
       newValue: null,
-      reason: null,
+      reason: cleanReason,
       requestId,
     });
   }
@@ -297,5 +339,159 @@ export class RoleService {
     const rolePermissions = roles.flatMap((r) => r.permissions);
 
     return Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePermissions]));
+  }
+
+  // -- B-8 bis ----------------------------------------------------------
+
+  /** Fixed groups a user belongs to (no permission check: callers already authorized the read). */
+  async fixedGroupsOf(tenantId: string, userId: string): Promise<SystemGroup[]> {
+    const held = await this.roles.listForUser(tenantId, userId);
+    return held.flatMap((r) => (r.systemGroup ? [r.systemGroup] : []));
+  }
+
+  /** F-B8-06: roles disabled while the user was suspended whose assignment remains (rights silently lost). */
+  async listLostRoles(tenantId: string, userId: string): Promise<Role[]> {
+    return (await this.roles.listDisabledForUser?.(tenantId, userId)) ?? [];
+  }
+
+  /**
+   * q45: only the application administrator (rolegroup.audit.update) changes the
+   * Audit group's permissions. If the actor is also a Risk Manager the change is
+   * queued until a member of Audit or the Committee validates it.
+   */
+  async changeAuditGroupPermissions(
+    actor: AuthenticatedUser,
+    permissions: Permission[],
+    requestId: string,
+  ): Promise<{ status: "APPLIED"; role: Role } | { status: "PENDING"; changeId: string }> {
+    requirePermission(actor, "rolegroup.audit.update");
+    assertKnownPermissions(permissions);
+    const group = (await this.roles.list(actor.tenantId)).find((r) => r.systemGroup === "AUDIT");
+    if (!group) throw new NotFoundError("Role", "AUDIT");
+    const held = await this.roles.listForUser(actor.tenantId, actor.userId);
+    if (held.some((r) => r.id === group.id)) {
+      throw new ForbiddenError("You cannot change the permissions of a group you belong to");
+    }
+
+    if (held.some((r) => r.systemGroup === "RISK_MANAGER")) {
+      if (!this.permissionChanges) throw new Error("RoleService requires a RolePermissionChangeRepository");
+      const change = await this.permissionChanges.create({
+        tenantId: actor.tenantId,
+        roleId: group.id,
+        permissions,
+        requestedBy: actor.userId,
+      });
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "RolePermissionChange",
+        entityId: change.id,
+        action: "PERMISSION_CHANGE",
+        oldValue: { permissions: group.permissions },
+        newValue: { status: "PENDING", permissions },
+        reason: null,
+        requestId,
+      });
+      return { status: "PENDING", changeId: change.id };
+    }
+
+    const role = await this.roles.update(actor.tenantId, group.id, { permissions });
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Role",
+      entityId: group.id,
+      action: "PERMISSION_CHANGE",
+      oldValue: group,
+      newValue: role,
+      reason: null,
+      requestId,
+    });
+    return { status: "APPLIED", role };
+  }
+
+  /** q45 maker-checker: a member of Audit or the Committee (never the author) approves or rejects. */
+  async decideAuditPermissionChange(
+    actor: AuthenticatedUser,
+    changeId: string,
+    approve: boolean,
+    requestId: string,
+  ): Promise<void> {
+    requirePermission(actor, "rolegroup.audit.validate");
+    if (!this.permissionChanges) throw new Error("RoleService requires a RolePermissionChangeRepository");
+    const change = await this.permissionChanges.getById(actor.tenantId, changeId);
+    if (!change) throw new NotFoundError("RolePermissionChange", changeId);
+    if (change.status !== "PENDING") throw new ValidationError("This change has already been decided");
+    if (change.requestedBy === actor.userId) {
+      throw new ForbiddenError("The author of a permission change cannot validate it");
+    }
+    const held = await this.roles.listForUser(actor.tenantId, actor.userId);
+    if (!held.some((r) => r.systemGroup === "AUDIT" || r.systemGroup === "RISK_COMMITTEE")) {
+      throw new ForbiddenError("Only a member of the Audit group or of the Committee can validate this change");
+    }
+
+    const claimed = await this.permissionChanges.decide(
+      actor.tenantId,
+      changeId,
+      approve ? "APPROVED" : "REJECTED",
+      actor.userId,
+    );
+    if (!claimed) throw new ValidationError("This change has already been decided");
+
+    if (approve) {
+      const before = await this.roles.getById(actor.tenantId, change.roleId);
+      const after = await this.roles.update(actor.tenantId, change.roleId, { permissions: change.permissions });
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Role",
+        entityId: change.roleId,
+        action: "PERMISSION_CHANGE",
+        oldValue: before,
+        newValue: after,
+        reason: `Validation of change ${changeId} requested by ${change.requestedBy}`,
+        requestId,
+      });
+    }
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "RolePermissionChange",
+      entityId: changeId,
+      action: approve ? "APPROVE" : "REJECT",
+      oldValue: { status: "PENDING" },
+      newValue: { status: approve ? "APPROVED" : "REJECTED" },
+      reason: null,
+      requestId,
+    });
+  }
+
+  /**
+   * q48 (F-B8-06), explicit exception to DECISION-011/q02, limited to this case:
+   * for a denied permission, the active users of the tenant who can give it back
+   * (holders of role.assign, if an active role carries the permission). Any
+   * authenticated user may ask; only display names are returned, and every call is audited.
+   */
+  async listGrantors(
+    actor: AuthenticatedUser,
+    permission: Permission,
+    requestId: string,
+  ): Promise<{ permission: Permission; grantors: Array<{ displayName: string }> }> {
+    if (!ALL_PERMISSIONS.includes(permission)) throw new ValidationError(`Unknown permission: ${permission}`);
+    if (!this.users?.listWithPermission) throw new Error("RoleService.listGrantors requires a UserRepository");
+    const carried = (await this.roles.list(actor.tenantId)).some((r) => r.permissions.includes(permission));
+    const found = carried ? await this.users.listWithPermission(actor.tenantId, "role.assign", actor.userId) : [];
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "PermissionGrantorsLookup",
+      entityId: actor.userId,
+      action: "READ",
+      oldValue: null,
+      newValue: { permission, returned: found.length },
+      reason: null,
+      requestId,
+    });
+    return { permission, grantors: found.map((u) => ({ displayName: u.displayName })) };
   }
 }

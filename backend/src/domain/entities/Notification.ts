@@ -40,6 +40,8 @@ export const NOTIFICATION_RESOURCE_TYPES = [
   "ANOMALY",
   "RISK_EVALUATION",
   "REVIEW_CYCLE",
+  // B-8 bis: user/rights management events (e.g. rights lost on reactivation); widened in migration 051.
+  "MANAGEMENT",
 ] as const satisfies readonly GrcObjectType[];
 
 export type NotificationResourceType = (typeof NOTIFICATION_RESOURCE_TYPES)[number];

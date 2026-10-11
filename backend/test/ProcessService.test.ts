@@ -160,7 +160,19 @@ const actor: AuthenticatedUser = {
   roles: ["process.read", "process.create", "process.update", "process.delete"],
 };
 
+// B-8 bis: departmentId is mandatory on creation, so the generic tests wire a permissive repository.
+const anyDepartment = {
+  async getById(_tenantId: string, id: string) {
+    return { id } as never;
+  },
+} as unknown as DepartmentRepository;
+
 describe("ProcessService department link (B-8)", () => {
+  it("refuses to create a process without departmentId (B-8 bis, q46)", async () => {
+    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
+    await expect(service.create(actor, { level: "PROCESS", name: "P1" }, "REQ-0")).rejects.toThrow("departmentId is required");
+  });
+
   const departments = {
     async getById(_tenantId: string, id: string) {
       return id === "dept-1" ? ({ id } as never) : null;
@@ -204,56 +216,56 @@ describe("ProcessService department link (B-8)", () => {
 
 describe("ProcessService", () => {
   it("creates a root PROCESS with no parent", async () => {
-    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository());
-    const process = await service.create(actor, { level: "PROCESS", name: "Onboarding" }, "REQ-1");
+    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
+    const process = await service.create(actor, { departmentId: "dept-1", level: "PROCESS", name: "Onboarding" }, "REQ-1");
     expect(process.parentId).toBeNull();
   });
 
   it("rejects a PROCESS-level item with a parent", async () => {
-    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository());
-    const root = await service.create(actor, { level: "PROCESS", name: "P1" }, "REQ-2");
+    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
+    const root = await service.create(actor, { departmentId: "dept-1", level: "PROCESS", name: "P1" }, "REQ-2");
     await expect(
-      service.create(actor, { level: "PROCESS", name: "P2", parentId: root.id }, "REQ-3"),
+      service.create(actor, { departmentId: "dept-1", level: "PROCESS", name: "P2", parentId: root.id }, "REQ-3"),
     ).rejects.toThrow(ValidationError);
   });
 
   it("requires a parent for SUBPROCESS/ACTIVITY", async () => {
-    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository());
+    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
     await expect(
-      service.create(actor, { level: "SUBPROCESS", name: "Sub" }, "REQ-4"),
+      service.create(actor, { departmentId: "dept-1", level: "SUBPROCESS", name: "Sub" }, "REQ-4"),
     ).rejects.toThrow(ValidationError);
   });
 
   it("accepts a SUBPROCESS whose parent is a PROCESS", async () => {
-    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository());
-    const root = await service.create(actor, { level: "PROCESS", name: "P1" }, "REQ-5");
+    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
+    const root = await service.create(actor, { departmentId: "dept-1", level: "PROCESS", name: "P1" }, "REQ-5");
     const sub = await service.create(
       actor,
-      { level: "SUBPROCESS", name: "Sub1", parentId: root.id },
+      { departmentId: "dept-1", level: "SUBPROCESS", name: "Sub1", parentId: root.id },
       "REQ-6",
     );
     expect(sub.parentId).toBe(root.id);
   });
 
   it("rejects a SUBPROCESS whose parent is an ACTIVITY (wrong rank)", async () => {
-    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository());
-    const root = await service.create(actor, { level: "PROCESS", name: "P1" }, "REQ-7");
-    const sub = await service.create(actor, { level: "SUBPROCESS", name: "Sub1", parentId: root.id }, "REQ-8");
+    const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
+    const root = await service.create(actor, { departmentId: "dept-1", level: "PROCESS", name: "P1" }, "REQ-7");
+    const sub = await service.create(actor, { departmentId: "dept-1", level: "SUBPROCESS", name: "Sub1", parentId: root.id }, "REQ-8");
     const activity = await service.create(
       actor,
-      { level: "ACTIVITY", name: "Act1", parentId: sub.id },
+      { departmentId: "dept-1", level: "ACTIVITY", name: "Act1", parentId: sub.id },
       "REQ-9",
     );
     await expect(
-      service.create(actor, { level: "SUBPROCESS", name: "Sub2", parentId: activity.id }, "REQ-10"),
+      service.create(actor, { departmentId: "dept-1", level: "SUBPROCESS", name: "Sub2", parentId: activity.id }, "REQ-10"),
     ).rejects.toThrow(ValidationError);
   });
 
   it("rejects a process being its own parent", async () => {
     const repo = inMemoryProcessRepository();
-    const service = new ProcessService(repo, inMemoryAuditRepository());
-    const root = await service.create(actor, { level: "PROCESS", name: "P1" }, "REQ-11");
-    const sub = await service.create(actor, { level: "SUBPROCESS", name: "Sub1", parentId: root.id }, "REQ-12");
+    const service = new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
+    const root = await service.create(actor, { departmentId: "dept-1", level: "PROCESS", name: "P1" }, "REQ-11");
+    const sub = await service.create(actor, { departmentId: "dept-1", level: "SUBPROCESS", name: "Sub1", parentId: root.id }, "REQ-12");
 
     await expect(
       service.update(actor, sub.id, { parentId: sub.id }, "REQ-13"),
@@ -293,10 +305,10 @@ describe("ProcessService", () => {
   describe("resolveEvaluationMode (ProcessService, DIV-06)", () => {
     it("resolves to the process's own evaluationMode when set", async () => {
       const repo = inMemoryProcessRepository();
-      const service = new ProcessService(repo, inMemoryAuditRepository());
+      const service = new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
       const root = await service.create(
         actor,
-        { level: "PROCESS", name: "P1", evaluationMode: "PARTICIPATIF" },
+        { departmentId: "dept-1", level: "PROCESS", name: "P1", evaluationMode: "PARTICIPATIF" },
         "REQ-14",
       );
 
@@ -306,13 +318,13 @@ describe("ProcessService", () => {
 
     it("inherits from the parent when the process itself is null", async () => {
       const repo = inMemoryProcessRepository();
-      const service = new ProcessService(repo, inMemoryAuditRepository());
+      const service = new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
       const root = await service.create(
         actor,
-        { level: "PROCESS", name: "P1", evaluationMode: "PARTICIPATIF" },
+        { departmentId: "dept-1", level: "PROCESS", name: "P1", evaluationMode: "PARTICIPATIF" },
         "REQ-15",
       );
-      const sub = await service.create(actor, { level: "SUBPROCESS", name: "Sub1", parentId: root.id }, "REQ-16");
+      const sub = await service.create(actor, { departmentId: "dept-1", level: "SUBPROCESS", name: "Sub1", parentId: root.id }, "REQ-16");
 
       const mode = await service.resolveEvaluationMode(actor, sub.id, "CLASSIQUE");
       expect(mode).toBe("PARTICIPATIF");
@@ -320,16 +332,16 @@ describe("ProcessService", () => {
 
     it("inherits from the grandparent (3-level chain) when both self and parent are null", async () => {
       const repo = inMemoryProcessRepository();
-      const service = new ProcessService(repo, inMemoryAuditRepository());
+      const service = new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
       const root = await service.create(
         actor,
-        { level: "PROCESS", name: "P1", evaluationMode: "PARTICIPATIF" },
+        { departmentId: "dept-1", level: "PROCESS", name: "P1", evaluationMode: "PARTICIPATIF" },
         "REQ-17",
       );
-      const sub = await service.create(actor, { level: "SUBPROCESS", name: "Sub1", parentId: root.id }, "REQ-18");
+      const sub = await service.create(actor, { departmentId: "dept-1", level: "SUBPROCESS", name: "Sub1", parentId: root.id }, "REQ-18");
       const activity = await service.create(
         actor,
-        { level: "ACTIVITY", name: "Act1", parentId: sub.id },
+        { departmentId: "dept-1", level: "ACTIVITY", name: "Act1", parentId: sub.id },
         "REQ-19",
       );
 
@@ -339,15 +351,15 @@ describe("ProcessService", () => {
 
     it("falls back to the tenant default when the whole chain is null", async () => {
       const repo = inMemoryProcessRepository();
-      const service = new ProcessService(repo, inMemoryAuditRepository());
-      const root = await service.create(actor, { level: "PROCESS", name: "P1" }, "REQ-20");
+      const service = new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
+      const root = await service.create(actor, { departmentId: "dept-1", level: "PROCESS", name: "P1" }, "REQ-20");
 
       const mode = await service.resolveEvaluationMode(actor, root.id, "PARTICIPATIF");
       expect(mode).toBe("PARTICIPATIF");
     });
 
     it("throws for an unknown processId", async () => {
-      const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository());
+      const service = new ProcessService(inMemoryProcessRepository(), inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
       await expect(service.resolveEvaluationMode(actor, randomUUID(), "CLASSIQUE")).rejects.toThrow();
     });
   });
@@ -355,8 +367,8 @@ describe("ProcessService", () => {
   describe("setEvaluationMode (DECISION-006 governance finding, SEC-017)", () => {
     it("sets evaluationMode when the actor holds process.evaluationmode.set", async () => {
       const repo = inMemoryProcessRepository();
-      const service = new ProcessService(repo, inMemoryAuditRepository());
-      const root = await service.create(actor, { level: "PROCESS", name: "P1" }, "REQ-21");
+      const service = new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
+      const root = await service.create(actor, { departmentId: "dept-1", level: "PROCESS", name: "P1" }, "REQ-21");
 
       const riskManager: AuthenticatedUser = {
         ...actor,
@@ -369,8 +381,8 @@ describe("ProcessService", () => {
 
     it("rejects an actor holding only process.update (not process.evaluationmode.set)", async () => {
       const repo = inMemoryProcessRepository();
-      const service = new ProcessService(repo, inMemoryAuditRepository());
-      const root = await service.create(actor, { level: "PROCESS", name: "P1" }, "REQ-23");
+      const service = new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
+      const root = await service.create(actor, { departmentId: "dept-1", level: "PROCESS", name: "P1" }, "REQ-23");
 
       const nonRiskManager: AuthenticatedUser = {
         ...actor,
@@ -387,10 +399,10 @@ describe("ProcessService", () => {
 
     it("allows resetting to null (inherit)", async () => {
       const repo = inMemoryProcessRepository();
-      const service = new ProcessService(repo, inMemoryAuditRepository());
+      const service = new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
       const root = await service.create(
         actor,
-        { level: "PROCESS", name: "P1", evaluationMode: "PARTICIPATIF" },
+        { departmentId: "dept-1", level: "PROCESS", name: "P1", evaluationMode: "PARTICIPATIF" },
         "REQ-25",
       );
 
@@ -472,9 +484,9 @@ describe("ProcessService", () => {
 
     it("refuses to archive a process still referenced by an active risk's processId", async () => {
       const repo = inMemoryProcessRepository();
-      const process = await new ProcessService(repo, inMemoryAuditRepository()).create(
+      const process = await new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment).create(
         actor,
-        { level: "PROCESS", name: "P1" },
+        { level: "PROCESS", name: "P1", departmentId: "dept-1" },
         "REQ-27",
       );
       const referencingRisk = buildRisk({ processId: process.id });
@@ -492,9 +504,9 @@ describe("ProcessService", () => {
 
     it("refuses to archive a process still referenced by an active control's processId", async () => {
       const repo = inMemoryProcessRepository();
-      const process = await new ProcessService(repo, inMemoryAuditRepository()).create(
+      const process = await new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment).create(
         actor,
-        { level: "PROCESS", name: "P1" },
+        { level: "PROCESS", name: "P1", departmentId: "dept-1" },
         "REQ-29",
       );
       const referencingControl = buildControl({ processId: process.id });
@@ -510,9 +522,9 @@ describe("ProcessService", () => {
 
     it("refuses to archive a process with a pending evaluation-mode request", async () => {
       const repo = inMemoryProcessRepository();
-      const process = await new ProcessService(repo, inMemoryAuditRepository()).create(
+      const process = await new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment).create(
         actor,
-        { level: "PROCESS", name: "P1" },
+        { level: "PROCESS", name: "P1", departmentId: "dept-1" },
         "REQ-31",
       );
       const pending = buildRequest({ processId: process.id, status: "PENDING_VALIDATION" });
@@ -529,9 +541,9 @@ describe("ProcessService", () => {
 
     it("allows archiving once no active risk/control/pending request references the process", async () => {
       const repo = inMemoryProcessRepository();
-      const process = await new ProcessService(repo, inMemoryAuditRepository()).create(
+      const process = await new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment).create(
         actor,
-        { level: "PROCESS", name: "P1" },
+        { level: "PROCESS", name: "P1", departmentId: "dept-1" },
         "REQ-33",
       );
       // An ARCHIVED risk still carries processId, but list() excludes it by default — must not block the archive.
@@ -553,12 +565,12 @@ describe("ProcessService", () => {
 
     it("still allows archiving when risks/controls/requests repositories are not wired (degrade, matches SEC-012's accepted structural risk)", async () => {
       const repo = inMemoryProcessRepository();
-      const process = await new ProcessService(repo, inMemoryAuditRepository()).create(
+      const process = await new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment).create(
         actor,
-        { level: "PROCESS", name: "P1" },
+        { level: "PROCESS", name: "P1", departmentId: "dept-1" },
         "REQ-35",
       );
-      const service = new ProcessService(repo, inMemoryAuditRepository());
+      const service = new ProcessService(repo, inMemoryAuditRepository(), undefined, undefined, undefined, anyDepartment);
 
       await service.archive(actor, process.id, "obsolète", "REQ-36");
 

@@ -65,3 +65,22 @@ export interface RoleAssignment {
   grantedAt: Date;
   revokedAt: Date | null;
 }
+
+/**
+ * B-8 bis (q45): a change of the Audit group's permissions made by an
+ * administrator who is also a Risk Manager waits here until a member of
+ * Audit or of the Committee validates it (never the author).
+ */
+export type RolePermissionChangeStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface RolePermissionChange {
+  id: string;
+  tenantId: string;
+  roleId: string;
+  permissions: Permission[];
+  requestedBy: string;
+  status: RolePermissionChangeStatus;
+  decidedBy: string | null;
+  createdAt: Date;
+  decidedAt: Date | null;
+}

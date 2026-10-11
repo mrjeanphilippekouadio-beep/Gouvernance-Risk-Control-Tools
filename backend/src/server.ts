@@ -17,6 +17,7 @@ import { PostgresAuditMissionRepository } from "./infrastructure/database/postgr
 import { PostgresFindingRepository } from "./infrastructure/database/postgres/PostgresFindingRepository.js";
 import { PostgresDepartmentRepository } from "./infrastructure/database/postgres/PostgresDepartmentRepository.js";
 import { PostgresProcessRepository } from "./infrastructure/database/postgres/PostgresProcessRepository.js";
+import { PostgresRolePermissionChangeRepository } from "./infrastructure/database/postgres/PostgresRolePermissionChangeRepository.js";
 import { PostgresRoleRepository } from "./infrastructure/database/postgres/PostgresRoleRepository.js";
 import { PostgresFeedbackRepository } from "./infrastructure/database/postgres/PostgresFeedbackRepository.js";
 import { PostgresKpiRepository } from "./infrastructure/database/postgres/PostgresKpiRepository.js";
@@ -260,7 +261,7 @@ const findingService = new FindingService(
   controlRepository,
   anomalyRepository,
 );
-const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository);
+const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool));
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
@@ -291,7 +292,6 @@ const riskEvaluationViewService = new RiskEvaluationViewService(
 );
 const kriService = new KriService(kriRepository, kriMeasureRepository, riskRepository, auditRepository);
 const kriMeasureService = new KriMeasureService(kriMeasureRepository, kriRepository, auditRepository, notifier);
-const userService = new UserService(userRepository, auditRepository, roleService, departmentRepository);
 const riskOwnershipService = new RiskOwnershipService(riskRepository, userRepository, riskEvaluationRepository);
 const actionPlanService = new ActionPlanService(
   actionPlanRepository,
@@ -373,6 +373,7 @@ const regulatoryFrameworkService = new RegulatoryFrameworkService(regulatoryFram
 const riskCategoryService = new RiskCategoryService(riskCategoryRepository, auditRepository);
 const riskImportService = new RiskImportService(riskService);
 const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
+const userService = new UserService(userRepository, auditRepository, roleService, departmentRepository, notificationService);
 const governanceService = new GovernanceService(reviewCycleRepository, auditRepository, notifier);
 
 const lookupMembership = async (email: string) => {

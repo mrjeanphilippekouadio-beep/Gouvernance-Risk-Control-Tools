@@ -43,3 +43,15 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Les constantes `MAX_SCALE_SIZE`/`MAX_IMPACT_AXES` (`api/validation.ts`) sont dupliquées dans le service (la couche services n'importe pas `api/`).
 - 2026-10-11 — v2 (F-B9-01/02, Security) : `.max(200)` label/code, `.max(120)` name/version ; `setJsonColumn` filtre `status = 'DRAFT'`, 0 ligne sur échelle existante → ValidationError (défense en profondeur de R-01).
 - 2026-10-11 — F-B8-05 : pré-contrôle `revokeFromUser` RM corrigé. Le comptage exclut les suspendus, donc cible suspendue = non comptée : `others = cible active ? actifs-1 : actifs`, refus si `others < 1` (même sémantique que la garde dépôt). Cible lue via `users?.getById` ; sans UserRepository, comportement prudent inchangé (fail closed). Dépôt non touché.
+
+## 2026-10-11 B-8 bis (branche wt/b8bis, migration 051)
+
+- Droits des 3 groupes poses par la migration 051 (seulement si le groupe est vide de permissions) ; groupe Audit REMPLACE Auditeur (detenteurs reportes, role desactive en soft ; un detenteur deja Risk Manager est retire sans entrer dans Audit). Seed dev adapte.
+- Cumul Risk Manager + Audit refuse en dur (`FORBIDDEN_CUMUL` dans RoleService.assignToUser) ; RM + Comite autorise, expose par `UserService.getDetail` (`fixedGroups`, `riskManagerAndCommittee`). Reglage configurable attend q58 : pas fait.
+- Motif obligatoire (<= 500) pour assigner/retirer un membre d un groupe fixe : 5e parametre optionnel `reason`, inscrit dans `audit.reason`.
+- Droits du groupe Audit : `rolegroup.audit.update` (admin appli, jamais donne a un role) ; si l acteur est aussi RM -> `role_permission_changes` PENDING, valide par membre Audit/Comite (`rolegroup.audit.validate`), jamais l auteur. `RoleService.update` refuse `permissions` sur le groupe Audit.
+- departmentId obligatoire a la creation d un processus (service + route), nullable en base.
+- F-B8-06 : `reactivate` renvoie `lostRoles` et notifie (resourceType MANAGEMENT, CHECK elargi en 051). `GET /roles/grantors?permission=` : noms d affichage seuls, audit action READ (ajoutee au CHECK) a chaque appel.
+- Principe : ajouter une action d audit = elargir audit_log_action_check dans la meme migration.
+- Tests A08 existants adaptes (motif sur groupes fixes, departmentId sur creation de processus).
+- Non fait : activation du premier Dispositif (inexistante cote backend) ; perimetre tous les risques (q66) inchange.

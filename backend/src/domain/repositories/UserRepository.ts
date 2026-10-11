@@ -24,4 +24,10 @@ export interface UserRepository {
   suspend(tenantId: string, id: string): Promise<void>;
   /** ACT-103: clears `deleted_at`. */
   reactivate(tenantId: string, id: string): Promise<void>;
+  /**
+   * B-8 bis (q48): active users of the tenant holding `permission` (legacy
+   * `users.roles` or an active RBAC role), minus `excludeUserId`. Only id +
+   * display name — used by RoleService.listGrantors, nothing else.
+   */
+  listWithPermission?(tenantId: string, permission: string, excludeUserId: string): Promise<Array<{ id: string; displayName: string }>>;
 }

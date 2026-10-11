@@ -17,5 +17,7 @@ export interface RoleRepository {
    */
   revokeFromUser(tenantId: string, roleId: string, userId: string, options?: { minRemaining?: number }): Promise<void>;
   listForUser(tenantId: string, userId: string): Promise<Role[]>;
+  /** B-8 bis (F-B8-06): roles DISABLED since the user got them but whose non-revoked assignment remains. */
+  listDisabledForUser?(tenantId: string, userId: string): Promise<Role[]>;
   listAssignments(tenantId: string, roleId: string): Promise<RoleAssignment[]>;
 }

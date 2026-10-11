@@ -29,6 +29,8 @@ const CreateProcessBody = z.object({
 });
 
 const UpdateProcessBody = CreateProcessBody.partial();
+// B-8 bis (q46): mandatory on creation only (the update body keeps it optional/nullish).
+const CreateProcessBodyStrict = CreateProcessBody.extend({ departmentId: z.guid() });
 const ArchiveProcessBody = z.object({ reason: z.string().min(1) });
 const SetEvaluationModeBody = z.object({ evaluationMode: EvaluationMode.nullable() });
 
@@ -56,7 +58,7 @@ export function processesRouter(processService: ProcessService): Router {
 
   router.post("/", async (req, res, next) => {
     try {
-      const body = CreateProcessBody.parse(req.body);
+      const body = CreateProcessBodyStrict.parse(req.body);
       const process = await processService.create(req.user, body, req.requestId);
       res.status(201).json({ data: process });
     } catch (err) {

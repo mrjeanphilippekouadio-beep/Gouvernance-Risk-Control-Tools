@@ -27,7 +27,10 @@ const UpdateRoleBody = z.object({
   departmentId: z.guid().nullish(),
 });
 
-const AssignmentBody = z.object({ userId: z.string().min(1) });
+// B-8 bis (q44): validated and bounded here, required by the service for the 3 fixed groups.
+const AssignmentBody = z.object({ userId: z.string().min(1), reason: z.string().trim().min(1).max(500).optional() });
+const AuditGroupPermissionsBody = z.object({ permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1) });
+const GrantorsQuery = z.object({ permission: PermissionEnum });
 
 export function rolesRouter(roleService: RoleService): Router {
   const router = Router();
@@ -48,6 +51,48 @@ export function rolesRouter(roleService: RoleService): Router {
     try {
       const roles = await roleService.list(req.user, false);
       res.json({ data: roles.map((r) => ({ id: r.id, name: r.name, permissions: r.permissions })) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // B-8 bis (q48): who can give a denied permission back. Any authenticated user; display names only; audited.
+  router.get("/grantors", async (req, res, next) => {
+    try {
+      const { permission } = GrantorsQuery.parse(req.query);
+      const result = await roleService.listGrantors(req.user, permission, req.requestId);
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // B-8 bis (q45): Audit group permissions — applied, or PENDING when the admin is also a Risk Manager.
+  router.put("/audit-group/permissions", async (req, res, next) => {
+    try {
+      const body = AuditGroupPermissionsBody.parse(req.body);
+      const result = await roleService.changeAuditGroupPermissions(req.user, body.permissions, req.requestId);
+      res.status(result.status === "PENDING" ? 202 : 200).json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/permission-changes/:id/approve", async (req, res, next) => {
+    try {
+      const id = z.guid().parse(req.params["id"]);
+      await roleService.decideAuditPermissionChange(req.user, id, true, req.requestId);
+      res.json({ data: { status: "APPROVED" } });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/permission-changes/:id/reject", async (req, res, next) => {
+    try {
+      const id = z.guid().parse(req.params["id"]);
+      await roleService.decideAuditPermissionChange(req.user, id, false, req.requestId);
+      res.json({ data: { status: "REJECTED" } });
     } catch (err) {
       next(err);
     }
@@ -117,7 +162,7 @@ export function rolesRouter(roleService: RoleService): Router {
   router.post("/:id/assign", async (req, res, next) => {
     try {
       const body = AssignmentBody.parse(req.body);
-      await roleService.assignToUser(req.user, req.params["id"] as string, body.userId, req.requestId);
+      await roleService.assignToUser(req.user, req.params["id"] as string, body.userId, req.requestId, body.reason);
       res.status(201).json({ data: { status: "ASSIGNED" } });
     } catch (err) {
       next(err);
@@ -127,7 +172,7 @@ export function rolesRouter(roleService: RoleService): Router {
   router.post("/:id/revoke", async (req, res, next) => {
     try {
       const body = AssignmentBody.parse(req.body);
-      await roleService.revokeFromUser(req.user, req.params["id"] as string, body.userId, req.requestId);
+      await roleService.revokeFromUser(req.user, req.params["id"] as string, body.userId, req.requestId, body.reason);
       res.json({ data: { status: "REVOKED" } });
     } catch (err) {
       next(err);
