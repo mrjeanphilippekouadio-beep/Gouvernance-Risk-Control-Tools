@@ -84,3 +84,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Notification après réactivation : try/catch + `console.error` (aucun logger injecté dans les services).
 - Tests existants adaptés (fixtures, pas d'assouplissement) : rôle « autre » avec `audit.read` donné à des RM -> `risk.read` (RoleService.test, QA-B8-groups) ; responsable d'action != clôturant (ActionPlanService.test, QA-sec-minilot) ; `reason` ajouté aux appels `changeAuditGroupPermissions` ; OBSERVATIONS QA (plusieurs PENDING, droits d'écriture pour Audit, detach processus, 1 audit par appel) converties en assertions du nouveau comportement.
 - Leçon : worktree sans node_modules -> lien symbolique vers celui du dépôt principal (ne pas le committer, `git add` par chemins) ; commandes bash composées avec heredoc refusées dans le worktree -> Write/Edit ou script python via fichier.
+
+## 2026-10-11 B-8 quater + bandes (branche wt/b8q, base baea2e1, migration 054 non appliquée)
+
+- q58 : colonne `configs.committee_audit_cumul_allowed` (défaut true, migration 054 + down), `Config.committeeAuditCumulAllowed`, `ConfigService.setCommitteeAuditCumul` (permission dédiée `config.cumul.set`, motif obligatoire, audit UPDATE), `PUT /config/committee-audit-cumul {allowed, reason}`. Contrôle dans `RoleService.assertAssignable` (7e param. constructeur OPTIONNEL `configs`, absent = autorisé). Agit sur les assignations futures seulement. RM+Audit reste en dur.
+- q63 : « administrateur » = détient, via un rôle actif, une de `role.create/update/delete/assign`, `user.create/update/delete/reactivate`, `rolegroup.audit.update` (les `.read` ne comptent pas). Création du cumul admin+RM (dans les deux sens) : motif exigé (<= 500), notification `ADMIN_RISK_MANAGER_CUMUL` aux porteurs de `rolegroup.audit.validate` (Audit+Comité), sauf l'intéressé. Fiche `GET /users/:id` : `administratorAndRiskManager`. Limite : modifier les permissions d'un rôle déjà porté par un RM (RoleService.update) ne déclenche pas ce contrôle.
+- q65 : entrée au Comité -> notification `COMMITTEE_MEMBER_ADDED` aux porteurs de `audit.read` (= groupe Audit, un rôle perso avec audit.read compte aussi).
+- `notifyValidators` refactoré en `notifyMembers` générique (best effort, erreur loggée).
+- DECISION-041 : `GET /cartography/scale` (permission `cartography.read`), `CartographyService.getActiveScale`.
+- Leçon : heredoc python composé refusé dans le worktree -> Write d'un script dans le scratchpad puis `python3 script`.

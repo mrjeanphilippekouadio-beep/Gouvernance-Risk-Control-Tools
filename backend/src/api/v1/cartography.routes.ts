@@ -58,6 +58,15 @@ export function cartographyRouter(cartographyService: CartographyService): Route
     }
   });
 
+  // DECISION-041: active scale + effective bands (data: null when no scale is active).
+  router.get("/scale", async (req, res, next) => {
+    try {
+      res.json({ data: await cartographyService.getActiveScale(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // ACT-184: both versions, same filter set, one response.
   router.get("/compare", async (req, res, next) => {
     try {

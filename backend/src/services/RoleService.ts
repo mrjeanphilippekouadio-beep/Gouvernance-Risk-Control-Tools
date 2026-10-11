@@ -13,6 +13,7 @@ import {
 } from "../domain/permissions.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { NotificationService } from "./NotificationService.js";
 import {
   isAuditGroupPermission,
@@ -25,6 +26,19 @@ const MAX_GROUP_REASON_LENGTH = 500;
 
 /** B-8 bis (q43): hard-coded for now (configurable part waits for PO q58). Risk Manager and Audit never cumulate. */
 const FORBIDDEN_CUMUL: Partial<Record<SystemGroup, SystemGroup>> = { RISK_MANAGER: "AUDIT", AUDIT: "RISK_MANAGER" };
+
+/**
+ * DECISION-042 q63: "application administrator" = holds, through any active role, at least one of
+ * these management permissions (role/user reads do not count). rolegroup.audit.update is the
+ * administrator-only right on the Audit group's permissions.
+ */
+const ADMIN_PERMISSIONS: Permission[] = [
+  "role.create", "role.update", "role.delete", "role.assign",
+  "user.create", "user.update", "user.delete", "user.reactivate",
+  "rolegroup.audit.update",
+];
+const isAdministrator = (roles: Role[]): boolean => roles.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));
+const isRiskManagerMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "RISK_MANAGER");
 
 /** F-B8b-03: permissions whose "who can give it back" answer is never served (administration / governance). */
 const NOT_REQUESTABLE = /^(role|rolegroup|user|audit)\./;
@@ -109,6 +123,8 @@ export class RoleService {
     private readonly permissionChanges?: RolePermissionChangeRepository,
     /** B-8 ter (F-B8b-02): tells Audit/Committee members that a change waits for them; skipped when absent. */
     private readonly notifications?: NotificationService,
+    /** DECISION-042 q58: Committee + Audit cumul setting; absent = allowed (the default). */
+    private readonly configs?: Pick<ConfigRepository, "getByTenant">,
   ) {}
 
   private readonly grantorsSeen = new Set<string>();
@@ -274,12 +290,33 @@ export class RoleService {
     roleId: string,
     userId: string | null,
     reason: string | undefined,
-  ): Promise<{ role: Role; cleanReason: string | null }> {
+  ): Promise<{ role: Role; cleanReason: string | null; createsAdminRiskManagerCumul: boolean }> {
     const role = await this.get(actor, roleId);
-    const cleanReason = this.groupReason(role, reason);
+    let cleanReason = this.groupReason(role, reason);
     const held = userId ? await this.roles.listForUser(actor.tenantId, userId) : [];
     assertNoCumul(role, held);
-    return { role, cleanReason };
+
+    // q58: Committee + Audit is allowed unless the tenant forbids it. Risk Manager + Audit is handled above.
+    const other = role.systemGroup === "AUDIT" ? "RISK_COMMITTEE" : role.systemGroup === "RISK_COMMITTEE" ? "AUDIT" : null;
+    if (other && held.some((r) => r.systemGroup === other)) {
+      const cfg = await this.configs?.getByTenant(actor.tenantId);
+      if (cfg && !cfg.committeeAuditCumulAllowed) {
+        throw new ValidationError("A user cannot be both in the Committee group and in the Audit group (setting of this tenant)");
+      }
+    }
+
+    // q63: creating the administrator + Risk Manager cumul needs a reason and warns a third party.
+    const after = [...held, role];
+    const createsAdminRiskManagerCumul =
+      isAdministrator(after) && isRiskManagerMember(after) && !(isAdministrator(held) && isRiskManagerMember(held));
+    if (createsAdminRiskManagerCumul) {
+      cleanReason = reason?.trim() || null;
+      if (!cleanReason) throw new ValidationError("A reason is required to make a user both application administrator and Risk Manager");
+      if (cleanReason.length > MAX_GROUP_REASON_LENGTH) {
+        throw new ValidationError(`reason must be at most ${MAX_GROUP_REASON_LENGTH} characters`);
+      }
+    }
+    return { role, cleanReason, createsAdminRiskManagerCumul };
   }
 
   /** ACT-093/113: the actor can never assign a role to themselves — that's the maker-checker boundary. */
@@ -294,7 +331,7 @@ export class RoleService {
     if (actor.userId === userId) {
       throw new ForbiddenError("You cannot assign a role to yourself — ask another admin");
     }
-    const { role, cleanReason } = await this.assertAssignable(actor, roleId, userId, reason);
+    const { role, cleanReason, createsAdminRiskManagerCumul } = await this.assertAssignable(actor, roleId, userId, reason);
 
     const assignment = await this.roles.assignToUser(actor.tenantId, roleId, userId, actor.userId);
 
@@ -309,6 +346,16 @@ export class RoleService {
       reason: cleanReason,
       requestId,
     });
+
+    // q63: administrator + Risk Manager cumul -> Audit and Committee members. q65: Committee entry -> Audit members.
+    if (createsAdminRiskManagerCumul) {
+      await this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
+        "Un utilisateur cumule désormais l'administration de l'application et le groupe Risk Manager.", requestId);
+    }
+    if (role.systemGroup === "RISK_COMMITTEE") {
+      await this.notifyMembers(actor, "audit.read", userId, userId, "COMMITTEE_MEMBER_ADDED",
+        "Un utilisateur vient d'entrer dans le groupe Comité des risques.", requestId);
+    }
   }
 
   /** ACT-114: also refuses to leave a user with zero active roles. */
@@ -410,6 +457,12 @@ export class RoleService {
     return held.flatMap((r) => (r.systemGroup ? [r.systemGroup] : []));
   }
 
+  /** q63: true when the user is both application administrator (see ADMIN_PERMISSIONS) and in the Risk Manager group. */
+  async isAdminAndRiskManager(tenantId: string, userId: string): Promise<boolean> {
+    const held = await this.roles.listForUser(tenantId, userId);
+    return isAdministrator(held) && isRiskManagerMember(held);
+  }
+
   /** F-B8-06: roles disabled while the user was suspended whose assignment remains (rights silently lost). */
   async listLostRoles(tenantId: string, userId: string): Promise<Role[]> {
     return (await this.roles.listDisabledForUser?.(tenantId, userId)) ?? [];
@@ -489,26 +542,40 @@ export class RoleService {
     return { status: "APPLIED", role };
   }
 
-  /** F-B8b-02: the change is already stored and audited; a notification failure must not undo it. */
-  private async notifyValidators(actor: AuthenticatedUser, changeId: string, requestId: string): Promise<void> {
+  /** Best effort: the action is already stored and audited; a notification failure must not undo it. */
+  private async notifyMembers(
+    actor: AuthenticatedUser,
+    permission: string,
+    excludeUserId: string | null,
+    resourceId: string,
+    eventType: string,
+    message: string,
+    requestId: string,
+  ): Promise<void> {
     if (!this.notifications || !this.users?.listWithPermission) return;
     try {
-      const validators = await this.users.listWithPermission(actor.tenantId, "rolegroup.audit.validate", actor.userId);
-      for (const v of validators) {
+      const members = await this.users.listWithPermission(actor.tenantId, permission, actor.userId);
+      for (const v of members.filter((m) => m.id !== excludeUserId)) {
         await this.notifications.record({
           tenantId: actor.tenantId,
           recipientUserId: v.id,
           resourceType: "MANAGEMENT",
-          resourceId: changeId,
-          eventType: "AUDIT_RIGHTS_CHANGE_PENDING",
-          message: "Un changement des droits du groupe Audit attend votre validation.",
+          resourceId,
+          eventType,
+          message,
           triggeredBy: actor.userId,
           requestId,
         });
       }
     } catch (err) {
-      console.error(`Audit-rights change ${changeId}: validators could not be notified (requestId ${requestId})`, err instanceof Error ? err.message : err);
+      console.error(`${eventType} ${resourceId}: members could not be notified (requestId ${requestId})`, err instanceof Error ? err.message : err);
     }
+  }
+
+  /** F-B8b-02: tells the validators (Audit, Committee) that a change of Audit rights waits for them. */
+  private notifyValidators(actor: AuthenticatedUser, changeId: string, requestId: string): Promise<void> {
+    return this.notifyMembers(actor, "rolegroup.audit.validate", null, changeId, "AUDIT_RIGHTS_CHANGE_PENDING",
+      "Un changement des droits du groupe Audit attend votre validation.", requestId);
   }
 
   /**

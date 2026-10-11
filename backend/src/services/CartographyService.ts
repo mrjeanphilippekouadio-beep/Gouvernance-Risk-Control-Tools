@@ -87,6 +87,21 @@ export interface CartographyCompareResult {
   residual: CartographyDataPoint[];
 }
 
+/** DECISION-041: the active scale as the Cartography page needs it (grid size + EFFECTIVE color bands). */
+export interface CartographyActiveScale {
+  scaleId: string;
+  name: string;
+  version: string;
+  /** n of the n x n grid; null only for a legacy scale with probabilityLevels != impactLevels (use the two fields below). */
+  size: number | null;
+  probabilityLevels: number;
+  impactLevels: number;
+  maxScore: number;
+  /** Configured criticalityThresholds, else defaultBandsForMaxScore(maxScore). */
+  bands: ScoreThreshold[];
+  bandsSource: "CONFIGURED" | "DEFAULT";
+}
+
 function deriveCriticality(score: number, bands: ScoreThreshold[]): string {
   const match = bands.find((b) => score >= b.min && score <= b.max);
   if (match) return match.label;
@@ -168,6 +183,27 @@ export class CartographyService {
     requirePermission(actor, "cartography.read");
     this.assertOwnerFilterSupported(filters);
     return this.computeDataPoints(actor, version, filters);
+  }
+
+  /** DECISION-041: active scale of the tenant with its effective bands, or null when none is active (the page then shows no grid). */
+  async getActiveScale(actor: AuthenticatedUser): Promise<CartographyActiveScale | null> {
+    requirePermission(actor, "cartography.read");
+    if (!this.ratingScales) return null;
+    const active = (await this.ratingScales.list(actor.tenantId)).find((s) => s.status === "ACTIVE");
+    if (!active) return null;
+    const maxScore = maxScoreForScale(active);
+    const configured = active.criticalityThresholds && active.criticalityThresholds.length > 0 ? active.criticalityThresholds : null;
+    return {
+      scaleId: active.id,
+      name: active.name,
+      version: active.version,
+      size: active.probabilityLevels === active.impactLevels ? active.probabilityLevels : null,
+      probabilityLevels: active.probabilityLevels,
+      impactLevels: active.impactLevels,
+      maxScore,
+      bands: configured ?? defaultBandsForMaxScore(maxScore),
+      bandsSource: configured ? "CONFIGURED" : "DEFAULT",
+    };
   }
 
   /** ACT-184: inherent + residual data points for the same filtered risk set, one response. */

@@ -38,6 +38,11 @@ const UpdateCommitteeEnforcementBody = z.object({
   reason: z.string().min(1),
 });
 
+const UpdateCommitteeAuditCumulBody = z.object({
+  allowed: z.boolean(),
+  reason: z.string().min(1).max(500),
+});
+
 /** ACT-220 (PUT /config), ACT-226 (PUT /config/appetite-mode) and DIV-06 (PUT /config/evaluation-mode) — see ConfigService for what's deliberately not wired yet. */
 export function configRouter(configService: ConfigService): Router {
   const router = Router();
@@ -102,6 +107,16 @@ export function configRouter(configService: ConfigService): Router {
     try {
       const body = UpdateCommitteeEnforcementBody.parse(req.body);
       const config = await configService.setCommitteeEnforcement(req.user, body.enforced, body.reason, req.requestId);
+      res.json({ data: config });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/committee-audit-cumul", async (req, res, next) => {
+    try {
+      const body = UpdateCommitteeAuditCumulBody.parse(req.body);
+      const config = await configService.setCommitteeAuditCumul(req.user, body.allowed, body.reason, req.requestId);
       res.json({ data: config });
     } catch (err) {
       next(err);
