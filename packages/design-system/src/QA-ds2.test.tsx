@@ -122,6 +122,7 @@ describe("QA-ds2 Table selection edge cases", () => {
     render(<Table columns={cols} rows={mk("1")} rowKey={(r) => r.id} loading={false} emptyMessage="v" selectedKeys={["1"]} />);
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.getAllByRole("row")[1].getAttribute("aria-selected")).toBeNull();
+    expect(screen.getAllByRole("row")[1].className).not.toContain("gs-table-row-selected");
   });
 
   it("selectionLabel names each row checkbox; select column header count stays aligned", () => {
@@ -405,11 +406,13 @@ describe("QA-ds2 VersionComparison", () => {
 });
 
 describe("QA-ds2 BulkActionBar", () => {
-  it("count 0, negative and NaN: nothing rendered (NaN <= 0 is false: see next test)", () => {
+  it("count 0 and negative: no bar, live region mounted but empty (NaN <= 0 is false: see next test)", () => {
     const { container, rerender } = render(<BulkActionBar count={0} onClear={() => {}} />);
-    expect(container.firstChild).toBeNull();
+    expect(container.querySelector(".gs-bulkbar")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("");
     rerender(<BulkActionBar count={-3} onClear={() => {}} />);
-    expect(container.firstChild).toBeNull();
+    expect(container.querySelector(".gs-bulkbar")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("");
   });
 
   it("PIN: NaN count renders a bar reading 'NaN élément sélectionné' (caller bug, not guarded)", () => {

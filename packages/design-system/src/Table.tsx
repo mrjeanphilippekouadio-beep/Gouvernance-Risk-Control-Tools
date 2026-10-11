@@ -130,7 +130,7 @@ export function Table<T>({
         <tbody>
           {rows.map((row) => {
             const key = rowKey(row);
-            const isSelected = selected.has(key);
+            const isSelected = selectable && selected.has(key);
             return (
             <tr key={key} aria-selected={selectable ? isSelected : undefined} className={isSelected ? "gs-table-row-selected" : undefined}>
               {selectable && (

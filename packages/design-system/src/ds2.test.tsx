@@ -165,9 +165,10 @@ describe("DS wave 2: BulkActionBar", () => {
   it("renders nothing at 0, pluralises, and clears", async () => {
     const onClear = vi.fn();
     const { container, rerender } = render(<BulkActionBar count={0} onClear={onClear} />);
-    expect(container.firstChild).toBeNull();
+    expect(container.querySelector(".gs-bulkbar")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("");
     rerender(<BulkActionBar count={1} onClear={onClear} />);
-    expect(screen.getByText("1 élément sélectionné")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("1 élément sélectionné");
     rerender(
       <BulkActionBar count={3} onClear={onClear}>
         <Button>Exemple</Button>
