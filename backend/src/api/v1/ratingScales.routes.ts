@@ -9,7 +9,7 @@ const ScaleLevelSchema = z.object({
 });
 
 const ScoreThresholdSchema = z.object({
-  label: z.string().min(1),
+  label: z.string().min(1).max(200),
   min: z.number().int(),
   max: z.number().int(),
 });

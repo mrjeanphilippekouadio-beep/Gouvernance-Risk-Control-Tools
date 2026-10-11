@@ -3,6 +3,9 @@
 -- check `SELECT count(*) FROM rating_scales WHERE probability_levels > 5 OR impact_levels > 5`
 -- and `SELECT count(*) FROM risk_assessments WHERE probability > 5 OR impact > 5 OR residual_probability > 5 OR residual_impact > 5` is 0 first.
 
+-- Atomic: run with `psql -1 -v ON_ERROR_STOP=1 -f` so a failing ADD CONSTRAINT rolls back every DROP.
+BEGIN;
+
 ALTER TABLE rating_scales DROP CONSTRAINT rating_scales_probability_levels_check;
 ALTER TABLE rating_scales ADD CONSTRAINT rating_scales_probability_levels_check CHECK (probability_levels BETWEEN 1 AND 5);
 ALTER TABLE rating_scales DROP CONSTRAINT rating_scales_impact_levels_check;
@@ -18,3 +21,5 @@ ALTER TABLE risk_assessments DROP CONSTRAINT risk_assessments_residual_impact_ch
 ALTER TABLE risk_assessments ADD CONSTRAINT risk_assessments_residual_impact_check CHECK (residual_impact BETWEEN 1 AND 5);
 
 DELETE FROM schema_migrations WHERE filename = '050_scale_3_to_6.sql';
+
+COMMIT;

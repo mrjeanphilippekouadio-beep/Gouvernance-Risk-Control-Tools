@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { boundedArray } from "../validation.js";
+import { ABSOLUTE_MAX_SCORE } from "../../domain/scoring.js";
 import type { ConfigService } from "../../services/ConfigService.js";
 
 const LevelThresholdBody = z.object({
@@ -27,8 +28,8 @@ const UpdateEvaluationModeBody = z.object({
 });
 
 const UpdateCommitteeThresholdsBody = z.object({
-  evaluationMinScore: z.number().int().optional(),
-  treatmentMinScore: z.number().int().nullable().optional(),
+  evaluationMinScore: z.number().int().max(ABSOLUTE_MAX_SCORE).optional(),
+  treatmentMinScore: z.number().int().max(ABSOLUTE_MAX_SCORE).nullable().optional(),
   reason: z.string().min(1),
 });
 

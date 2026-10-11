@@ -6,6 +6,7 @@ import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
 import { MIN_APPETITE_THRESHOLD } from "./RiskEvaluationService.js";
+import { defaultCommitteeThreshold } from "../domain/scoring.js";
 import { resolveMaxScore } from "./scoreCeiling.js";
 
 const SCORE_FORMULAS = ["P_X_I", "WEIGHTED_SUM"] as const;
@@ -21,7 +22,7 @@ const EVALUATION_MODES = ["CLASSIQUE", "PARTICIPATIF"] as const;
  * which always computes a suggestion but never blocks an override).
  * `version: 0` and `id: null` mark it as not-yet-persisted.
  */
-function defaultConfig(tenantId: string): Config {
+function defaultConfig(tenantId: string, committeeMinScore: number): Config {
   return {
     id: "",
     tenantId,
@@ -32,7 +33,7 @@ function defaultConfig(tenantId: string): Config {
     evaluationMode: "CLASSIQUE",
     // Lot A (RISK_MANAGEMENT_V1 §8): reproduces the pre-Lot-A hardcoded behavior exactly
     // (COMMITTEE_VALIDATION_MIN_SCORE = 15, always enforced) — see 045_committee_thresholds.sql.
-    committeeEvaluationMinScore: 15,
+    committeeEvaluationMinScore: committeeMinScore,
     committeeTreatmentMinScore: null,
     committeeEvaluationEnforced: true,
     version: 0,
@@ -78,7 +79,7 @@ export class ConfigService {
 
   async get(actor: AuthenticatedUser): Promise<Config> {
     requirePermission(actor, "config.read");
-    return (await this.configs.getByTenant(actor.tenantId)) ?? defaultConfig(actor.tenantId);
+    return (await this.configs.getByTenant(actor.tenantId)) ?? defaultConfig(actor.tenantId, defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, actor.tenantId)));
   }
 
   /**

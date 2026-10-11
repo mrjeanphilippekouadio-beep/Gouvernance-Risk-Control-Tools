@@ -12,7 +12,7 @@ import type { ScoreThreshold } from "../domain/entities/RatingScale.js";
 import type { Process } from "../domain/entities/Process.js";
 import { ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
-import { DEFAULT_MATRIX_SIZE, defaultCriticalityBands } from "../domain/scoring.js";
+import { DEFAULT_MATRIX_SIZE, defaultBandsForMaxScore, defaultCriticalityBands, maxScoreForScale } from "../domain/scoring.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 export type CartographyVersion = "inherent" | "residual";
@@ -301,7 +301,7 @@ export class CartographyService {
     const bands =
       scale?.criticalityThresholds && scale.criticalityThresholds.length > 0
         ? scale.criticalityThresholds
-        : defaultCriticalityBands(scale?.impactLevels ?? DEFAULT_MATRIX_SIZE);
+        : scale ? defaultBandsForMaxScore(maxScoreForScale(scale)) : defaultCriticalityBands(DEFAULT_MATRIX_SIZE);
     cache.set(ratingScaleId, bands);
     return bands;
   }

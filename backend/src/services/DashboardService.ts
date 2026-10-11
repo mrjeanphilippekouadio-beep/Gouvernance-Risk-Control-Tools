@@ -35,7 +35,9 @@ import { computeKpiStatus, type Kpi, type KpiStatus } from "../domain/entities/K
 
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
-import { DEFAULT_MATRIX_SIZE, defaultCriticalityBands } from "../domain/scoring.js";
+import { DEFAULT_MATRIX_SIZE, defaultBandsForMaxScore, defaultCriticalityBands, maxScoreForScale } from "../domain/scoring.js";
+import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
+import type { ScoreThreshold } from "../domain/entities/RatingScale.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { DashboardScopeMode, RiskScope } from "../domain/entities/DashboardScope.js";
 import type { DashboardScopeResolver } from "./DashboardScopeResolver.js";
@@ -44,19 +46,12 @@ import type { DashboardScopeResolver } from "./DashboardScopeResolver.js";
 // Shared read models
 // ---------------------------------------------------------------------
 
-/**
- * Rough qualitative label for ranking/highlighting. Deliberately NOT wired to
- * RatingScaleRepository (CartographyService owns the methodology-versioned
- * resolution): uses the default bands of the historical 5x5 matrix, see
- * domain/scoring.ts. Scores of a larger matrix clamp to the last band.
- */
-const DEFAULT_CRITICALITY_BANDS = defaultCriticalityBands(DEFAULT_MATRIX_SIZE);
-
-function deriveCriticality(score: number): string {
-  const match = DEFAULT_CRITICALITY_BANDS.find((b) => score >= b.min && score <= b.max);
+/** Rough qualitative label for ranking/highlighting, from the bands of the evaluation's scale (see resolveBands). Out-of-range scores clamp to the first/last band. */
+function deriveCriticality(score: number, bands: ScoreThreshold[]): string {
+  const match = bands.find((b) => score >= b.min && score <= b.max);
   if (match) return match.label;
-  const first = DEFAULT_CRITICALITY_BANDS[0]!;
-  const last = DEFAULT_CRITICALITY_BANDS[DEFAULT_CRITICALITY_BANDS.length - 1]!;
+  const first = bands[0]!;
+  const last = bands[bands.length - 1]!;
   return score < first.min ? first.label : last.label;
 }
 
@@ -288,6 +283,11 @@ export class DashboardService {
      * behavior), so existing construction sites keep working unchanged.
      */
     private readonly scopeResolver?: DashboardScopeResolver,
+    /**
+     * B-9 bis: optional — criticality bands of the scale CAPTURED by the evaluation (configured
+     * bands, else defaults for its size), like CartographyService. Absent: 5x5 bands.
+     */
+    private readonly ratingScales?: Pick<RatingScaleRepository, "getById">,
   ) {}
 
   // -- ACT-080 ---------------------------------------------------------
@@ -806,6 +806,16 @@ export class DashboardService {
     return { process: risk.process, resolvedVia: "processText" };
   }
 
+  private async resolveBands(tenantId: string, ratingScaleId: string | null): Promise<ScoreThreshold[]> {
+    const fallback = defaultCriticalityBands(DEFAULT_MATRIX_SIZE);
+    if (!ratingScaleId || !this.ratingScales) return fallback;
+    const scale = await this.ratingScales.getById(tenantId, ratingScaleId);
+    if (!scale) return fallback;
+    return scale.criticalityThresholds && scale.criticalityThresholds.length > 0
+      ? scale.criticalityThresholds
+      : defaultBandsForMaxScore(maxScoreForScale(scale));
+  }
+
   private async buildRiskSummary(
     tenantId: string,
     risk: Risk,
@@ -826,7 +836,7 @@ export class DashboardService {
       // Safe: getMostRecentAuthoritativeEvaluation only ever returns an
       // evaluation whose status is in AUTHORITATIVE_EVALUATION_STATUSES.
       evaluationStatus: evaluation ? (evaluation.status as AuthoritativeEvaluationStatus) : null,
-      criticality: score !== null ? deriveCriticality(score) : null,
+      criticality: score !== null ? deriveCriticality(score, await this.resolveBands(tenantId, evaluation?.ratingScaleId ?? null)) : null,
       subCategory: evaluation?.subCategory ?? null,
       entity: evaluation?.entity ?? null,
       appetiteExceeded: evaluation?.appetiteExceeded ?? null,
