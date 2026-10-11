@@ -3,6 +3,7 @@ import { z } from "zod";
 import { boundedArray } from "../validation.js";
 import type { RoleService } from "../../services/RoleService.js";
 import { ALL_PERMISSIONS, type Permission } from "../../domain/permissions.js";
+import { grantorsRateLimiter } from "../middleware/rateLimit.js";
 import { DASHBOARD_SCOPE_MODES, type DashboardScopeMode } from "../../domain/entities/DashboardScope.js";
 
 const PermissionEnum = z.enum(ALL_PERMISSIONS as [Permission, ...Permission[]]);
@@ -29,7 +30,12 @@ const UpdateRoleBody = z.object({
 
 // B-8 bis (q44): validated and bounded here, required by the service for the 3 fixed groups.
 const AssignmentBody = z.object({ userId: z.string().min(1), reason: z.string().trim().min(1).max(500).optional() });
-const AuditGroupPermissionsBody = z.object({ permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1) });
+// F-B8b-02 (q56): the reason is mandatory.
+const AuditGroupPermissionsBody = z.object({
+  permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1),
+  reason: z.string().trim().min(1).max(500),
+});
+const PermissionChangesQuery = z.object({ status: z.enum(["PENDING", "APPROVED", "REJECTED"]).default("PENDING") });
 const GrantorsQuery = z.object({ permission: PermissionEnum });
 
 export function rolesRouter(roleService: RoleService): Router {
@@ -57,7 +63,7 @@ export function rolesRouter(roleService: RoleService): Router {
   });
 
   // B-8 bis (q48): who can give a denied permission back. Any authenticated user; display names only; audited.
-  router.get("/grantors", async (req, res, next) => {
+  router.get("/grantors", grantorsRateLimiter(), async (req, res, next) => {
     try {
       const { permission } = GrantorsQuery.parse(req.query);
       const result = await roleService.listGrantors(req.user, permission, req.requestId);
@@ -71,8 +77,19 @@ export function rolesRouter(roleService: RoleService): Router {
   router.put("/audit-group/permissions", async (req, res, next) => {
     try {
       const body = AuditGroupPermissionsBody.parse(req.body);
-      const result = await roleService.changeAuditGroupPermissions(req.user, body.permissions, req.requestId);
+      const result = await roleService.changeAuditGroupPermissions(req.user, body.permissions, req.requestId, body.reason);
       res.status(result.status === "PENDING" ? 202 : 200).json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // F-B8b-02: the validator reads the before/after of a change before deciding (rolegroup.audit.validate, checked by the service).
+  router.get("/permission-changes", async (req, res, next) => {
+    try {
+      const { status } = PermissionChangesQuery.parse(req.query);
+      const data = await roleService.listPermissionChanges(req.user, status);
+      res.json({ data });
     } catch (err) {
       next(err);
     }

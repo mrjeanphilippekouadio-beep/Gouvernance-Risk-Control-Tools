@@ -126,7 +126,7 @@ function setup() {
   const groups = Object.fromEntries(
     GROUPS.map(([name, sg]) => [sg, repo.seed({ tenantId: "tenant-1", name, systemGroup: sg })]),
   ) as Record<SystemGroup, Role>;
-  const filler = repo.seed({ tenantId: "tenant-1", name: "Filler", permissions: ["audit.read"] });
+  const filler = repo.seed({ tenantId: "tenant-1", name: "Filler", permissions: ["risk.read"] });
   /** Gives each user a second role so only the group rule (not "last active role") can block a revoke. */
   async function join(group: Role, userIds: string[]) {
     for (const u of userIds) {

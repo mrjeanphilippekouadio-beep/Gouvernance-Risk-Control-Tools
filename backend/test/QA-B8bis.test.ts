@@ -124,6 +124,13 @@ function world(opts: { notifier?: "ok" | "fail" | "none"; changeRepo?: boolean; 
       c.status = status; c.decidedBy = by; c.decidedAt = new Date();
       return true;
     },
+    async reopen(t: string, id: string) {
+      const c = changes.get(id);
+      if (c && c.tenantId === t && c.status !== "PENDING") { c.status = "PENDING"; c.decidedBy = null; c.decidedAt = null; }
+    },
+    async list(t: string, f: { status?: string; roleId?: string }) {
+      return [...changes.values()].filter((c) => c.tenantId === t && (!f.status || c.status === f.status) && (!f.roleId || c.roleId === f.roleId));
+    },
   };
 
   const audit = {
@@ -267,7 +274,7 @@ describe("QA-B8bis cumul rule (q43)", () => {
 
   // DEFECT-B8bis-01. The reason is checked by assignToUser AFTER users.create(): a refused creation leaves a login-capable, role-less user
   // (same shape as SEC-010). Expected: no user row when the initial role is refused for a validation reason.
-  it.fails("KNOWN GAP: a refused POST /users (fixed group without reason) leaves no orphan user row", async () => {
+  it("FIXED B-8 ter: a refused POST /users (fixed group without reason) leaves no orphan user row", async () => {
     const w = world();
     await expect(w.userService.create(admin, { email: "orphan@x.io", displayName: "O", roleId: w.groups.AUDIT.id }, "R9")).rejects.toThrow(ValidationError);
     expect(w.userCreates).toEqual([]);
@@ -338,7 +345,7 @@ describe("QA-B8bis Audit-group permission changes (q45)", () => {
 
   it("APPLIED for a plain administrator: permissions replaced, audited with old and new value", async () => {
     const w = world();
-    const res = await w.roleService.changeAuditGroupPermissions(admin, ["audit.read", "risk.read"], "R1");
+    const res = await w.roleService.changeAuditGroupPermissions(admin, ["audit.read", "risk.read"], "R1", "motif de test");
     expect(res.status).toBe("APPLIED");
     expect(w.roles.get(w.groups.AUDIT.id)?.permissions).toEqual(["audit.read", "risk.read"]);
     expect(w.events).toHaveLength(1);
@@ -349,7 +356,7 @@ describe("QA-B8bis Audit-group permission changes (q45)", () => {
   it("PENDING for an administrator who is a Risk Manager: group untouched, change stored, audited; no direct application", async () => {
     const w = world();
     await w.member(w.groups.RISK_MANAGER, "rm-admin");
-    const res = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "risk.read"], "R2");
+    const res = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "risk.read"], "R2", "motif de test");
     expect(res.status).toBe("PENDING");
     expect(w.roles.get(w.groups.AUDIT.id)?.permissions).toEqual(["audit.read"]);
     expect([...w.changes.values()]).toHaveLength(1);
@@ -360,19 +367,19 @@ describe("QA-B8bis Audit-group permission changes (q45)", () => {
   it("PENDING path fails closed without the change repository (nothing applied)", async () => {
     const w = world({ changeRepo: false });
     await w.member(w.groups.RISK_MANAGER, "rm-admin");
-    await expect(w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read"], "R3")).rejects.toThrow(/RolePermissionChangeRepository/);
+    await expect(w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read"], "R3", "motif de test")).rejects.toThrow(/RolePermissionChangeRepository/);
     expect(w.roles.get(w.groups.AUDIT.id)?.permissions).toEqual(["audit.read"]);
     expect(w.events).toHaveLength(0);
   });
 
   it("refuses: missing permission, unknown permission, empty list, an Audit member changing their own group, tenant without Audit group", async () => {
     const w = world();
-    await expect(w.roleService.changeAuditGroupPermissions(actor("x", ["role.update"]), ["audit.read"], "R4")).rejects.toThrow(ForbiddenError);
-    await expect(w.roleService.changeAuditGroupPermissions(admin, ["nope.nope" as Permission], "R4")).rejects.toThrow(ValidationError);
-    await expect(w.roleService.changeAuditGroupPermissions(admin, [], "R4")).rejects.toThrow(ValidationError);
+    await expect(w.roleService.changeAuditGroupPermissions(actor("x", ["role.update"]), ["audit.read"], "R4", "motif de test")).rejects.toThrow(ForbiddenError);
+    await expect(w.roleService.changeAuditGroupPermissions(admin, ["nope.nope" as Permission], "R4", "motif de test")).rejects.toThrow(ValidationError);
+    await expect(w.roleService.changeAuditGroupPermissions(admin, [], "R4", "motif de test")).rejects.toThrow(ValidationError);
     await w.member(w.groups.AUDIT, "aud-admin");
-    await expect(w.roleService.changeAuditGroupPermissions(actor("aud-admin", ADMIN_PERMS), ["audit.read", "risk.read"], "R4")).rejects.toThrow(/belong/);
-    await expect(w.roleService.changeAuditGroupPermissions(actor("t2-admin", ADMIN_PERMS, T2), ["audit.read"], "R4")).rejects.toThrow(NotFoundError);
+    await expect(w.roleService.changeAuditGroupPermissions(actor("aud-admin", ADMIN_PERMS), ["audit.read", "risk.read"], "R4", "motif de test")).rejects.toThrow(/belong/);
+    await expect(w.roleService.changeAuditGroupPermissions(actor("t2-admin", ADMIN_PERMS, T2), ["audit.read"], "R4", "motif de test")).rejects.toThrow(NotFoundError);
     expect(w.roles.get(w.groups.AUDIT.id)?.permissions).toEqual(["audit.read"]);
     expect(w.events).toHaveLength(0);
   });
@@ -400,7 +407,7 @@ describe("QA-B8bis Audit-group permission changes (q45)", () => {
       await w.member(w.groups.AUDIT, "aud");
       await w.member(w.groups.RISK_COMMITTEE, "com");
       await w.put(w.filler, "plain"); w.events.length = 0;
-      const res = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "kri.read"], "R-req");
+      const res = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "kri.read"], "R-req", "motif de test");
       if (res.status !== "PENDING") throw new Error("setup");
       w.events.length = 0;
       return { w, id: res.changeId };
@@ -482,27 +489,28 @@ describe("QA-B8bis Audit-group permission changes (q45)", () => {
       const w = world();
       const mount = (a: express.Express) => a.use("/roles", rolesRouter(w.roleService));
       const url = "/roles/audit-group/permissions";
-      expect((await http(mount, admin, "PUT", url, { permissions: [] })).status).toBe(400);
+      const reason = "motif de test"; // B-8 ter (F-B8b-02): the reason is mandatory
+      expect((await http(mount, admin, "PUT", url, { permissions: [], reason })).status).toBe(400);
       expect((await http(mount, admin, "PUT", url, {})).status).toBe(400);
-      expect((await http(mount, admin, "PUT", url, { permissions: ["bogus"] })).status).toBe(400);
-      expect((await http(mount, admin, "PUT", url, { permissions: Array(ALL_PERMISSIONS.length + 1).fill("risk.read") })).status).toBe(400);
-      expect((await http(mount, actor("x", ["role.update"]), "PUT", url, { permissions: ["audit.read"] })).status).toBe(403);
-      const ok = await http(mount, admin, "PUT", url, { permissions: ["audit.read", "risk.read"] });
+      expect((await http(mount, admin, "PUT", url, { permissions: ["bogus"], reason })).status).toBe(400);
+      expect((await http(mount, admin, "PUT", url, { permissions: Array(ALL_PERMISSIONS.length + 1).fill("risk.read"), reason })).status).toBe(400);
+      expect((await http(mount, actor("x", ["role.update"]), "PUT", url, { permissions: ["audit.read"], reason })).status).toBe(403);
+      const ok = await http(mount, admin, "PUT", url, { permissions: ["audit.read", "risk.read"], reason });
       expect(ok.status).toBe(200);
       expect(ok.json?.data?.status).toBe("APPLIED");
       await w.member(w.groups.RISK_MANAGER, "rm-admin");
-      const pend = await http(mount, rmAdmin, "PUT", url, { permissions: ["audit.read"] });
+      const pend = await http(mount, rmAdmin, "PUT", url, { permissions: ["audit.read"], reason });
       expect(pend.status).toBe(202);
       expect(pend.json?.data?.status).toBe("PENDING");
     });
 
     // DEFECT-B8bis-03 (MINOR, already flagged by A06 as "claim + application hors transaction"): when the application of an approved
     // change fails, the change stays APPROVED (and can never be retried) while the group keeps its old permissions.
-    it.fails("KNOWN GAP: a failed application of an approved change does not leave it APPROVED-but-not-applied", async () => {
+    it("FIXED B-8 ter: a failed application of an approved change does not leave it APPROVED-but-not-applied", async () => {
       const w = world();
       await w.member(w.groups.RISK_MANAGER, "rm-admin");
       await w.member(w.groups.AUDIT, "aud");
-      const res = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "kri.read"], "R");
+      const res = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "kri.read"], "R", "motif de test");
       if (res.status !== "PENDING") throw new Error("setup");
       const real = w.roleRepo.update;
       w.roleRepo.update = async () => { throw new Error("db down"); };
@@ -511,22 +519,25 @@ describe("QA-B8bis Audit-group permission changes (q45)", () => {
       expect(w.changes.get(res.changeId)?.status).toBe("PENDING"); // currently "APPROVED"
     });
 
-    it("OBSERVATION: several PENDING changes can coexist and the last one approved wins, whatever the order of creation", async () => {
+    it("F-B8b-04 (was an OBSERVATION): a second change is refused while one is PENDING; after a decision a new one is possible", async () => {
       const w = world();
       await w.member(w.groups.RISK_MANAGER, "rm-admin");
       await w.member(w.groups.AUDIT, "aud");
-      const c1 = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "kri.read"], "R");
-      const c2 = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "risk.read"], "R");
-      if (c1.status !== "PENDING" || c2.status !== "PENDING") throw new Error("setup");
-      await w.roleService.decideAuditPermissionChange(actor("aud", VALIDATE), c2.changeId, true, "R");
+      const c1 = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "kri.read"], "R", "motif de test");
+      await expect(w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "risk.read"], "R", "motif de test")).rejects.toThrow(/already pending/);
+      if (c1.status !== "PENDING") throw new Error("setup");
       await w.roleService.decideAuditPermissionChange(actor("aud", VALIDATE), c1.changeId, true, "R");
       expect(w.roles.get(w.groups.AUDIT.id)?.permissions).toEqual(["audit.read", "kri.read"]);
+      const c2 = await w.roleService.changeAuditGroupPermissions(rmAdmin, ["audit.read", "risk.read"], "R", "motif de test");
+      expect(c2.status).toBe("PENDING");
     });
 
-    it("OBSERVATION (PO challenge): nothing prevents giving the 'read-only' Audit group write or admin permissions (q42 says read-only)", async () => {
+    it("F-B8b-01 (was an OBSERVATION): the 'read-only' Audit group cannot be given write or admin permissions (q42)", async () => {
       const w = world();
-      const res = await w.roleService.changeAuditGroupPermissions(admin, ["audit.read", "risk.delete", "role.assign", "rolegroup.audit.update"], "R");
-      expect(res.status).toBe("APPLIED");
+      await expect(
+        w.roleService.changeAuditGroupPermissions(admin, ["audit.read", "risk.delete", "role.assign", "rolegroup.audit.update"], "R", "motif de test"),
+      ).rejects.toThrow(ValidationError);
+      expect(w.roles.get(w.groups.AUDIT.id)?.permissions).toEqual(["audit.read"]);
     });
   });
 });
@@ -553,12 +564,12 @@ describe("QA-B8bis /roles/grantors (q48)", () => {
   it("never returns users of another tenant", async () => {
     const { w, holder } = gw();
     await w.put(holder, "g1");
-    const other = w.seedRole({ tenantId: T2, name: "Admins2", permissions: ["role.assign"] });
+    const other = w.seedRole({ tenantId: T2, name: "Admins2", permissions: ["role.assign", "risk.read"] });
     w.addUser("t2-user", { tenantId: T2, displayName: "Autre Tenant" });
     w.assignments.push({ id: "z", tenantId: T2, roleId: other.id, userId: "t2-user", grantedBy: "x", grantedAt: new Date(), revokedAt: null });
     const res = await w.roleService.listGrantors(asker, "risk.read", "R2");
     expect(res.grantors).toEqual([{ displayName: "Name g1" }]);
-    const t2 = await w.roleService.listGrantors(actor("t2-asker", [], T2), "role.assign", "R2b");
+    const t2 = await w.roleService.listGrantors(actor("t2-asker", [], T2), "risk.read", "R2b");
     expect(t2.grantors).toEqual([{ displayName: "Autre Tenant" }]);
   });
 
@@ -578,14 +589,17 @@ describe("QA-B8bis /roles/grantors (q48)", () => {
     expect(w.events.at(-1)).toMatchObject({ action: "READ", entityType: "PermissionGrantorsLookup" });
   });
 
-  it("one audit row per call, with tenant, actor, permission and count; two calls -> two rows", async () => {
+  // F-B8b-03: one audit row per (user, permission, hour), so a loop cannot inflate the append-only table.
+  it("one audit row per (user, permission, hour), with tenant, actor, permission and count; a repeat writes nothing, another permission writes a row", async () => {
     const { w, holder } = gw();
     await w.put(holder, "g1"); w.events.length = 0;
     await w.roleService.listGrantors(asker, "risk.read", "R5");
     await w.roleService.listGrantors(asker, "risk.read", "R6");
-    expect(w.events).toHaveLength(2);
+    expect(w.events).toHaveLength(1);
     expect(w.events[0]).toMatchObject({ tenantId: T1, userId: "asker", entityId: "asker", action: "READ", newValue: { permission: "risk.read", returned: 1 } });
-    expect(w.events[1]!.entityType).toBe("PermissionGrantorsLookup");
+    expect(w.events[0]!.entityType).toBe("PermissionGrantorsLookup");
+    await w.roleService.listGrantors(asker, "dashboard.read", "R6b");
+    expect(w.events).toHaveLength(2);
   });
 
   it("unknown permission: ValidationError, no audit row (service) / 400 (HTTP); missing and array query are 400", async () => {
@@ -691,7 +705,7 @@ describe("QA-B8bis reactivation and lost rights (F-B8-06)", () => {
 
   // DEFECT-B8bis-04 (MINOR): the notification is sent after the reactivation is committed and audited; a notification failure turns the
   // whole call into a 500 although the user IS reactivated (a retry then answers "User is not suspended" and the lost rights are never shown).
-  it.fails("KNOWN GAP: a notification failure does not fail an already committed reactivation", async () => {
+  it("FIXED B-8 ter: a notification failure does not fail an already committed reactivation", async () => {
     const { w } = await suspendedWithLostRole({ notifier: "fail" });
     const res = await w.userService.reactivate(admin, "u1", "R6");
     expect(res.lostRoles).toHaveLength(1);
@@ -760,11 +774,12 @@ describe("QA-B8bis process department mandatory on creation (q46)", () => {
     expect((await http(mount, pa, "PATCH", `/processes/${legacy.id}`, { name: "Legacy 3" })).status).toBe(200);
   });
 
-  it("OBSERVATION: update still accepts departmentId null, so a process created with a department can be detached afterwards (q46 'NOT NULL en base' will need to close this)", async () => {
-    const { service } = pw();
+  it("B-8 ter (was an OBSERVATION): update refuses departmentId null, a process created with a department cannot be detached", async () => {
+    const { service, store } = pw();
     const p = await service.create(pa, { ...base, departmentId: D1 }, "R5");
     const mount = (a: express.Express) => a.use("/processes", processesRouter(service));
-    expect((await http(mount, pa, "PATCH", `/processes/${p.id}`, { departmentId: null })).status).toBe(200);
+    expect((await http(mount, pa, "PATCH", `/processes/${p.id}`, { departmentId: null })).status).toBe(400);
+    expect(store.get(p.id)?.departmentId).toBe(D1);
   });
 });
 
@@ -800,7 +815,7 @@ describe("QA-B8bis ActionPlanService self-validation (point signalé par A06)", 
 
   // F-B8b-06 (Security review B-8 bis, confirmed by QA): the control only compares with createdBy, so the RESPONSIBLE user (executor of the
   // action) who did not create it can close it with their own evidence. Expected by the maker-checker principle: executor != closer.
-  it.fails("KNOWN GAP F-B8b-06: the responsible user cannot close their own action", async () => {
+  it("FIXED B-8 ter F-B8b-06: the responsible user cannot close their own action", async () => {
     const { service, closes } = aw(plan("rm1", "exec"));
     await expect(service.close(closer("exec"), "ap1", "ev-1", "ok", "R3")).rejects.toThrow(ForbiddenError);
     expect(closes).toEqual([]);
@@ -892,7 +907,7 @@ describe("QA-B8bis migration 051 (static review, never applied)", () => {
   // DEFECT-B8bis-02 (MAJOR): migration 051 seeds the rights of the 3 groups of EXISTING tenants only. Tenants created afterwards
   // (PostgresTenantRepository.create, same rows as 049) still get the groups with '{}' permissions: their Risk Manager has no rights
   // and their Audit group cannot read the audit trail (it replaced the "Auditeur" role).
-  it.fails("KNOWN GAP: a tenant created after migration 051 gets its 3 groups with the q42 rights, not with empty permissions", () => {
+  it("FIXED B-8 ter: a tenant created after migration 051 gets its 3 groups with the q42 rights, not with empty permissions", () => {
     const src = readFileSync("src/infrastructure/database/postgres/PostgresTenantRepository.ts", "utf8");
     const insert = src.slice(src.indexOf("INSERT INTO roles"), src.indexOf("AS g (name"));
     expect(insert).not.toMatch(/'\{\}'/);

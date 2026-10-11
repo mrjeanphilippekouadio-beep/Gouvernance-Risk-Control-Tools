@@ -102,6 +102,9 @@ export class UserService {
       throw new ValidationError("Role assignment is not configured — cannot create a user without an initial role");
     }
     await this.assertDepartmentExists(actor.tenantId, input.departmentId);
+    // B8bis-01: every rule checkable in advance (role exists, reason for a fixed group, cumul) runs
+    // BEFORE the user row exists, so a refusal leaves no orphan account.
+    await this.roleService.assertAssignable(actor, input.roleId, null, input.reason);
 
     const user = await this.users.create({
       tenantId: actor.tenantId,
@@ -267,15 +270,20 @@ export class UserService {
     });
 
     if (lostRoles.length > 0) {
-      await this.notifications?.record({
-        tenantId: actor.tenantId,
-        recipientUserId: id,
-        resourceType: "MANAGEMENT",
-        eventType: "RIGHTS_LOST_ON_REACTIVATION",
-        message: `Des droits ont été perdus pendant la suspension (rôles désactivés : ${lostRoles.map((r) => r.name).join(", ")}).`.slice(0, 1500),
-        triggeredBy: actor.userId,
-        requestId,
-      });
+      // B8bis-04: the reactivation is already committed and audited; a notification failure is logged, not fatal.
+      try {
+        await this.notifications?.record({
+          tenantId: actor.tenantId,
+          recipientUserId: id,
+          resourceType: "MANAGEMENT",
+          eventType: "RIGHTS_LOST_ON_REACTIVATION",
+          message: `Des droits ont été perdus pendant la suspension (rôles désactivés : ${lostRoles.map((r) => r.name).join(", ")}).`.slice(0, 1500),
+          triggeredBy: actor.userId,
+          requestId,
+        });
+      } catch (err) {
+        console.error(`Reactivation of user ${id}: lost-rights notification failed (requestId ${requestId})`, err instanceof Error ? err.message : err);
+      }
     }
 
     return { ...after, lostRoles };

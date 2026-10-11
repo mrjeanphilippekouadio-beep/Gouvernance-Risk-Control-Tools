@@ -9,6 +9,7 @@ interface Row {
   role_id: string;
   permissions: string[];
   requested_by: string;
+  reason: string | null;
   status: RolePermissionChangeStatus;
   decided_by: string | null;
   created_at: Date;
@@ -22,6 +23,7 @@ function toDomain(row: Row): RolePermissionChange {
     roleId: row.role_id,
     permissions: row.permissions as Permission[],
     requestedBy: row.requested_by,
+    reason: row.reason,
     status: row.status,
     decidedBy: row.decided_by,
     createdAt: row.created_at,
@@ -32,11 +34,11 @@ function toDomain(row: Row): RolePermissionChange {
 export class PostgresRolePermissionChangeRepository implements RolePermissionChangeRepository {
   constructor(private readonly pool: Pool) {}
 
-  async create(input: { tenantId: string; roleId: string; permissions: Permission[]; requestedBy: string }): Promise<RolePermissionChange> {
+  async create(input: { tenantId: string; roleId: string; permissions: Permission[]; requestedBy: string; reason?: string | null }): Promise<RolePermissionChange> {
     const { rows } = await this.pool.query<Row>(
-      `INSERT INTO role_permission_changes (tenant_id, role_id, permissions, requested_by)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [input.tenantId, input.roleId, input.permissions, input.requestedBy],
+      `INSERT INTO role_permission_changes (tenant_id, role_id, permissions, requested_by, reason)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [input.tenantId, input.roleId, input.permissions, input.requestedBy, input.reason ?? null],
     );
     const row = rows[0];
     if (!row) throw new Error("Insert into role_permission_changes returned no row");
@@ -58,5 +60,23 @@ export class PostgresRolePermissionChangeRepository implements RolePermissionCha
       [tenantId, id, status, decidedBy],
     );
     return (rowCount ?? 0) > 0;
+  }
+
+  async reopen(tenantId: string, id: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE role_permission_changes SET status = 'PENDING', decided_by = NULL, decided_at = NULL
+       WHERE tenant_id = $1 AND id = $2 AND status IN ('APPROVED', 'REJECTED')`,
+      [tenantId, id],
+    );
+  }
+
+  async list(tenantId: string, filter: { status?: RolePermissionChangeStatus; roleId?: string }): Promise<RolePermissionChange[]> {
+    const { rows } = await this.pool.query<Row>(
+      `SELECT * FROM role_permission_changes
+       WHERE tenant_id = $1 AND ($2::text IS NULL OR status = $2) AND ($3::uuid IS NULL OR role_id = $3)
+       ORDER BY created_at DESC LIMIT 100`,
+      [tenantId, filter.status ?? null, filter.roleId ?? null],
+    );
+    return rows.map(toDomain);
   }
 }
