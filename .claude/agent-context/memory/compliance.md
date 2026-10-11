@@ -126,3 +126,22 @@ Statut : **recommandation, en attente des réponses du PO.**
 11. Les désignations de rôles (RO, DEL, EXEC) et leurs changements sont des
     événements sensibles : permission dédiée, motif, approbateur distinct,
     audit append-only.
+
+## Passage Compliance EVD-1 (2026-10-11, branche evd-1)
+
+Verdict : OK pour PR, sans bloquant. Statut : recommandation, durée légale
+de 10 ans citée uniquement via DECISION-018 (EVD §33 n° 5) ; fondement
+légal « à confirmer par les juristes ».
+- SHA-256/taille/type = intégrité technique, pas valeur probante complète :
+  pas d'immuabilité Drive, pas de horodatage de confiance, hash non relu au
+  téléchargement (prévu EVD-2).
+- DOWNLOAD audité avant libération de l'URL (bon), mais trace la remise
+  du lien, pas l'accès Drive réel.
+- Suppression : `delete()` écrit `reason: null`, pas de `deleted_at`/
+  `deleted_by` sur `evidences`, `evidence.delete` pas limitée au groupe Risk
+  Manager : écart avec DECISION-018 n° 9, à traiter avant la mise en prod
+  de la suppression sur demande (lot suivant).
+- Historique sans hash : rattrapage conseillé, jamais de hash inventé.
+12. Un hash calculé à l'upload prouve l'identité du contenu depuis ce
+    moment, pas son authenticité d'origine ni sa non-altération sur Drive
+    tant qu'il n'est pas recontrôlé.
