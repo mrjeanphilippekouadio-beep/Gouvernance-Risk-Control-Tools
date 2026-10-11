@@ -20,3 +20,18 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - Règles Sonar légitimes à désactiver : `plsql:S1192`/`S125` sur migrations+seed, `typescript:S6747` (`gs-id` GridStack) sur design-system, `typescript:S9382` sur `runMigrations.ts` et `scripts/`, règles `Web:*`/`javascript:*` sur `apps-script-legacy/**` (sauf `S5725`/`S2245` tant que S1 n'est pas livré). Ne jamais désactiver `S3776`, `S5145`, `S5693`, `S6505`, `S8541`, `S8544`, `S5725`, `S2871`.
 - Décision PO en attente (à tracker dans `ACTION_ITEMS.md`, règle 7bis) : sort du legacy (corriger ou exclure la dette a11y/modernisation d'`apps-script-legacy/`).
 - Note hors Sonar : images Docker non épinglées par digest.
+
+## Position dépendances Snyk (2026-10-11), base : `docs/security/snyk-dependencies.md`
+
+- 4 alertes. zod 4.6.5 (Snyk 7.5/8.7) : **exploitable, PoC mesuré** : body 1 Mo de `{}` contre `z.array(z.object)` = ~2 s CPU bloquant + ~540 Mo heap. Auth précède parse zod, permission suit : tout utilisateur authentifié. CVSS 3.1 effectif 6.5 (PR:L), signalé à HUMAN malgré < 7 car Snyk >= 7.
+- **Leçon : `.max()` n'atténue PAS le DoS zod 4.6.5** (check exécuté après le parse des éléments). Contre-mesure testée : `z.array(z.unknown()).max(N).pipe(z.array(El))`. Aucune version zod corrigée (latest = 4.6.5).
+- 14 `z.array` HTTP, aucun borné. Règle à pousser dans CLAUDE.md : pas de `z.array` nu sur entrée HTTP.
+- unzipper/traverse/inflight : non atteignables (exceljs `xlsx.load` en mémoire via JSZip, aucun `Extract`/`Open`/`glob`). INFORMATIONAL. exceljs latest = 4.4.0 donc pas de montée ; piste : `overrides unzipper 0.12.5` (retire binary/traverse/fstream/rimraf). Ne pas surcharger `glob` (casse archiver).
+- Un score Snyk est un signal : toujours lire le code ET reproduire quand c'est peu coûteux (le PoC a invalidé l'hypothèse « .max suffit »).
+- À tracker (7bis) : lots S-1 (A06), S-2 (A06), info HUMAN sur zod.
+
+## Retest S-1 zod (2026-10-11, HEAD 9dfe022) : GO
+
+- 17 couples route/champ rejoués sur vrais routeurs : 1 Mo de `{}` = 400 en 56-174 ms (avant 2,1 s / 540 Mo), imbriqué 16-54 ms, valides > max 6-16 ms. Aucun `z.array` nu hors `env.ts`.
+- Leçon : le garde-fou par regex (`z.array(` dans `api/v1`) est contournable (`.array()`, `z.record`, `z.tuple`, hors `api/v1`) ; un retest doit toujours évaluer le test garde-fou, pas seulement le correctif.
+- Notés non traités : `z.string()` sans `.max()` (~60), `limit` négatif audit-log, branding multer sans files/parts, `coveredRiskIds` max 1000 vs sélection UI. `express.json` 256 ko = durcissement optionnel.

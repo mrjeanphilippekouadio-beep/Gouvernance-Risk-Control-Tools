@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { boundedArray, MAX_DEFENSE_LINES } from "../validation.js";
 import type { RatingScaleService } from "../../services/RatingScaleService.js";
 
 const ScaleLevelSchema = z.object({
@@ -24,27 +25,27 @@ const CreateRatingScaleBody = z.object({
   version: z.string().min(1),
   probabilityLevels: z.number().int(),
   impactLevels: z.number().int(),
-  probabilityLabels: z.array(ScaleLevelSchema).nullish(),
-  impactLabels: z.array(ScaleLevelSchema).nullish(),
+  probabilityLabels: boundedArray(ScaleLevelSchema, 50).nullish(),
+  impactLabels: boundedArray(ScaleLevelSchema, 50).nullish(),
 });
 
 const UpdateThresholdsBody = z.object({
-  thresholds: z.array(ScoreThresholdSchema),
+  thresholds: boundedArray(ScoreThresholdSchema, 50),
 });
 
 const UpdateImpactAxesBody = z.object({
-  axes: z.array(ImpactAxisSchema),
+  axes: boundedArray(ImpactAxisSchema, 20),
   retainedImpactRule: z.enum(["MAX", "AVERAGE", "WEIGHTED_SUM"]).optional(),
 });
 
 const UpdateLevelsBody = z.object({
-  levels: z.array(ScaleLevelSchema),
+  levels: boundedArray(ScaleLevelSchema, 50),
 });
 
 const UpdateMasteryBody = z.object({
-  levels: z.array(ScaleLevelSchema),
-  defenseLines: z.array(z.string().min(1)),
-  thresholds: z.array(ScoreThresholdSchema).nullish(),
+  levels: boundedArray(ScaleLevelSchema, 50),
+  defenseLines: boundedArray(z.string().min(1), MAX_DEFENSE_LINES),
+  thresholds: boundedArray(ScoreThresholdSchema, 50).nullish(),
 });
 
 const DisableRatingScaleBody = z.object({ reason: z.string().min(1) });

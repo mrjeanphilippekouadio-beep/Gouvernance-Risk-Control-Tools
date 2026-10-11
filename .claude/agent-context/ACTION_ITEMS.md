@@ -159,6 +159,9 @@ pour l'usage.
 | @dev-backend @compliance @security | **Écarts Evidence relevés par le cadrage EVD (2026-10-08)** : la table `evidences` n'a ni SHA-256, ni taille, ni type MIME ; `getUrl` ne journalise pas les téléchargements ; la suppression envoie le fichier dans la corbeille Drive, vidée après 30 jours — l'original finit physiquement détruit (conflit avec la conservation et le soft delete) ; deux migrations numérotées `044_` (`044_audit_log_escalate`, `044_risk_idempotency`). | 2026-10-08 | Ouvert — corrigés par EVD-1 (hash, métadonnées, audit téléchargement) ; corbeille Drive à arbitrer avec la décision §33 n° 5 ; doublon 044 à documenter (ne pas renuméroter une migration déjà appliquée). |
 | @dev-backend @security | **Nouveaux écarts code / contrat amendé relevés par l'Architecte (2026-10-08).** F-8 : seuils Comité relus à la validation au lieu d'être figés sur l'évaluation (`RiskEvaluationService.ts:436`, `:518`, `:586-595`, invariant 9). F-9 : surcharge d'appétence libre (`RiskEvaluation.ts:119-122`, invariant 8). F-10 : `process.evaluationmode.set` change le mode sans tiers (invariant 5). F-11 : `Process` sans lien département. F-12 : un seul `evaluatorId`, validateur comparé à lui seul. | 2026-10-08 | Ouvert — corrigés respectivement par B-6 (F-8), arbitrage RM (F-9), B-2/arbitrage PO (F-10), arbitrage PO (F-11), B-1 (F-12). **F-14 (2026-10-08)** : `validateByCommittee` valide dès l'appel d'un seul membre, sans vote, quorum ni échéance, et n'exclut que l'évaluateur (pas RO/DEL/EXEC). **F-13 (2026-10-08, DECISION-016)** : `RatingScale` limite probabilité et impact à 1..5 (`RatingScale.ts:69-73`), avec deux tailles indépendantes et des libellés d'impact communs à tous les axes (`impactLabels`, `ImpactAxis` sans niveaux) ; il manque la taille 6, l'égalité des tailles, un descriptif par niveau pour chaque axe (en plus de celui de la probabilité), saisi à la création du Dispositif, et le plafond de 7 axes. |
 | HUMAN @security @devops @dev-frontend @dev-backend | **SonarCloud — base et plan de correction (A10, 2026-10-11)**, `docs/security/sonarcloud-issues.md` : 688 issues (apps-script-legacy 475, frontend 94, backend 65) ; 38 réelles, aucune CVSS ≥ 7. Lot S1 (`--ignore-scripts` sur `npm ci` CI/migrate/Dockerfile, hashes Semgrep, SRI/épinglage CDN legacy) recommandé en premier. | 2026-10-11 | **Partiellement résolu (DECISION-036)** : S1 CI/backend en cours ; reste reporté au lot « dette Sonar » après bouclage (dont legacy et Cartographie). |
+| HUMAN | **Quality Gate SonarCloud en échec sur PR #147 (2026-10-11)** : « C Security Rating on New Code ». Cause probable (non vérifiable d'ici, sonarcloud.io bloqué par le proxy) : la règle S5693 se redéclenche sur les lignes multer modifiées (seuil Sonar inférieur à 25 Mo / 10 Mo), comme annoncé par la revue Security. PR déjà fusionnée, gate non bloquante. | 2026-10-11 | **Ouvert — HUMAN : dans SonarCloud, confirmer l'issue en cause ; si c'est S5693 sur `evidences.routes.ts` / `riskImport.routes.ts`, la marquer « Safe » avec la justification de `docs/security/sonarcloud-issues.md` ; sinon me transmettre l'issue.** |
+| HUMAN @security @dev-backend | **Snyk — dépendances backend (A10, 2026-10-11)**, `docs/security/snyk-dependencies.md`. **zod 4.6.5 (CVE-2023-54404) exploitable** : CVSS effectif 6.5, escaladé (Snyk 7.5/8.7). PoC local : 1 Mo de JSON → ~2 s d'event loop bloqué, ~540 Mo de heap. Tout utilisateur authentifié peut le déclencher. Aucune version corrigée, `.max()` inefficace seul. 14 `z.array` HTTP sans borne. unzipper / traverse / inflight (via exceljs) non atteignables dans notre usage. | 2026-10-11 | **Partiellement résolu (DECISION-037)** : S-1 en cours ; S-2 reporté au lot « dette Sonar ». |
+| HUMAN @dev-backend @security | **Surfaces relevées par le retest A10 de S-1 (2026-10-11), non traitées** : ~60 `z.string()` sans `.max()` (jusqu'à 1 Mo persisté en base puis dupliqué dans `audit_logs`) ; `GET /audit-logs` : un `limit` négatif atteint `LIMIT -n` en SQL (non testé) ; upload `branding` borné en taille seulement (ni `files` ni `parts`) ; `express.json` 1 Mo → 256 ko recommandé en défense en profondeur ; `coveredRiskIds`/`riskIds` plafonnés à 1000 (refus au-delà de 1000 risques cochés). | 2026-10-11 | **Ouvert — HUMAN : proposé pour le lot « dette Sonar » (DECISION-036), sauf `limit` négatif à corriger plus tôt si confirmé.** |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
@@ -961,4 +964,21 @@ DECISION:
 RELATED: ligne « SonarCloud — base et plan de correction » ci-dessus.
 OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ — S1 dispatché (devops + dev-backend).
+```
+
+```
+DECISION-037
+DATE: 2026-10-11
+QUESTION: Alertes Snyk backend (A10, `docs/security/snyk-dependencies.md`) — que traiter et quand ?
+DECISION:
+  S-1 (zod, CVE-2023-54404, exploitable par tout utilisateur authentifié) :
+    lancé maintenant — bornes de taille vérifiées AVANT la validation des
+    éléments sur les 14 `z.array` alimentés par HTTP, test de non-régression,
+    règle CLAUDE.md. Obligatoire avant toute promotion staging → main.
+  S-2 (`overrides` unzipper 0.12.5) et chaîne exceljs (unzipper, traverse,
+    inflight — non atteignables) : reportés au lot « dette Sonar » après
+    bouclage du projet. Veille A10 sur une release zod > 4.6.5.
+RELATED: ligne « Snyk — dépendances backend » ci-dessus, DECISION-036.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — S-1 dispatché (dev-backend).
 ```

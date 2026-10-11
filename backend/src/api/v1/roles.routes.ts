@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { boundedArray } from "../validation.js";
 import type { RoleService } from "../../services/RoleService.js";
 import { ALL_PERMISSIONS, type Permission } from "../../domain/permissions.js";
 import { DASHBOARD_SCOPE_MODES, type DashboardScopeMode } from "../../domain/entities/DashboardScope.js";
@@ -13,14 +14,14 @@ const DashboardScopeModeEnum = z.enum(DASHBOARD_SCOPE_MODES as [DashboardScopeMo
 const CreateRoleBody = z.object({
   name: z.string().min(1),
   description: z.string().nullish(),
-  permissions: z.array(PermissionEnum).min(1),
+  permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1),
   dashboardScopeMode: DashboardScopeModeEnum.optional(),
 });
 
 const UpdateRoleBody = z.object({
   name: z.string().min(1).optional(),
   description: z.string().nullish(),
-  permissions: z.array(PermissionEnum).min(1).optional(),
+  permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1).optional(),
   dashboardScopeMode: DashboardScopeModeEnum.optional(),
 });
 

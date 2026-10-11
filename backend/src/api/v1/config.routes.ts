@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { boundedArray } from "../validation.js";
 import type { ConfigService } from "../../services/ConfigService.js";
 
 const LevelThresholdBody = z.object({
@@ -10,7 +11,7 @@ const LevelThresholdBody = z.object({
 
 const UpdateMethodologyBody = z.object({
   scoreFormula: z.enum(["P_X_I", "WEIGHTED_SUM"]).optional(),
-  levelThresholds: z.array(LevelThresholdBody).optional(),
+  levelThresholds: boundedArray(LevelThresholdBody, 50).optional(),
   impactRetenuRule: z.enum(["MAX", "AVERAGE", "WEIGHTED_SUM"]).optional(),
   reason: z.string().min(1),
 });

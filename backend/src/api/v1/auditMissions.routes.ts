@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { boundedArray } from "../validation.js";
 import type { AuditMissionService } from "../../services/AuditMissionService.js";
 
 const Status = z.enum(["PLANIFIEE", "EN_COURS", "CLOTUREE"]);
@@ -9,7 +10,7 @@ const CreateAuditMissionBody = z.object({
   title: z.string().min(1),
   scope: z.string().min(1),
   leadAuditorId: z.string().min(1),
-  auditorIds: z.array(z.string().min(1)).optional(),
+  auditorIds: boundedArray(z.string().min(1), 200).optional(),
   plannedStartDate: z.coerce.date(),
   plannedEndDate: z.coerce.date(),
 });
