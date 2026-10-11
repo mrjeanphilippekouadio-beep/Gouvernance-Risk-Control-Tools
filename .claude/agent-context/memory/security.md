@@ -79,3 +79,9 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - Migration 051 PASS : listes CHECK = dernières migrations + valeur ajoutée, 105 permissions vérifiées par script contre ALL_PERMISSIONS, runner transactionnel, rien de deviné.
 - Leçon : un garde-fou « seulement après un refus » implémenté dans le frontend n'est pas un garde-fou ; le serveur doit le faire respecter. Un maker-checker doit contraindre l'indépendance du validateur (pas seulement auteur ≠ validateur) et lui donner de quoi lire ce qu'il valide. Une interdiction de cumul sur l'appartenance ne couvre pas les permissions effectives.
 - Tracker (7bis) : F-B8b-01..06 (A06 ; arbitrage A13/A14/PO pour 01, 02, 06).
+
+## Revue B-8 ter + quater (2026-10-11, commits 923a7f1 + 5d4c9c7, tête 3484b77, statique + vitest 42 verts) : PASS avec réserves, aucune escalade (max 4,4)
+- Retest : F-B8b-01, 02, 03, 06 PASS ; 04 et 05 partiels. Config `PUT /config/committee-audit-cumul` (permission dédiée, motif, audit, pas de mass assignment), migrations 053/054, `/cartography/scale`, notifications : sans écart, tenant-scopés.
+- F-B8t-01 MEDIUM 4,4 : `RoleService.update` ne rejoue ni `assertNoCumul` ni q63 ; le groupe RM peut recevoir `ADMIN_PERMISSIONS` (tout RM devient admin+RM sans motif ni notification). F-B8t-02 (users.roles legacy ignoré, course `assignToUser` sans verrou), F-B8t-03 (approbation sans revalidation liste blanche/auteur/expiration), F-B8t-04 (`reopen` laisse droits appliqués + PENDING) LOW.
+- Leçon : un contrôle ajouté à l'assignation doit aussi couvrir TOUT chemin qui change les droits effectifs d'un porteur existant (édition du rôle), pas seulement l'entrée de l'utilisateur dans le rôle. Une liste blanche appliquée à la création d'une demande doit être revérifiée à l'application (données antérieures). Une compensation « rouvrir » ne défait pas un effet déjà appliqué.
+- Tracker (7bis) : F-B8t-01..04 (A06), définition « administrateur » q63 (A13/A14).
