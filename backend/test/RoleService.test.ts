@@ -316,7 +316,7 @@ describe("RoleService", () => {
         systemGroup,
       } as never);
       // Every member also holds a second role so the "last active role" rule is not what blocks the revoke.
-      const other = await service.create(admin, { name: "Other", permissions: ["audit.read"] }, "REQ-o");
+      const other = await service.create(admin, { name: "Other", permissions: ["risk.read"] }, "REQ-o");
       for (const userId of ["u1", "u2"]) {
         await service.assignToUser(admin, group.id, userId, "REQ-a", "motif de test");
         await service.assignToUser(admin, other.id, userId, "REQ-a", "motif de test");
@@ -336,7 +336,7 @@ describe("RoleService", () => {
       const users = inMemoryUserRepository([mkUser("u1", null), mkUser("u2", new Date())]);
       const service = new RoleService(repo, inMemoryAuditRepository(), users, departments);
       const group = await repo.create({ tenantId: admin.tenantId, name: "RM", permissions: [], systemGroup: "RISK_MANAGER" } as never);
-      const other = await service.create(admin, { name: "Other", permissions: ["audit.read"] }, "REQ-o");
+      const other = await service.create(admin, { name: "Other", permissions: ["risk.read"] }, "REQ-o");
       for (const userId of ["u1", "u2"]) {
         await service.assignToUser(admin, group.id, userId, "REQ-a", "motif de test");
         await service.assignToUser(admin, other.id, userId, "REQ-a", "motif de test");

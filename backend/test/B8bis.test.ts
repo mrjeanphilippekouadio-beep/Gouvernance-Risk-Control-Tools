@@ -96,13 +96,13 @@ describe("B-8 bis fixed groups", () => {
 describe("B-8 bis Audit group permissions (q45)", () => {
   it("is refused without the dedicated permission and through the generic update", async () => {
     const { service } = setup();
-    await expect(service.changeAuditGroupPermissions(actor("x", ["role.update"]), ["audit.read"], "r")).rejects.toThrow(ForbiddenError);
+    await expect(service.changeAuditGroupPermissions(actor("x", ["role.update"]), ["audit.read"], "r", "motif de test")).rejects.toThrow(ForbiddenError);
     await expect(service.update(admin, "au", { permissions: ["audit.read"] }, "r")).rejects.toThrow(ValidationError);
   });
 
   it("applies directly for a plain administrator", async () => {
     const { service, events } = setup();
-    const res = await service.changeAuditGroupPermissions(admin, ["audit.read"], "r");
+    const res = await service.changeAuditGroupPermissions(admin, ["audit.read"], "r", "motif de test");
     expect(res.status).toBe("APPLIED");
     expect(events.at(-1)?.action).toBe("PERMISSION_CHANGE");
   });
@@ -111,7 +111,7 @@ describe("B-8 bis Audit group permissions (q45)", () => {
     const { service, held, changes } = setup();
     held.set("admin", ["rm"]);
     held.set("aud", ["au"]);
-    const res = await service.changeAuditGroupPermissions(admin, ["audit.read"], "r");
+    const res = await service.changeAuditGroupPermissions(admin, ["audit.read"], "r", "motif de test");
     expect(res.status).toBe("PENDING");
 
     const validate: Permission[] = ["rolegroup.audit.validate"];
@@ -127,7 +127,7 @@ describe("B-8 bis Audit group permissions (q45)", () => {
 describe("B-8 bis grantors and lost rights (q48)", () => {
   it("returns display names only and audits the lookup", async () => {
     const { service, events } = setup();
-    const res = await service.listGrantors(actor("u9", []), "role.assign", "r");
+    const res = await service.listGrantors(actor("u9", []), "risk.read", "r");
     expect(res.grantors).toEqual([{ displayName: "Awa Admin" }]);
     expect(events.at(-1)?.action).toBe("READ");
     const none = await service.listGrantors(actor("u9", []), "kri.delete", "r"); // no active role carries it

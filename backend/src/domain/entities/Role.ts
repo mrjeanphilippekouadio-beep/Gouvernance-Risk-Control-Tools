@@ -79,6 +79,8 @@ export interface RolePermissionChange {
   roleId: string;
   permissions: Permission[];
   requestedBy: string;
+  /** B-8 ter (F-B8b-02): the author's motive, shown to the validator (column added by migration 053). */
+  reason?: string | null;
   status: RolePermissionChangeStatus;
   decidedBy: string | null;
   createdAt: Date;

@@ -261,7 +261,8 @@ const findingService = new FindingService(
   controlRepository,
   anomalyRepository,
 );
-const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool));
+const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
+const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
@@ -373,7 +374,6 @@ const tenantService = new TenantService(tenantRepository, auditRepository);
 const regulatoryFrameworkService = new RegulatoryFrameworkService(regulatoryFrameworkRepository, auditRepository);
 const riskCategoryService = new RiskCategoryService(riskCategoryRepository, auditRepository);
 const riskImportService = new RiskImportService(riskService);
-const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
 const userService = new UserService(userRepository, auditRepository, roleService, departmentRepository, notificationService);
 const governanceService = new GovernanceService(reviewCycleRepository, auditRepository, notifier);
 

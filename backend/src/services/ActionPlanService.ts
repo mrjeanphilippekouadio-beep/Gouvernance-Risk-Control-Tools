@@ -396,6 +396,10 @@ export class ActionPlanService {
     if (before.createdBy === actor.userId) {
       throw new ForbiddenError("The actor who created this action cannot close it themselves — ask another user to close it");
     }
+    // F-B8b-06: the executor is not their own checker either.
+    if (before.responsibleUserId === actor.userId) {
+      throw new ForbiddenError("The user responsible for this action cannot close it themselves — ask another user to close it");
+    }
     if (this.evidences) {
       const evidence = await this.evidences.getById(actor.tenantId, evidenceId);
       if (!evidence || evidence.status === "DELETED") throw new ValidationError(`Evidence ${evidenceId} does not exist in this tenant`);

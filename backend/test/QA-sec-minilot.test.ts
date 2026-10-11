@@ -236,7 +236,7 @@ function setup(evidences: Evidence[]) {
 async function newAction(s: ReturnType<typeof setup>): Promise<string> {
   const due = new Date();
   due.setFullYear(due.getFullYear() + 1);
-  const a = await s.service.create(creator, { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: due }, "REQ-c");
+  const a = await s.service.create(creator, { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: due }, "REQ-c");
   s.auditRecords.length = 0; // only observe what close() does
   return a.id;
 }

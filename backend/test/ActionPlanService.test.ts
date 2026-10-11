@@ -590,7 +590,7 @@ describe("ActionPlanService — computed EN_RETARD status (ACT-192/193), never s
     const service = buildService({ actions: repo });
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: pastDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: pastDate() },
       "REQ-10",
     );
     const closed = await service.close(otherUser, created.id, "evidence-1", "Fait", "REQ-11");
@@ -605,7 +605,7 @@ describe("ActionPlanService.updateProgress (ACT-191)", () => {
     const service = buildService();
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: futureDate() },
       "REQ-12",
     );
     const updated = await service.updateProgress(creator, created.id, 40, "Moitié faite", "REQ-13");
@@ -617,7 +617,7 @@ describe("ActionPlanService.updateProgress (ACT-191)", () => {
     const service = buildService();
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: futureDate() },
       "REQ-14",
     );
     await expect(service.updateProgress(creator, created.id, 150, null, "REQ-15")).rejects.toThrow(ValidationError);
@@ -627,7 +627,7 @@ describe("ActionPlanService.updateProgress (ACT-191)", () => {
     const service = buildService();
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: futureDate() },
       "REQ-16",
     );
     await service.close(otherUser, created.id, "evidence-1", "Fait", "REQ-17");
@@ -720,7 +720,7 @@ describe("ActionPlanService.close (ACT-195) — mandatory evidence + maker-check
     const service = buildService();
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: futureDate() },
       "REQ-32",
     );
     const closed = await service.close(otherUser, created.id, "evidence-1", "Documenté", "REQ-33");
@@ -733,7 +733,7 @@ describe("ActionPlanService.close (ACT-195) — mandatory evidence + maker-check
     const service = buildService();
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: futureDate() },
       "REQ-34",
     );
     await expect(service.close(otherUser, created.id, "", null, "REQ-35")).rejects.toThrow(ValidationError);
@@ -743,7 +743,7 @@ describe("ActionPlanService.close (ACT-195) — mandatory evidence + maker-check
     const service = buildService({ evidences: fakeEvidenceRepository([]) });
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: futureDate() },
       "REQ-36",
     );
     await expect(service.close(otherUser, created.id, "missing-evidence", null, "REQ-37")).rejects.toThrow(ValidationError);
@@ -753,7 +753,7 @@ describe("ActionPlanService.close (ACT-195) — mandatory evidence + maker-check
     const service = buildService({ evidences: fakeEvidenceRepository([evidence({ status: "DELETED" })]) });
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: futureDate() },
       "REQ-36b",
     );
     await expect(service.close(otherUser, created.id, "evidence-1", null, "REQ-37b")).rejects.toThrow(
@@ -765,7 +765,7 @@ describe("ActionPlanService.close (ACT-195) — mandatory evidence + maker-check
     const service = buildService();
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: futureDate() },
       "REQ-38",
     );
     await expect(service.close(creator, created.id, "evidence-1", "Documenté", "REQ-39")).rejects.toThrow(ForbiddenError);
@@ -775,7 +775,7 @@ describe("ActionPlanService.close (ACT-195) — mandatory evidence + maker-check
     const service = buildService();
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: futureDate() },
       "REQ-40",
     );
     await service.close(otherUser, created.id, "evidence-1", "Fait", "REQ-41");
@@ -786,7 +786,7 @@ describe("ActionPlanService.close (ACT-195) — mandatory evidence + maker-check
     const service = buildService();
     const created = await service.create(
       creator,
-      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-2", dueDate: futureDate() },
+      { title: "T", sourceType: "MANAGEMENT", responsibleUserId: "user-3", dueDate: futureDate() },
       "REQ-43",
     );
     const readOnlyOther = { ...otherUser, roles: ["actionplan.read", "actionplan.update"] };

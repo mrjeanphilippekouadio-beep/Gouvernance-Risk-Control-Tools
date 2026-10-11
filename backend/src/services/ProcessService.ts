@@ -131,6 +131,10 @@ export class ProcessService {
       await this.validateHierarchy(actor.tenantId, level, parentId, id);
     }
 
+    // B-8 ter: a process attached to a department can be moved, never detached (q46).
+    if (input.departmentId === null && before.departmentId) {
+      throw new ValidationError("departmentId cannot be removed once a process is attached to a department");
+    }
     if (input.departmentId) await this.assertDepartmentExists(actor.tenantId, input.departmentId);
 
     const after = await this.processes.update(actor.tenantId, id, input);
