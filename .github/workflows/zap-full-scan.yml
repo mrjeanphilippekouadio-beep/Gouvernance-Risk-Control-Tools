@@ -51,14 +51,15 @@ jobs:
             -e ZAP_TARGET_URL="${{ secrets.ZAP_TARGET_URL }}" \
             -e ZAP_TEST_EMAIL="qagrctest@gmail.com" \
             -e ZAP_TEST_PASSWORD="${{ secrets.ZAP_TEST_PASSWORD }}" \
+            --entrypoint bash \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap.sh -cmd -autorun /zap/wrk/.github/zap/automation-plan.yaml
+            -c 'zap.sh -cmd -autorun /zap/wrk/.github/zap/automation-plan.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null; exit $rc'
           rc=$?
           set -e
-          # zap.log has the per-request authentication detail the reports
-          # don't (which login/poll attempts failed and why) — copy it
-          # alongside the reports so it's in the uploaded artifact.
-          cp zap-home/zap.log report/zap.log 2>/dev/null || true
+          # The previous attempt to grab the auth-attempt detail from
+          # zap.log via a fixed mounted path (zap-home/zap.log) silently
+          # found nothing — the find above prints it straight into this
+          # job's log instead of guessing the path, so it's always visible.
           # No exitStatus job in the plan, so ZAP uses its own default exit
           # codes: 0 ok, 2 warnings found (expected — don't fail the build
           # just because alerts exist), 1 a real plan/execution error.
