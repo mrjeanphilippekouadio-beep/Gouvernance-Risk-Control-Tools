@@ -18,7 +18,14 @@ interface RefusalDialogProps {
   children?: ReactNode;
 }
 
-/** Generic refusal window (DECISION-025 q02), built on `Modal`. */
+/**
+ * Generic refusal window (DECISION-025 q02), built on `Modal`.
+ *
+ * In `sensitive` mode no holder name is rendered, but `action`, `reason`
+ * and `children` are shown as given: callers must never put a name there.
+ * For sensitive permissions the backend should not send the holder list at
+ * all; this component only hides what it receives.
+ */
 export function RefusalDialog({ open, onClose, action, reason, authorized = [], sensitive, children }: RefusalDialogProps) {
   return (
     <Modal open={open} onClose={onClose} title="Action refusée" actions={<Button onClick={onClose}>Fermer</Button>}>

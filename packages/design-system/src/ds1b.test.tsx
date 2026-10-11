@@ -157,6 +157,8 @@ describe("M2 Modal + RefusalDialog (E14, E15)", () => {
     expect(screen.getByText("Contactez la fonction conformité.")).toBeTruthy();
     expect(screen.queryByText("Exemple A")).toBeNull();
     expect(screen.queryByText("Personnes autorisées")).toBeNull();
+    // Security review DS-1b: no name anywhere in the markup, attributes included.
+    expect(baseElement.innerHTML).not.toContain("Exemple A");
     await expectNoViolations(baseElement);
   });
 
