@@ -148,7 +148,8 @@ pour l'usage.
 | @dev-backend @compliance HUMAN | **COMP-EVD1-2 — suppression d'une évidence sur demande conforme à DECISION-018 n° 9** : motif obligatoire (aujourd'hui `reason: null`), `deleted_at`/`deleted_by`, demande traitée par le groupe Risk Manager (demandeur ≠ traitant), `evidence.delete` réservée ; décision HUMAN sur le refus de supprimer une preuve qui alimente des records importés (EVD-4). | 2026-10-11 | **Ouvert — lot suivant, avant toute suppression sur demande en production.** |
 | @infrastructure @compliance HUMAN | **COMP-EVD1-4 — protection du stockage des preuves** : rétention ou verrouillage sur les deux Drive partagés, droits du compte de service sans suppression définitive, journaux d'activité Drive conservés, politique de purge écrite, archivage après 1 an (DECISION-018 n° 5) derrière `DocumentStorage`. | 2026-10-11 | **Ouvert — lot Infra/Conservation.** |
 | @dev-backend HUMAN | **COMP-EVD1-5 — rattrapage des empreintes des évidences historiques** : script hors migration (relecture par `getContent`, hash marqué « établi a posteriori », trace dans `audit_log`) ; écriture de masse à valider par HUMAN avant exécution. Ajouter le KRI « % évidences avec empreinte ». | 2026-10-11 | **Ouvert — lot de rattrapage dédié.** |
-| HUMAN @risk-manager @product-manager | **Étape 2 du contrat (R1.1) — 11 questions ouvertes Q-E2-1 à Q-E2-11** dans `docs/architecture/RM-V1-Contrat-etape2-PROJET.md` (rédaction Risk Manager, relecture Product Manager, 2026-10-11), reportées dans la page de pilotage (q23 à q33). Bloquent : R1.2 (Q-E2-1, -2), R1.3 (-3), R1.4 (-4, -5, -6), R2 (-7, -8, -9), R3 (-10, -11). Le texte du projet doit aussi être validé par le PO avant report dans le contrat. | 2026-10-11 | **Ouvert — HUMAN : répondre aux questions et valider le texte.** |
+| HUMAN @risk-manager @product-manager | **Étape 2 du contrat (R1.1) — 11 questions ouvertes Q-E2-1 à Q-E2-11** dans `docs/architecture/RM-V1-Contrat-etape2-PROJET.md` (rédaction Risk Manager, relecture Product Manager, 2026-10-11), reportées dans la page de pilotage (q23 à q33). Bloquent : R1.2 (Q-E2-1, -2), R1.3 (-3), R1.4 (-4, -5, -6), R2 (-7, -8, -9), R3 (-10, -11). Le texte du projet doit aussi être validé par le PO avant report dans le contrat. | 2026-10-11 | **Questions répondues (DECISION-034, 2026-10-11) et intégrées au projet. Ouvert — HUMAN : 6 confirmations (page de pilotage q34 à q39 : lecture de q26, garde-fous de la suppléance du Comité, revue quand toute l'équipe risque est concernée, destinataire de l'escalade, « Sans suite », sens de q25), puis validation du texte final.** |
+| HUMAN @ux-designer @dev-frontend | **Revue Penpot du design system (PO, 2026-10-11)** : `docs/ux/DS-V1-revue-penpot.md`. Faite sur une copie locale antérieure à la vague 1 : la plupart des « bloquants » sont déjà corrigés sur staging ; les écarts de couleur/police/rayon sont la marque Djamo validée (le fichier Penpot donne la structure, pas la marque). Vrais écarts restants listés en fin de fichier (tailles Button/Modal, Table zébrée/compacte/sélection, Tabs/Card désactivé et sélectionné, paliers 12px et display, 13 composants sans fiche Penpot). | 2026-10-11 | **Ouvert — HUMAN : GO de la vague 2 du design system sur ce périmètre.** |
 | @dev-backend @security | **Évidence supprimée acceptée comme preuve de clôture d'un plan d'action (Security, revue EVD-1, 2026-10-11, préexistant)** : `ActionPlanService.ts:399-401` vérifie l'évidence de clôture par `getById` sans contrôler `status !== 'DELETED'`. | 2026-10-11 | **Ouvert — petit correctif à prévoir hors EVD-1.** |
 | @infrastructure @security HUMAN | **Partage des fichiers sur les Drive partagés (Security, revue EVD-1, 2026-10-11)** : le lien Drive stocké est un lien statique ; si les Drive partagés sont ouverts à tout le domaine, `evidence.download` et son audit se contournent hors application. Vérifier que l'accès aux 4 Drive partagés est limité au compte de service et aux administrateurs nommés. | 2026-10-11 | **Ouvert — HUMAN : vérifier les membres des Drive partagés.** |
 | @infrastructure @dev-backend HUMAN | **Authentification Google Drive en production non prouvée (Infrastructure, 2026-10-08)** : `googleDriveAuth.ts` et `env.ts:101` interdisent la clé JSON en production et supposent l'identité Cloud Run, alors que la production tourne sur Render ; le dépôt d'évidences en production peut échouer. | 2026-10-08 | **Ouvert — à vérifier (R0.4) ; décision HUMAN sur le mécanisme d'identité Drive en production.** |
@@ -157,6 +158,7 @@ pour l'usage.
 | HUMAN @privacy @architect @compliance | **Propositions EVD §33 n° 10, 11, 12, 14 et stockage (2026-10-08).** n° 10/14 (Privacy) : déclaration « données personnelles oui / non / ne sait pas » (ne sait pas = oui) ; colonne persistée / ignorée / masquée, valeurs ignorées jamais copiées même dans les erreurs ; dataset `confidential` (lecture des lignes et téléchargement réservés à des rôles nommés) ; colonnes personnelles masquées en liste ; lecture et téléchargement journalisés sans valeurs ; plancher non désactivable ; la classification se relève librement, ne s'abaisse que par l'équipe risque ; ces protections dès EVD-1. n° 11 (Architecte) : contrôles type / obligatoire / ligne vide / doublon de clé ; défaut = annuler l'import si une ligne est invalide, option tenant = importer les valides (import marqué partiel). n° 12 : clé métier facultative, déclarée dans la version de schéma, défaut aucune. Stockage (DECISION-018 n° 5) : Drive ne tient pas 10 ans (pas d'archive, pas de verrou, corbeille purgée à 30 jours) → **GCS** : classe Archive après 365 jours (accès immédiat), rétention 10 ans non verrouillée d'abord, `GcsStorage` derrière `DocumentStorage`, nouveau lot **EVD-0 Stockage** avant EVD-1, copie unique des évidences Drive existantes. | 2026-10-08 | **Ouvert — HUMAN : valider ces propositions ; décider plus tard du verrouillage Bucket Lock (irréversible, conflit avec un effacement avant 10 ans — avis Privacy et juristes requis) ; faire qualifier par les juristes la localisation des données (Neon US, Drive/GCS) avant EVD-4.** |
 | @dev-backend @compliance @security | **Écarts Evidence relevés par le cadrage EVD (2026-10-08)** : la table `evidences` n'a ni SHA-256, ni taille, ni type MIME ; `getUrl` ne journalise pas les téléchargements ; la suppression envoie le fichier dans la corbeille Drive, vidée après 30 jours — l'original finit physiquement détruit (conflit avec la conservation et le soft delete) ; deux migrations numérotées `044_` (`044_audit_log_escalate`, `044_risk_idempotency`). | 2026-10-08 | Ouvert — corrigés par EVD-1 (hash, métadonnées, audit téléchargement) ; corbeille Drive à arbitrer avec la décision §33 n° 5 ; doublon 044 à documenter (ne pas renuméroter une migration déjà appliquée). |
 | @dev-backend @security | **Nouveaux écarts code / contrat amendé relevés par l'Architecte (2026-10-08).** F-8 : seuils Comité relus à la validation au lieu d'être figés sur l'évaluation (`RiskEvaluationService.ts:436`, `:518`, `:586-595`, invariant 9). F-9 : surcharge d'appétence libre (`RiskEvaluation.ts:119-122`, invariant 8). F-10 : `process.evaluationmode.set` change le mode sans tiers (invariant 5). F-11 : `Process` sans lien département. F-12 : un seul `evaluatorId`, validateur comparé à lui seul. | 2026-10-08 | Ouvert — corrigés respectivement par B-6 (F-8), arbitrage RM (F-9), B-2/arbitrage PO (F-10), arbitrage PO (F-11), B-1 (F-12). **F-14 (2026-10-08)** : `validateByCommittee` valide dès l'appel d'un seul membre, sans vote, quorum ni échéance, et n'exclut que l'évaluateur (pas RO/DEL/EXEC). **F-13 (2026-10-08, DECISION-016)** : `RatingScale` limite probabilité et impact à 1..5 (`RatingScale.ts:69-73`), avec deux tailles indépendantes et des libellés d'impact communs à tous les axes (`impactLabels`, `ImpactAxis` sans niveaux) ; il manque la taille 6, l'égalité des tailles, un descriptif par niveau pour chaque axe (en plus de celui de la probabilité), saisi à la création du Dispositif, et le plafond de 7 axes. |
+| HUMAN @security @devops @dev-frontend @dev-backend | **SonarCloud — base et plan de correction (A10, 2026-10-11)**, `docs/security/sonarcloud-issues.md` : 688 issues (apps-script-legacy 475, frontend 94, backend 65) ; 38 réelles, aucune CVSS ≥ 7. Lot S1 (`--ignore-scripts` sur `npm ci` CI/migrate/Dockerfile, hashes Semgrep, SRI/épinglage CDN legacy) recommandé en premier. | 2026-10-11 | **Partiellement résolu (DECISION-036)** : S1 CI/backend en cours ; reste reporté au lot « dette Sonar » après bouclage (dont legacy et Cartographie). |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
@@ -840,6 +842,98 @@ STATUS: DÉCIDÉ — fait par le PO le 2026-10-11 ; GO de lancement de
   et correction du commentaire périmé de `RiskEvaluationService`.
 ```
 
+```
+DECISION-033
+DATE: 2026-10-11
+QUESTION: Étape 2 du contrat — que se passe-t-il quand le groupe Risk
+  Committee est vide (Q-E2-6 première activation, et plus largement
+  tout ce que le Comité approuve) ?
+DECISION: Si le groupe Comité est vide, le groupe Risk Manager (la
+  fonction risque) prend en charge ce que le Comité aurait approuvé.
+  Garde-fous proposés par l'orchestrateur, à confirmer par le PO :
+  l'approbateur est un autre membre du groupe que le demandeur, motif
+  obligatoire, trace d'audit, cumul marqué ; un groupe Risk Manager
+  d'un seul membre ne peut pas s'approuver lui-même.
+RELATED: DECISION-016, DECISION-019 (P3 : auto-proposition activée par
+  le Comité), Q-E2-4, Q-E2-6, Q-E2-9, page de pilotage q28.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ (principe) — garde-fous à confirmer ; à reporter dans le
+  projet d'étape 2.
+```
+
+```
+DECISION-034
+DATE: 2026-10-11
+QUESTION: Étape 2 du contrat — Q-E2-1 à Q-E2-11 (page de pilotage q23 à
+  q33).
+DECISION (réponses du PO, verbatim résumé) :
+  q23 / Q-E2-1 — La direction du département est le membre du groupe
+    hiérarchiquement au-dessus des autres (directeur ou head of) ; il
+    voit le travail des membres sur les risques, les contrôles et les
+    objets qu'ils détiennent ou ont créés.
+  q24 / Q-E2-2 — Le responsable de la fonction risque est le responsable
+    du service risque : droits sur tous les risques, les contrôles et
+    l'administration ; il peut suppléer le Comité si le groupe Comité est
+    vide (voir DECISION-033).
+  q25 / Q-E2-3 — Un Dispositif est choisi une seule fois à la création ;
+    les risques sont affichés par Dispositif, un à la fois.
+  q26 / Q-E2-4 — « Les changements sont au niveau du risque et l'audit est
+    notifié si le groupe n'est pas vide ; comportement par défaut ; on
+    pourra choisir l'audit et/ou le comité. » (interprétation à vérifier
+    dans le texte : par défaut la fonction risque approuve et Audit est
+    notifié ; le Dispositif peut exiger l'approbation d'Audit et/ou du
+    Comité).
+  q27 / Q-E2-5 — Audit : mêmes règles de vote que le Comité, avec
+    avertissement et indicateur.
+  q28 / Q-E2-6 — Premier Dispositif : on demande d'abord de créer un
+    utilisateur dans le groupe risque au niveau hiérarchique le plus
+    élevé ; à défaut, l'administrateur du client (différent du
+    demandeur), avec motif et trace, une seule fois.
+  q29 / Q-E2-7 — Règle personnalisée : planchers fixes seulement ; quorum
+    impossible = envoi refusé puis escalade.
+  q30 / Q-E2-8 — Rejet = comme un retour, gardé en historique et compté.
+  q31 / Q-E2-9 — Revue sans autre membre : l'approbateur choisi au
+    Dispositif, avec alerte à l'équipe risque.
+  q32 / Q-E2-10 — « Sans suite » sans commentaire, avec possibilité de
+    le retirer s'il n'est pas pertinent.
+  q33 / Q-E2-11 — Auteur d'une cotation importée = la personne qui
+    importe ; Résiduel importé par l'équipe risque seulement.
+RELATED: DECISION-033, `docs/architecture/RM-V1-Contrat-etape2-PROJET.md`.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — à intégrer au projet d'étape 2 ; le texte final reste à
+  valider par le PO avant report dans le contrat.
+```
+
+```
+DECISION-035
+DATE: 2026-10-11
+QUESTION: Étape 2 du contrat — confirmations q34 à q39 (page de pilotage).
+DECISION:
+  q34 — Lecture de q26 validée : par défaut la fonction risque approuve
+    les changements du Dispositif ; Audit est notifié (si son groupe
+    n'est pas vide) ; le Dispositif peut exiger en plus l'accord d'Audit
+    et/ou du Comité.
+  q35 — Suppléance d'un Comité vide par la fonction risque : **une
+    personne au moins** suffit (pas deux). Garde-fous non contestés,
+    maintenus : jamais le demandeur, jamais sur ce dont la personne est
+    auteur / RO / Délégué / Exécuteur, jamais pour activer
+    l'auto-proposition ; motif et trace.
+  q36 — Revue quand toute l'équipe risque est concernée : **Audit si son
+    groupe n'est pas vide** (sinon Comité, sinon suppléance — lecture de
+    l'orchestrateur). Les groupes Comité et Audit ont chacun un **journal
+    de toutes les décisions prises en leur absence**.
+  q37 — Le PO demande une proposition (destinataire de l'escalade quand
+    le quorum est impossible) → proposition en q37 de la page de pilotage.
+  q38 — « Sans suite » peut être retiré ; prévoir la possibilité de
+    **créer des statuts de contribution** personnalisés.
+  q39 — Le Dispositif est choisi à la création de l'espace client et/ou
+    à la création du Dispositif ; les risques s'affichent par Dispositif,
+    un à la fois.
+RELATED: DECISION-033, DECISION-034.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — q37 en attente de validation de la proposition.
+```
+
 | @release-manager | **URGENT — `main` a 27 commits jamais poussés sur `origin`, aucune PR ouverte pour le Lot 1 RACI malgré un feu vert QA + Security complet (SEC-016 CLOSED).** Vérifié le 2026-09-29 : dernière PR mergée = #15 (`security/fix-sec-009-015`, 2026-09-28). Tout ce qui a suivi (SEC-016, 3 docs d'architecture cible, ADR-002, Lot 1 RACI complet avec revue QA/Security) est resté en local sur `main`, sans branche ni PR. Working tree en plus non propre (fichiers modifiés/non trackés : `ACTION_ITEMS.md`, `SHARED_LOG.md`, `CLAUDE.md`, design system, `RisksPage.tsx`, `RaciPanel.tsx`/`.css`, `api/raci.ts`/`users.ts`, `ADR-003...`). Rollback de migration `027_raci_assignments.sql` jamais testé/tracé non plus (déjà exigé dans la DoD proposée le 28/09). Recommandation : ouvrir la PR du Lot 1 RACI (+ éventuellement une PR séparée pour les 3 docs d'architecture/ADR-002/ADR-003) avant tout nouveau lot, pour ne pas accumuler davantage de commits non tracés. | 2026-09-29 | **Résolu — PR #16 ouverte, 22 commits, mergée par le PO le 2026-09-29.** Lots A/B/C exécutés en parallèle/séquence (voir DECISION-005 ci-dessous pour le détail complet) : Lot 1 RACI + charte graphique + docs architecture poussés, fuite Privacy corrigée, `GrcObjectType` créé et `RaciEntityType` migré dessus, middleware `ModuleToggle` câblé, 20 tests `BrandingService` ajoutés, rollback de migration établi comme convention projet (027+028 `.down.sql` + `README.md` + correctif du runner). 405 tests verts sur toute la série, working tree propre. |
 | @tous | **DECISION-004 — Balayage complet des 15 agents (2026-09-29), confirmation croisée du problème central de DECISION-003.** 7 agents indépendants (architect, product-manager, dev-backend, dev-db, security, compliance, audit) ont chacun, depuis leur propre angle, confirmé par preuve code la même divergence de whitelists polymorphes — désormais **7 whitelists connues**, pas 5 : `ActionPlanSourceType`, `ActionLinkResourceType`, `RaciEntityType` (6e, déjà livrée avant DECISION-003 — @product-manager), `NotificationResourceType` (7e, périmètre différent avec `RISK_EVALUATION`/`REVIEW_CYCLE` — @dev-backend), plus RACI/Comments/Evidence-links/Finding prévues. **Divergence de casse en plus de la couverture** : RACI en `PascalCase` (`'Risk'`), les autres en `SNAKE_CASE` majuscule (`'RISK'`) — @dev-db, @dev-backend. `@security` ajoute : le risque n'est pas que l'énum diverge, c'est que la fonction de résolution tenant-scopée est dupliquée à la main à chaque whitelist — recommande de centraliser aussi le **résolveur**, pas seulement le type. `@compliance` qualifie la divergence de `REGULATORY_GAP` mineur (pas juste dette technique) et demande une vérification de non-régression sur les données réelles existantes au moment de la création de `GrcObjectType` (aucune ligne en base ne doit devenir invalide sous la whitelist unifiée). Décision à prendre par `@architect` avant d'écrire `GrcObjectType.ts` : casse canonique retenue (majuscule recommandée, 5 whitelists sur 7 déjà dans cette casse) et si `NotificationResourceType` (périmètre différent) entre dans l'unification ou reste à part. | 2026-09-29 | **Résolu — `@architect` a tranché : SNAKE_CASE majuscule, `NotificationResourceType` inclus. `backend/src/domain/GrcObjectType.ts` créé, `RaciEntityType` migré dessus (migration `028`, PR #16). Restent à migrer plus tard, seulement au moment où ces modules seront exposés (pas anticipé) : `ActionPlanSourceType`/`ActionLinkResourceType`, `NotificationResourceType` lui-même (dérivation recommandée par l'architecte, pas faite), Comments/Evidence-links/Finding.** |
 | @privacy | **PRIV-CH-DASH-001 — portée élargie (2026-09-29).** Confirmé toujours ouvert et non corrigé (`RiskOwnershipService.listOwners` consomme toujours `getById` sans vérifier `deletedAt`). La portée initiale ("avant le dashboard consolidé") est trop étroite : le pattern `*ViewService` que DECISION-003 généralise (10-15 repositories composés par fiche) multiplie mécaniquement le nombre de résolutions d'identité, donc le nombre de points de fuite potentiels. Exigence reformulée : la matrice widget × donnée × permission ET le correctif `getById` doivent être faits avant **tout** premier `*ViewService` codé (Risk 360, Dashboard, ou `RiskDeviceViewService`), pas seulement avant l'écran Dashboard nommément. | 2026-09-27 | **Partiellement résolu (2026-09-29)** — `RiskOwnershipService.listOwners` corrigé (masquage d'un owner suspendu, PR #16). La partie plus large (matrice widget × donnée × permission avant tout futur `*ViewService`) reste ouverte — aucun `*ViewService` codé à ce jour, condition à satisfaire au moment venu, pas avant. |
@@ -849,3 +943,22 @@ STATUS: DÉCIDÉ — fait par le PO le 2026-10-11 ; GO de lancement de
 | @ux-designer | **Sidebar non pensée pour l'échelle — signalé par l'agent lui-même lors du balayage du 2026-09-29.** Seulement 3 entrées/2 groupes affichés, brief prévoit ~19-25 entrées sur 7 domaines, aucun comportement de repli défini. | 2026-09-29 | **Résolu (2026-09-29)** — groupes repliables ajoutés (un seul ouvert à la fois, les autres réduits à en-tête + compteur), 6 groupes/19 entrées démontrés (Risk 360 consolidé dans "Registre" plutôt qu'entrée séparée, cohérent avec DECISION-003). Signalé par le PO en cours de route comme "pas élégant" de tout lister à plat — corrigé dans le même geste. |
 | @risk-manager @architect | **Mode Classique/Participatif de cotation — question soulevée par le PO en revue de l'écran Évaluation (2026-09-29).** Réponse convergente des deux agents dispatchés séparément : "brut" (mode Participatif) n'est PAS un nouveau champ — c'est mathématiquement le score inhérent, saisi par un acteur différent (exécutant de contrôle L1 plutôt qu'équipe risque). Ce qui manque réellement : un point de maker-checker intermédiaire (L1 soumet, L2 endosse) avant que le score ne devienne l'inhérent officiel — `assertIsEvaluator` actuel n'a qu'un seul `evaluatorId` pour toute l'évaluation, pas de cran intermédiaire. Précédent direct : `VALIDE_COMITE`/ACT-253 (nouveau statut + permission dédiée, pas un objet séparé). Risque de gouvernance confirmé si non fait : un exécutant qui note seul le risque que son propre contrôle maîtrise recrée un biais d'auto-évaluation (mandat Risk Manager §43). **Désaccord de niveau non tranché** : Architect recommande de porter le mode sur `Config` (tenant-wide, par analogie avec `appetiteMode`) ; Risk Manager recommande le Dispositif (une organisation a des maturités différentes par direction, un mode global empêcherait la coexistence légitime Classique/Participatif). Les deux convergent sur un point : jamais au niveau du Risque individuel. Le niveau exact dépend de DECISION-003 (Dispositif = service de lecture composée, pas d'entité persistée) — porter une config sur une simple vue de lecture n'est pas trivial, aucun des deux agents ne peut trancher ça seul. Détail complet : `SHARED_LOG.md`. | 2026-09-29 | **Résolu par arbitrage PO — voir DECISION-006 ci-dessus (niveau Processus retenu, ni Config ni Dispositif).** |
 | @security | **SEC-016 — RETEST INDÉPENDANT : CONFIRMED_FIXED. CLOSED.** Code retracé ligne par ligne (`assertNoSelfRaConflict`, commit `3db536`) : les deux sens sont désormais bloqués par un unique chemin de code (`otherRole = role === "A" ? "R" : role === "R" ? "A" : null`, recherche de `otherRole` déjà détenu par `actingUserId`) — A puis R **et** R puis A tracés à la main, tous deux `ForbiddenError`. Cas légitimes non bloqués à tort vérifiés par trace (pas seulement par les tests) : tiers désignant deux personnes différentes comme R et A (`targetUserId !== actingUserId` → sortie immédiate) ; rôles `C`/`I` toujours hors scope (`otherRole` vaut `null`). Test `SEC-016` (`SecurityBoundaries.test.ts` L1245-1271) relu intégralement : diff strictement limité à `it.fails(` → `it(`, assertion `.rejects.toThrow(ForbiddenError)` et corps du test inchangés — non affaibli. `npm run typecheck && npm test` relancés indépendamment dans `backend/` (pas repris du rapport dev-backend) : typecheck propre, **35 fichiers / 376 tests verts**. **Verdict global Lot 1 (les 6 points de la revue du 2026-09-28 + SEC-016) : 6/6 CONFIRMED_SAFE/CONFIRMED_FIXED — feu vert Security pour le câblage `RiskService`/`ControlService`/`ActionPlanService` + écran frontend**, sous réserve d'un point de vigilance non bloquant déjà noté (repositories optionnels d'`ActionPlanService`/`RaciAssignmentService` toujours injectés à tout futur point de construction) et d'un **nouveau retest Security une fois RACI effectivement câblé dans un flux d'approbation métier** (le risque métier plus large — Accountable seul sans `R` jamais gaté — devient exploitable seulement à ce moment-là, pas sur ce commit). Détail complet : `SHARED_LOG.md`, entrée `@security` du 2026-09-28 (retest SEC-016). | 2026-09-28 | **CLOSED — CONFIRMED_FIXED, feu vert Security pour la suite du Lot 1.** |
+
+```
+DECISION-036
+DATE: 2026-10-11
+QUESTION: Rapport SonarCloud (A10, `docs/security/sonarcloud-issues.md`) — que corriger maintenant ?
+DECISION:
+  Lot S1 maintenant (avant toute promotion staging → main) : `--ignore-scripts`
+    sur les 5 `npm ci` (`ci.yml`, `migrate.yml`, `backend/Dockerfile`),
+    Semgrep épinglé avec hash, limites multer (`files`, `fields`, `parts`)
+    sur `evidences.routes.ts` et `riskImport.routes.ts`.
+  Tout le reste (dette TS/React/design-system, scripts Telegram, legacy,
+    réglage Sonar D5) est reporté à un lot « dette Sonar » après bouclage
+    du projet.
+  Tris `CartographyPage.tsx` (S2871) : non traités — page gelée par
+    consigne PO.
+RELATED: ligne « SonarCloud — base et plan de correction » ci-dessus.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — S1 dispatché (devops + dev-backend).
+```

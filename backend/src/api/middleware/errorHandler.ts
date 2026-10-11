@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { MulterError } from "multer";
 import type { NextFunction, Request, Response } from "express";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../../domain/errors/DomainErrors.js";
 
@@ -9,6 +10,11 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   }
   if (err instanceof ZodError) {
     res.status(400).json({ error: "Requête invalide.", requestId: req.requestId });
+    return;
+  }
+  if (err instanceof MulterError) {
+    const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+    res.status(status).json({ error: "Téléversement invalide.", requestId: req.requestId });
     return;
   }
   if (err instanceof NotFoundError) {
