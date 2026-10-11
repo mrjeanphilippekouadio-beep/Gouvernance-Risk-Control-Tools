@@ -111,3 +111,11 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - F-B8q-01 : le repo avait déjà un pattern transaction (`revokeFromUser`) -> `assignToUser` fait BEGIN + `SELECT ... FOR UPDATE` sur la ligne `roles` (non supprimée, sinon NotFoundError) + INSERT. `update` laissé tel quel : un UPDATE verrouille déjà la ligne. Limite : cela ordonne l'INSERT et l'UPDATE mais ne ferme pas la fenêtre check-then-act du service (règles de cumul lues avant) ; il faudrait les rejouer sous verrou.
 - F-B8q-03 : pas de transaction inter-repos (audit/rôles/changements = trois repos). Choix : (a) si `roles.update` échoue, relire le rôle ; si ses droits égalent ceux du changement, il est appliqué -> pas de reopen, on poursuit vers l'audit ; (b) `reopen` SQL gardé par `NOT EXISTS` autre PENDING du même rôle, retourne un booléen ; `false` loggé, erreur d'origine renvoyée. Requête 7 (APPROVED sans audit_logs) ajoutée à `docs/security/B8-predeploy-checks.sql`.
 - Leçon : commandes bash composées (heredoc + git) refusées en worktree ; découper et passer par Write/Edit.
+## 2026-10-11 EVD-2 « Analyse » (branche wt/evd2, base 720b606, aucune migration)
+
+- `POST /api/v1/evidences/:id/analysis` (permission `evidence.import`, limiteur `costlyOperationRateLimiter`) -> `EvidenceService.analyze` : permission, lookup tenant-scopé (`getOwnedOrThrow`), refus si non xlsx / sans sha256 / `fileSize` > 5 Mo, PUIS `getContent`, contrôle SHA-256 (409 si altéré), PUIS `analyzeXlsx` (`services/xlsxAnalysis.ts` : plafond 5 Mo, `assertSafeXlsxArchive`, exceljs, 50 feuilles, 20 000 lignes, 50 colonnes). Le plafond de lecture Drive 25 Mo (`getContent`) est celui d'EVD-1.
+- Aucune écriture, aucun audit (cadrage : « Aucune écriture »). Question ouverte : auditer la lecture du contenu comme `DOWNLOAD` ?
+- Exemples toujours renvoyés : aucun indicateur `confidential`/données personnelles n'existe sur `Evidence` (décision 14 du cadrage, dataset EVD-3). Signalé, non inventé.
+- Formules : on lit `result` en cache, jamais évaluées. Colonnes entièrement vides (en-tête ET données) non listées ; colonne avec en-tête et sans donnée : `isEmpty: true`.
+- `evidence.import` NON ajouté aux groupes fixes : HUMAN l'accorde par SQL.
+- Leçon : commande bash composée avec heredoc python refusée dans le worktree -> Write/Edit directement.
