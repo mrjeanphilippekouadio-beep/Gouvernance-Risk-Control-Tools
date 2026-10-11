@@ -389,3 +389,40 @@ Aucune chaîne exploitable sans compte privilégié `role.update`.
 
 ### Statut
 F-B8b-01, 02, 03, 06 : RETEST_PASS (CLOSED côté sécurité, résidus INFO). F-B8b-04, 05 : RETEST_FAIL partiel, résidus portés par F-B8t-01..04 (REMEDIATION_REQUIRED : F-B8t-01 MEDIUM avant la production du lot ; F-B8t-02..04 LOW). F-B8t-05, 06 INFO. B-8 quater : PASS (config, migration 054, cartographie, notifications). À rejouer sur staging : 053 et 054, puis `B8-predeploy-checks.sql` (ajouter le contrôle des PENDING). À tracker (7bis) : F-B8t-01..04 (A06 ; F-B8t-01 et définition de « administrateur » : A13/A14).
+
+## Retest B-8 quinquies — 2026-10-11 (A10, retest statique + vitest de `fbf96f9`, tête `dc0b9a2`)
+
+**Escalade HUMAN : aucune** (max CVSS 2,7). Verdict : **F-B8t-01 RETEST_PASS, F-B8t-03 RETEST_PASS (résidu INFO), F-B8t-04 RETEST_PASS avec résidu LOW**. Aucun bloquant. Limites : lecture de `RoleService.ts`, `PostgresRoleRepository.ts`, `PostgresRolePermissionChangeRepository.ts`, `roles.routes.ts`, `fixedGroupPermissions.ts`, migrations 051/053 ; vitest `B8quinquies`, `B8ter`, `QA-B8quater` (106 verts) ; pas de base Postgres réelle (concurrence raisonnée). Un test vert ne vaut pas attaque : les contournements ont été cherchés dans le code. CVSS 3.1 estimé ; le risque métier reste au Risk Manager.
+
+### Contournements cherchés (F-B8t-01)
+| Scénario | Résultat |
+|---|---|
+| Ajout `audit.read` à un rôle ordinaire détenu par un RM | Bloqué : `assertNoCumul(resulting, others)` rejoué par porteur actif, tout-ou-rien (la boucle précède `roles.update`). |
+| Ajout de `role.assign` (ou autre `ADMIN_PERMISSIONS`) au groupe RM | Plus silencieux : motif obligatoire (zod + service), notification Audit/Comité par porteur, motif tracé dans l'audit. **Non interdit** : choix q63 (cumul admin+RM permis avec réserve), pas un défaut. |
+| Retrait puis ajout en deux appels | Bloqué : la détection compare à `before` à chaque appel ; le 2e appel voit `p` absent de `before`, donc rejoue. Et `previous` contient l'état courant, donc la transition est bien recalculée. |
+| Édition d'un rôle non assigné puis assignation | Bloqué : `assertAssignable` rejoue `assertCumulRules` à l'assignation (le rôle peut être admin ou auditeur seul). `ConflictError` sur doublon. |
+| Permission admin ajoutée au Comité / Audit | Audit : whitelist lecture seule. Comité : **aucune règle** (INFO, cf. F-B8q-02). |
+| Réactivation de rôle désactivé | Pas de route d'enable, `listForUser` exclut les rôles désactivés : fermé. |
+| Porteurs suspendus | `listAssignments` ne joint pas `users` : les suspendus sont rejoués (conservateur, correct au retour de `user.reactivate`). |
+| Deux `PATCH` concurrents | `permissions` est un remplacement complet ; le dernier gagne, aucun cumul combiné nouveau. |
+| `reason` sans besoin | Accepté, stocké `trim`, borné 500 : sans effet de sécurité. |
+
+### Constats
+- **F-B8q-01 (LOW, `AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:N` = 2,7, PROBABLE par lecture)** — Course `update` / `assignToUser` sans verrou. `update` lit `listAssignments` puis écrit ; `assignToUser` lit le rôle puis `INSERT` nu. Deux administrateurs simultanés (ajout `audit.read` au rôle X pendant l'assignation de X à un RM) passent chacun leur contrôle sur un instantané périmé. Fenêtre de quelques ms, deux comptes `role.*`. Reco A06 : `SELECT ... FOR UPDATE` sur la ligne `roles` dans les deux chemins (déjà fait pour `revokeFromUser`), ou revérification après écriture. Même classe que le résidu de F-B8t-02 (course), non traité par ce lot.
+- **F-B8q-02 (INFO)** — Définition « administrateur » : (i) `rolegroup.audit.update` figure dans `ADMIN_PERMISSIONS` mais `rolegroupAuditPermissionAllowedOn` interdit à tout rôle de la porter : seul le canal legacy `users.roles` peut la détenir, et `isAdministrator` ne lit que le RBAC ; l'entrée est donc inopérante et l'angle mort legacy de **F-B8t-02 reste ouvert** (non couvert par ce lot) ; (ii) les groupes Comité (validateur des droits Audit) et ordinaires peuvent recevoir des permissions d'administration sans règle de cumul admin+Comité ; (iii) l'élargissement de `ADMIN_PERMISSIONS` (`config.*`) est rétroactif sans contrôle : tout porteur existant de `config.cumul.set` + RM devient admin+RM sans motif (aucun rôle seedé ne la porte) ; ajouter au `B8-predeploy-checks.sql` la détection des doubles admin+RM existants ; (iv) l'audit du `PATCH` ne liste pas les utilisateurs touchés (reconstruction par `user_roles`, perdue après révocation). À arbitrer par A13/A14.
+- **F-B8q-03 (LOW, `AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:N` = 2,7, PROBABLE)** — Résidu de F-B8t-04, voir ci-dessous.
+
+### F-B8t-03 — RETEST_PASS
+`approve=true` revérifie `isAuditGroupPermission` avant le claim : un PENDING hors liste blanche renvoie 400 et reste PENDING, sans claim orphelin ; il reste rejetable (le message l'indique). Contrôle 6 ajouté à `B8-predeploy-checks.sql` (SQL fixe, équivalent de la liste blanche). Non traités (reco inchangée, INFO 2,0) : auteur non revérifié (perte de `rolegroup.audit.update`, suspension), pas d'expiration, `assertKnownPermissions` non rejoué à l'approbation. Effet de bord : un PENDING hors liste blanche bloque tout nouveau changement (index unique) tant qu'il n'est pas rejeté ; fail-closed.
+
+### F-B8t-04 — événement d'audit manquant : évaluation
+Séquence actuelle : claim `decide` ; si `getById`/`update` échoue, `reopen` (rien n'est appliqué, correct) ; si l'application réussit, deux `audit.record` (Role `PERMISSION_CHANGE` avec avant/après, puis `RolePermissionChange` `APPROVE`) ; en cas d'échec d'audit : `console.error` avec changeId + requestId, erreur renvoyée, statut reste APPROVED. L'incohérence « droits appliqués, statut PENDING/REJECTED » de F-B8t-04 est fermée.
+- **Ce qui est perdu** si l'audit échoue : la ligne `audit_logs` et surtout l'instantané « avant » des permissions du groupe (`roles.update` écrase, `role_permission_changes` ne garde que l'« après »). Le qui/quand/pourquoi survit dans `role_permission_changes` (`requested_by`, `reason`, `decided_by`, `decided_at`, `permissions`) et dans le log applicatif. Le client reçoit 500 et un rejeu donne « already decided » : **personne ne peut réémettre l'événement**, et rien ne signale l'écart sauf le log.
+- **Exploitabilité** : l'attaquant ne contrôle pas l'échec d'insertion (reason de longueur fixe, `entity_type` sans CHECK, `action` APPROVE/REJECT/PERMISSION_CHANGE/READ dans la CHECK de 051) ; seule une panne transitoire (Neon, timeout, pool) l'induit. Un validateur indépendant malveillant ne peut pas la provoquer à volonté ; l'effet sur les droits est de toute façon celui qu'il a le droit d'approuver. Risque = perte de preuve, pas élévation.
+- **Résidus** (F-B8q-03) : (a) échec ambigu — `roles.update` validé côté base mais réponse perdue (timeout réseau) : `reopen` remet PENDING alors que les droits sont appliqués, un second validateur peut REJETER (REJECTED + droits appliqués) ; (b) inverse : l'application échoue et un nouveau PENDING a été créé pendant la fenêtre (le claim libère l'index unique) : `reopen` viole l'index, erreur seulement loggée, statut APPROVED sans droits appliqués. Reco A06 (une des deux) : écrire l'audit AVANT l'application (statut intermédiaire), ou claim+update+audit dans une transaction d'un repository dédié ; requête de réconciliation « APPROVED sans ligne audit_logs correspondante » dans `B8-predeploy-checks.sql` ; alerte sur le log `audit write failed`. Aligner avec A23 (Audit & Observability) : Security Control ≠ Audit Evidence ≠ Detection.
+
+### Chaînes d'attaque
+Aucune nouvelle. F-B8q-01 + F-B8t-02 (legacy/course) exigent deux comptes privilégiés et ne donnent qu'un cumul de gouvernance, pas d'accès externe.
+
+### Statut
+F-B8t-01 RETEST_PASS (CLOSED côté sécurité). F-B8t-03 RETEST_PASS (CLOSED, résidus INFO). F-B8t-04 RETEST_PASS, résidu F-B8q-03 REMEDIATION_REQUIRED (LOW, A06). F-B8t-02 inchangé (LOW, ouvert), F-B8q-01 LOW (A06), F-B8q-02 INFO (A13/A14). À tracker (7bis) : F-B8q-01, F-B8q-03 (A06), F-B8q-02 (A13/A14). Rejouer le contrôle 6 de `B8-predeploy-checks.sql` sur staging.
