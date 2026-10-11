@@ -709,12 +709,24 @@ export class RoleService {
         before = await this.roles.getById(actor.tenantId, change.roleId);
         after = await this.roles.update(actor.tenantId, change.roleId, { permissions: change.permissions });
       } catch (err) {
-        try {
-          await this.permissionChanges.reopen?.(actor.tenantId, changeId);
-        } catch (reopenErr) {
-          console.error(`Audit-rights change ${changeId}: could not be reopened after a failed application`, reopenErr instanceof Error ? reopenErr.message : reopenErr);
+        // F-B8q-03(a): the update may have been committed with the response lost. If the stored rights already
+        // equal the change, it IS applied: keep APPROVED and carry on to the audit write instead of reopening.
+        const current = await this.roles.getById(actor.tenantId, change.roleId).catch(() => null);
+        if (current && current.permissions.length === change.permissions.length
+            && change.permissions.every((p) => current.permissions.includes(p))) {
+          after = current;
+        } else {
+          try {
+            // F-B8q-03(b): reopen is a no-op (false) if another PENDING exists for this role.
+            const reopened = await this.permissionChanges.reopen?.(actor.tenantId, changeId);
+            if (reopened === false) {
+              console.error(`Audit-rights change ${changeId}: application failed but it could not be reopened (another change is PENDING); it stays APPROVED without applied rights`);
+            }
+          } catch (reopenErr) {
+            console.error(`Audit-rights change ${changeId}: could not be reopened after a failed application`, reopenErr instanceof Error ? reopenErr.message : reopenErr);
+          }
+          throw err;
         }
-        throw err;
       }
     }
     try {

@@ -10,7 +10,7 @@ export interface RolePermissionChangeRepository {
    * B-8 ter (F-B8b-04): undoes an APPROVED claim whose application failed, so the change can be retried.
    * Optional so older test doubles keep compiling; the Postgres repository implements it.
    */
-  reopen?(tenantId: string, id: string): Promise<void>;
+  reopen?(tenantId: string, id: string): Promise<boolean | void>;
   /** B-8 ter: changes of a tenant, newest first (optional for the same reason as reopen). */
   list?(tenantId: string, filter: { status?: RolePermissionChangeStatus; roleId?: string }): Promise<RolePermissionChange[]>;
 }

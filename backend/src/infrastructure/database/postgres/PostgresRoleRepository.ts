@@ -3,7 +3,7 @@ import type { RoleRepository } from "../../../domain/repositories/RoleRepository
 import type { CreateRoleInput, Role, RoleAssignment, SystemGroup, UpdateRoleInput } from "../../../domain/entities/Role.js";
 import type { Permission } from "../../../domain/permissions.js";
 import type { DashboardScopeMode } from "../../../domain/entities/DashboardScope.js";
-import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 
 interface RoleRow {
@@ -167,15 +167,37 @@ export class PostgresRoleRepository implements RoleRepository {
   }
 
   async assignToUser(tenantId: string, roleId: string, userId: string, grantedBy: string): Promise<RoleAssignment> {
-    const { rows } = await this.pool.query<UserRoleRow>(
-      `INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [tenantId, roleId, userId, grantedBy],
-    );
-    const row = rows[0];
-    if (!row) throw new Error("Insert into user_roles returned no row");
-    return assignmentToDomain(row);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      // F-B8q-01: same row lock as revokeFromUser; it orders this insert against a concurrent roles UPDATE
+      // (which row-locks the same line) and refuses a role disabled in the meantime.
+      const locked = await client.query(
+        `SELECT id FROM roles WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+        [tenantId, roleId],
+      );
+      if (!locked.rowCount) throw new NotFoundError("Role", roleId);
+      const { rows } = await client.query<UserRoleRow>(
+        `INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [tenantId, roleId, userId, grantedBy],
+      );
+      await client.query("COMMIT");
+      const row = rows[0];
+      if (!row) throw new Error("Insert into user_roles returned no row");
+      return assignmentToDomain(row);
+    } catch (err) {
+      await client.query("ROLLBACK");
+      // q65-02: the loser of two simultaneous assignments hits user_roles_active_idx (23505) -> 409, not 500.
+      if (typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505"
+          && (err as { constraint?: unknown }).constraint === "user_roles_active_idx") {
+        throw new ConflictError("This user already holds this role", roleId);
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async revokeFromUser(

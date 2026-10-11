@@ -104,3 +104,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - F-B8t-04 : aucune transaction inter-repos dans le repo -> choix simple : `reopen` seulement si l'application des droits échoue ; une fois appliqués, un échec d'audit est loggé et renvoyé SANS reopen (statut APPROVED = droits appliqués). Limite : l'événement d'audit manquant n'est pas rejoué.
 - Fakes de tests B8ter/QA-B8quater : `listAssignments` ajouté (méthode requise de l'interface réelle, fail-closed plutôt que `?.`).
 - Leçon : un heredoc dans une commande composée est refusé ; Write d'un script dans le scratchpad (nom unique : edit.py existait déjà).
+
+## 2026-10-11 B-8 sexies (branche wt/b8r, base 720b606, aucune migration)
+
+- q65-02 : `PostgresRoleRepository.assignToUser` traduit 23505 sur `user_roles_active_idx` en `ConflictError` (409). Le `it.fails` de QA-B8quinquies est devenu `it` (le faux repo lève maintenant `ConflictError`, comme le vrai).
+- F-B8q-01 : le repo avait déjà un pattern transaction (`revokeFromUser`) -> `assignToUser` fait BEGIN + `SELECT ... FOR UPDATE` sur la ligne `roles` (non supprimée, sinon NotFoundError) + INSERT. `update` laissé tel quel : un UPDATE verrouille déjà la ligne. Limite : cela ordonne l'INSERT et l'UPDATE mais ne ferme pas la fenêtre check-then-act du service (règles de cumul lues avant) ; il faudrait les rejouer sous verrou.
+- F-B8q-03 : pas de transaction inter-repos (audit/rôles/changements = trois repos). Choix : (a) si `roles.update` échoue, relire le rôle ; si ses droits égalent ceux du changement, il est appliqué -> pas de reopen, on poursuit vers l'audit ; (b) `reopen` SQL gardé par `NOT EXISTS` autre PENDING du même rôle, retourne un booléen ; `false` loggé, erreur d'origine renvoyée. Requête 7 (APPROVED sans audit_logs) ajoutée à `docs/security/B8-predeploy-checks.sql`.
+- Leçon : commandes bash composées (heredoc + git) refusées en worktree ; découper et passer par Write/Edit.
