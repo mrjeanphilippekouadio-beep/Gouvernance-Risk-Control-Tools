@@ -249,7 +249,7 @@ describe("QA-EVD1 HTTP layer", () => {
 
   // QA-EVD1-1: errorHandler has no ZodError branch (pre-existing, global), so a malformed
   // allowDuplicate (strict z.enum) answers 500 instead of 400. Expected: 400.
-  it.fails.each(["TRUE", "1", "yes", ""])("QA-EVD1-1 malformed allowDuplicate=%j answers 4xx (not 500)", async (bad) => {
+  it.each(["TRUE", "1", "yes", ""])("QA-EVD1-1 malformed allowDuplicate=%j answers 4xx (not 500)", async (bad) => {
     const { base } = await start(userA);
     const c = xlsxBytes("bad" + bad);
     const fields = { documentType: "X", controlExecutionId: "exec-1" };
@@ -269,7 +269,7 @@ describe("QA-EVD1 HTTP layer", () => {
   });
 
   // QA-EVD1-2: same root cause as QA-EVD1-1 for GET /evidences without controlExecutionId (500, expected 400).
-  it.fails("QA-EVD1-2 list without controlExecutionId answers 4xx (not 500)", async () => {
+  it("QA-EVD1-2 list without controlExecutionId answers 4xx (not 500)", async () => {
     const { base } = await start(userA);
     const missing = await fetch(base);
     expect(missing.status).toBeGreaterThanOrEqual(400);

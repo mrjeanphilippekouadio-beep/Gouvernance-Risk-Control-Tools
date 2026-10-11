@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 import { google, type drive_v3 } from "googleapis";
 import { GoogleAuth } from "google-auth-library";
 import { resolveGoogleDriveAuthOptions, type GoogleDriveAuthMode } from "./googleDriveAuth.js";
-import type { DocumentStorage, StoredDocumentRef } from "./DocumentStorage.js";
+import { MAX_DOCUMENT_BYTES, type DocumentStorage, type StoredDocumentRef } from "./DocumentStorage.js";
 
 /**
  * Google Drive-backed implementation of DocumentStorage.
@@ -93,6 +93,10 @@ export class GoogleDriveStorage implements DocumentStorage {
 
   async getContent(storageFileId: string): Promise<Buffer> {
     const drive = await this.drive();
+    const meta = await drive.files.get({ fileId: storageFileId, fields: "size", supportsAllDrives: true });
+    if (Number(meta.data.size ?? 0) > MAX_DOCUMENT_BYTES) {
+      throw new Error(`Drive file ${storageFileId} exceeds the ${MAX_DOCUMENT_BYTES / (1024 * 1024)}MB limit; refusing to read it.`);
+    }
     const res = await drive.files.get(
       { fileId: storageFileId, alt: "media", supportsAllDrives: true },
       { responseType: "arraybuffer" },

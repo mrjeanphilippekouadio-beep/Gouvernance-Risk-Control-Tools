@@ -289,4 +289,28 @@ describe("EvidenceService", () => {
     expect(list[0]).not.toHaveProperty("driveFileId");
     expect(await service.listForControlExecution(tenantBUser, "exec-1")).toHaveLength(0);
   });
+
+  it("SEC-EVD1-1: upload returns a summary without Drive references", async () => {
+    const service = new EvidenceService(inMemoryEvidenceRepository(), fakeDocumentStorage(), inMemoryAuditRepository());
+    const evidence = await service.upload(
+      tenantAUser,
+      { fileName: "preuve.xlsx", mimeType: XLSX, content: xlsxBytes, documentType: "CONTROL_EVIDENCE", controlExecutionId: "exec-1" },
+      "REQ-S1",
+    );
+    expect(evidence).not.toHaveProperty("driveUrl");
+    expect(evidence).not.toHaveProperty("driveFileId");
+    expect(evidence.sha256).toBeTruthy();
+  });
+
+  it("SEC-EVD1-2: duplicate 409 reveals the existing id only to an actor with evidence.read", async () => {
+    const service = new EvidenceService(inMemoryEvidenceRepository(), fakeDocumentStorage(), inMemoryAuditRepository());
+    const params = { fileName: "preuve.xlsx", mimeType: XLSX, content: xlsxBytes, documentType: "CONTROL_EVIDENCE", controlExecutionId: "exec-1" };
+    const first = await service.upload(tenantAUser, params, "REQ-S2");
+
+    const uploadOnly = { ...tenantAUser, userId: "user-c", roles: ["evidence.upload"] as typeof tenantAUser.roles };
+    const err = (await service.upload(uploadOnly, params, "REQ-S3").catch((e: unknown) => e)) as ConflictError;
+    expect(err).toBeInstanceOf(ConflictError);
+    expect(err.existingId).toBeUndefined();
+    expect(err.message).not.toContain(first.id);
+  });
 });

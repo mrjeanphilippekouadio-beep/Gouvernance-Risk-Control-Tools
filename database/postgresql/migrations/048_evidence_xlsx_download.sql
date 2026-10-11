@@ -35,5 +35,6 @@ WHERE deleted_at IS NULL
 -- Legacy direct grants (users.roles holds permission strings).
 UPDATE users
 SET roles = array_append(roles, 'evidence.download')
-WHERE 'evidence.read' = ANY (roles)
+WHERE deleted_at IS NULL
+  AND 'evidence.read' = ANY (roles)
   AND NOT ('evidence.download' = ANY (roles));

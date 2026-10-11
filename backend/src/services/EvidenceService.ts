@@ -6,13 +6,17 @@ import type { Evidence } from "../domain/entities/Evidence.js";
 import { ConflictError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
-import type { DocumentStorage } from "../infrastructure/storage/DocumentStorage.js";
+import { MAX_DOCUMENT_BYTES, type DocumentStorage } from "../infrastructure/storage/DocumentStorage.js";
 import { validateEvidenceFile, XLSX_MIME } from "./evidenceFileValidation.js";
 
 /** List view: no Drive reference, since reaching the file requires evidence.download. */
 export type EvidenceSummary = Omit<Evidence, "driveFileId" | "driveUrl">;
 
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB — generous for scanned evidence, not unbounded
+function toSummary({ driveFileId: _f, driveUrl: _u, ...summary }: Evidence): EvidenceSummary {
+  return summary;
+}
+
+const MAX_UPLOAD_BYTES = MAX_DOCUMENT_BYTES; // 25 MB — generous for scanned evidence, not unbounded
 
 /**
  * Owns the one rule that keeps document access tenant-isolated: never
@@ -42,7 +46,7 @@ export class EvidenceService {
       allowDuplicate?: boolean;
     },
     requestId: string,
-  ): Promise<Evidence> {
+  ): Promise<EvidenceSummary> {
     requirePermission(actor, "evidence.upload");
 
     if (!params.fileName.trim()) throw new ValidationError("fileName is required");
@@ -70,7 +74,11 @@ export class EvidenceService {
     if (!params.allowDuplicate) {
       const existing = await this.evidences.findBySha256?.(actor.tenantId, sha256);
       if (existing) {
-        throw new ConflictError(`An identical file already exists as evidence ${existing.id}`, existing.id);
+        // Only an actor allowed to read evidences learns the existing id.
+        if (actor.roles.includes("evidence.read")) {
+          throw new ConflictError(`An identical file already exists as evidence ${existing.id}`, existing.id);
+        }
+        throw new ConflictError("Un fichier identique est déjà enregistré.");
       }
     }
 
@@ -139,13 +147,13 @@ export class EvidenceService {
       throw auditError;
     }
 
-    return evidence;
+    return toSummary(evidence);
   }
 
   async listForControlExecution(actor: AuthenticatedUser, controlExecutionId: string): Promise<EvidenceSummary[]> {
     requirePermission(actor, "evidence.read");
     const items = await this.evidences.listForControlExecution(actor.tenantId, controlExecutionId);
-    return items.map(({ driveFileId: _f, driveUrl: _u, ...summary }) => summary);
+    return items.map(toSummary);
   }
 
   async getUrl(actor: AuthenticatedUser, id: string, requestId: string): Promise<string> {
