@@ -1,0 +1,35 @@
+/*
+ * Shared accessibility rules (WCAG 2.1 AA, DS-1a).
+ * One keyboard focus ring for every interactive component, built on the
+ * existing --gs-primary token. Per-component rules (DatePicker input,
+ * FileUpload, FormField) keep their own offset and are unchanged.
+ */
+.btn:focus-visible,
+.gs-tab:focus-visible,
+.gs-seg-btn:focus-visible,
+.gs-menu-item:focus-visible,
+.gs-pagination-nav:focus-visible,
+.gs-pagination-page:focus-visible,
+.gs-panel-tab:focus-visible,
+.gs-breadcrumb-link:focus-visible,
+.gs-datepicker-head button:focus-visible,
+.gs-datepicker-day:focus-visible,
+.gs-datepicker-foot button:focus-visible,
+.gs-slider input:focus-visible,
+.gs-modal:focus-visible {
+  outline: 2px solid var(--gs-primary);
+  outline-offset: 2px;
+}
+
+/* Text available to assistive technology only (reasons, captions). */
+.gs-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

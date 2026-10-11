@@ -1,0 +1,28 @@
+.catalog {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--gs-space-4);
+}
+
+.catalog section {
+  margin-top: var(--gs-space-5);
+}
+
+.catalog h3 {
+  font-family: var(--gs-font-ui);
+  font-size: var(--gs-font-size-body);
+  color: var(--gs-text-secondary);
+  margin: var(--gs-space-3) 0 var(--gs-space-2);
+}
+
+.catalog-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gs-space-3);
+  align-items: flex-start;
+}
+
+.catalog-note {
+  color: var(--gs-text-secondary);
+  font-size: 12px;
+}

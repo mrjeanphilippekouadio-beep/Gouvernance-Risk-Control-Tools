@@ -1,3 +1,4 @@
+import "./a11y.css";
 export { Breadcrumb } from "./Breadcrumb";
 export type { BreadcrumbItem } from "./Breadcrumb";
 export { Button } from "./Button";
