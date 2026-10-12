@@ -4,6 +4,7 @@ import type { CreateRoleInput, Role, RoleAssignment, SystemGroup, UpdateRoleInpu
 import type { Permission } from "../../../domain/permissions.js";
 import type { DashboardScopeMode } from "../../../domain/entities/DashboardScope.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import type { RoleAssignRecheck, RoleUpdateRecheck } from "../../../domain/repositories/RoleRepository.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 
 interface RoleRow {
@@ -31,6 +32,20 @@ interface UserRoleRow {
 }
 
 /** F-B8-03: unique_violation (23505) on roles_active_department_idx — two groups for one department. */
+const ROLES_OF_USER_SQL = `SELECT r.* FROM roles r
+       JOIN user_roles ur ON ur.role_id = r.id
+       WHERE ur.tenant_id = $1 AND ur.user_id = $2 AND ur.revoked_at IS NULL AND r.deleted_at IS NULL
+       ORDER BY r.name`;
+
+/** A failing ROLLBACK (dead connection) must not replace the error that caused it. */
+async function rollbackQuietly(client: { query(sql: string): Promise<unknown> }): Promise<void> {
+  try {
+    await client.query("ROLLBACK");
+  } catch {
+    /* the original error is the one to report */
+  }
+}
+
 function rethrowDepartmentConflict(err: unknown): never {
   if (typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505"
       && (err as { constraint?: unknown }).constraint === "roles_active_department_idx") {
@@ -116,7 +131,8 @@ export class PostgresRoleRepository implements RoleRepository {
     return toDomain(row);
   }
 
-  async update(tenantId: string, id: string, input: UpdateRoleInput): Promise<Role> {
+  async update(tenantId: string, id: string, input: UpdateRoleInput, recheck?: RoleUpdateRecheck): Promise<Role> {
+    if (recheck) return this.updateUnderLock(tenantId, id, input, recheck);
     const { setClauses, values } = buildUpdateSet(
       {
         name: input.name,
@@ -146,6 +162,63 @@ export class PostgresRoleRepository implements RoleRepository {
     return toDomain(row);
   }
 
+  /**
+   * F-B8s-01: lock order is always users (by id) THEN the role, like assignToUser. The holders are re-read
+   * after the role lock; a holder that appeared meanwhile was not locked, so we refuse (retry) rather than guess.
+   */
+  private async updateUnderLock(tenantId: string, id: string, input: UpdateRoleInput, recheck: RoleUpdateRecheck): Promise<Role> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const holdersSql = `SELECT DISTINCT user_id FROM user_roles WHERE tenant_id = $1 AND role_id = $2 AND revoked_at IS NULL`;
+      const first = await client.query<{ user_id: string }>(holdersSql, [tenantId, id]);
+      const ids = first.rows.map((r) => r.user_id).sort();
+      if (ids.length > 0) {
+        await client.query(`SELECT id FROM users WHERE tenant_id = $1 AND id = ANY($2::uuid[]) ORDER BY id FOR UPDATE`, [tenantId, ids]);
+      }
+      const locked = await client.query<RoleRow>(
+        `SELECT * FROM roles WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+        [tenantId, id],
+      );
+      if (!locked.rows[0]) throw new NotFoundError("Role", id);
+      const second = await client.query<{ user_id: string }>(holdersSql, [tenantId, id]);
+      if (second.rows.some((r) => !ids.includes(r.user_id))) {
+        throw new ConflictError("Role assignments changed concurrently; retry");
+      }
+      const holders: { userId: string; roles: Role[] }[] = [];
+      for (const userId of ids) {
+        const { rows } = await client.query<RoleRow>(ROLES_OF_USER_SQL, [tenantId, userId]);
+        holders.push({ userId, roles: rows.map(toDomain) });
+      }
+      await recheck(toDomain(locked.rows[0]), holders);
+      const { setClauses, values } = buildUpdateSet(
+        {
+          name: input.name,
+          description: input.description,
+          permissions: input.permissions,
+          dashboard_scope_mode: input.dashboardScopeMode,
+          department_id: input.departmentId,
+        },
+        3,
+      );
+      if (setClauses.length === 0) throw new Error("update with recheck needs at least one field");
+      const { rows } = await client
+        .query<RoleRow>(
+          `UPDATE roles SET ${setClauses.join(", ")}, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+          [tenantId, id, ...values],
+        )
+        .catch(rethrowDepartmentConflict);
+      await client.query("COMMIT");
+      if (!rows[0]) throw new NotFoundError("Role", id);
+      return toDomain(rows[0]);
+    } catch (err) {
+      await rollbackQuietly(client);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   async disable(tenantId: string, id: string): Promise<void> {
     const { rowCount } = await this.pool.query(
       `UPDATE roles SET deleted_at = now(), updated_at = now()
@@ -166,17 +239,34 @@ export class PostgresRoleRepository implements RoleRepository {
     return Number(rows[0]?.count ?? 0);
   }
 
-  async assignToUser(tenantId: string, roleId: string, userId: string, grantedBy: string): Promise<RoleAssignment> {
+  async assignToUser(
+    tenantId: string,
+    roleId: string,
+    userId: string,
+    grantedBy: string,
+    recheck?: RoleAssignRecheck,
+  ): Promise<RoleAssignment> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      // F-B8q-01: same row lock as revokeFromUser; it orders this insert against a concurrent roles UPDATE
-      // (which row-locks the same line) and refuses a role disabled in the meantime.
-      const locked = await client.query(
-        `SELECT id FROM roles WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+      // F-B8s-01: lock the target user first (one lock common to every role assigned to them), then the role.
+      // Same order as updateUnderLock, so no deadlock between an assignment and a role update.
+      const user = await client.query(
+        `SELECT id FROM users WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+        [tenantId, userId],
+      );
+      if (!user.rowCount) throw new NotFoundError("User", userId);
+      // F-B8q-01: orders this insert against a concurrent roles UPDATE and refuses a role disabled meanwhile.
+      const locked = await client.query<RoleRow>(
+        `SELECT * FROM roles WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
         [tenantId, roleId],
       );
       if (!locked.rowCount) throw new NotFoundError("Role", roleId);
+      if (recheck) {
+        // Replay the cumul rules on what is committed NOW, under both locks (the service's first check may be stale).
+        const held = await client.query<RoleRow>(ROLES_OF_USER_SQL, [tenantId, userId]);
+        await recheck(toDomain(locked.rows[0] as RoleRow), held.rows.map(toDomain));
+      }
       const { rows } = await client.query<UserRoleRow>(
         `INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by)
          VALUES ($1, $2, $3, $4)
@@ -188,7 +278,7 @@ export class PostgresRoleRepository implements RoleRepository {
       if (!row) throw new Error("Insert into user_roles returned no row");
       return assignmentToDomain(row);
     } catch (err) {
-      await client.query("ROLLBACK");
+      await rollbackQuietly(client);
       // q65-02: the loser of two simultaneous assignments hits user_roles_active_idx (23505) -> 409, not 500.
       if (typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505"
           && (err as { constraint?: unknown }).constraint === "user_roles_active_idx") {
@@ -231,7 +321,7 @@ export class PostgresRoleRepository implements RoleRepository {
       if (!rowCount) throw new NotFoundError("RoleAssignment", `${roleId}:${userId}`);
       await client.query("COMMIT");
     } catch (err) {
-      await client.query("ROLLBACK");
+      await rollbackQuietly(client);
       throw err;
     } finally {
       client.release();
@@ -239,13 +329,7 @@ export class PostgresRoleRepository implements RoleRepository {
   }
 
   async listForUser(tenantId: string, userId: string): Promise<Role[]> {
-    const { rows } = await this.pool.query<RoleRow>(
-      `SELECT r.* FROM roles r
-       JOIN user_roles ur ON ur.role_id = r.id
-       WHERE ur.tenant_id = $1 AND ur.user_id = $2 AND ur.revoked_at IS NULL AND r.deleted_at IS NULL
-       ORDER BY r.name`,
-      [tenantId, userId],
-    );
+    const { rows } = await this.pool.query<RoleRow>(ROLES_OF_USER_SQL, [tenantId, userId]);
     return rows.map(toDomain);
   }
 

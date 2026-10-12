@@ -21,7 +21,16 @@ const LOCAL_HEADER_FIXED_SIZE = 30;
  * entries. Each entry is really inflated with its output capped at its
  * declared size, so memory stays bounded by MAX_UNCOMPRESSED_TOTAL.
  */
-export function assertSafeXlsxArchive(buffer: Buffer): void {
+export interface ArchiveLimits {
+  /** Max total decompressed bytes (default 20 MB). */
+  maxTotal?: number;
+  /** Max decompressed bytes for a single entry (default: the total). */
+  maxEntry?: number;
+}
+
+export function assertSafeXlsxArchive(buffer: Buffer, limits: ArchiveLimits = {}): void {
+  const maxTotal = limits.maxTotal ?? MAX_UNCOMPRESSED_TOTAL;
+  const maxEntry = limits.maxEntry ?? maxTotal;
   const bad = (msg: string) => new ValidationError(`Invalid Excel file: ${msg}`);
   const inconsistent = () => bad("inconsistent archive");
   const entries: { name: string; method: number; compressed: number; uncompressed: number; localOffset: number }[] = [];
@@ -84,7 +93,7 @@ export function assertSafeXlsxArchive(buffer: Buffer): void {
     if (name === "xl/workbook.xml") hasWorkbook = true;
 
     total += uncompressed;
-    if (total > MAX_UNCOMPRESSED_TOTAL) throw bad("decompressed size exceeds the allowed limit");
+    if (total > maxTotal || uncompressed > maxEntry) throw bad("decompressed size exceeds the allowed limit");
     if (uncompressed >= RATIO_CHECK_MIN_SIZE && uncompressed > compressed * MAX_COMPRESSION_RATIO) {
       throw bad("suspicious compression ratio");
     }
