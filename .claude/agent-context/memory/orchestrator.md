@@ -21,3 +21,8 @@ Mémoire persistante du rôle Orchestrateur sur GRC Tools. Obligatoire : la mett
 ## Historique
 
 - 2026-10-11 — Base SonarCloud (688 issues) et triage Snyk ; lots S1 (PR #147) et S-1 zod (PR #148) livrés sur staging ; DECISION-036/037 ; retours d'expérience versés dans PEOS.
+
+## 2026-10-12 — Réponses du cockpit non relues pendant ~7 h (q79–q95)
+- Le PO avait répondu à q79–q93 vers 01:20 UTC ; je les ai annoncées « en attente » jusqu'à 08:40, et deux PR (#165, #166) ont été fusionnées avec du code que q87/q90/q94/q95 modifiaient.
+- Règle : à chaque transition (PR fusionnée, retour d'agent, avant tout dispatch), requêter `questions` avec `status == "answered"` et comparer au Decision Log ; toute réponse non journalisée passe avant le reste.
+- Une réponse libre (champ `decision = other`) s'inscrit avec l'interprétation explicitement marquée « à confirmer par A13 », jamais reformulée comme si c'était le texte du PO.
