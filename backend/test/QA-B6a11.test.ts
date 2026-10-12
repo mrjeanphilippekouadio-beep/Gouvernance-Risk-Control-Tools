@@ -55,15 +55,18 @@ describe("down migrations remove their schema_migrations row (F-B6a-13)", () => 
 
 // F-B6a-14: CREATE OR REPLACE drops a function's SET search_path. Any trigger function (re)defined from 058 on
 // must pin it, either in its definition or by an ALTER FUNCTION ... SET search_path in the same migration.
+// The value matters, not just its presence: pg_temp anywhere but last reopens the temp-table bypass.
+const PATH = "([a-z_0-9]+(?:\\s*,\\s*[a-z_0-9]+)*)";
+const pinned = (v?: string) => v?.split(",").map((s) => s.trim()).join(",") === "pg_catalog,public,pg_temp";
 describe("trigger functions from 058 on pin search_path (F-B6a-14)", () => {
   const ups = readdirSync(dir).filter((f) => /^\d{3}_.*\.sql$/.test(f) && !f.endsWith(".down.sql") && Number(f.slice(0, 3)) >= 58);
   it.each(ups)("%s", (f) => {
     const sql = strip(read(f));
     for (const m of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([a-z_0-9.]+)\s*\([^)]*\)\s*RETURNS\s+trigger([\s\S]*?)(\$[A-Za-z_]*\$)/gi)) {
-      const inline = /SET\s+search_path\s*=/i.test(m[2]);
+      const inline = pinned(new RegExp(`SET\\s+search_path\\s*=\\s*${PATH}`, "i").exec(m[2])?.[1]);
       // Only an ALTER after this CREATE counts: a CREATE OR REPLACE resets any earlier SET.
-      const re = new RegExp(`ALTER\\s+FUNCTION\\s+${m[1].replace(".", "\\.")}\\s*\\([^)]*\\)\\s+SET\\s+search_path\\s*=`, "gi");
-      const altered = [...sql.matchAll(re)].some((a) => a.index! > m.index!);
+      const re = new RegExp(`ALTER\\s+FUNCTION\\s+${m[1].replace(".", "\\.")}\\s*\\([^)]*\\)\\s+SET\\s+search_path\\s*=\\s*${PATH}`, "gi");
+      const altered = [...sql.matchAll(re)].some((a) => a.index! > m.index! && pinned(a[1]));
       expect(inline || altered, `${f}: ${m[1]} must SET search_path = pg_catalog, public, pg_temp`).toBe(true);
     }
   });
