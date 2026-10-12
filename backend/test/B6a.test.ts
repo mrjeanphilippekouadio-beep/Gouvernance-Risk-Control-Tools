@@ -170,8 +170,11 @@ const u2 = actor("u2");
 const R = "req";
 
 /** u1 creates a framework; returns its ids. */
-async function created(s: ReturnType<typeof setup>, params: object = {}) {
-  const { framework, version } = await s.service.create(u1, { name: "Dispositif A", ratingScaleId: "s1", params }, R);
+async function created(s: ReturnType<typeof setup>, params: { changeApprover?: string } = {}) {
+  // C-B6a-02: a non-RISK_MANAGER approver cannot be written through the service before B-12: seed it as stored data.
+  const { changeApprover, ...allowed } = params;
+  const { framework, version } = await s.service.create(u1, { name: "Dispositif A", ratingScaleId: "s1", params: allowed }, R);
+  if (changeApprover) s.versions.find((x) => x.id === version.id)!.changeApprover = changeApprover as never;
   return { fw: framework.id, v: version.id };
 }
 
@@ -215,8 +218,8 @@ describe("B-6a drafts", () => {
   it("a partial update changes only the given keys and forces lastEditedBy; unknown keys such as status are ignored by the repository", async () => {
     const s = setup();
     const { fw, v } = await created(s);
-    const after = await s.service.updateDraft(u2, fw, v, { changeApprover: "COMMITTEE", committeeTreatmentMinScore: null, status: "ACTIVE" } as never, R);
-    expect(after).toMatchObject({ changeApprover: "COMMITTEE", status: "DRAFT", lastEditedBy: "u2", committeeEvaluationMinScore: 15 });
+    const after = await s.service.updateDraft(u2, fw, v, { selfProposalAllowed: true, committeeTreatmentMinScore: null, status: "ACTIVE" } as never, R);
+    expect(after).toMatchObject({ selfProposalAllowed: true, status: "DRAFT", lastEditedBy: "u2", committeeEvaluationMinScore: 15 });
     expect(s.events.at(-1)).toMatchObject({ action: "UPDATE", entityType: "RiskFrameworkVersion", userId: "u2" });
     await expect(s.service.updateDraft(u1, fw, v, {}, R)).rejects.toThrow(/Nothing to update/);
   });

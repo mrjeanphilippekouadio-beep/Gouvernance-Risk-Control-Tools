@@ -204,17 +204,20 @@ function world(o: Opts = {}) {
 type W = ReturnType<typeof world>;
 
 let n = 0;
-async function draft(w: W, params: object = {}, by = u1) {
-  const { framework, version } = await w.service.create(by, { name: `D${++n}`, ratingScaleId: S1, params }, R);
+async function draft(w: W, params: { changeApprover?: string } = {}, by = u1) {
+  // C-B6a-02: a non-RISK_MANAGER approver cannot be written through the service before B-12: seed it as stored data.
+  const { changeApprover, ...allowed } = params;
+  const { framework, version } = await w.service.create(by, { name: `D${++n}`, ratingScaleId: S1, params: allowed }, R);
+  if (changeApprover) w.versions.find((x) => x.id === version.id)!.changeApprover = changeApprover as never;
   return { fw: framework.id, v: version.id };
 }
-async function pend(w: W, params: object = {}, by = u1) {
+async function pend(w: W, params: { changeApprover?: string } = {}, by = u1) {
   const { fw, v } = await draft(w, params, by);
   const r = await w.service.requestActivation(by, fw, v, "motif", R);
   return { fw, v, r: r.id };
 }
 /** A Dispositif with an ACTIVE v1 (requested by u1, approved by u2). */
-async function live(w: W, params: object = {}) {
+async function live(w: W, params: { changeApprover?: string } = {}) {
   const p = await pend(w, params);
   await w.service.approve(u2, p.r, undefined, R);
   return p;
@@ -385,8 +388,8 @@ describe("QA-B6a decisions: wrong state, double decision, concurrency", () => {
     const { fw, v } = await draft(w);
     const evil = { status: "ARCHIVED", archivedAt: new Date(), archivedBy: "u1", archiveReason: "x", createdBy: "evil", lastEditedBy: "evil", isDefault: true, id: "x", tenantId: T2 };
     await expect(w.service.updateDraft(u1, fw, v, evil as never, R)).rejects.toThrow(/Nothing to update/);
-    await w.service.updateDraft(u2, fw, v, { ...evil, changeApprover: "AUDIT" } as never, R);
-    expect(w.calls.draftFields.at(-1)).toEqual(["changeApprover"]);
+    await w.service.updateDraft(u2, fw, v, { ...evil, selfProposalAllowed: true } as never, R);
+    expect(w.calls.draftFields.at(-1)).toEqual(["selfProposalAllowed"]);
     expect(verOf(w, v)).toMatchObject({ status: "DRAFT", lastEditedBy: "u2", createdBy: "u1", tenantId: T1, archivedAt: null });
   });
 
@@ -429,7 +432,7 @@ describe("QA-B6a circuit (q34/q72/q76/q87) and self-proposal (q92)", () => {
     await expect(w.service.reject(u2, r2, "x", R)).rejects.toThrow(ConflictError);
     expect(w.snapshot()).toBe(before);
     expect(reqOf(w, r2).status).toBe("PENDING");
-    await w.service.withdraw(u1, r2, undefined, R);
+    await w.service.withdraw(u1, r2, "retrait", R);
     expect(verOf(w, v2).status).toBe("DRAFT");
   });
 
@@ -506,7 +509,7 @@ describe("QA-B6a circuit (q34/q72/q76/q87) and self-proposal (q92)", () => {
       ["Risk Manager rule on an ACTIVE version", async () => { const w = world({ rm: ["u1", "u2", "u3"] }); const p = await live(w); const d = await w.service.createDraft(u1, p.fw, undefined, R); await w.service.updateDraft(u1, p.fw, d.id, { selfProposalAllowed: true }, R); return { w, fw: p.fw, v: d.id }; }],
       ["Audit vote", async () => { const w = world({ rm: ["u1", "u2", "u3"], audit: ["a1", "a2"] }); const p = await live(w, { changeApprover: "AUDIT" }); const d = await w.service.createDraft(u1, p.fw, undefined, R); await w.service.updateDraft(u1, p.fw, d.id, { selfProposalAllowed: true }, R); return { w, fw: p.fw, v: d.id }; }],
       ["Committee fallback (Committee too small)", async () => { const w = world({ rm: ["u1", "u2", "u3"], committee: ["c1"] }); const p = await live(w, { changeApprover: "COMMITTEE" }); const d = await w.service.createDraft(u1, p.fw, undefined, R); await w.service.updateDraft(u1, p.fw, d.id, { selfProposalAllowed: true }, R); return { w, fw: p.fw, v: d.id }; }],
-      ["draft switching the approver and the flag together (rule of the ACTIVE version applies)", async () => { const w = world({ rm: ["u1", "u2", "u3"], committee: ["c1", "c2"] }); const p = await live(w); const d = await w.service.createDraft(u1, p.fw, undefined, R); await w.service.updateDraft(u1, p.fw, d.id, { selfProposalAllowed: true, changeApprover: "COMMITTEE" }, R); return { w, fw: p.fw, v: d.id }; }],
+      ["draft switching the approver and the flag together (rule of the ACTIVE version applies)", async () => { const w = world({ rm: ["u1", "u2", "u3"], committee: ["c1", "c2"] }); const p = await live(w); const d = await w.service.createDraft(u1, p.fw, undefined, R); await w.service.updateDraft(u1, p.fw, d.id, { selfProposalAllowed: true }, R); verOf(w, d.id).changeApprover = "COMMITTEE"; return { w, fw: p.fw, v: d.id }; }],
     ])("refused at request creation: %s; the draft stays DRAFT and no request, audit or notification is created", async (_l, build) => {
       const { w, fw, v } = await build();
       const before = w.snapshot();
@@ -523,7 +526,7 @@ describe("QA-B6a circuit (q34/q72/q76/q87) and self-proposal (q92)", () => {
       const r = await w.service.requestActivation(u1, p.fw, d.id, "go", R);
       expect(r.status).toBe("PENDING");
       await expect(w.service.approve(u2, r.id, "x", R)).rejects.toThrow(ConflictError);
-      await w.service.withdraw(u1, r.id, undefined, R);
+      await w.service.withdraw(u1, r.id, "retrait", R);
       // active already true (state only reachable after B-12): the next draft inherits true and is not refused
       const w2 = world({ rm: ["u1", "u2", "u3"], committee: ["c1", "c2"] });
       const p2 = await live(w2, { changeApprover: "COMMITTEE" });
@@ -607,7 +610,7 @@ describe("QA-B6a audit (spec §13) and failures", () => {
     const w = world();
     const { framework, version } = await w.service.create(u1, { name: "A", ratingScaleId: S1 }, "q1");
     await w.service.updateIdentity(u1, framework.id, { name: "B", reason: "renom" }, "q2");
-    await w.service.updateDraft(u1, framework.id, version.id, { changeApprover: "AUDIT" }, "q3");
+    await w.service.updateDraft(u1, framework.id, version.id, { selfProposalAllowed: false }, "q3");
     const r = await w.service.requestActivation(u1, framework.id, version.id, "go", "q4");
     await w.service.approve(u2, r.id, "ok", "q5");
     const d = await w.service.createDraft(u2, framework.id, undefined, "q6");
@@ -638,7 +641,7 @@ describe("QA-B6a audit (spec §13) and failures", () => {
     expect([w.events.length, w.sent.length]).toEqual([n, sent]);
   });
 
-  it("audit down on approve: the decision is applied and not replayable (409), the error is reported and logged with the requestId; the requester is NOT notified (observation)", async () => {
+  it("audit down on approve: the decision is applied and not replayable (409), the error is reported and logged with the requestId; the requester IS still notified (C-B6a-01)", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const w = world();
     const { v, r } = await pend(w);
@@ -648,20 +651,20 @@ describe("QA-B6a audit (spec §13) and failures", () => {
     expect(reqOf(w, r).status).toBe("APPROVED");
     expect(verOf(w, v).status).toBe("ACTIVE");
     expect(spy.mock.calls.flat().join(" ")).toContain("rid-9");
-    expect(w.sent).toHaveLength(0);
+    expect(w.sent.map((x) => x.eventType)).toEqual(["RISK_FRAMEWORK_CHANGE_DECIDED"]); // C-B6a-01
     w.hooks.auditFails = () => false;
     await expect(w.service.approve(u2, r, "ok", R)).rejects.toThrow(ConflictError);
     expect(w.events.filter((e) => e.action === "APPROVE")).toHaveLength(0); // the trail has a permanent hole (spec §13 known gap)
   });
 
-  it("audit down on a request: the request exists and can still be decided (no orphan version), but nobody was notified and SUBMIT is missing (observation)", async () => {
+  it("audit down on a request: the request exists and can still be decided (no orphan version), members are still notified (C-B6a-01) and SUBMIT is missing (observation)", async () => {
     const w = world();
     const { fw, v } = await draft(w);
     w.hooks.auditFails = (e) => e.action === "SUBMIT";
     w.sent.length = 0;
     await expect(w.service.requestActivation(u1, fw, v, "go", R)).rejects.toThrow(/audit down/);
     expect(verOf(w, v).status).toBe("PENDING_APPROVAL");
-    expect(w.sent).toHaveLength(0);
+    expect(w.sent.map((x) => x.eventType)).toEqual(["RISK_FRAMEWORK_CHANGE_PENDING"]); // C-B6a-01
     w.hooks.auditFails = () => false;
     await expect(w.service.approve(u2, w.requests[0]!.id, undefined, R)).resolves.toBeDefined();
   });
@@ -675,17 +678,17 @@ describe("QA-B6a audit (spec §13) and failures", () => {
     expect(verOf(w, v).status).toBe("ACTIVE");
   });
 
-  // KNOWN GAP (MINOR, QA severity): spec §5.3(4) excludes every author found in the audit trail, but an edit whose
-  // audit write fails is stored (RiskFrameworkService.ts:261-262, no transaction) and, once another person edits
-  // afterwards, last_edited_by no longer names the first editor either: nothing excludes them any more.
-  it.fails("KNOWN GAP B6a-QA-01: an editor whose audit line failed can still approve after another edit", async () => {
+  // B6a-QA-01 (closed by B-6a bis): the audit line is written BEFORE the edit is stored, so an edit whose audit failed
+  // is never stored and an editor can never be untraceable.
+  it("B6a-QA-01: an edit whose audit failed is not stored; any stored edit keeps its editor excluded after another edit", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const w = world({ rm: ["u1", "u2", "u3"] });
     const { fw, v } = await draft(w);
     w.hooks.auditFails = (e) => e.userId === "u3" && e.action === "UPDATE";
     await expect(w.service.updateDraft(u3, fw, v, { committeeEvaluationEnforced: false }, R)).rejects.toThrow(/audit down/);
-    expect(verOf(w, v).committeeEvaluationEnforced).toBe(false); // the edit was stored
+    expect(verOf(w, v).committeeEvaluationEnforced).toBe(true); // the edit was NOT stored (audit first)
     w.hooks.auditFails = () => false;
+    await w.service.updateDraft(u3, fw, v, { committeeEvaluationEnforced: false }, R); // stored, audited
     await w.service.updateDraft(u1, fw, v, { defaultEvaluationMode: "PARTICIPATIF" }, R);
     const r = await w.service.requestActivation(u1, fw, v, "go", R);
     await expect(w.service.approve(u3, r.id, undefined, R)).rejects.toThrow(ForbiddenError);

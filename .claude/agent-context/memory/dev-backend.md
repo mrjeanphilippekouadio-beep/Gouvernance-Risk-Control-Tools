@@ -161,3 +161,15 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - `NotificationService.emit` : si le repo expose `insertIfNoUnread`, `write(input, dedupe)` l'utilise (null = déjà une non-lue, audit non écrit) et le pré-check `existsUnread` est sauté ; sinon repli sur l'ancien comportement (fakes inchangés). `record` délègue à `write(input, false)`.
 - `perUserRateLimiter()` sur `POST /kri-measures`.
 - Non testé sur vrai Postgres (fake pool) : le test de régression « 20 emit parallèles = 1 ligne » reste à rejouer par A10/A08. Verrou advisory = par transaction, donc libéré au COMMIT/ROLLBACK ; l'audit est écrit après, hors transaction (inchangé).
+
+## 2026-10-12 B-6a bis (branche wt/b6abis, base 16ff888, aucune migration)
+
+- F-B6a-01 : `PostgresRiskFrameworkRepository.mirrorScale` (dans la transaction de `recordDecision`) verrouille l'échelle, refuse ARCHIVED, rejoue le plafond n² (version, `configs`, `risk_appetites` actives) et archive toute autre échelle ACTIVE **qu'aucune version ACTIVE ne référence** (pas « toute autre » : un second Dispositif actif garde la sienne). Un throw = ROLLBACK de toute la décision.
+- F-B6a-02 : `createActivationRequest` prend `validateLocked` (optionnel, fakes inchangés) : SELECT ... FOR UPDATE de la version puis rejeu de `validateRequestable` (assertActivatable + q65). `decide` rejoue la même méthode à l'approbation seulement (un refus d'une version devenue invalide reste possible).
+- B6a-QA-01 sans migration : l'audit UPDATE est écrit AVANT le stockage de la modification. Effet de bord assumé : une entrée UPDATE peut exister pour une modification qui n'a pas pu être stockée (sur-exclusion, jamais sous-exclusion). Le `it.fails` converti en `it` : l'étape « l'édition a été stockée » est devenue « n'a PAS été stockée », et u3 refait une édition réussie avant le test final Forbidden (assertion finale inchangée).
+- C-B6a-01 (partiel) : notifications envoyées puis erreur d'audit relancée (SUBMIT et APPROVE/REJECT). L'audit reste hors transaction (q90 ouverte).
+- C-B6a-02 : `checkParams` refuse tout `changeApprover` != RISK_MANAGER (create + updateDraft). Les tests q87 posent désormais l'approbateur en donnée stockée (helpers `draft`/`created`).
+- C-B6a-04 : motif de retrait obligatoire dans le service ; le zod de la route reste `optional()` volontairement (sinon 400 avant 403/404 dans les tests QA de surface HTTP).
+- F-B6a-07 : `notify(..., dedupe)` utilise `emit({skipIfUnread:true})` si `emit` existe, sur `resourceId` = id du Dispositif.
+- F-B6a-04 : `authorsOf` ajoute les auteurs (audit CREATE/UPDATE `RatingScale`) quand l'échelle référencée est DRAFT. Le document d'arbitrage A13 n'était pas dans ma base : implémenté d'après le message du coordinateur.
+- Leçon : un `validateLocked`-style callback optionnel évite de modifier les fakes de repository des tests existants.

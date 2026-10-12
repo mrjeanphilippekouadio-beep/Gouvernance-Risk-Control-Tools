@@ -378,6 +378,17 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
 
   async createActivationRequest(input: CreateActivationRequestInput): Promise<RiskFrameworkChangeRequest> {
     return this.tx(async (c) => {
+      // F-B6a-02: the version is locked, then validated as it is NOW; a concurrent PATCH waits for the commit.
+      if (input.validateLocked) {
+        const locked = await c.query<VersionRow>(
+          `SELECT * FROM risk_framework_versions WHERE tenant_id = $1 AND framework_id = $2 AND id = $3 FOR UPDATE`,
+          [input.tenantId, input.frameworkId, input.versionId],
+        );
+        if (!locked.rows[0] || locked.rows[0].status !== "DRAFT") {
+          throw new ValidationError("Only a draft version can be submitted for activation");
+        }
+        await input.validateLocked(versionOf(locked.rows[0]));
+      }
       const moved = await c.query(
         `UPDATE risk_framework_versions SET status = 'PENDING_APPROVAL', updated_at = now()
          WHERE tenant_id = $1 AND framework_id = $2 AND id = $3 AND status = 'DRAFT'`,
@@ -425,6 +436,59 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
       throw new ValidationError(`Request kind ${row.kind} is not supported yet`);
     }
     return row;
+  }
+
+  /**
+   * F-B6a-01. The scale of the activated version becomes ACTIVE: refused when ARCHIVED, refused when a
+   * threshold (version, configs, legacy appetites) exceeds its n x n ceiling (F-B9b-01, fail-closed:
+   * the throw rolls the whole decision back). Any other ACTIVE scale that no ACTIVE version references is
+   * archived, so the legacy readers (newest ACTIVE scale wins) cannot pick a scale this one outranks.
+   */
+  private async mirrorScale(c: PoolClient, tenantId: string, v: RiskFrameworkVersion): Promise<void> {
+    const sc = await c.query<{ status: string; probability_levels: number; impact_levels: number }>(
+      `SELECT status, probability_levels, impact_levels FROM rating_scales
+       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+      [tenantId, v.ratingScaleId],
+    );
+    const scale = sc.rows[0];
+    if (!scale) throw new ValidationError("The rating scale of this version no longer exists");
+    if (scale.status === "ARCHIVED") {
+      throw new ValidationError("Cannot activate a version on an archived rating scale — create a new scale instead");
+    }
+    const ceiling = scale.probability_levels * scale.impact_levels;
+    const over: string[] = [];
+    const check = (label: string, value: number | null) => {
+      if (value !== null && value > ceiling) over.push(`${label} (${value})`);
+    };
+    check("seuil Comité évaluation de la version", v.committeeEvaluationMinScore);
+    check("seuil Comité traitement de la version", v.committeeTreatmentMinScore);
+    for (const a of v.appetiteThresholds) check(`appétence "${a.subCategory}" de la version`, a.threshold);
+    const cfg = await c.query<{ e: number; t: number | null }>(
+      `SELECT committee_evaluation_min_score AS e, committee_treatment_min_score AS t FROM configs WHERE tenant_id = $1`,
+      [tenantId],
+    );
+    check("seuil Comité évaluation (configs)", cfg.rows[0]?.e ?? null);
+    check("seuil Comité traitement (configs)", cfg.rows[0]?.t ?? null);
+    const apps = await c.query<{ sub_category: string; threshold: number }>(
+      `SELECT sub_category, threshold FROM risk_appetites WHERE tenant_id = $1 AND active AND deleted_at IS NULL`,
+      [tenantId],
+    );
+    for (const a of apps.rows) check(`appétence "${a.sub_category}"`, a.threshold);
+    if (over.length > 0) {
+      throw new ValidationError(`Cannot activate: these thresholds exceed the maximum score of the scale (${ceiling}): ${over.join(", ")}. Lower them first.`);
+    }
+    await c.query(
+      `UPDATE rating_scales SET status = 'ACTIVE', activated_at = COALESCE(activated_at, now()), archived_at = NULL, updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND status <> 'ACTIVE'`,
+      [tenantId, v.ratingScaleId],
+    );
+    await c.query(
+      `UPDATE rating_scales SET status = 'ARCHIVED', archived_at = now(), updated_at = now()
+       WHERE tenant_id = $1 AND id <> $2 AND status = 'ACTIVE' AND deleted_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM risk_framework_versions x
+                         WHERE x.tenant_id = $1 AND x.rating_scale_id = rating_scales.id AND x.status = 'ACTIVE')`,
+      [tenantId, v.ratingScaleId],
+    );
   }
 
   async recordDecision(tenantId: string, requestId: string, d: RecordDecisionInput): Promise<DecisionResult> {
@@ -477,21 +541,8 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
       const version = activated.rows[0];
       if (!version) throw new ConflictError("La version n'est plus en attente d'approbation");
 
-      // Scale status mirror (spec §2.3): ACTIVE while an ACTIVE version references it, ARCHIVED once none does.
-      await c.query(
-        `UPDATE rating_scales SET status = 'ACTIVE', activated_at = COALESCE(activated_at, now()), archived_at = NULL, updated_at = now()
-         WHERE tenant_id = $1 AND id = $2 AND status <> 'ACTIVE'`,
-        [tenantId, version.rating_scale_id],
-      );
-      if (previousActive && previousActive.ratingScaleId !== version.rating_scale_id) {
-        await c.query(
-          `UPDATE rating_scales SET status = 'ARCHIVED', archived_at = now(), updated_at = now()
-           WHERE tenant_id = $1 AND id = $2 AND status = 'ACTIVE'
-             AND NOT EXISTS (SELECT 1 FROM risk_framework_versions v
-                             WHERE v.tenant_id = $1 AND v.rating_scale_id = $2 AND v.status = 'ACTIVE')`,
-          [tenantId, previousActive.ratingScaleId],
-        );
-      }
+      // Scale status mirror (spec §2.3), F-B6a-01: same guards as RatingScaleService.activateVersion, same transaction.
+      await this.mirrorScale(c, tenantId, versionOf(version));
       // The first activated Dispositif of a tenant becomes its default.
       await c.query(
         `UPDATE risk_frameworks SET is_default = true, updated_at = now()
