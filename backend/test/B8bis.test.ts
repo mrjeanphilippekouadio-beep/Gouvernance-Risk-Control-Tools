@@ -126,6 +126,30 @@ describe("B-8 bis Audit group permissions (q45)", () => {
   });
 });
 
+describe("G1 administrator who is a Committee member", () => {
+  it("queues the change instead of applying it, and the author cannot validate it", async () => {
+    const { service, held, changes, roles } = setup();
+    held.set("admin", ["co"]);
+    held.set("aud", ["au"]);
+    const before = [...roles.find((r) => r.id === "au")!.permissions];
+    const res = await service.changeAuditGroupPermissions(admin, ["audit.read"], "r", "motif de test");
+    expect(res.status).toBe("PENDING");
+    expect(changes[0]?.requestedBy).toBe("admin");
+    expect(roles.find((r) => r.id === "au")!.permissions).toEqual(before);
+    const validate: Permission[] = ["rolegroup.audit.validate"];
+    await expect(service.decideAuditPermissionChange(actor("admin", validate), "c1", true, "r")).rejects.toThrow(ForbiddenError);
+    expect(changes[0]?.status).toBe("PENDING");
+    await service.decideAuditPermissionChange(actor("aud", validate), "c1", true, "r");
+    expect(changes[0]?.status).toBe("APPROVED");
+  });
+
+  it("Risk Manager case unchanged: still queued", async () => {
+    const { service, held } = setup();
+    held.set("admin", ["rm"]);
+    expect((await service.changeAuditGroupPermissions(admin, ["audit.read"], "r", "motif de test")).status).toBe("PENDING");
+  });
+});
+
 describe("B-8 bis grantors and lost rights (q48)", () => {
   it("returns display names only and audits the lookup", async () => {
     const { service, events } = setup();

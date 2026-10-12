@@ -201,3 +201,9 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - q90 : `RiskFrameworkRepository.auditsInTransaction?` + paramètre `audit?: TransactionalAudit<R>` (callback `result -> événements`) sur chaque méthode mutante ; `PostgresRiskFrameworkRepository` insère via `insertAuditEvent(client, e)` (extrait de `PostgresAuditRepository`) AVANT le COMMIT ; un échec d'audit = ROLLBACK. Service : `inTx` -> passe le callback ; sinon (faux repos des tests) enregistre après coup comme avant. `updateIdentity`/`updateDraft`/`discardDraft` passés de `pool.query` à `tx`. `holders()` n'échoue plus (liste vide + log) : les notifications ne sautent plus pour un échec non lié. Notifications toujours après COMMIT.
 - Effet : plus d'état « action appliquée mais audit perdu » en production ; l'ordre « audit avant stockage » de B6a-QA-01 n'est plus nécessaire en prod (reste pour les faux repos).
 - Non couvert : lectures `listForEntity` (auteurs) inchangées ; non testé sur vrai Postgres (faux pool) ; autres modules (Risk, Control...) gardent l'audit hors transaction.
+
+## 2026-10-12 G1 (branche wt/g1, DECISION-044 / A13)
+
+- `changeAuditGroupPermissions` : mise en attente si l'auteur est RM OU membre du Comité (`RISK_COMMITTEE`), même mécanisme (`role_permission_changes`, `requestedBy` exclu de la décision). Cause : depuis q80 un admin peut être au Comité et appliquait seul.
+- Principe : quand une règle de SoD dépend d'un cumul de groupes, relire toutes les gardes qui testent UN groupe quand le cumul autorisé change.
+- Tests dans `B8bis.test.ts` (describe G1). Aucune assertion existante modifiée. Worktree sans node_modules : `npm ci --ignore-scripts` (sinon faux échecs typecheck sur Buffer/any).

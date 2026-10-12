@@ -572,7 +572,7 @@ export class RoleService {
 
   /**
    * q45: only the application administrator (rolegroup.audit.update) changes the
-   * Audit group's permissions. If the actor is also a Risk Manager the change is
+   * Audit group's permissions. If the actor is also a Risk Manager or a Committee member the change is
    * queued until a member of Audit or the Committee validates it.
    * F-B8b-01: read-only whitelist. F-B8b-02: mandatory reason, members notified.
    * F-B8b-04: a single PENDING change per group.
@@ -605,7 +605,8 @@ export class RoleService {
       throw new ValidationError("A change of the Audit group permissions is already pending validation");
     }
 
-    if (held.some((r) => r.systemGroup === "RISK_MANAGER")) {
+    // G1 (DECISION-044): an administrator who is also a Committee member would otherwise apply alone, like a Risk Manager.
+    if (held.some((r) => r.systemGroup === "RISK_MANAGER" || r.systemGroup === "RISK_COMMITTEE")) {
       if (!this.permissionChanges) throw new Error("RoleService requires a RolePermissionChangeRepository");
       const change = await this.permissionChanges.create({
         tenantId: actor.tenantId,
