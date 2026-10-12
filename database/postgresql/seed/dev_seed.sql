@@ -27,11 +27,11 @@ ON CONFLICT DO NOTHING;
 INSERT INTO roles (tenant_id, name, description, permissions, system_group)
 VALUES
   ('00000000-0000-0000-0000-000000000001', 'Risk Manager', 'Groupe fixe : équipe risque (jamais vide)',
-    ARRAY['risk.read','risk.create','risk.update','risk.delete','risk.escalate','risk.owner.assign','riskevaluation.read','riskevaluation.create','riskevaluation.update','riskevaluation.validate','control.read','kri.read','actionplan.read','dashboard.read','dashboard.executive','cartography.read','process.read','department.read'], 'RISK_MANAGER'),
+    ARRAY['risk.read','risk.create','risk.update','risk.delete','risk.escalate','risk.owner.assign','riskevaluation.read','riskevaluation.create','riskevaluation.update','riskevaluation.validate','control.read','kri.read','actionplan.read','dashboard.read','dashboard.executive','cartography.read','process.read','department.read','riskframework.read','riskframework.create','riskframework.update','riskframework.activate','riskframework.archive','riskframework.process.assign'], 'RISK_MANAGER'),
   ('00000000-0000-0000-0000-000000000001', 'Risk Committee', 'Groupe fixe : Comité des risques (peut être vide)',
-    ARRAY['risk.read','riskevaluation.read','control.read','kri.read','actionplan.read','dashboard.read','dashboard.executive','cartography.read','riskevaluation.validate.committee','treatmentdecision.validate.committee','rolegroup.audit.validate'], 'RISK_COMMITTEE'),
+    ARRAY['risk.read','riskevaluation.read','control.read','kri.read','actionplan.read','dashboard.read','dashboard.executive','cartography.read','riskevaluation.validate.committee','treatmentdecision.validate.committee','rolegroup.audit.validate','riskframework.read'], 'RISK_COMMITTEE'),
   ('00000000-0000-0000-0000-000000000001', 'Audit', 'Groupe fixe : Audit (peut être vide)',
-    ARRAY['risk.read','riskevaluation.read','control.read','kri.read','actionplan.read','dashboard.read','dashboard.executive','cartography.read','audit.read','audit.mission.read','audit.finding.read','rolegroup.audit.validate'], 'AUDIT')
+    ARRAY['risk.read','riskevaluation.read','control.read','kri.read','actionplan.read','dashboard.read','dashboard.executive','cartography.read','audit.read','audit.mission.read','audit.finding.read','rolegroup.audit.validate','riskframework.read'], 'AUDIT')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO users (id, tenant_id, email, display_name, roles)

@@ -32,3 +32,15 @@
 - Constats de comportement à connaître côté app : une version ACTIVE refuse même un UPDATE de `updated_at`
   seul ; le runtime a UPDATE sur les change requests (append-only garanti par trigger, pas par GRANT) ;
   DELETE/TRUNCATE révoqués sur les 3 tables.
+
+## 2026-10-12 — suivi B-6a (F-B6a-08, C-B6a-08, analyse F-B6a-06)
+- `dev_seed.sql` crée les groupes fixes APRÈS les migrations : toute migration qui ajoute des permissions aux
+  groupes fixes (UPDATE roles ... WHERE system_group) ne touche pas le tenant de seed. Réflexe : à chaque
+  migration de ce type, aligner le tableau de permissions du seed dans le même lot. Vérifié : RISK_MANAGER 6,
+  RISK_COMMITTEE 1, AUDIT 1 `riskframework.*`, seed rejouable (ON CONFLICT DO NOTHING, ne met pas à jour une ligne existante).
+- Un `.down.sql` qui détruit une piste d'audit porte un avertissement en tête de fichier ; `psql -1` est
+  incompatible avec un fichier qui contient son propre BEGIN/COMMIT (utiliser `-v ON_ERROR_STOP=1 -f` seul).
+- Une migration poussée est figée : on corrige par migration suivante, pas en place (contrairement à la fenêtre
+  « jamais enregistrée » du 2026-10-12 ci-dessus).
+- F-B6a-06 : analysé, non implémenté, en attente de décision (voir rapport : lien version<->demande APPROVED
+  par un tiers, interdiction BOOTSTRAP tant que B-6d absent).
