@@ -15,6 +15,8 @@ export interface NotificationRepository {
   markAsRead(tenantId: string, id: string, recipientUserId: string): Promise<Notification>;
   /** F-NOTIF-01: true if an UNREAD notification already exists for this exact (tenant, recipient, resource, event). Optional so older fakes keep working (no dedup then). */
   existsUnread?(tenantId: string, recipientUserId: string, resourceType: string, resourceId: string, eventType: string): Promise<boolean>;
+  /** F-NOTIF-01: atomic create-unless-unread (serialised per key); null when an identical unread one exists. Optional: fakes without it fall back to existsUnread + create. */
+  insertIfNoUnread?(input: CreateNotificationInput): Promise<Notification | null>;
   /** Unread notifications of one recipient. */
   countUnread(tenantId: string, recipientUserId: string): Promise<number>;
   /** Stamps readAt on every unread notification of that recipient (tenant-scoped); returns how many changed. */

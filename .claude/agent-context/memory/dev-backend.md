@@ -146,3 +146,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - F-NOTIF-04 : contrôle du catalogue dans `NotificationService.subscribe` (ValidationError -> 400), `.max(100)` zod. Tests existants qui s'abonnaient à `KRI/THRESHOLD_BREACH` (hors catalogue) passés à `KRI_THRESHOLD_BREACH`.
 - F-NOTIF-05 : `z.string().uuid()` sur `:id`, `.max(100)` sur le filtre `eventType`. F-NOTIF-06 : KRI sans émission si risque `ARCHIVED`/`deletedAt`. NOTIF-QA-01 : try/catch par destinataire.
 - F-NOTIF-02 (types désactivables) NON touché : décision PO q85.
+
+## 2026-10-12 NOTIFRACE : F-NOTIF-01 en concurrence (branche wt/notifrace, base 0c253b6, aucune migration)
+
+- `NotificationRepository.insertIfNoUnread?` (optionnel) : `PostgresNotificationRepository` ouvre une transaction (`pool.connect`), `pg_advisory_xact_lock(hashtextextended(clé, 0))` sur `tenant|destinataire|resourceType|resourceId|eventType`, SELECT non-lu, INSERT si absent, COMMIT ; ROLLBACK (avalé) + `release` en `finally` sur erreur.
+- `NotificationService.emit` : si le repo expose `insertIfNoUnread`, `write(input, dedupe)` l'utilise (null = déjà une non-lue, audit non écrit) et le pré-check `existsUnread` est sauté ; sinon repli sur l'ancien comportement (fakes inchangés). `record` délègue à `write(input, false)`.
+- `perUserRateLimiter()` sur `POST /kri-measures`.
+- Non testé sur vrai Postgres (fake pool) : le test de régression « 20 emit parallèles = 1 ligne » reste à rejouer par A10/A08. Verrou advisory = par transaction, donc libéré au COMMIT/ROLLBACK ; l'audit est écrit après, hors transaction (inchangé).
