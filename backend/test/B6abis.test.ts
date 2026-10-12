@@ -230,6 +230,7 @@ function fakePool(o: { scaleStatus?: string; cfgEval?: number; appetite?: number
       if (/^SELECT status, probability_levels/.test(log.at(-1)!)) {
         return row([{ status: o.scaleStatus ?? "DRAFT", probability_levels: 5, impact_levels: 5 }]);
       }
+      if (/^SELECT min\(/.test(log.at(-1)!)) return row([{ ceiling: 25 }]);
       if (/FROM configs/.test(log.at(-1)!)) return row([{ e: o.cfgEval ?? 15, t: null }]);
       if (/FROM risk_appetites/.test(log.at(-1)!)) return row(o.appetite ? [{ sub_category: "Fraude", threshold: o.appetite }] : []);
       return /^UPDATE/.test(log.at(-1)!) ? { rows: [], rowCount: 1 } : row([]);
