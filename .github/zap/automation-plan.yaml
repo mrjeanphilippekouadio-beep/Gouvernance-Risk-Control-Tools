@@ -1,61 +1,44 @@
-# OWASP ZAP Automation Framework plan — authenticated full scan.
+# OWASP ZAP Automation Framework plan — authenticated staging scan.
 #
-# Why this exists: the unauthenticated full scan (zaproxy/action-full-scan)
-# only ever found the static SPA shell (8-9 endpoints, 100% GET) because
-# every real page/API call in this app sits behind the local QA login form
-# (#local-email / #local-password, rendered at "/" when
-# VITE_AUTH_PROVIDER=local — confirmed on staging by inspecting the built
-# JS bundle). This plan drives a real headless browser through that form
-# so the Ajax spider and active scan can reach the authenticated app.
+# Staging consists of two separate Render origins:
+# - Frontend: https://gouvernanceriskcontroltools-staging.onrender.com
+# - Backend:  https://gouvernance-risk-control-tools-staging.onrender.com
 #
-# Login flow (backend/src/api/v1/localAuth.routes.ts):
-#   POST /api/v1/auth/local {"email","password"} -> {"accessToken","tokenType"}
-# Protected routes require header: Authorization: Bearer <accessToken>
-# (backend/src/api/middleware/auth.ts) — on failure they return JSON body
-# {"error":"Missing bearer token"} or {"error":"Invalid or expired token"}.
-# Verification target: GET /api/v1/users/me (any authenticated route works).
+# The workflow resolves these values into a private temporary copy using Ruby's
+# YAML parser/serializer. The source plan contains no credentials or real hosts.
+# Login is performed in the frontend; the session verification endpoint is on
+# the backend. Both origins must be in the same context for ZAP to scan the
+# browser-generated API traffic and authenticated API endpoints.
 #
-# ${ZAP_TARGET_URL} / ${ZAP_TEST_EMAIL} / ${ZAP_TEST_PASSWORD} are substituted
-# by the workflow itself (envsubst, "Resolve ZAP automation plan secrets"
-# step) before this file is ever handed to ZAP — never hardcode credentials
-# here. This is deliberate, not just convention: ZAP's own built-in
-# ${envvar} substitution turned out to resolve context.urls and
-# authentication.parameters.loginPageUrl correctly but silently failed for
-# authentication.verification.pollUrl (left as the literal string
-# "${ZAP_TARGET_URL}/api/v1/users/me", which the HTTP client then rejected
-# with "incorrect path"). Every verification poll errored as a result, so
-# ZAP could never confirm a login had succeeded — that's what was actually
-# behind the 42%/80% "authentication failure" aborts, not rate limiting.
-# Pre-resolving the whole file ourselves removes ZAP's substitution from the
-# loop entirely instead of hunting for every field it does or doesn't cover.
+# Login flow:
+#   Frontend login form -> POST <API>/api/v1/auth/local
+#     {"email","password"} -> {"accessToken","tokenType"}
+#   Verification: GET <API>/api/v1/users/me
+# Protected routes require Authorization: Bearer <accessToken>.
+#
+# ZAP active scanning is restricted to the dedicated staging environment.
+# Never use this plan against production or real customer data.
 
 env:
   contexts:
     - name: grc-tools
       urls:
         - ${ZAP_TARGET_URL}
+        - ${ZAP_API_BASE_URL}
       authentication:
         method: "browser"
         parameters:
           loginPageUrl: ${ZAP_TARGET_URL}
         verification:
           method: "poll"
-          pollUrl: ${ZAP_TARGET_URL}/api/v1/users/me
-          loggedOutRegex: "\\Q\"error\":\"Missing bearer token\"\\E|\\Q\"error\":\"Invalid or expired token\"\\E"
-          # Default poll frequency is every single request, which hammers
-          # /api/v1/users/me hard enough during the active scan to trip
-          # authAttemptRateLimiter (backend/src/api/middleware/rateLimit.ts:
-          # 50 failed requests / 15 min / IP) on its own — that rate limiter
-          # is almost certainly what the first authenticated run's "42%
-          # authentication failures" abort actually measured.
+          pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
+          loggedOutRegex: "\\Q\\\"error\\":\\\"Missing bearer token\\\"\\E|\\Q\\\"error\\":\\\"Invalid or expired token\\\"\\E"
           pollFrequency: 20
           pollUnits: "requests"
       sessionManagement:
-        # The app never persists the token to a cookie/localStorage (it's
-        # plain React state) — so raw HTTP replay (spider/active scan) needs
-        # the Bearer header re-attached per request from the JSON the login
-        # POST returned. Browser-driven steps (spiderAjax) get it for free
-        # since they share the same in-page JS state.
+        # The frontend keeps its token in React state. Browser-driven scanning
+        # observes the real login flow; ZAP's header session management replays
+        # the Bearer token for direct HTTP requests to protected API paths.
         method: "headers"
         parameters:
           Authorization: "Bearer {%json:accessToken%}"
@@ -69,26 +52,21 @@ jobs:
   - type: spider
     parameters:
       context: grc-tools
+      user: qa
       url: ${ZAP_TARGET_URL}
       maxDuration: 2
 
-  - type: spiderAjax
+  - type: spiderClient
     parameters:
       context: grc-tools
       user: qa
       url: ${ZAP_TARGET_URL}
-      # With the pollUrl substitution bug fixed, auth now actually succeeds —
-      # but the run at maxDuration:5 still only reached 1 backend endpoint
-      # (the login POST itself): 5 minutes wasn't enough for Crawljax to
-      # click through the React app's screens after logging in. Give it more
-      # room to actually traverse the authenticated surface.
       maxDuration: 12
-      logoutAvoidance: true
-      # Default is one browser per CPU core, each logging in independently
-      # from the same runner IP — a likely contributor to the rate-limiter
-      # trip seen before the pollUrl fix. One browser is slower but keeps
-      # login attempts serial.
+      maxCrawlDepth: 10
+      maxChildren: 100
       numberOfBrowsers: 1
+      logoutAvoidance: true
+      scopeCheck: "Flexible"
 
   - type: passiveScan-wait
     parameters:
@@ -99,11 +77,24 @@ jobs:
       context: grc-tools
       user: qa
       maxScanDurationInMins: 30
-      # Keep request volume/concurrency low enough to stay well under
-      # authAttemptRateLimiter's 50-failed-requests/15min/IP budget even
-      # if a handful of fuzzed requests legitimately 401.
       threadPerHost: 2
       delayInMs: 250
+
+  # Evidence of what ZAP actually found; the workflow enforces a minimum
+  # authenticated API coverage gate before accepting the run.
+  - type: export
+    parameters:
+      context: grc-tools
+      type: yaml
+      source: sitestree
+      fileName: /zap/wrk/report/site-tree.yaml
+
+  - type: export
+    parameters:
+      context: grc-tools
+      type: yaml
+      source: clientmap
+      fileName: /zap/wrk/report/client-map.yaml
 
   - type: report
     parameters:
