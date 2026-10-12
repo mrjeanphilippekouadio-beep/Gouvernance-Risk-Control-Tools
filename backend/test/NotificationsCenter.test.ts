@@ -190,4 +190,30 @@ describe("persisted KRI and action-plan notifications", () => {
     await service.escalateIfOverdue(apActor, "a1", "r");
     expect(emitted.map((e) => e.recipientUserId).sort()).toEqual(["o1", "resp", "s2"]);
   });
+
+  it("q96: a KRI-sourced action also notifies owner and superior of the KRI's risk (tenant-scoped, deduplicated, archived/foreign ignored)", async () => {
+    const run = async (kriId: string) => {
+      const emitted: string[] = [];
+      const seenKri: Array<[string, string]> = [];
+      const action = { id: "a1", title: "T", status: "PLANIFIEE", dueDate: new Date(Date.now() - 86_400_000), responsibleUserId: "resp", sourceType: "KRI", sourceId: kriId } as unknown as ActionPlan;
+      const kris: Record<string, object> = { k1: { riskId: "r1" }, k2: { riskId: "r2" }, k3: { riskId: "r1" } };
+      const risks: Record<string, object> = { r1: { ownerId: "o1", superiorOwnerId: "resp" }, r2: { ownerId: "gone", superiorOwnerId: "gone2", status: "ARCHIVED" } };
+      const service = new ActionPlanService(
+        { getById: async () => action, start: async () => action, listLinks: async () => [] } as never,
+        { record: async () => undefined } as never,
+        { getById: async (_t: string, id: string) => risks[id] ?? null } as never,
+        undefined,
+        { getById: async (t: string, id: string) => (seenKri.push([t, id]), t === "t1" ? kris[id] ?? null : null) } as never,
+        undefined, undefined, undefined, undefined, undefined, undefined,
+        { emit: async (i: { recipientUserId: string }) => void emitted.push(i.recipientUserId) } as unknown as NotificationService,
+      );
+      await service.start({ ...actor, roles: ["actionplan.update"] }, "a1", "r");
+      return { emitted: emitted.sort(), seenKri };
+    };
+    const ok = await run("k1"); // o1 reached only through the KRI risk; superior == responsible: merged
+    expect(ok.emitted).toEqual(["o1", "resp"]);
+    expect(ok.seenKri).toEqual([["t1", "k1"]]);
+    expect((await run("k2")).emitted).toEqual(["resp"]); // archived risk of the KRI ignored
+    expect((await run("unknown")).emitted).toEqual(["resp"]); // KRI not in tenant: ignored
+  });
 });

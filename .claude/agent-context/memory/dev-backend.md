@@ -207,3 +207,7 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - `changeAuditGroupPermissions` : mise en attente si l'auteur est RM OU membre du Comité (`RISK_COMMITTEE`), même mécanisme (`role_permission_changes`, `requestedBy` exclu de la décision). Cause : depuis q80 un admin peut être au Comité et appliquait seul.
 - Principe : quand une règle de SoD dépend d'un cumul de groupes, relire toutes les gardes qui testent UN groupe quand le cumul autorisé change.
 - Tests dans `B8bis.test.ts` (describe G1). Aucune assertion existante modifiée. Worktree sans node_modules : `npm ci --ignore-scripts` (sinon faux échecs typecheck sur Buffer/any).
+## 2026-10-12 q96 (branche wt/q96, base fe31915, DECISION-045 pt 1)
+
+- `ActionPlanService.resolveRecipients` : une action sourceType KRI ajoute `Kri.riskId` (lu via `kris.getById(actor.tenantId, sourceId)`, dépendance déjà injectée, gardée par `this.kris`) aux risques couverts ; même boucle que q84 (dédoublonnage, archivé/supprimé ignoré, échec loggé non fatal). Limite : un échec de lecture du KRI saute aussi les autres risques (même try).
+- Test : `NotificationsCenter.test.ts` (1 nouveau). Piège de test : ne pas laisser un lien RISK vers le même risque, il masque le chemin KRI.
