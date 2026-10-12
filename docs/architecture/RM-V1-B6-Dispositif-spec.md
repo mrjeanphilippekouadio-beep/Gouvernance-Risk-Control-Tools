@@ -280,26 +280,103 @@ Un échec de notification est journalisé et n'est jamais fatal. Les notificatio
 
 En repli q100, `RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE` part aussi aux membres des groupes contournés (§5.4.1).
 
-### 5.6 Amorçage (B-6d : q77, q81, q82, q83, q93)
+### 5.6 Amorçage (B-6d : q77, q81, q82, q83, q93, q98, q99, q101, q102, q103)
 
 **Pourquoi** : Djamo démarre avec un seul Risk Manager (q93). Sans exception, sa première demande d'activation reste PENDING sans décideur (§5.4, q75).
 
-**Lecture retenue** (DECISION-044 points 3 à 5 ; q82 et q83 sont des réponses libres dont l'interprétation de l'orchestrateur doit être **confirmée par A13**, voir §14.2) :
+**Sources** : DECISION-044 points 3 à 5 (q81 à q83) ; DECISION-045 points 3 et 4 (q98, q99) ; DECISION-046 points 2 à 4 (q101 à q103). q101 **remplace** la lecture « fin dès le premier membre » de q82 (I-D1). I-D2 et I-D4 sont confirmés par A13 (revue du 2026-10-12, §1.2). Seule I-D7 (lecture du seuil de q103) attend A13, sans bloquer (§14.2).
 
 1. **Périmètre fermé (q81).** L'amorçage ne couvre que :
    - l'activation du **premier** Dispositif du tenant : demande `ACTIVATE_VERSION` alors qu'aucune version du tenant n'a jamais été activée (`activated_at IS NULL` partout) ;
    - l'approbation des désignations (responsable de risque, délégué, exécuteur). Ces désignations n'existent pas encore : B-6d ne fournit que la fonction pure, que B-5 réutilisera.
 
    Toujours exclus : `SET_DEFAULT`, `ASSIGN_PROCESS`, toute version suivante (v2 et au-delà), les changements de droits d'Audit (q67), l'activation de l'auto-proposition (q65). Le premier Dispositif devient Dispositif par défaut par l'étape 5 de l'approbation (§4), sans demande `SET_DEFAULT`.
-2. **Condition d'ouverture (q77, q83).** Exactement **un** membre actif du groupe Risk Manager, **et** aucun membre actif ni au Comité ni à Audit. Le RM doit d'abord chercher à faire désigner un second membre du groupe risque (q83) ; l'amorçage n'est ouvert que s'il déclare, dans un motif obligatoire, pourquoi c'est impossible. Le système ne peut pas vérifier cette impossibilité : elle est déclarative et tracée (§14.2 point I-D2).
-3. **Fin (q82).** L'amorçage prend fin dès qu'un membre actif existe au Comité **ou** à Audit (un seul suffit, sans attendre deux éligibles), ou dès qu'il existe un second RM actif (la condition « un seul RM » n'est plus vraie). Pas de durée maximale : la règle des 90 jours et la colonne `tenants.created_at` sont abandonnées. Après la fin, une demande sans décideur reste en attente avec alerte (q75).
-4. **Décision.** Le RM décide sa propre demande. `decision_regime = 'BOOTSTRAP'`, `decider_group = 'RISK_MANAGER'`, `decided_by = requested_by`, commentaire obligatoire (le motif d'impossibilité), `ratification_status = NULL` : **pas de ratification ultérieure** (q83).
-5. **Visibilité (q77, q82).** Toutes les décisions BOOTSTRAP sont journalisées (audit dans la transaction, q90) et consultables par Audit et le Comité dès l'ajout de leurs membres, dans la vue « décisions prises en votre absence ». B-6d fournit la donnée et la lecture (`GET /risk-frameworks/change-requests?regime=BOOTSTRAP`, `riskframework.read`, que Comité et Audit détiennent) ; l'écran relève d'un lot F. Les premiers membres d'Audit et du Comité sont **prévenus** à leur arrivée (q77) : notification `RISK_FRAMEWORK_BOOTSTRAP_NOTICE`, émise lors de l'ajout d'un membre à l'un de ces groupes si le tenant a au moins une décision BOOTSTRAP.
+
+   L'exception ne lève **que** la règle « le décideur n'est ni le demandeur ni un auteur » (§5.3 points 3 et 4, qui désignent ici la même personne). Tout le reste s'applique : membre RM actif, `riskframework.activate`, validations du §2.3, q65, q67, audit dans la transaction (q90), et en B-5 les plafonds de cumul RO + Exécuteur et Délégué + Exécuteur (A13, I-D2 point 3).
+2. **Valeurs du Dispositif amorcé (q98).** Le premier Dispositif activé par amorçage porte **uniquement les valeurs par défaut du contrat** ; tout autre réglage passe ensuite par une demande ordinaire (v2, circuit normal). Fonction pure `contractDefaultViolations(version, scaleSize): string[]` dans `domain/frameworkApproval.ts` ; la décision est refusée (`ValidationError`, liste des champs) si elle n'est pas vide. Paramètres contrôlés : ceux pour lesquels le contrat §10 ou §8 donne une valeur :
+
+   | Colonne | Valeur exigée |
+   |---|---|
+   | `default_evaluation_mode` | `CLASSIQUE` |
+   | `committee_evaluation_min_score` | `floor(n*n*15/25)`, n = taille de l'échelle (5, 9, 15, 21 ; q71) |
+   | `committee_evaluation_enforced` | `true` |
+   | `change_approver` | `RISK_MANAGER` |
+   | `self_proposal_allowed` | `false` |
+   | `risk_owner_executor_cumul_allowed` | `true` |
+   | `delegate_executor_cumul_allowed` | `true` |
+   | `hybrid_policy_enabled` | `false` |
+   | `mastery_authoritative_source` | `RISK_TEAM` |
+   | `committee_vote_rule` / `committee_vote_custom` | `DEFAULT` / NULL |
+
+   Les paramètres que le contrat laisse « fixés à la création » ou « fixés par le client », sans valeur (échelle et axes, `appetite_thresholds`, `low_criticality_threshold`, `delegation_max_days`, `committee_treatment_min_score`), ne sont pas contraints au-delà des validations ordinaires : lecture A05 à confirmer, voir §14.2 point I-D8. Le brouillon de reprise (055) recopie les seuils de `configs` : s'ils diffèrent du défaut, le RM corrige le brouillon avant de demander l'activation (§8.0 étape 3).
+3. **Condition d'ouverture (q77, q83, q101).** Toutes ces conditions, relues sous verrou (point 9) :
+   - la fin n'est pas mémorisée (`tenants.risk_framework_bootstrap_ended_at IS NULL`, point 5) ;
+   - **aucun circuit ne fonctionne** (point 4) ;
+   - le demandeur est l'unique membre actif du groupe Risk Manager.
+
+   Avoir un membre au Comité ou à Audit n'empêche plus l'amorçage (q101) : tant que le groupe n'a pas 2 membres, il ne peut pas décider (q72).
+4. **Fin : un circuit fonctionne réellement (q101).** Fonction pure `isCircuitFunctional(activeMembers)` : vraie si le groupe Risk Manager compte **au moins 2 membres actifs**, ou si le Comité **ou** Audit compte **au moins 2 membres actifs** (`MIN_VOTERS`, q72). « Membre actif » a la définition du §5.3 (affectation non révoquée, utilisateur non suspendu, rattachement par `roles.system_group`). Le seuil n'exclut pas le demandeur ni les auteurs, que q72 retire pour une demande donnée : l'unique RM ne peut être ni au Comité (q94) ni à Audit (invariant), donc le résultat est le même pour l'amorçage (voir §14.2 point I-D8 bis). Pas de durée maximale (q82).
+5. **Fin définitive et mémorisée (q102).** La fin n'est **jamais recalculée** sur l'état courant des groupes : sinon révoquer ou suspendre le second RM ou un membre d'Audit suffirait à rouvrir l'exception (revue A13, I-D3). Mise en œuvre :
+   - **où** : colonne `tenants.risk_framework_bootstrap_ended_at timestamptz NULL` (migration de B-6d, §12.3). NULL = amorçage possible ; non NULL = terminé, pour toujours, pour ce tenant, quel que soit le Dispositif ;
+   - **qui l'écrit** : uniquement le trigger `risk_framework_bootstrap_end_mark` (§12.3), AFTER sur `user_roles` (nouvelle affectation active, ou `revoked_at` remis à NULL) et sur `users` (réactivation : `deleted_at` repasse à NULL). Quand l'événement touche l'un des trois groupes fixes, il prend le verrou du tenant, recompte les membres actifs et, si `isCircuitFunctional` est vrai (même règle en SQL), pose `now()`. Un trigger plutôt qu'un appel dans chaque service : aucun chemin d'affectation présent ou futur (`RoleService.assign`, mise à jour de rôle, `UserService.reactivate`, intervention HUMAN) ne peut l'oublier, et l'écriture fait partie de la transaction qui crée le second membre ;
+   - **sous quel verrou** : `SELECT … FROM tenants WHERE id = $1 FOR UPDATE`. Le trigger le prend avant de compter. En READ COMMITTED, chaque requête de la fonction voit les validations faites avant elle : deux ajouts concurrents (deux premiers membres d'Audit) sont sérialisés, et le second voit bien le premier. Sans ce verrou, chacun compterait 1 et la fin serait perdue ;
+   - **jamais rouverte** : trigger `tenants_bootstrap_end_guard` BEFORE UPDATE sur `tenants`, qui refuse (`42501`) toute modification de la colonne une fois non NULL, y compris le retour à NULL. Les retraits (révocation, suspension) ne prennent pas le verrou et n'ont aucun effet sur le marqueur ;
+   - **remplissage initial** : la migration pose `now()` pour chaque tenant dont le circuit fonctionne déjà. L'état passé n'est pas reconstitué (l'historique des suspensions n'est pas conservé) : risque très faible, puisque la production n'a pas d'utilisateurs (DECISION-038 §9) ; sur staging, un tenant qui a eu deux RM puis un seul reste ouvert ;
+   - **trace** : la date est le marqueur lui-même. Il n'y a pas de ligne d'audit propre ; la fin se rattache à l'audit de l'affectation ou de la réactivation qui l'a provoquée (même transaction si RoleService écrit son audit dans la transaction, ce qui n'est pas encore le cas : constat A23 AUD-D044, §14.2 point I-D9).
+6. **Motif structuré (q83, I-D2 confirmé par A13).** Le RM doit d'abord faire désigner un second membre du groupe risque. Il ne crée pas d'utilisateur lui-même (droit d'administrateur, q79), sauf s'il cumule administrateur + RM (q63). S'il n'y parvient pas, il le déclare. Corps de `bootstrap-approve` : `{ comment, justification: { askedUserId, askedOn, outcome } }`, tous obligatoires :
+   - `askedUserId` : l'administrateur à qui la désignation a été demandée. Le service vérifie qu'il appartient au tenant et détient au moins une permission d'administrateur (`ADMIN_PERMISSIONS`, q79 ; A06 l'exporte de `RoleService` vers le domaine). Il peut s'agir du demandeur lui-même s'il cumule (§14.2 point I-D9) ;
+   - `askedOn` : date (`YYYY-MM-DD`), au plus aujourd'hui ;
+   - `outcome` : texte non vide, au plus 500 caractères, qui explique pourquoi la désignation n'a pas abouti.
+
+   La justification est enregistrée dans `bootstrap_justification` (§5.1) et le commentaire dans `decision_comment`. Le système ne peut pas vérifier l'impossibilité : c'est déclaratif et tracé, et ce risque résiduel est accepté par le PO (A13, I-D2 point 4).
+7. **Information, visibilité, pas de tiers externe (q99, q101, q103).**
+   - À **chaque** décision BOOTSTRAP, `RISK_FRAMEWORK_BOOTSTRAP_NOTICE` (obligatoire au catalogue, q99) part, après commit, aux **membres actifs d'Audit et du Comité** du moment, sans doublon (q101 : « l'auditeur est informé »). Elle remplace `RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE` sur ce chemin ;
+   - **à l'arrivée** d'un membre dans Audit ou le Comité (affectation ou réactivation), si le tenant a au moins une décision BOOTSTRAP, la même notification lui est adressée (q77). Elle est émise par `RoleService` et `UserService.reactivate` après commit, au mieux ;
+   - **groupes vides (q103)** : **personne d'autre** n'est prévenu, ni les administrateurs ni HUMAN. Le PO écarte ici la recommandation d'A13 (tiers prévenu, Q-A13-4 option A). Le risque devient réel tant qu'aucun membre n'est arrivé : le premier Dispositif d'un RM seul n'est revu par personne avant cette arrivée ;
+   - **consultation** : toutes les décisions BOOTSTRAP sont journalisées (audit dans la transaction, q90) et consultables par `GET /risk-frameworks/change-requests?regime=BOOTSTRAP` (`riskframework.read`, détenue par Comité et Audit) ; l'écran « décisions prises en votre absence » relève d'un lot F. Lecture retenue : information et consultation dès le **premier** membre ; « supérieur à un membre » (q103) est la condition de **fin** (point 4). Lecture de l'orchestrateur, à confirmer par A13 (I-D7, non bloquant : si A13 la renverse, seul le moment de la notification change).
+8. **Décision.** Le RM décide sa propre demande : `decision_regime = 'BOOTSTRAP'`, `decider_group = 'RISK_MANAGER'`, `decided_by = requested_by`, `decision_comment` et `bootstrap_justification` obligatoires, `ratification_status = NULL`, `fallback_cause = NULL`. **Pas de ratification ultérieure** (q83 l'emporte sur q62 pour ce seul régime, confirmé par A13, I-D4).
+9. **Contrôle sous verrou.** Méthode de dépôt `recordBootstrapDecision(tenantId, requestId, decision, validateLocked, audit)`, en une transaction :
+   1. `SELECT risk_framework_bootstrap_ended_at FROM tenants WHERE id = $1 FOR UPDATE` (le même verrou que le trigger de fin : un ajout concurrent attend, ou a déjà posé la fin) ;
+   2. réserver la demande (`FOR UPDATE`, toujours PENDING) ;
+   3. relire, dans cette transaction, les membres actifs des trois groupes et le fait qu'une version du tenant ait déjà été activée ;
+   4. appeler `validateLocked(ctx)` : le service y appelle `isBootstrapAllowed(ctx)` et lève une exception si c'est refusé (même motif que `validateLocked`, F-B6a-02) ;
+   5. puis les étapes de l'approbation du §4 (version ACTIVE, miroir, défaut, audit).
+
+   Ordre des verrous : le chemin d'affectation verrouille `users`, puis `roles`, puis (trigger) `tenants`. Ce chemin-ci ne verrouille que `tenants` et les tables du Dispositif. Il ne prend ni `users` ni `roles` : pas de cycle, donc pas d'interblocage. Un retrait concurrent (révocation, suspension) ne prend pas le verrou du tenant ; il ne peut que rendre la condition plus vraie, ce qui est sans danger.
+
+**Contrat de `isBootstrapAllowed`** (pure, `domain/frameworkApproval.ts`) :
+
+```ts
+export type BootstrapKind = "ACTIVATE_VERSION" | "ASSIGN_PROCESS" | "SET_DEFAULT" | "DESIGNATION";
+export interface BootstrapContext {
+  kind: BootstrapKind;
+  /** q102 : tenants.risk_framework_bootstrap_ended_at relu sous verrou ; non NULL = fin définitive. */
+  endedAt: Date | null;
+  /** Membres actifs par groupe fixe (§5.3), relus sous verrou. */
+  activeMembers: { RISK_MANAGER: number; COMMITTEE: number; AUDIT: number };
+  /** Le demandeur (= décideur) est membre actif du groupe Risk Manager. */
+  requesterIsActiveRiskManager: boolean;
+  /** ACTIVATE_VERSION : aucune version du tenant n'a jamais été activée (q81). */
+  firstActivationOfTenant: boolean;
+  /** ACTIVATE_VERSION : contractDefaultViolations(...) est vide (q98). */
+  contractDefaultsOnly: boolean;
+  /** La demande ferait passer l'auto-proposition à true (q65). */
+  switchesSelfProposalOn: boolean;
+}
+export type BootstrapRefusal =
+  | "ENDED" | "CIRCUIT_FUNCTIONAL" | "NOT_SOLE_RISK_MANAGER" | "OUT_OF_SCOPE"
+  | "NOT_FIRST_ACTIVATION" | "NOT_CONTRACT_DEFAULTS" | "SELF_PROPOSAL";
+export function isCircuitFunctional(m: BootstrapContext["activeMembers"]): boolean;
+/** null = autorisé ; sinon la première raison de refus, dans l'ordre ci-dessous. */
+export function bootstrapRefusal(ctx: BootstrapContext): BootstrapRefusal | null;
+export const isBootstrapAllowed = (ctx: BootstrapContext) => bootstrapRefusal(ctx) === null;
+```
+
+Ordre d'évaluation : `ENDED` (marqueur non NULL) → `CIRCUIT_FUNCTIONAL` (filet de sécurité : le marqueur aurait dû être posé ; le service ne le pose pas lui-même) → `NOT_SOLE_RISK_MANAGER` (`!requesterIsActiveRiskManager` ou `activeMembers.RISK_MANAGER !== 1`) → `SELF_PROPOSAL` → selon `kind` : `ASSIGN_PROCESS` et `SET_DEFAULT` donnent `OUT_OF_SCOPE` ; `ACTIVATE_VERSION` donne `NOT_FIRST_ACTIVATION` puis `NOT_CONTRACT_DEFAULTS` ; `DESIGNATION` est autorisé (B-5). Chaque raison a son message `ValidationError` (ou `ForbiddenError` pour `NOT_SOLE_RISK_MANAGER`). L'âge du tenant ne fait pas partie du contexte (q82).
 
 **Mise en œuvre (contrat pour A06)** :
-- fonction pure unique `isBootstrapAllowed(ctx)` dans `domain/frameworkApproval.ts`. `ctx` contient : le type de demande, le fait qu'aucune version du tenant n'ait jamais été activée, le nombre de RM actifs, le nombre de membres actifs du Comité et d'Audit, l'activation éventuelle de l'auto-proposition par la demande. L'âge du tenant n'en fait plus partie (q82) ;
-- route dédiée `POST /risk-frameworks/change-requests/:rid/bootstrap-approve` (`riskframework.activate`, membre RM, `{comment}` obligatoire), distincte de `approve` pour que l'exception soit explicite dans les journaux HTTP et l'audit. `approve` garde son refus « décideur = demandeur » ;
-- les conditions d'ouverture sont relues **dans la transaction de décision**, sous verrou des lignes `roles` des trois groupes fixes (même famille de verrou qu'en B-8 sexies), pour qu'un second RM ou un premier membre d'Audit ajouté en parallèle ferme bien l'exception ;
+- route dédiée `POST /risk-frameworks/change-requests/:rid/bootstrap-approve` (`riskframework.activate`, membre RM, demandeur seulement, corps du point 6 en zod strict), distincte de `approve` pour que l'exception soit explicite dans les journaux HTTP et l'audit. `approve` garde son refus « décideur = demandeur » ;
+- `createActivationRequest` évalue `bootstrapRefusal` sans verrou, seulement pour adapter le message de `RISK_FRAMEWORK_NO_DECIDER` (« vous pouvez décider en amorçage ») ; la décision ne s'y fie jamais ;
 - défense en base : voir §12.3.
 
 ## 6. Immuabilité (invariant 7 et R-01), défense en profondeur
