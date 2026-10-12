@@ -163,6 +163,7 @@ jobs:
               api_host = URI.parse(ENV.fetch("ZAP_API_BASE_URL")).host
               tree = YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)
               urls = []
+              successful_urls = []
               walk = lambda do |node|
                 case node
                 when Hash
@@ -171,6 +172,8 @@ jobs:
                       uri = URI.parse(node["url"])
                       if uri.host == api_host && uri.path && uri.path != "/" && !uri.path.empty?
                         urls << uri.path
+                        code = node["statusCode"]
+                        successful_urls << uri.path if code.is_a?(Integer) && (200..299).cover?(code)
                       end
                     rescue URI::InvalidURIError
                       # Ignore malformed/non-URL tree labels.
@@ -183,11 +186,16 @@ jobs:
               end
               walk.call(tree)
               paths = urls.uniq
+              successful_paths = successful_urls.uniq
               if paths.length < 3
                 warn "::error::ZAP coverage gate failed: fewer than 3 distinct non-root API paths were captured."
                 exit 1
               end
-              puts "ZAP API coverage gate passed (#{paths.length} distinct non-root paths)."
+              if successful_paths.empty?
+                warn "::error::ZAP coverage gate failed: no successful (2xx) API response was captured; authentication is unproven."
+                exit 1
+              end
+              puts "ZAP API coverage gate passed (#{paths.length} distinct non-root paths; #{successful_paths.length} with 2xx responses)."
             ' report/site-tree.yaml; then
               rc=1
             fi
