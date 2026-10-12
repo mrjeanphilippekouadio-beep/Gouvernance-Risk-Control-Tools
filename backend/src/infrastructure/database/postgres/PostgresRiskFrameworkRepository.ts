@@ -15,11 +15,13 @@ import type {
   RiskFrameworkChangeRequest,
   RiskFrameworkVersion,
   RiskFrameworkVersionStatus,
+  TransactionalAudit,
   UpdateDraftParams,
 } from "../../../domain/entities/RiskFramework.js";
 import type { EvaluationMode } from "../../../domain/entities/Config.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
+import { insertAuditEvent } from "./PostgresAuditRepository.js";
 
 interface FrameworkRow {
   id: string;
@@ -178,7 +180,16 @@ function mapPgError(err: unknown): unknown {
 }
 
 export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository {
+  /** q90: every mutating method inserts its audit events with the transaction client. */
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
+
+  /** q90: a failing audit INSERT throws, so the caller's transaction rolls the action back. */
+  private async audited<R>(c: PoolClient, result: R, audit?: TransactionalAudit<R>): Promise<R> {
+    for (const event of audit?.(result) ?? []) await insertAuditEvent(c, event);
+    return result;
+  }
 
   /** Runs `fn` in a transaction; unique/immutability violations are mapped to domain errors. */
   private async tx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
@@ -242,6 +253,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     description: string | null;
     createdBy: string;
     params: FrameworkParams;
+    audit?: TransactionalAudit<{ framework: RiskFramework; version: RiskFrameworkVersion }>;
   }): Promise<{ framework: RiskFramework; version: RiskFrameworkVersion }> {
     const p = input.params;
     return this.tx(async (c) => {
@@ -271,7 +283,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
           input.createdBy,
         ],
       );
-      return { framework: frameworkOf(fw.rows[0]!), version: versionOf(ver.rows[0]!) };
+      return this.audited(c, { framework: frameworkOf(fw.rows[0]!), version: versionOf(ver.rows[0]!) }, input.audit);
     });
   }
 
@@ -279,20 +291,19 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     tenantId: string,
     id: string,
     fields: { name?: string; description?: string | null },
+    audit?: TransactionalAudit<RiskFramework>,
   ): Promise<RiskFramework> {
     const { setClauses, values } = buildUpdateSet({ name: fields.name, description: fields.description }, 3);
     if (setClauses.length === 0) throw new ValidationError("Nothing to update");
-    try {
-      const { rows } = await this.pool.query<FrameworkRow>(
+    return this.tx(async (c) => {
+      const { rows } = await c.query<FrameworkRow>(
         `UPDATE risk_frameworks SET ${setClauses.join(", ")}, updated_at = now()
          WHERE tenant_id = $1 AND id = $2 AND archived_at IS NULL RETURNING *`,
         [tenantId, id, ...values],
       );
       if (!rows[0]) throw new NotFoundError("RiskFramework", id);
-      return frameworkOf(rows[0]);
-    } catch (err) {
-      throw mapPgError(err);
-    }
+      return this.audited(c, frameworkOf(rows[0]), audit);
+    });
   }
 
   async createDraftFrom(
@@ -300,8 +311,10 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     frameworkId: string,
     sourceVersionId: string,
     createdBy: string,
+    audit?: TransactionalAudit<RiskFrameworkVersion>,
   ): Promise<RiskFrameworkVersion> {
     return this.tx(async (c) => {
+      // q87: the approver is not copied, a new draft is always RISK_MANAGER (SQL literal below).
       // Serialises concurrent drafts of one Dispositif so max(version_number) + 1 is reliable.
       const lock = await c.query(
         `SELECT id FROM risk_frameworks WHERE tenant_id = $1 AND id = $2 AND archived_at IS NULL FOR UPDATE`,
@@ -317,14 +330,14 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
                 (SELECT COALESCE(MAX(version_number), 0) + 1 FROM risk_framework_versions WHERE framework_id = s.framework_id),
                 'DRAFT', s.rating_scale_id, s.default_evaluation_mode, s.committee_evaluation_min_score,
                 s.committee_evaluation_enforced, s.committee_treatment_min_score, s.appetite_thresholds,
-                s.change_approver, s.self_proposal_allowed, $4, $4
+                'RISK_MANAGER', s.self_proposal_allowed, $4, $4
          FROM risk_framework_versions s
          WHERE s.tenant_id = $1 AND s.framework_id = $2 AND s.id = $3
          RETURNING *`,
         [tenantId, frameworkId, sourceVersionId, createdBy],
       );
       if (!rows[0]) throw new NotFoundError("RiskFrameworkVersion", sourceVersionId);
-      return versionOf(rows[0]);
+      return this.audited(c, versionOf(rows[0]), audit);
     });
   }
 
@@ -334,6 +347,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     versionId: string,
     fields: UpdateDraftParams,
     editedBy: string,
+    audit?: TransactionalAudit<RiskFrameworkVersion>,
   ): Promise<RiskFrameworkVersion> {
     const columns: Record<string, unknown> = {};
     for (const [key, column] of Object.entries(DRAFT_COLUMNS)) {
@@ -342,17 +356,15 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     }
     const { setClauses, values } = buildUpdateSet(columns, 5);
     if (setClauses.length === 0) throw new ValidationError("Nothing to update");
-    try {
-      const { rows } = await this.pool.query<VersionRow>(
+    return this.tx(async (c) => {
+      const { rows } = await c.query<VersionRow>(
         `UPDATE risk_framework_versions SET ${setClauses.join(", ")}, last_edited_by = $4, updated_at = now()
          WHERE tenant_id = $1 AND framework_id = $2 AND id = $3 AND status = 'DRAFT' RETURNING *`,
         [tenantId, frameworkId, versionId, editedBy, ...values],
       );
       if (!rows[0]) throw new ValidationError("Only a draft version can be modified");
-      return versionOf(rows[0]);
-    } catch (err) {
-      throw mapPgError(err);
-    }
+      return this.audited(c, versionOf(rows[0]), audit);
+    });
   }
 
   async discardDraft(
@@ -361,19 +373,18 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     versionId: string,
     archivedBy: string,
     reason: string,
+    audit?: TransactionalAudit<RiskFrameworkVersion>,
   ): Promise<RiskFrameworkVersion> {
-    try {
-      const { rows } = await this.pool.query<VersionRow>(
+    return this.tx(async (c) => {
+      const { rows } = await c.query<VersionRow>(
         `UPDATE risk_framework_versions
          SET status = 'ARCHIVED', archived_at = now(), archived_by = $4, archive_reason = $5, updated_at = now()
          WHERE tenant_id = $1 AND framework_id = $2 AND id = $3 AND status = 'DRAFT' RETURNING *`,
         [tenantId, frameworkId, versionId, archivedBy, reason],
       );
       if (!rows[0]) throw new ValidationError("Only a draft version can be discarded");
-      return versionOf(rows[0]);
-    } catch (err) {
-      throw mapPgError(err);
-    }
+      return this.audited(c, versionOf(rows[0]), audit);
+    });
   }
 
   async createActivationRequest(input: CreateActivationRequestInput): Promise<RiskFrameworkChangeRequest> {
@@ -401,7 +412,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
          VALUES ($1, 'ACTIVATE_VERSION', $2, $3, $4, $5, $6) RETURNING *`,
         [input.tenantId, input.frameworkId, input.versionId, JSON.stringify(input.previousValue), input.reason, input.requestedBy],
       );
-      return requestOf(rows[0]!);
+      return this.audited(c, requestOf(rows[0]!), input.audit);
     });
   }
 
@@ -506,7 +517,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     }
   }
 
-  async recordDecision(tenantId: string, requestId: string, d: RecordDecisionInput): Promise<DecisionResult> {
+  async recordDecision(tenantId: string, requestId: string, d: RecordDecisionInput, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult> {
     return this.tx(async (c) => {
       const req = await this.lockPending(c, tenantId, requestId);
       const decided = await c.query<RequestRow>(
@@ -525,7 +536,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
           [tenantId, req.version_id],
         );
         if (!back.rows[0]) throw new ConflictError("La version n'est plus en attente d'approbation");
-        return { request, version: versionOf(back.rows[0]), previousActive: null };
+        return this.audited(c, { request, version: versionOf(back.rows[0]), previousActive: null }, audit);
       }
 
       // The previous ACTIVE goes first: at most one ACTIVE version per Dispositif (unique index).
@@ -565,11 +576,11 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
            AND NOT EXISTS (SELECT 1 FROM risk_frameworks WHERE tenant_id = $1 AND is_default AND archived_at IS NULL)`,
         [tenantId, req.framework_id],
       );
-      return { request, version: versionOf(version), previousActive };
+      return this.audited(c, { request, version: versionOf(version), previousActive }, audit);
     });
   }
 
-  async withdraw(tenantId: string, requestId: string, comment: string | null): Promise<DecisionResult> {
+  async withdraw(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult> {
     return this.tx(async (c) => {
       const req = await this.lockPending(c, tenantId, requestId);
       const done = await c.query<RequestRow>(
@@ -584,7 +595,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
         [tenantId, req.version_id],
       );
       if (!back.rows[0]) throw new ConflictError("La version n'est plus en attente d'approbation");
-      return { request: requestOf(done.rows[0]!), version: versionOf(back.rows[0]), previousActive: null };
+      return this.audited(c, { request: requestOf(done.rows[0]!), version: versionOf(back.rows[0]), previousActive: null }, audit);
     });
   }
 }

@@ -32,26 +32,31 @@ function toDomain(row: AuditRow): AuditEvent {
   };
 }
 
+/** The single INSERT into audit_log; `db` may be a pool or a transaction client (q90: same transaction). */
+export async function insertAuditEvent(db: Pick<Pool, "query">, event: Omit<AuditEvent, "id" | "timestamp">): Promise<void> {
+  await db.query(
+    `INSERT INTO audit_log
+       (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, reason, request_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      event.tenantId,
+      event.userId,
+      event.entityType,
+      event.entityId,
+      event.action,
+      event.oldValue !== undefined ? JSON.stringify(event.oldValue) : null,
+      event.newValue !== undefined ? JSON.stringify(event.newValue) : null,
+      event.reason,
+      event.requestId,
+    ],
+  );
+}
+
 export class PostgresAuditRepository implements AuditRepository {
   constructor(private readonly pool: Pool) {}
 
   async record(event: Omit<AuditEvent, "id" | "timestamp">): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO audit_log
-         (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, reason, request_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        event.tenantId,
-        event.userId,
-        event.entityType,
-        event.entityId,
-        event.action,
-        event.oldValue !== undefined ? JSON.stringify(event.oldValue) : null,
-        event.newValue !== undefined ? JSON.stringify(event.newValue) : null,
-        event.reason,
-        event.requestId,
-      ],
-    );
+    await insertAuditEvent(this.pool, event);
   }
 
   async listForEntity(tenantId: string, entityType: string, entityId: string): Promise<AuditEvent[]> {

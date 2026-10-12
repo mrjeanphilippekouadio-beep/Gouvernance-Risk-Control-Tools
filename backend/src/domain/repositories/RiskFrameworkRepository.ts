@@ -7,6 +7,7 @@ import type {
   RiskFramework,
   RiskFrameworkChangeRequest,
   RiskFrameworkVersion,
+  TransactionalAudit,
   UpdateDraftParams,
 } from "../entities/RiskFramework.js";
 
@@ -16,6 +17,12 @@ import type {
  * mutation after creation is PENDING -> a decision, via recordDecision / withdraw).
  */
 export interface RiskFrameworkRepository {
+  /**
+   * True when every mutating method below writes the `audit` events it receives inside its own transaction
+   * (a failing audit write rolls the action back). When absent/false the caller records the audit itself afterwards.
+   */
+  readonly auditsInTransaction?: boolean;
+
   listFrameworks(tenantId: string): Promise<RiskFramework[]>;
   getFramework(tenantId: string, id: string): Promise<RiskFramework | null>;
   listVersions(tenantId: string, frameworkId: string): Promise<RiskFrameworkVersion[]>;
@@ -29,16 +36,17 @@ export interface RiskFrameworkRepository {
     description: string | null;
     createdBy: string;
     params: FrameworkParams;
+    audit?: TransactionalAudit<{ framework: RiskFramework; version: RiskFrameworkVersion }>;
   }): Promise<{ framework: RiskFramework; version: RiskFrameworkVersion }>;
   /** Identity only (name, description); only the provided keys are written. */
-  updateIdentity(tenantId: string, id: string, fields: { name?: string; description?: string | null }): Promise<RiskFramework>;
+  updateIdentity(tenantId: string, id: string, fields: { name?: string; description?: string | null }, audit?: TransactionalAudit<RiskFramework>): Promise<RiskFramework>;
 
   /** Copies `sourceVersionId` into a new DRAFT (version_number = max + 1). */
-  createDraftFrom(tenantId: string, frameworkId: string, sourceVersionId: string, createdBy: string): Promise<RiskFrameworkVersion>;
+  createDraftFrom(tenantId: string, frameworkId: string, sourceVersionId: string, createdBy: string, audit?: TransactionalAudit<RiskFrameworkVersion>): Promise<RiskFrameworkVersion>;
   /** DRAFT only (0 rows -> error). Only the provided keys are written. */
-  updateDraft(tenantId: string, frameworkId: string, versionId: string, fields: UpdateDraftParams, editedBy: string): Promise<RiskFrameworkVersion>;
+  updateDraft(tenantId: string, frameworkId: string, versionId: string, fields: UpdateDraftParams, editedBy: string, audit?: TransactionalAudit<RiskFrameworkVersion>): Promise<RiskFrameworkVersion>;
   /** DRAFT -> ARCHIVED (abandon). */
-  discardDraft(tenantId: string, frameworkId: string, versionId: string, archivedBy: string, reason: string): Promise<RiskFrameworkVersion>;
+  discardDraft(tenantId: string, frameworkId: string, versionId: string, archivedBy: string, reason: string, audit?: TransactionalAudit<RiskFrameworkVersion>): Promise<RiskFrameworkVersion>;
 
   /** One transaction: version DRAFT -> PENDING_APPROVAL and the request row. */
   createActivationRequest(input: CreateActivationRequestInput): Promise<RiskFrameworkChangeRequest>;
@@ -48,7 +56,7 @@ export interface RiskFrameworkRepository {
    * One transaction. APPROVED: reserve the request (FOR UPDATE), version -> ACTIVE, previous ACTIVE ->
    * ARCHIVED, scale mirror, first default. REJECTED: version back to DRAFT.
    */
-  recordDecision(tenantId: string, requestId: string, decision: RecordDecisionInput): Promise<DecisionResult>;
+  recordDecision(tenantId: string, requestId: string, decision: RecordDecisionInput, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult>;
   /** Requester's own retraction; version back to DRAFT. The service checks who may call it. */
-  withdraw(tenantId: string, requestId: string, comment: string | null): Promise<DecisionResult>;
+  withdraw(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult>;
 }
