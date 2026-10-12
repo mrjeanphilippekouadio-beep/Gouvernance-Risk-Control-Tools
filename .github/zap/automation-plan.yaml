@@ -77,11 +77,17 @@ jobs:
       context: grc-tools
       user: qa
       url: ${ZAP_TARGET_URL}
-      maxDuration: 5
+      # With the pollUrl substitution bug fixed, auth now actually succeeds —
+      # but the run at maxDuration:5 still only reached 1 backend endpoint
+      # (the login POST itself): 5 minutes wasn't enough for Crawljax to
+      # click through the React app's screens after logging in. Give it more
+      # room to actually traverse the authenticated surface.
+      maxDuration: 12
       logoutAvoidance: true
       # Default is one browser per CPU core, each logging in independently
       # from the same runner IP — a likely contributor to the rate-limiter
-      # trip above. One browser is slower but keeps login attempts serial.
+      # trip seen before the pollUrl fix. One browser is slower but keeps
+      # login attempts serial.
       numberOfBrowsers: 1
 
   - type: passiveScan-wait
