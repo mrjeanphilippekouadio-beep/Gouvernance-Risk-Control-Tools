@@ -173,3 +173,9 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - F-B6a-07 : `notify(..., dedupe)` utilise `emit({skipIfUnread:true})` si `emit` existe, sur `resourceId` = id du Dispositif.
 - F-B6a-04 : `authorsOf` ajoute les auteurs (audit CREATE/UPDATE `RatingScale`) quand l'échelle référencée est DRAFT. Le document d'arbitrage A13 n'était pas dans ma base : implémenté d'après le message du coordinateur.
 - Leçon : un `validateLocked`-style callback optionnel évite de modifier les fakes de repository des tests existants.
+
+## 2026-10-12 F-B6a-10 (branche wt/b6a10, base 27aa4de, aucune migration)
+
+- `mirrorScale` : après les deux UPDATE des échelles, `SELECT min(probability_levels * impact_levels) FROM rating_scales WHERE status = 'ACTIVE'` (= activée + conservées car référencées par une version ACTIVE) ; tout seuil collecté (version, `configs`, appétences actives) au-dessus de ce plus petit plafond -> ValidationError listant les seuils, donc ROLLBACK de la décision. Le contrôle contre l'échelle activée reste en premier (messages existants inchangés).
+- Fakes de B6abis/QA-B6abis : ajout d'un handler pour la nouvelle requête `SELECT min(` (source de vérité changée, à signaler à A08). Test : `B6aFix10.test.ts` (scénario A10, 30 refusé / 25 accepté).
+- Leçon : un contrôle ajouté APRÈS les UPDATE reste annulé par le ROLLBACK ; pas besoin de pré-calculer l'ensemble des échelles restantes en SQL ou en JS.
