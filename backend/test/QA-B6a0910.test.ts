@@ -23,8 +23,8 @@ function pool(o: Opts) {
   const scales = o.scales.map((s) => ({ ...s }));
   const ver = {
     id: "v2", tenant_id: "t1", framework_id: "fw2", version_number: 2, status: "PENDING_APPROVAL", rating_scale_id: o.own,
-    default_evaluation_mode: "CLASSIQUE", committee_evaluation_min_score: null, committee_evaluation_enforced: false,
-    committee_treatment_min_score: null, appetite_thresholds: [], change_approver: "RISK_MANAGER", self_proposal_allowed: false,
+    default_evaluation_mode: "CLASSIQUE", committee_evaluation_min_score: o.cfgEval ?? null, committee_evaluation_enforced: false, // B-6b: configs/risk_appetites are no longer read by mirrorScale; the former "legacy" thresholds are now carried by the version
+    committee_treatment_min_score: o.cfgTreat ?? null, appetite_thresholds: (o.appetites ?? []).filter((a) => a.active && !a.deleted).map((a) => ({ subCategory: a.sub_category, threshold: a.threshold })), change_approver: "RISK_MANAGER", self_proposal_allowed: false,
     ...o.version,
   };
   const client = {
@@ -72,7 +72,7 @@ describe("QA-B6a0910 F-B6a-10 smallest ceiling of the scales left ACTIVE", () =>
 
   it("several scales stay ACTIVE: the MINIMUM (16) is used, not the first or the own one", async () => {
     const f = pool(base(17));
-    await expect(run(f)).rejects.toThrow(/smallest maximum score \(16\).*seuil Comité évaluation \(configs\) \(17\)/);
+    await expect(run(f)).rejects.toThrow(/smallest maximum score \(16\).*seuil Comité évaluation de la version \(17\)/);
     expect(ended(f)).toBe("ROLLBACK");
   });
 
@@ -127,7 +127,7 @@ describe("QA-B6a0910 F-B6a-10 smallest ceiling of the scales left ACTIVE", () =>
     await run(ok);
     expect(ended(ok)).toBe("COMMIT");
     const ko = mk([{ sub_category: "Fraude", threshold: 17, active: true }, { sub_category: "Cyber", threshold: 16, active: true }]);
-    await expect(run(ko)).rejects.toThrow(/smallest maximum score \(16\).*appétence "Fraude" \(17\)/);
+    await expect(run(ko)).rejects.toThrow(/smallest maximum score \(16\).*appétence "Fraude" de la version \(17\)/);
     const msg = await run(mk([{ sub_category: "Fraude", threshold: 17, active: true }, { sub_category: "Cyber", threshold: 16, active: true }])).catch((e: Error) => e.message);
     expect(msg).not.toMatch(/Cyber/); // 16 == minimum: not listed
   });
@@ -148,8 +148,8 @@ describe("QA-B6a0910 F-B6a-10 smallest ceiling of the scales left ACTIVE", () =>
   it("all offending thresholds are listed in one message (configs eval + treatment)", async () => {
     const f = pool({ ...base(30), cfgTreat: 28 });
     const msg = await run(f).catch((e: Error) => e.message);
-    expect(msg).toMatch(/seuil Comité évaluation \(configs\) \(30\)/);
-    expect(msg).toMatch(/seuil Comité traitement \(configs\) \(28\)/);
+    expect(msg).toMatch(/seuil Comité évaluation de la version \(30\)/);
+    expect(msg).toMatch(/seuil Comité traitement de la version \(28\)/);
   });
 
   it("refusal leaves no COMMIT; the whole decision (request UPDATE included) is in the rolled-back transaction", async () => {

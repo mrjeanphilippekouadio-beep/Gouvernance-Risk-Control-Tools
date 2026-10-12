@@ -2,6 +2,8 @@ import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
+import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
+import type { RatingScale } from "../domain/entities/RatingScale.js";
 import type { Risk } from "../domain/entities/Risk.js";
 import {
   AUTHORITATIVE_EVALUATION_STATUSES,
@@ -34,7 +36,12 @@ export interface CartographyFilters {
    * at with an invented shape.
    */
   ownerId?: string;
+  /** B-6b: one Dispositif at a time; defaults to the tenant's default Dispositif. Ignored when the Dispositif is not wired. */
+  frameworkId?: string;
 }
+
+/** B-6b: the read side of the Dispositif the cartography needs. */
+export type CartographyFrameworkReads = Pick<RiskFrameworkRepository, "getDefaultFramework" | "getFramework" | "getActiveVersion" | "getVersionById">;
 
 /** One risk plotted on the heatmap: position (probability x impact), color (criticality), size (velocity). */
 export interface CartographyDataPoint {
@@ -80,6 +87,8 @@ export interface CartographyDataPoint {
   velocity: null;
   entityLabel: string | null;
   departmentId: string | null;
+  /** B-6b (only when the Dispositif is wired): the version the evaluation is frozen on; null = "antérieure au Dispositif". */
+  frameworkVersionId?: string | null;
 }
 
 export interface CartographyCompareResult {
@@ -100,6 +109,28 @@ export interface CartographyActiveScale {
   /** Configured criticalityThresholds, else defaultBandsForMaxScore(maxScore). */
   bands: ScoreThreshold[];
   bandsSource: "CONFIGURED" | "DEFAULT";
+  /** B-6b (only when the Dispositif is wired). */
+  frameworkId?: string;
+  frameworkName?: string;
+  frameworkVersionId?: string;
+  frameworkVersionNumber?: number;
+}
+
+/** The grid view of a scale (size, ceiling, effective bands). */
+function scaleView(scale: RatingScale): CartographyActiveScale {
+  const maxScore = maxScoreForScale(scale);
+  const configured = scale.criticalityThresholds && scale.criticalityThresholds.length > 0 ? scale.criticalityThresholds : null;
+  return {
+    scaleId: scale.id,
+    name: scale.name,
+    version: scale.version,
+    size: scale.probabilityLevels === scale.impactLevels ? scale.probabilityLevels : null,
+    probabilityLevels: scale.probabilityLevels,
+    impactLevels: scale.impactLevels,
+    maxScore,
+    bands: configured ?? defaultBandsForMaxScore(maxScore),
+    bandsSource: configured ? "CONFIGURED" : "DEFAULT",
+  };
 }
 
 function deriveCriticality(score: number, bands: ScoreThreshold[]): string {
@@ -172,6 +203,8 @@ export class CartographyService {
      * `resolvedVia`, never silently.
      */
     private readonly processes?: ProcessRepository,
+    /** B-6b: when wired, the scale shown is that of the Dispositif's ACTIVE version; absent: pre-B-6b behaviour. */
+    private readonly frameworks?: CartographyFrameworkReads,
   ) {}
 
   /** ACT-180/181/183: heatmap data points for one version, with optional combinable filters. */
@@ -186,24 +219,29 @@ export class CartographyService {
   }
 
   /** DECISION-041: active scale of the tenant with its effective bands, or null when none is active (the page then shows no grid). */
-  async getActiveScale(actor: AuthenticatedUser): Promise<CartographyActiveScale | null> {
+  async getActiveScale(actor: AuthenticatedUser, frameworkId?: string): Promise<CartographyActiveScale | null> {
     requirePermission(actor, "cartography.read");
     if (!this.ratingScales) return null;
+    if (this.frameworks) {
+      // B-6b (spec §9): the scale of the shown Dispositif's ACTIVE version; no Dispositif / no active version -> no grid.
+      const framework = frameworkId
+        ? await this.frameworks.getFramework(actor.tenantId, frameworkId)
+        : await this.frameworks.getDefaultFramework(actor.tenantId);
+      if (!framework) return null;
+      const version = await this.frameworks.getActiveVersion(actor.tenantId, framework.id);
+      if (!version) return null;
+      const scale = await this.ratingScales.getById(actor.tenantId, version.ratingScaleId);
+      if (!scale) return null;
+      return {
+        ...scaleView(scale),
+        frameworkId: framework.id,
+        frameworkName: framework.name,
+        frameworkVersionId: version.id,
+        frameworkVersionNumber: version.versionNumber,
+      };
+    }
     const active = (await this.ratingScales.list(actor.tenantId)).find((s) => s.status === "ACTIVE");
-    if (!active) return null;
-    const maxScore = maxScoreForScale(active);
-    const configured = active.criticalityThresholds && active.criticalityThresholds.length > 0 ? active.criticalityThresholds : null;
-    return {
-      scaleId: active.id,
-      name: active.name,
-      version: active.version,
-      size: active.probabilityLevels === active.impactLevels ? active.probabilityLevels : null,
-      probabilityLevels: active.probabilityLevels,
-      impactLevels: active.impactLevels,
-      maxScore,
-      bands: configured ?? defaultBandsForMaxScore(maxScore),
-      bandsSource: configured ? "CONFIGURED" : "DEFAULT",
-    };
+    return active ? scaleView(active) : null;
   }
 
   /** ACT-184: inherent + residual data points for the same filtered risk set, one response. */
@@ -235,6 +273,18 @@ export class CartographyService {
     const risks = await this.risks.list(actor.tenantId);
     const candidates = risks.filter((risk) => this.matchesStaticFilters(risk, filters));
 
+    // B-6b (spec §9): one Dispositif at a time. An evaluation belongs to one through its version; rows from
+    // before the Dispositif (no version) are shown with the default Dispositif WITHOUT being attached to it
+    // (frameworkVersionId: null) — nothing is rewritten, no methodology is claimed that cannot be proven.
+    let targetFrameworkId: string | null = null;
+    let targetIsDefault = true;
+    const versionFramework = new Map<string, string | null>();
+    if (this.frameworks) {
+      const def = await this.frameworks.getDefaultFramework(actor.tenantId);
+      targetFrameworkId = filters?.frameworkId ?? def?.id ?? null;
+      targetIsDefault = !filters?.frameworkId || filters.frameworkId === def?.id;
+    }
+
     const bandsCache = new Map<string, ScoreThreshold[]>();
     const processCache = new Map<string, Process | null>();
     const points: CartographyDataPoint[] = [];
@@ -248,6 +298,20 @@ export class CartographyService {
       // to a neighboring, already-shipped module's interface.
       const evaluation = await this.getMostRecentAuthoritativeEvaluation(actor.tenantId, risk.id);
       if (!evaluation) continue; // no authoritative (VALIDATED/VALIDE_COMITE) evaluation yet -> excluded, never defaulted
+
+      if (this.frameworks) {
+        const versionId = evaluation.riskFrameworkVersionId ?? null;
+        if (versionId === null) {
+          if (!targetIsDefault) continue;
+        } else {
+          let owner = versionFramework.get(versionId);
+          if (owner === undefined) {
+            owner = (await this.frameworks.getVersionById(actor.tenantId, versionId))?.frameworkId ?? null;
+            versionFramework.set(versionId, owner);
+          }
+          if (owner === null || owner !== targetFrameworkId) continue;
+        }
+      }
 
       if (filters?.subCategory && evaluation.subCategory !== filters.subCategory) continue;
       if (filters?.entity && (evaluation.entity ?? undefined) !== filters.entity) continue;
@@ -276,6 +340,7 @@ export class CartographyService {
         velocity: null,
         entityLabel: evaluation.entity,
         departmentId: risk.ownerDepartmentId,
+        ...(this.frameworks ? { frameworkVersionId: evaluation.riskFrameworkVersionId ?? null } : {}),
       });
     }
 

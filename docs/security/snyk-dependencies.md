@@ -958,3 +958,41 @@ INFO : (a) des droits d'administration portés par `users.roles` hérité ne son
 ### Statut et tracker (7bis)
 
 F-D046-01 (A06, avec F-D044-08), F-D046-02 (A06/A08), F-D046-03 (frontend). F-D044-03 : RatingScale RETEST_PASS, reste ouvert pour les autres services.
+
+## B-6b — Branchement du Dispositif (revue A10, 2026-10-12, commit `45cbd86`, tête `e25820f`)
+
+Méthode : revue statique du diff (28 fichiers, migration 059 up/down), `npm run typecheck` vert, `vitest` 1828 verts / 25 ignorés. Aucun rejeu Postgres (059 jamais appliquée hors base jetable ; aucun accès Neon). **Dépendances : aucun `package.json` / lockfile modifié, rien à évaluer côté Snyk.**
+
+**Verdict : feu vert staging avec réserves. Aucun blocage. Aucune escalade HUMAN (max CVSS 2,7).**
+
+### PASS
+
+- **Tenant / `frameworkId`** (cartographie `/`, `/scale`, `/compare`) : `z.guid()` sinon 400 ; `getFramework`, `getDefaultFramework`, `getActiveVersion`, `getVersionById` filtrent tous par `actor.tenantId`. Un `frameworkId` d'un autre tenant donne `data: null` (scale) ou zéro point (les versions des évaluations sont relues tenant-scopées, l'égalité d'id ne matche jamais). Pas d'oracle inter-tenant.
+- **`GET /risk-frameworks/applicable`** : exactement un de `riskId`/`processId` (guid), risque et processus relus par `actor.tenantId` → 404 hors tenant ; route déclarée avant `/:id`. Gate `riskframework.read` : la réponse (version complète) est déjà lisible par cette permission via les routes de versions ; pas de nouvelle donnée exposée (voir INFO F-B6b-03).
+- **Instantané F-8** : version, échelle, seuils Comité résolus serveur dans `RiskEvaluationService.create` depuis `risk.processId` relu en base ; `CreateEvaluationBody` (zod non strict = clés inconnues retirées) + construction explicite de l'input : un `snapshot` client est ignoré. `validate`/`validateByCommittee`/traitement lisent les copies de l'évaluation ; une évaluation rattachée à une version sans seuil de traitement → refus (fail-closed), jamais de repli `configs`. `recordInherentScoring` réécrit `rating_scale_id` avec la valeur figée.
+- **Attribution** : aucun nouveau champ `...By` client ; `createdBy`/`lastEditedBy` des versions restent serveur.
+- **États terminaux** : aucune nouvelle transition terminale ; `committeeVoteRule: CUSTOM` et `committeeVoteCustom` non nul refusés (schéma `.strict()` vide + service).
+- **Migration 059** : `risk_framework_versions_guard()` redéfinie AVEC `SET search_path = pg_catalog, public, pg_temp`, les 8 colonnes q91 ajoutées à `same_content` (immuables hors DRAFT) ; le down restaure la version 056 avec le même `SET` et retire sa ligne `schema_migrations`. `QA-B6a11` vert.
+- **boundedArray** : aucune nouvelle entrée tableau (seul `appetiteThresholds`, déjà borné à 200).
+- **Écrivains fermés** : `ConfigService.updateEvaluationMode`/`updateCommitteeThresholds`/`setCommitteeEnforcement`, `RiskAppetiteService.setThreshold`/`archive` → `ValidationError` quand le Dispositif est câblé (toujours en `server.ts`). Inventaire SQL : `risk_appetites` n'est écrit que par `RiskAppetiteService` ; `configs` que par `ConfigService.upsertConfig`, dont les chemins restés ouverts (`updateMethodology`, `updateAppetiteMode`, `setCommitteeAuditCumul`) ne peuvent pas toucher aux seuils (schémas zod sans ces clés, `UpdateMethodologyInput` sans elles). Conforme au §3 de la spec, sauf `RatingScaleService.activateVersion` (B-6b-01, ci-dessous).
+
+### Findings
+
+**F-B6b-01 — LOW — CVSS 3.1 2,7 (AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:L/A:N) — CONFIRMED (code) — owner A06, à rattacher à B-6b-02.**
+`DashboardService.getAppetiteVsResidual` (`GET /reports/appetite-vs-residual`, l. 647-700) compare toujours les résiduels à `risk_appetites` actives, table désormais gelée (écrivains fermés). Une nouvelle version du Dispositif qui abaisse une appétence, ou ajoute une sous-catégorie, n'apparaît pas dans le rapport : dépassements sous-déclarés au Comité alors que `appetiteExceeded` de l'évaluation (calculé sur la version) est juste. Chemin : RM active v2 (appétence « Fraude » 12 au lieu de 16) ; un risque à 14 est signalé par l'évaluation mais le rapport exécutif affiche 16 et « non dépassé ». Reco : lire l'appétence de la version applicable au risque (`resolveApplicableVersion` + `findAppetite`, ou version figée de l'évaluation) ; ajouter ce lecteur à l'inventaire B-6b-02. Test : v2 abaisse l'appétence → `exceeded: true`.
+
+**F-B6b-02 — LOW — CVSS 3.1 2,0 (AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:N) — owner A07.**
+L'invariant F-8 (« jamais réattachée, jamais réécrite ») n'est tenu que par l'application : aucune garde en base sur `risk_evaluations.risk_framework_version_id` / `committee_*` / `rating_scale_id` une fois posés (seul un index existe sur la table, 019), et la FK `risk_framework_version_id` ne porte pas `tenant_id`. Un détenteur du rôle runtime (injection, credential) peut abaisser le seuil Comité d'une évaluation ou la rattacher à une version d'un autre tenant. Défense en profondeur, cohérente avec les gardes déjà posées sur les versions. Reco : trigger `BEFORE UPDATE` (avec `SET search_path = pg_catalog, public, pg_temp`) refusant toute modification de ces colonnes une fois non nulles + contrôle que la version appartient au même tenant (trigger ou FK composite `(tenant_id, id)`).
+
+**B-6b-01 (connu) — évaluation sécurité : LOW — CVSS 3.1 2,7 (AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:L/A:L).**
+`RatingScaleService.activateVersion` (gate `ratingscale.delete`, dédiée) peut ARCHIVER l'échelle de la version ACTIVE du Dispositif (le trigger 055 gèle le contenu, pas `status`). Impact borné : création/évaluation non touchées (`getById` ignore `status`), seuils figés intacts. Effets : lecteurs hérités (`resolveMaxScore`, `DashboardService`) basculent sur une échelle hors Dispositif ; une future version réutilisant cette échelle sera refusée par `mirrorScale` (ARCHIVED). À fermer comme les autres écrivains (§3).
+
+**F-B6b-03 — INFO — owner A06.** `/applicable?riskId=` n'exige pas `risk.read` : un détenteur de `riskframework.read` seul confirme l'existence d'un id de risque du tenant (404 vs 200). Négligeable (uuid, mêmes groupes RM/Comité/Audit). Reco optionnelle : `requirePermission(actor, "risk.read")` sur la branche `riskId`.
+
+**F-B6b-04 — INFO (pré-B-6c) — owner A05/A06.** Quand B-6c écrira `processes.risk_framework_id`, `risk.processId` (modifiable avec `risk.update`) choisira quel Dispositif — donc quels seuils Comité/appétence — s'applique aux évaluations futures du risque. B-6c doit traiter le changement de processus d'un risque comme un acte méthodologique (audit avec ancien/nouveau Dispositif, ou gate dédiée).
+
+**F-B6b-05 — INFO — owner A06 (B-5).** Les versions ACTIVE antérieures à 059 ont `low_criticality_threshold` NULL ; seule la demande d'activation l'exige. B-5 doit traiter NULL en fail-closed (cumul RO + Exécuteur → exception approuvée), comme le note la migration ; à couvrir par un test B-5.
+
+### Statut et tracker (7bis)
+
+F-B6b-01 (A06, avec B-6b-02, avant B-6c), F-B6b-02 (A07), B-6b-01 (A06, déjà ouvert), F-B6b-03/04/05 INFO.

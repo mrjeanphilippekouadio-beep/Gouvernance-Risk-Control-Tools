@@ -27,6 +27,16 @@ const ParamsShape = {
   appetiteThresholds: boundedArray(AppetiteEntry, 200),
   changeApprover: z.enum(["RISK_MANAGER", "AUDIT", "COMMITTEE", "AUDIT_AND_COMMITTEE"]),
   selfProposalAllowed: z.boolean(),
+  // B-6b (q91). The seuil "faible" is entered explicitly (never pre-filled, R2); `null` clears it in a draft.
+  lowCriticalityThreshold: Score.nullable(),
+  riskOwnerExecutorCumulAllowed: z.boolean(),
+  delegateExecutorCumulAllowed: z.boolean(),
+  delegationMaxDays: z.number().int().min(1).max(3650).nullable(), // technical anti-abuse bound, not a business rule
+  hybridPolicyEnabled: z.boolean(),
+  masteryAuthoritativeSource: z.enum(["RISK_TEAM", "FIRST_LINE"]),
+  committeeVoteRule: z.enum(["DEFAULT", "A", "B", "C", "CUSTOM"]),
+  // Shape defined by B-12; the service refuses any value until then. Strict + empty: no free-form object reaches it.
+  committeeVoteCustom: z.object({}).strict().nullable(),
 };
 
 const CreateBody = z
@@ -50,6 +60,9 @@ const ReasonBody = z.object({ reason: Reason }).strict();
 const ApproveBody = z.object({ comment: Comment.optional() }).strict();
 const RejectBody = z.object({ comment: Comment.min(1) }).strict();
 const WithdrawBody = z.object({ reason: Comment.optional() }).strict();
+const ApplicableQuery = z
+  .object({ riskId: Id.optional(), processId: Id.optional() })
+  .refine((q) => (q.riskId === undefined) !== (q.processId === undefined), { message: "Exactly one of riskId or processId is required" });
 const StatusQuery = z.enum(["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"]).optional();
 
 /**
@@ -74,6 +87,16 @@ export function riskFrameworksRouter(service: RiskFrameworkService): Router {
       const body = CreateBody.parse(req.body);
       const created = await service.create(req.user, body, req.requestId);
       res.status(201).json({ data: created });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // B-6b: the Dispositif version that applies to a risk or a process (read-only). Before "/:id".
+  router.get("/applicable", async (req, res, next) => {
+    try {
+      const q = ApplicableQuery.parse(req.query);
+      res.json({ data: await service.getApplicable(req.user, q) });
     } catch (err) {
       next(err);
     }

@@ -207,7 +207,7 @@ let n = 0;
 async function draft(w: W, params: { changeApprover?: string } = {}, by = u1) {
   // C-B6a-02: a non-RISK_MANAGER approver cannot be written through the service before B-12: seed it as stored data.
   const { changeApprover, ...allowed } = params;
-  const { framework, version } = await w.service.create(by, { name: `D${++n}`, ratingScaleId: S1, params: allowed }, R);
+  const { framework, version } = await w.service.create(by, { name: `D${++n}`, ratingScaleId: S1, params: { lowCriticalityThreshold: 5, ...allowed } }, R);
   if (changeApprover) w.versions.find((x) => x.id === version.id)!.changeApprover = changeApprover as never;
   return { fw: framework.id, v: version.id };
 }
@@ -608,7 +608,7 @@ describe("QA-B6a audit (spec §13) and failures", () => {
 
   it("every mutation writes the expected entity/action, userId = actor, tenant and requestId carried", async () => {
     const w = world();
-    const { framework, version } = await w.service.create(u1, { name: "A", ratingScaleId: S1 }, "q1");
+    const { framework, version } = await w.service.create(u1, { name: "A", ratingScaleId: S1, params: { lowCriticalityThreshold: 5 } }, "q1");
     await w.service.updateIdentity(u1, framework.id, { name: "B", reason: "renom" }, "q2");
     await w.service.updateDraft(u1, framework.id, version.id, { selfProposalAllowed: false }, "q3");
     const r = await w.service.requestActivation(u1, framework.id, version.id, "go", "q4");
@@ -861,7 +861,7 @@ describe("QA-B6a tenant isolation and HTTP surface", () => {
   it("end to end over HTTP: create -> request -> self-approve 403 -> approve by a third party 200 -> second approve 409 -> new draft", async () => {
     const w = world();
     await withHttp(w, async (call) => {
-      const c = await call("POST", "/", { name: "Dispositif", ratingScaleId: S1 }, u1);
+      const c = await call("POST", "/", { name: "Dispositif", ratingScaleId: S1, params: { lowCriticalityThreshold: 5 } }, u1);
       expect(c.status).toBe(201);
       const { framework, version } = c.json.data;
       const rq = await call("POST", `/${framework.id}/versions/${version.id}/activation-requests`, { reason: "go" }, u1);

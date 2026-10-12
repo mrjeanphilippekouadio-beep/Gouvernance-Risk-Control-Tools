@@ -24,6 +24,10 @@ interface RiskEvaluationRow {
   evaluation_mode: RiskEvaluation["evaluationMode"];
   rating_scale_id: string | null;
   rating_scale_version: string | null;
+  risk_framework_version_id: string | null;
+  committee_evaluation_min_score: number | null;
+  committee_evaluation_enforced: boolean | null;
+  committee_treatment_min_score: number | null;
   inherent_probability: number | null;
   inherent_impacts: ImpactAxisScore[] | null;
   inherent_impact_retained: number | null;
@@ -59,6 +63,10 @@ function toDomain(row: RiskEvaluationRow): RiskEvaluation {
     evaluationMode: row.evaluation_mode,
     ratingScaleId: row.rating_scale_id,
     ratingScaleVersion: row.rating_scale_version,
+    riskFrameworkVersionId: row.risk_framework_version_id,
+    committeeEvaluationMinScore: row.committee_evaluation_min_score,
+    committeeEvaluationEnforced: row.committee_evaluation_enforced,
+    committeeTreatmentMinScore: row.committee_treatment_min_score,
     inherentProbability: row.inherent_probability,
     inherentImpacts: row.inherent_impacts,
     inherentImpactRetained: row.inherent_impact_retained,
@@ -129,10 +137,13 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
   }
 
   async create(input: CreateRiskEvaluationInput): Promise<RiskEvaluation> {
+    const snap = input.snapshot;
     const { rows } = await this.pool.query<RiskEvaluationRow>(
       `INSERT INTO risk_evaluations
-         (tenant_id, risk_id, evaluation_type, status, evaluator_id, sub_category, entity, evaluation_mode)
-       VALUES ($1, $2, $3, 'BROUILLON', $4, $5, $6, $7)
+         (tenant_id, risk_id, evaluation_type, status, evaluator_id, sub_category, entity, evaluation_mode,
+          risk_framework_version_id, rating_scale_id, rating_scale_version,
+          committee_evaluation_min_score, committee_evaluation_enforced, committee_treatment_min_score)
+       VALUES ($1, $2, $3, 'BROUILLON', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         input.tenantId,
@@ -142,6 +153,12 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
         input.subCategory,
         input.entity ?? null,
         input.evaluationMode,
+        snap?.riskFrameworkVersionId ?? null,
+        snap?.ratingScaleId ?? null,
+        snap?.ratingScaleVersion ?? null,
+        snap?.committeeEvaluationMinScore ?? null,
+        snap?.committeeEvaluationEnforced ?? null,
+        snap?.committeeTreatmentMinScore ?? null,
       ],
     );
     const row = rows[0];

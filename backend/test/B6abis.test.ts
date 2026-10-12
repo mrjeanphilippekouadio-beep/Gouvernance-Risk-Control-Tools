@@ -104,7 +104,7 @@ function world(o: { scales?: RatingScale[]; emit?: boolean } = {}) {
 }
 
 async function draft(w: ReturnType<typeof world>) {
-  const { version } = await w.service.create(u1, { name: "D", ratingScaleId: "s1" }, R);
+  const { version } = await w.service.create(u1, { name: "D", ratingScaleId: "s1", params: { lowCriticalityThreshold: 5 } }, R);
   return version.id;
 }
 
@@ -260,13 +260,16 @@ describe("B-6a bis repository (F-B6a-01, F-B6a-02)", () => {
     expect(f.log).not.toContain("COMMIT");
   });
 
+  // B-6b (spec §2.3, F-B6a-12 closed): `configs` and `risk_appetites` are no longer read by mirrorScale;
+  // their writers are closed, only the thresholds carried by the version are checked.
   it.each([
-    ["configs Comité threshold above n²", { cfgEval: 30 }, /configs/],
-    ["legacy appetite above n²", { appetite: 26 }, /Fraude/],
-  ])("F-B6a-01: %s refuses the activation (rollback)", async (_n, o, msg) => {
+    ["configs Comité threshold above n²", { cfgEval: 30 }],
+    ["legacy appetite above n²", { appetite: 26 }],
+  ])("B-6b: %s is no longer read by the activation (committed)", async (_n, o) => {
     const f = fakePool(o);
-    await expect(new PostgresRiskFrameworkRepository(f.pool).recordDecision("t1", "r1", decision)).rejects.toThrow(msg);
-    expect(f.log.at(-1)).toBe("ROLLBACK");
+    await new PostgresRiskFrameworkRepository(f.pool).recordDecision("t1", "r1", decision);
+    expect(f.log.at(-1)).toBe("COMMIT");
+    expect(f.log.some((q) => /FROM configs|FROM risk_appetites/.test(q))).toBe(false);
   });
 
   it("F-B6a-02: createActivationRequest locks the version FOR UPDATE, replays validateLocked on it, and a throw rolls back", async () => {
