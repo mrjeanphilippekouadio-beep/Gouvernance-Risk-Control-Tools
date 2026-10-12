@@ -47,7 +47,9 @@ const COMMITTEE_VALIDATION_PERMISSIONS: Permission[] = [
 ];
 const isCommitteeValidationPermission = (p: Permission): boolean => COMMITTEE_VALIDATION_PERMISSIONS.includes(p);
 const isRiskManagerMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "RISK_MANAGER");
-const isCommitteeMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "RISK_COMMITTEE");
+/** Committee membership = the group or its validation powers (F-D044-01), for q94 as for q80/G1. */
+const isCommitteeRole = (r: Role): boolean => r.systemGroup === "RISK_COMMITTEE" || r.permissions.some(isCommitteeValidationPermission);
+const isCommitteeMember = (roles: Role[]): boolean => roles.some(isCommitteeRole);
 
 /** F-B8b-03: permissions whose "who can give it back" answer is never served (administration / governance). */
 const NOT_REQUESTABLE = /^(role|rolegroup|user|audit)\./;
@@ -85,7 +87,7 @@ function assertRolePermissionRules(group: SystemGroup | null, permissions: Permi
  */
 function assertNoCumul(role: Role, held: Role[]): void {
   const isRm = (r: Role) => r.systemGroup === "RISK_MANAGER";
-  const isCommittee = (r: Role) => r.systemGroup === "RISK_COMMITTEE" || r.permissions.some(isCommitteeValidationPermission);
+  const isCommittee = isCommitteeRole;
   if ((isRm(role) && (isCommittee(role) || held.some(isCommittee))) || (isCommittee(role) && held.some(isRm))) {
     throw new ValidationError("A user cannot be both in the Risk Manager group and in the Committee group");
   }

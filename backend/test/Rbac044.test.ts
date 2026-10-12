@@ -131,6 +131,15 @@ describe("F-D044-01: Committee validation permissions count as Committee members
     await expect(svc.reactivate(assigner, "old", "r")).rejects.toThrow(ValidationError);
   });
 
+  it("treats an administrator holding Committee validation powers as admin + Committee (q80)", async () => {
+    const { service, sent, held } = world();
+    held.set("val", ["co"]);
+    held.set("u4", ["comval"]);
+    await expect(service.assignToUser(assigner, "client", "u4", "r")).rejects.toThrow(/administrator and Committee member/);
+    await service.assignToUser(assigner, "client", "u4", "r", "continuité");
+    expect(sent.filter((s) => s.eventType === "ADMIN_RISK_MANAGER_CUMUL").map((s) => s.recipientUserId)).toEqual(["val"]);
+  });
+
   it("still lets a non-Risk-Manager hold these permissions", async () => {
     const { service } = world();
     await service.assignToUser(assigner, "comval", "u3", "r", "motif");
