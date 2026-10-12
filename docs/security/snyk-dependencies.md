@@ -593,3 +593,69 @@ Sous-point vérifié : NOTIF-QA-01, un destinataire KRI en échec n'empêche plu
 
 ### Statut et tracker (7bis)
 F-NOTIF-03/04/05/06 : **CLOSED** côté sécurité. F-NOTIF-01 : **REMEDIATION_REQUIRED** (A06, MEDIUM 4,3 : dédoublonnage atomique + limiteur KRI). F-NOTIF-02 : attend la décision PO q85 (owner HUMAN), chaîne F-NOTIF-01 + 02 toujours ouverte (rafale -> désabonnement de la victime).
+
+## Revue B-6a Dispositif — 2026-10-12 (A10, `0a465fa` + migration corrigée `9936da3`, tête `824bef7`, statique + vitest 134 verts + Postgres 16 réel jetable)
+
+### Verdict
+**PASS avec réserves. Escalade HUMAN : aucune** (CVSS max 3,8). Aucun code modifié. Méthode : relecture du diff (service, repository, routes, permissions, groupes fixes, migration 055 dans sa version A07 `9936da3`, identique à la tête) ; vitest `B6a`, `B8ter`, `QA-B8quater`, `boundedArray` (134 verts) ; rejeu sur Postgres 16 jetable hors dépôt (001 à 055 sous un rôle propriétaire `grc_migrator_runtime`, 055 rejouée deux fois, seed dev, tests SQL sous `grc_app_runtime`, scénarios sur le vrai `RiskFrameworkService` câblé aux vrais repositories Postgres).
+
+### Points vérifiés sans écart
+- **Attribution** : `createdBy`, `lastEditedBy`, `requestedBy`, `decidedBy`, `archivedBy` sont tous forcés à `actor.userId` dans le service. Aucun schéma zod ne les accepte : tous sont `.strict()`, et un `status` ou un `...By` dans le corps donne 400. Le service filtre en plus par la liste blanche `PARAM_KEYS`.
+- **Permissions** : décider (approuver ou refuser) exige `riskframework.activate`, et l'archivage de la version précédente a lieu dans cette décision. L'abandon d'un brouillon (DRAFT -> ARCHIVED) exige `riskframework.archive`. Aucune transition terminale n'est accessible avec `update`. Comité et Audit n'ont que `riskframework.read`, ce qui est cohérent avec `isAuditGroupPermission` (suffixe `.read`). Vérifié sur base : après 055, RM a les 6 permissions, Comité et Audit seulement `read`.
+- **Maker-checker en service** (rejoué sur base réelle) : l'auteur d'une modification (journal d'audit), le demandeur et un administrateur non RM sont refusés (403) ; un 3e RM approuve. Un RM n'est reconnu que par `user_roles` non révoqué sur un rôle de groupe non désactivé : `users.roles`, le canal hérité, ne fait pas un RM. **En base** : le CHECK `maker_checker` refuse `decided_by = requested_by` en régime `NORMAL`.
+- **Triggers et droits** (exécutés sous `grc_app_runtime`) : `DELETE` et `TRUNCATE` sont refusés sur les 3 tables (ACL `arw`, sans `d` ni `D`). DRAFT -> ACTIVE est refusé. Une version PENDING est figée. Une version ACTIVE est immuable : paramètres, retour en DRAFT, et passage en ARCHIVED sans `archived_*` ou avec `last_edited_by` modifié sont tous refusés. Une version ARCHIVED ne peut pas redevenir ACTIVE. Le contenu et la suppression douce d'une échelle référencée par une version PENDING sont refusés, alors que le miroir `status` reste permis. Une demande décidée ne peut plus être modifiée ni revenir en PENDING, et le `reason` d'une demande PENDING ne change pas, même au moment du retrait.
+- **Concurrence** (`FOR UPDATE` sur la demande) : sur 5 essais de approve x3 + reject en parallèle, on obtient exactement 1 décision, 1 seule version ACTIVE et l'ancienne ARCHIVED. Sur 3 essais de approve, reject et withdraw en parallèle, on obtient exactement 1 issue. Le brouillon concurrent est protégé par le verrou sur le Dispositif et l'index `open_idx`.
+- **q87, fail-closed** : quand le décideur résolu est un vote, `approve` et `reject` répondent tous deux 409, et la demande reste PENDING et retirable.
+- **Isolation tenant** : toutes les requêtes filtrent `tenant_id`, `getVersion` filtre aussi `framework_id`, et l'échelle est vérifiée dans le tenant (`getById` filtre `deleted_at`).
+- **Entrées** : `appetiteThresholds` utilise `boundedArray(el, 200)`, sans aucun `z.array` nu. Les identifiants sont en `z.guid()` et les textes sont bornés.
+
+### Findings
+| ID | Sévérité | CVSS 3.1 | Confiance | Owner |
+|---|---|---|---|---|
+| F-B6a-01 | LOW (prioritaire) | 3,8 AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:L/A:L | CONFIRMED | A06 |
+| F-B6a-02 | LOW | 2,0 AV:N/AC:H/PR:H/UI:R/S:U/C:N/I:L/A:N | CONFIRMED | A06 |
+| F-B6a-03 | LOW | 2,7 AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:L/A:N | CONFIRMED | A06 |
+| F-B6a-04 | LOW | 2,2 AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:N | PROBABLE | A06 + A13 |
+| F-B6a-05..08 | INFO | — | — | voir ci-dessous |
+
+**F-B6a-01 — Le miroir des échelles crée deux échelles ACTIVE et contourne les gardes de `RatingScaleService.activateVersion` (B-6a déployé sans B-6b).** Fichier : `PostgresRiskFrameworkRepository.ts:481-494`. Le miroir met l'échelle de la version en ACTIVE, mais à la première activation il **n'archive pas** l'échelle ACTIVE héritée : `previousActive` est null. Les lecteurs hérités (`resolveMaxScore` dans `scoreCeiling.ts:14`, `RiskEvaluationService.resolveActiveRatingScale` vers la ligne 604, `CartographyService.getActiveScale`) prennent la **plus récente** des échelles ACTIVE (`ORDER BY created_at DESC`).
+Rejeu : une échelle héritée 6x6 est ACTIVE, avec `configs.committee_evaluation_min_score = 30`. Un RM modifie le brouillon pour référencer une échelle 5x5, un 2e RM en demande l'activation, un 3e approuve. Résultat : `Legacy 6x6 ACTIVE` et `New 5x5 ACTIVE`, et `resolveMaxScore` vaut 25. Le seuil Comité 30 devient inatteignable, donc `validate()` n'oriente plus aucune évaluation vers le Comité : la garde est **fail-open**. C'est F-B9b-01 rouvert par un nouveau chemin. Ce chemin saute aussi `assertThresholdsFitCeiling` et l'interdiction de réactiver une échelle ARCHIVED : le miroir passe à ACTIVE toute échelle `status <> 'ACTIVE'`.
+**Correctif attendu** : tant que B-6b n'a pas fermé les écritures concurrentes, le miroir doit garder une seule échelle ACTIVE par tenant, en archivant dans la même transaction toute autre ACTIVE qu'aucune version ACTIVE ne référence. Il faut aussi rejouer `assertThresholdsFitCeiling` (seuils de `configs`/`risk_appetites`) dans `requestActivation` et dans `decide`, et refuser une échelle ARCHIVED. Alternative : ne pas déployer B-6a sans B-6b.
+Test de régression : après une activation, `count(*) FROM rating_scales WHERE status='ACTIVE' AND tenant_id=…` vaut 1, et une activation qui rendrait un seuil de `configs` supérieur à n² est refusée.
+
+**F-B6a-02 — TOCTOU entre la validation de la demande et le passage en PENDING : q65 et le plafond n² sont contournables.** Fichiers : `RiskFrameworkService.ts:297-309` et `PostgresRiskFrameworkRepository.ts:381-386`. `requestActivation` valide une version lue sans verrou (`assertActivatable`, puis q65 sur `version.selfProposalAllowed`). `createActivationRequest` fait ensuite `UPDATE ... WHERE status='DRAFT'`, sans vérifier que le contenu n'a pas changé. Un `PATCH` du brouillon qui arrive pendant cette fenêtre de plusieurs allers-retours SQL est donc figé tel quel. `decide` ne rejoue ni `assertActivatable` ni q65.
+Rejeu : un RM envoie en parallèle la demande et un `PATCH {selfProposalAllowed:true, committeeEvaluationMinScore:36}` sur une échelle 5x5. Sur 30 essais avec un délai aléatoire de 0 à 40 ms, **3 versions PENDING** portent `self_proposal_allowed = true` et un seuil de 36, supérieur à 25. La 1re a été approuvée par un 3e RM en régime `NORMAL` et est devenue **ACTIVE** avec l'auto-proposition activée sans vote du Comité : l'invariant q65 est contourné, et le seuil Comité sera inatteignable dès B-6b. UI:R, parce qu'un approbateur doit valider sans relire.
+**Correctif attendu** : verrouiller la version (`SELECT ... FOR UPDATE` dans la transaction de `createActivationRequest`), puis valider sous ce verrou ce qui a été relu dans la transaction, ou comparer `updated_at`. Il faut aussi rejouer `assertActivatable` et q65 dans `decide`, avant `recordDecision`.
+Test de régression : `PATCH` et demande en parallèle (20 essais sur Postgres réel) donnent 0 version PENDING invalide.
+
+**F-B6a-03 — `discardDraft` n'exige pas d'être membre du groupe RM.** Fichier : `RiskFrameworkService.ts:274`. La méthode ne fait que `requirePermission(..., "riskframework.archive")`. Un administrateur non RM (`role.create` + `role.assign`, sous maker-checker) peut créer un rôle personnalisé portant `riskframework.archive` et l'assigner à un tiers non RM. Rejoué : ce tiers abandonne le brouillon d'un RM (`OK`). L'impact est faible : l'action est auditée et le brouillon peut être recréé. La spec §10 ne liste pas `archive` dans la garde RM, mais q51 (« la configuration appartient à la fonction risque ») s'applique. Surtout, la même permission portera en B-6c l'**archivage d'un Dispositif entier**.
+**Correctif attendu** : `assertRiskManager(actor)` dans `discardDraft`, et obligatoirement dans le futur `archive()` de B-6c.
+
+**F-B6a-04 — L'exclusion des auteurs ignore le contenu de l'échelle référencée.** Fichier : `RiskFrameworkService.ts:489-497`. Une version peut référencer une échelle DRAFT, encore modifiable par tout détenteur de `ratingscale.update` (RM ou non) jusqu'au passage en PENDING. Les bandes, descriptifs et axes font partie de ce qui est approuvé. Pourtant, l'auteur de l'échelle peut être l'approbateur de la version, puisque `authorsOf` ne lit que l'audit `RiskFrameworkVersion`. La spec §5.3 ne couvre que la version : c'est un trou de maker-checker par conception.
+**Correctif attendu**, à arbitrer par A13 : ajouter aux exclus les utilisateurs des audits `CREATE`/`UPDATE` de `RatingScale` sur `ratingScaleId`, ou exiger une échelle déjà verrouillée (non DRAFT).
+
+**INFO**
+- **F-B6a-05** — Repli forcé par auto-exclusion. Un membre RM + Comité (cumul permis) qui modifie le brouillon s'exclut du Comité. Avec un Comité de 2 membres, le Comité passe sous 2 éligibles, et la décision tombe en vote d'Audit ou en repli RM (`FALLBACK`), au lieu du vote du Comité. Le risque est atténué par le commentaire obligatoire, la ratification en attente et la notification d'Audit. À arbitrer par A13, lien avec C-B6a-03 : faut-il rester PENDING quand c'est l'exclusion, et non l'absence, qui réduit le groupe ?
+- **F-B6a-06** — Maker-checker en base partiel. Le CHECK ne lie que le demandeur et le décideur sur la ligne de demande, et admet déjà `BOOTSTRAP` alors qu'aucun code B-6a ne l'émet : sous `grc_app_runtime`, une auto-approbation marquée `BOOTSTRAP` est acceptée (rejoué). Aucune contrainte ne lie une version ACTIVE à une demande APPROVED (même point que C-B6a-07). Les auteurs ne sont pas contrôlés en base, et `created_by`/`last_edited_by` restent réécrivables en DRAFT. Exploiter ces points suppose les identifiants de base du runtime. Reco : n'admettre `BOOTSTRAP` qu'avec B-6d ; trigger d'activation exigeant une demande APPROVED (B-6b).
+- **F-B6a-07** — Inondation de notifications. Des cycles `requestActivation` / `withdraw` émettent `RISK_FRAMEWORK_CHANGE_PENDING` à chaque détenteur de `activate`, via `record`, donc sans dédoublonnage ni limiteur. Seul un RM peut le faire. Reco : `emit` avec `skipIfUnread` sur `resourceId` = Dispositif.
+- **F-B6a-08** — `dev_seed.sql` crée les groupes fixes du tenant de démonstration **sans** `riskframework.*`, parce que le seed passe après 055. Rejouer 055 corrige. Dev seulement (A07).
+
+### Chaînes d'attaque
+F-B6a-02 + F-B6a-01 : un RM fait figer par la course une version qui référence une échelle plus petite, avec un seuil Comité supérieur à n² ; un 2e RM l'approuve. Avant B-6b, la garde Comité héritée tombe (F-B6a-01). Après B-6b, c'est le seuil copié dans l'instantané qui la fait tomber (F-B6a-02). Deux RM sont nécessaires, sans compromission. Aucune chaîne n'atteint 7.
+
+### Statut et tracker (7bis)
+F-B6a-01 et F-B6a-02 : **REMEDIATION_REQUIRED** (A06), à corriger avant tout déploiement de B-6a sans B-6b. F-B6a-03 : REMEDIATION_REQUIRED (A06), obligatoire avant B-6c. F-B6a-04 et F-B6a-05 : arbitrage A13, puis A06. F-B6a-06 (A07, avec B-6b/B-6d), F-B6a-07 (A06), F-B6a-08 (A07) : INFO.
+
+### Retest F-NOTIF-01 (b19c7f2) — 2026-10-12 (A10, fusionné `5ea47ac`, Postgres 16 réel jetable + vitest `NotifRace` 5 verts)
+
+**RETEST_PASS. Escalade HUMAN : aucune.** `PostgresNotificationRepository.insertIfNoUnread` fait, dans une seule transaction : `pg_advisory_xact_lock(hashtextextended(clé, 0))` sur la clé (tenant, destinataire, type de ressource, ressource, événement), puis un `SELECT` des non-lues, puis l'`INSERT`, puis le `COMMIT`. En READ COMMITTED, le `SELECT` qui suit le verrou voit l'insertion validée par le détenteur précédent. `emit` passe par ce chemin dès que `skipIfUnread` et `resourceId` sont fournis. Les deux appelants le font : `ActionPlanService` pour `ACTION_OVERDUE`, `KriMeasureService` pour `KRI_THRESHOLD_BREACH`.
+
+| scénario (vrai `NotificationService` + repositories Postgres) | correctif | témoin sans `insertIfNoUnread` |
+|---|---|---|
+| 20 `emit` parallèles ACTION_OVERDUE (5 essais) | **1, 1, 1, 1, 1** | 20, 20, 20, 20, 20 |
+| 20 `emit` parallèles KRI_THRESHOLD_BREACH (5 essais) | **1, 1, 1, 1, 1** | 20, 20, 20, 20, 20 |
+| lecture par la victime, puis 20 en parallèle | 1 non lue, 2 au total (voulu) | — |
+
+Aucun abonnement désactivé dans le jeu de test, ce qui exclut un faux PASS. Le témoin s'exécute sur la même base : la course existe bien dans l'environnement, et c'est le verrou qui la ferme. Il y a 1 ligne d'audit par notification créée et aucune pour un appel dédoublonné. `POST /kri-measures` porte désormais `perUserRateLimiter()` (20 / 15 min, clé `tenant:user`).
+Résidus INFO : le limiteur garde un magasin mémoire par instance, donc la borne est multipliée par le nombre d'instances Cloud Run (A09/A16). Une collision du hachage 64 bits ne fait que sérialiser deux clés, sans perte. `ACTION_STARTED_LATE` reste sans dédoublonnage, sans impact (voir retest précédent).
+**Statut** : F-NOTIF-01 **CLOSED** côté sécurité. La chaîne F-NOTIF-01 + 02 est réduite à une notification par cycle de lecture. F-NOTIF-02 attend toujours la décision PO q85.
