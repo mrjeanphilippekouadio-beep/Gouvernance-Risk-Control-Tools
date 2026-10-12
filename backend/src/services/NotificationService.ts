@@ -138,6 +138,13 @@ export class NotificationService {
   // -- ACT-201: system-facing notification log -------------------------
 
   async record(input: RecordNotificationInput): Promise<Notification> {
+    const n = await this.write(input, false);
+    if (!n) throw new Error("record: unexpected null notification");
+    return n;
+  }
+
+  /** `dedupe` = atomic insert-unless-unread (repo.insertIfNoUnread); null when an identical unread one exists. */
+  private async write(input: RecordNotificationInput, dedupe: boolean): Promise<Notification | null> {
     if (!RESOURCE_TYPES.includes(input.resourceType)) {
       throw new ValidationError(`resourceType must be one of: ${RESOURCE_TYPES.join(", ")}`);
     }
@@ -152,14 +159,18 @@ export class NotificationService {
     }
     if (!input.triggeredBy?.trim()) throw new ValidationError("triggeredBy is required for the audit trail");
 
-    const notification = await this.notifications.create({
+    const data = {
       tenantId: input.tenantId,
       recipientUserId: input.recipientUserId,
       resourceType: input.resourceType,
       resourceId: input.resourceId ?? null,
       eventType: input.eventType.trim(),
       message: input.message.trim(),
-    });
+    };
+    const notification = dedupe && data.resourceId && this.notifications.insertIfNoUnread
+      ? await this.notifications.insertIfNoUnread(data)
+      : await this.notifications.create(data);
+    if (!notification) return null;
 
     await this.audit.record({
       tenantId: input.tenantId,
@@ -182,9 +193,10 @@ export class NotificationService {
    * Returns null when skipped. Mandatory callers may keep using `record` directly.
    */
   async emit(input: RecordNotificationInput): Promise<Notification | null> {
-    // F-NOTIF-01: opt-in dedup — skipped while an identical UNREAD notification exists. Application-level
-    // (no unique index, no migration): two truly concurrent calls may both insert, which is tolerated.
-    if (input.skipIfUnread && input.resourceId &&
+    // F-NOTIF-01: opt-in dedup — skipped while an identical UNREAD notification exists. When the repository
+    // offers insertIfNoUnread (advisory-locked check + insert) it is atomic; otherwise the plain pre-check is
+    // best effort (concurrent calls may both insert).
+    if (input.skipIfUnread && input.resourceId && !this.notifications.insertIfNoUnread &&
         (await this.notifications.existsUnread?.(input.tenantId, input.recipientUserId, input.resourceType, input.resourceId, input.eventType.trim()))) {
       return null;
     }
@@ -192,7 +204,7 @@ export class NotificationService {
       const sub = await this.subscriptions.getByKey(input.tenantId, input.recipientUserId, input.resourceType, input.eventType.trim());
       if (sub && !sub.enabled) return null;
     }
-    return this.record(input);
+    return this.write(input, !!input.skipIfUnread);
   }
 
   // -- ACT-202: notification center -------------------------------------

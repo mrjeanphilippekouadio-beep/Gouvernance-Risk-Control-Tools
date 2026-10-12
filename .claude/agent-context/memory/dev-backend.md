@@ -154,3 +154,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Test existant adapté (source de vérité changée, à signaler à A08) : `B8ter` compare la constante des groupes à 051 + ajouts de 055 ; `QA-B8quater` n'exige plus que 054 soit le dernier numéro mais garde « sans trou depuis 53 ».
 - Non fait (B-6b/c/d) : résolution du Dispositif applicable, instantané F-8, Cartographie, fermeture des écritures `configs`/`risk_appetites`/`activateVersion`, `GET /applicable`, rattachement Processus, défaut, archivage d'un Dispositif, amorçage.
 - Leçon : dans ce worktree, `cat <<EOF > fichier` composé est refusé ; Write/Edit, ou `python3 - <<'EOF'` seul fonctionne.
+
+## 2026-10-12 NOTIFRACE : F-NOTIF-01 en concurrence (branche wt/notifrace, base 0c253b6, aucune migration)
+
+- `NotificationRepository.insertIfNoUnread?` (optionnel) : `PostgresNotificationRepository` ouvre une transaction (`pool.connect`), `pg_advisory_xact_lock(hashtextextended(clé, 0))` sur `tenant|destinataire|resourceType|resourceId|eventType`, SELECT non-lu, INSERT si absent, COMMIT ; ROLLBACK (avalé) + `release` en `finally` sur erreur.
+- `NotificationService.emit` : si le repo expose `insertIfNoUnread`, `write(input, dedupe)` l'utilise (null = déjà une non-lue, audit non écrit) et le pré-check `existsUnread` est sauté ; sinon repli sur l'ancien comportement (fakes inchangés). `record` délègue à `write(input, false)`.
+- `perUserRateLimiter()` sur `POST /kri-measures`.
+- Non testé sur vrai Postgres (fake pool) : le test de régression « 20 emit parallèles = 1 ligne » reste à rejouer par A10/A08. Verrou advisory = par transaction, donc libéré au COMMIT/ROLLBACK ; l'audit est écrit après, hors transaction (inchangé).

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { perUserRateLimiter } from "../middleware/rateLimit.js";
 import type { KriMeasureService } from "../../services/KriMeasureService.js";
 
 const CreateKriMeasureBody = z.object({
@@ -33,7 +34,7 @@ export function kriMeasuresRouter(kriMeasureService: KriMeasureService): Router 
     }
   });
 
-  router.post("/", async (req, res, next) => {
+  router.post("/", perUserRateLimiter(), async (req, res, next) => {
     try {
       const body = CreateKriMeasureBody.parse(req.body);
       const measure = await kriMeasureService.record(req.user, body, req.requestId);
