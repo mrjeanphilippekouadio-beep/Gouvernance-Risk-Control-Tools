@@ -26,3 +26,8 @@ Mémoire persistante du rôle Orchestrateur sur GRC Tools. Obligatoire : la mett
 - Le PO avait répondu à q79–q93 vers 01:20 UTC ; je les ai annoncées « en attente » jusqu'à 08:40, et deux PR (#165, #166) ont été fusionnées avec du code que q87/q90/q94/q95 modifiaient.
 - Règle : à chaque transition (PR fusionnée, retour d'agent, avant tout dispatch), requêter `questions` avec `status == "answered"` et comparer au Decision Log ; toute réponse non journalisée passe avant le reste.
 - Une réponse libre (champ `decision = other`) s'inscrit avec l'interprétation explicitement marquée « à confirmer par A13 », jamais reformulée comme si c'était le texte du PO.
+
+## 2026-10-12 — rechute sur la lecture du cockpit (DECISION-045)
+- Deuxième retard le même jour : q96–q99 répondues à 08:46–08:48, découvertes à 13:20 seulement parce qu'une écriture épinglée a échoué (version_mismatch). La leçon de DECISION-044 (« relire à chaque transition ») ne suffit pas.
+- Règle renforcée : **avant chaque message au PO et avant chaque dispatch**, `query questions where status == "answered"` sur les ordres ≥ dernière question journalisée. Une réponse trouvée → Decision Log d'abord, tout le reste ensuite.
+- Signal utile : un `version_mismatch` sur un document `questions` = le PO l'a probablement tranché.
