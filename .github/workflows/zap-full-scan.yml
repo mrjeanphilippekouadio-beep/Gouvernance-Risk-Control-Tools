@@ -122,7 +122,7 @@ jobs:
             --add-host=zap:127.0.0.1 \
             --entrypoint bash \
             ghcr.io/zaproxy/zaproxy:stable \
-            -c 'test -r /zap/wrk/automation-plan.resolved.yaml || { echo "Resolved plan is not readable inside ZAP container" >&2; exit 1; }; zap.sh -cmd -host 127.0.0.1 -port 8080 -autorun /zap/wrk/automation-plan.resolved.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \\; -exec cat {} \\; 2>/dev/null; exit $rc' || rc=$?
+            -c 'test -r /zap/wrk/automation-plan.resolved.yaml || { echo "Resolved plan is not readable inside ZAP container" >&2; exit 1; }; zap.sh -cmd -host 127.0.0.1 -port 8080 -autorun /zap/wrk/automation-plan.resolved.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null; exit $rc' || rc=$?
 
           zap_log="zap-home/zap.log"
           if [ ! -s "$zap_log" ]; then
