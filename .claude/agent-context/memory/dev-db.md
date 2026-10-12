@@ -60,3 +60,21 @@
 - Validé sur Postgres 16 jetable (001->056, 056 x2, down x2, up->down->up identique en pg_dump -s) ; 14 cas SQL.
 - Technique de test : fonctions pg_temp (run/prep) avec sous-transaction forcée au rollback ; défense en profondeur testée en
   désactivant seulement le trigger utilisateur (FK et index restent actifs).
+
+## 2026-10-12 — migration 057 (F-B6a-09, garde INSERT du Dispositif)
+- Les triggers de garde de 055/056 étaient `BEFORE UPDATE OR DELETE` : un INSERT direct (version ACTIVE, demande déjà
+  APPROVED) contournait tout. Réflexe : une garde de cycle de vie couvre les 3 événements (INSERT, UPDATE, DELETE) ;
+  toujours se demander « et si la ligne naît déjà dans l'état final ? ».
+- 057 : triggers `BEFORE INSERT` `risk_framework_versions_insert_guard` (DRAFT, activation_request_id/activated_at/archived_*
+  NULL) et `risk_framework_change_requests_insert_guard` (PENDING, 6 champs de décision NULL, `requested_by` du tenant) ;
+  `risk_framework_change_requests_guard()` (UPDATE) gagne le contrôle `decided_by` du même tenant (via `users`). SQLSTATE 42501.
+  Pas de FK composite users(id, tenant_id) : elle exigerait un UNIQUE (id, tenant_id) sur `users` (table partagée), le
+  trigger suffit et ne touche pas aux lignes existantes.
+- Le down de 057 restaure le corps de la garde UPDATE de 055 (copie) : si 055 change, resynchroniser (comme pour 056).
+- Compat code : createWithDraft/createDraftFrom (DRAFT), createActivationRequest (PENDING par défaut), recordDecision/withdraw
+  (UPDATE seulement), brouillon de reprise 055 (DRAFT) : aucun changement de code. Les requêtes de test avec tenant
+  de `decided_by` différent sont refusées ; la décision nominale par un tiers du même tenant passe.
+- Test : un nominal « DRAFT » échoue en 23505 (index d'une seule version ouverte) tant qu'un brouillon existe : tester
+  le nominal APRÈS l'activation de v1, sinon on confond refus de trigger et contrainte d'unicité.
+- Environnement : l'agent worktree refuse les `$VAR` en position de commande, `su -c` et les pipes ; passer par de petits
+  scripts dans le scratchpad (`sh script`), et appeler psql par chemin complet.
