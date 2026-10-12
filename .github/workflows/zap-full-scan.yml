@@ -68,10 +68,28 @@ jobs:
           # Hand it over to that exact uid rather than opening it to everyone.
           sudo chown 1000:1000 report zap-home
           set +e
+          # Every browser-driven step (spiderAjax/Crawljax, and the DomXss /
+          # ActiveScript active-scan rules, which also launch a real
+          # headless Firefox) logged
+          # "RedirectScript - Failed to configure ZAP extension on browser
+          # launch" followed by Firefox reaching
+          # about:neterror?e=proxyConnectFailure for
+          # https://zap/zapCallBackUrl/... — the browser's proxy config
+          # points at hostname "zap", a convention from ZAP's official
+          # docker-compose setups (where the service is literally named
+          # "zap" and gets that hostname for free via Compose's DNS). We run
+          # this as a single standalone `docker run`, so nothing resolves
+          # "zap" inside the container, the extension can never phone back,
+          # and every browser-driven job silently falls back to crawling/
+          # scanning with no ZAP proxy in the loop — explaining why
+          # Crawljax never saw the authenticated app (0 links beyond the
+          # login form) even after auth itself started working. Map it to
+          # the container's own loopback so it resolves to ZAP itself.
           docker run --rm \
             -v "${{ github.workspace }}/report:/zap/wrk/report:rw" \
             -v "${{ github.workspace }}/zap-home:/home/zap/.ZAP:rw" \
             -v "$RUNNER_TEMP/automation-plan.resolved.yaml:/zap/plan/automation-plan.yaml:ro" \
+            --add-host=zap:127.0.0.1 \
             --entrypoint bash \
             ghcr.io/zaproxy/zaproxy:stable \
             -c 'zap.sh -cmd -autorun /zap/plan/automation-plan.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null; exit $rc'
