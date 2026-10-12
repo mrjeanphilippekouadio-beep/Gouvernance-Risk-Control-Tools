@@ -61,6 +61,8 @@ export interface RecordNotificationInput {
   message: string;
   triggeredBy: string;
   requestId: string;
+  /** F-NOTIF-01: `emit` only — skip when an identical unread notification already exists. */
+  skipIfUnread?: boolean;
 }
 
 /**
@@ -91,6 +93,10 @@ export class NotificationService {
       throw new ValidationError(`eventType must be at most ${MAX_EVENT_TYPE_LENGTH} characters`);
     }
     if (typeof input.enabled !== "boolean") throw new ValidationError("enabled must be a boolean");
+    // F-NOTIF-04: exact (resourceType, eventType) pair from the catalog only.
+    if (!NOTIFICATION_CATALOG.some((t) => t.resourceType === input.resourceType && t.eventType === input.eventType.trim())) {
+      throw new ValidationError("Unknown notification type for this resourceType");
+    }
     if (!input.enabled && isMandatoryNotification(input.resourceType, input.eventType.trim())) {
       throw new ValidationError("This notification type is a security/governance safeguard and cannot be disabled");
     }
@@ -176,6 +182,12 @@ export class NotificationService {
    * Returns null when skipped. Mandatory callers may keep using `record` directly.
    */
   async emit(input: RecordNotificationInput): Promise<Notification | null> {
+    // F-NOTIF-01: opt-in dedup — skipped while an identical UNREAD notification exists. Application-level
+    // (no unique index, no migration): two truly concurrent calls may both insert, which is tolerated.
+    if (input.skipIfUnread && input.resourceId &&
+        (await this.notifications.existsUnread?.(input.tenantId, input.recipientUserId, input.resourceType, input.resourceId, input.eventType.trim()))) {
+      return null;
+    }
     if (!isMandatoryNotification(input.resourceType, input.eventType.trim())) {
       const sub = await this.subscriptions.getByKey(input.tenantId, input.recipientUserId, input.resourceType, input.eventType.trim());
       if (sub && !sub.enabled) return null;

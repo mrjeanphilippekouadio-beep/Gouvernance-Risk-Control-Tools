@@ -137,3 +137,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - F-EVD2-02 : `examples` seulement si `evidence.download`. F-EVD2-03 : audit `READ` fail-closed après le contrôle SHA-256, avant l'analyse ; `newValue` = {fileName, sha256, examplesReturned} ; `sheetCount` NON inclus (inconnu avant l'analyse, écrire après casserait le fail-closed). `analyze(actor, id, requestId = "unknown")`.
 - QA : date hors plage -> cellule illisible (null) ; en-tête avec années (entiers 1900-2100) reconnu ; libellé de lien rich text résolu récursivement. Tests existants adaptés : EVD2.test (acteur avec download, 1 écriture = l'audit READ), B8sexies.test (séquence SQL avec verrou user), QA (observation convertie, 2 tests figeant le 500 supprimés).
 - Skill `ponytail` introuvable dans l'environnement : principe appliqué à la main. Worktree supprimé en cours de tâche : recréé via `git worktree add -B`.
+
+## 2026-10-12 NOTIFFIX : F-NOTIF-01/03/04/05/06 + NOTIF-QA-01/02 (branche wt/notiffix, base f520794, aucune migration)
+
+- Dédoublonnage applicatif (pas d'index unique, pas de migration) : `NotificationRepository.existsUnread?` (optionnel, SQL tenant+destinataire+resource+event, `read_at IS NULL`) ; `emit({... skipIfUnread: true})` l'utilise. Choix d'un flag sur `emit` plutôt qu'une nouvelle méthode : les mocks de tests qui n'exposent que `emit` continuent de marcher. Utilisé par ACTION_OVERDUE et KRI_THRESHOLD_BREACH seulement. Limite : deux appels réellement concurrents peuvent insérer deux lignes ; repo sans `existsUnread` = pas de dédup (fail-open).
+- `/action-plans/:id/escalate` : `perUserRateLimiter()` (20 / 15 min par tenant:user).
+- F-NOTIF-03 : messages « Seuil KRI dépassé (KRI <id>) », « Action en retard (action <id>) », « Action démarrée en retard (action <id>) » ; le canal `Notifier` externe garde ses textes détaillés (hors périmètre).
+- F-NOTIF-04 : contrôle du catalogue dans `NotificationService.subscribe` (ValidationError -> 400), `.max(100)` zod. Tests existants qui s'abonnaient à `KRI/THRESHOLD_BREACH` (hors catalogue) passés à `KRI_THRESHOLD_BREACH`.
+- F-NOTIF-05 : `z.string().uuid()` sur `:id`, `.max(100)` sur le filtre `eventType`. F-NOTIF-06 : KRI sans émission si risque `ARCHIVED`/`deletedAt`. NOTIF-QA-01 : try/catch par destinataire.
+- F-NOTIF-02 (types désactivables) NON touché : décision PO q85.

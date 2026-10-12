@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import express from "express";
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { NotificationService } from "../src/services/NotificationService.js";
 import { KriMeasureService } from "../src/services/KriMeasureService.js";
 import { ActionPlanService } from "../src/services/ActionPlanService.js";
@@ -26,9 +27,12 @@ function world(opts: { failCreate?: boolean; failAudit?: boolean } = {}) {
     {
       async create(i) {
         if (opts.failCreate) throw new Error("db down");
-        const n: Notification = { id: `n${++seq}`, ...i, sentAt: new Date(), readAt: null };
+        const n: Notification = { id: randomUUID(), ...i, sentAt: new Date(), readAt: null };
         rows.push(n);
         return n;
+      },
+      async existsUnread(t, u, r, rid, e) {
+        return rows.some((n) => n.tenantId === t && n.recipientUserId === u && n.resourceType === r && n.resourceId === rid && n.eventType === e && n.readAt === null);
       },
       async getById(t, id) { return rows.find((n) => n.tenantId === t && n.id === id) ?? null; },
       async listForRecipient(t, u) {
@@ -153,12 +157,11 @@ describe("QA notifications / subscriptions", () => {
     expect(audit.map((e) => e["action"])).toEqual(["CREATE", "UPDATE"]);
   });
 
-  it("OBSERVATION: the pair is not validated against the catalog (unknown event types and a mandatory name under another resourceType can be opted out; harmless because emit matches the pair)", async () => {
-    const { service, rows } = world();
-    await expect(service.subscribe(actor, { resourceType: "KRI", eventType: "COMMITTEE_MEMBER_ADDED", enabled: false }, "r")).resolves.toBeTruthy();
-    await expect(service.subscribe(actor, { resourceType: "KRI", eventType: "NOPE", enabled: false }, "r")).resolves.toBeTruthy();
-    expect(await service.emit({ ...base, resourceType: "MANAGEMENT", eventType: "COMMITTEE_MEMBER_ADDED", recipientUserId: "u1" })).not.toBeNull();
-    expect(rows).toHaveLength(1);
+  it("F-NOTIF-04: a pair absent from the catalog (unknown type, or a mandatory name under another resourceType) is rejected, nothing stored", async () => {
+    const { service, subs } = world();
+    await expect(service.subscribe(actor, { resourceType: "KRI", eventType: "COMMITTEE_MEMBER_ADDED", enabled: false }, "r")).rejects.toBeInstanceOf(ValidationError);
+    await expect(service.subscribe(actor, { resourceType: "KRI", eventType: "NOPE", enabled: false }, "r")).rejects.toBeInstanceOf(ValidationError);
+    expect(subs).toHaveLength(0);
   });
 
   it("catalog is coherent: unique pairs, valid resource types, exactly the 4 MANAGEMENT governance types mandatory", () => {
@@ -219,6 +222,7 @@ describe("QA notifications / HTTP routes", () => {
       expect((await s.call("/api/v1/notifications?resourceType=NOPE")).status).toBe(400);
       expect((await s.call("/api/v1/notifications/unread-count", "POST")).status).toBe(404);
       expect((await s.call(`/api/v1/notifications/${other.id}/read`, "PATCH")).status).toBe(404);
+      expect((await s.call("/api/v1/notifications/n1/read", "PATCH")).status).toBe(400); // F-NOTIF-05: not a uuid
       expect((await s.call("/api/v1/notifications/read-all", "GET")).status).toBe(404);
     } finally { s.close(); }
   });
@@ -318,6 +322,7 @@ describe("QA notifications / KRI recipients", () => {
   it("owner === superior is notified once; ORANGE and ROUGE both notify; GREEN never; notification points at the KRI with the catalog type", async () => {
     const k = kriWorld({ ownerId: "o", superiorOwnerId: "o" });
     await k.rec(7);
+    k.w.rows.forEach((n) => (n.readAt = new Date())); // F-NOTIF-01: an unread one would dedupe the next breach
     await k.rec(11);
     await k.rec(0);
     expect(k.w.rows).toHaveLength(2);
@@ -350,9 +355,7 @@ describe("QA notifications / KRI recipients", () => {
     } finally { spy.mockRestore(); }
   });
 
-  // KNOWN GAP (MINOR): persistBreach loops inside ONE try/catch (KriMeasureService.ts persistBreach), so a failure on the
-  // first recipient aborts the loop and the superior is never notified, even though the failure may be specific to one row.
-  it.fails("KNOWN GAP NOTIF-QA-01: a failure persisting the owner's notification must not prevent the superior's", async () => {
+  it("NOTIF-QA-01 (fixed): a failure persisting the owner's notification must not prevent the superior's", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
       const w = world();
@@ -428,9 +431,7 @@ describe("QA notifications / action plan", () => {
     expect(a.notifier.notify).toHaveBeenCalledTimes(1);
   });
 
-  // KNOWN GAP (MINOR): escalateIfOverdue has no idempotence. Every call (the endpoint is manual, no scheduler) inserts a new
-  // unread ACTION_OVERDUE row for the same action, plus a new audit row, so repeated clicks flood the responsible user.
-  it.fails("KNOWN GAP NOTIF-QA-02: escalating the same overdue action twice must not create two unread ACTION_OVERDUE notifications", async () => {
+  it("NOTIF-QA-02 / F-NOTIF-01 (fixed): escalating the same overdue action twice must not create two unread ACTION_OVERDUE notifications", async () => {
     const a = apWorld();
     await a.service.escalateIfOverdue(a.user, "a1", "r1");
     await a.service.escalateIfOverdue(a.user, "a1", "r2");

@@ -136,15 +136,15 @@ function newService() {
 describe("NotificationService — subscriptions (ACT-200)", () => {
   it("creates a subscription for the caller, scoped to their own userId", async () => {
     const { service } = newService();
-    const sub = await service.subscribe(actor, { resourceType: "KRI", eventType: "THRESHOLD_BREACH", enabled: true }, "REQ-1");
+    const sub = await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true }, "REQ-1");
     expect(sub.userId).toBe(actor.userId);
     expect(sub.enabled).toBe(true);
   });
 
   it("upserts in place on a second call for the same (resourceType, eventType) — never a second row", async () => {
     const { service } = newService();
-    await service.subscribe(actor, { resourceType: "KRI", eventType: "THRESHOLD_BREACH", enabled: true }, "REQ-1");
-    const updated = await service.subscribe(actor, { resourceType: "KRI", eventType: "THRESHOLD_BREACH", enabled: false }, "REQ-2");
+    await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true }, "REQ-1");
+    const updated = await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false }, "REQ-2");
 
     const all = await service.listSubscriptions(actor);
     expect(all).toHaveLength(1);
@@ -168,15 +168,15 @@ describe("NotificationService — subscriptions (ACT-200)", () => {
 
   it("scopes listSubscriptions by user: another user's subscriptions are never returned", async () => {
     const { service } = newService();
-    await service.subscribe(actor, { resourceType: "KRI", eventType: "THRESHOLD_BREACH", enabled: true }, "REQ-5");
+    await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true }, "REQ-5");
     const otherUserSubs = await service.listSubscriptions(otherUser);
     expect(otherUserSubs).toHaveLength(0);
   });
 
   it("records CREATE then UPDATE in the audit log across the two calls", async () => {
     const { service, audit } = newService();
-    await service.subscribe(actor, { resourceType: "KRI", eventType: "THRESHOLD_BREACH", enabled: true }, "REQ-6");
-    await service.subscribe(actor, { resourceType: "KRI", eventType: "THRESHOLD_BREACH", enabled: false }, "REQ-7");
+    await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true }, "REQ-6");
+    await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false }, "REQ-7");
     expect(audit.events).toHaveLength(2);
     expect((audit.events[0] as { action: string }).action).toBe("CREATE");
     expect((audit.events[1] as { action: string }).action).toBe("UPDATE");
@@ -191,7 +191,7 @@ describe("NotificationService — record (ACT-201, system-facing)", () => {
       recipientUserId: "owner-1",
       resourceType: "KRI",
       resourceId: "kri-1",
-      eventType: "THRESHOLD_BREACH",
+      eventType: "KRI_THRESHOLD_BREACH",
       message: "KRI seuil dépassé",
       triggeredBy: "system-caller-1",
       requestId: "REQ-8",
@@ -211,7 +211,7 @@ describe("NotificationService — record (ACT-201, system-facing)", () => {
         recipientUserId: "owner-1",
         resourceType: "KRI",
         resourceId: null,
-        eventType: "THRESHOLD_BREACH",
+        eventType: "KRI_THRESHOLD_BREACH",
         message: "  ",
         triggeredBy: "system-caller-1",
         requestId: "REQ-9",
@@ -244,7 +244,7 @@ describe("NotificationService — notification center (ACT-202)", () => {
       recipientUserId: actor.userId,
       resourceType: "KRI",
       resourceId: "kri-1",
-      eventType: "THRESHOLD_BREACH",
+      eventType: "KRI_THRESHOLD_BREACH",
       message: "Alerte 1",
       triggeredBy: "system",
       requestId: "REQ-A",

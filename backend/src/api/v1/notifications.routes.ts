@@ -19,7 +19,7 @@ export function notificationsRouter(notificationService: NotificationService): R
       const userId = typeof req.query["user_id"] === "string" ? req.query["user_id"] : "me";
       const resourceTypeRaw = req.query["resourceType"];
       const resourceType = typeof resourceTypeRaw === "string" ? (ResourceType.parse(resourceTypeRaw) as NotificationResourceType) : undefined;
-      const eventType = typeof req.query["eventType"] === "string" ? req.query["eventType"] : undefined;
+      const eventType = typeof req.query["eventType"] === "string" ? z.string().max(100).parse(req.query["eventType"]) : undefined;
       const readRaw = req.query["read"];
       const read = readRaw === "true" ? true : readRaw === "false" ? false : undefined;
       const { limit, offset } = PaginationQuery.parse(req.query);
@@ -57,7 +57,7 @@ export function notificationsRouter(notificationService: NotificationService): R
 
   router.patch("/:id/read", async (req, res, next) => {
     try {
-      const notification = await notificationService.markAsRead(req.user, req.params["id"] as string, req.requestId);
+      const notification = await notificationService.markAsRead(req.user, z.string().uuid().parse(req.params["id"]), req.requestId);
       res.json({ data: notification });
     } catch (err) {
       next(err);

@@ -7,7 +7,7 @@ const ResourceType = z.enum(NOTIFICATION_RESOURCE_TYPES);
 
 const SubscribeBody = z.object({
   resourceType: ResourceType,
-  eventType: z.string().min(1),
+  eventType: z.string().min(1).max(100),
   enabled: z.boolean(),
 });
 

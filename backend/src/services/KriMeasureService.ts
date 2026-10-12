@@ -87,7 +87,7 @@ export class KriMeasureService {
         .catch(() => {
           // Best-effort — a broken notification channel must never fail the actual measure recording.
         });
-      await this.persistBreach(actor, kri.id, kri.riskId, `Alerte KRI [${status}] "${kri.label}" : valeur ${measure.value} le ${measure.measureDate.toISOString().slice(0, 10)}`, requestId);
+      await this.persistBreach(actor, kri.id, kri.riskId, `Seuil KRI dépassé (KRI ${kri.id})`, requestId);
     }
 
     return measure;
@@ -98,9 +98,12 @@ export class KriMeasureService {
     if (!this.notifications || !this.risks) return;
     try {
       const risk = await this.risks.getById(actor.tenantId, riskId);
+      if (risk?.status === "ARCHIVED" || risk?.deletedAt) return; // F-NOTIF-06
       const recipients = new Set([risk?.ownerId, risk?.superiorOwnerId].filter((id): id is string => !!id));
       for (const recipientUserId of recipients) {
-        await this.notifications.emit({
+        try {
+          await this.notifications.emit({
+            skipIfUnread: true,
           tenantId: actor.tenantId,
           recipientUserId,
           resourceType: "KRI",
@@ -109,7 +112,10 @@ export class KriMeasureService {
           message,
           triggeredBy: actor.userId,
           requestId,
-        });
+          });
+        } catch (err) { // NOTIF-QA-01: one failing recipient must not block the next
+          console.error(`KRI ${kriId}: breach notification not persisted for a recipient (requestId ${requestId})`, err instanceof Error ? err.message : err);
+        }
       }
     } catch (err) {
       console.error(`KRI ${kriId}: breach notification not persisted (requestId ${requestId})`, err instanceof Error ? err.message : err);

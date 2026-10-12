@@ -113,9 +113,11 @@ export class ActionPlanService {
   ) {}
 
   /** Best effort: recipient = the action's responsible user only (risk owner / superior not wired, see handoff). */
-  private async persistNotification(actor: AuthenticatedUser, action: ActionPlan, eventType: string, message: string, requestId: string): Promise<void> {
+  /** F-NOTIF-03: messages carry no title/date (readable with notification.read alone); `dedupe` = F-NOTIF-01. */
+  private async persistNotification(actor: AuthenticatedUser, action: ActionPlan, eventType: string, message: string, requestId: string, dedupe = false): Promise<void> {
     try {
       await this.notifications?.emit({
+        skipIfUnread: dedupe,
         tenantId: actor.tenantId,
         recipientUserId: action.responsibleUserId,
         resourceType: "ACTION_PLAN",
@@ -304,8 +306,7 @@ export class ActionPlanService {
         .catch(() => {
           // Best-effort — a broken notification channel must never fail the actual transition.
         });
-      await this.persistNotification(actor, after, "ACTION_STARTED_LATE",
-        `Action "${after.title}" démarrée en retard (échéance dépassée le ${after.dueDate.toISOString().slice(0, 10)})`, requestId);
+      await this.persistNotification(actor, after, "ACTION_STARTED_LATE", `Action démarrée en retard (action ${after.id})`, requestId);
     }
 
     return this.toView(after);
@@ -350,8 +351,7 @@ export class ActionPlanService {
       requestId,
     });
 
-    await this.persistNotification(actor, action, "ACTION_OVERDUE",
-      `Action en retard : "${action.title}" (échéance ${action.dueDate.toISOString().slice(0, 10)})`, requestId);
+    await this.persistNotification(actor, action, "ACTION_OVERDUE", `Action en retard (action ${action.id})`, requestId, true);
 
     return { escalated: true, action: this.toView(action) };
   }

@@ -118,6 +118,14 @@ export class PostgresNotificationRepository implements NotificationRepository {
     return toDomain(row);
   }
 
+  async existsUnread(tenantId: string, recipientUserId: string, resourceType: string, resourceId: string, eventType: string): Promise<boolean> {
+    const { rows } = await this.pool.query(
+      `SELECT 1 FROM notifications WHERE tenant_id = $1 AND recipient_user_id = $2 AND resource_type = $3 AND resource_id = $4 AND event_type = $5 AND read_at IS NULL LIMIT 1`,
+      [tenantId, recipientUserId, resourceType, resourceId, eventType],
+    );
+    return rows.length > 0;
+  }
+
   async countUnread(tenantId: string, recipientUserId: string): Promise<number> {
     const { rows } = await this.pool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM notifications WHERE tenant_id = $1 AND recipient_user_id = $2 AND read_at IS NULL`,
