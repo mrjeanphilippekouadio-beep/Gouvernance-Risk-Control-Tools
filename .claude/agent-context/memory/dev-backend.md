@@ -179,3 +179,40 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - `mirrorScale` : après les deux UPDATE des échelles, `SELECT min(probability_levels * impact_levels) FROM rating_scales WHERE status = 'ACTIVE'` (= activée + conservées car référencées par une version ACTIVE) ; tout seuil collecté (version, `configs`, appétences actives) au-dessus de ce plus petit plafond -> ValidationError listant les seuils, donc ROLLBACK de la décision. Le contrôle contre l'échelle activée reste en premier (messages existants inchangés).
 - Fakes de B6abis/QA-B6abis : ajout d'un handler pour la nouvelle requête `SELECT min(` (source de vérité changée, à signaler à A08). Test : `B6aFix10.test.ts` (scénario A10, 30 refusé / 25 accepté).
 - Leçon : un contrôle ajouté APRÈS les UPDATE reste annulé par le ROLLBACK ; pas besoin de pré-calculer l'ensemble des échelles restantes en SQL ou en JS.
+
+## 2026-10-12 Notifications q84/q85/q95 (branche wt/notif-q84q85q95, base 37766ab, DECISION-044)
+
+- Catalogue : 11 types, tous `mandatory` (4 MANAGEMENT RISK_FRAMEWORK_* ajoutés ; KRI_THRESHOLD_BREACH, ACTION_STARTED_LATE, ACTION_OVERDUE passés obligatoires ; ferme F-NOTIF-02). Plus aucun type optionnel : `subscribe(enabled:false)` est refusé partout, `enabled:true` reste accepté. Mécanisme d abonnement gardé (pas demandé de le retirer).
+- q84 : `ActionPlanService.resolveRecipients` = responsable + owner/superior de chaque risque couvert (sourceType RISK + liens RISK), Set sans doublon, risques archivés/supprimés ignorés (F-NOTIF-06), tenant = actor.tenantId, un try par destinataire. Sans RiskRepository câblé : responsable seul (repli, tests existants intacts).
+- Tests figeant un opt-out réel adaptés : on pousse une ligne d abonnement périmée (`subs.push`) pour prouver qu elle est ignorée. Frontend inchangé (reflète déjà `mandatory`).
+- Leçon : heredoc python refusé par le harnais ; Write d un script dans le scratchpad puis python3 chemin absolu.
+## 2026-10-12 RBAC DECISION-044 : q94 / q80 / q79 (branche wt/rbac-q79q80q94, base 37766ab, aucune migration)
+
+- q94 : `assertNoCumul` (RoleService) refuse aussi Risk Manager + Comité (groupes), dans tous les chemins qui passent par `assertCumulRules` (assignation, rejeu sous verrou F-B8s-01, élargissement d'un rôle). Non configurable. `UserService.reactivate` appelle `RoleService.assertReactivable` : refuse de réactiver un utilisateur qui détient encore un cumul interdit (RM + Comité ou RM + Audit) antérieur à la règle. `riskManagerAndCommittee` sur la fiche est conservé uniquement pour repérer les cumuls pré-existants.
+- q80 : `createsAdminCommitteeCumul` calculé comme admin + RM ; motif obligatoire (message distinct), même événement `ADMIN_RISK_MANAGER_CUMUL` (type obligatoire déjà au catalogue, message « Comité des risques »), champ `administratorAndCommittee` sur `GET /users/:id`. Pas de nouveau type de notification (évite de toucher aux tests « 4 types obligatoires »).
+- q79 : « gestion du client » = `config.manage` (clients, modules, référentiels, catégories de risque, import Excel) ajouté à `ADMIN_PERMISSIONS` ; la méthodologie (`config.update`) non.
+- Requêtes de repérage 8 (RM + Comité) et 9 (config.manage, avec RM/Comité) ajoutées à `docs/security/B8-predeploy-checks.sql` — lecture seule, HUMAN seul exécute.
+- Exigence B-12 consignée (rien de construit, aucun code de vote n'existe) : l'administrateur ne vote ni ne ratifie jamais une demande qu'il a faite ou un changement de droits qu'il a appliqué (q80).
+- Tests QA adaptés (source de vérité PO changée) : B8bis (2), B8quater (1), QA-B8bis (2), QA-B8quater (2) ; nouveau `Rbac044.test.ts`.
+- Leçon : un rôle de test portant `role.assign` est « administrateur » : après q80 l'ajouter à un membre du Comité exige un motif.
+## 2026-10-12 B-6a q87 + q90 (branche wt/b6a-q87q90, base 37766ab, aucune migration)
+
+- q87 : `assertApproverAllowed` (service) refuse tout `changeApprover` != RISK_MANAGER à la création et à l'édition de brouillon (déjà là depuis B-6a bis). Nouveau : la copie `createDraftFrom` met `'RISK_MANAGER'` en littéral SQL au lieu de copier `change_approver` (un refus aurait cassé la copie d'une version héritière et les tests de circuit). `decide`/`resolveFor` inchangés : le circuit suit la version ACTIVE, donc une version héritière COMMITTEE/AUDIT reste fail-closed (409). Une version active héritière non-RM bloque toujours le Dispositif (sortie = intervention base) : à porter à A13/A05.
+- q90 : `RiskFrameworkRepository.auditsInTransaction?` + paramètre `audit?: TransactionalAudit<R>` (callback `result -> événements`) sur chaque méthode mutante ; `PostgresRiskFrameworkRepository` insère via `insertAuditEvent(client, e)` (extrait de `PostgresAuditRepository`) AVANT le COMMIT ; un échec d'audit = ROLLBACK. Service : `inTx` -> passe le callback ; sinon (faux repos des tests) enregistre après coup comme avant. `updateIdentity`/`updateDraft`/`discardDraft` passés de `pool.query` à `tx`. `holders()` n'échoue plus (liste vide + log) : les notifications ne sautent plus pour un échec non lié. Notifications toujours après COMMIT.
+- Effet : plus d'état « action appliquée mais audit perdu » en production ; l'ordre « audit avant stockage » de B6a-QA-01 n'est plus nécessaire en prod (reste pour les faux repos).
+- Non couvert : lectures `listForEntity` (auteurs) inchangées ; non testé sur vrai Postgres (faux pool) ; autres modules (Risk, Control...) gardent l'audit hors transaction.
+
+## 2026-10-12 G1 (branche wt/g1, DECISION-044 / A13)
+
+- `changeAuditGroupPermissions` : mise en attente si l'auteur est RM OU membre du Comité (`RISK_COMMITTEE`), même mécanisme (`role_permission_changes`, `requestedBy` exclu de la décision). Cause : depuis q80 un admin peut être au Comité et appliquait seul.
+- Principe : quand une règle de SoD dépend d'un cumul de groupes, relire toutes les gardes qui testent UN groupe quand le cumul autorisé change.
+- Tests dans `B8bis.test.ts` (describe G1). Aucune assertion existante modifiée. Worktree sans node_modules : `npm ci --ignore-scripts` (sinon faux échecs typecheck sur Buffer/any).
+## 2026-10-12 q96 (branche wt/q96, base fe31915, DECISION-045 pt 1)
+
+- `ActionPlanService.resolveRecipients` : une action sourceType KRI ajoute `Kri.riskId` (lu via `kris.getById(actor.tenantId, sourceId)`, dépendance déjà injectée, gardée par `this.kris`) aux risques couverts ; même boucle que q84 (dédoublonnage, archivé/supprimé ignoré, échec loggé non fatal). Limite : un échec de lecture du KRI saute aussi les autres risques (même try).
+- Test : `NotificationsCenter.test.ts` (1 nouveau). Piège de test : ne pas laisser un lien RISK vers le même risque, il masque le chemin KRI.
+
+## 2026-10-12 F-D044-01 (branche wt/fd04401, base 6d3940b)
+- Pour q94, "Comité" = groupe RISK_COMMITTEE OU permission `riskevaluation.validate.committee` / `treatmentdecision.validate.committee` / `governance.validate` (`COMMITTEE_VALIDATION_PERMISSIONS` dans RoleService). Appliqué dans `assertNoCumul` (donc assignation, rejeu sous verrou, élargissement, `assertReactivable`) ; `assertRolePermissionRules` interdit ces permissions au groupe RM ; requête 8 de B8-predeploy-checks.sql étendue (colonne `committee_permission_roles`).
+- Leçon : une règle de cumul portant sur un groupe doit aussi être exprimée sur les permissions effectives (même faille que F-B8b-05 pour audit.*). Reste ouvert : F-D044-04 (users.roles hérités), sens inverse Comité -> permissions RM (arbitrage A13).
+- Tests : Rbac044.test.ts (describe F-D044-01, 4 tests). Aucune assertion existante modifiée (rôle `comval` ajouté à world()).

@@ -206,6 +206,29 @@ pour l'usage.
 | @orchestrator @devops @dev-db | **PR #165 fusionnée dans staging (`fe3bd4d`)** ; contenu vérifié par `git diff` : identique au head `1fc0781`. `migrate.yml` run 7 vert : « Applied migration: 055_risk_frameworks.sql » puis « 056_risk_framework_activation_guard.sql ». Suite intégrée sur la branche de travail (`40bd608`) : F-B6a-10 (`c8a845c`, A06) + migration 057 F-B6a-09 (`7d1907b`, A07), 1706/1706 ; passages QA (A08) et Security (A10) dispatchés avant la PR suivante. | 2026-10-12 | **En cours** |
 | @dev-db @security @dev-backend @risk-manager | **Retest A10 (`b51a274`) + QA A08 (`0a08b71`, PASS_WITH_RESERVES, 1723/1723) : F-B6a-10 et F-B6a-09 CLOSED, feu vert PR staging.** Nouveaux, avant production : **F-B6a-11** LOW 2,2 (A07, migration 058) — fonctions de garde 055/056/057 sans `search_path` fixé, contournables par table temporaire ; **F-B6a-13** INFO (A07, même 058) — down 057 ne retire pas sa ligne `schema_migrations`. **F-B6a-12** INFO (A06) — `configs` lu sans verrou par `mirrorScale`, fermé par B-6b. Réserves QA : minimum des échelles lu sans verrou (même famille que F-B6a-12) ; seuils comparés aux échelles d'autres Dispositifs — choix à confirmer par A13 avec B-6c (q89). | 2026-10-12 | **F-B6a-09/10 CLOSED ; F-B6a-11/13 ouverts (A07 dispatché) ; F-B6a-12 → B-6b** |
 | @dev-db @qa-engineer @security @infrastructure | **PR #166 fusionnée (`720b4c3`), 057 appliquée sur staging (migrate.yml run 8).** Migration 058 (A07 `ea6d469`) : `search_path` fixé sur les 6 gardes 055–057. QA A08 (`1fbe1ba`) PASS ; Security A10 (`c881751`) : **F-B6a-11 et F-B6a-13 RETEST_PASS, CLOSED**, feu vert PR staging. **F-B6a-14** INFO (rollback 057.down joué avant 058.down efface le `search_path`) : corrigé par l'orchestrateur — note d'ordre dans 057.down + garde statique dans `QA-B6a11.test.ts` (toute fonction de trigger ≥ 058 doit fixer son `search_path`) + règle CLAUDE.md → **CLOSED**. Reste optionnel @infrastructure : `REVOKE TEMP ON DATABASE … FROM PUBLIC` sur Neon (défense en profondeur, non vérifié). | 2026-10-12 | **F-B6a-11/13/14 CLOSED ; REVOKE TEMP optionnel ouvert (A16)** |
+| @orchestrator @dev-db @security | **PR #167 fusionnée (`7326886`)**, contenu vérifié (`git diff` vide avec le head `383ce7b`) ; `migrate.yml` run 9 vert : « Applied migration: 058_risk_framework_guard_search_path.sql ». Revue Gitar : garde F-B6a-14 durcie (ALTER compté seulement après son CREATE, délimiteur `$tag$`), 4 sondes vérifiées. **Tous les findings Security B-6a sont fermés** (F-B6a-01..14), sauf F-B6a-12 INFO → B-6b. Reste avant production : C-B6a-01 (audit d'activation dans la même transaction) ; optionnel `REVOKE TEMP` (A16). | 2026-10-12 | **Fait** |
+| @dev-backend @qa-engineer @product-manager | **A06 notifications `0c4384b` fusionné** (q95 : 4 types `RISK_FRAMEWORK_*` au catalogue, obligatoires ; q85 : KRI + retards d'action obligatoires, **F-NOTIF-02 CLOSED** ; q84 : destinataires d'action = responsable + propriétaire et supérieur de chaque risque couvert, dédoublonnés). 1743/1743. Garde F-B6a-14 durcie sur la valeur du `search_path` (`9af087e`, Gitar #167). QA A08 à passer. | 2026-10-12 | **Fait, QA en attente** |
+| @product-manager | **Question PO (q96)** : une action dont la source est un KRI (sans lien RISK explicite) doit-elle notifier aussi le propriétaire/supérieur du risque de ce KRI ? Aujourd'hui : responsable seul. | 2026-10-12 | **Décidé (DECISION-045)** |
+| @product-manager @ux-designer | **Question PO (q97)** : depuis q85 les 11 types sont obligatoires — l'écran « abonnements » ne permet plus rien de désactiver. Le retirer, le garder en lecture seule, ou réintroduire des types optionnels ? | 2026-10-12 | **Décidé (DECISION-045)** |
+| @dev-backend @security @compliance | **A06 B-6a `e5b6381` fusionné** — q87 : la copie de brouillon force `RISK_MANAGER` (dernier chemin ouvert) → **C-B6a-02 CLOSED** ; q90 : audit du Dispositif écrit dans la même transaction que l'action (ROLLBACK si l'audit échoue) pour les 8 mutations → **C-B6a-01 CLOSED pour le Dispositif**. Testé sur faux pool uniquement : A08 rejoue sur Postgres jetable. | 2026-10-12 | **Fait, QA/Security en attente** |
+| @risk-manager @architect | Une version ACTIVE héritée portant un approbateur COMMITTEE/AUDIT gèle le Dispositif (409 sur toute demande, seule issue une intervention en base). Aucune n'existe à ce jour à notre connaissance ; décider s'il faut un garde-fou ou une requête de repérage avant production. | 2026-10-12 | **Ouvert — A13/A05** |
+| @security | L'écart « audit écrit hors transaction » (fermé pour le Dispositif par q90) subsiste dans les autres modules (Risk, Control, …). À évaluer par A10 : périmètre et priorité. | 2026-10-12 | **Ouvert — A10** |
+| @dev-backend @security | **A06 RBAC `2b14eb7` fusionné** — q94 : cumul RM + Comité refusé (tous chemins, y compris réactivation d'un utilisateur portant un cumul interdit antérieur) ; q80 : admin + Comité marqué (motif + notification `rolegroup.audit.validate`) ; q79 : `config.manage` compte comme droit administrateur. Requêtes de repérage 8 et 9 ajoutées à `docs/security/B8-predeploy-checks.sql` (lecture seule, à jouer par HUMAN). Exigence B-12 consignée : l'admin ne vote ni ne ratifie sa propre demande. Intégration : 1755/1755. | 2026-10-12 | **Fait, QA/Security en attente** |
+| @infrastructure | **HUMAN : jouer les requêtes 8 et 9 de `docs/security/B8-predeploy-checks.sql` sur staging/prod** avant mise en production (détenteurs actuels de cumuls RM + Comité et de `config.manage`). | 2026-10-12 | **Ouvert — owner HUMAN** |
+| @architect | **Spec B-6 mise à jour avec DECISION-044** (`docs/architecture/RM-V1-B6-Dispositif-spec.md`, §14.1 Q1–Q8 tranchées, §18 plan : 0 q87/q90 → 1 B-6b (A06+A07, migration ≥ 059) → 2 B-6d (A06+A07) → 3 B-6c, séquentiels). En production (un seul RM, q93) **B-6d doit partir avant ou avec B-6b**. Mémoire `architect.md` créée. | 2026-10-12 | **Fait** |
+| @risk-manager | **Bloquant B-6d (spec §14.2)** — I-D1 : un tenant 1 RM + 1 membre Audit sort du bootstrap mais reste bloqué (q72, 2 membres éligibles requis) — voulu ? I-D2 : le RM ne peut pas créer d'utilisateurs (droit admin, q79) — « impossible » de q83 accepté sur déclaration écrite ? I-D3 : fin du bootstrap définitive ou réversible ? I-D4 : q83 (pas de ratification) l'emporte-t-il sur q62 et la recommandation A14 ? | 2026-10-12 | **Ouvert — A13 (dispatché)** |
+| @risk-manager | **Non bloquant B-6b/B-6c (spec §14.2)** — R1 statuts de contribution / mode d'appétence dans « tous les paramètres » ? R2 seuil « faible » sans défaut contractuel ; R3 options de cumul booléennes ; R4 `FIRST_LINE` ; R5 délégation sans durée max → date de fin obligatoire ? I-C1 réserve QA échelles inter-Dispositifs ; I-C2 un `ReviewCycle` ouvert verrouille-t-il le Dispositif ? | 2026-10-12 | **Ouvert — A13 (dispatché)** |
+| @product-manager | **Questions PO (q98, q99)** — q98 (I-D5) : un Dispositif activé par bootstrap doit-il utiliser les valeurs par défaut du contrat ? q99 (I-D6) : la notification de bootstrap est-elle obligatoire au catalogue ? | 2026-10-12 | **Décidé (DECISION-045)** |
+| @risk-manager @dev-backend @security | **Revue A13 DECISION-044** (`docs/risk/A13-review-DECISION-044.md`) : **G1** (MEDIUM, séparation des tâches) — `changeAuditGroupPermissions` ne met en attente que si l'auteur est RM ; un admin + Comité (légal depuis q80) applique seul des droits d'Audit → correctif A06 dispatché. Autres demandes A13 pour B-6d : fin d'amorçage mémorisée, motif structuré, notification lue/non lue tracée, KRI « âge de l'amorçage ». | 2026-10-12 | **G1 en cours (A06)** |
+| @product-manager | **Questions PO q100–q105** (issues de la revue A13) : q100 version héritée COMMITTEE/AUDIT (Q-A13-1) ; q101 sens de « fin » du démarrage (I-D1) ; q102 fin définitive (I-D3) ; q103 tiers prévenu si groupes vides (Q-A13-4) ; q104 admin + Audit (Q-A13-5) ; q105 `config.manage` et import (Q-A13-6). q101–q103 bloquent B-6d. | 2026-10-12 | **Ouvert — owner HUMAN** |
+| @dev-backend @dev-frontend | Mise en œuvre DECISION-045 : q96 (risque du KRI source = risque couvert, A06) et q97 (écran abonnements en lecture seule, Dev Frontend). | 2026-10-12 | **Fait** (q96 `5ce5d39`, q97 `dc06a38`) |
+| @qa-engineer @security @audit @dev-backend | **Revues du lot DECISION-044 + G1 + DECISION-045** : QA A08 `3de31bf` **PASS** (40 tests, dont 15 sur Postgres 16 jetable : ROLLBACK réel des 8 mutations du Dispositif si l'audit échoue) ; Security A10 `5a6e117` **feu vert staging** (CVSS max 3,1) ; Audit A23 `a3b5e40` 14 constats sans bloquant ; G1 corrigé `180c015`. Intégration : 1783 tests + 15 Postgres, build frontend OK. | 2026-10-12 | **Fait** |
+| @dev-backend @risk-manager | **F-D044-01** LOW 2,7 CONFIRMÉ (PoC) — q94 contourné par les permissions effectives : un admin peut donner à un RM les permissions de validation du Comité via un rôle ordinaire ou le groupe RM, sans motif ni notification. **À corriger avant production** (dispatché A06) + requête de repérage 8 à étendre. | 2026-10-12 | **Corrigé `ea4ef9f` (A06) + `6aebb98` (q80). Retest A10 : RETEST_PASS, CLOSED (`70e2d74`).** |
+| @dev-backend @security | **F-D044-07** LOW 2,7 (retest A10) : G1 (`changeAuditGroupPermissions`) ne mettait en attente que pour les groupes RM/Comité ; un admin avec `governance.validate` par un rôle ordinaire appliquait seul. | 2026-10-12 | **Corrigé (orchestrateur) : `isCommitteeRole`, test F-D044-07 dans `B8bis.test.ts`** |
+| @risk-manager @dev-backend | **F-D044-08** LOW 2,2 (retest A10) : q58 (paramètre tenant interdisant Comité + Audit, `RoleService` l. 378) et q65 (notification `COMMITTEE_MEMBER_ADDED`, l. 455) ne reconnaissent le Comité que par le groupe. Faut-il étendre la définition q94 (groupe ou pouvoirs de validation) à ces deux règles ? | 2026-10-12 | Ouvert : arbitrage A13, puis A06 |
+| @dev-backend @security | **F-D044-03** LOW 3,1 — audit écrit hors transaction dans ~33 services ; chaîne concrète : `RatingScaleService` (audit après l'écriture → `authorsOf` peut ignorer un auteur d'échelle). Priorité : RatingScale, puis Role, User, Config. **F-D044-02** LOW (effets de bord de l'approbation sans audit propre, = AUD-D044-01). **F-D044-06** INFO (libellé de notification admin + Comité ; tenant dans `audited()`). | 2026-10-12 | **Ouvert — A06** |
+| @dev-db | **AUD-D044-14 / F-D044-04** INFO — garde 038 sans `SET search_path` (non exploitable, conformité à la convention) ; requêtes 8/9 ignorent `users.roles` hérité (F-B8t-02). À la prochaine migration. | 2026-10-12 | **Ouvert — A07** |
+| @audit @dev-backend @compliance | **Constats A23 AUD-D044-01..13** (`docs/audit/A23-review-DECISION-044.md`) : refus de cumul/réactivation et refus d'opt-out non tracés, marquage admin + Comité peu exploitable, audit RBAC hors transaction. **AUD-D044-12** (opt-outs historiques neutralisés sans trace) : décision de gouvernance A14/A15 avant correctif. QA-D044-04 (Privacy) : propriétaires/supérieurs reçoivent un id d'action sans `actionplan.read`. | 2026-10-12 | **Ouvert — A06/A14/A24** |
 | @devops @dev-db | **Incident migrate.yml staging (2026-10-11, PR #151)** : 049 appliquée, 050 en échec (`constraint risks_probability_check does not exist`) — les CHECK probability/impact sont sur `risk_assessments`, pas `risks` ; 050 annulée par sa transaction, rien d'enregistré. Corrigée par A07 (bloc `DO` sur `pg_constraint`, table corrigée, vérifiée sur Postgres 16 jetable). **Cause racine du non-détection** : la CI de PR crée une branche Neon mais n'y applique pas les migrations → proposer (A09) un job `npm run migrate` sur la branche Neon éphémère de PR. | 2026-10-11 | **050 appliquée sur staging (PR #152, migrate.yml run 5 vert, 2026-10-11). Ouvert — A09 (job migrations en CI de PR).** |
 ## Decision Log
 
@@ -1278,4 +1301,103 @@ OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ — A13 (contrat, q72 à q77) ; B-6 (q77 amorçage, premier
   Dispositif q51) ; B-12 (q72 à q76) ; centre de notifications (q70,
   backend + frontend) ; q71 et q78 déjà conformes au code.
+```
+
+```text
+DECISION-044
+DATE: 2026-10-12 (réponses saisies dans l'artefact Pilotage entre 01:08 et
+  01:22 UTC, q94/q95 à 08:11 UTC ; journalisées ici à 08:40 UTC — retard
+  de journalisation de l'orchestrateur, voir la note en fin d'entrée)
+QUESTION: réponses PO dans l'artefact Pilotage, q79 à q95.
+DECISION:
+  1. q79 : la « gestion du client » compte comme droit d'administrateur,
+     pas la « méthodologie » ; repérer avant la production les personnes
+     déjà concernées.
+  2. q80 : cumul administrateur + Comité autorisé comme administrateur +
+     Risk Manager (cumul marqué sur la fiche, motif, tiers prévenu) ;
+     l'administrateur ne vote ni ne ratifie jamais une demande qu'il a
+     faite ou un changement de droits qu'il a appliqué.
+  3. q81 : amorçage limité à une liste fermée — activation du premier
+     Dispositif et approbation des désignations (responsable de risque,
+     délégué, exécuteur). Toujours exclus : changements de droits
+     d'Audit (q67), activation de l'auto-proposition (q65).
+  4. q82 (réponse libre, interprétation orchestrateur à confirmer par
+     A13) : l'amorçage ne s'arrête pas tant que le Comité ET Audit sont
+     vides, c.-à-d. il prend fin dès que l'un des deux a un membre ; pas
+     de durée maximale. Toutes les actions d'amorçage sont journalisées
+     et consultables dans une vue dédiée par Audit et le Comité dès
+     l'ajout de leurs membres (ce qui a été fait pendant leur absence).
+  5. q83 (réponse libre, interprétation orchestrateur à confirmer par
+     A13) : pas d'exception d'auto-approbation par défaut — le Risk
+     Manager seul doit d'abord créer au moins un autre utilisateur du
+     groupe risque ; seulement si c'est impossible, il agit seul, et
+     toutes ces actions sont journalisées dans la vue dédiée accessible
+     à Audit et au Comité. Pas de ratification ultérieure demandée.
+  6. q84 : retard de démarrage / échéance dépassée d'une action →
+     responsable de l'action + propriétaire et supérieur de chaque
+     risque couvert par l'action (sans doublon).
+  7. q85 : alertes KRI et retards d'action obligatoires pour tous les
+     destinataires (plus de désabonnement) → ferme F-NOTIF-02.
+  8. q86 : bascule vers le Dispositif : courte période sans évaluation
+     possible acceptée (B-6b).
+  9. q87 : interdire de choisir Audit ou Comité comme approbateur avant
+     B-12 (et non plus « demande en attente ») → change B-6a livré.
+  10. q88 : « Audit et Comité » : les deux votes requis, Comité d'abord,
+      puis Audit (B-12).
+  11. q89 : changer un processus de Dispositif → règle d'approbation du
+      Dispositif d'arrivée, effet au cycle suivant (B-6c).
+  12. q90 : audit écrit dans la même opération indivisible que l'action,
+      dès le Dispositif (toutes ses actions, pas seulement
+      l'activation) → change B-6a livré ; ferme C-B6a-01 une fois fait.
+  13. q91 : tous les paramètres du Dispositif prévus dès maintenant
+      (seuil « faible », cumuls, délégation, politique Hybride,
+      Maîtrise, règle du Comité), pas lot par lot.
+  14. q92 : auto-proposition désactivée jusqu'à B-12.
+  15. q93 : un seul Risk Manager au départ → garder la phase d'amorçage
+      (points 3 à 5).
+  16. q94 : interdire le cumul équipe risque (Risk Manager) + Comité —
+      annule la partie « Risk Manager + Comité toujours autorisé » de
+      q58 (DECISION-041/042) → change B-8 livré ; repérer les cumuls
+      existants avant production.
+  17. q95 : les 4 notifications `RISK_FRAMEWORK_*` sont ajoutées au
+      catalogue comme obligatoires.
+RELATED: DECISION-040, DECISION-041, DECISION-042, DECISION-043,
+  C-B6a-01, C-B6a-02, F-B6a-05, F-NOTIF-02, spec B-6 §14.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — corrections du livré : B-6a (q87, q90), notifications
+  (q84, q85, q95), RBAC (q79, q80, q94) ; spec B-6 à mettre à jour par
+  A05/A13 (q81-q83, q86, q88, q89, q91-q93) avant B-6b/c/d ; B-12 (q88,
+  q92). NOTE ORCHESTRATEUR : ces réponses sont restées non journalisées
+  ~7 h et l'orchestrateur les a décrites comme « en attente » dans ses
+  points d'étape — écart à la règle 7bis / protocole cockpit
+  (DECISION-021) : relire la collection `questions` (status=answered) à
+  chaque transition de module, pas seulement au moment où l'on pose une
+  question.
+```
+
+```
+DECISION-045
+DATE: 2026-10-12 (réponses cockpit 08:46–08:48 UTC, journalisées 13:25 UTC)
+CONTEXT: questions q96–q99 posées par l'orchestrateur après les lots
+  A06 notifications (0c4384b) et la spec B-6 mise à jour (A05, §14.2).
+DECISION (PO, cockpit, toutes = recommandation acceptée) :
+  1. q96 : une action née d'un KRI notifie aussi le propriétaire et le
+     supérieur du risque surveillé par ce KRI (risque couvert = source
+     RISK + liens RISK + risque du KRI source) → correctif A06 sur
+     `ActionPlanService.resolveRecipients`.
+  2. q97 : l'écran des abonnements reste, en lecture seule : il liste
+     les notifications reçues et indique qu'elles sont obligatoires →
+     frontend (Dev Frontend), pas de changement backend.
+  3. q98 (I-D5) : en mode démarrage (B-6d), le premier Dispositif porte
+     uniquement les valeurs par défaut du contrat ; tout réglage passe
+     ensuite par une demande ordinaire → spec B-6d.
+  4. q99 (I-D6) : `RISK_FRAMEWORK_BOOTSTRAP_NOTICE` est obligatoire au
+     catalogue → B-6d.
+RELATED: DECISION-044, spec B-6 §14.2, docs/risk/A13-review-DECISION-044.md.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — q96 à dispatcher (A06), q97 à dispatcher (Dev
+  Frontend), q98/q99 intégrées à B-6d. NOTE ORCHESTRATEUR : deuxième
+  retard de journalisation le même jour (~4 h 30) malgré la leçon de
+  DECISION-044 — la relecture `status == "answered"` doit précéder
+  chaque message au PO, pas seulement chaque transition de module.
 ```

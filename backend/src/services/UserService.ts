@@ -10,12 +10,14 @@ import type { NotificationService } from "./NotificationService.js";
 import type { SystemGroup } from "../domain/entities/Role.js";
 import type { Permission } from "../domain/permissions.js";
 
-/** B-8 bis (q43): user sheet with the fixed groups and the allowed Risk Manager + Committee cumul flagged. */
+/** B-8 bis (q43): user sheet with the fixed groups. riskManagerAndCommittee is now a forbidden cumul (q94): kept only to flag pre-existing ones. */
 export interface UserDetail extends User {
   fixedGroups: SystemGroup[];
   riskManagerAndCommittee: boolean;
   /** DECISION-042 q63: application administrator (role/user management permissions) AND Risk Manager group. */
   administratorAndRiskManager: boolean;
+  /** DECISION-044 q80: application administrator AND Committee group (same marking as administratorAndRiskManager). */
+  administratorAndCommittee: boolean;
 }
 
 /** B-8 bis (F-B8-06): a role disabled during suspension whose assignment remains. */
@@ -161,6 +163,7 @@ export class UserService {
       fixedGroups,
       riskManagerAndCommittee: fixedGroups.includes("RISK_MANAGER") && fixedGroups.includes("RISK_COMMITTEE"),
       administratorAndRiskManager: this.roleService ? await this.roleService.isAdminAndRiskManager(actor.tenantId, id) : false,
+      administratorAndCommittee: this.roleService ? await this.roleService.isAdminAndCommittee(actor.tenantId, id) : false,
     };
   }
 
@@ -251,6 +254,8 @@ export class UserService {
     const before = await this.users.getById(actor.tenantId, id);
     if (!before) throw new NotFoundError("User", id);
     if (!before.deletedAt) throw new ValidationError("User is not suspended");
+    // q94: refuse to revive a forbidden Risk Manager cumul (Committee / Audit) that predates the rule.
+    await this.roleService?.assertReactivable(actor.tenantId, id);
 
     await this.users.reactivate(actor.tenantId, id);
     const after = await this.users.getById(actor.tenantId, id);

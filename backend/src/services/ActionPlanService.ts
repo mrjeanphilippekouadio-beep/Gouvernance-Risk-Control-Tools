@@ -114,21 +114,52 @@ export class ActionPlanService {
 
   /** Best effort: recipient = the action's responsible user only (risk owner / superior not wired, see handoff). */
   /** F-NOTIF-03: messages carry no title/date (readable with notification.read alone); `dedupe` = F-NOTIF-01. */
-  private async persistNotification(actor: AuthenticatedUser, action: ActionPlan, eventType: string, message: string, requestId: string, dedupe = false): Promise<void> {
+  /**
+   * q84: recipients = the action's responsible user + owner and superior owner of every risk the action
+   * covers (its RISK source and its RISK links), deduplicated. Same owner/superior resolution as the KRI
+   * breach alert; archived/deleted risks are skipped (F-NOTIF-06). Without a risk repository: responsible only.
+   */
+  private async resolveRecipients(actor: AuthenticatedUser, action: ActionPlan): Promise<string[]> {
+    const recipients = new Set<string>([action.responsibleUserId]);
+    if (!this.risks) return [...recipients];
     try {
-      await this.notifications?.emit({
-        skipIfUnread: dedupe,
-        tenantId: actor.tenantId,
-        recipientUserId: action.responsibleUserId,
-        resourceType: "ACTION_PLAN",
-        resourceId: action.id,
-        eventType,
-        message,
-        triggeredBy: actor.userId,
-        requestId,
-      });
+      const riskIds = new Set<string>();
+      if (action.sourceType === "RISK" && action.sourceId) riskIds.add(action.sourceId);
+      for (const l of await this.actions.listLinks(actor.tenantId, action.id)) if (l.resourceType === "RISK") riskIds.add(l.resourceId);
+      // q96: a KRI-born action also covers the risk that KRI monitors (Kri.riskId, mandatory), tenant-scoped read.
+      if (action.sourceType === "KRI" && action.sourceId && this.kris) {
+        const kri = await this.kris.getById(actor.tenantId, action.sourceId);
+        if (kri?.riskId) riskIds.add(kri.riskId);
+      }
+      for (const riskId of riskIds) {
+        const risk = await this.risks.getById(actor.tenantId, riskId);
+        if (!risk || risk.status === "ARCHIVED" || risk.deletedAt) continue;
+        for (const id of [risk.ownerId, risk.superiorOwnerId]) if (id) recipients.add(id);
+      }
     } catch (err) {
-      console.error(`Action ${action.id}: ${eventType} notification not persisted (requestId ${requestId})`, err instanceof Error ? err.message : err);
+      console.error(`Action ${action.id}: risk recipients not resolved (${err instanceof Error ? err.message : err})`);
+    }
+    return [...recipients];
+  }
+
+  private async persistNotification(actor: AuthenticatedUser, action: ActionPlan, eventType: string, message: string, requestId: string, dedupe = false): Promise<void> {
+    if (!this.notifications) return;
+    for (const recipientUserId of await this.resolveRecipients(actor, action)) {
+      try { // one failing recipient must not block the next
+        await this.notifications.emit({
+          skipIfUnread: dedupe,
+          tenantId: actor.tenantId,
+          recipientUserId,
+          resourceType: "ACTION_PLAN",
+          resourceId: action.id,
+          eventType,
+          message,
+          triggeredBy: actor.userId,
+          requestId,
+        });
+      } catch (err) {
+        console.error(`Action ${action.id}: ${eventType} notification not persisted (requestId ${requestId})`, err instanceof Error ? err.message : err);
+      }
     }
   }
 

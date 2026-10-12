@@ -144,11 +144,11 @@ describe("NotificationService — subscriptions (ACT-200)", () => {
   it("upserts in place on a second call for the same (resourceType, eventType) — never a second row", async () => {
     const { service } = newService();
     await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true }, "REQ-1");
-    const updated = await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false }, "REQ-2");
+    const updated = await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true }, "REQ-2"); // q85: disabling is refused now
 
     const all = await service.listSubscriptions(actor);
     expect(all).toHaveLength(1);
-    expect(updated.enabled).toBe(false);
+    expect(updated.enabled).toBe(true);
   });
 
   it("rejects an unknown resourceType", async () => {
@@ -176,7 +176,7 @@ describe("NotificationService — subscriptions (ACT-200)", () => {
   it("records CREATE then UPDATE in the audit log across the two calls", async () => {
     const { service, audit } = newService();
     await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true }, "REQ-6");
-    await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false }, "REQ-7");
+    await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true }, "REQ-7");
     expect(audit.events).toHaveLength(2);
     expect((audit.events[0] as { action: string }).action).toBe("CREATE");
     expect((audit.events[1] as { action: string }).action).toBe("UPDATE");

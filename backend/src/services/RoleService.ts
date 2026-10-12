@@ -36,9 +36,20 @@ const ADMIN_PERMISSIONS: Permission[] = [
   "role.create", "role.update", "role.delete", "role.assign",
   "user.create", "user.update", "user.delete", "user.reactivate",
   "rolegroup.audit.update", "config.cumul.set", "config.committeeenforcement.set",
+  // q79 (DECISION-044): client management (module toggles, tenants, regulatory frameworks, risk categories,
+  // Excel import) counts. Methodology (config.update) does not.
+  "config.manage",
 ];
 const isAdministrator = (roles: Role[]): boolean => roles.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));
+/** F-D044-01: holding one of these counts as Committee membership for the q94 rule (RM + Committee). */
+const COMMITTEE_VALIDATION_PERMISSIONS: Permission[] = [
+  "riskevaluation.validate.committee", "treatmentdecision.validate.committee", "governance.validate",
+];
+const isCommitteeValidationPermission = (p: Permission): boolean => COMMITTEE_VALIDATION_PERMISSIONS.includes(p);
 const isRiskManagerMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "RISK_MANAGER");
+/** Committee membership = the group or its validation powers (F-D044-01), for q94 as for q80/G1. */
+const isCommitteeRole = (r: Role): boolean => r.systemGroup === "RISK_COMMITTEE" || r.permissions.some(isCommitteeValidationPermission);
+const isCommitteeMember = (roles: Role[]): boolean => roles.some(isCommitteeRole);
 
 /** F-B8b-03: permissions whose "who can give it back" answer is never served (administration / governance). */
 const NOT_REQUESTABLE = /^(role|rolegroup|user|audit)\./;
@@ -56,6 +67,12 @@ function assertRolePermissionRules(group: SystemGroup | null, permissions: Permi
   if (misplaced.length > 0) {
     throw new ValidationError(`Permission(s) not grantable to this role: ${misplaced.join(", ")}`);
   }
+  if (group === "RISK_MANAGER") {
+    const committee = permissions.filter(isCommitteeValidationPermission);
+    if (committee.length > 0) {
+      throw new ValidationError(`The Risk Manager group cannot carry Committee validation permissions (${committee.join(", ")}): Risk Manager and Committee never cumulate`);
+    }
+  }
   if (group === "RISK_MANAGER" || group === "RISK_COMMITTEE") {
     const audit = permissions.filter(isAuditPermission);
     if (audit.length > 0) {
@@ -64,9 +81,16 @@ function assertRolePermissionRules(group: SystemGroup | null, permissions: Permi
   }
 }
 
-/** F-B8b-05 (q43): Risk Manager and Audit never cumulate, in groups or in effective audit.* permissions. */
+/**
+ * F-B8b-05 (q43): Risk Manager and Audit never cumulate, in groups or in effective audit.* permissions.
+ * q94 (DECISION-044): Risk Manager and Committee never cumulate either (not configurable).
+ */
 function assertNoCumul(role: Role, held: Role[]): void {
   const isRm = (r: Role) => r.systemGroup === "RISK_MANAGER";
+  const isCommittee = isCommitteeRole;
+  if ((isRm(role) && (isCommittee(role) || held.some(isCommittee))) || (isCommittee(role) && held.some(isRm))) {
+    throw new ValidationError("A user cannot be both in the Risk Manager group and in the Committee group");
+  }
   const isAuditor = (r: Role) => r.systemGroup === "AUDIT" || r.permissions.some(isAuditPermission);
   if ((isRm(role) && held.some(isAuditor)) || (isAuditor(role) && held.some(isRm))) {
     const groups = role.systemGroup && FORBIDDEN_CUMUL[role.systemGroup] && held.some((r) => r.systemGroup === FORBIDDEN_CUMUL[role.systemGroup!]);
@@ -236,6 +260,7 @@ export class RoleService {
 
     // F-B8t-01: widening a role replays the cumul rules for each active holder with the resulting permissions.
     let cumulUsers: string[] = [];
+    let committeeCumulUsers: string[] = [];
     const cleanReason = reason?.trim() || null;
     let recheck: RoleUpdateRecheck | undefined;
     if (input.permissions !== undefined && input.permissions.some((p) => !before.permissions.includes(p))) {
@@ -244,10 +269,12 @@ export class RoleService {
       recheck = async (lockedRole, holders) => {
         const resulting: Role = { ...lockedRole, permissions: newPermissions };
         cumulUsers = [];
+        committeeCumulUsers = [];
         for (const h of holders) {
           const others = h.roles.filter((r) => r.id !== id);
           const res = await this.assertCumulRules(actor.tenantId, resulting, others, h.roles, reason);
           if (res.createsAdminRiskManagerCumul) cumulUsers.push(h.userId);
+          if (res.createsAdminCommitteeCumul) committeeCumulUsers.push(h.userId);
         }
       };
       const resulting: Role = { ...before, permissions: input.permissions };
@@ -257,6 +284,7 @@ export class RoleService {
         const others = previous.filter((r) => r.id !== id);
         const res = await this.assertCumulRules(actor.tenantId, resulting, others, previous, reason);
         if (res.createsAdminRiskManagerCumul) cumulUsers.push(a.userId);
+        if (res.createsAdminCommitteeCumul) committeeCumulUsers.push(a.userId);
       }
     }
 
@@ -277,6 +305,10 @@ export class RoleService {
     for (const userId of cumulUsers) {
       await this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
         "Un utilisateur cumule désormais l'administration de l'application et le groupe Risk Manager.", requestId);
+    }
+    for (const userId of committeeCumulUsers) {
+      await this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
+        "Un utilisateur cumule désormais l'administration de l'application et le groupe Comité des risques.", requestId);
     }
     return after;
   }
@@ -320,13 +352,13 @@ export class RoleService {
     roleId: string,
     userId: string | null,
     reason: string | undefined,
-  ): Promise<{ role: Role; cleanReason: string | null; createsAdminRiskManagerCumul: boolean }> {
+  ): Promise<{ role: Role; cleanReason: string | null; createsAdminRiskManagerCumul: boolean; createsAdminCommitteeCumul: boolean }> {
     const role = await this.get(actor, roleId);
     const groupReason = this.groupReason(role, reason);
     const held = userId ? await this.roles.listForUser(actor.tenantId, userId) : [];
     if (held.some((r) => r.id === roleId)) throw new ConflictError(`This user already holds the role "${role.name}"`, roleId);
-    const { cleanReason, createsAdminRiskManagerCumul } = await this.assertCumulRules(actor.tenantId, role, held, held, reason);
-    return { role, cleanReason: cleanReason ?? groupReason, createsAdminRiskManagerCumul };
+    const { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul } = await this.assertCumulRules(actor.tenantId, role, held, held, reason);
+    return { role, cleanReason: cleanReason ?? groupReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul };
   }
 
   /**
@@ -339,7 +371,7 @@ export class RoleService {
     others: Role[],
     previous: Role[],
     reason: string | undefined,
-  ): Promise<{ cleanReason: string | null; createsAdminRiskManagerCumul: boolean }> {
+  ): Promise<{ cleanReason: string | null; createsAdminRiskManagerCumul: boolean; createsAdminCommitteeCumul: boolean }> {
     assertNoCumul(role, others);
 
     // q58: Committee + Audit (group or effective audit.*) is allowed unless the tenant forbids it. RM + Audit is handled above.
@@ -356,15 +388,22 @@ export class RoleService {
     const after = [...others, role];
     const createsAdminRiskManagerCumul =
       isAdministrator(after) && isRiskManagerMember(after) && !(isAdministrator(previous) && isRiskManagerMember(previous));
+    // q80 (DECISION-044): administrator + Committee is handled exactly like administrator + Risk Manager.
+    const createsAdminCommitteeCumul =
+      isAdministrator(after) && isCommitteeMember(after) && !(isAdministrator(previous) && isCommitteeMember(previous));
     let cleanReason: string | null = null;
-    if (createsAdminRiskManagerCumul) {
+    if (createsAdminRiskManagerCumul || createsAdminCommitteeCumul) {
       cleanReason = reason?.trim() || null;
-      if (!cleanReason) throw new ValidationError("A reason is required to make a user both application administrator and Risk Manager");
+      if (!cleanReason) {
+        throw new ValidationError(
+          `A reason is required to make a user both application administrator and ${createsAdminRiskManagerCumul ? "Risk Manager" : "Committee member"}`,
+        );
+      }
       if (cleanReason.length > MAX_GROUP_REASON_LENGTH) {
         throw new ValidationError(`reason must be at most ${MAX_GROUP_REASON_LENGTH} characters`);
       }
     }
-    return { cleanReason, createsAdminRiskManagerCumul };
+    return { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul };
   }
 
   /** ACT-093/113: the actor can never assign a role to themselves — that's the maker-checker boundary. */
@@ -381,13 +420,14 @@ export class RoleService {
     }
     const pre = await this.assertAssignable(actor, roleId, userId, reason);
     const { role } = pre;
-    let { cleanReason, createsAdminRiskManagerCumul } = pre;
+    let { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul } = pre;
 
     // F-B8s-01: the check above may be stale; the repository replays it under the user + role locks.
     const assignment = await this.roles.assignToUser(actor.tenantId, roleId, userId, actor.userId, async (lockedRole, held) => {
       const res = await this.assertCumulRules(actor.tenantId, lockedRole, held, held, reason);
       cleanReason = res.cleanReason ?? cleanReason;
       createsAdminRiskManagerCumul = res.createsAdminRiskManagerCumul;
+      createsAdminCommitteeCumul = res.createsAdminCommitteeCumul;
     });
 
     await this.audit.record({
@@ -406,6 +446,11 @@ export class RoleService {
     if (createsAdminRiskManagerCumul) {
       await this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
         "Un utilisateur cumule désormais l'administration de l'application et le groupe Risk Manager.", requestId);
+    }
+    // q80: same mechanism (same mandatory event type) for administrator + Committee.
+    if (createsAdminCommitteeCumul) {
+      await this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
+        "Un utilisateur cumule désormais l'administration de l'application et le groupe Comité des risques.", requestId);
     }
     if (role.systemGroup === "RISK_COMMITTEE") {
       await this.notifyMembers(actor, "audit.read", userId, userId, "COMMITTEE_MEMBER_ADDED",
@@ -518,6 +563,21 @@ export class RoleService {
     return isAdministrator(held) && isRiskManagerMember(held);
   }
 
+  /** q80: true when the user is both application administrator and in the Committee group. */
+  async isAdminAndCommittee(tenantId: string, userId: string): Promise<boolean> {
+    const held = await this.roles.listForUser(tenantId, userId);
+    return isAdministrator(held) && isCommitteeMember(held);
+  }
+
+  /**
+   * q94: a user who still holds a forbidden cumul (Risk Manager + Committee, or + Audit) created before the rule
+   * cannot be silently reactivated with it. No-op for everyone else.
+   */
+  async assertReactivable(tenantId: string, userId: string): Promise<void> {
+    const held = await this.roles.listForUser(tenantId, userId);
+    for (const r of held) assertNoCumul(r, held.filter((o) => o.id !== r.id));
+  }
+
   /** F-B8-06: roles disabled while the user was suspended whose assignment remains (rights silently lost). */
   async listLostRoles(tenantId: string, userId: string): Promise<Role[]> {
     return (await this.roles.listDisabledForUser?.(tenantId, userId)) ?? [];
@@ -525,7 +585,7 @@ export class RoleService {
 
   /**
    * q45: only the application administrator (rolegroup.audit.update) changes the
-   * Audit group's permissions. If the actor is also a Risk Manager the change is
+   * Audit group's permissions. If the actor is also a Risk Manager or a Committee member the change is
    * queued until a member of Audit or the Committee validates it.
    * F-B8b-01: read-only whitelist. F-B8b-02: mandatory reason, members notified.
    * F-B8b-04: a single PENDING change per group.
@@ -558,7 +618,8 @@ export class RoleService {
       throw new ValidationError("A change of the Audit group permissions is already pending validation");
     }
 
-    if (held.some((r) => r.systemGroup === "RISK_MANAGER")) {
+    // G1 (DECISION-044): an administrator who is also a Committee member would otherwise apply alone, like a Risk Manager.
+    if (held.some((r) => r.systemGroup === "RISK_MANAGER" || isCommitteeRole(r))) {
       if (!this.permissionChanges) throw new Error("RoleService requires a RolePermissionChangeRepository");
       const change = await this.permissionChanges.create({
         tenantId: actor.tenantId,

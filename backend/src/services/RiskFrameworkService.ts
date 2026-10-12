@@ -5,15 +5,18 @@ import type { RiskFrameworkRepository } from "../domain/repositories/RiskFramewo
 import type { RoleRepository } from "../domain/repositories/RoleRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { SystemGroup } from "../domain/entities/Role.js";
+import type { AuditEvent } from "../domain/entities/AuditEvent.js";
 import type {
   AppetiteThresholdEntry,
   ApproverGroup,
   ChangeApprover,
   ChangeRequestStatus,
   FrameworkParams,
+  DecisionResult,
   RiskFramework,
   RiskFrameworkChangeRequest,
   RiskFrameworkVersion,
+  TransactionalAudit,
   UpdateDraftParams,
 } from "../domain/entities/RiskFramework.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
@@ -94,6 +97,15 @@ function normalizeAppetite(entries: AppetiteThresholdEntry[]): AppetiteThreshold
   });
 }
 
+/** q87 / C-B6a-02: a Committee/Audit vote does not exist before B-12; such a Dispositif could never change again. */
+function assertApproverAllowed(approver: ChangeApprover): void {
+  if (approver !== "RISK_MANAGER") {
+    throw new ValidationError("Seul l'approbateur RISK_MANAGER est possible pour l'instant : le vote Comité/Audit sera disponible avec B-12");
+  }
+}
+
+type AuditInput = Omit<AuditEvent, "id" | "timestamp">;
+
 /** Validates (and normalizes) whichever parameters are present. */
 function checkParams<T extends UpdateDraftParams>(input: T): T {
   // Whitelist: only the parameters of §2.2 survive, whatever the caller passed (never a `status`).
@@ -104,10 +116,7 @@ function checkParams<T extends UpdateDraftParams>(input: T): T {
   if (p.changeApprover !== undefined && !APPROVERS.includes(p.changeApprover)) {
     throw new ValidationError(`changeApprover must be one of: ${APPROVERS.join(", ")}`);
   }
-  // C-B6a-02: a Committee/Audit vote does not exist before B-12; such a Dispositif could never change again.
-  if (p.changeApprover !== undefined && p.changeApprover !== "RISK_MANAGER") {
-    throw new ValidationError("Seul l'approbateur RISK_MANAGER est possible pour l'instant : le vote Comité/Audit sera disponible avec B-12");
-  }
+  if (p.changeApprover !== undefined) assertApproverAllowed(p.changeApprover);
   if (p.committeeEvaluationMinScore !== undefined) assertScore(p.committeeEvaluationMinScore, "committeeEvaluationMinScore");
   if (p.committeeTreatmentMinScore !== undefined && p.committeeTreatmentMinScore !== null) {
     assertScore(p.committeeTreatmentMinScore, "committeeTreatmentMinScore");
@@ -193,16 +202,13 @@ export class RiskFrameworkService {
     };
     await this.assertSubCategories(actor.tenantId, params.appetiteThresholds);
 
-    const created = await this.frameworks.createWithDraft({
-      tenantId: actor.tenantId,
-      name,
-      description,
-      createdBy: actor.userId,
-      params,
-    });
-    await this.record(actor, "RiskFramework", created.framework.id, "CREATE", null, created.framework, null, requestId);
-    await this.record(actor, "RiskFrameworkVersion", created.version.id, "CREATE", null, created.version, null, requestId);
-    return created;
+    return this.audited<{ framework: RiskFramework; version: RiskFrameworkVersion }>(
+      (created) => [
+        this.event(actor, "RiskFramework", created.framework.id, "CREATE", null, created.framework, null, requestId),
+        this.event(actor, "RiskFrameworkVersion", created.version.id, "CREATE", null, created.version, null, requestId),
+      ],
+      (audit) => this.frameworks.createWithDraft({ tenantId: actor.tenantId, name, description, createdBy: actor.userId, params, audit }),
+    );
   }
 
   async updateIdentity(
@@ -219,9 +225,10 @@ export class RiskFrameworkService {
     const fields: { name?: string; description?: string | null } = {};
     if (input.name !== undefined) fields.name = cleanText(input.name, "name", MAX_NAME, true)!;
     if (input.description !== undefined) fields.description = cleanText(input.description, "description", MAX_DESCRIPTION, false);
-    const after = await this.frameworks.updateIdentity(actor.tenantId, id, fields);
-    await this.record(actor, "RiskFramework", id, "UPDATE", before, after, reason, requestId);
-    return after;
+    return this.audited(
+      (after) => [this.event(actor, "RiskFramework", id, "UPDATE", before, after, reason, requestId)],
+      (audit) => this.frameworks.updateIdentity(actor.tenantId, id, fields, audit),
+    );
   }
 
   /** New DRAFT copied from `fromVersionId`, or from the ACTIVE version. */
@@ -238,9 +245,13 @@ export class RiskFrameworkService {
     if (!source) {
       throw new ValidationError(fromVersionId ? `Version ${fromVersionId} not found in this Dispositif` : "No active version to copy: fromVersionId is required");
     }
-    const draft = await this.frameworks.createDraftFrom(actor.tenantId, frameworkId, source.id, actor.userId);
-    await this.record(actor, "RiskFrameworkVersion", draft.id, "CREATE", null, draft, null, requestId);
-    return draft;
+    // q87: the repository copies every parameter except the approver, which is always RISK_MANAGER in a new
+    // draft (a Committee/Audit approver of a legacy source is never carried over; the circuit of a request
+    // still follows the ACTIVE version, fail-closed).
+    return this.audited<RiskFrameworkVersion>(
+      (draft) => [this.event(actor, "RiskFrameworkVersion", draft.id, "CREATE", null, draft, null, requestId)],
+      (audit) => this.frameworks.createDraftFrom(actor.tenantId, frameworkId, source.id, actor.userId, audit),
+    );
   }
 
   /** Partial update of a DRAFT. There is no `status` in the input: an edit is never a transition. */
@@ -263,9 +274,13 @@ export class RiskFrameworkService {
     }
     if (clean.appetiteThresholds) await this.assertSubCategories(actor.tenantId, clean.appetiteThresholds);
 
-    // B6a-QA-01: the audit line (which feeds the author exclusion) is written BEFORE the edit is stored, so an
-    // edit can never exist without its editor being traceable. Worst case: an UPDATE entry for an edit that
-    // then failed to store (over-excludes that person, never under-excludes).
+    // q90: with a transactional repository the edit and its audit line are one operation. Otherwise (B6a-QA-01)
+    // the audit line, which feeds the author exclusion, is written BEFORE the edit is stored: worst case an
+    // UPDATE entry for an edit that failed to store (over-excludes that person, never under-excludes).
+    if (this.inTx) {
+      return this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId,
+        (after) => [this.event(actor, "RiskFrameworkVersion", versionId, "UPDATE", before, after, null, requestId)]);
+    }
     await this.record(actor, "RiskFrameworkVersion", versionId, "UPDATE", before, { ...before, ...clean, lastEditedBy: actor.userId }, null, requestId);
     return this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId);
   }
@@ -283,9 +298,10 @@ export class RiskFrameworkService {
     const clean = cleanText(reason, "reason", MAX_REASON, true)!;
     const before = await this.getVersionOrThrow(actor.tenantId, frameworkId, versionId);
     this.assertDraft(before);
-    const after = await this.frameworks.discardDraft(actor.tenantId, frameworkId, versionId, actor.userId, clean);
-    await this.record(actor, "RiskFrameworkVersion", versionId, "STATUS_CHANGE", before, after, clean, requestId);
-    return after;
+    return this.audited(
+      (after) => [this.event(actor, "RiskFrameworkVersion", versionId, "STATUS_CHANGE", before, after, clean, requestId)],
+      (audit) => this.frameworks.discardDraft(actor.tenantId, frameworkId, versionId, actor.userId, clean, audit),
+    );
   }
 
   // -- change requests --------------------------------------------------
@@ -316,15 +332,18 @@ export class RiskFrameworkService {
       previousValue: active ? { versionId: active.id, versionNumber: active.versionNumber } : null,
       // F-B6a-02: replayed on the locked row, so a PATCH racing with this request cannot slip past.
       validateLocked: async (locked) => { checked.final = await this.validateRequestable(actor.tenantId, locked, actor.userId); },
+      audit: this.inTx ? (r) => [this.event(actor, "RiskFrameworkChangeRequest", r.id, "SUBMIT", null, r, clean, requestId)] : undefined,
     });
     const { decider, all, eligible } = checked.final ?? checked;
-    // C-B6a-01: notifications leave even when the audit write fails (the audit error is raised afterwards).
+    // Non-transactional repository only: notifications leave even when the audit write fails (C-B6a-01.1).
     let auditError: unknown = null;
-    try {
-      await this.record(actor, "RiskFrameworkChangeRequest", request.id, "SUBMIT", null, request, clean, requestId);
-    } catch (err) {
-      auditError = err;
-      console.error(`risk framework request ${request.id}: request stored but audit failed (requestId ${requestId})`, err instanceof Error ? err.message : err);
+    if (!this.inTx) {
+      try {
+        await this.record(actor, "RiskFrameworkChangeRequest", request.id, "SUBMIT", null, request, clean, requestId);
+      } catch (err) {
+        auditError = err;
+        console.error(`risk framework request ${request.id}: request stored but audit failed (requestId ${requestId})`, err instanceof Error ? err.message : err);
+      }
     }
 
     if (decider.kind === "RISK_MANAGER" && eligible.RISK_MANAGER.length === 0) {
@@ -355,9 +374,10 @@ export class RiskFrameworkService {
     if (request.requestedBy !== actor.userId) throw new ForbiddenError("Seul le demandeur peut retirer sa demande");
     if (request.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${request.status})`);
     const comment = cleanText(reason, "reason", MAX_REASON, true);
-    const result = await this.frameworks.withdraw(actor.tenantId, id, comment);
-    await this.record(actor, "RiskFrameworkChangeRequest", id, "STATUS_CHANGE", request, result.request, comment, requestId);
-    return result;
+    return this.audited<DecisionResult>(
+      (result) => [this.event(actor, "RiskFrameworkChangeRequest", id, "STATUS_CHANGE", request, result.request, comment, requestId)],
+      (audit) => this.frameworks.withdraw(actor.tenantId, id, comment, audit),
+    );
   }
 
   /**
@@ -398,6 +418,16 @@ export class RiskFrameworkService {
     const fallback = decider.regime === "FALLBACK";
     const cleanComment = cleanText(comment, "comment", MAX_COMMENT, outcome === "REJECTED" || fallback);
 
+    const events = (result: DecisionResult): AuditInput[] =>
+      outcome === "APPROVED"
+        ? [
+            this.event(actor, "RiskFrameworkVersion", result.version.id, "STATUS_CHANGE",
+              result.previousActive, { ...result.version, decisionRegime: decider.regime, requestId: id }, cleanComment, requestId),
+            this.event(actor, "RiskFrameworkChangeRequest", id, "APPROVE", request, result.request, cleanComment, requestId),
+          ]
+        : [this.event(actor, "RiskFrameworkChangeRequest", id, "REJECT", request, result.request, cleanComment, requestId)];
+
+    // q90: with a transactional repository the audit rows are part of the decision (a failing audit = ROLLBACK).
     const result = await this.frameworks.recordDecision(actor.tenantId, id, {
       outcome,
       decidedBy: actor.userId,
@@ -405,21 +435,17 @@ export class RiskFrameworkService {
       decisionRegime: decider.regime,
       deciderGroup: "RISK_MANAGER",
       ratificationStatus: fallback ? "PENDING" : null,
-    });
+    }, this.inTx ? events : undefined);
 
     let auditError: unknown = null;
-    try {
-      if (outcome === "APPROVED") {
-        await this.record(actor, "RiskFrameworkVersion", result.version.id, "STATUS_CHANGE",
-          result.previousActive, { ...result.version, decisionRegime: decider.regime, requestId: id }, cleanComment, requestId);
-        await this.record(actor, "RiskFrameworkChangeRequest", id, "APPROVE", request, result.request, cleanComment, requestId);
-      } else {
-        await this.record(actor, "RiskFrameworkChangeRequest", id, "REJECT", request, result.request, cleanComment, requestId);
+    if (!this.inTx) {
+      try {
+        for (const e of events(result)) await this.audit.record(e);
+      } catch (err) {
+        // Non-transactional repository only: the decision is applied and not replayed (F-B8t-04): logged, then reported.
+        console.error(`risk framework request ${id}: decision applied but audit failed (requestId ${requestId})`, err instanceof Error ? err.message : err);
+        auditError = err;
       }
-    } catch (err) {
-      // The decision is applied and not replayed (same choice as F-B8t-04): logged, then reported.
-      console.error(`risk framework request ${id}: decision applied but audit failed (requestId ${requestId})`, err instanceof Error ? err.message : err);
-      auditError = err;
     }
 
     await this.notify(actor, [request.requestedBy], id, "RISK_FRAMEWORK_CHANGE_DECIDED",
@@ -429,7 +455,7 @@ export class RiskFrameworkService {
     await this.notify(actor, await this.holders(actor, "audit.read"), id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE",
       fallback ? "Une demande de Dispositif a été décidée en repli par un Risk Manager (ratification à venir)." : "Une demande de Dispositif a été décidée par un Risk Manager.",
       requestId);
-    if (auditError) throw auditError; // C-B6a-01: reported after the (best effort) notifications left
+    if (auditError) throw auditError; // reported after the (best effort) notifications left
     return result;
   }
 
@@ -574,6 +600,24 @@ export class RiskFrameworkService {
     return r;
   }
 
+  /** q90: true when the repository writes the audit rows in the transaction of the action itself. */
+  private get inTx(): boolean {
+    return this.frameworks.auditsInTransaction === true;
+  }
+
+  private event(
+    actor: AuthenticatedUser,
+    entityType: string,
+    entityId: string,
+    action: "CREATE" | "UPDATE" | "STATUS_CHANGE" | "SUBMIT" | "APPROVE" | "REJECT",
+    oldValue: unknown,
+    newValue: unknown,
+    reason: string | null,
+    requestId: string,
+  ): AuditInput {
+    return { tenantId: actor.tenantId, userId: actor.userId, entityType, entityId, action, oldValue, newValue, reason, requestId };
+  }
+
   private async record(
     actor: AuthenticatedUser,
     entityType: string,
@@ -584,12 +628,26 @@ export class RiskFrameworkService {
     reason: string | null,
     requestId: string,
   ): Promise<void> {
-    await this.audit.record({ tenantId: actor.tenantId, userId: actor.userId, entityType, entityId, action, oldValue, newValue, reason, requestId });
+    await this.audit.record(this.event(actor, entityType, entityId, action, oldValue, newValue, reason, requestId));
+  }
+
+  /** Runs the action with its audit events in the same transaction, or records them right after (fakes). */
+  private async audited<R>(build: TransactionalAudit<R>, run: (audit?: TransactionalAudit<R>) => Promise<R>): Promise<R> {
+    if (this.inTx) return run(build);
+    const result = await run();
+    for (const e of build(result)) await this.audit.record(e);
+    return result;
   }
 
   private async holders(actor: AuthenticatedUser, permission: string): Promise<string[]> {
-    const list = (await this.users.listWithPermission?.(actor.tenantId, permission, actor.userId)) ?? [];
-    return list.map((u) => u.id);
+    try {
+      const list = (await this.users.listWithPermission?.(actor.tenantId, permission, actor.userId)) ?? [];
+      return list.map((u) => u.id);
+    } catch (err) {
+      // Best effort (C-B6a-01.1): a failing lookup must not skip the other notifications nor undo the action.
+      console.error(`recipients of ${permission} could not be resolved`, err instanceof Error ? err.message : err);
+      return [];
+    }
   }
 
   /** Best effort: the action is already stored and audited; a notification failure must not undo it. */

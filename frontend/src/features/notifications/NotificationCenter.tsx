@@ -183,6 +183,10 @@ export function NotificationCenter({ token, onNavigate }: { token: string; onNav
           <div className="notif-body">
             {subsError && <MessageBanner tone="danger">{subsError}</MessageBanner>}
             {!subsError && (subs === null || types === null) && <Skeleton lines={3} label="Chargement des abonnements" />}
+            {subs !== null && types !== null && types.some((t) => t.mandatory) && (
+              <MessageBanner tone="info">Ces notifications sont obligatoires : vous les recevez toujours et ne pouvez pas les désactiver.</MessageBanner>
+            )}
+            {subs !== null && types !== null && types.length === 0 && <p>Aucun type de notification reçu.</p>}
             {subs !== null && types !== null && (
               <ul className="notif-list">
                 {types.map(({ resourceType, eventType, label, mandatory }) => {

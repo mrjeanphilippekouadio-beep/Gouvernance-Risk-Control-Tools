@@ -15,7 +15,7 @@ function role(id: string, systemGroup: SystemGroup | null, permissions: Permissi
 }
 
 function setup() {
-  const roles = [role("rm", "RISK_MANAGER"), role("co", "RISK_COMMITTEE"), role("au", "AUDIT"), role("plain", null, ["role.assign"])];
+  const roles = [role("rm", "RISK_MANAGER"), role("co", "RISK_COMMITTEE"), role("au", "AUDIT"), role("plain", null, ["role.assign"]), role("gov", null, ["governance.validate"])];
   const held = new Map<string, string[]>(); // userId -> roleIds
   const changes: RolePermissionChange[] = [];
   const events: AuditEvent[] = [];
@@ -70,25 +70,27 @@ describe("B-8 bis fixed groups", () => {
     await expect(service.assignToUser(admin, "co", "u1", "r1", "x".repeat(501))).rejects.toThrow(ValidationError);
     await service.assignToUser(admin, "co", "u1", "r1", "  nomination  ");
     expect(events.at(-1)?.reason).toBe("nomination");
-    await service.assignToUser(admin, "plain", "u1", "r2"); // ordinary role: no reason needed
+    await service.assignToUser(admin, "plain", "u2", "r2"); // ordinary role: no reason needed (u2 holds no group)
   });
 
-  it("refuses Risk Manager + Audit in both directions, allows Risk Manager + Committee", async () => {
+  it("refuses Risk Manager + Audit and Risk Manager + Committee in both directions (q94)", async () => {
     const { service } = setup();
     await service.assignToUser(admin, "rm", "u1", "r1", "motif");
     await expect(service.assignToUser(admin, "au", "u1", "r2", "motif")).rejects.toThrow(/both/);
     await service.assignToUser(admin, "au", "u2", "r3", "motif");
     await expect(service.assignToUser(admin, "rm", "u2", "r4", "motif")).rejects.toThrow(/both/);
-    await service.assignToUser(admin, "co", "u1", "r5", "motif");
+    // q94: Risk Manager + Committee is now refused too (was allowed before DECISION-044)
+    await expect(service.assignToUser(admin, "co", "u1", "r5", "motif")).rejects.toThrow(/Committee/);
+    await service.assignToUser(admin, "co", "u4", "r6", "motif");
+    await expect(service.assignToUser(admin, "rm", "u4", "r7", "motif")).rejects.toThrow(/Committee/);
   });
 
-  it("exposes the Risk Manager + Committee cumul on the user sheet", async () => {
-    const { service, users, audit } = setup();
-    await service.assignToUser(admin, "rm", "u1", "r1", "motif");
-    await service.assignToUser(admin, "co", "u1", "r2", "motif");
+  it("flags a pre-existing Risk Manager + Committee cumul on the user sheet (cannot be created any more)", async () => {
+    const { service, users, audit, held } = setup();
+    held.set("u1", ["rm", "co"]);
     const userService = new UserService(users as never, audit as never, service);
     const detail = await userService.getDetail(admin, "u1");
-    expect(detail.fixedGroups).toEqual(["RISK_MANAGER", "RISK_COMMITTEE"]);
+    expect(detail.fixedGroups.sort()).toEqual(["RISK_COMMITTEE", "RISK_MANAGER"]);
     expect(detail.riskManagerAndCommittee).toBe(true);
   });
 });
@@ -121,6 +123,36 @@ describe("B-8 bis Audit group permissions (q45)", () => {
     await service.decideAuditPermissionChange(actor("aud", validate), "c1", true, "r");
     expect(changes[0]?.status).toBe("APPROVED");
     await expect(service.decideAuditPermissionChange(actor("aud", validate), "c1", true, "r")).rejects.toThrow(ValidationError);
+  });
+});
+
+describe("G1 administrator who is a Committee member", () => {
+  it("queues the change instead of applying it, and the author cannot validate it", async () => {
+    const { service, held, changes, roles } = setup();
+    held.set("admin", ["co"]);
+    held.set("aud", ["au"]);
+    const before = [...roles.find((r) => r.id === "au")!.permissions];
+    const res = await service.changeAuditGroupPermissions(admin, ["audit.read"], "r", "motif de test");
+    expect(res.status).toBe("PENDING");
+    expect(changes[0]?.requestedBy).toBe("admin");
+    expect(roles.find((r) => r.id === "au")!.permissions).toEqual(before);
+    const validate: Permission[] = ["rolegroup.audit.validate"];
+    await expect(service.decideAuditPermissionChange(actor("admin", validate), "c1", true, "r")).rejects.toThrow(ForbiddenError);
+    expect(changes[0]?.status).toBe("PENDING");
+    await service.decideAuditPermissionChange(actor("aud", validate), "c1", true, "r");
+    expect(changes[0]?.status).toBe("APPROVED");
+  });
+
+  it("also queues when Committee validation powers come from an ordinary role (F-D044-07)", async () => {
+    const { service, held } = setup();
+    held.set("admin", ["gov"]);
+    expect((await service.changeAuditGroupPermissions(admin, ["audit.read"], "r", "motif de test")).status).toBe("PENDING");
+  });
+
+  it("Risk Manager case unchanged: still queued", async () => {
+    const { service, held } = setup();
+    held.set("admin", ["rm"]);
+    expect((await service.changeAuditGroupPermissions(admin, ["audit.read"], "r", "motif de test")).status).toBe("PENDING");
   });
 });
 
