@@ -456,3 +456,13 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
 
 39. L'exclusion d'un auteur est de la séparation des tâches ; son effet sur le régime de décision (vote -> repli) doit être tracé avec sa cause, pas bloqué (principe 9).
 40. Ce qui est approuvé comprend les objets que la demande référence (échelle, descriptifs), pas seulement la ligne de demande : l'exclusion des auteurs couvre l'ensemble.
+
+# Addendum mémoire @risk-manager (A13), 2026-10-12
+
+À ajouter À LA FIN de `.claude/agent-context/memory/risk-manager.md` (le fichier n'existe pas dans le worktree de base 0dc6bda, donc non édité ici ; le copier tel quel dans la mémoire puis supprimer cet addendum).
+
+- 2026-10-12 : **revue DECISION-044** (`docs/risk/A13-review-DECISION-044.md`, **recommandations non arbitrées**). q82/q83 : lecture fidèle mais incomplète ; fin de l'amorçage **définitive et mémorisée** (sinon un RM rouvre l'exception en retirant le tiers), motif d'impossibilité structuré (le RM n'a pas `user.create`), tiers prévenu même si Audit et Comité sont vides (administrateurs autres + HUMAN), l'exception ne lève que « décideur ≠ demandeur », q83 l'emporte sur q62 pour BOOTSTRAP seul, KRI d'ancienneté plutôt que durée maximale, valeurs du Dispositif amorcé = défauts du contrat ou plus strictes (I-D5, question PO). Version ACTIVE héritée COMMITTEE/AUDIT : repérage pré-déploiement obligatoire, garde-fou FALLBACK (cause `LEGACY_APPROVER_PRE_B12`) seulement si ≥ 1 ligne, jamais d'intervention en base (le trigger d'immuabilité l'interdit). Trou de séparation des tâches trouvé (G1) : `changeAuditGroupPermissions` ne met en attente que l'auteur RM, donc admin + Comité applique seul des droits d'Audit. Admin + Audit non encadré (Q-A13-5). q96 : oui, notifier le propriétaire du risque du KRI (`Kri.riskId` est obligatoire). R1-R5, I-C1, I-C2 répondus (I-C1 et I-C2 confirmés).
+
+41. Une exception à fin « événementielle » se ferme à sens unique : la fin est mémorisée, jamais recalculée sur l'état courant des groupes, sinon elle se rouvre à volonté.
+42. Une règle qui dépend d'un acte « impossible » à déclarer n'est vérifiable que si le motif est structuré (qui, quand, pourquoi) et qu'un tiers hors groupes vides est prévenu.
+43. Quand une catégorie devient autorisée (admin + Comité), chercher tous les flux où l'ancienne interdiction jouait le rôle de contrôle (ici la mise en attente des droits d'Audit).
