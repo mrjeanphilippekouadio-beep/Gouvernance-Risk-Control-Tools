@@ -119,3 +119,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Formules : on lit `result` en cache, jamais évaluées. Colonnes entièrement vides (en-tête ET données) non listées ; colonne avec en-tête et sans donnée : `isEmpty: true`.
 - `evidence.import` NON ajouté aux groupes fixes : HUMAN l'accorde par SQL.
 - Leçon : commande bash composée avec heredoc python refusée dans le worktree -> Write/Edit directement.
+
+## 2026-10-11 centre de notifications (branche wt/notifb, base 2cf4f48, aucune migration)
+
+- Routes : `GET /notifications/unread-count` (data = nombre), `POST /notifications/read-all` (data = {updated}), `GET /notifications/types` (catalogue). Toutes `notification.read`, limitées à actor.userId + actor.tenantId ; read-all audite une ligne (UPDATE, reason MARK_ALL_READ, entityId = userId car entity_id NOT NULL) seulement si count > 0.
+- `domain/notificationCatalog.ts` : 7 types, 4 gouvernance `mandatory: true`. `subscribe(enabled=false)` sur un type obligatoire -> ValidationError.
+- `NotificationService.emit` = record + respect du désabonnement explicite (ignoré pour les obligatoires) ; `record` inchangé. Les 4 types obligatoires gardent `record`.
+- Persistés : ACTION_STARTED_LATE / ACTION_OVERDUE -> responsible_user_id seul ; KRI_THRESHOLD_BREACH -> owner + superior owner du risque principal du KRI (backlog ACT-135). Params de constructeur optionnels en fin (ActionPlanService +notifications ; KriMeasureService +notifications, +risks). Best effort, erreur loggée. Telegram inchangé.
+- Non fait : Risk Owner + superior des risques liés pour les plans d'action (ACT-193, liens multiples : règle de choix non définie) ; notifications de Risk/Governance/Feedback (non demandées) ; pas de dédoublonnage d'escalateIfOverdue répété.
+- Leçon : heredoc python composé refusé -> script dans le scratchpad puis exécution seule.

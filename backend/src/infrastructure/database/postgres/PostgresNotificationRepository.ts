@@ -117,4 +117,20 @@ export class PostgresNotificationRepository implements NotificationRepository {
     if (!row) throw new NotFoundError("Notification", id);
     return toDomain(row);
   }
+
+  async countUnread(tenantId: string, recipientUserId: string): Promise<number> {
+    const { rows } = await this.pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM notifications WHERE tenant_id = $1 AND recipient_user_id = $2 AND read_at IS NULL`,
+      [tenantId, recipientUserId],
+    );
+    return Number(rows[0]?.count ?? "0");
+  }
+
+  async markAllAsRead(tenantId: string, recipientUserId: string): Promise<number> {
+    const result = await this.pool.query(
+      `UPDATE notifications SET read_at = now() WHERE tenant_id = $1 AND recipient_user_id = $2 AND read_at IS NULL`,
+      [tenantId, recipientUserId],
+    );
+    return result.rowCount ?? 0;
+  }
 }
