@@ -49,3 +49,7 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - Gaps backend : pas de « tout marquer comme lu », pas de compteur de non-lus dédié, pas de catalogue des types d'événements (liste en dur des 4 types réellement persistés), abonnements non consultés à l'émission, notifications plans d'action/KRI non persistées (Telegram seulement), pas de deep-link par id (les écrans n'ouvrent pas un objet précis).
 - Types réellement émis vers `notifications` : RIGHTS_LOST_ON_REACTIVATION, ADMIN_RISK_MANAGER_CUMUL, COMMITTEE_MEMBER_ADDED, AUDIT_RIGHTS_CHANGE_PENDING (tous MANAGEMENT). Type inconnu -> libellé « Notification ».
 - Harnais : refuse les commandes Bash composées (heredoc + `&&`), utiliser Write.
+
+## 2026-10-12 — q97 abonnements en lecture seule (`wt/q97`, DECISION-045 pt 2)
+
+- Le code gérait déjà `mandatory` (badge « Obligatoire », bouton masqué). Ajouts : MessageBanner info « notifications obligatoires » (affichée si au moins un type `mandatory`) et état vide « Aucun type de notification reçu ». Le comportement des types `mandatory:false` (Activer/Désactiver) est conservé. Aucune règle recalculée côté front.
