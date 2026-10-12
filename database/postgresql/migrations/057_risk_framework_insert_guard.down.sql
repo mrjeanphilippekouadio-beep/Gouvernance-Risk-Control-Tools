@@ -30,4 +30,6 @@ BEGIN
 END;
 $$;
 
+DELETE FROM schema_migrations WHERE filename = '057_risk_framework_insert_guard.sql';
+
 COMMIT;
