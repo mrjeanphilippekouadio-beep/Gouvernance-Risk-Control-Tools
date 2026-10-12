@@ -1,4 +1,6 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
+import { insertAuditEvent } from "./PostgresAuditRepository.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import type { RatingScaleRepository } from "../../../domain/repositories/RatingScaleRepository.js";
 import type {
   CreateRatingScaleInput,
@@ -61,7 +63,27 @@ function toDomain(row: RatingScaleRow): RatingScale {
 }
 
 export class PostgresRatingScaleRepository implements RatingScaleRepository {
+  /** F-D044-03: every mutating method inserts its audit events with the transaction client. */
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
+
+  /** BEGIN/COMMIT around `fn`; the audit events are inserted before COMMIT, so a failing insert rolls the write back. */
+  private async tx<R>(audit: TransactionalAudit<R> | undefined, fn: (c: PoolClient) => Promise<R>): Promise<R> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const out = await fn(client);
+      for (const event of audit?.(out) ?? []) await insertAuditEvent(client, event);
+      await client.query("COMMIT");
+      return out;
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
 
   async getById(tenantId: string, id: string): Promise<RatingScale | null> {
     const { rows } = await this.pool.query<RatingScaleRow>(
@@ -82,8 +104,9 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
     return rows.map(toDomain);
   }
 
-  async create(input: CreateRatingScaleInput): Promise<RatingScale> {
-    const { rows } = await this.pool.query<RatingScaleRow>(
+  async create(input: CreateRatingScaleInput, audit?: TransactionalAudit<RatingScale>): Promise<RatingScale> {
+    return this.tx(audit, async (c) => {
+    const { rows } = await c.query<RatingScaleRow>(
       `INSERT INTO rating_scales
          (tenant_id, name, version, status, probability_levels, probability_labels,
           impact_levels, impact_labels)
@@ -102,6 +125,7 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
     const row = rows[0];
     if (!row) throw new Error("Insert into rating_scales returned no row");
     return toDomain(row);
+    });
   }
 
   private async setJsonColumn(
@@ -109,8 +133,10 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
     id: string,
     column: string,
     value: unknown,
+    audit?: TransactionalAudit<RatingScale>,
   ): Promise<RatingScale> {
-    const { rows } = await this.pool.query<RatingScaleRow>(
+    return this.tx(audit, async (c) => {
+    const { rows } = await c.query<RatingScaleRow>(
       `UPDATE rating_scales SET ${column} = $3, updated_at = now()
        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL AND status = 'DRAFT'
        RETURNING *`,
@@ -119,7 +145,7 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
     const row = rows[0];
     if (!row) {
       // R-01 defense in depth: 0 rows = missing, or no longer DRAFT (same refusal as assertMutable).
-      const { rows: existing } = await this.pool.query(
+      const { rows: existing } = await c.query(
         `SELECT 1 FROM rating_scales WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
         [tenantId, id],
       );
@@ -127,33 +153,31 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
       throw new ValidationError("Cannot modify a rating scale that is not a draft — create a new version instead");
     }
     return toDomain(row);
+    });
   }
 
-  async updateThresholds(tenantId: string, id: string, thresholds: ScoreThreshold[]): Promise<RatingScale> {
-    return this.setJsonColumn(tenantId, id, "criticality_thresholds", thresholds);
+  async updateThresholds(tenantId: string, id: string, thresholds: ScoreThreshold[], audit?: TransactionalAudit<RatingScale>): Promise<RatingScale> {
+    return this.setJsonColumn(tenantId, id, "criticality_thresholds", thresholds, audit);
   }
 
-  async updateImpactAxes(tenantId: string, id: string, config: ImpactAxesConfig): Promise<RatingScale> {
-    return this.setJsonColumn(tenantId, id, "impact_axes", config);
+  async updateImpactAxes(tenantId: string, id: string, config: ImpactAxesConfig, audit?: TransactionalAudit<RatingScale>): Promise<RatingScale> {
+    return this.setJsonColumn(tenantId, id, "impact_axes", config, audit);
   }
 
-  async updateVelocity(tenantId: string, id: string, levels: ScaleLevel[]): Promise<RatingScale> {
-    return this.setJsonColumn(tenantId, id, "velocity_levels", levels);
+  async updateVelocity(tenantId: string, id: string, levels: ScaleLevel[], audit?: TransactionalAudit<RatingScale>): Promise<RatingScale> {
+    return this.setJsonColumn(tenantId, id, "velocity_levels", levels, audit);
   }
 
-  async updatePersistence(tenantId: string, id: string, levels: ScaleLevel[]): Promise<RatingScale> {
-    return this.setJsonColumn(tenantId, id, "persistence_levels", levels);
+  async updatePersistence(tenantId: string, id: string, levels: ScaleLevel[], audit?: TransactionalAudit<RatingScale>): Promise<RatingScale> {
+    return this.setJsonColumn(tenantId, id, "persistence_levels", levels, audit);
   }
 
-  async updateMastery(tenantId: string, id: string, config: MasteryScaleConfig): Promise<RatingScale> {
-    return this.setJsonColumn(tenantId, id, "mastery_scale", config);
+  async updateMastery(tenantId: string, id: string, config: MasteryScaleConfig, audit?: TransactionalAudit<RatingScale>): Promise<RatingScale> {
+    return this.setJsonColumn(tenantId, id, "mastery_scale", config, audit);
   }
 
-  async activateAndArchivePrevious(tenantId: string, id: string): Promise<RatingScale> {
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-
+  async activateAndArchivePrevious(tenantId: string, id: string, audit?: TransactionalAudit<RatingScale>): Promise<RatingScale> {
+    return this.tx(audit, async (client) => {
       await client.query(
         `UPDATE rating_scales
          SET status = 'ARCHIVED', archived_at = now(), updated_at = now()
@@ -170,24 +194,19 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
       );
       const row = rows[0];
       if (!row) throw new NotFoundError("RatingScale", id);
-
-      await client.query("COMMIT");
       return toDomain(row);
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    } finally {
-      client.release();
-    }
+    });
   }
 
-  async softDelete(tenantId: string, id: string, deletedBy: string, reason: string): Promise<void> {
-    const { rowCount } = await this.pool.query(
+  async softDelete(tenantId: string, id: string, deletedBy: string, reason: string, audit?: TransactionalAudit<void>): Promise<void> {
+    return this.tx(audit, async (c) => {
+    const { rowCount } = await c.query(
       `UPDATE rating_scales
        SET deleted_at = now(), deleted_by = $3, deletion_reason = $4
        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
       [tenantId, id, deletedBy, reason],
     );
     if (!rowCount) throw new NotFoundError("RatingScale", id);
+    });
   }
 }
