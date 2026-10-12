@@ -220,11 +220,12 @@ pour l'usage.
 | @risk-manager | **Non bloquant B-6b/B-6c (spec §14.2)** — R1 statuts de contribution / mode d'appétence dans « tous les paramètres » ? R2 seuil « faible » sans défaut contractuel ; R3 options de cumul booléennes ; R4 `FIRST_LINE` ; R5 délégation sans durée max → date de fin obligatoire ? I-C1 réserve QA échelles inter-Dispositifs ; I-C2 un `ReviewCycle` ouvert verrouille-t-il le Dispositif ? | 2026-10-12 | **Ouvert — A13 (dispatché)** |
 | @product-manager | **Questions PO (q98, q99)** — q98 (I-D5) : un Dispositif activé par bootstrap doit-il utiliser les valeurs par défaut du contrat ? q99 (I-D6) : la notification de bootstrap est-elle obligatoire au catalogue ? | 2026-10-12 | **Décidé (DECISION-045)** |
 | @risk-manager @dev-backend @security | **Revue A13 DECISION-044** (`docs/risk/A13-review-DECISION-044.md`) : **G1** (MEDIUM, séparation des tâches) — `changeAuditGroupPermissions` ne met en attente que si l'auteur est RM ; un admin + Comité (légal depuis q80) applique seul des droits d'Audit → correctif A06 dispatché. Autres demandes A13 pour B-6d : fin d'amorçage mémorisée, motif structuré, notification lue/non lue tracée, KRI « âge de l'amorçage ». | 2026-10-12 | **G1 en cours (A06)** |
-| @product-manager | **Questions PO q100–q105** (issues de la revue A13) : q100 version héritée COMMITTEE/AUDIT (Q-A13-1) ; q101 sens de « fin » du démarrage (I-D1) ; q102 fin définitive (I-D3) ; q103 tiers prévenu si groupes vides (Q-A13-4) ; q104 admin + Audit (Q-A13-5) ; q105 `config.manage` et import (Q-A13-6). q101–q103 bloquent B-6d. | 2026-10-12 | **Ouvert — owner HUMAN** |
+| @product-manager | **Questions PO q100–q105** (issues de la revue A13) : q100 version héritée COMMITTEE/AUDIT (Q-A13-1) ; q101 sens de « fin » du démarrage (I-D1) ; q102 fin définitive (I-D3) ; q103 tiers prévenu si groupes vides (Q-A13-4) ; q104 admin + Audit (Q-A13-5) ; q105 `config.manage` et import (Q-A13-6). q101–q103 bloquent B-6d. | 2026-10-12 | **q100–q104 décidées (DECISION-046) ; q105 ouverte — owner HUMAN** |
 | @dev-backend @dev-frontend | Mise en œuvre DECISION-045 : q96 (risque du KRI source = risque couvert, A06) et q97 (écran abonnements en lecture seule, Dev Frontend). | 2026-10-12 | **Fait** (q96 `5ce5d39`, q97 `dc06a38`) |
 | @qa-engineer @security @audit @dev-backend | **Revues du lot DECISION-044 + G1 + DECISION-045** : QA A08 `3de31bf` **PASS** (40 tests, dont 15 sur Postgres 16 jetable : ROLLBACK réel des 8 mutations du Dispositif si l'audit échoue) ; Security A10 `5a6e117` **feu vert staging** (CVSS max 3,1) ; Audit A23 `a3b5e40` 14 constats sans bloquant ; G1 corrigé `180c015`. Intégration : 1783 tests + 15 Postgres, build frontend OK. | 2026-10-12 | **Fait** |
 | @dev-backend @risk-manager | **F-D044-01** LOW 2,7 CONFIRMÉ (PoC) — q94 contourné par les permissions effectives : un admin peut donner à un RM les permissions de validation du Comité via un rôle ordinaire ou le groupe RM, sans motif ni notification. **À corriger avant production** (dispatché A06) + requête de repérage 8 à étendre. | 2026-10-12 | **Corrigé `ea4ef9f` (A06) + `6aebb98` (q80). Retest A10 : RETEST_PASS, CLOSED (`70e2d74`).** |
 | @dev-backend @security | **F-D044-07** LOW 2,7 (retest A10) : G1 (`changeAuditGroupPermissions`) ne mettait en attente que pour les groupes RM/Comité ; un admin avec `governance.validate` par un rôle ordinaire appliquait seul. | 2026-10-12 | **Corrigé (orchestrateur) : `isCommitteeRole`, test F-D044-07 dans `B8bis.test.ts`** |
+| @risk-manager | **I-D7 (lecture de q103)** : q103 dit « journalisées pour consultation dès que l'un des groupes Audit et/ou Comité est supérieur à un membre », q101 dit « l'auditeur [unique] est informé ». Lecture orchestrateur retenue : la consultation et l'information sont ouvertes dès le premier membre (sinon q101 serait contredit) ; « > 1 membre » = condition de **fin** de l'amorçage. A13 confirme. | 2026-10-12 | Ouvert — A13 |
 | @risk-manager @dev-backend | **F-D044-08** LOW 2,2 (retest A10) : q58 (paramètre tenant interdisant Comité + Audit, `RoleService` l. 378) et q65 (notification `COMMITTEE_MEMBER_ADDED`, l. 455) ne reconnaissent le Comité que par le groupe. Faut-il étendre la définition q94 (groupe ou pouvoirs de validation) à ces deux règles ? | 2026-10-12 | Ouvert : arbitrage A13, puis A06 |
 | @dev-backend @security | **F-D044-03** LOW 3,1 — audit écrit hors transaction dans ~33 services ; chaîne concrète : `RatingScaleService` (audit après l'écriture → `authorsOf` peut ignorer un auteur d'échelle). Priorité : RatingScale, puis Role, User, Config. **F-D044-02** LOW (effets de bord de l'approbation sans audit propre, = AUD-D044-01). **F-D044-06** INFO (libellé de notification admin + Comité ; tenant dans `audited()`). | 2026-10-12 | **Ouvert — A06** |
 | @dev-db | **AUD-D044-14 / F-D044-04** INFO — garde 038 sans `SET search_path` (non exploitable, conformité à la convention) ; requêtes 8/9 ignorent `users.roles` hérité (F-B8t-02). À la prochaine migration. | 2026-10-12 | **Ouvert — A07** |
@@ -1400,4 +1401,41 @@ STATUS: DÉCIDÉ — q96 à dispatcher (A06), q97 à dispatcher (Dev
   retard de journalisation le même jour (~4 h 30) malgré la leçon de
   DECISION-044 — la relecture `status == "answered"` doit précéder
   chaque message au PO, pas seulement chaque transition de module.
+```
+
+```
+DECISION-046
+DATE: 2026-10-12 (réponses cockpit 13:08–13:11 UTC, journalisées 13:14 UTC)
+CONTEXT: questions q100–q104 issues de la revue A13 de DECISION-044
+  (docs/risk/A13-review-DECISION-044.md) et de la spec B-6 §14.2.
+DECISION (PO, cockpit) :
+  1. q100 (Q-A13-1) : repérage avant production ET garde-fou construit
+     tout de suite : une version active héritée dont l'approbateur est
+     COMMITTEE ou AUDIT ne gèle pas le Dispositif ; la demande se replie
+     vers le Risk Manager, commentaire obligatoire, ratification
+     ultérieure (régime de repli q62) → B-6d + requête de repérage
+     (B8-predeploy-checks.sql, lecture seule).
+  2. q101 (I-D1) : réponse libre « le risk manager continue de
+     s'auto-approuver et l'auditeur est informé » = option 2 : l'amorçage
+     ne se termine que lorsqu'un circuit fonctionne réellement (second RM
+     actif, ou ≥ 2 membres éligibles au Comité ou à l'Audit, q72) ;
+     jusque-là le RM s'auto-approuve et le ou les membres existants
+     d'Audit/Comité sont informés de chaque décision BOOTSTRAP.
+  3. q102 (I-D3) : fin définitive et mémorisée ; l'amorçage ne se
+     rouvre jamais pour ce tenant (recommandation acceptée).
+  4. q103 (Q-A13-4) : réponse libre « les actions sont journalisées pour
+     consultation dès que l'un des groupes Audit et/ou Comité est
+     supérieur à un membre » : quand les groupes sont vides, personne
+     d'autre n'est prévenu (ni administrateurs ni HUMAN) ; les décisions
+     sont journalisées et consultables. Lecture du seuil à confirmer par
+     A13 (item I-D7).
+  5. q104 (Q-A13-5) : cumul administrateur + Audit traité comme
+     administrateur + Comité (q80) : motif obligatoire, tiers prévenu,
+     cumul signalé (recommandation acceptée) → A06 RoleService.
+RELATED: DECISION-044, DECISION-045, spec B-6 §5.6 et §14.2.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — q104 dispatché (A06) ; q100–q103 intégrées à la spec
+  B-6d (A05) ; q105 reste ouverte. Journalisé 3 minutes après la
+  dernière réponse : la relecture `status == "answered"` avant chaque
+  transition a fonctionné.
 ```
