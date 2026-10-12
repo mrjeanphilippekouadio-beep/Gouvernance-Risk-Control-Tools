@@ -21,6 +21,14 @@ export interface NotificationSubscription {
   enabled: boolean;
 }
 
+/** Catalogue served by the backend; `mandatory` types (security/governance) cannot be unsubscribed. */
+export interface NotificationType {
+  resourceType: NotificationResourceType;
+  eventType: string;
+  label: string;
+  mandatory: boolean;
+}
+
 // The client unwraps `{ data }`, so the backend's `total` is not reachable: callers count `data.length`.
 export const notificationsApi = {
   list: (token: string, opts: { read?: boolean; limit?: number } = {}) => {
@@ -28,6 +36,10 @@ export const notificationsApi = {
     if (opts.read !== undefined) q.set("read", String(opts.read));
     return apiRequest<AppNotification[]>(`/api/v1/notifications?${q}`, { token });
   },
+  unreadCount: (token: string) => apiRequest<number>("/api/v1/notifications/unread-count", { token }),
+  listTypes: (token: string) => apiRequest<NotificationType[]>("/api/v1/notifications/types", { token }),
+  markAllRead: (token: string) =>
+    apiRequest<{ updated: number }>("/api/v1/notifications/read-all", { method: "POST", token }),
   markRead: (token: string, id: string) =>
     apiRequest<AppNotification>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH", token }),
   listSubscriptions: (token: string) =>

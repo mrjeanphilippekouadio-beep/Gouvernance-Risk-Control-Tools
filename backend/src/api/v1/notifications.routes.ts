@@ -31,6 +31,30 @@ export function notificationsRouter(notificationService: NotificationService): R
     }
   });
 
+  router.get("/unread-count", async (req, res, next) => {
+    try {
+      res.json({ data: await notificationService.countUnread(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/types", (req, res, next) => {
+    try {
+      res.json({ data: notificationService.getCatalog(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/read-all", async (req, res, next) => {
+    try {
+      res.json({ data: { updated: await notificationService.markAllAsRead(req.user, req.requestId) } });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.patch("/:id/read", async (req, res, next) => {
     try {
       const notification = await notificationService.markAsRead(req.user, req.params["id"] as string, req.requestId);

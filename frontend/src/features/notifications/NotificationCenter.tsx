@@ -1,22 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button, MessageBanner, Modal, Skeleton, StatusBadge, Tabs } from "@djamo/design-system";
 import { ApiError } from "../../api/client";
-import { notificationsApi, type AppNotification, type NotificationResourceType, type NotificationSubscription } from "../../api/notifications";
+import { notificationsApi, type AppNotification, type NotificationResourceType, type NotificationSubscription, type NotificationType } from "../../api/notifications";
 import "./NotificationCenter.css";
 
 export type NotificationTarget = "risks" | "actions" | "controls" | "evaluation" | "roles";
 
 const POLL_MS = 60_000;
 const COUNT_CAP = 100;
-
-/** Event types the backend persists today (grep `notifications.record`); anything else uses the generic label. */
-const EVENT_LABELS: Record<string, string> = {
-  RIGHTS_LOST_ON_REACTIVATION: "Droits perdus à la réactivation",
-  ADMIN_RISK_MANAGER_CUMUL: "Cumul administrateur et gestionnaire des risques",
-  COMMITTEE_MEMBER_ADDED: "Nouveau membre du comité",
-  AUDIT_RIGHTS_CHANGE_PENDING: "Changement de droits d’audit en attente",
-};
-const KNOWN_SUBSCRIPTIONS: { resourceType: NotificationResourceType; eventType: string }[] = Object.keys(EVENT_LABELS).map((eventType) => ({ resourceType: "MANAGEMENT", eventType }));
 
 /** Screens that exist today; none opens a record by id, so the link goes to the module. */
 const TARGETS: Partial<Record<NotificationResourceType, { view: NotificationTarget; label: string }>> = {
@@ -26,10 +17,6 @@ const TARGETS: Partial<Record<NotificationResourceType, { view: NotificationTarg
   RISK_EVALUATION: { view: "evaluation", label: "Ouvrir les évaluations" },
   MANAGEMENT: { view: "roles", label: "Ouvrir les rôles" },
 };
-
-export function eventLabel(eventType: string): string {
-  return EVENT_LABELS[eventType] ?? "Notification";
-}
 
 function errorText(e: unknown): string {
   if (e instanceof ApiError && e.status === 401) return "Session expirée : reconnectez-vous.";
@@ -53,12 +40,14 @@ export function NotificationCenter({ token, onNavigate }: { token: string; onNav
   const [subs, setSubs] = useState<NotificationSubscription[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [subsError, setSubsError] = useState<string | null>(null);
+  const [types, setTypes] = useState<NotificationType[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const eventLabel = (eventType: string) => types?.find((t) => t.eventType === eventType)?.label ?? "Notification";
 
   const refreshCount = useCallback(async () => {
     try {
-      const rows = await notificationsApi.list(token, { read: false, limit: COUNT_CAP });
-      setUnread(rows.length);
+      setUnread(await notificationsApi.unreadCount(token));
     } catch {
       setUnread(null); // unknown, never shown as 0
     }
@@ -88,6 +77,11 @@ export function NotificationCenter({ token, onNavigate }: { token: string; onNav
     } catch (e) {
       setSubsError(errorText(e));
     }
+    try {
+      setTypes(await notificationsApi.listTypes(token));
+    } catch (e) {
+      setSubsError(errorText(e));
+    }
   }, [token]);
 
   useEffect(() => {
@@ -111,6 +105,20 @@ export function NotificationCenter({ token, onNavigate }: { token: string; onNav
     }
   };
 
+  const markAllRead = async () => {
+    setBusyId("all");
+    try {
+      await notificationsApi.markAllRead(token);
+      const now = new Date().toISOString();
+      setItems((cur) => cur?.map((n) => (n.readAt === null ? { ...n, readAt: now } : n)) ?? cur);
+      void refreshCount();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const toggleSub = async (resourceType: NotificationResourceType, eventType: string, enabled: boolean) => {
     setBusyId(eventType);
     setSubsError(null);
@@ -125,6 +133,7 @@ export function NotificationCenter({ token, onNavigate }: { token: string; onNav
   };
 
   const countLabel = unread === null ? "" : unread >= COUNT_CAP ? `${COUNT_CAP - 1}+` : String(unread);
+  const hasUnread = unread !== null ? unread > 0 : (items?.some((n) => n.readAt === null) ?? false);
 
   return (
     <>
@@ -138,9 +147,10 @@ export function NotificationCenter({ token, onNavigate }: { token: string; onNav
         <Tabs<Tab> items={[{ value: "list", label: "Notifications" }, { value: "subs", label: "Abonnements" }]} active={tab} onChange={setTab} />
         {tab === "list" && (
           <div className="notif-body">
-            <MessageBanner tone="info">
-              Actualisation à l’ouverture puis toutes les minutes. L’action « Tout marquer comme lu » n’existe pas encore côté serveur ; chaque notification se marque individuellement.
-            </MessageBanner>
+            <MessageBanner tone="info">Actualisation à l’ouverture puis toutes les minutes.</MessageBanner>
+            <div className="notif-actions">
+              <Button size="sm" variant="secondary" loading={busyId === "all"} disabled={!hasUnread} onClick={() => void markAllRead()}>Tout marquer comme lu</Button>
+            </div>
             {error && <MessageBanner tone="danger">{error}</MessageBanner>}
             {!error && items === null && <Skeleton lines={4} label="Chargement des notifications" />}
             {items !== null && items.length === 0 && <p className="notif-empty">Aucune notification.</p>}
@@ -170,27 +180,26 @@ export function NotificationCenter({ token, onNavigate }: { token: string; onNav
         )}
         {tab === "subs" && (
           <div className="notif-body">
-            <MessageBanner tone="warning" title="Préférences enregistrées, pas encore appliquées">
-              Le serveur enregistre vos choix mais ne les consulte pas encore avant d’émettre une notification. Il n’expose pas non plus la liste complète des types : seuls les types émis aujourd’hui sont proposés.
-            </MessageBanner>
             {subsError && <MessageBanner tone="danger">{subsError}</MessageBanner>}
-            {!subsError && subs === null && <Skeleton lines={3} label="Chargement des abonnements" />}
-            {subs !== null && (
+            {!subsError && (subs === null || types === null) && <Skeleton lines={3} label="Chargement des abonnements" />}
+            {subs !== null && types !== null && (
               <ul className="notif-list">
-                {KNOWN_SUBSCRIPTIONS.map(({ resourceType, eventType }) => {
+                {types.map(({ resourceType, eventType, label, mandatory }) => {
                   const row = subs.find((s) => s.resourceType === resourceType && s.eventType === eventType);
-                  const enabled = row?.enabled;
+                  const enabled = mandatory ? true : row?.enabled;
                   return (
                     <li key={eventType} className="notif-item">
                       <div className="notif-head">
-                        <strong>{eventLabel(eventType)}</strong>
-                        <StatusBadge label={enabled === undefined ? "Non défini" : enabled ? "Activé" : "Désactivé"} tone={enabled === undefined ? "neutral" : enabled ? "success" : "warning"} />
+                        <strong>{label}</strong>
+                        <StatusBadge label={mandatory ? "Obligatoire" : enabled === undefined ? "Activé par défaut" : enabled ? "Activé" : "Désactivé"} tone={mandatory ? "info" : enabled === false ? "warning" : "success"} />
                       </div>
-                      <div className="notif-actions">
-                        <Button size="sm" variant="secondary" loading={busyId === eventType} onClick={() => void toggleSub(resourceType, eventType, enabled !== true)}>
-                          {enabled === true ? "Désactiver" : "Activer"}
-                        </Button>
-                      </div>
+                      {!mandatory && (
+                        <div className="notif-actions">
+                          <Button size="sm" variant="secondary" loading={busyId === eventType} onClick={() => void toggleSub(resourceType, eventType, enabled === false)}>
+                            {enabled === false ? "Activer" : "Désactiver"}
+                          </Button>
+                        </div>
+                      )}
                     </li>
                   );
                 })}

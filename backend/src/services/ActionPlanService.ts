@@ -25,6 +25,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
+import type { NotificationService } from "./NotificationService.js";
 
 const SOURCE_TYPES: readonly ActionPlanSourceType[] = ACTION_PLAN_SOURCE_TYPES;
 const LINK_RESOURCE_TYPES: readonly ActionLinkResourceType[] = ACTION_LINK_RESOURCE_TYPES;
@@ -107,7 +108,27 @@ export class ActionPlanService {
      * server.ts wiring before this change, keep compiling unmodified).
      */
     private readonly findings?: FindingRepository,
+    /** Persisted in-app notification for the action's responsible user; skipped when absent. */
+    private readonly notifications?: NotificationService,
   ) {}
+
+  /** Best effort: recipient = the action's responsible user only (risk owner / superior not wired, see handoff). */
+  private async persistNotification(actor: AuthenticatedUser, action: ActionPlan, eventType: string, message: string, requestId: string): Promise<void> {
+    try {
+      await this.notifications?.emit({
+        tenantId: actor.tenantId,
+        recipientUserId: action.responsibleUserId,
+        resourceType: "ACTION_PLAN",
+        resourceId: action.id,
+        eventType,
+        message,
+        triggeredBy: actor.userId,
+        requestId,
+      });
+    } catch (err) {
+      console.error(`Action ${action.id}: ${eventType} notification not persisted (requestId ${requestId})`, err instanceof Error ? err.message : err);
+    }
+  }
 
   async create(actor: AuthenticatedUser, input: CreateActionPlanRequest, requestId: string): Promise<ActionPlanView> {
     requirePermission(actor, "actionplan.create");
@@ -283,6 +304,8 @@ export class ActionPlanService {
         .catch(() => {
           // Best-effort — a broken notification channel must never fail the actual transition.
         });
+      await this.persistNotification(actor, after, "ACTION_STARTED_LATE",
+        `Action "${after.title}" démarrée en retard (échéance dépassée le ${after.dueDate.toISOString().slice(0, 10)})`, requestId);
     }
 
     return this.toView(after);
@@ -326,6 +349,9 @@ export class ActionPlanService {
       reason: "ESCALATE: computed status EN_RETARD",
       requestId,
     });
+
+    await this.persistNotification(actor, action, "ACTION_OVERDUE",
+      `Action en retard : "${action.title}" (échéance ${action.dueDate.toISOString().slice(0, 10)})`, requestId);
 
     return { escalated: true, action: this.toView(action) };
   }

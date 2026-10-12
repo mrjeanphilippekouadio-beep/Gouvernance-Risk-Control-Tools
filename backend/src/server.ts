@@ -292,7 +292,7 @@ const riskEvaluationViewService = new RiskEvaluationViewService(
   effectivenessRepository,
 );
 const kriService = new KriService(kriRepository, kriMeasureRepository, riskRepository, auditRepository);
-const kriMeasureService = new KriMeasureService(kriMeasureRepository, kriRepository, auditRepository, notifier);
+const kriMeasureService = new KriMeasureService(kriMeasureRepository, kriRepository, auditRepository, notifier, notificationService, riskRepository);
 const riskOwnershipService = new RiskOwnershipService(riskRepository, userRepository, riskEvaluationRepository);
 const actionPlanService = new ActionPlanService(
   actionPlanRepository,
@@ -306,6 +306,7 @@ const actionPlanService = new ActionPlanService(
   userRepository,
   departmentRepository,
   findingRepository,
+  notificationService,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository);
 const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository);
