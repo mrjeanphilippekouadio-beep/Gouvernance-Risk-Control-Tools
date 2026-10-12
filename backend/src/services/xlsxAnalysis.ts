@@ -6,6 +6,9 @@ import { assertSafeXlsxArchive } from "../infrastructure/zipArchiveGuard.js";
 export const MAX_ANALYSIS_BYTES = 5 * 1024 * 1024;
 export const MAX_ANALYSIS_ROWS = 20_000;
 export const MAX_ANALYSIS_COLUMNS = 50;
+/** F-EVD2-01: decompressed caps for the analysis, checked before exceljs loads (row/column caps only apply after load). */
+const MAX_ANALYSIS_UNCOMPRESSED = 8 * 1024 * 1024;
+const MAX_ANALYSIS_ENTRY_UNCOMPRESSED = 6 * 1024 * 1024;
 const MAX_SHEETS = 50;
 const HEADER_SCAN_ROWS = 20;
 const MAX_EXAMPLES = 3;
@@ -40,13 +43,14 @@ type Scalar = string | number | boolean | Date;
 function toScalar(value: ExcelJS.CellValue): Scalar | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "string") return value.trim() === "" ? null : value;
-  if (typeof value === "number" || typeof value === "boolean" || value instanceof Date) return value;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value; // out-of-range serial: unreadable, not a crash
+  if (typeof value === "number" || typeof value === "boolean") return value;
   if (typeof value === "object") {
     if ("error" in value) return null;
     if ("result" in value) return toScalar(value.result as ExcelJS.CellValue);
     if ("formula" in value || "sharedFormula" in value) return null;
     if ("richText" in value) return toScalar(value.richText.map((r) => r.text).join(""));
-    if ("text" in value) return toScalar(String(value.text));
+    if ("text" in value) return toScalar(value.text as ExcelJS.CellValue); // hyperlink label: string or rich text
   }
   return null;
 }
@@ -85,11 +89,13 @@ function analyzeSheet(sheet: ExcelJS.Worksheet, withExamples: boolean): SheetAna
   if (firstNonEmpty === -1) {
     return { name: sheet.name, headerRow: null, headerDetected: false, rowCount: 0, columns: [] };
   }
-  // Header = first row (within the scan window) holding >= 2 cells, all text (1 for a single-column sheet).
+  // Header = first row (within the scan window) holding >= 2 cells (1 for a single-column sheet), all text
+  // except year-like integers (columns "2024", "2025"), with at least one real text cell.
   const minCells = nCols > 1 ? 2 : 1;
+  const headerLike = (v: Scalar | null) => v === null || typeof v === "string" || (typeof v === "number" && Number.isInteger(v) && v >= 1900 && v <= 2100);
   let headerIdx = grid
     .slice(0, HEADER_SCAN_ROWS)
-    .findIndex((cells) => filled(cells) >= minCells && cells.every((v) => v === null || typeof v === "string"));
+    .findIndex((cells) => filled(cells) >= minCells && cells.every(headerLike) && cells.some((v) => typeof v === "string"));
   const headerDetected = headerIdx !== -1;
   if (!headerDetected) headerIdx = firstNonEmpty;
 
@@ -119,7 +125,7 @@ export async function analyzeXlsx(buffer: Buffer, withExamples: boolean): Promis
   if (buffer.byteLength > MAX_ANALYSIS_BYTES) {
     throw new ValidationError(`File exceeds the ${MAX_ANALYSIS_BYTES / (1024 * 1024)}MB analysis limit`);
   }
-  assertSafeXlsxArchive(buffer);
+  assertSafeXlsxArchive(buffer, { maxTotal: MAX_ANALYSIS_UNCOMPRESSED, maxEntry: MAX_ANALYSIS_ENTRY_UNCOMPRESSED });
   const workbook = new ExcelJS.Workbook();
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

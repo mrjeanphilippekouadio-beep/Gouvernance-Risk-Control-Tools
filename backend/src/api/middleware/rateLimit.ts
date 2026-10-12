@@ -53,6 +53,19 @@ export function costlyOperationRateLimiter() {
   });
 }
 
+/** F-EVD2-01: per-user cap (tenant:user) on top of the per-IP costly limiter, for heavy per-user operations. */
+export function perUserRateLimiter() {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => `${req.user?.tenantId ?? "-"}:${req.user?.userId ?? "-"}`,
+    validate: { keyGeneratorIpFallback: false },
+    message: { error: "Too many requests to this endpoint, please try again later" },
+  });
+}
+
 /**
  * F-B8b-03: GET /roles/grantors is open to any authenticated user (q48) and
  * succeeds with 200, so authAttemptRateLimiter never counts it. Per-user cap.

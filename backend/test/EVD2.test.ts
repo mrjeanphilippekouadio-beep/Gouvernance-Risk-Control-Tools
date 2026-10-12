@@ -39,7 +39,7 @@ function setup(content: Buffer, overrides: Partial<Evidence> = {}) {
   return { calls, service: new EvidenceService(repo, storage, audit) };
 }
 
-const actor: AuthenticatedUser = { userId: "u1", tenantId: "tenant-a", email: "a@x", displayName: "A", roles: ["evidence.import"] };
+const actor: AuthenticatedUser = { userId: "u1", tenantId: "tenant-a", email: "a@x", displayName: "A", roles: ["evidence.import", "evidence.download"] }; // examples need download too (F-EVD2-02)
 
 describe("EVD-2 analysis", () => {
   it("returns sheets, detected header, inferred types, examples and empty columns", async () => {
@@ -122,10 +122,10 @@ describe("EVD-2 analysis", () => {
     await expect(setup(buf).service.analyze(actor, "ev-1")).rejects.toBeInstanceOf(ValidationError);
   });
 
-  it("performs no write (db, storage, audit)", async () => {
+  it("performs no write to db or storage; the only write is the READ audit row (F-EVD2-03)", async () => {
     const buf = await workbookBuffer((wb) => wb.addWorksheet("S").addRow(["A", "B"]));
     const { service, calls } = setup(buf);
     await service.analyze(actor, "ev-1");
-    expect(calls.writes).toBe(0);
+    expect(calls.writes).toBe(1);
   });
 });

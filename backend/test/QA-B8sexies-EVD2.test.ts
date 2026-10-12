@@ -25,7 +25,7 @@ import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityP
 // QA level 2 on B-8 sexies (7c29441) and EVD-2 (aed8ec1), plus the static review of the notification
 // centre (see the report: no frontend test suite exists). A QA PASS only: not a Security, Privacy,
 // Compliance or Risk opinion. Oracle (INPUT/ACTION/EXPECTED) was fixed from the src comments before running.
-// `it.fails` = KNOWN GAP: green while the defect exists, red the day it is fixed (then switch to `it`).
+// Former `it.fails` KNOWN GAPs were fixed by A06 (EVD2bis) and converted to `it`.
 
 // =====================================================================================================
 // B-8 sexies
@@ -81,8 +81,7 @@ describe("QA B-8 sexies / PostgresRoleRepository.assignToUser", () => {
     const sql = readFileSync("../database/postgresql/migrations/013_roles.sql", "utf8");
     expect(sql).toMatch(/CREATE UNIQUE INDEX user_roles_active_idx ON user_roles \(tenant_id, user_id, role_id\) WHERE revoked_at IS NULL/);
   });
-  // KNOWN GAP (MINOR): a failing ROLLBACK replaces the original error (here the 409 the caller should get).
-  it.fails("KNOWN GAP B8s-QA-01: a failing ROLLBACK must not mask the original ConflictError", async () => {
+  it("FIXED B8s-QA-01: a failing ROLLBACK must not mask the original ConflictError", async () => {
     const { pool } = fakePool((sql) => sql.startsWith("ROLLBACK") ? new Error("connection terminated")
       : lockOk(sql) ? { rowCount: 1, rows: [{}] } : sql.includes("INSERT") ? pgError("23505", "user_roles_active_idx") : { rowCount: 0, rows: [] });
     await expect(new PostgresRoleRepository(pool).assignToUser("t", "r", "u", "g")).rejects.toBeInstanceOf(ConflictError);
@@ -208,8 +207,7 @@ describe("QA B-8 sexies / decideAuditPermissionChange: applied-or-reopen", () =>
     await expect(w.service.decideAuditPermissionChange(maker, "c1", true, "r")).rejects.toBeInstanceOf(ForbiddenError);
     expect(w.change.status).toBe("PENDING");
   });
-  // KNOWN GAP (MINOR): "applied" is judged on length + inclusion, so a duplicate-bearing change is mistaken for applied.
-  it.fails("KNOWN GAP B8s-QA-02: change [audit.read, audit.read] vs stored [audit.read, risk.read] after a REAL failed update must be reopened", async () => {
+  it("FIXED B8s-QA-02: change [audit.read, audit.read] vs stored [audit.read, risk.read] after a REAL failed update must be reopened", async () => {
     const w = decideWorld({ initial: ["audit.read", "risk.read"], change: ["audit.read", "audit.read"], updateMode: "fail" });
     await expect(w.service.decideAuditPermissionChange(validator, "c1", true, "r")).rejects.toThrow("db down");
     // expected: PENDING again (rights NOT applied). actual: stays APPROVED with risk.read still granted.
@@ -309,7 +307,7 @@ describe("QA EVD-2 / order of checks (permission -> tenant lookup -> Drive)", ()
     const w = evWorld(buf);
     const [r1, r2] = await Promise.all([w.service.analyze(actor, "ev-1"), w.service.analyze(actor, "ev-1")]);
     expect(r1).toEqual(r2);
-    expect(w.log.filter((l) => l === "write")).toHaveLength(0);
+    expect(w.log.filter((l) => l === "write")).toHaveLength(2); // only the READ audit rows (F-EVD2-03)
   });
   it("response shape carries evidenceId, fileName, sha256, sheets and NO Drive reference", async () => {
     const buf = await book((wb) => wb.addWorksheet("S").addRow(["A", "B"]));
@@ -317,14 +315,15 @@ describe("QA EVD-2 / order of checks (permission -> tenant lookup -> Drive)", ()
     expect(Object.keys(res).sort()).toEqual(["evidenceId", "fileName", "sha256", "sheets"]);
     expect(JSON.stringify(res)).not.toContain("drive-1");
   });
-  // QA_CHALLENGE (observation, not a defect: cadrage says "Aucune ecriture"): analysis returns up to 3 cell values per column
-  // with evidence.import only (no evidence.download) and leaves NO audit row, whereas getUrl audits DOWNLOAD fail-closed.
-  it("OBSERVATION: example cell values are returned without evidence.download and without any audit write", async () => {
+  // Was an OBSERVATION (examples returned with evidence.import only, no audit); F-EVD2-02/03 changed both.
+  it("examples need evidence.download too, and the read is audited (READ)", async () => {
     const buf = await book((wb) => { const s = wb.addWorksheet("S"); s.addRow(["Name", "Iban"]); s.addRow(["Jane Doe", "CI93 0000"]); });
     const w = evWorld(buf);
-    const res = await w.service.analyze({ ...actor, roles: ["evidence.import"] }, "ev-1");
+    const res = await w.service.analyze({ ...actor, roles: ["evidence.import", "evidence.download"] }, "ev-1");
     expect(res.sheets[0]!.columns.flatMap((c) => c.examples)).toEqual(["Jane Doe", "CI93 0000"]);
-    expect(w.log).not.toContain("write");
+    const bare = await w.service.analyze({ ...actor, roles: ["evidence.import"] }, "ev-1");
+    expect(bare.sheets[0]!.columns.flatMap((c) => c.examples)).toEqual([]);
+    expect(w.log.filter((l) => l === "write")).toHaveLength(2); // one READ audit row per analysis
   });
 });
 
@@ -416,18 +415,14 @@ describe("QA EVD-2 / malformed files are 400 (ValidationError), never 500", () =
     expect(bomb.length).toBeLessThan(MAX_ANALYSIS_BYTES);
     await expect(analyzeXlsx(bomb, true)).rejects.toBeInstanceOf(ValidationError);
   });
-  // KNOWN GAP (MAJOR for robustness): a date-formatted numeric cell outside the JS Date range gives an Invalid Date,
-  // display() calls toISOString() -> RangeError (not a DomainError) -> errorHandler answers 500 for a user-supplied file.
+  // Fixed: an out-of-range date serial is treated as an unreadable (empty) cell instead of a RangeError (HTTP 500).
   async function hugeDateBook() {
     return book((wb) => {
       const s = wb.addWorksheet("S"); s.addRow(["A", "B"]); s.addRow(["x", 1e12]); s.getCell("B2").numFmt = "yyyy-mm-dd";
     });
   }
-  it.fails("KNOWN GAP EVD2-QA-01: a date-formatted cell with an out-of-range serial must yield 400/OK, not a RangeError", async () => {
+  it("FIXED EVD2-QA-01: a date-formatted cell with an out-of-range serial must yield 400/OK, not a RangeError", async () => {
     expect(["ok", "ValidationError"]).toContain(await outcome(analyzeXlsx(await hugeDateBook(), true)));
-  });
-  it("EVD2-QA-01 evidence: the failure is a raw RangeError (-> HTTP 500), also when examples are withheld is NOT the case", async () => {
-    expect(await outcome(analyzeXlsx(await hugeDateBook(), true))).toBe("RangeError");
   });
 });
 
@@ -496,14 +491,11 @@ describe("QA EVD-2 / structure analysis", () => {
     const buf = await book((wb) => { const w = wb.addWorksheet("Hidden"); w.state = "hidden"; w.addRow(["A", "B"]); });
     expect((await analyzeXlsx(buf, true)).map((x) => x.name)).toEqual(["Hidden"]);
   });
-  // KNOWN GAP (MINOR): a header that carries a number (year columns: "Name", 2024, 2025) is not "all text", so the
-  // heuristic skips it and silently elects the next all-text row (a DATA row) as header with headerDetected=true.
-  it.fails("KNOWN GAP EVD2-QA-02: header with year columns must stay the header row", async () => {
+  it("FIXED EVD2-QA-02: header with year columns must stay the header row", async () => {
     const [s] = await analyzeXlsx(await book((wb) => { const w = wb.addWorksheet("S"); w.addRow(["Name", 2024, 2025]); w.addRow(["alice", "ok", "ok"]); w.addRow(["bob", "ko", "ok"]); }), true);
     expect(s!.headerRow).toBe(1);
   });
-  // KNOWN GAP (MINOR): a hyperlink cell whose text is rich text is stringified with String(object).
-  it.fails("KNOWN GAP EVD2-QA-03: hyperlink with rich-text label must not be reported as [object Object]", async () => {
+  it("FIXED EVD2-QA-03: hyperlink with rich-text label must not be reported as [object Object]", async () => {
     const [s] = await analyzeXlsx(await book((wb) => {
       const w = wb.addWorksheet("S"); w.addRow(["A", "B"]);
       w.getCell("A2").value = { text: { richText: [{ text: "lbl" }] }, hyperlink: "http://x" } as never; w.getCell("B2").value = 1;
@@ -553,11 +545,6 @@ describe("QA EVD-2 / HTTP route", () => {
     } finally { bad.close(); }
     const pdf = await serve(evWorld(good, { mimeType: "application/pdf" }).service, actor);
     try { expect((await call(pdf.base, "/evidences/ev-1/analysis")).status).toBe(400); } finally { pdf.close(); }
-  });
-  it("the out-of-range date workbook answers 500 over HTTP (evidence for EVD2-QA-01)", async () => {
-    const buf = await book((wb) => { const s = wb.addWorksheet("S"); s.addRow(["A", "B"]); s.addRow(["x", 1e12]); s.getCell("B2").numFmt = "yyyy-mm-dd"; });
-    const srv = await serve(evWorld(buf).service, actor);
-    try { expect((await call(srv.base, "/evidences/ev-1/analysis")).status).toBe(500); } finally { srv.close(); }
   });
   it("rate limit: the 31st call from the same client in the window is 429 (shared costly limiter)", async () => {
     const buf = await book((wb) => wb.addWorksheet("S").addRow(["A", "B"]));

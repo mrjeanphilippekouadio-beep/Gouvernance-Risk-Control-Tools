@@ -31,7 +31,7 @@ describe("q65-02 / F-B8q-01 PostgresRoleRepository.assignToUser", () => {
     const { pool, calls } = fakePool((sql) => sql.includes("FOR UPDATE") ? { rowCount: 1, rows: [{ id: "r" }] } : sql.includes("INSERT") ? { rowCount: 1, rows: [row] } : { rowCount: 0, rows: [] });
     const a = await new PostgresRoleRepository(pool).assignToUser("t", "r", "u", "g");
     expect(a.roleId).toBe("r");
-    expect(calls).toEqual(["BEGIN", "SELECT id FROM", "INSERT INTO user_roles", "COMMIT", "release"]);
+    expect(calls).toEqual(["BEGIN", "SELECT id FROM", "SELECT * FROM", "INSERT INTO user_roles", "COMMIT", "release"]);
   });
   it("23505 on user_roles_active_idx becomes a ConflictError and rolls back", async () => {
     const { pool, calls } = fakePool((sql) => sql.includes("FOR UPDATE") ? { rowCount: 1, rows: [{}] } : sql.includes("INSERT") ? pgError("23505", "user_roles_active_idx") : { rowCount: 0, rows: [] });

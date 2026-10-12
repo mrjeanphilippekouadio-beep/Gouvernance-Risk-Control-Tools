@@ -1,4 +1,4 @@
-import type { RoleRepository } from "../domain/repositories/RoleRepository.js";
+import type { RoleRepository, RoleUpdateRecheck } from "../domain/repositories/RoleRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
@@ -235,9 +235,21 @@ export class RoleService {
     assertDashboardScopeModeWritable(input.dashboardScopeMode);
 
     // F-B8t-01: widening a role replays the cumul rules for each active holder with the resulting permissions.
-    const cumulUsers: string[] = [];
+    let cumulUsers: string[] = [];
     const cleanReason = reason?.trim() || null;
+    let recheck: RoleUpdateRecheck | undefined;
     if (input.permissions !== undefined && input.permissions.some((p) => !before.permissions.includes(p))) {
+      const newPermissions = input.permissions;
+      // F-B8s-01: replayed by the repository under the holders' + role locks, on the committed state at that moment.
+      recheck = async (lockedRole, holders) => {
+        const resulting: Role = { ...lockedRole, permissions: newPermissions };
+        cumulUsers = [];
+        for (const h of holders) {
+          const others = h.roles.filter((r) => r.id !== id);
+          const res = await this.assertCumulRules(actor.tenantId, resulting, others, h.roles, reason);
+          if (res.createsAdminRiskManagerCumul) cumulUsers.push(h.userId);
+        }
+      };
       const resulting: Role = { ...before, permissions: input.permissions };
       for (const a of await this.roles.listAssignments(actor.tenantId, id)) {
         if (a.revokedAt) continue;
@@ -248,7 +260,7 @@ export class RoleService {
       }
     }
 
-    const after = await this.roles.update(actor.tenantId, id, input);
+    const after = await this.roles.update(actor.tenantId, id, input, recheck);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -367,9 +379,16 @@ export class RoleService {
     if (actor.userId === userId) {
       throw new ForbiddenError("You cannot assign a role to yourself — ask another admin");
     }
-    const { role, cleanReason, createsAdminRiskManagerCumul } = await this.assertAssignable(actor, roleId, userId, reason);
+    const pre = await this.assertAssignable(actor, roleId, userId, reason);
+    const { role } = pre;
+    let { cleanReason, createsAdminRiskManagerCumul } = pre;
 
-    const assignment = await this.roles.assignToUser(actor.tenantId, roleId, userId, actor.userId);
+    // F-B8s-01: the check above may be stale; the repository replays it under the user + role locks.
+    const assignment = await this.roles.assignToUser(actor.tenantId, roleId, userId, actor.userId, async (lockedRole, held) => {
+      const res = await this.assertCumulRules(actor.tenantId, lockedRole, held, held, reason);
+      cleanReason = res.cleanReason ?? cleanReason;
+      createsAdminRiskManagerCumul = res.createsAdminRiskManagerCumul;
+    });
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -712,8 +731,9 @@ export class RoleService {
         // F-B8q-03(a): the update may have been committed with the response lost. If the stored rights already
         // equal the change, it IS applied: keep APPROVED and carry on to the audit write instead of reopening.
         const current = await this.roles.getById(actor.tenantId, change.roleId).catch(() => null);
-        if (current && current.permissions.length === change.permissions.length
-            && change.permissions.every((p) => current.permissions.includes(p))) {
+        const wanted = new Set(change.permissions);
+        if (current && new Set(current.permissions).size === wanted.size
+            && [...wanted].every((p) => current.permissions.includes(p))) {
           after = current;
         } else {
           try {
