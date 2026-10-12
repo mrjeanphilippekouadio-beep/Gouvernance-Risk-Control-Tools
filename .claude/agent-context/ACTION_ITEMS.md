@@ -1364,3 +1364,30 @@ STATUS: DÉCIDÉ — corrections du livré : B-6a (q87, q90), notifications
   chaque transition de module, pas seulement au moment où l'on pose une
   question.
 ```
+
+```
+DECISION-045
+DATE: 2026-10-12 (réponses cockpit 08:46–08:48 UTC, journalisées 13:25 UTC)
+CONTEXT: questions q96–q99 posées par l'orchestrateur après les lots
+  A06 notifications (0c4384b) et la spec B-6 mise à jour (A05, §14.2).
+DECISION (PO, cockpit, toutes = recommandation acceptée) :
+  1. q96 : une action née d'un KRI notifie aussi le propriétaire et le
+     supérieur du risque surveillé par ce KRI (risque couvert = source
+     RISK + liens RISK + risque du KRI source) → correctif A06 sur
+     `ActionPlanService.resolveRecipients`.
+  2. q97 : l'écran des abonnements reste, en lecture seule : il liste
+     les notifications reçues et indique qu'elles sont obligatoires →
+     frontend (Dev Frontend), pas de changement backend.
+  3. q98 (I-D5) : en mode démarrage (B-6d), le premier Dispositif porte
+     uniquement les valeurs par défaut du contrat ; tout réglage passe
+     ensuite par une demande ordinaire → spec B-6d.
+  4. q99 (I-D6) : `RISK_FRAMEWORK_BOOTSTRAP_NOTICE` est obligatoire au
+     catalogue → B-6d.
+RELATED: DECISION-044, spec B-6 §14.2, docs/risk/A13-review-DECISION-044.md.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — q96 à dispatcher (A06), q97 à dispatcher (Dev
+  Frontend), q98/q99 intégrées à B-6d. NOTE ORCHESTRATEUR : deuxième
+  retard de journalisation le même jour (~4 h 30) malgré la leçon de
+  DECISION-044 — la relecture `status == "answered"` doit précéder
+  chaque message au PO, pas seulement chaque transition de module.
+```
