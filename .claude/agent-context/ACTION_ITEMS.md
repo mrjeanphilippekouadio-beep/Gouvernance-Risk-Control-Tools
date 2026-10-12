@@ -1280,3 +1280,75 @@ STATUS: DÉCIDÉ — A13 (contrat, q72 à q77) ; B-6 (q77 amorçage, premier
   Dispositif q51) ; B-12 (q72 à q76) ; centre de notifications (q70,
   backend + frontend) ; q71 et q78 déjà conformes au code.
 ```
+
+```text
+DECISION-044
+DATE: 2026-10-12 (réponses saisies dans l'artefact Pilotage entre 01:08 et
+  01:22 UTC, q94/q95 à 08:11 UTC ; journalisées ici à 08:40 UTC — retard
+  de journalisation de l'orchestrateur, voir la note en fin d'entrée)
+QUESTION: réponses PO dans l'artefact Pilotage, q79 à q95.
+DECISION:
+  1. q79 : la « gestion du client » compte comme droit d'administrateur,
+     pas la « méthodologie » ; repérer avant la production les personnes
+     déjà concernées.
+  2. q80 : cumul administrateur + Comité autorisé comme administrateur +
+     Risk Manager (cumul marqué sur la fiche, motif, tiers prévenu) ;
+     l'administrateur ne vote ni ne ratifie jamais une demande qu'il a
+     faite ou un changement de droits qu'il a appliqué.
+  3. q81 : amorçage limité à une liste fermée — activation du premier
+     Dispositif et approbation des désignations (responsable de risque,
+     délégué, exécuteur). Toujours exclus : changements de droits
+     d'Audit (q67), activation de l'auto-proposition (q65).
+  4. q82 (réponse libre, interprétation orchestrateur à confirmer par
+     A13) : l'amorçage ne s'arrête pas tant que le Comité ET Audit sont
+     vides, c.-à-d. il prend fin dès que l'un des deux a un membre ; pas
+     de durée maximale. Toutes les actions d'amorçage sont journalisées
+     et consultables dans une vue dédiée par Audit et le Comité dès
+     l'ajout de leurs membres (ce qui a été fait pendant leur absence).
+  5. q83 (réponse libre, interprétation orchestrateur à confirmer par
+     A13) : pas d'exception d'auto-approbation par défaut — le Risk
+     Manager seul doit d'abord créer au moins un autre utilisateur du
+     groupe risque ; seulement si c'est impossible, il agit seul, et
+     toutes ces actions sont journalisées dans la vue dédiée accessible
+     à Audit et au Comité. Pas de ratification ultérieure demandée.
+  6. q84 : retard de démarrage / échéance dépassée d'une action →
+     responsable de l'action + propriétaire et supérieur de chaque
+     risque couvert par l'action (sans doublon).
+  7. q85 : alertes KRI et retards d'action obligatoires pour tous les
+     destinataires (plus de désabonnement) → ferme F-NOTIF-02.
+  8. q86 : bascule vers le Dispositif : courte période sans évaluation
+     possible acceptée (B-6b).
+  9. q87 : interdire de choisir Audit ou Comité comme approbateur avant
+     B-12 (et non plus « demande en attente ») → change B-6a livré.
+  10. q88 : « Audit et Comité » : les deux votes requis, Comité d'abord,
+      puis Audit (B-12).
+  11. q89 : changer un processus de Dispositif → règle d'approbation du
+      Dispositif d'arrivée, effet au cycle suivant (B-6c).
+  12. q90 : audit écrit dans la même opération indivisible que l'action,
+      dès le Dispositif (toutes ses actions, pas seulement
+      l'activation) → change B-6a livré ; ferme C-B6a-01 une fois fait.
+  13. q91 : tous les paramètres du Dispositif prévus dès maintenant
+      (seuil « faible », cumuls, délégation, politique Hybride,
+      Maîtrise, règle du Comité), pas lot par lot.
+  14. q92 : auto-proposition désactivée jusqu'à B-12.
+  15. q93 : un seul Risk Manager au départ → garder la phase d'amorçage
+      (points 3 à 5).
+  16. q94 : interdire le cumul équipe risque (Risk Manager) + Comité —
+      annule la partie « Risk Manager + Comité toujours autorisé » de
+      q58 (DECISION-041/042) → change B-8 livré ; repérer les cumuls
+      existants avant production.
+  17. q95 : les 4 notifications `RISK_FRAMEWORK_*` sont ajoutées au
+      catalogue comme obligatoires.
+RELATED: DECISION-040, DECISION-041, DECISION-042, DECISION-043,
+  C-B6a-01, C-B6a-02, F-B6a-05, F-NOTIF-02, spec B-6 §14.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — corrections du livré : B-6a (q87, q90), notifications
+  (q84, q85, q95), RBAC (q79, q80, q94) ; spec B-6 à mettre à jour par
+  A05/A13 (q81-q83, q86, q88, q89, q91-q93) avant B-6b/c/d ; B-12 (q88,
+  q92). NOTE ORCHESTRATEUR : ces réponses sont restées non journalisées
+  ~7 h et l'orchestrateur les a décrites comme « en attente » dans ses
+  points d'étape — écart à la règle 7bis / protocole cockpit
+  (DECISION-021) : relire la collection `questions` (status=answered) à
+  chaque transition de module, pas seulement au moment où l'on pose une
+  question.
+```
