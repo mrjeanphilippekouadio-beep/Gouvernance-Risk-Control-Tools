@@ -777,3 +777,77 @@ Ce finding ne bloque pas le staging.
 
 ### Statut et tracker (7bis)
 F-B6a-11 : **CLOSED** (RETEST_PASS). F-B6a-13 : **CLOSED** (RETEST_PASS). F-B6a-14 INFO : REVIEW_REQUIRED (A07 note d'ordre ou SET dans 057.down, A08 test garde, A16 REVOKE TEMP optionnel). Aucune escalade HUMAN (aucun CVSS ≥ 7). **Feu vert A10 pour la PR staging de 058.**
+
+## Revue DECISION-044 — notifications q84/q85/q95, RBAC q79/q80/q94, Dispositif q87/q90 — 2026-10-12 (A10)
+
+Périmètre : `git diff 37766ab 0dc6bda -- backend docs` (commits `0c4384b`, `2b14eb7`, `e5b6381`), tête `0dc6bda`. Méthode : revue statique, PoC vitest temporaire (non committé) sur le vrai `RoleService`, `npm run typecheck` OK, `npm test` 97 fichiers / 1755 tests verts. Aucune base distante touchée.
+
+### Contrôles vérifiés (PASS)
+- **q94, chemins d'assignation** : `assertNoCumul` refuse RM + Comité dans les deux sens, à l'assignation (pré-contrôle et rejeu sous verrous `users` + `roles`, F-B8s-01) et à la mise à jour d'un rôle (rejeu par porteur actif). L'ordre d'assignation ne change rien. `systemGroup` est immuable à l'update. Deux assignations concurrentes RM / Comité sur un même utilisateur sont sérialisées par le verrou `users`, déjà rejoué sur base réelle pour RM + Audit (0/50). Le seul `INSERT INTO user_roles` du dépôt passe par ce chemin.
+- **Réactivation** : `assertReactivable` lit `listForUser`, qui ne filtre pas les suspendus. Un cumul antérieur est donc vu et refusé. Pendant la suspension, aucune assignation n'est possible (404 sous verrou). Une course réactivation / assignation ne peut donc pas créer le cumul. Le cumul RM + `audit.*` effectif est aussi refusé à la réactivation.
+- **q80 / q79** : élargir le groupe Comité avec une permission d'administration rejoue la règle pour chaque porteur : motif obligatoire, validateurs prévenus. `config.manage` est dans `ADMIN_PERMISSIONS`, `config.update` n'y est pas.
+- **q85 / q95, notifications obligatoires** : les 7 types émis sont au catalogue en `mandatory: true`. `subscribe(enabled=false)` renvoie 400 sur un type obligatoire. `emit` ignore toute ligne d'abonnement pour un type obligatoire, y compris les désabonnements stockés avant q85. Les types hors catalogue sont refusés (F-NOTIF-04). Aucun client ne peut couper une notification obligatoire.
+- **q84, résolution des destinataires** : `listLinks` et `risks.getById` sont filtrés par `actor.tenantId`. Un lien ou une source vers un risque d'un autre tenant renvoie `null` et est ignoré. La notification porte toujours le tenant de l'acteur : un `ownerId` étranger ne la verrait pas, car sa boîte est scopée à son propre tenant. Le message ne contient qu'un id (F-NOTIF-03). La déduplication se fait par destinataire (verrou consultatif F-NOTIF-01) et l'escalade reste derrière le limiteur par utilisateur. Aucune fuite inter-tenant.
+- **q90, audit transactionnel du Dispositif** : les 8 mutations (`create`, `updateIdentity`, `createDraft`, `updateDraft`, `discardDraft`, `requestActivation`, `withdraw`, `approve`/`reject`) passent leurs événements au repository. `PostgresRiskFrameworkRepository` les insère avec le client de la transaction (`audited`). Un échec d'audit annule l'action par ROLLBACK, et aucune notification ne part. Le chemin faux-repository (`auditsInTransaction` absent) n'enregistre qu'une fois : `audited()` n'écrit qu'après un `run()` sans `audit`, et `requestActivation`/`decide` sont gardés par `!this.inTx`. Il n'y a donc pas de double audit. `insertAuditEvent` écrit `event.tenantId`, construit côté service depuis `actor.tenantId`, jamais depuis le client. `server.ts` ne décore pas `AuditRepository`, donc le chemin transactionnel ne contourne aucun traitement. L'exclusion des auteurs (`authorsOf`) lit désormais une ligne UPDATE validée en même temps que l'édition : B6a-QA-01 est mieux fermé.
+- **q87** : `createDraftFrom` force `'RISK_MANAGER'` en littéral SQL, et `checkParams` refuse tout autre approbateur à la création comme à l'édition.
+- **Requêtes de repérage 8 et 9** (`B8-predeploy-checks.sql`) : uniquement des `SELECT`, aucune écriture, aucun DDL, aucun `SET`. Lecture seule confirmée.
+
+### Findings
+
+**F-D044-01 — LOW — CVSS 3.1 2,7 (AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:L/A:N) — CONFIRMED (PoC) — owner A06 (+ arbitrage A13/A14).**
+Titre : l'interdiction q94 (RM + Comité) ne porte que sur l'appartenance au groupe, pas sur les permissions effectives du Comité.
+- Constat : `riskevaluation.validate.committee`, `treatmentdecision.validate.committee` et `governance.validate` ne sont contrôlés que par `requirePermission`, sans lien au groupe (`RiskEvaluationService.validateByCommittee`, `TreatmentDecisionService.validateByCommittee`, `GovernanceService`). `assertRolePermissionRules` n'interdit aux groupes RM/Comité que `audit.*` et `rolegroup.audit.*`.
+- Scénario : un administrateur non porteur assigne à un Risk Manager un rôle ordinaire portant ces trois permissions, ou ajoute `*.validate.committee` au groupe RM lui-même. L'opération est acceptée sans motif ni notification. Le RM valide ensuite « en Comité » les évaluations et décisions de traitement de son équipe : seul l'évaluateur ou le proposant est exclu. C'est exactement ce que q94 voulait empêcher. La règle analogue RM + Audit couvre, elle, les permissions effectives `audit.*` (F-B8b-05).
+- Preuve (PoC vitest temporaire sur le vrai `RoleService`, 3 cas sur 3 conformes) :
+  - témoin : `rm` puis `co` → refus « Committee group » ;
+  - `rm` puis le rôle ordinaire `comval` → accepté, 0 notification ;
+  - `update(rm, permissions + riskevaluation.validate.committee)` → accepté.
+- Correctif proposé : définir `isCommitteeMember = systemGroup === "RISK_COMMITTEE" || permissions.some(isCommitteeValidationPermission)` (les trois permissions ci-dessus) et l'utiliser à trois endroits :
+  - dans `assertNoCumul` ;
+  - dans `assertRolePermissionRules` : le groupe RM ne porte jamais de permission de validation Comité ;
+  - dans la requête de repérage 8.
+  En sens inverse, A13 doit arbitrer le cas des permissions de décision sur les risques portées par un rôle ordinaire d'un membre du Comité.
+- Test de régression : rôle ordinaire `*.validate.committee` sur un RM → 400 ; élargissement du groupe RM avec la même permission → 400 ; réactivation d'un porteur RM + `*.validate.committee` → 400.
+
+**F-D044-02 — LOW — CVSS 3.1 2,2 (AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:N) — CONFIRMED (statique) — owner A06.**
+Titre : les effets de bord de `recordDecision` ne sont pas audités sur leur propre entité (q90 « toutes ses actions », partiel).
+- Dans la même transaction, l'approbation a trois effets de bord :
+  1. elle archive la version ACTIVE précédente ;
+  2. elle passe l'échelle en ACTIVE et ARCHIVE toute autre échelle ACTIVE non référencée (`mirrorScale`) ;
+  3. elle pose `risk_frameworks.is_default`.
+- Les deux lignes d'audit portent sur la nouvelle version et sur la demande. `listForEntity("RatingScale", id)` et `listForEntity("RiskFrameworkVersion", previous.id)` ne montrent ni l'activation ni l'archivage, alors qu'un archivage d'échelle est terminal.
+- Cet écart existait avant q90 : ce n'est pas une régression. Il ne permet pas de modification non tracée, puisque la décision elle-même est auditée.
+- Correctif : faire renvoyer dans `DecisionResult` les ids des échelles activées ou archivées et un `becameDefault`, puis construire dans `events(result)` une ligne `STATUS_CHANGE` par effet de bord, y compris pour `previousActive.id`.
+
+**F-D044-03 — LOW — CVSS 3.1 3,1 (AV:N/AC:H/PR:L/UI:N/S:U/C:N/I:L/A:N) — CONFIRMED (statique) — owner A06 (+ A13 pour la priorisation). Écart signalé par A06 : « audit écrit hors transaction » ailleurs.**
+- Périmètre : 33 services, environ 109 appels `audit.record(...)` exécutés sur le pool après une mutation déjà validée. `PostgresRiskFrameworkRepository` est le seul repository transactionnel. Si l'insert d'audit échoue (incident base ou pool, coupure entre deux requêtes), l'action reste stockée sans trace, et l'erreur 500 incite à rejouer.
+- Sévérité : un attaquant ne provoque pas cet échec à volonté (AC:H). L'impact touche la non-répudiation, sans élévation directe. Il devient un contournement de contrôle dès qu'un contrôle **lit** l'audit.
+- Chaîne concrète trouvée : pour une échelle DRAFT, `RiskFrameworkService.authorsOf` exclut les auteurs d'après les lignes d'audit `RatingScale` (F-B6a-04). Or `RatingScaleService.updateThresholds`, `updateImpactAxes` et les méthodes voisines écrivent l'audit **après** l'update. Si l'audit d'une édition d'échelle échoue, son auteur devient éligible pour approuver la version du Dispositif : l'exclusion est fail-open.
+- Même famille : les modules de droits (`RoleService.assignToUser`/`update`, `UserService.suspend`/`reactivate`, `ConfigService`) sont les plus sensibles pour la future règle q80 « ne ratifie jamais un changement qu'il a appliqué », si elle s'appuie sur l'audit.
+- Recommandation (pas de correction ici), par priorité :
+  1. `RatingScaleService` en premier, puisqu'un contrôle du Dispositif lit son audit : audit d'abord (comme B6a-QA-01) ou passage en transactionnel ;
+  2. puis Role, User et Config (droits et seuils) ;
+  3. ensuite, migration progressive module par module vers le motif `TransactionalAudit` + `insertAuditEvent`.
+
+  Ne bloque pas le staging.
+
+**F-D044-04 — INFO — owner A06/A13.** Les requêtes de repérage 8 et 9, ainsi que `isAdministrator`/`assertNoCumul`, ignorent les permissions héritées de `users.roles` (angle mort F-B8t-02, toujours ouvert). Pourtant `server.ts` les ajoute aux droits effectifs. Une personne qui porte `config.manage` (q79) ou une permission de validation Comité via `users.roles` n'est donc ni repérée ni bloquée. La requête 8 ne détecte pas non plus le cas F-D044-01. À compléter avec la correction de F-D044-01 : ajouter `u.roles && ARRAY[...]` aux deux requêtes.
+
+**F-D044-05 — INFO — owner A06/HUMAN.** Une version ACTIVE dont `change_approver` ≠ `RISK_MANAGER` bloque définitivement le Dispositif. Ce cas n'est possible que pour des données créées avec `0a465fa`, avant C-B6a-02. Le circuit suit l'approbateur de la version ACTIVE, `decide` renvoie 409 « vote B-12 », et q87 interdit désormais ce choix. Le blocage est fail-closed. À ajouter : une requête de repérage en lecture seule, `SELECT tenant_id, framework_id, id FROM risk_framework_versions WHERE status = 'ACTIVE' AND change_approver <> 'RISK_MANAGER';`, avec 0 ligne attendue.
+
+**F-D044-06 — INFO — owner A06.**
+- (a) Le cumul admin + Comité réutilise le type `ADMIN_RISK_MANAGER_CUMUL`, dont le libellé de catalogue est « Cumul administrateur et gestionnaire des risques ». Le message est correct, mais le filtre et le libellé sont trompeurs.
+- (b) La 2e moitié de q80 (« l'administrateur ne vote ni ne ratifie jamais une demande qu'il a faite ou un changement de droits qu'il a appliqué ») n'est implémentée que par l'exclusion du demandeur dans `decideAuditPermissionChange`. À porter dans B-12.
+- (c) Défense en profondeur : le `audited()` du repository pourrait vérifier `event.tenantId === tenantId` avant l'insert.
+
+**AUD-D044-14 (signalé par A23) — évaluation A10 : INFO, non exploitable, non-conformité de convention — owner A07.**
+- `audit_log_append_only_guard` (038) n'a pas de `SET search_path`. Mais son corps se limite à un `RAISE EXCEPTION … TG_OP` : il ne lit aucune table, n'appelle aucune fonction, et le format `%` de `RAISE` ne résout aucun opérateur utilisateur.
+- Aucun nom n'est donc résolu par `search_path` à l'exécution, et l'ombrage `pg_temp` (F-B6a-11) n'a aucune prise. Ce point était déjà constaté dans l'inventaire `pg_proc` du retest 058.
+- Les triggers sont attachés à `public.audit_log` par OID : une table temporaire `audit_log` ne désactive pas la garde de la vraie table. Elle masquerait seulement les `INSERT` non qualifiés de la **même** session, ce qui suppose déjà de pouvoir exécuter du SQL arbitraire dans une session applicative.
+- En revanche, la convention de `CLAUDE.md` (« Every trigger/guard function pins `SET search_path` ») n'est pas respectée à la lettre, et `QA-B6a11.test.ts` ne couvre que les migrations ≥ 058.
+- Recommandation : poser `SET search_path = pg_catalog, public, pg_temp` sur la fonction de 038 dans la prochaine migration (`ALTER FUNCTION` ou redéfinition avec `SET`), par uniformité. Non bloquant.
+
+### Statut et tracker (7bis)
+F-D044-01 LOW 2,7 : REMEDIATION_REQUIRED (A06, arbitrage A13/A14 sur le sens Comité → permissions RM). F-D044-02 LOW 2,2 : REMEDIATION_REQUIRED (A06). F-D044-03 LOW 3,1 : REVIEW_REQUIRED (A06/A13, `RatingScaleService` en premier). F-D044-04/05/06 INFO. AUD-D044-14 INFO (A07).
+CVSS max 3,1 : **aucune escalade HUMAN** (seuil 7 non atteint).
+**Feu vert A10 pour la PR staging** de `0c4384b` + `2b14eb7` + `e5b6381`. F-D044-01 doit être corrigé avant la production : il vide de sa substance une décision PO explicite (q94).
