@@ -150,11 +150,11 @@ describe("q58 Committee + Audit cumul setting: edge cases", () => {
     await expect(forbidding.service.assignToUser(assigner, "plain", "u1", "r")).resolves.toBeUndefined();
   });
 
-  it("the setting does not apply to non-group roles, nor to Committee + Risk Manager", async () => {
+  it("the setting does not apply to non-group roles; Committee + Risk Manager is refused regardless (q94)", async () => {
     const w = world({ cumul: false });
     await w.service.assignToUser(assigner, "co", "u1", "r", "motif");
     await expect(w.service.assignToUser(assigner, "plain", "u1", "r")).resolves.toBeUndefined();
-    await expect(w.service.assignToUser(assigner, "rm", "u1", "r", "motif")).resolves.toBeUndefined();
+    await expect(w.service.assignToUser(assigner, "rm", "u1", "r", "motif")).rejects.toThrow(ValidationError);
   });
 
   it("fails closed when the config read fails: error propagates, nothing is assigned", async () => {
@@ -370,7 +370,7 @@ describe("q63 administrator + Risk Manager cumul: edge cases", () => {
   it("cumul + Committee entry together: both notifications, to their own audiences", async () => {
     const w = world({ extraRoles: [role("coadm", "RISK_COMMITTEE", ["role.assign"])] });
     w.held.set("aud", ["au"]);
-    w.held.set("u1", ["rm"]);
+    // q94: u1 can no longer be a Risk Manager entering the Committee; q80: administrator + Committee uses the same notification
     await w.service.assignToUser(assigner, "coadm", "u1", "r", "motif");
     expect(w.sent.map((s) => `${s.eventType}:${s.recipientUserId}`).sort()).toEqual(["ADMIN_RISK_MANAGER_CUMUL:aud", "COMMITTEE_MEMBER_ADDED:aud"]);
   });
