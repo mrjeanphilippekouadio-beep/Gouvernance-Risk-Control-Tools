@@ -740,3 +740,40 @@ Test de régression : A9 et A10 sous `grc_app_runtime` doivent échouer en 42501
 ### Statut et tracker (7bis)
 F-B6a-10 : **CLOSED** (RETEST_PASS). F-B6a-09 : **CLOSED** (RETEST_PASS). **F-B6a-11** LOW 2,2 : REMEDIATION_REQUIRED (A07, migration 058, avant la production). F-B6a-12 INFO (A06, couvert par B-6b). F-B6a-13 INFO (A07, avec 058).
 **Feu vert pour la PR staging suivante** : oui. CVSS max 2,2, aucune escalade HUMAN.
+
+### Retest F-B6a-11 / F-B6a-13 — 2026-10-12 (A10, migration 058 `ea6d469`, tête `78da834`, Postgres 16 réel jetable 001→058)
+Rejeu sous `grc_app_runtime` (pas de CREATE sur `public`, TEMP présent), attaquant en `public.` explicite pour que seule la garde voie l'ombre `pg_temp`. Chaque attaque dans sa transaction, annulée.
+
+| Attaque | Avant 058 (témoin) | Après 058 |
+|---|---|---|
+| ATK-1 : table temporaire `risk_framework_change_requests` avec fausse demande APPROVED, version PENDING -> ACTIVE (vraie demande PENDING) | passe (version ACTIVE, demande réelle PENDING) | 42501 (garde 056) |
+| ATK-2 : table temporaire `users` (utilisateur du tenant B mappé sur A), INSERT d'une demande `requested_by` hors tenant | passe | 42501 (garde INSERT 057) |
+| ATK-3 : idem, décision `decided_by` hors tenant | passe | 42501 (garde UPDATE 057) |
+| ATK-4 : table temporaire `risk_framework_versions` vide, modification d'une échelle référencée par une version PENDING | passe (échelle modifiée) | 42501 (gel 055) |
+| ATK-5 : `SET LOCAL search_path = pg_temp, public` + ombre | passe | 42501 (le `SET` de la fonction l'emporte) |
+| ATK-6 : opérateur `=` et fonction créés dans `pg_temp` | sans effet | sans effet (pg_temp jamais cherché pour fonctions/opérateurs) |
+| ATK-7 : `CREATE` dans `public` (prérequis d'un détournement d'opérateur/fonction/table) | 42501 | 42501 |
+
+Contrôles sans table temporaire : les 4 attaques sont refusées en 42501 avant comme après 058.
+
+Recherche de contournement restant :
+- Inventaire `pg_proc` de `public` : 7 fonctions plpgsql, toutes détenues par `grc_migrator_runtime`, aucune `SECURITY DEFINER`. Les 6 de 055/056/057 portent `search_path=pg_catalog, public, pg_temp`. La 7e (`audit_log_append_only_guard`, 038) ne lit aucune table, elle n'est donc pas exposée. Aucun trigger dont la fonction serait hors `public`, aucun event trigger, aucune règle, aucune policy.
+- Les gardes n'appellent aucune fonction (pas de `now()` ni de fonction utilisateur). Les opérateurs (`=`, `<>`, `IN`, `IS DISTINCT FROM` sur text/uuid/jsonb) sont résolus dans `pg_catalog`, cherché en premier. Le runtime n'a ni CREATE sur `public` ni la propriété des fonctions, il ne peut donc ni ombrer un opérateur ni faire `ALTER`/`CREATE OR REPLACE` sur une garde.
+- `CREATE OR REPLACE` sans `SET` efface bien le réglage (vérifié : `proconfig` repasse à NULL). Voir F-B6a-14 ci-dessous.
+- Le parcours nominal du vrai `RiskFrameworkService` + `PostgresRiskFrameworkRepository` passe sous le runtime après 058 : édition, demande, auto-approbation refusée (maker-checker), approbation par un tiers (v1 ACTIVE), v2 depuis v1, rejet, retrait, nouvelle demande, approbation (v1 ARCHIVED, v2 ACTIVE). 058 est rejouable (idempotente).
+
+**F-B6a-11 : RETEST_PASS -> CLOSED.**
+
+**F-B6a-13 : RETEST_PASS -> CLOSED.** `058.down` remet les 6 fonctions à `proconfig` NULL et retire sa ligne. Les attaques ATK-1 à 4 repassent alors, ce qui est l'état 057 attendu et documenté. `057.down` retire ensuite les triggers INSERT et sa ligne de `schema_migrations`. Le runner (fichiers non appliqués, une transaction par fichier) réapplique alors 057 puis 058 : les triggers et les 6 `search_path` reviennent, et les attaques retombent en 42501.
+
+**Nouveau — F-B6a-14 — INFO (sans CVSS : il faut une action de migrateur privilégié pour l'amorcer), owner A07 + A08.** Le réglage de 058 est un attribut de fonction : tout `CREATE OR REPLACE FUNCTION` ultérieur sans `SET search_path` le perd sans bruit (vérifié). Or `057.down` fait justement un `CREATE OR REPLACE` de `risk_framework_change_requests_guard`. Si on l'exécute alors que 058 est encore appliquée (rollback dans le désordre), 058 reste inscrite dans `schema_migrations` mais la garde redevient vulnérable à F-B6a-11, et le runner ne réappliquera pas 058. Le seul avertissement est un commentaire dans 058.
+
+Recommandations :
+1. Ajouter dans `057.down` une note d'ordre (« exécuter 058.down d'abord ») ou y inclure le `SET search_path` dans la redéfinition.
+2. Ajouter un test garde statique dans le style de `boundedArray.test.ts` : toute migration ≥ 058 contenant `CREATE OR REPLACE FUNCTION … RETURNS trigger` doit contenir `SET search_path`.
+3. Défense en profondeur (A16/A09) : `REVOKE TEMP ON DATABASE … FROM PUBLIC`, si le runtime n'utilise pas de tables temporaires.
+
+Ce finding ne bloque pas le staging.
+
+### Statut et tracker (7bis)
+F-B6a-11 : **CLOSED** (RETEST_PASS). F-B6a-13 : **CLOSED** (RETEST_PASS). F-B6a-14 INFO : REVIEW_REQUIRED (A07 note d'ordre ou SET dans 057.down, A08 test garde, A16 REVOKE TEMP optionnel). Aucune escalade HUMAN (aucun CVSS ≥ 7). **Feu vert A10 pour la PR staging de 058.**
