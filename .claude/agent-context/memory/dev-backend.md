@@ -179,3 +179,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - `mirrorScale` : après les deux UPDATE des échelles, `SELECT min(probability_levels * impact_levels) FROM rating_scales WHERE status = 'ACTIVE'` (= activée + conservées car référencées par une version ACTIVE) ; tout seuil collecté (version, `configs`, appétences actives) au-dessus de ce plus petit plafond -> ValidationError listant les seuils, donc ROLLBACK de la décision. Le contrôle contre l'échelle activée reste en premier (messages existants inchangés).
 - Fakes de B6abis/QA-B6abis : ajout d'un handler pour la nouvelle requête `SELECT min(` (source de vérité changée, à signaler à A08). Test : `B6aFix10.test.ts` (scénario A10, 30 refusé / 25 accepté).
 - Leçon : un contrôle ajouté APRÈS les UPDATE reste annulé par le ROLLBACK ; pas besoin de pré-calculer l'ensemble des échelles restantes en SQL ou en JS.
+
+## 2026-10-12 Notifications q84/q85/q95 (branche wt/notif-q84q85q95, base 37766ab, DECISION-044)
+
+- Catalogue : 11 types, tous `mandatory` (4 MANAGEMENT RISK_FRAMEWORK_* ajoutés ; KRI_THRESHOLD_BREACH, ACTION_STARTED_LATE, ACTION_OVERDUE passés obligatoires ; ferme F-NOTIF-02). Plus aucun type optionnel : `subscribe(enabled:false)` est refusé partout, `enabled:true` reste accepté. Mécanisme d abonnement gardé (pas demandé de le retirer).
+- q84 : `ActionPlanService.resolveRecipients` = responsable + owner/superior de chaque risque couvert (sourceType RISK + liens RISK), Set sans doublon, risques archivés/supprimés ignorés (F-NOTIF-06), tenant = actor.tenantId, un try par destinataire. Sans RiskRepository câblé : responsable seul (repli, tests existants intacts).
+- Tests figeant un opt-out réel adaptés : on pousse une ligne d abonnement périmée (`subs.push`) pour prouver qu elle est ignorée. Frontend inchangé (reflète déjà `mandatory`).
+- Leçon : heredoc python refusé par le harnais ; Write d un script dans le scratchpad puis python3 chemin absolu.

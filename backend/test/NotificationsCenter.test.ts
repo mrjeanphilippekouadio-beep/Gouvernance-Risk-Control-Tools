@@ -94,21 +94,25 @@ describe("notification center", () => {
     expect(() => service.getCatalog(noPerm)).toThrow(ForbiddenError);
   });
 
-  it("exposes the catalog with the four governance types mandatory", () => {
+  it("exposes the catalog with every type mandatory (DECISION-044 q85/q95)", () => {
     const { service } = build();
     const mandatory = service.getCatalog(actor).filter((t) => t.mandatory).map((t) => t.eventType).sort();
-    expect(mandatory).toEqual(["ADMIN_RISK_MANAGER_CUMUL", "AUDIT_RIGHTS_CHANGE_PENDING", "COMMITTEE_MEMBER_ADDED", "RIGHTS_LOST_ON_REACTIVATION"]);
-    expect(NOTIFICATION_CATALOG.filter((t) => !t.mandatory).map((t) => t.eventType)).toContain("KRI_THRESHOLD_BREACH");
+    expect(mandatory).toEqual([
+      "ACTION_OVERDUE", "ACTION_STARTED_LATE", "ADMIN_RISK_MANAGER_CUMUL", "AUDIT_RIGHTS_CHANGE_PENDING", "COMMITTEE_MEMBER_ADDED",
+      "KRI_THRESHOLD_BREACH", "RIGHTS_LOST_ON_REACTIVATION", "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE", "RISK_FRAMEWORK_CHANGE_DECIDED",
+      "RISK_FRAMEWORK_CHANGE_PENDING", "RISK_FRAMEWORK_NO_DECIDER",
+    ]);
+    expect(NOTIFICATION_CATALOG.filter((t) => !t.mandatory)).toHaveLength(0);
   });
 });
 
 describe("subscriptions applied at emission", () => {
-  it("skips an explicitly unsubscribed optional type, persists otherwise", async () => {
-    const { service, rows } = build();
+  it("q85: a KRI breach cannot be unsubscribed and a stale opt-out never suppresses it", async () => {
+    const { service, rows, subs } = build();
+    await expect(service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false }, "r")).rejects.toBeInstanceOf(ValidationError);
+    subs.push({ id: "s", tenantId: "t1", userId: "u1", resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false, createdAt: new Date(), updatedAt: new Date() });
     expect(await service.emit({ ...base, recipientUserId: "u1" })).not.toBeNull();
-    await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false }, "r");
-    expect(await service.emit({ ...base, recipientUserId: "u1" })).toBeNull();
-    expect(await service.emit({ ...base, recipientUserId: "u2" })).not.toBeNull(); // other user unaffected
+    expect(await service.emit({ ...base, recipientUserId: "u2" })).not.toBeNull();
     expect(rows).toHaveLength(2);
   });
 
@@ -158,5 +162,32 @@ describe("persisted KRI and action-plan notifications", () => {
     expect(emitted).toEqual([expect.objectContaining({ recipientUserId: "resp", eventType: "ACTION_OVERDUE", resourceType: "ACTION_PLAN" })]);
     const failing = await build2(async () => { throw new Error("db down"); }).escalateIfOverdue(apActor, "a1", "r");
     expect(failing.escalated).toBe(true);
+  });
+
+  it("q84: overdue and late-start go to the responsible user + owner and superior of every covered risk (source + links), without duplicates, tenant-scoped", async () => {
+    const emitted: Array<{ recipientUserId: string; eventType: string; tenantId: string }> = [];
+    const seen: Array<[string, string]> = [];
+    const action = { id: "a1", title: "T", status: "PLANIFIEE", dueDate: new Date(Date.now() - 86_400_000), responsibleUserId: "resp", sourceType: "RISK", sourceId: "r1" } as unknown as ActionPlan;
+    const owners: Record<string, object> = {
+      r1: { ownerId: "o1", superiorOwnerId: "resp" }, // superior == responsible: no duplicate
+      r2: { ownerId: "o1", superiorOwnerId: "s2" }, // owner already counted via r1
+      r3: { ownerId: "gone", superiorOwnerId: "gone2", status: "ARCHIVED" }, // archived: skipped
+    };
+    const service = new ActionPlanService(
+      { getById: async () => action, start: async () => action, listLinks: async () => [{ resourceType: "RISK", resourceId: "r2" }, { resourceType: "RISK", resourceId: "r3" }, { resourceType: "KRI", resourceId: "k9" }] } as never,
+      { record: async () => undefined } as never,
+      { getById: async (t: string, id: string) => (seen.push([t, id]), owners[id] ?? null) } as never,
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      { emit: async (i: { recipientUserId: string; eventType: string; tenantId: string }) => void emitted.push(i) } as unknown as NotificationService,
+    );
+    const apActor = { ...actor, roles: ["actionplan.update"] };
+    await service.start(apActor, "a1", "r");
+    expect(emitted.map((e) => e.recipientUserId).sort()).toEqual(["o1", "resp", "s2"]);
+    expect(emitted.every((e) => e.eventType === "ACTION_STARTED_LATE" && e.tenantId === "t1")).toBe(true);
+    expect(seen.every(([t]) => t === "t1")).toBe(true);
+    expect(seen.map(([, id]) => id).sort()).toEqual(["r1", "r2", "r3"]);
+    emitted.length = 0;
+    await service.escalateIfOverdue(apActor, "a1", "r");
+    expect(emitted.map((e) => e.recipientUserId).sort()).toEqual(["o1", "resp", "s2"]);
   });
 });
