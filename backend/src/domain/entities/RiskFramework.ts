@@ -99,6 +99,8 @@ export interface CreateActivationRequestInput {
   reason: string;
   requestedBy: string;
   previousValue: unknown;
+  /** F-B6a-02: replayed by the repository on the version it has just locked (FOR UPDATE); a throw aborts. */
+  validateLocked?: (version: RiskFrameworkVersion) => Promise<void>;
 }
 
 export interface RecordDecisionInput {

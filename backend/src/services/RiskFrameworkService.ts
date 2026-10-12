@@ -104,6 +104,10 @@ function checkParams<T extends UpdateDraftParams>(input: T): T {
   if (p.changeApprover !== undefined && !APPROVERS.includes(p.changeApprover)) {
     throw new ValidationError(`changeApprover must be one of: ${APPROVERS.join(", ")}`);
   }
+  // C-B6a-02: a Committee/Audit vote does not exist before B-12; such a Dispositif could never change again.
+  if (p.changeApprover !== undefined && p.changeApprover !== "RISK_MANAGER") {
+    throw new ValidationError("Seul l'approbateur RISK_MANAGER est possible pour l'instant : le vote Comité/Audit sera disponible avec B-12");
+  }
   if (p.committeeEvaluationMinScore !== undefined) assertScore(p.committeeEvaluationMinScore, "committeeEvaluationMinScore");
   if (p.committeeTreatmentMinScore !== undefined && p.committeeTreatmentMinScore !== null) {
     assertScore(p.committeeTreatmentMinScore, "committeeTreatmentMinScore");
@@ -128,7 +132,8 @@ export class RiskFrameworkService {
     /** Fail-closed: an appetite entry naming a subCategoryId is refused when this is not wired. */
     private readonly riskCategories?: Pick<RiskCategoryRepository, "getById">,
     /** Optional: notifications are best effort. */
-    private readonly notifications?: Pick<NotificationService, "record">,
+    private readonly notifications?: Pick<NotificationService, "record"> & Partial<Pick<NotificationService, "emit">>,
+
   ) {}
 
   // -- reads ------------------------------------------------------------
@@ -258,9 +263,11 @@ export class RiskFrameworkService {
     }
     if (clean.appetiteThresholds) await this.assertSubCategories(actor.tenantId, clean.appetiteThresholds);
 
-    const after = await this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId);
-    await this.record(actor, "RiskFrameworkVersion", versionId, "UPDATE", before, after, null, requestId);
-    return after;
+    // B6a-QA-01: the audit line (which feeds the author exclusion) is written BEFORE the edit is stored, so an
+    // edit can never exist without its editor being traceable. Worst case: an UPDATE entry for an edit that
+    // then failed to store (over-excludes that person, never under-excludes).
+    await this.record(actor, "RiskFrameworkVersion", versionId, "UPDATE", before, { ...before, ...clean, lastEditedBy: actor.userId }, null, requestId);
+    return this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId);
   }
 
   /** DRAFT -> ARCHIVED. A terminal transition: `riskframework.archive`, never `update`. */
@@ -272,6 +279,7 @@ export class RiskFrameworkService {
     requestId: string,
   ): Promise<RiskFrameworkVersion> {
     requirePermission(actor, "riskframework.archive");
+    await this.assertRiskManager(actor);
     const clean = cleanText(reason, "reason", MAX_REASON, true)!;
     const before = await this.getVersionOrThrow(actor.tenantId, frameworkId, versionId);
     this.assertDraft(before);
@@ -296,15 +304,8 @@ export class RiskFrameworkService {
     if (framework.archivedAt) throw new ValidationError("Cannot activate a version of an archived Dispositif");
     const version = await this.getVersionOrThrow(actor.tenantId, frameworkId, versionId);
     this.assertDraft(version);
-    await this.assertActivatable(actor.tenantId, version);
-
-    const active = await this.frameworks.getActiveVersion(actor.tenantId, frameworkId);
-    const { decider, all, eligible } = await this.resolveFor(actor.tenantId, version, actor.userId, active?.changeApprover ?? "RISK_MANAGER");
-    // q65: switching self-proposal on is only receivable when the Committee votes on it.
-    const switchesSelfProposalOn = version.selfProposalAllowed && !(active?.selfProposalAllowed ?? false);
-    if (switchesSelfProposalOn && !(decider.kind === "VOTE" && decider.groups.includes("COMMITTEE"))) {
-      throw new ValidationError("L'activation de l'auto-proposition exige un vote du Comité");
-    }
+    const checked = await this.validateRequestable(actor.tenantId, version, actor.userId);
+    const { active } = checked;
 
     const request = await this.frameworks.createActivationRequest({
       tenantId: actor.tenantId,
@@ -313,17 +314,28 @@ export class RiskFrameworkService {
       reason: clean,
       requestedBy: actor.userId,
       previousValue: active ? { versionId: active.id, versionNumber: active.versionNumber } : null,
+      // F-B6a-02: replayed on the locked row, so a PATCH racing with this request cannot slip past.
+      validateLocked: async (locked) => { checked.final = await this.validateRequestable(actor.tenantId, locked, actor.userId); },
     });
-    await this.record(actor, "RiskFrameworkChangeRequest", request.id, "SUBMIT", null, request, clean, requestId);
+    const { decider, all, eligible } = checked.final ?? checked;
+    // C-B6a-01: notifications leave even when the audit write fails (the audit error is raised afterwards).
+    let auditError: unknown = null;
+    try {
+      await this.record(actor, "RiskFrameworkChangeRequest", request.id, "SUBMIT", null, request, clean, requestId);
+    } catch (err) {
+      auditError = err;
+      console.error(`risk framework request ${request.id}: request stored but audit failed (requestId ${requestId})`, err instanceof Error ? err.message : err);
+    }
 
     if (decider.kind === "RISK_MANAGER" && eligible.RISK_MANAGER.length === 0) {
       // q75: nobody can decide — never a tacit validation, never by the administrator.
       await this.notify(actor, all.RISK_MANAGER, request.id, "RISK_FRAMEWORK_NO_DECIDER",
         "Une demande d'activation de Dispositif ne peut être décidée par personne : aucun Risk Manager éligible.", requestId);
     } else {
-      await this.notify(actor, await this.holders(actor, "riskframework.activate"), request.id, "RISK_FRAMEWORK_CHANGE_PENDING",
-        "Une demande d'activation de Dispositif attend votre décision.", requestId);
+      await this.notify(actor, await this.holders(actor, "riskframework.activate"), frameworkId, "RISK_FRAMEWORK_CHANGE_PENDING",
+        "Une demande d'activation de Dispositif attend votre décision.", requestId, true);
     }
+    if (auditError) throw auditError;
     return request;
   }
 
@@ -342,7 +354,7 @@ export class RiskFrameworkService {
     const request = await this.getRequestOrThrow(actor.tenantId, id);
     if (request.requestedBy !== actor.userId) throw new ForbiddenError("Seul le demandeur peut retirer sa demande");
     if (request.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${request.status})`);
-    const comment = cleanText(reason, "reason", MAX_REASON, false);
+    const comment = cleanText(reason, "reason", MAX_REASON, true);
     const result = await this.frameworks.withdraw(actor.tenantId, id, comment);
     await this.record(actor, "RiskFrameworkChangeRequest", id, "STATUS_CHANGE", request, result.request, comment, requestId);
     return result;
@@ -374,8 +386,11 @@ export class RiskFrameworkService {
       throw new ForbiddenError("Vous avez contribué à cette version : un tiers doit décider");
     }
 
-    const active = await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId);
-    const { decider } = await this.resolveFor(actor.tenantId, version, request.requestedBy, active?.changeApprover ?? "RISK_MANAGER");
+    // F-B6a-02: approving replays the rules of the request (a rejection of an invalid version stays possible).
+    const { decider } = outcome === "APPROVED"
+      ? await this.validateRequestable(actor.tenantId, version, request.requestedBy)
+      : await this.resolveFor(actor.tenantId, version,
+          request.requestedBy, (await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId))?.changeApprover ?? "RISK_MANAGER");
     if (decider.kind === "VOTE") {
       const who = decider.groups.map((g) => (g === "COMMITTEE" ? "Comité" : "Audit")).join(" et ");
       throw new ConflictError(`Cette demande attend le vote du groupe ${who} (fonctionnalité B-12) ; le demandeur peut la retirer.`);
@@ -392,6 +407,7 @@ export class RiskFrameworkService {
       ratificationStatus: fallback ? "PENDING" : null,
     });
 
+    let auditError: unknown = null;
     try {
       if (outcome === "APPROVED") {
         await this.record(actor, "RiskFrameworkVersion", result.version.id, "STATUS_CHANGE",
@@ -403,7 +419,7 @@ export class RiskFrameworkService {
     } catch (err) {
       // The decision is applied and not replayed (same choice as F-B8t-04): logged, then reported.
       console.error(`risk framework request ${id}: decision applied but audit failed (requestId ${requestId})`, err instanceof Error ? err.message : err);
-      throw err;
+      auditError = err;
     }
 
     await this.notify(actor, [request.requestedBy], id, "RISK_FRAMEWORK_CHANGE_DECIDED",
@@ -413,7 +429,24 @@ export class RiskFrameworkService {
     await this.notify(actor, await this.holders(actor, "audit.read"), id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE",
       fallback ? "Une demande de Dispositif a été décidée en repli par un Risk Manager (ratification à venir)." : "Une demande de Dispositif a été décidée par un Risk Manager.",
       requestId);
+    if (auditError) throw auditError; // C-B6a-01: reported after the (best effort) notifications left
     return result;
+  }
+
+  /**
+   * Everything that must hold for a version to be submitted and, again, approved (spec §2.3 + q65).
+   * Returns the circuit resolved for it. `final` is set by the locked replay in createActivationRequest.
+   */
+  private async validateRequestable(tenantId: string, version: RiskFrameworkVersion, requesterId: string) {
+    await this.assertActivatable(tenantId, version);
+    const active = await this.frameworks.getActiveVersion(tenantId, version.frameworkId);
+    const resolved = await this.resolveFor(tenantId, version, requesterId, active?.changeApprover ?? "RISK_MANAGER");
+    // q65: switching self-proposal on is only receivable when the Committee votes on it.
+    const switchesSelfProposalOn = version.selfProposalAllowed && !(active?.selfProposalAllowed ?? false);
+    if (switchesSelfProposalOn && !(resolved.decider.kind === "VOTE" && resolved.decider.groups.includes("COMMITTEE"))) {
+      throw new ValidationError("L'activation de l'auto-proposition exige un vote du Comité");
+    }
+    return { ...resolved, active, final: undefined as undefined | Awaited<ReturnType<typeof this.resolveFor>> };
   }
 
   // -- rules ------------------------------------------------------------
@@ -493,6 +526,13 @@ export class RiskFrameworkService {
     for (const e of await this.audit.listForEntity(tenantId, "RiskFrameworkVersion", v.id)) {
       if (e.action === "CREATE" || e.action === "UPDATE") authors.add(e.userId);
     }
+    // F-B6a-04: a DRAFT scale is still editable until the version is frozen, so its authors count too.
+    const scale = await this.ratingScales.getById(tenantId, v.ratingScaleId);
+    if (scale?.status === "DRAFT") {
+      for (const e of await this.audit.listForEntity(tenantId, "RatingScale", scale.id)) {
+        if (e.action === "CREATE" || e.action === "UPDATE") authors.add(e.userId);
+      }
+    }
     return authors;
   }
 
@@ -559,20 +599,24 @@ export class RiskFrameworkService {
     eventType: string,
     message: string,
     requestId: string,
+    /** F-B6a-07: skip when an identical unread notification exists (only if `emit` is available). */
+    dedupe = false,
   ): Promise<void> {
     if (!this.notifications) return;
     try {
       for (const recipientUserId of new Set(userIds)) {
-        await this.notifications.record({
+        const n = {
           tenantId: actor.tenantId,
           recipientUserId,
-          resourceType: "MANAGEMENT",
+          resourceType: "MANAGEMENT" as const,
           resourceId,
           eventType,
           message,
           triggeredBy: actor.userId,
           requestId,
-        });
+        };
+        if (dedupe && this.notifications.emit) await this.notifications.emit({ ...n, skipIfUnread: true });
+        else await this.notifications.record(n);
       }
     } catch (err) {
       console.error(`${eventType} ${resourceId}: members could not be notified (requestId ${requestId})`, err instanceof Error ? err.message : err);
