@@ -554,3 +554,42 @@ F-NOTIF-01 + F-NOTIF-02 : un compte `actionplan.update` noie la boîte du respon
 
 ### Statut et tracker (7bis)
 F-NOTIF-01, F-NOTIF-03 (A06) : REMEDIATION_REQUIRED. F-NOTIF-02 : décision PO/A13 (owner HUMAN). INFO : à A06 au prochain passage. Retest attendu : double escalade = 1 notification, message KRI sans libellé/valeur ou destinataire filtré, abonnement hors catalogue = 400.
+
+### Retest centre de notifications — 2026-10-12 (A10, correctif `cf5c49c`, tête `58b4c41`)
+
+**Escalade HUMAN : aucune.** Max CVSS du résidu = 4,3. Aucun code modifié. Méthode : relecture du diff, vitest (3 suites, 59 verts), rejeu sur Postgres 16 jetable hors dépôt (migrations + seed dev, supprimé ensuite) avec les vrais `NotificationService`, `PostgresNotificationRepository`, `PostgresNotificationSubscriptionRepository` et `PostgresAuditRepository`. F-NOTIF-02 hors périmètre (décision PO q85).
+
+| Finding | Verdict | Résidu |
+|---|---|---|
+| F-NOTIF-01 | **RETEST_FAIL partiel** | MEDIUM 4,3 (AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N) |
+| F-NOTIF-03 | **RETEST_PASS** | aucun |
+| F-NOTIF-04 | **RETEST_PASS** | aucun |
+| F-NOTIF-05 | **RETEST_PASS** | aucun |
+| F-NOTIF-06 | **RETEST_PASS** | aucun |
+
+**F-NOTIF-01 — RETEST_FAIL partiel, résidu MEDIUM 4,3.** Mesures sur `emit({ skipIfUnread: true })` (Postgres réel) :
+| scénario | notifications créées |
+|---|---|
+| 10 appels séquentiels | **1** |
+| la victime lit, puis 10 appels de plus | 2 au total (une par cycle de lecture, voulu) |
+| 2 appels parallèles (5 essais) | 1, 2, 2, 2, 2 |
+| 5 appels parallèles | 2, 5, 5, 5, 5 |
+| 20 appels parallèles (ACTION_OVERDUE) | 5, 20, 19, 20, 19 |
+| 20 appels parallèles (KRI_THRESHOLD_BREACH) | 20, 20, 20, 20, 20 |
+Le dédoublonnage séquentiel fonctionne. En parallèle, il est **quasi inopérant** : `existsUnread` puis `INSERT` sans verrou ni index, toutes les requêtes lisent « aucune non lue » avant le premier `INSERT`. Ce n'est pas une course étroite : un `Promise.all` de 20 requêtes la gagne de façon fiable (AC:L). Bornes réelles :
+- `POST /api/v1/actions/:id/escalate` : `perUserRateLimiter` 20 / 15 min (après `authMiddleware`, clé `tenant:user`, magasin mémoire par instance) -> jusqu'à ~20 notifications par rafale, par compte et par instance, renouvelables à chaque fenêtre dès que la victime a lu (sinon la non-lue existante bloque les suivantes). Chaque appel écrit toujours une ligne d'audit (`STATUS_CHANGE`/`ESCALATE`) et déclenche le `Notifier` externe (titre + responsable, canal opérateur) : bornés par le même limiteur.
+- Mesures KRI (`kriMeasures.routes.ts`) : **aucun limiteur** ; une rafale de N mesures au-delà du seuil donne N notifications à chacun des 2 propriétaires et N mesures append-only (historique KRI pollué), N seulement borné par la taille de rafale acceptée. Précondition : la permission de saisie de mesure KRI.
+Gain par rapport à 5,4 : l'accumulation dans le temps est bornée (une non-lue bloque les appels séquentiels suivants). Le risque d'inondation par rafale reste entier. Reco A06 : index unique partiel `notifications (tenant_id, recipient_user_id, resource_type, resource_id, event_type) WHERE read_at IS NULL AND event_type IN ('ACTION_OVERDUE','KRI_THRESHOLD_BREACH')` + `INSERT ... ON CONFLICT DO NOTHING` (la migration est nécessaire ; pré-nettoyer les doublons non lus existants), ou `pg_advisory_xact_lock` sur la clé dans la même transaction que la lecture et l'insertion ; plus `perUserRateLimiter` sur la route de mesure KRI. Test de régression : 20 `emit` parallèles sur Postgres réel = 1 ligne.
+`ACTION_STARTED_LATE` non dédoublonné : **sans impact**, émis seulement par `start()`, qui exige `PLANIFIEE`, et aucun chemin ne ramène une action à `PLANIFIEE` (une fois par action au plus). INFO.
+Sous-point vérifié : NOTIF-QA-01, un destinataire KRI en échec n'empêche plus l'autre (try/catch par destinataire) ; l'erreur logguée ne contient que l'id KRI et le `requestId`.
+
+**F-NOTIF-03 — RETEST_PASS.** Messages persistés : « Action en retard (action <id>) », « Action démarrée en retard (action <id>) », « Seuil KRI dépassé (KRI <id>) » : plus de libellé, de valeur, de titre ni d'échéance ; seul un identifiant (déjà dans `resource_id`) est lisible avec `notification.read`. Le détail se lit sous les permissions du module. INFO : le `Notifier` externe garde titre et responsable, mais c'est le canal opérateur, pas la boîte d'un utilisateur.
+
+**F-NOTIF-04 — RETEST_PASS.** Rejoué : `action_overdue` (casse) -> 400 ; `FOO` -> 400 ; un type d'un autre `resourceType` (`RIGHTS_LOST_ON_REACTIVATION` sur `ACTION_PLAN`) -> 400 ; `"ACTION_OVERDUE "` accepté mais stocké **trimé** (`ACTION_OVERDUE`), donc identique à la clé lue par `emit`. `.max(100)` au zod et sur le filtre `eventType` de la liste. Les types obligatoires restent refusés à la désactivation.
+
+**F-NOTIF-05 — RETEST_PASS.** `PATCH /notifications/:id/read` : `z.string().uuid()` -> `ZodError` -> 400 via `errorHandler`, plus de 500 sur cast Postgres.
+
+**F-NOTIF-06 — RETEST_PASS.** `persistBreach` sort si `risk.status === "ARCHIVED"` ou `deletedAt` ; `PostgresRiskRepository.getById` filtre déjà `deleted_at IS NULL` (risque supprimé -> `null` -> aucun destinataire). La mesure elle-même reste enregistrée (comportement métier, hors sécurité).
+
+### Statut et tracker (7bis)
+F-NOTIF-03/04/05/06 : **CLOSED** côté sécurité. F-NOTIF-01 : **REMEDIATION_REQUIRED** (A06, MEDIUM 4,3 : dédoublonnage atomique + limiteur KRI). F-NOTIF-02 : attend la décision PO q85 (owner HUMAN), chaîne F-NOTIF-01 + 02 toujours ouverte (rafale -> désabonnement de la victime).
