@@ -77,7 +77,6 @@ function world(opts: { failCreate?: boolean; failAudit?: boolean } = {}) {
 const actor: AuthenticatedUser = { userId: "u1", tenantId: "t1", email: "a@x.test", displayName: "A", roles: ["notification.read"] };
 const base = { tenantId: "t1", resourceType: "KRI", resourceId: null, eventType: "KRI_THRESHOLD_BREACH", message: "m", triggeredBy: "u9", requestId: "r" } as const;
 const MANDATORY = NOTIFICATION_CATALOG.filter((t) => t.mandatory);
-const OPTIONAL = NOTIFICATION_CATALOG.filter((t) => !t.mandatory);
 
 describe("QA notifications / tenant and user isolation", () => {
   it("unread-count and read-all only ever see (tenant, user) of the actor, in all four combinations", async () => {
@@ -127,31 +126,30 @@ describe("QA notifications / subscriptions", () => {
     await expect(service.subscribe(actor, { resourceType: "MANAGEMENT", eventType: "COMMITTEE_MEMBER_ADDED", enabled: true }, "r")).resolves.toMatchObject({ enabled: true });
   });
 
-  it("disabling an optional type is effective for that user only and that type only; re-enabling restores", async () => {
-    const { service, rows } = world();
-    await service.subscribe(actor, { resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE", enabled: false }, "r");
+  it("q85: ACTION_OVERDUE cannot be disabled (refused, nothing stored); other users/tenants/types unaffected", async () => {
+    const { service, rows, subs } = world();
+    await expect(service.subscribe(actor, { resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE", enabled: false }, "r")).rejects.toBeInstanceOf(ValidationError);
+    expect(subs).toHaveLength(0);
     const overdue = { ...base, resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE" } as const;
-    expect(await service.emit({ ...overdue, recipientUserId: "u1" })).toBeNull();
-    expect(await service.emit({ ...overdue, recipientUserId: "u2" })).not.toBeNull(); // other user
-    expect(await service.emit({ ...overdue, tenantId: "t2", recipientUserId: "u1" })).not.toBeNull(); // other tenant
-    expect(await service.emit({ ...overdue, eventType: "ACTION_STARTED_LATE", recipientUserId: "u1" })).not.toBeNull(); // other optional type
-    expect(await service.emit({ ...base, recipientUserId: "u1" })).not.toBeNull(); // KRI breach
-    await service.subscribe(actor, { resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE", enabled: true }, "r");
     expect(await service.emit({ ...overdue, recipientUserId: "u1" })).not.toBeNull();
+    expect(await service.emit({ ...overdue, recipientUserId: "u2" })).not.toBeNull();
+    expect(await service.emit({ ...overdue, tenantId: "t2", recipientUserId: "u1" })).not.toBeNull();
+    expect(await service.emit({ ...overdue, eventType: "ACTION_STARTED_LATE", recipientUserId: "u1" })).not.toBeNull();
+    expect(await service.emit({ ...base, recipientUserId: "u1" })).not.toBeNull(); // KRI breach
     expect(rows).toHaveLength(5);
   });
 
-  it("opting out of every optional type never suppresses any of the four mandatory types", async () => {
-    const { service, rows } = world();
-    for (const t of OPTIONAL) await service.subscribe(actor, { resourceType: t.resourceType, eventType: t.eventType, enabled: false }, "r");
-    for (const t of OPTIONAL) expect(await service.emit({ ...base, resourceType: t.resourceType, eventType: t.eventType, recipientUserId: "u1" })).toBeNull();
+  it("q85/q95: every catalog type is mandatory, and a stale opt-out row never suppresses any of them", async () => {
+    const { service, rows, subs } = world();
+    for (const t of MANDATORY) subs.push({ id: `s-${t.eventType}`, tenantId: "t1", userId: "u1", resourceType: t.resourceType, eventType: t.eventType, enabled: false, createdAt: new Date(), updatedAt: new Date() });
     for (const t of MANDATORY) expect(await service.emit({ ...base, resourceType: t.resourceType, eventType: t.eventType, recipientUserId: "u1" })).not.toBeNull();
     expect(rows).toHaveLength(MANDATORY.length);
+    expect(MANDATORY).toHaveLength(NOTIFICATION_CATALOG.length);
   });
 
   it("subscribe is audited CREATE then UPDATE and is always about the actor", async () => {
     const { service, audit } = world();
-    const first = await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false }, "r");
+    const first = await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true }, "r");
     await service.subscribe(actor, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true }, "r");
     expect(first.userId).toBe("u1");
     expect(audit.map((e) => e["action"])).toEqual(["CREATE", "UPDATE"]);
@@ -164,12 +162,12 @@ describe("QA notifications / subscriptions", () => {
     expect(subs).toHaveLength(0);
   });
 
-  it("catalog is coherent: unique pairs, valid resource types, exactly the 4 MANAGEMENT governance types mandatory", () => {
+  it("catalog is coherent: unique pairs, valid resource types, all 11 types mandatory (8 MANAGEMENT, 2 ACTION_PLAN, 1 KRI)", () => {
     const keys = NOTIFICATION_CATALOG.map((t) => `${t.resourceType}/${t.eventType}`);
     expect(new Set(keys).size).toBe(keys.length);
     expect(NOTIFICATION_CATALOG.every((t) => (NOTIFICATION_RESOURCE_TYPES as readonly string[]).includes(t.resourceType) && t.label.length > 0)).toBe(true);
-    expect(MANDATORY).toHaveLength(4);
-    expect(MANDATORY.every((t) => t.resourceType === "MANAGEMENT")).toBe(true);
+    expect(MANDATORY).toHaveLength(11);
+    expect(MANDATORY.filter((t) => t.resourceType === "MANAGEMENT")).toHaveLength(8);
   });
 });
 
@@ -206,7 +204,7 @@ describe("QA notifications / HTTP routes", () => {
       expect((await s.call("/api/v1/notifications/unread-count")).json).toEqual({ data: 0 });
       const types = (await s.call("/api/v1/notifications/types")).json!.data as Array<{ eventType: string; mandatory: boolean; label: string; resourceType: string }>;
       expect(types).toHaveLength(NOTIFICATION_CATALOG.length);
-      expect(types.filter((t) => t.mandatory)).toHaveLength(4);
+      expect(types.filter((t) => t.mandatory)).toHaveLength(11);
       expect(w.rows.find((n) => n.recipientUserId === "u2")!.readAt).toBeNull();
     } finally { s.close(); }
   });
@@ -243,16 +241,17 @@ describe("QA notifications / HTTP routes", () => {
     } finally { s.close(); }
   });
 
-  it("POST subscription: mandatory disable 400 (no row), optional disable 201, then listed; bad body 400", async () => {
+  it("POST subscription: every disable 400 (no row), enable 201, then listed; bad body 400", async () => {
     const w = world();
     const s = await serve(w, actor);
     try {
       expect((await s.call("/api/v1/notification-subscriptions", "POST", { resourceType: "MANAGEMENT", eventType: "RIGHTS_LOST_ON_REACTIVATION", enabled: false })).status).toBe(400);
       expect(w.subs).toHaveLength(0);
-      expect((await s.call("/api/v1/notification-subscriptions", "POST", { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false })).status).toBe(201);
+      expect((await s.call("/api/v1/notification-subscriptions", "POST", { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false })).status).toBe(400); // q85
+      expect((await s.call("/api/v1/notification-subscriptions", "POST", { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: true })).status).toBe(201);
       const listed = (await s.call("/api/v1/notification-subscriptions")).json!.data as Array<{ enabled: boolean }>;
       expect(listed).toHaveLength(1);
-      expect(listed[0]!.enabled).toBe(false);
+      expect(listed[0]!.enabled).toBe(true);
       expect((await s.call("/api/v1/notification-subscriptions", "POST", { resourceType: "KRI", eventType: "", enabled: false })).status).toBe(400);
       expect((await s.call("/api/v1/notification-subscriptions", "POST", { resourceType: "KRI", eventType: "K", enabled: "no" })).status).toBe(400);
       expect((await s.call("/api/v1/notification-subscriptions", "POST", { resourceType: "BOGUS", eventType: "K", enabled: false })).status).toBe(400);
@@ -330,12 +329,12 @@ describe("QA notifications / KRI recipients", () => {
     expect(k.w.audit.filter((e) => e["entityType"] === "Notification" && e["userId"] === "u1")).toHaveLength(2); // triggeredBy = actor
   });
 
-  it("recipient who opted out is skipped, the other recipient still gets it", async () => {
+  it("q85: a stale opt-out of the owner is ignored, both recipients get the breach", async () => {
     const w = world();
-    await w.service.subscribe({ ...actor, userId: "o" }, { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false }, "r");
+    w.subs.push({ id: "s", tenantId: "t1", userId: "o", resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", enabled: false, createdAt: new Date(), updatedAt: new Date() });
     const k = kriWorld({ ownerId: "o", superiorOwnerId: "s" }, w);
     await k.rec(7);
-    expect(recipients(w)).toEqual(["s"]);
+    expect([...recipients(w)].sort()).toEqual(["o", "s"]);
   });
 
   it("not wired (no NotificationService / RiskRepository) behaves as before", async () => {
@@ -417,12 +416,12 @@ describe("QA notifications / action plan", () => {
     } finally { spy.mockRestore(); }
   });
 
-  it("responsible user who opted out of ACTION_OVERDUE gets no notification, escalation still succeeds", async () => {
+  it("q85: a stale opt-out of the responsible user for ACTION_OVERDUE is ignored, escalation notifies", async () => {
     const w = world();
-    await w.service.subscribe({ ...actor, userId: "resp" }, { resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE", enabled: false }, "r");
+    w.subs.push({ id: "s", tenantId: "t1", userId: "resp", resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE", enabled: false, createdAt: new Date(), updatedAt: new Date() });
     const a = apWorld({}, w);
     expect((await a.service.escalateIfOverdue(a.user, "a1", "r")).escalated).toBe(true);
-    expect(w.rows).toHaveLength(0);
+    expect(w.rows).toHaveLength(1);
   });
 
   it("without a NotificationService the legacy notifier path is unchanged", async () => {
