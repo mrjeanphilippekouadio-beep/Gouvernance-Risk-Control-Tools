@@ -15,10 +15,19 @@
 # {"error":"Missing bearer token"} or {"error":"Invalid or expired token"}.
 # Verification target: GET /api/v1/users/me (any authenticated route works).
 #
-# ${ZAP_TARGET_URL} / ${ZAP_TEST_EMAIL} / ${ZAP_TEST_PASSWORD} are resolved
-# from the container's environment at run time (AF substitutes ${envvar}
-# anywhere in this file) — set them as -e flags in the workflow, never
-# hardcode credentials here.
+# ${ZAP_TARGET_URL} / ${ZAP_TEST_EMAIL} / ${ZAP_TEST_PASSWORD} are substituted
+# by the workflow itself (envsubst, "Resolve ZAP automation plan secrets"
+# step) before this file is ever handed to ZAP — never hardcode credentials
+# here. This is deliberate, not just convention: ZAP's own built-in
+# ${envvar} substitution turned out to resolve context.urls and
+# authentication.parameters.loginPageUrl correctly but silently failed for
+# authentication.verification.pollUrl (left as the literal string
+# "${ZAP_TARGET_URL}/api/v1/users/me", which the HTTP client then rejected
+# with "incorrect path"). Every verification poll errored as a result, so
+# ZAP could never confirm a login had succeeded — that's what was actually
+# behind the 42%/80% "authentication failure" aborts, not rate limiting.
+# Pre-resolving the whole file ourselves removes ZAP's substitution from the
+# loop entirely instead of hunting for every field it does or doesn't cover.
 
 env:
   contexts:

@@ -30,6 +30,29 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Resolve ZAP automation plan secrets
+        # ZAP's own Automation Framework ${VAR} substitution resolves fine
+        # for context.urls / authentication.parameters.loginPageUrl (confirmed:
+        # GitHub's secret masking showed *** there, proving the real value was
+        # substituted in) but silently FAILS for
+        # authentication.verification.pollUrl: the poll request was sent with
+        # the literal, unsubstituted string "${ZAP_TARGET_URL}/api/v1/users/me"
+        # (org.apache.commons.httpclient.URIException: incorrect path, seen
+        # on every run). Every verification poll then errored, so ZAP could
+        # never confirm a login succeeded even when it did — THIS, not the
+        # rate limiter, is what produced the 42%/80% "authentication failure"
+        # aborts. Fix: substitute the variables ourselves before ZAP ever
+        # parses the file, so AF's partial/inconsistent substitution is never
+        # in the loop.
+        env:
+          ZAP_TARGET_URL: ${{ secrets.ZAP_TARGET_URL }}
+          ZAP_TEST_EMAIL: "qagrctest@gmail.com"
+          ZAP_TEST_PASSWORD: ${{ secrets.ZAP_TEST_PASSWORD }}
+        run: |
+          envsubst '$ZAP_TARGET_URL $ZAP_TEST_EMAIL $ZAP_TEST_PASSWORD' \
+            < .github/zap/automation-plan.yaml \
+            > "$RUNNER_TEMP/automation-plan.resolved.yaml"
+
       - name: ZAP Full Scan (authenticated, via Automation Framework)
         # No marketplace action here: authenticating as a real QA user
         # (browser-driven login + header-based session management, see
@@ -46,14 +69,12 @@ jobs:
           sudo chown 1000:1000 report zap-home
           set +e
           docker run --rm \
-            -v "${{ github.workspace }}:/zap/wrk/:rw" \
+            -v "${{ github.workspace }}/report:/zap/wrk/report:rw" \
             -v "${{ github.workspace }}/zap-home:/home/zap/.ZAP:rw" \
-            -e ZAP_TARGET_URL="${{ secrets.ZAP_TARGET_URL }}" \
-            -e ZAP_TEST_EMAIL="qagrctest@gmail.com" \
-            -e ZAP_TEST_PASSWORD="${{ secrets.ZAP_TEST_PASSWORD }}" \
+            -v "$RUNNER_TEMP/automation-plan.resolved.yaml:/zap/plan/automation-plan.yaml:ro" \
             --entrypoint bash \
             ghcr.io/zaproxy/zaproxy:stable \
-            -c 'zap.sh -cmd -autorun /zap/wrk/.github/zap/automation-plan.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null; exit $rc'
+            -c 'zap.sh -cmd -autorun /zap/plan/automation-plan.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null; exit $rc'
           rc=$?
           set -e
           # The previous attempt to grab the auth-attempt detail from
