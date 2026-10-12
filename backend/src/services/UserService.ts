@@ -18,6 +18,8 @@ export interface UserDetail extends User {
   administratorAndRiskManager: boolean;
   /** DECISION-044 q80: application administrator AND Committee group (same marking as administratorAndRiskManager). */
   administratorAndCommittee: boolean;
+  /** DECISION-046 q104: application administrator AND Audit group (same marking). */
+  administratorAndAudit: boolean;
 }
 
 /** B-8 bis (F-B8-06): a role disabled during suspension whose assignment remains. */
@@ -164,6 +166,7 @@ export class UserService {
       riskManagerAndCommittee: fixedGroups.includes("RISK_MANAGER") && fixedGroups.includes("RISK_COMMITTEE"),
       administratorAndRiskManager: this.roleService ? await this.roleService.isAdminAndRiskManager(actor.tenantId, id) : false,
       administratorAndCommittee: this.roleService ? await this.roleService.isAdminAndCommittee(actor.tenantId, id) : false,
+      administratorAndAudit: this.roleService ? await this.roleService.isAdminAndAudit(actor.tenantId, id) : false,
     };
   }
 
