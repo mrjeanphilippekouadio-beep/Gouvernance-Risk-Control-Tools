@@ -102,6 +102,17 @@ export interface RiskFrameworkVersion extends FrameworkParams {
   archiveReason: string | null;
 }
 
+/**
+ * B-6b-05 (A13 R4 ii): with FIRST_LINE the first line's entry of the Mastery is the one that counts, so the
+ * Dispositif has reduced independence on the Mastery. Derived on read (no column), shown on every read of a version.
+ */
+export type WithMasteryIndependence<V> = V & { reducedMasteryIndependence: boolean };
+export function withMasteryIndependence<V extends { masteryAuthoritativeSource: MasteryAuthoritativeSource }>(
+  v: V,
+): WithMasteryIndependence<V> {
+  return { ...v, reducedMasteryIndependence: v.masteryAuthoritativeSource === "FIRST_LINE" };
+}
+
 export type ChangeRequestKind = "ACTIVATE_VERSION" | "ASSIGN_PROCESS" | "SET_DEFAULT";
 export type ChangeRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
 export type DecisionRegime = "NORMAL" | "FALLBACK" | "BOOTSTRAP";

@@ -257,14 +257,13 @@ describe("QA-B6b appetite lookup on a frozen version", () => {
 });
 
 describe("QA-B6b copied thresholds missing on the evaluation (fakes / raw inserts)", () => {
-  it("version set + copied evaluation threshold NULL: validate falls back to configs / default (PINNED OBSERVATION QA-B6b-01 — differs from TreatmentDecision)", async () => {
+  it("version set + copied evaluation threshold NULL: validate fails closed, configs never read (QA-B6b-01 fixed, consistent with TreatmentDecision)", async () => {
     // The CHECK of 059 leaves the columns nullable; the service always writes them, so only a raw insert gets here.
     const configs = { async getByTenant() { return { committeeEvaluationMinScore: 3, committeeEvaluationEnforced: true }; } };
     const { service, store } = evaluationService(frameworksFake(FWS, [ver()]), [scale("s5")], { configs });
     const e = await service.create(creator, input, "rq");
     Object.assign(store.rows[0]!, { committeeEvaluationMinScore: null, committeeEvaluationEnforced: null, residualScore: 5 });
-    // Spec §8.1 says configs are no longer read; today residual 5 >= configs 3 forces the Committee path.
-    await expect(service.validate(validator, e.id, null, "rq")).rejects.toThrow(/committee threshold \(3\)/);
+    await expect(service.validate(validator, e.id, null, "rq")).rejects.toThrow(/carries no committee threshold copy/);
   });
 
   it("min set but enforced NULL: fail closed to enforced=true", async () => {
@@ -511,7 +510,7 @@ describe("QA-B6b GET /risk-frameworks/applicable", () => {
   const PROC = "22222222-2222-4222-8222-222222222222";
 
   async function http(fn: (call: (path: string, as?: AuthenticatedUser) => Promise<{ status: number; json: { data?: unknown; error?: string } | null }>) => Promise<void>) {
-    let current = actor("u", ["riskframework.read"]);
+    let current = actor("u", ["riskframework.read", "risk.read"]);
     const app = express();
     app.use((req, _res, next) => { (req as never as { user: AuthenticatedUser }).user = current; next(); });
     app.use("/rf", riskFrameworksRouter(svc() as never));
@@ -537,12 +536,12 @@ describe("QA-B6b GET /risk-frameworks/applicable", () => {
 
   it("risk -> chain -> PROCESS Dispositif fw2 (200 with the version and its scale id); unknown risk/process 404; other tenant 404", async () => {
     await http(async (call) => {
-      const ok = await call(`/applicable?riskId=${RISK}`, actor("u", ["riskframework.read"]));
+      const ok = await call(`/applicable?riskId=${RISK}`, actor("u", ["riskframework.read", "risk.read"]));
       expect(ok.status).toBe(200);
       expect(ok.json?.data).toMatchObject({ frameworkId: "fw2", ratingScaleId: "s3" });
       expect((await call("/applicable?riskId=33333333-3333-4333-8333-333333333333")).status).toBe(404);
       expect((await call("/applicable?processId=33333333-3333-4333-8333-333333333333")).status).toBe(404);
-      expect((await call(`/applicable?riskId=${RISK}`, actor("u", ["riskframework.read"], T2))).status).toBe(404);
+      expect((await call(`/applicable?riskId=${RISK}`, actor("u", ["riskframework.read", "risk.read"], T2))).status).toBe(404);
     });
   });
 });

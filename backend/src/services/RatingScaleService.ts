@@ -18,6 +18,8 @@ import type { RiskAppetiteRepository } from "../domain/repositories/RiskAppetite
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import { maxScoreForScale } from "../domain/scoring.js";
 import { assertDescriptors, assertLevels, assertReadyToActivate } from "../domain/ratingScaleRules.js";
+import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
+import { FRAMEWORK_OWNS_SETTING_MESSAGE } from "./riskFrameworkResolution.js";
 import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
 import type { AuditEvent } from "../domain/entities/AuditEvent.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
@@ -107,6 +109,8 @@ export class RatingScaleService {
      */
     private readonly riskAppetites?: Pick<RiskAppetiteRepository, "list">,
     private readonly configs?: Pick<ConfigRepository, "getByTenant">,
+    /** B-6b-01 (spec §3): when wired (server.ts) the Dispositif owns "the active scale"; activateVersion is closed. */
+    private readonly frameworks?: Pick<RiskFrameworkRepository, "listFrameworks">,
   ) {}
 
   async create(
@@ -308,6 +312,11 @@ export class RatingScaleService {
    */
   async activateVersion(actor: AuthenticatedUser, id: string, requestId: string): Promise<RatingScale> {
     requirePermission(actor, "ratingscale.delete");
+    // B-6b-01: the scale in force is the one referenced by the ACTIVE version of a Dispositif (it is mirrored
+    // from there by PostgresRiskFrameworkRepository); activating one here would be a second writer.
+    if (this.frameworks) {
+      throw new ValidationError(`${FRAMEWORK_OWNS_SETTING_MESSAGE} (référencez cette échelle dans une nouvelle version du Dispositif)`);
+    }
     const before = await this.get(actor, id);
     if (before.status === "ARCHIVED") {
       throw new ValidationError("Cannot re-activate an archived rating scale — create a new version instead");
