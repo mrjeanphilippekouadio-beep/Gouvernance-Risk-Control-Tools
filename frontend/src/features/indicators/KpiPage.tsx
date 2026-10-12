@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, useRef } from "react";
 import { Button, Card, FormField, LineChart, MessageBanner, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
 import {
   kpisApi,
@@ -80,11 +80,13 @@ export function KpiPage({ token }: { token: string }) {
     row.processId && `Processus : ${processes.find((p) => p.id === row.processId)?.name ?? row.processId}`,
   ].filter(Boolean).join(" · ") || "—";
 
+  const measuresFor = useRef<string | null>(null);
   const loadMeasures = useCallback(async (kpiId: string) => {
+    measuresFor.current = kpiId; // ignore a late answer for a previously selected indicator
     setMeasuresLoading(true); setMeasuresError(null);
-    try { setMeasures(await kpisApi.measures(token, kpiId)); }
-    catch (err) { setMeasures([]); fail(err, setMeasuresError); }
-    finally { setMeasuresLoading(false); }
+    try { const rows = await kpisApi.measures(token, kpiId); if (measuresFor.current === kpiId) setMeasures(rows); }
+    catch (err) { if (measuresFor.current === kpiId) { setMeasures([]); fail(err, setMeasuresError); } }
+    finally { if (measuresFor.current === kpiId) setMeasuresLoading(false); }
   }, [token, fail]);
 
   useEffect(() => { if (selectedId) void loadMeasures(selectedId); else setMeasures([]); }, [selectedId, loadMeasures]);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { describeError } from "../indicators/shared";
 import { Button, Card, FormField, MessageBanner, Modal, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
-import { ApiError } from "../../api/client";
 import { anomaliesApi, type Anomaly, type AnomalySeverity, type AnomalyStatus } from "../../api/anomalies";
 import "../core/WorkflowPages.css";
 
@@ -9,7 +9,7 @@ const statusLabels: Record<AnomalyStatus, string> = { NEW: "Nouvelle", UNDER_ANA
 const toneForSeverity = (value: AnomalySeverity): StatusTone => value === "CRITICAL" || value === "MAJOR" ? "danger" : value === "HIGH" ? "warning" : value === "MODERATE" ? "info" : "neutral";
 const toneForStatus = (value: AnomalyStatus): StatusTone => value === "CLOSED" ? "success" : value === "ACTION_IN_PROGRESS" ? "warning" : value === "UNDER_ANALYSIS" ? "info" : "danger";
 const dateLabel = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString("fr-FR") : "—";
-const errorMessage = (err: unknown) => err instanceof ApiError ? `${err.message}${err.requestId ? ` (réf. ${err.requestId})` : ""}` : err instanceof Error ? err.message : "Une erreur inattendue est survenue.";
+const errorMessage = describeError;
 
 interface Props { token: string; }
 
@@ -81,7 +81,6 @@ export function AnomaliesPage({ token }: Props) {
     { key: "actions", header: "Actions", render: (row) => <Button onClick={() => open(row)}>Ouvrir</Button> },
   ], []);
 
-  const commentRequired = targetStatus === "CLOSED";
   const transitionTargets = selected ? (Object.keys(statusLabels) as AnomalyStatus[]).filter((s) => s !== selected.status) : [];
 
   return <section className="workflow-page">
@@ -122,8 +121,8 @@ export function AnomaliesPage({ token }: Props) {
         <strong>Changer le statut</strong>
         {transitionError && <MessageBanner tone="danger">{transitionError}</MessageBanner>}
         <FormField label="Nouveau statut" htmlFor="anomaly-target"><select id="anomaly-target" value={targetStatus} onChange={(e) => { setTargetStatus(e.target.value as "" | AnomalyStatus); setTransitionError(null); }}><option value="">Choisir…</option>{transitionTargets.map((s) => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></FormField>
-        <FormField label={commentRequired ? "Commentaire (obligatoire pour clôturer)" : "Commentaire"} htmlFor="anomaly-comment"><textarea id="anomaly-comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} required={commentRequired} /></FormField>
-        <div className="workflow-actions"><Button variant="primary" disabled={saving || !targetStatus || (commentRequired && !comment.trim())} onClick={() => void transition()}>{saving ? "Enregistrement…" : "Appliquer"}</Button></div>
+        <FormField label="Commentaire" htmlFor="anomaly-comment"><textarea id="anomaly-comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} /></FormField>
+        <div className="workflow-actions"><Button variant="primary" disabled={saving || !targetStatus} onClick={() => void transition()}>{saving ? "Enregistrement…" : "Appliquer"}</Button></div>
       </div>}
     </Modal>
   </section>;

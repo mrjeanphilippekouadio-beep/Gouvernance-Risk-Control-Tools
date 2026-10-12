@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { describeError } from "../indicators/shared";
 import { Button, Card, DatePicker, FormField, MessageBanner, Modal, Pagination, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
-import { ApiError } from "../../api/client";
 import { auditLogApi, type AuditAction, type AuditEvent, type AuditLogFilters } from "../../api/auditLog";
 import "../core/WorkflowPages.css";
 
@@ -21,7 +21,7 @@ const toneForAction = (action: AuditAction): StatusTone =>
       : action === "CREATE" || action === "APPROVE" || action === "VALIDATE" ? "success" : "info";
 const dateTimeLabel = (value: string) => new Date(value).toLocaleString("fr-FR");
 const prettyJson = (value: unknown) => value === null || value === undefined ? "—" : JSON.stringify(value, null, 2);
-const errorMessage = (err: unknown) => err instanceof ApiError ? `${err.message}${err.requestId ? ` (réf. ${err.requestId})` : ""}` : err instanceof Error ? err.message : "Une erreur inattendue est survenue.";
+const errorMessage = describeError;
 const startOfDay = (iso: string) => new Date(`${iso}T00:00:00`).toISOString();
 const endOfDay = (iso: string) => new Date(`${iso}T23:59:59.999`).toISOString();
 

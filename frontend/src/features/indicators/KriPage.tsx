@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, useRef } from "react";
 import { Button, Card, FormField, LineChart, MessageBanner, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
 import {
   krisApi,
@@ -75,11 +75,13 @@ export function KriPage({ token }: { token: string }) {
   const selected = useMemo(() => rows.find((row) => row.id === selectedId) ?? null, [rows, selectedId]);
   const riskLabel = (riskId: string) => risks.find((risk) => risk.id === riskId)?.description ?? riskId;
 
+  const measuresFor = useRef<string | null>(null);
   const loadMeasures = useCallback(async (kriId: string) => {
+    measuresFor.current = kriId; // ignore a late answer for a previously selected indicator
     setMeasuresLoading(true); setMeasuresError(null);
-    try { setMeasures(await krisApi.measures(token, kriId)); }
-    catch (err) { setMeasures([]); fail(err, setMeasuresError); }
-    finally { setMeasuresLoading(false); }
+    try { const rows = await krisApi.measures(token, kriId); if (measuresFor.current === kriId) setMeasures(rows); }
+    catch (err) { if (measuresFor.current === kriId) { setMeasures([]); fail(err, setMeasuresError); } }
+    finally { if (measuresFor.current === kriId) setMeasuresLoading(false); }
   }, [token, fail]);
 
   useEffect(() => { if (selectedId) void loadMeasures(selectedId); else setMeasures([]); }, [selectedId, loadMeasures]);
