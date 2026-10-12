@@ -91,3 +91,16 @@
 - Test : clone `CREATE DATABASE ... TEMPLATE` avant/après la migration pour rejouer le même scénario (le nominal committe
   des lignes) ; `\set VERBOSITY sqlstate` ; 25P02 après une erreur dans une tx est du bruit, pas un résultat.
 - Environnement agent : pas de `. fichier` ni `sh` dans une commande composée ; scripts du scratchpad lancés seuls.
+
+## 2026-10-12 — migration 060 (F-B6b-02, gel de l'instantané risk_evaluations)
+- 060 : trigger `BEFORE UPDATE OF` les 5 colonnes d'instantané (risk_framework_version_id, 3x committee_*, rating_scale_id) :
+  non NULL => immuable (même retour à NULL), SQLSTATE 42501. NULL -> valeur permis SEULEMENT pour rating_scale_id (BROUILLON
+  pré-Dispositif, recordInherentScoring, spec 8.1) ; refusé pour les 4 autres (aucun chemin applicatif ne le fait).
+  Tenant : UNIQUE (tenant_id, id) sur risk_framework_versions (trivial, id = PK) + FK composite NOT VALID MATCH SIMPLE
+  `risk_evaluations_framework_version_tenant_fk` ; la FK simple de 059 est conservée. search_path épinglé (inline + ALTER).
+- Conséquence app à connaître : un 2e scoring inhérent qui résoudrait une AUTRE échelle (mode legacy sans Dispositif, via
+  resolveActiveRatingScale) serait refusé ; en mode Dispositif le service réutilise e.ratingScaleId donc rien ne change.
+- Vérifié sur PG16 jetable (001->060, 060 x2, down x2, up->down->up identique en pg_dump -s, 17 cas SQL). Tests :
+  backend/test/QA-FB6b02.test.ts (statique) et QA-FB6b02-pg.test.ts (QA_FB6B02_PGHOST = dossier socket, QA_FB6B02_PGDB).
+- Skill `ponytail` introuvable dans cet environnement (Unknown skill) : principe appliqué à la main (pas d'abstraction en plus).
+- Script PG jetable : `runuser -u postgres -- sh pg.sh` (initdb + pg_ctl -k <scratchpad>, listen_addresses='') puis boucle psql -1.
