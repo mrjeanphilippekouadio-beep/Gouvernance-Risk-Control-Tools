@@ -104,3 +104,72 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - F-B8t-04 : aucune transaction inter-repos dans le repo -> choix simple : `reopen` seulement si l'application des droits échoue ; une fois appliqués, un échec d'audit est loggé et renvoyé SANS reopen (statut APPROVED = droits appliqués). Limite : l'événement d'audit manquant n'est pas rejoué.
 - Fakes de tests B8ter/QA-B8quater : `listAssignments` ajouté (méthode requise de l'interface réelle, fail-closed plutôt que `?.`).
 - Leçon : un heredoc dans une commande composée est refusé ; Write d'un script dans le scratchpad (nom unique : edit.py existait déjà).
+
+## 2026-10-11 B-8 sexies (branche wt/b8r, base 720b606, aucune migration)
+
+- q65-02 : `PostgresRoleRepository.assignToUser` traduit 23505 sur `user_roles_active_idx` en `ConflictError` (409). Le `it.fails` de QA-B8quinquies est devenu `it` (le faux repo lève maintenant `ConflictError`, comme le vrai).
+- F-B8q-01 : le repo avait déjà un pattern transaction (`revokeFromUser`) -> `assignToUser` fait BEGIN + `SELECT ... FOR UPDATE` sur la ligne `roles` (non supprimée, sinon NotFoundError) + INSERT. `update` laissé tel quel : un UPDATE verrouille déjà la ligne. Limite : cela ordonne l'INSERT et l'UPDATE mais ne ferme pas la fenêtre check-then-act du service (règles de cumul lues avant) ; il faudrait les rejouer sous verrou.
+- F-B8q-03 : pas de transaction inter-repos (audit/rôles/changements = trois repos). Choix : (a) si `roles.update` échoue, relire le rôle ; si ses droits égalent ceux du changement, il est appliqué -> pas de reopen, on poursuit vers l'audit ; (b) `reopen` SQL gardé par `NOT EXISTS` autre PENDING du même rôle, retourne un booléen ; `false` loggé, erreur d'origine renvoyée. Requête 7 (APPROVED sans audit_logs) ajoutée à `docs/security/B8-predeploy-checks.sql`.
+- Leçon : commandes bash composées (heredoc + git) refusées en worktree ; découper et passer par Write/Edit.
+## 2026-10-11 EVD-2 « Analyse » (branche wt/evd2, base 720b606, aucune migration)
+
+- `POST /api/v1/evidences/:id/analysis` (permission `evidence.import`, limiteur `costlyOperationRateLimiter`) -> `EvidenceService.analyze` : permission, lookup tenant-scopé (`getOwnedOrThrow`), refus si non xlsx / sans sha256 / `fileSize` > 5 Mo, PUIS `getContent`, contrôle SHA-256 (409 si altéré), PUIS `analyzeXlsx` (`services/xlsxAnalysis.ts` : plafond 5 Mo, `assertSafeXlsxArchive`, exceljs, 50 feuilles, 20 000 lignes, 50 colonnes). Le plafond de lecture Drive 25 Mo (`getContent`) est celui d'EVD-1.
+- Aucune écriture, aucun audit (cadrage : « Aucune écriture »). Question ouverte : auditer la lecture du contenu comme `DOWNLOAD` ?
+- Exemples toujours renvoyés : aucun indicateur `confidential`/données personnelles n'existe sur `Evidence` (décision 14 du cadrage, dataset EVD-3). Signalé, non inventé.
+- Formules : on lit `result` en cache, jamais évaluées. Colonnes entièrement vides (en-tête ET données) non listées ; colonne avec en-tête et sans donnée : `isEmpty: true`.
+- `evidence.import` NON ajouté aux groupes fixes : HUMAN l'accorde par SQL.
+- Leçon : commande bash composée avec heredoc python refusée dans le worktree -> Write/Edit directement.
+
+## 2026-10-11 centre de notifications (branche wt/notifb, base 2cf4f48, aucune migration)
+
+- Routes : `GET /notifications/unread-count` (data = nombre), `POST /notifications/read-all` (data = {updated}), `GET /notifications/types` (catalogue). Toutes `notification.read`, limitées à actor.userId + actor.tenantId ; read-all audite une ligne (UPDATE, reason MARK_ALL_READ, entityId = userId car entity_id NOT NULL) seulement si count > 0.
+- `domain/notificationCatalog.ts` : 7 types, 4 gouvernance `mandatory: true`. `subscribe(enabled=false)` sur un type obligatoire -> ValidationError.
+- `NotificationService.emit` = record + respect du désabonnement explicite (ignoré pour les obligatoires) ; `record` inchangé. Les 4 types obligatoires gardent `record`.
+- Persistés : ACTION_STARTED_LATE / ACTION_OVERDUE -> responsible_user_id seul ; KRI_THRESHOLD_BREACH -> owner + superior owner du risque principal du KRI (backlog ACT-135). Params de constructeur optionnels en fin (ActionPlanService +notifications ; KriMeasureService +notifications, +risks). Best effort, erreur loggée. Telegram inchangé.
+- Non fait : Risk Owner + superior des risques liés pour les plans d'action (ACT-193, liens multiples : règle de choix non définie) ; notifications de Risk/Governance/Feedback (non demandées) ; pas de dédoublonnage d'escalateIfOverdue répété.
+- Leçon : heredoc python composé refusé -> script dans le scratchpad puis exécution seule.
+
+## 2026-10-12 EVD2bis : F-B8s-01, F-EVD2-01/02/03 + 5 KNOWN GAP QA (branche wt/evd2bis, aucune migration)
+
+- F-B8s-01 : `RoleRepository.assignToUser(..., recheck?)` verrouille `users` (cible, `deleted_at IS NULL`, sinon NotFound) PUIS `roles` (`SELECT *`), relit les rôles détenus sous verrou et appelle `recheck(lockedRole, held)` ; le service y rejoue `assertCumulRules` (la pré-vérification reste, pour les faux repos). `update(..., recheck?)` (élargissement seulement) : verrouille les users détenteurs (ORDER BY id) puis le rôle, relit les détenteurs (nouveau détenteur apparu = ConflictError « retry »), rejoue le cumul avec les rôles lus sous verrou, puis UPDATE dans la même transaction. Ordre fixe user -> role. Non testé sur vrai Postgres (tests = faux pool).
+- `rollbackQuietly` : un ROLLBACK en échec ne masque plus l'erreur d'origine (assign, revoke, update). B8s-QA-02 : « droits appliqués » = égalité d'ENSEMBLES (doublons ignorés).
+- F-EVD2-01 : `assertSafeXlsxArchive(buffer, {maxTotal, maxEntry})` ; analyse = 8 Mo total / 6 Mo par entrée, avant `xlsx.load`. Sémaphore par processus `MAX_CONCURRENT_ANALYSES = 2` dans `EvidenceService` (409 ConflictError au-delà, libéré en `finally`), + `perUserRateLimiter` (20 / 15 min, clé tenant:user) sur la route. Limite : sémaphore par instance, pas global multi-instances ; mémoire du conteneur (A09/A16) non confirmée.
+- F-EVD2-02 : `examples` seulement si `evidence.download`. F-EVD2-03 : audit `READ` fail-closed après le contrôle SHA-256, avant l'analyse ; `newValue` = {fileName, sha256, examplesReturned} ; `sheetCount` NON inclus (inconnu avant l'analyse, écrire après casserait le fail-closed). `analyze(actor, id, requestId = "unknown")`.
+- QA : date hors plage -> cellule illisible (null) ; en-tête avec années (entiers 1900-2100) reconnu ; libellé de lien rich text résolu récursivement. Tests existants adaptés : EVD2.test (acteur avec download, 1 écriture = l'audit READ), B8sexies.test (séquence SQL avec verrou user), QA (observation convertie, 2 tests figeant le 500 supprimés).
+- Skill `ponytail` introuvable dans l'environnement : principe appliqué à la main. Worktree supprimé en cours de tâche : recréé via `git worktree add -B`.
+
+## 2026-10-12 NOTIFFIX : F-NOTIF-01/03/04/05/06 + NOTIF-QA-01/02 (branche wt/notiffix, base f520794, aucune migration)
+
+- Dédoublonnage applicatif (pas d'index unique, pas de migration) : `NotificationRepository.existsUnread?` (optionnel, SQL tenant+destinataire+resource+event, `read_at IS NULL`) ; `emit({... skipIfUnread: true})` l'utilise. Choix d'un flag sur `emit` plutôt qu'une nouvelle méthode : les mocks de tests qui n'exposent que `emit` continuent de marcher. Utilisé par ACTION_OVERDUE et KRI_THRESHOLD_BREACH seulement. Limite : deux appels réellement concurrents peuvent insérer deux lignes ; repo sans `existsUnread` = pas de dédup (fail-open).
+- `/action-plans/:id/escalate` : `perUserRateLimiter()` (20 / 15 min par tenant:user).
+- F-NOTIF-03 : messages « Seuil KRI dépassé (KRI <id>) », « Action en retard (action <id>) », « Action démarrée en retard (action <id>) » ; le canal `Notifier` externe garde ses textes détaillés (hors périmètre).
+- F-NOTIF-04 : contrôle du catalogue dans `NotificationService.subscribe` (ValidationError -> 400), `.max(100)` zod. Tests existants qui s'abonnaient à `KRI/THRESHOLD_BREACH` (hors catalogue) passés à `KRI_THRESHOLD_BREACH`.
+- F-NOTIF-05 : `z.string().uuid()` sur `:id`, `.max(100)` sur le filtre `eventType`. F-NOTIF-06 : KRI sans émission si risque `ARCHIVED`/`deletedAt`. NOTIF-QA-01 : try/catch par destinataire.
+- F-NOTIF-02 (types désactivables) NON touché : décision PO q85.
+## 2026-10-12 B-6a « Socle du Dispositif » (branche wt/b6a, base f520794, migration 055 NON appliquée ni exécutée)
+
+- Écrit : `RiskFrameworkService` (cycle DRAFT -> PENDING_APPROVAL -> ACTIVE -> ARCHIVED), `PostgresRiskFrameworkRepository` (pool pg, pattern `tx` + `rollbackQuietly`), `domain/frameworkApproval.ts` (`resolveDecider` pur), `domain/ratingScaleRules.ts` (`assertLevels`/`assertDescriptors`/`assertReadyToActivate` DÉPLACÉS depuis `RatingScaleService`, pas copiés), routes `/api/v1/risk-frameworks`, 6 permissions `riskframework.*`, migration 055 + down. Migration écrite par A06 lui-même (A07 non spawné, aucun outil Agent disponible) ; jamais exécutée : à faire rejouer deux fois sur Postgres jetable par A07/A08 (triggers, DO $$ de reprise, regex du test B8ter sur 055).
+- Décisions PO appliquées (recommandations de la spec) : q87 demande « vote » = PENDING + 409 sur approve ET reject, message nommant le groupe ; q90 audit juste après l'action (échec loggé puis renvoyé, pas de reopen) ; q91 seuls les paramètres du §2.2 ; q92 auto-proposition refusée à la création de la demande hors vote Comité (donc inactivable avant B-12). Aucun amorçage (B-6d).
+- Choix hors texte de la spec (à relire) : (1) demande WITHDRAWN = `decided_by` NULL, `decision_regime` NULL (le CHECK maker-checker interdirait que le demandeur « décide » son retrait) ; (2) `activation_request_id` sans FK (cycle de création des tables) ; (3) `AUDIT_AND_COMMITTEE` : chaque groupe éligible (>=2) vote, aucun éligible -> repli RM ; (4) auteurs exclus = `created_by` + `last_edited_by` + users des audits CREATE/UPDATE de la version ; (5) `reject` suit le même circuit que `approve` (409 si un vote est requis) ; (6) liste blanche `PARAM_KEYS` dans le service : une clé inconnue (ex. `status`) est ignorée même sans zod ; (7) unicité d'appétence = (subCategory, entity) exacte après trim, sensible à la casse comme l'index de `risk_appetites`.
+- Test existant adapté (source de vérité changée, à signaler à A08) : `B8ter` compare la constante des groupes à 051 + ajouts de 055 ; `QA-B8quater` n'exige plus que 054 soit le dernier numéro mais garde « sans trou depuis 53 ».
+- Non fait (B-6b/c/d) : résolution du Dispositif applicable, instantané F-8, Cartographie, fermeture des écritures `configs`/`risk_appetites`/`activateVersion`, `GET /applicable`, rattachement Processus, défaut, archivage d'un Dispositif, amorçage.
+- Leçon : dans ce worktree, `cat <<EOF > fichier` composé est refusé ; Write/Edit, ou `python3 - <<'EOF'` seul fonctionne.
+
+## 2026-10-12 NOTIFRACE : F-NOTIF-01 en concurrence (branche wt/notifrace, base 0c253b6, aucune migration)
+
+- `NotificationRepository.insertIfNoUnread?` (optionnel) : `PostgresNotificationRepository` ouvre une transaction (`pool.connect`), `pg_advisory_xact_lock(hashtextextended(clé, 0))` sur `tenant|destinataire|resourceType|resourceId|eventType`, SELECT non-lu, INSERT si absent, COMMIT ; ROLLBACK (avalé) + `release` en `finally` sur erreur.
+- `NotificationService.emit` : si le repo expose `insertIfNoUnread`, `write(input, dedupe)` l'utilise (null = déjà une non-lue, audit non écrit) et le pré-check `existsUnread` est sauté ; sinon repli sur l'ancien comportement (fakes inchangés). `record` délègue à `write(input, false)`.
+- `perUserRateLimiter()` sur `POST /kri-measures`.
+- Non testé sur vrai Postgres (fake pool) : le test de régression « 20 emit parallèles = 1 ligne » reste à rejouer par A10/A08. Verrou advisory = par transaction, donc libéré au COMMIT/ROLLBACK ; l'audit est écrit après, hors transaction (inchangé).
+
+## 2026-10-12 B-6a bis (branche wt/b6abis, base 16ff888, aucune migration)
+
+- F-B6a-01 : `PostgresRiskFrameworkRepository.mirrorScale` (dans la transaction de `recordDecision`) verrouille l'échelle, refuse ARCHIVED, rejoue le plafond n² (version, `configs`, `risk_appetites` actives) et archive toute autre échelle ACTIVE **qu'aucune version ACTIVE ne référence** (pas « toute autre » : un second Dispositif actif garde la sienne). Un throw = ROLLBACK de toute la décision.
+- F-B6a-02 : `createActivationRequest` prend `validateLocked` (optionnel, fakes inchangés) : SELECT ... FOR UPDATE de la version puis rejeu de `validateRequestable` (assertActivatable + q65). `decide` rejoue la même méthode à l'approbation seulement (un refus d'une version devenue invalide reste possible).
+- B6a-QA-01 sans migration : l'audit UPDATE est écrit AVANT le stockage de la modification. Effet de bord assumé : une entrée UPDATE peut exister pour une modification qui n'a pas pu être stockée (sur-exclusion, jamais sous-exclusion). Le `it.fails` converti en `it` : l'étape « l'édition a été stockée » est devenue « n'a PAS été stockée », et u3 refait une édition réussie avant le test final Forbidden (assertion finale inchangée).
+- C-B6a-01 (partiel) : notifications envoyées puis erreur d'audit relancée (SUBMIT et APPROVE/REJECT). L'audit reste hors transaction (q90 ouverte).
+- C-B6a-02 : `checkParams` refuse tout `changeApprover` != RISK_MANAGER (create + updateDraft). Les tests q87 posent désormais l'approbateur en donnée stockée (helpers `draft`/`created`).
+- C-B6a-04 : motif de retrait obligatoire dans le service ; le zod de la route reste `optional()` volontairement (sinon 400 avant 403/404 dans les tests QA de surface HTTP).
+- F-B6a-07 : `notify(..., dedupe)` utilise `emit({skipIfUnread:true})` si `emit` existe, sur `resourceId` = id du Dispositif.
+- F-B6a-04 : `authorsOf` ajoute les auteurs (audit CREATE/UPDATE `RatingScale`) quand l'échelle référencée est DRAFT. Le document d'arbitrage A13 n'était pas dans ma base : implémenté d'après le message du coordinateur.
+- Leçon : un `validateLocked`-style callback optionnel évite de modifier les fakes de repository des tests existants.

@@ -162,6 +162,17 @@ Détail : `docs/security/compliance-DECISION-040.md`. Verdict : conforme avec r�
 14. La souplesse voulue par le PO se garde par des paramètres à défaut sûr, des alertes et des indicateurs, pas par des interdictions ; ce qu'on ne règle pas : auto-validation, silence valant accord.
 15. La 3e ligne ne décide pas en gestion du risque sans marquage et ratification ; un groupe « vide » se compte en membres actifs.
 
+## Passage Compliance B-6a Dispositif versionné (2026-10-12, commit 0a465fa)
+
+Détail : `docs/compliance/B6a-compliance-review.md`. Verdict : conforme avec réserves, aucun bloquant. Statut : recommandation, en attente du PO (q81-q83, q86-q92). Pas de texte BCEAO consulté.
+- Conforme : maker-checker à 3 niveaux, immuabilité (trigger + REVOKE), aucune suppression, repli marqué, fail-closed.
+- Audit hors transaction (q90) : accepter pour staging seulement ; l'exception lève avant les notifications (Audit non prévenu) et le contrôle « auteur » dépend du journal. Condition de production : audit de l'activation dans la transaction.
+- Verrouillage : un approbateur de type vote activé avant B-12 gèle la méthodologie ; recommandé de n'accepter que `RISK_MANAGER` jusqu'à B-12.
+- « Audit et Comité » avec un seul groupe : acceptable comme repli seulement si marqué dégradé ; la ratification ne peut pas s'écrire sur la ligne de demande (CHECK + trigger append-only) : prévoir une table dédiée en B-12.
+- q89 : recommander la règle la plus exigeante des deux Dispositifs ; q81-83 : amorçage inutile si 2 RM, sinon valeurs par défaut du contrat, extinction automatique, ratification avec délai.
+16. Un contrôle fail-closed ne doit pas pouvoir être configuré de manière à se verrouiller lui-même (approbateur indisponible) ; refuser l'option tant que le mécanisme n'existe pas.
+17. Une dégradation d'un double contrôle (un seul groupe sur deux) est un repli : marquée, notifiée, ratifiée, jamais écrite comme régime normal.
+
 12. Un hash calculé à l'upload prouve l'identité du contenu depuis ce
     moment, pas son authenticité d'origine ni sa non-altération sur Drive
     tant qu'il n'est pas recontrôlé.

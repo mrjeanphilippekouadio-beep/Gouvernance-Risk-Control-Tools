@@ -42,3 +42,14 @@ SELECT c.tenant_id, c.id AS change_id, c.role_id, p AS permission
 FROM role_permission_changes c, unnest(c.permissions) AS p
 WHERE c.status = 'PENDING'
   AND NOT (p LIKE '%.read' OR p LIKE '%.download' OR p IN ('dashboard.executive', 'rolegroup.audit.validate'));
+
+-- 7. F-B8q-03 : changements de droits Audit APPROVED sans ligne audit_logs (droits appliques ou non, trace manquante).
+-- Reconciliation a lancer apres tout incident d'ecriture d'audit. Attendu : 0 ligne ; sinon rejouer l'evenement a la main.
+SELECT c.tenant_id, c.id AS change_id, c.role_id, c.decided_by, c.decided_at
+FROM role_permission_changes c
+WHERE c.status = 'APPROVED'
+  AND NOT EXISTS (
+    SELECT 1 FROM audit_logs a
+    WHERE a.tenant_id = c.tenant_id AND a.entity_type = 'RolePermissionChange'
+      AND a.entity_id = c.id AND a.action = 'APPROVE'
+  );

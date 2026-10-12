@@ -62,12 +62,16 @@ export class PostgresRolePermissionChangeRepository implements RolePermissionCha
     return (rowCount ?? 0) > 0;
   }
 
-  async reopen(tenantId: string, id: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE role_permission_changes SET status = 'PENDING', decided_by = NULL, decided_at = NULL
-       WHERE tenant_id = $1 AND id = $2 AND status IN ('APPROVED', 'REJECTED')`,
+  async reopen(tenantId: string, id: string): Promise<boolean> {
+    // F-B8q-03(b): never reopen onto an existing PENDING of the same role (unique index) -> no-op, returns false.
+    const { rowCount } = await this.pool.query(
+      `UPDATE role_permission_changes c SET status = 'PENDING', decided_by = NULL, decided_at = NULL
+       WHERE c.tenant_id = $1 AND c.id = $2 AND c.status IN ('APPROVED', 'REJECTED')
+         AND NOT EXISTS (SELECT 1 FROM role_permission_changes o
+                         WHERE o.tenant_id = c.tenant_id AND o.role_id = c.role_id AND o.status = 'PENDING' AND o.id <> c.id)`,
       [tenantId, id],
     );
+    return (rowCount ?? 0) > 0;
   }
 
   async list(tenantId: string, filter: { status?: RolePermissionChangeStatus; roleId?: string }): Promise<RolePermissionChange[]> {

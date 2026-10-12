@@ -7,6 +7,8 @@ import { ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
+import type { NotificationService } from "./NotificationService.js";
+import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 
 /**
  * ACT-133: append-only, like KpiMeasureService/ControlExecutionService —
@@ -33,6 +35,9 @@ export class KriMeasureService {
     private readonly audit: AuditRepository,
     /** Optional so existing callers/tests built before this existed don't need to change. */
     private readonly notifier?: Notifier,
+    /** Persisted in-app notification for the risk's owner and superior owner (ACT-135); both optional. */
+    private readonly notifications?: NotificationService,
+    private readonly risks?: RiskRepository,
   ) {}
 
   async record(
@@ -82,9 +87,39 @@ export class KriMeasureService {
         .catch(() => {
           // Best-effort — a broken notification channel must never fail the actual measure recording.
         });
+      await this.persistBreach(actor, kri.id, kri.riskId, `Seuil KRI dépassé (KRI ${kri.id})`, requestId);
     }
 
     return measure;
+  }
+
+  /** Recipients: owner and superior owner of the KRI's primary risk (backlog ACT-135). Best effort, never fatal. */
+  private async persistBreach(actor: AuthenticatedUser, kriId: string, riskId: string, message: string, requestId: string): Promise<void> {
+    if (!this.notifications || !this.risks) return;
+    try {
+      const risk = await this.risks.getById(actor.tenantId, riskId);
+      if (risk?.status === "ARCHIVED" || risk?.deletedAt) return; // F-NOTIF-06
+      const recipients = new Set([risk?.ownerId, risk?.superiorOwnerId].filter((id): id is string => !!id));
+      for (const recipientUserId of recipients) {
+        try {
+          await this.notifications.emit({
+            skipIfUnread: true,
+          tenantId: actor.tenantId,
+          recipientUserId,
+          resourceType: "KRI",
+          resourceId: kriId,
+          eventType: "KRI_THRESHOLD_BREACH",
+          message,
+          triggeredBy: actor.userId,
+          requestId,
+          });
+        } catch (err) { // NOTIF-QA-01: one failing recipient must not block the next
+          console.error(`KRI ${kriId}: breach notification not persisted for a recipient (requestId ${requestId})`, err instanceof Error ? err.message : err);
+        }
+      }
+    } catch (err) {
+      console.error(`KRI ${kriId}: breach notification not persisted (requestId ${requestId})`, err instanceof Error ? err.message : err);
+    }
   }
 
   async listForKri(actor: AuthenticatedUser, kriId: string, filters?: KriMeasureListFilters): Promise<KriMeasureListResult> {

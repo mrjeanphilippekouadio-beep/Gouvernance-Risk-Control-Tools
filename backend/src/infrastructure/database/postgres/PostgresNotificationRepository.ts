@@ -50,6 +50,39 @@ export class PostgresNotificationRepository implements NotificationRepository {
     return toDomain(row);
   }
 
+  /** F-NOTIF-01: one transaction, serialised per (tenant, recipient, resource, event) by an advisory lock — no migration. */
+  async insertIfNoUnread(input: CreateNotificationInput): Promise<Notification | null> {
+    const key = [input.tenantId, input.recipientUserId, input.resourceType, input.resourceId, input.eventType].join("|");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [key]);
+      const existing = await client.query(
+        `SELECT 1 FROM notifications WHERE tenant_id = $1 AND recipient_user_id = $2 AND resource_type = $3 AND resource_id = $4 AND event_type = $5 AND read_at IS NULL LIMIT 1`,
+        [input.tenantId, input.recipientUserId, input.resourceType, input.resourceId, input.eventType],
+      );
+      if (existing.rows.length > 0) {
+        await client.query("COMMIT");
+        return null;
+      }
+      const { rows } = await client.query<NotificationRow>(
+        `INSERT INTO notifications (tenant_id, recipient_user_id, resource_type, resource_id, event_type, message)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [input.tenantId, input.recipientUserId, input.resourceType, input.resourceId, input.eventType, input.message],
+      );
+      await client.query("COMMIT");
+      const row = rows[0];
+      if (!row) throw new Error("Insert into notifications returned no row");
+      return toDomain(row);
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   async getById(tenantId: string, id: string): Promise<Notification | null> {
     const { rows } = await this.pool.query<NotificationRow>(
       `SELECT * FROM notifications WHERE tenant_id = $1 AND id = $2`,
@@ -116,5 +149,29 @@ export class PostgresNotificationRepository implements NotificationRepository {
     const row = rows[0];
     if (!row) throw new NotFoundError("Notification", id);
     return toDomain(row);
+  }
+
+  async existsUnread(tenantId: string, recipientUserId: string, resourceType: string, resourceId: string, eventType: string): Promise<boolean> {
+    const { rows } = await this.pool.query(
+      `SELECT 1 FROM notifications WHERE tenant_id = $1 AND recipient_user_id = $2 AND resource_type = $3 AND resource_id = $4 AND event_type = $5 AND read_at IS NULL LIMIT 1`,
+      [tenantId, recipientUserId, resourceType, resourceId, eventType],
+    );
+    return rows.length > 0;
+  }
+
+  async countUnread(tenantId: string, recipientUserId: string): Promise<number> {
+    const { rows } = await this.pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM notifications WHERE tenant_id = $1 AND recipient_user_id = $2 AND read_at IS NULL`,
+      [tenantId, recipientUserId],
+    );
+    return Number(rows[0]?.count ?? "0");
+  }
+
+  async markAllAsRead(tenantId: string, recipientUserId: string): Promise<number> {
+    const result = await this.pool.query(
+      `UPDATE notifications SET read_at = now() WHERE tenant_id = $1 AND recipient_user_id = $2 AND read_at IS NULL`,
+      [tenantId, recipientUserId],
+    );
+    return result.rowCount ?? 0;
   }
 }

@@ -10,6 +10,7 @@ import type {
 import type { NotificationSubscription } from "../domain/entities/NotificationSubscription.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
+import { isMandatoryNotification, NOTIFICATION_CATALOG, type NotificationTypeInfo } from "../domain/notificationCatalog.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 const RESOURCE_TYPES: NotificationResourceType[] = [
@@ -60,6 +61,8 @@ export interface RecordNotificationInput {
   message: string;
   triggeredBy: string;
   requestId: string;
+  /** F-NOTIF-01: `emit` only — skip when an identical unread notification already exists. */
+  skipIfUnread?: boolean;
 }
 
 /**
@@ -90,6 +93,13 @@ export class NotificationService {
       throw new ValidationError(`eventType must be at most ${MAX_EVENT_TYPE_LENGTH} characters`);
     }
     if (typeof input.enabled !== "boolean") throw new ValidationError("enabled must be a boolean");
+    // F-NOTIF-04: exact (resourceType, eventType) pair from the catalog only.
+    if (!NOTIFICATION_CATALOG.some((t) => t.resourceType === input.resourceType && t.eventType === input.eventType.trim())) {
+      throw new ValidationError("Unknown notification type for this resourceType");
+    }
+    if (!input.enabled && isMandatoryNotification(input.resourceType, input.eventType.trim())) {
+      throw new ValidationError("This notification type is a security/governance safeguard and cannot be disabled");
+    }
 
     const before = await this.subscriptions.getByKey(actor.tenantId, actor.userId, input.resourceType, input.eventType.trim());
 
@@ -114,6 +124,12 @@ export class NotificationService {
     return after;
   }
 
+  /** Types the backend can emit, with `mandatory` (cannot be unsubscribed). */
+  getCatalog(actor: AuthenticatedUser): readonly NotificationTypeInfo[] {
+    requirePermission(actor, "notification.read");
+    return NOTIFICATION_CATALOG;
+  }
+
   async listSubscriptions(actor: AuthenticatedUser): Promise<NotificationSubscription[]> {
     requirePermission(actor, "notification.read");
     return this.subscriptions.listForUser(actor.tenantId, actor.userId);
@@ -122,6 +138,13 @@ export class NotificationService {
   // -- ACT-201: system-facing notification log -------------------------
 
   async record(input: RecordNotificationInput): Promise<Notification> {
+    const n = await this.write(input, false);
+    if (!n) throw new Error("record: unexpected null notification");
+    return n;
+  }
+
+  /** `dedupe` = atomic insert-unless-unread (repo.insertIfNoUnread); null when an identical unread one exists. */
+  private async write(input: RecordNotificationInput, dedupe: boolean): Promise<Notification | null> {
     if (!RESOURCE_TYPES.includes(input.resourceType)) {
       throw new ValidationError(`resourceType must be one of: ${RESOURCE_TYPES.join(", ")}`);
     }
@@ -136,14 +159,18 @@ export class NotificationService {
     }
     if (!input.triggeredBy?.trim()) throw new ValidationError("triggeredBy is required for the audit trail");
 
-    const notification = await this.notifications.create({
+    const data = {
       tenantId: input.tenantId,
       recipientUserId: input.recipientUserId,
       resourceType: input.resourceType,
       resourceId: input.resourceId ?? null,
       eventType: input.eventType.trim(),
       message: input.message.trim(),
-    });
+    };
+    const notification = dedupe && data.resourceId && this.notifications.insertIfNoUnread
+      ? await this.notifications.insertIfNoUnread(data)
+      : await this.notifications.create(data);
+    if (!notification) return null;
 
     await this.audit.record({
       tenantId: input.tenantId,
@@ -158,6 +185,26 @@ export class NotificationService {
     });
 
     return notification;
+  }
+
+  /**
+   * Emission entry point for optional types: an explicit opt-out by the recipient
+   * (enabled=false) skips persistence; mandatory types ignore any stored opt-out.
+   * Returns null when skipped. Mandatory callers may keep using `record` directly.
+   */
+  async emit(input: RecordNotificationInput): Promise<Notification | null> {
+    // F-NOTIF-01: opt-in dedup — skipped while an identical UNREAD notification exists. When the repository
+    // offers insertIfNoUnread (advisory-locked check + insert) it is atomic; otherwise the plain pre-check is
+    // best effort (concurrent calls may both insert).
+    if (input.skipIfUnread && input.resourceId && !this.notifications.insertIfNoUnread &&
+        (await this.notifications.existsUnread?.(input.tenantId, input.recipientUserId, input.resourceType, input.resourceId, input.eventType.trim()))) {
+      return null;
+    }
+    if (!isMandatoryNotification(input.resourceType, input.eventType.trim())) {
+      const sub = await this.subscriptions.getByKey(input.tenantId, input.recipientUserId, input.resourceType, input.eventType.trim());
+      if (sub && !sub.enabled) return null;
+    }
+    return this.write(input, !!input.skipIfUnread);
   }
 
   // -- ACT-202: notification center -------------------------------------
@@ -175,6 +222,32 @@ export class NotificationService {
       throw new ValidationError("user_id must be 'me' — reading another user's notification center is not supported");
     }
     return this.notifications.listForRecipient(actor.tenantId, actor.userId, options);
+  }
+
+  async countUnread(actor: AuthenticatedUser): Promise<number> {
+    requirePermission(actor, "notification.read");
+    return this.notifications.countUnread(actor.tenantId, actor.userId);
+  }
+
+  /** Only the caller's own unread notifications, in the caller's tenant. */
+  async markAllAsRead(actor: AuthenticatedUser, requestId: string): Promise<number> {
+    requirePermission(actor, "notification.read");
+    const count = await this.notifications.markAllAsRead(actor.tenantId, actor.userId);
+    if (count > 0) {
+      // audit_log.entity_id is NOT NULL: a bulk operation is attributed to the recipient's own id.
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Notification",
+        entityId: actor.userId,
+        action: "UPDATE",
+        oldValue: null,
+        newValue: { markedRead: count },
+        reason: "MARK_ALL_READ",
+        requestId,
+      });
+    }
+    return count;
   }
 
   async markAsRead(actor: AuthenticatedUser, id: string, requestId: string): Promise<Notification> {

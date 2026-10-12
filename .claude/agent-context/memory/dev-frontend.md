@@ -41,3 +41,11 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - Précision de la règle « ne jamais toucher la Cartographie » : elle vise le VISUEL (couleurs, typo, disposition, légende), pas la logique de grille. La taille suit `GET /api/v1/cartography/scale` (`api/cartography.ts`) ; `data: null` => aucune grille + MessageBanner info (le DS n'a pas de composant EmptyState).
 - Couleur d'une case = bande backend contenant `p*i` (plus de `ceil(x*y/5)`), bandes mappées par position sur la palette z1..z5 répartie linéairement (`round(1 + idx*4/(n-1))`) ; n≠4 accepté sans cas particulier.
 - Plus aucun recadrage `Math.min(5,…)` des valeurs d'évaluation : un risque hors échelle est listé sous la grille (`cart-note`), jamais placé en silence sur la bordure.
+
+## 2026-10-11 — Centre de notifications (`wt/notif`, DECISION-043 §1 / q70)
+
+- `features/notifications/NotificationCenter.tsx` (cloche + compteur dans la topbar, Modal DS `md` avec Tabs Notifications / Abonnements) ; `api/notifications.ts`. Aucun nouveau composant ni jeton ; `.notif-*` n'utilise que des `--gs-*`.
+- `apiRequest` déballe `{data}` : le `total` du backend est inaccessible. Compteur de non-lus = `GET ?read=false&limit=100` puis `length` (plafonné « 99+ »). Un échec affiche « inconnu », jamais 0.
+- Gaps backend : pas de « tout marquer comme lu », pas de compteur de non-lus dédié, pas de catalogue des types d'événements (liste en dur des 4 types réellement persistés), abonnements non consultés à l'émission, notifications plans d'action/KRI non persistées (Telegram seulement), pas de deep-link par id (les écrans n'ouvrent pas un objet précis).
+- Types réellement émis vers `notifications` : RIGHTS_LOST_ON_REACTIVATION, ADMIN_RISK_MANAGER_CUMUL, COMMITTEE_MEMBER_ADDED, AUDIT_RIGHTS_CHANGE_PENDING (tous MANAGEMENT). Type inconnu -> libellé « Notification ».
+- Harnais : refuse les commandes Bash composées (heredoc + `&&`), utiliser Write.

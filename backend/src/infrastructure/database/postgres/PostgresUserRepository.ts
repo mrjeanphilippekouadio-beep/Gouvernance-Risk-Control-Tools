@@ -121,11 +121,14 @@ export class PostgresUserRepository implements UserRepository {
    * Risk Manager group. Same lock as PostgresRoleRepository.revokeFromUser
    * (FOR UPDATE on the group's roles row) so a concurrent revoke/suspend
    * cannot both pass the count. Always on: no service dependency needed.
+   * Locks users before roles, the same order as RoleRepository.assignToUser /
+   * update (F-EVD2b-01: the reverse order deadlocked against a group widening).
    */
   async suspend(tenantId: string, id: string): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await client.query(`SELECT id FROM users WHERE tenant_id = $1 AND id = $2 FOR UPDATE`, [tenantId, id]);
       const { rows: groups } = await client.query<{ id: string }>(
         `SELECT r.id FROM roles r
          JOIN user_roles ur ON ur.role_id = r.id AND ur.tenant_id = r.tenant_id

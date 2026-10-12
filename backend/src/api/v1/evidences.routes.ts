@@ -3,7 +3,7 @@ import multer from "multer";
 import { z } from "zod";
 import type { EvidenceService } from "../../services/EvidenceService.js";
 import { ValidationError } from "../../domain/errors/DomainErrors.js";
-import { costlyOperationRateLimiter } from "../middleware/rateLimit.js";
+import { costlyOperationRateLimiter, perUserRateLimiter } from "../middleware/rateLimit.js";
 import { MAX_DOCUMENT_BYTES } from "../../infrastructure/storage/DocumentStorage.js";
 
 // 1 file + 3 real text fields (documentType, controlExecutionId, allowDuplicate); headroom of 10 fields because
@@ -63,6 +63,14 @@ export function evidencesRouter(evidenceService: EvidenceService): Router {
     try {
       const url = await evidenceService.getUrl(req.user, req.params["id"] as string, req.requestId);
       res.json({ data: { url } });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/:id/analysis", costlyOperationRateLimiter(), perUserRateLimiter(), async (req, res, next) => {
+    try {
+      res.json({ data: await evidenceService.analyze(req.user, req.params["id"] as string, req.requestId) });
     } catch (err) {
       next(err);
     }

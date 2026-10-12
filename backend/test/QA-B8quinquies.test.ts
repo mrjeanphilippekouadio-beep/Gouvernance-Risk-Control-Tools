@@ -60,7 +60,7 @@ function world(opts: Opts = {}) {
     async assignToUser(_t: string, roleId: string, userId: string) {
       if (opts.yieldOnInsert) await new Promise((r) => setTimeout(r, 1));
       // faithful to user_roles_active_idx (013): one active (user, role) pair
-      if ((held.get(userId) ?? []).includes(roleId)) throw Object.assign(new Error("duplicate key"), { code: "23505" });
+      if ((held.get(userId) ?? []).includes(roleId)) throw new ConflictError("already held", roleId); // PostgresRoleRepository translates 23505 (q65-02)
       held.set(userId, [...(held.get(userId) ?? []), roleId]);
       return { id: "a", tenantId: T1, roleId, userId, grantedBy: "x", grantedAt: new Date(), revokedAt: null };
     },
@@ -372,7 +372,7 @@ describe("409 on double assignment", () => {
     const w = world();
     await expect(w.service.assignToUser(admin, "plain", "admin", "r")).rejects.toThrow(ForbiddenError);
   });
-  it.fails("KNOWN GAP q65-02 (MINOR): two simultaneous assignments of the same role race past the pre-check; the loser gets the raw 23505 (HTTP 500) instead of a ConflictError", async () => {
+  it("q65-02: two simultaneous assignments of the same role race past the pre-check; the loser gets a ConflictError (repository translates 23505)", async () => {
     const w = world({ yieldOnInsert: true });
     const results = await Promise.allSettled([
       w.service.assignToUser(admin, "plain", "u1", "r"),

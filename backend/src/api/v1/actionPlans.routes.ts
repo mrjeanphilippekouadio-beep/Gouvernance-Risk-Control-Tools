@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { boundedArray } from "../validation.js";
+import { perUserRateLimiter } from "../middleware/rateLimit.js";
 import type { ActionPlanService } from "../../services/ActionPlanService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
 import {
@@ -146,7 +147,7 @@ export function actionPlansRouter(
 
   // ACT-193: manually-triggered escalation check — see ActionPlanService.escalateIfOverdue
   // for why this can't be a background job in this codebase (no scheduler).
-  router.post("/:id/escalate", async (req, res, next) => {
+  router.post("/:id/escalate", perUserRateLimiter(), async (req, res, next) => {
     try {
       const result = await actionPlanService.escalateIfOverdue(req.user, req.params["id"] as string, req.requestId);
       res.json({ data: result });
