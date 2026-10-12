@@ -220,13 +220,23 @@ pour l'usage.
 | @risk-manager | **Non bloquant B-6b/B-6c (spec §14.2)** — R1 statuts de contribution / mode d'appétence dans « tous les paramètres » ? R2 seuil « faible » sans défaut contractuel ; R3 options de cumul booléennes ; R4 `FIRST_LINE` ; R5 délégation sans durée max → date de fin obligatoire ? I-C1 réserve QA échelles inter-Dispositifs ; I-C2 un `ReviewCycle` ouvert verrouille-t-il le Dispositif ? | 2026-10-12 | **Ouvert — A13 (dispatché)** |
 | @product-manager | **Questions PO (q98, q99)** — q98 (I-D5) : un Dispositif activé par bootstrap doit-il utiliser les valeurs par défaut du contrat ? q99 (I-D6) : la notification de bootstrap est-elle obligatoire au catalogue ? | 2026-10-12 | **Décidé (DECISION-045)** |
 | @risk-manager @dev-backend @security | **Revue A13 DECISION-044** (`docs/risk/A13-review-DECISION-044.md`) : **G1** (MEDIUM, séparation des tâches) — `changeAuditGroupPermissions` ne met en attente que si l'auteur est RM ; un admin + Comité (légal depuis q80) applique seul des droits d'Audit → correctif A06 dispatché. Autres demandes A13 pour B-6d : fin d'amorçage mémorisée, motif structuré, notification lue/non lue tracée, KRI « âge de l'amorçage ». | 2026-10-12 | **G1 en cours (A06)** |
-| @product-manager | **Questions PO q100–q105** (issues de la revue A13) : q100 version héritée COMMITTEE/AUDIT (Q-A13-1) ; q101 sens de « fin » du démarrage (I-D1) ; q102 fin définitive (I-D3) ; q103 tiers prévenu si groupes vides (Q-A13-4) ; q104 admin + Audit (Q-A13-5) ; q105 `config.manage` et import (Q-A13-6). q101–q103 bloquent B-6d. | 2026-10-12 | **Ouvert — owner HUMAN** |
+| @product-manager | **Questions PO q100–q105** (issues de la revue A13) : q100 version héritée COMMITTEE/AUDIT (Q-A13-1) ; q101 sens de « fin » du démarrage (I-D1) ; q102 fin définitive (I-D3) ; q103 tiers prévenu si groupes vides (Q-A13-4) ; q104 admin + Audit (Q-A13-5) ; q105 `config.manage` et import (Q-A13-6). q101–q103 bloquent B-6d. | 2026-10-12 | **q100–q105 répondues** (q105 précisée par q106 : laisser en l'état, DECISION-046 point 6) |
 | @dev-backend @dev-frontend | Mise en œuvre DECISION-045 : q96 (risque du KRI source = risque couvert, A06) et q97 (écran abonnements en lecture seule, Dev Frontend). | 2026-10-12 | **Fait** (q96 `5ce5d39`, q97 `dc06a38`) |
 | @qa-engineer @security @audit @dev-backend | **Revues du lot DECISION-044 + G1 + DECISION-045** : QA A08 `3de31bf` **PASS** (40 tests, dont 15 sur Postgres 16 jetable : ROLLBACK réel des 8 mutations du Dispositif si l'audit échoue) ; Security A10 `5a6e117` **feu vert staging** (CVSS max 3,1) ; Audit A23 `a3b5e40` 14 constats sans bloquant ; G1 corrigé `180c015`. Intégration : 1783 tests + 15 Postgres, build frontend OK. | 2026-10-12 | **Fait** |
 | @dev-backend @risk-manager | **F-D044-01** LOW 2,7 CONFIRMÉ (PoC) — q94 contourné par les permissions effectives : un admin peut donner à un RM les permissions de validation du Comité via un rôle ordinaire ou le groupe RM, sans motif ni notification. **À corriger avant production** (dispatché A06) + requête de repérage 8 à étendre. | 2026-10-12 | **Corrigé `ea4ef9f` (A06) + `6aebb98` (q80). Retest A10 : RETEST_PASS, CLOSED (`70e2d74`).** |
 | @dev-backend @security | **F-D044-07** LOW 2,7 (retest A10) : G1 (`changeAuditGroupPermissions`) ne mettait en attente que pour les groupes RM/Comité ; un admin avec `governance.validate` par un rôle ordinaire appliquait seul. | 2026-10-12 | **Corrigé (orchestrateur) : `isCommitteeRole`, test F-D044-07 dans `B8bis.test.ts`** |
-| @risk-manager @dev-backend | **F-D044-08** LOW 2,2 (retest A10) : q58 (paramètre tenant interdisant Comité + Audit, `RoleService` l. 378) et q65 (notification `COMMITTEE_MEMBER_ADDED`, l. 455) ne reconnaissent le Comité que par le groupe. Faut-il étendre la définition q94 (groupe ou pouvoirs de validation) à ces deux règles ? | 2026-10-12 | Ouvert : arbitrage A13, puis A06 |
-| @dev-backend @security | **F-D044-03** LOW 3,1 — audit écrit hors transaction dans ~33 services ; chaîne concrète : `RatingScaleService` (audit après l'écriture → `authorsOf` peut ignorer un auteur d'échelle). Priorité : RatingScale, puis Role, User, Config. **F-D044-02** LOW (effets de bord de l'approbation sans audit propre, = AUD-D044-01). **F-D044-06** INFO (libellé de notification admin + Comité ; tenant dans `audited()`). | 2026-10-12 | **Ouvert — A06** |
+| @orchestrator @dev-frontend @ux-designer HUMAN | **Retard du frontend constaté par le PO (2026-10-12)** : 43 modules d'API, 13 écrans ; 18 modules sans aucun écran (KRI, KPI et mesures, anomalies, processus, journal d'audit, cycles de revue, référentiels, catégories de risque, Dispositif, propriétaires de risque, rapports, réglages client…). **Cause racine : l'orchestrateur.** Chaque décision PO a été dispatchée côté backend ; les specs renvoient l'écran à un « lot F » qui n'a jamais été planifié ni tracé. Rien de technique ne bloque la plupart de ces écrans. Correctif : lots frontend dispatchés en parallèle des lots backend ; toute spec qui renvoie un écran à « un lot F » crée une ligne ici. | 2026-10-12 | **En cours** : lots F-KRI/KPI et F-Audit/Anomalies dispatchés |
+| @dev-backend @dev-frontend | **Gaps de contrat relevés par le lot frontend KRI/KPI (2026-10-12)** : (1) = gap « mes permissions » ci-dessous ; (2) `apiRequest` ne garde que `data` → la pagination de `GET /kri-measures` (`total`, `page`) est perdue (côté frontend) ; (3) `GET /kpi-measures` sans pagination ni filtre de dates ; (4) `GET /kris` sans tendance ni valeur précédente ; (5) KRI/KPI ne renvoient que des identifiants (risque, département, processus) — libellé côté serveur souhaitable ; (6) pas de client `processes` avant ce lot (client minimal ajouté, suppose `id`/`name`). Non livré (le backend le permet) : désactivation KRI, archivage KPI, risques couverts d'un KRI, rattachement KPI. | 2026-10-12 | Ouvert — A06 (1, 3–5), Dev Frontend (2, 6) |
+| @dev-backend @dev-frontend | **Gaps de contrat backend relevés par le lot frontend Journal d'audit + Anomalies (2026-10-12)** : (1) aucun endpoint « mes permissions » → le frontend ne peut pas masquer les actions, il s'appuie sur le 403 ; (2) l'API anomalies n'expose pas les transitions possibles (l'UI propose tout, le backend refuse) ; (3) `GET /audit-log` sans offset ni total (500 max) ; (4) `entityId` seul ignoré par la route audit-log ; (5) pas de libellés lisibles (utilisateurs, contrôles, risques) dans ces réponses. | 2026-10-12 | Ouvert — A06 |
+| @dev-backend @security | **F-D046-01** LOW 2,7 (A10, revue DECISION-046) : un administrateur qui reçoit un rôle ordinaire portant `audit.read` n'est pas signalé administrateur + Audit (ni motif, ni notification). Même famille que F-D044-08 : à coder avec lui (appartenance Audit et Comité par les pouvoirs). | 2026-10-12 | Ouvert — A06, avec F-D044-08 |
+| @dev-backend @qa-engineer | **F-D046-02** INFO (A10) : si un repository Postgres oublie `auditsInTransaction`, le service repasse sans bruit en audit hors transaction → test garde sur cet indicateur pour chaque repository migré (F-D044-03). | 2026-10-12 | Ouvert — A06/A08 |
+| @dev-frontend | **F-D046-03** INFO (A10) : `READ` et `DOWNLOAD` absents de l'union `AuditAction` du frontend (filtre du journal d'audit). | 2026-10-12 | **Corrigé (orchestrateur)** |
+| @dev-frontend @qa-engineer | **QA DECISION-046 : PASS avec réserves (A08, 2026-10-12)** — backend sans défaut (q104 et RatingScale rejoués sur Postgres 16 jetable). Réserves frontend : QA-D046-01 règle « commentaire obligatoire pour clôturer » recodée côté écran anomalies → **retirée** (le serveur décide) ; QA-D046-02 = F-D046-03 **corrigé** ; QA-D046-03 401/réseau mal libellés (audit, anomalies) → **corrigé** (`describeError` partagé) ; QA-D046-04 réponse périmée de l'historique KRI/KPI → **corrigé** ; QA-D046-05 libellé « Inactif » jamais affiché (`GET /kris` et `/kpis` excluent les inactifs) → ouvert, mineur. Observations : réactivation sans rejeu admin + Audit (comme q80) ; détail `oldValue`/`newValue` brut dans le journal d'audit → regard Privacy (A15) ; aucun test frontend automatisé. | 2026-10-12 | 01–04 corrigés ; 05 ouvert (Dev Frontend) ; Privacy à solliciter |
+| @risk-manager | **I-D8 (spec B-6 §14.2, A05)** : q98 ne contraint en amorçage que les paramètres qui ont une valeur par défaut au contrat. Restent libres : échelle, appétence, seuil « faible », durée de délégation, seuil Comité de traitement → un Risk Manager seul peut fixer une appétence ou un seuil « faible » élevés au démarrage. Acceptable, ou question PO ? | 2026-10-12 | Ouvert — A13 (PO si besoin) |
+| @risk-manager | **I-D9 (spec B-6 §14.2, A05)** : un Risk Manager qui est aussi administrateur peut se désigner lui-même comme « administrateur sollicité » dans le motif structuré d'amorçage (I-D2). Faut-il l'interdire ? | 2026-10-12 | Ouvert — A13 |
+| @risk-manager | **I-D7 (lecture de q103)** : q103 dit « journalisées pour consultation dès que l'un des groupes Audit et/ou Comité est supérieur à un membre », q101 dit « l'auditeur [unique] est informé ». Lecture orchestrateur retenue : la consultation et l'information sont ouvertes dès le premier membre (sinon q101 serait contredit) ; « > 1 membre » = condition de **fin** de l'amorçage. A13 confirme. | 2026-10-12 | **Confirmé par A13** (2026-10-12, `A13-review-DECISION-044.md` §6) : ouverture dès le 1er membre actif ; fin à 2 membres **éligibles actifs** (nuance à reporter dans la spec B-6d, A05) |
+| @risk-manager @dev-backend | **F-D044-08** LOW 2,2 (retest A10) : q58 (paramètre tenant interdisant Comité + Audit, `RoleService` l. 378) et q65 (notification `COMMITTEE_MEMBER_ADDED`, l. 455) ne reconnaissent le Comité que par le groupe. Faut-il étendre la définition q94 (groupe ou pouvoirs de validation) à ces deux règles ? | 2026-10-12 | **A13 : étendre les deux** (q58 dans les deux sens + `assertReactivable` ; q65 aussi à l'élargissement, à la transition non-membre → membre). Ne relève pas du PO. À dispatcher A06 |
+| @dev-backend @security | **F-D044-03** (RatingScale : corrigé `0d68095`, RETEST_PASS A10 sur Postgres jetable ; reste ~32 services, Role/User/Config d'abord) LOW 3,1 — audit écrit hors transaction dans ~33 services ; chaîne concrète : `RatingScaleService` (audit après l'écriture → `authorsOf` peut ignorer un auteur d'échelle). Priorité : RatingScale, puis Role, User, Config. **F-D044-02** LOW (effets de bord de l'approbation sans audit propre, = AUD-D044-01). **F-D044-06** INFO (libellé de notification admin + Comité ; tenant dans `audited()`). | 2026-10-12 | **Ouvert — A06** |
 | @dev-db | **AUD-D044-14 / F-D044-04** INFO — garde 038 sans `SET search_path` (non exploitable, conformité à la convention) ; requêtes 8/9 ignorent `users.roles` hérité (F-B8t-02). À la prochaine migration. | 2026-10-12 | **Ouvert — A07** |
 | @audit @dev-backend @compliance | **Constats A23 AUD-D044-01..13** (`docs/audit/A23-review-DECISION-044.md`) : refus de cumul/réactivation et refus d'opt-out non tracés, marquage admin + Comité peu exploitable, audit RBAC hors transaction. **AUD-D044-12** (opt-outs historiques neutralisés sans trace) : décision de gouvernance A14/A15 avant correctif. QA-D044-04 (Privacy) : propriétaires/supérieurs reçoivent un id d'action sans `actionplan.read`. | 2026-10-12 | **Ouvert — A06/A14/A24** |
 | @devops @dev-db | **Incident migrate.yml staging (2026-10-11, PR #151)** : 049 appliquée, 050 en échec (`constraint risks_probability_check does not exist`) — les CHECK probability/impact sont sur `risk_assessments`, pas `risks` ; 050 annulée par sa transaction, rien d'enregistré. Corrigée par A07 (bloc `DO` sur `pg_constraint`, table corrigée, vérifiée sur Postgres 16 jetable). **Cause racine du non-détection** : la CI de PR crée une branche Neon mais n'y applique pas les migrations → proposer (A09) un job `npm run migrate` sur la branche Neon éphémère de PR. | 2026-10-11 | **050 appliquée sur staging (PR #152, migrate.yml run 5 vert, 2026-10-11). Ouvert — A09 (job migrations en CI de PR).** |
@@ -1400,4 +1410,50 @@ STATUS: DÉCIDÉ — q96 à dispatcher (A06), q97 à dispatcher (Dev
   retard de journalisation le même jour (~4 h 30) malgré la leçon de
   DECISION-044 — la relecture `status == "answered"` doit précéder
   chaque message au PO, pas seulement chaque transition de module.
+```
+
+```
+DECISION-046
+DATE: 2026-10-12 (réponses cockpit 13:08–13:11 UTC, journalisées 13:14 UTC)
+CONTEXT: questions q100–q104 issues de la revue A13 de DECISION-044
+  (docs/risk/A13-review-DECISION-044.md) et de la spec B-6 §14.2.
+DECISION (PO, cockpit) :
+  1. q100 (Q-A13-1) : repérage avant production ET garde-fou construit
+     tout de suite : une version active héritée dont l'approbateur est
+     COMMITTEE ou AUDIT ne gèle pas le Dispositif ; la demande se replie
+     vers le Risk Manager, commentaire obligatoire, ratification
+     ultérieure (régime de repli q62) → B-6d + requête de repérage
+     (B8-predeploy-checks.sql, lecture seule).
+  2. q101 (I-D1) : réponse libre « le risk manager continue de
+     s'auto-approuver et l'auditeur est informé » = option 2 : l'amorçage
+     ne se termine que lorsqu'un circuit fonctionne réellement (second RM
+     actif, ou ≥ 2 membres éligibles au Comité ou à l'Audit, q72) ;
+     jusque-là le RM s'auto-approuve et le ou les membres existants
+     d'Audit/Comité sont informés de chaque décision BOOTSTRAP.
+  3. q102 (I-D3) : fin définitive et mémorisée ; l'amorçage ne se
+     rouvre jamais pour ce tenant (recommandation acceptée).
+  4. q103 (Q-A13-4) : réponse libre « les actions sont journalisées pour
+     consultation dès que l'un des groupes Audit et/ou Comité est
+     supérieur à un membre » : quand les groupes sont vides, personne
+     d'autre n'est prévenu (ni administrateurs ni HUMAN) ; les décisions
+     sont journalisées et consultables. Lecture du seuil à confirmer par
+     A13 (item I-D7).
+  5. q104 (Q-A13-5) : cumul administrateur + Audit traité comme
+     administrateur + Comité (q80) : motif obligatoire, tiers prévenu,
+     cumul signalé (recommandation acceptée) → A06 RoleService.
+RELATED: DECISION-044, DECISION-045, spec B-6 §5.6 et §14.2.
+OWNER: HUMAN (Product Owner)
+STATUS: DÉCIDÉ — q104 dispatché (A06) ; q100–q103 intégrées à la spec
+  B-6d (A05). CORRECTIF ORCHESTRATEUR (13:30) : q105 avait été
+  répondue à 13:12:50, quelques secondes après la lecture du cockpit ;
+  annoncée à tort comme « encore ouverte » au PO, qui l'a signalé.
+  6. q105 (Q-A13-6) : réponse libre « conserver pour les deux rôles
+     admin et manager de risque ». Lecture probable : l'import de
+     risques et les catégories restent ouverts aux deux rôles, sans
+     que le Risk Manager devienne « administrateur + RM » signalé, ce
+     qui suppose des droits dédiés hors `config.manage` (option B).
+     Précision demandée au PO (q106). Réponse q106 (13:21) : « Non :
+     laisser en l'état ; un Risk Manager qui importe reçoit le droit de
+     gestion client et reste signalé administrateur + Risk Manager ».
+     → Aucun changement de code (option A de Q-A13-6). DÉCIDÉ.
 ```

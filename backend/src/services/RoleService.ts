@@ -50,6 +50,8 @@ const isRiskManagerMember = (roles: Role[]): boolean => roles.some((r) => r.syst
 /** Committee membership = the group or its validation powers (F-D044-01), for q94 as for q80/G1. */
 const isCommitteeRole = (r: Role): boolean => r.systemGroup === "RISK_COMMITTEE" || r.permissions.some(isCommitteeValidationPermission);
 const isCommitteeMember = (roles: Role[]): boolean => roles.some(isCommitteeRole);
+/** q104 (DECISION-046): Audit membership = the system group only (extension to audit.* permissions is F-D044-08, with A13). */
+const isAuditGroupMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "AUDIT");
 
 /** F-B8b-03: permissions whose "who can give it back" answer is never served (administration / governance). */
 const NOT_REQUESTABLE = /^(role|rolegroup|user|audit)\./;
@@ -261,6 +263,7 @@ export class RoleService {
     // F-B8t-01: widening a role replays the cumul rules for each active holder with the resulting permissions.
     let cumulUsers: string[] = [];
     let committeeCumulUsers: string[] = [];
+    let auditCumulUsers: string[] = [];
     const cleanReason = reason?.trim() || null;
     let recheck: RoleUpdateRecheck | undefined;
     if (input.permissions !== undefined && input.permissions.some((p) => !before.permissions.includes(p))) {
@@ -270,11 +273,13 @@ export class RoleService {
         const resulting: Role = { ...lockedRole, permissions: newPermissions };
         cumulUsers = [];
         committeeCumulUsers = [];
+        auditCumulUsers = [];
         for (const h of holders) {
           const others = h.roles.filter((r) => r.id !== id);
           const res = await this.assertCumulRules(actor.tenantId, resulting, others, h.roles, reason);
           if (res.createsAdminRiskManagerCumul) cumulUsers.push(h.userId);
           if (res.createsAdminCommitteeCumul) committeeCumulUsers.push(h.userId);
+          if (res.createsAdminAuditCumul) auditCumulUsers.push(h.userId);
         }
       };
       const resulting: Role = { ...before, permissions: input.permissions };
@@ -285,6 +290,7 @@ export class RoleService {
         const res = await this.assertCumulRules(actor.tenantId, resulting, others, previous, reason);
         if (res.createsAdminRiskManagerCumul) cumulUsers.push(a.userId);
         if (res.createsAdminCommitteeCumul) committeeCumulUsers.push(a.userId);
+        if (res.createsAdminAuditCumul) auditCumulUsers.push(a.userId);
       }
     }
 
@@ -302,14 +308,9 @@ export class RoleService {
       requestId,
     });
 
-    for (const userId of cumulUsers) {
-      await this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
-        "Un utilisateur cumule désormais l'administration de l'application et le groupe Risk Manager.", requestId);
-    }
-    for (const userId of committeeCumulUsers) {
-      await this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
-        "Un utilisateur cumule désormais l'administration de l'application et le groupe Comité des risques.", requestId);
-    }
+    for (const userId of cumulUsers) await this.notifyAdminCumul(actor, userId, "Risk Manager", requestId);
+    for (const userId of committeeCumulUsers) await this.notifyAdminCumul(actor, userId, "Comité des risques", requestId);
+    for (const userId of auditCumulUsers) await this.notifyAdminCumul(actor, userId, "Audit", requestId);
     return after;
   }
 
@@ -352,13 +353,13 @@ export class RoleService {
     roleId: string,
     userId: string | null,
     reason: string | undefined,
-  ): Promise<{ role: Role; cleanReason: string | null; createsAdminRiskManagerCumul: boolean; createsAdminCommitteeCumul: boolean }> {
+  ): Promise<{ role: Role; cleanReason: string | null; createsAdminRiskManagerCumul: boolean; createsAdminCommitteeCumul: boolean; createsAdminAuditCumul: boolean }> {
     const role = await this.get(actor, roleId);
     const groupReason = this.groupReason(role, reason);
     const held = userId ? await this.roles.listForUser(actor.tenantId, userId) : [];
     if (held.some((r) => r.id === roleId)) throw new ConflictError(`This user already holds the role "${role.name}"`, roleId);
-    const { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul } = await this.assertCumulRules(actor.tenantId, role, held, held, reason);
-    return { role, cleanReason: cleanReason ?? groupReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul };
+    const { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul, createsAdminAuditCumul } = await this.assertCumulRules(actor.tenantId, role, held, held, reason);
+    return { role, cleanReason: cleanReason ?? groupReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul, createsAdminAuditCumul };
   }
 
   /**
@@ -371,7 +372,7 @@ export class RoleService {
     others: Role[],
     previous: Role[],
     reason: string | undefined,
-  ): Promise<{ cleanReason: string | null; createsAdminRiskManagerCumul: boolean; createsAdminCommitteeCumul: boolean }> {
+  ): Promise<{ cleanReason: string | null; createsAdminRiskManagerCumul: boolean; createsAdminCommitteeCumul: boolean; createsAdminAuditCumul: boolean }> {
     assertNoCumul(role, others);
 
     // q58: Committee + Audit (group or effective audit.*) is allowed unless the tenant forbids it. RM + Audit is handled above.
@@ -391,19 +392,22 @@ export class RoleService {
     // q80 (DECISION-044): administrator + Committee is handled exactly like administrator + Risk Manager.
     const createsAdminCommitteeCumul =
       isAdministrator(after) && isCommitteeMember(after) && !(isAdministrator(previous) && isCommitteeMember(previous));
+    // q104 (DECISION-046): administrator + Audit group, same handling.
+    const createsAdminAuditCumul =
+      isAdministrator(after) && isAuditGroupMember(after) && !(isAdministrator(previous) && isAuditGroupMember(previous));
     let cleanReason: string | null = null;
-    if (createsAdminRiskManagerCumul || createsAdminCommitteeCumul) {
+    if (createsAdminRiskManagerCumul || createsAdminCommitteeCumul || createsAdminAuditCumul) {
       cleanReason = reason?.trim() || null;
       if (!cleanReason) {
         throw new ValidationError(
-          `A reason is required to make a user both application administrator and ${createsAdminRiskManagerCumul ? "Risk Manager" : "Committee member"}`,
+          `A reason is required to make a user both application administrator and ${createsAdminRiskManagerCumul ? "Risk Manager" : createsAdminCommitteeCumul ? "Committee member" : "Audit member"}`,
         );
       }
       if (cleanReason.length > MAX_GROUP_REASON_LENGTH) {
         throw new ValidationError(`reason must be at most ${MAX_GROUP_REASON_LENGTH} characters`);
       }
     }
-    return { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul };
+    return { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul, createsAdminAuditCumul };
   }
 
   /** ACT-093/113: the actor can never assign a role to themselves — that's the maker-checker boundary. */
@@ -420,7 +424,7 @@ export class RoleService {
     }
     const pre = await this.assertAssignable(actor, roleId, userId, reason);
     const { role } = pre;
-    let { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul } = pre;
+    let { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul, createsAdminAuditCumul } = pre;
 
     // F-B8s-01: the check above may be stale; the repository replays it under the user + role locks.
     const assignment = await this.roles.assignToUser(actor.tenantId, roleId, userId, actor.userId, async (lockedRole, held) => {
@@ -428,6 +432,7 @@ export class RoleService {
       cleanReason = res.cleanReason ?? cleanReason;
       createsAdminRiskManagerCumul = res.createsAdminRiskManagerCumul;
       createsAdminCommitteeCumul = res.createsAdminCommitteeCumul;
+      createsAdminAuditCumul = res.createsAdminAuditCumul;
     });
 
     await this.audit.record({
@@ -443,15 +448,10 @@ export class RoleService {
     });
 
     // q63: administrator + Risk Manager cumul -> Audit and Committee members. q65: Committee entry -> Audit members.
-    if (createsAdminRiskManagerCumul) {
-      await this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
-        "Un utilisateur cumule désormais l'administration de l'application et le groupe Risk Manager.", requestId);
-    }
-    // q80: same mechanism (same mandatory event type) for administrator + Committee.
-    if (createsAdminCommitteeCumul) {
-      await this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
-        "Un utilisateur cumule désormais l'administration de l'application et le groupe Comité des risques.", requestId);
-    }
+    if (createsAdminRiskManagerCumul) await this.notifyAdminCumul(actor, userId, "Risk Manager", requestId);
+    // q80 / q104: same mechanism (same mandatory event type) for administrator + Committee and + Audit.
+    if (createsAdminCommitteeCumul) await this.notifyAdminCumul(actor, userId, "Comité des risques", requestId);
+    if (createsAdminAuditCumul) await this.notifyAdminCumul(actor, userId, "Audit", requestId);
     if (role.systemGroup === "RISK_COMMITTEE") {
       await this.notifyMembers(actor, "audit.read", userId, userId, "COMMITTEE_MEMBER_ADDED",
         "Un utilisateur vient d'entrer dans le groupe Comité des risques.", requestId);
@@ -561,6 +561,17 @@ export class RoleService {
   async isAdminAndRiskManager(tenantId: string, userId: string): Promise<boolean> {
     const held = await this.roles.listForUser(tenantId, userId);
     return isAdministrator(held) && isRiskManagerMember(held);
+  }
+
+  private notifyAdminCumul(actor: AuthenticatedUser, userId: string, group: string, requestId: string): Promise<void> {
+    return this.notifyMembers(actor, "rolegroup.audit.validate", userId, userId, "ADMIN_RISK_MANAGER_CUMUL",
+      `Un utilisateur cumule désormais l'administration de l'application et le groupe ${group}.`, requestId);
+  }
+
+  /** q104: true when the user is both application administrator and in the Audit group. */
+  async isAdminAndAudit(tenantId: string, userId: string): Promise<boolean> {
+    const held = await this.roles.listForUser(tenantId, userId);
+    return isAdministrator(held) && isAuditGroupMember(held);
   }
 
   /** q80: true when the user is both application administrator and in the Committee group. */

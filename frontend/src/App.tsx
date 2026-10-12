@@ -12,7 +12,11 @@ import { ControlsPage } from "./features/controls/ControlsPage";
 import { ControlMonitoringPage } from "./features/controls/ControlMonitoringPage";
 import { AuditFindingsPage } from "./features/audit/AuditFindingsPage";
 import { ActionPlansPage } from "./features/actions/ActionPlansPage";
+import { AuditLogPage } from "./features/audit/AuditLogPage";
+import { AnomaliesPage } from "./features/anomalies/AnomaliesPage";
 import { NotificationCenter } from "./features/notifications/NotificationCenter";
+import { KriPage } from "./features/indicators/KriPage";
+import { KpiPage } from "./features/indicators/KpiPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import { useLocalSignIn } from "./auth/useLocalSignIn";
@@ -24,7 +28,7 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi";
 type NavItem = { id: View; label: string; icon: string; available?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -40,12 +44,13 @@ const NAV_GROUPS: NavGroup[] = [
   { label: "Contrôle interne", items: [
     { id: "controls", label: "Contrôles", icon: "check", available: true },
     { id: "monitoring", label: "Exécutions & efficacité", icon: "play", available: true },
+    { id: "anomalies", label: "Anomalies", icon: "message", available: true },
     { id: "placeholder", label: "Plan de contrôle", icon: "panel" },
     { id: "placeholder", label: "Lignes de défense", icon: "shield" },
   ] },
   { label: "Indicateurs", items: [
-    { id: "placeholder", label: "KRI", icon: "trend" },
-    { id: "placeholder", label: "KPI", icon: "trend" },
+    { id: "kri", label: "KRI", icon: "trend", available: true },
+    { id: "kpi", label: "KPI", icon: "trend", available: true },
     { id: "placeholder", label: "Dashboards", icon: "dashboard" },
   ] },
   { label: "Plans & revues", items: [
@@ -55,6 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
   { label: "Audit", items: [
     { id: "placeholder", label: "Missions", icon: "search" },
     { id: "findings", label: "Constats & recommandations", icon: "message", available: true },
+    { id: "auditlog", label: "Journal d'audit", icon: "search", available: true },
   ] },
   { label: "Administration", items: [
     { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
@@ -76,6 +82,10 @@ const PAGE_TITLES: Record<View, string> = {
   monitoring: "Exécutions & efficacité",
   findings: "Constats & recommandations",
   actions: "Plans d’action",
+  auditlog: "Journal d'audit",
+  anomalies: "Anomalies",
+  kri: "Indicateurs de risque (KRI)",
+  kpi: "Indicateurs de performance (KPI)",
 };
 
 function App() {
@@ -185,6 +195,10 @@ function App() {
             {view === "monitoring" && <ControlMonitoringPage token={token} />}
             {view === "findings" && <AuditFindingsPage token={token} />}
             {view === "actions" && <ActionPlansPage token={token} />}
+            {view === "auditlog" && <AuditLogPage token={token} />}
+            {view === "anomalies" && <AnomaliesPage token={token} />}
+            {view === "kri" && <KriPage token={token} />}
+            {view === "kpi" && <KpiPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} initialRiskId={evaluationRiskId} />}
             {view === "risks" && <RisksPage token={token} onEvaluate={(riskId) => { setEvaluationRiskId(riskId); setView("evaluation"); }} />}
             {view === "roles" && <RolesAdmin token={token} />}

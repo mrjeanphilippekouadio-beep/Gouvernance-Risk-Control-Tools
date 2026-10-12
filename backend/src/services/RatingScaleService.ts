@@ -18,6 +18,8 @@ import type { RiskAppetiteRepository } from "../domain/repositories/RiskAppetite
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import { maxScoreForScale } from "../domain/scoring.js";
 import { assertDescriptors, assertLevels, assertReadyToActivate } from "../domain/ratingScaleRules.js";
+import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
+import type { AuditEvent } from "../domain/entities/AuditEvent.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 const LEVEL_BOUNDS = { min: 1, max: 5 } as const;
@@ -128,21 +130,10 @@ export class RatingScaleService {
       assertDescriptors(input.impactLabels, "impactLabels", input.impactLevels);
     }
 
-    const scale = await this.ratingScales.create({ ...input, tenantId: actor.tenantId });
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "RatingScale",
-      entityId: scale.id,
-      action: "CREATE",
-      oldValue: null,
-      newValue: scale,
-      reason: null,
-      requestId,
-    });
-
-    return scale;
+    return this.audited(
+      (scale) => [this.event(actor, scale.id, "CREATE", null, scale, null, requestId)],
+      (audit) => this.ratingScales.create({ ...input, tenantId: actor.tenantId }, audit),
+    );
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<RatingScale> {
@@ -173,9 +164,10 @@ export class RatingScaleService {
       throw new ValidationError(`thresholds cannot exceed the maximum score of this scale (${ceiling})`);
     }
 
-    const after = await this.ratingScales.updateThresholds(actor.tenantId, id, input.thresholds);
-    await this.recordUpdate(actor, id, before, after, requestId);
-    return after;
+    return this.audited(
+      (after) => [this.event(actor, id, "UPDATE", before, after, null, requestId)],
+      (audit) => this.ratingScales.updateThresholds(actor.tenantId, id, input.thresholds, audit),
+    );
   }
 
   async updateImpactAxes(
@@ -207,12 +199,13 @@ export class RatingScaleService {
       orders.add(axis.order);
     }
 
-    const after = await this.ratingScales.updateImpactAxes(actor.tenantId, id, {
-      axes: input.axes,
-      retainedImpactRule: input.retainedImpactRule ?? "MAX",
-    });
-    await this.recordUpdate(actor, id, before, after, requestId);
-    return after;
+    return this.audited(
+      (after) => [this.event(actor, id, "UPDATE", before, after, null, requestId)],
+      (audit) => this.ratingScales.updateImpactAxes(actor.tenantId, id, {
+        axes: input.axes,
+        retainedImpactRule: input.retainedImpactRule ?? "MAX",
+      }, audit),
+    );
   }
 
   async updateVelocity(
@@ -226,9 +219,10 @@ export class RatingScaleService {
     assertMutable(before);
     assertLevels(input.levels, "velocity levels", LEVEL_BOUNDS);
 
-    const after = await this.ratingScales.updateVelocity(actor.tenantId, id, input.levels);
-    await this.recordUpdate(actor, id, before, after, requestId);
-    return after;
+    return this.audited(
+      (after) => [this.event(actor, id, "UPDATE", before, after, null, requestId)],
+      (audit) => this.ratingScales.updateVelocity(actor.tenantId, id, input.levels, audit),
+    );
   }
 
   async updatePersistence(
@@ -242,9 +236,10 @@ export class RatingScaleService {
     assertMutable(before);
     assertLevels(input.levels, "persistence levels", LEVEL_BOUNDS);
 
-    const after = await this.ratingScales.updatePersistence(actor.tenantId, id, input.levels);
-    await this.recordUpdate(actor, id, before, after, requestId);
-    return after;
+    return this.audited(
+      (after) => [this.event(actor, id, "UPDATE", before, after, null, requestId)],
+      (audit) => this.ratingScales.updatePersistence(actor.tenantId, id, input.levels, audit),
+    );
   }
 
   async updateMastery(
@@ -265,16 +260,17 @@ export class RatingScaleService {
     }
     if (input.thresholds) assertThresholds(input.thresholds, "mastery thresholds");
 
-    const after = await this.ratingScales.updateMastery(actor.tenantId, id, {
-      levels: input.levels,
-      defenseLines: input.defenseLines,
-      // CHALLENGE-001 (PO decision, 2026-09-29, corrected after Risk Manager
-      // review): lines of defense are not compensatory — not caller-configurable today.
-      aggregation: "MIN",
-      thresholds: input.thresholds ?? null,
-    });
-    await this.recordUpdate(actor, id, before, after, requestId);
-    return after;
+    return this.audited(
+      (after) => [this.event(actor, id, "UPDATE", before, after, null, requestId)],
+      (audit) => this.ratingScales.updateMastery(actor.tenantId, id, {
+        levels: input.levels,
+        defenseLines: input.defenseLines,
+        // CHALLENGE-001 (PO decision, 2026-09-29, corrected after Risk Manager
+        // review): lines of defense are not compensatory — not caller-configurable today.
+        aggregation: "MIN",
+        thresholds: input.thresholds ?? null,
+      }, audit),
+    );
   }
 
   /**
@@ -319,21 +315,10 @@ export class RatingScaleService {
     assertReadyToActivate(before);
     await this.assertThresholdsFitCeiling(actor.tenantId, before);
 
-    const after = await this.ratingScales.activateAndArchivePrevious(actor.tenantId, id);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "RatingScale",
-      entityId: id,
-      action: "STATUS_CHANGE",
-      oldValue: before,
-      newValue: after,
-      reason: null,
-      requestId,
-    });
-
-    return after;
+    return this.audited(
+      (after) => [this.event(actor, id, "STATUS_CHANGE", before, after, null, requestId)],
+      (audit) => this.ratingScales.activateAndArchivePrevious(actor.tenantId, id, audit),
+    );
   }
 
   /**
@@ -362,38 +347,32 @@ export class RatingScaleService {
       );
     }
 
-    await this.ratingScales.softDelete(actor.tenantId, id, actor.userId, reason);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "RatingScale",
-      entityId: id,
-      action: "DELETE",
-      oldValue: before,
-      newValue: null,
-      reason,
-      requestId,
-    });
+    await this.audited(
+      () => [this.event(actor, id, "DELETE", before, null, reason, requestId)],
+      (audit) => this.ratingScales.softDelete(actor.tenantId, id, actor.userId, reason, audit),
+    );
   }
 
-  private async recordUpdate(
+  private event(
     actor: AuthenticatedUser,
-    id: string,
-    before: RatingScale,
-    after: RatingScale,
+    entityId: string,
+    action: "CREATE" | "UPDATE" | "STATUS_CHANGE" | "DELETE",
+    oldValue: unknown,
+    newValue: unknown,
+    reason: string | null,
     requestId: string,
-  ): Promise<void> {
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "RatingScale",
-      entityId: id,
-      action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason: null,
-      requestId,
-    });
+  ): Omit<AuditEvent, "id" | "timestamp"> {
+    return { tenantId: actor.tenantId, userId: actor.userId, entityType: "RatingScale", entityId, action, oldValue, newValue, reason, requestId };
+  }
+
+  /**
+   * F-D044-03: the audit rows go in the transaction of the write when the repository supports it
+   * (so a lost audit row rolls the write back); otherwise (test fakes) they are recorded right after.
+   */
+  private async audited<R>(build: TransactionalAudit<R>, run: (audit?: TransactionalAudit<R>) => Promise<R>): Promise<R> {
+    if (this.ratingScales.auditsInTransaction === true) return run(build);
+    const result = await run();
+    for (const e of build(result)) await this.audit.record(e);
+    return result;
   }
 }

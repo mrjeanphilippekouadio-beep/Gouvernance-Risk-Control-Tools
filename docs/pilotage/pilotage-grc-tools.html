@@ -124,6 +124,7 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
 .field{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-bottom:1px solid var(--border)}
 .field input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font:13px var(--font-mono)}
 .log-row{display:grid;grid-template-columns:110px 160px 1fr;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13.5px}
+.stamp{margin-top:4px;font:500 12px var(--font-mono);color:var(--fg-3)}
 .tabbar{display:none}
 @media (max-width:768px){
   .app{grid-template-columns:1fr}
@@ -178,6 +179,13 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
   const $ = s => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const pill = s => el("span","pill s-" + s, STATUS[s] || s);
+  const fmtDT = iso => { try { return new Date(iso).toLocaleString("fr-FR",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}); } catch(e){ return iso || ""; } };
+  /* Dernière mise à jour = la plus récente des dates connues (état du projet, agents, livraisons, réponses, configuration). */
+  const lastUpdate = () => { const ds = [S.project && S.project.updatedAt];
+    ["agents","releases","deliveries","variables","secrets"].forEach(n => S[n].forEach(d => ds.push(d.updatedAt, d.date)));
+    S.questions.forEach(q => ds.push(q.answeredAt, q.createdAt));
+    const t = ds.map(x => Date.parse(x || "")).filter(x => !isNaN(x) && x <= Date.now() + 5*60000);
+    return t.length ? new Date(Math.max(...t)).toISOString() : null; };
   const fmt = iso => { try { return new Date(iso).toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"numeric"}); } catch(e){ return iso || ""; } };
   const agentName = id => { const a = S.agents.find(x => x.id === id); return a ? a.name : id; };
   const qState = q => q.status !== "answered" ? "open" : (q.decision === "refused" ? "refused" : "answered");
@@ -212,7 +220,9 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
   function head(title, sub, right){
     const h = el("div","view-head"); const t = el("div");
     const h1 = el("h1",null,title); h1.tabIndex = -1; h1.id = "view-title"; t.append(h1);
-    if (sub) t.append(el("p","muted",sub)); h.append(t); if (right) h.append(right); return h;
+    if (sub) t.append(el("p","muted",sub));
+    const lu = lastUpdate(); if (lu) t.append(el("p","stamp","Dernière mise à jour : " + fmtDT(lu)));
+    h.append(t); if (right) h.append(right); return h;
   }
   function viewLink(cls, view, label, id){ const a = el("a",cls,label); a.href = "#" + view + (id ? "/" + id : ""); a.dataset.view = view; if (id) a.dataset.id = id; return a; }
   function qRow(q){
@@ -470,7 +480,7 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
       const on = a.dataset.view === S.view || (S.view === "journal" && a.dataset.view === "configuration" && !!a.closest(".tabbar"));
       if (on) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current");
     });
-    $("#updated").textContent = S.project && S.project.updatedAt ? "Mis à jour le " + fmt(S.project.updatedAt) : "";
+    { const lu = lastUpdate(); $("#updated").textContent = lu ? "Dernière mise à jour : " + fmtDT(lu) : ""; }
   }
   function render(focus){
     badges();

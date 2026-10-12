@@ -21,6 +21,7 @@ function world() {
     role("client", null, ["config.manage"]),
     role("method", null, ["config.update"]),
     role("plain", null, ["risk.read"]),
+    role("au", "AUDIT", ["audit.read"]),
     role("comval", null, ["risk.read", "riskevaluation.validate.committee"]),
   ];
   const held = new Map<string, string[]>();
@@ -144,5 +145,30 @@ describe("F-D044-01: Committee validation permissions count as Committee members
     const { service } = world();
     await service.assignToUser(assigner, "comval", "u3", "r", "motif");
     await expect(service.assignToUser(assigner, "plain", "u3", "r", "motif")).resolves.not.toThrow();
+  });
+});
+
+describe("DECISION-046 q104: administrator + Audit cumul", () => {
+  it("needs a reason, warns the validators with the cumul event, flags the user sheet", async () => {
+    const { service, sent, held, users, audit } = world();
+    held.set("val", ["co"]);
+    held.set("u1", ["au"]);
+    await expect(service.assignToUser(assigner, "client", "u1", "r")).rejects.toThrow(/administrator and Audit member/);
+    await service.assignToUser(assigner, "client", "u1", "r", "continuité");
+    const cumul = sent.filter((s) => s.eventType === "ADMIN_RISK_MANAGER_CUMUL");
+    expect(cumul.map((s) => s.recipientUserId)).toEqual(["val"]);
+    expect(cumul[0]?.message).toMatch(/Audit/);
+    const svc = new UserService({ async getById(_t: string, id: string) { return { id, tenantId: "t1", email: "e", displayName: id, roles: [], departmentId: null, createdAt: new Date(), deletedAt: null }; } } as never, audit as never, service);
+    void users;
+    expect((await svc.getDetail(assigner, "u1")).administratorAndAudit).toBe(true);
+    expect((await svc.getDetail(assigner, "u1")).administratorAndCommittee).toBe(false);
+    held.set("u2", ["au"]);
+    expect((await svc.getDetail(assigner, "u2")).administratorAndAudit).toBe(false);
+  });
+
+  it("ordinary Audit members (no admin power) are not affected", async () => {
+    const { service, held } = world();
+    held.set("u1", ["au"]);
+    await expect(service.assignToUser(assigner, "plain", "u1", "r")).resolves.toBeUndefined();
   });
 });

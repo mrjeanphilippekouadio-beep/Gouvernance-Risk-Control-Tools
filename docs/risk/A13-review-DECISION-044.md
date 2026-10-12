@@ -169,3 +169,57 @@ Le choix 3 dégrade un contrôle que le PO avait choisi (Comité/Audit), donc c'
 **À A05 (spec B-6)** : I-D3 fin définitive et mémorisée ; I-D2 motif structuré ; notification de l'amorçage vers les administrateurs et HUMAN si groupes vides ; l'exception ne lève que « décideur ≠ demandeur » ; exclusion de vote B-12 calculée depuis l'audit.
 **À HUMAN avant production** : requêtes #8, #9 et celle du §2.2 ; nettoyage tracé.
 **Questions PO (fermées, avec recommandation)** : Q-A13-1 (version héritée), Q-A13-2 (sens de « fin »), Q-A13-3 (valeurs de l'amorçage), Q-A13-4 (tiers prévenu), Q-A13-5 (administrateur + Audit), Q-A13-6 (`config.manage` et import), q96 (notifier le propriétaire du risque du KRI).
+
+---
+
+## 6. Arbitrages complémentaires (A13, 2026-10-12) : F-D044-08 et I-D7
+
+**Statut** : recommandations A13 ; le PO reste décideur. Sources relues : `RoleService.ts` (`isCommitteeRole` l. 51, `assertCumulRules` l. 377-385, `assignToUser` l. 455-458), retest A10 F-D044-01 (F-D044-08), DECISION-044 points 4-5, DECISION-046 points 2 et 4.
+
+### 6.1 F-D044-08 (a) : q58, cumul Comité + Audit interdit par le tenant
+
+- [Fait] `assertCumulRules` définit le côté Audit par les pouvoirs effectifs (`AUDIT` ou `audit.*`) mais le côté Comité par le seul groupe. La règle est donc déjà asymétrique : elle regarde la substance d'un côté et l'étiquette de l'autre.
+- [Fait, A10] Le groupe Audit + un rôle ordinaire `riskevaluation.validate.committee` passe ; avec le groupe Comité, il est refusé. Le réglage du tenant est contourné.
+- **Verdict : OUI, étendre à `isCommitteeRole`, dans les deux sens** (assignation et élargissement de rôle, comme le demande A10).
+- Justification (séparation des fonctions) : le réglage existe pour que celui qui valide en Comité ne soit pas celui qui contrôle a posteriori. Cette incompatibilité tient aux pouvoirs, pas au nom du groupe. Laisser l'étiquette seule revient à offrir à chacun un contournement par un rôle ordinaire, que q94 a déjà fermé pour le Risk Manager. Garder une définition de « membre du Comité » par règle fabriquerait des Comités différents selon le contrôle regardé.
+- Risque de sur-blocage : faible. La règle ne joue que si le tenant a choisi d'interdire (défaut : autorisé, q58). L'extension durcit un choix du client, elle n'en crée pas un. Aucun risque d'affaiblir un contrôle.
+- Limites à signaler à A06 (non bloquantes) : (i) pas de rétroactivité, les cumuls Comité-par-pouvoirs + Audit déjà en place ne sont pas touchés ; si le tenant a interdit le cumul, les repérer par une lecture seule du type de la requête 8, nettoyage tracé par HUMAN ; (ii) `assertReactivable` ne contrôle pas q58 (déjà noté en 3.2 point 4) : sans effet nouveau, à traiter en même temps si le coût est nul.
+- **Relève-t-il du PO ? Non.** Ce n'est pas un nouveau choix de gouvernance : q58 et q94 emploient le même mot « Comité », et la définition par les pouvoirs a été retenue pour q94 et q80. Aligner q58 est de la cohérence d'implémentation. À consigner pour information dans le Decision Log, sans question.
+
+### 6.2 F-D044-08 (b) : q65, notification `COMMITTEE_MEMBER_ADDED` aux membres d'Audit
+
+- [Fait] `assignToUser` ne notifie que si `role.systemGroup === "RISK_COMMITTEE"`. Une entrée par un rôle ordinaire portant un pouvoir de validation Comité ne notifie personne (0 notification, PoC A10).
+- **Verdict : OUI, étendre à `isCommitteeRole`.**
+- Justification (détection a posteriori) : q65 est un contrôle détectif, et seul celui-là prévient Audit qu'une personne vient de recevoir le pouvoir de valider. Si la voie la plus discrète (le rôle ordinaire) est la seule qui ne déclenche rien, le contrôle ne couvre que le chemin que personne n'emprunterait pour contourner. Une notification en trop coûte une ligne ; une entrée sans notification se détecte tard ou jamais.
+- Deux précisions à transmettre à A06 pour que le contrôle soit complet :
+  1. **Élargissement d'un rôle ordinaire déjà détenu** : ajouter un pouvoir Comité à un rôle existant fait entrer ses titulaires au Comité sans aucune assignation. Si la notification est liée à `assignToUser`, ce chemin reste muet. Soit notifier à l'élargissement (une notification par titulaire nouvellement concerné, ou une seule nommant le rôle), soit l'écrire explicitement hors périmètre avec sa justification. Je recommande de le couvrir.
+  2. **Anti-doublon** : notifier à la transition « n'était pas membre du Comité, l'est maintenant » (état avant/après, comme le fait déjà `createsAdminCommitteeCumul`), pas à chaque rôle supplémentaire d'un membre déjà au Comité.
+- [Hypothèse] L'évènement `COMMITTEE_MEMBER_ADDED` est au catalogue des notifications obligatoires (q85 les rend obligatoires). Le type reste inchangé, donc aucune modification du catalogue.
+- **Relève-t-il du PO ? Non**, pour la même raison que 6.1. Le seul point où le PO pourrait avoir une préférence (notifier aussi à l'élargissement de rôle) est un détail d'exécution, pas une règle de gouvernance ; je ne l'élève pas.
+
+### 6.3 I-D7 : lecture de q103 face à q101
+
+Textes :
+- q101 (PO) : « le risk manager continue de s'auto-approuver et l'auditeur est informé » ; l'amorçage ne se termine que quand un circuit fonctionne (second RM actif ou ≥ 2 membres éligibles au Comité ou à l'Audit, q72).
+- q103 (PO) : « les actions sont journalisées pour consultation dès que l'un des groupes Audit et/ou Comité est supérieur à un membre ».
+
+Analyse :
+- [Fait] q101 suppose qu'un auditeur **unique** est informé. Il y a donc au moins une information avant « > 1 membre ». Une lecture de q103 qui ouvre la consultation seulement à « > 1 membre » ne contredit pas q101 mot à mot (information par notification, consultation de la vue plus tard), mais elle produirait un auditeur prévenu qui ne peut pas ouvrir le journal de ce dont on le prévient. Une information qu'on ne peut pas vérifier n'est pas un contrôle détectif.
+- [Fait] Le seuil « > 1 membre » de q103 coïncide avec la condition de fin de q101 (≥ 2 membres éligibles d'un des deux groupes). Les deux textes décrivent donc le même moment : la fin de l'amorçage.
+- **Verdict : je confirme la lecture de l'orchestrateur, avec une nuance.**
+  1. Information et consultation ouvertes dès le **premier** membre actif d'Audit ou du Comité. C'est la lecture qui n'affaiblit aucun contrôle : elle donne plus de visibilité à un tiers, jamais moins, et ne confère à l'auditeur aucun droit nouveau (le rôle Audit a déjà `audit.read`).
+  2. « > 1 membre » est la condition de **fin** de l'amorçage, pas le début de la consultation.
+  3. Quand les deux groupes sont vides, aucune notification (q103, voulu par le PO) ; les décisions sont journalisées dès la première et deviennent consultables à l'arrivée du premier membre, y compris pour ce qui s'est passé avant (c'est déjà le texte de DECISION-044 point 4 : « dès l'ajout de leurs membres »).
+- **Nuance (à transmettre à A05/A06)** : « supérieur à un membre » doit se compter en membres **éligibles et actifs** (non suspendus, hors cumul interdit, hors personnes exclues par q72), pas en lignes de `user_roles`. Sinon un groupe de deux comptes dont un suspendu mettrait fin à l'amorçage alors que le circuit ne peut pas voter. Cette précision est ma rédaction (mémoire principe 37), pas une décision du PO.
+- **Les deux réponses sont-elles inconciliables ? Non.** Elles se concilient dès que l'on sépare l'**ouverture** de la consultation (dès le premier membre) de la **fin** de l'amorçage (> 1 éligible). Seule une lecture littérale de q103 comme « pas de consultation avant 2 membres » les mettrait en tension avec l'esprit de q101. Dans ce cas, le changement est minime : restreindre l'accès à la vue, sans toucher la journalisation ni la notification.
+- **Relève-t-il du PO ? Pas obligatoirement.** Je recommande de consigner la lecture comme interprétation validée par A13 dans le Decision Log. Si l'orchestrateur veut une couverture totale, une confirmation d'une ligne au PO suffit (« la consultation du journal d'amorçage est ouverte dès le premier membre d'Audit ou du Comité ; l'amorçage se termine à 2 membres éligibles »), mais elle ne doit pas bloquer B-6d.
+
+### 6.4 Récapitulatif
+
+| Point | Verdict | PO ? |
+|---|---|---|
+| F-D044-08 (a) q58 | Étendre à `isCommitteeRole`, deux sens, assignation et élargissement | Non (information Decision Log) |
+| F-D044-08 (b) q65 | Étendre à `isCommitteeRole`, y compris à l'élargissement de rôle, anti-doublon par transition | Non |
+| I-D7 | Lecture orchestrateur confirmée ; « > 1 » = fin de l'amorçage, compté en éligibles actifs | Non bloquant ; confirmation d'une ligne facultative |
+
+Actions : A06 (q58, q65, éventuellement `assertReactivable`), A05 (formulation « éligibles actifs » dans B-6d). Aucun nouveau risque identifié ; le risque résiduel de F-D044-08 reste **faible** (CVSS A10 2,2) et passe à **très faible** après correctif.

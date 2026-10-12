@@ -216,3 +216,11 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Pour q94, "Comité" = groupe RISK_COMMITTEE OU permission `riskevaluation.validate.committee` / `treatmentdecision.validate.committee` / `governance.validate` (`COMMITTEE_VALIDATION_PERMISSIONS` dans RoleService). Appliqué dans `assertNoCumul` (donc assignation, rejeu sous verrou, élargissement, `assertReactivable`) ; `assertRolePermissionRules` interdit ces permissions au groupe RM ; requête 8 de B8-predeploy-checks.sql étendue (colonne `committee_permission_roles`).
 - Leçon : une règle de cumul portant sur un groupe doit aussi être exprimée sur les permissions effectives (même faille que F-B8b-05 pour audit.*). Reste ouvert : F-D044-04 (users.roles hérités), sens inverse Comité -> permissions RM (arbitrage A13).
 - Tests : Rbac044.test.ts (describe F-D044-01, 4 tests). Aucune assertion existante modifiée (rôle `comval` ajouté à world()).
+
+## 2026-10-12 q104 + F-D044-03 RatingScale (branche worktree-agent-a0942533cd27b62c1, base 3988d37 par merge, aucune migration)
+
+- Le worktree était sur une base ancienne (44555c9, migration 046) : `git reset --hard` refusé par le harnais, résolu par `git merge` de `claude/gouvernance-risk-control-tools-0mus68`. Vérifier la base avant de lire le code.
+- q104 : 3e drapeau `createsAdminAuditCumul` dans `assertCumulRules` (Audit = groupe système AUDIT seul, F-D044-08 reste chez A13) ; motif obligatoire, même événement `ADMIN_RISK_MANAGER_CUMUL` via `notifyAdminCumul` (helper commun aux 3 cumuls), `administratorAndAudit` distinct sur `UserDetail`. Tests dans Rbac044.test.ts.
+- F-D044-03 RatingScale : `RatingScaleRepository.auditsInTransaction?` + paramètre `audit?: TransactionalAudit` sur chaque méthode mutante ; `PostgresRatingScaleRepository.tx(audit, fn)` (audit inséré avant COMMIT) ; service `audited(build, run)` avec repli hors transaction pour les faux repos. Test existant adapté (source de vérité changée, à signaler à A08) : `PostgresRatingScaleRepository.draftGuard.test.ts` (faux pool avec `connect`).
+- Reste F-D044-03 : Role, User, Config en priorité, puis les ~30 autres services (liste dans le rapport). Non testé sur vrai Postgres.
+- Leçon : un script python multi-lignes lancé dans la même commande que `cd`+`npm` est refusé « trop complexe » ; Write du script dans le scratchpad puis commande simple.

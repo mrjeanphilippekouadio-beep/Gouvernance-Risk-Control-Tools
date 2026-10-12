@@ -918,3 +918,43 @@ Titre : q58 et q65 restent « groupe seulement ».
 - Correctif : `isCommitteeRole` aux deux endroits (q58 à appliquer dans les deux sens, en assignation comme en élargissement). A13 confirme que q58/q65 visent bien les pouvoirs effectifs, comme q94.
 
 CVSS max 2,7 : **aucune escalade HUMAN**. F-D044-01 est **RETEST_PASS / CLOSED** : q94 tient sur l'assignation, l'élargissement, le groupe RM et la réactivation. Feu vert A10 maintenu pour la PR staging #168. F-D044-07 doit être corrigé avant la production, puisque G1 était l'objet explicite de `6aebb98`. F-D044-08 peut suivre dans le même correctif.
+
+## Revue DECISION-046 — q104 (admin + Audit), retest F-D044-03 RatingScale, frontend audit/anomalies/KRI/KPI — 2026-10-12 (A10)
+
+Périmètre : `6bca0db` (q104), `0d68095` (F-D044-03), `64fe709` + `70e3b95` (frontend), tête `70e3b95`. Méthode : revue statique, PoC `tsx` hors dépôt sur `RoleService` (faux repositories rejouant le `recheck`), rejeu Postgres 16 local jetable (001→058, rôle `grc_app_runtime`, base détruite ensuite), vitest ciblé 19/19 verts. Aucune base distante touchée.
+
+**Verdict : feu vert staging. Aucune escalade HUMAN (CVSS max 2,7).**
+
+### 1. q104 — cumul administrateur + Audit (PASS)
+
+PoC (9 scénarios) :
+- Ordre « admin puis Audit » : refus sans motif ou avec un motif blanc ; accepté avec motif ; `ADMIN_RISK_MANAGER_CUMUL` envoyé au tiers (membre Comité), ni à l'acteur ni au sujet. Ordre « Audit puis admin » : couvert par le test `Rbac044` (motif, notification, `administratorAndAudit`).
+- Élargissement d'un rôle ordinaire détenu par un membre Audit (+`role.assign`) : refus sans motif, accepté avec motif et notification. Le calcul passe aussi par le `recheck` sous verrou (F-B8s-01).
+- Auto-exemption : auto-assignation refusée ; élargissement d'un rôle détenu refusé ; un admin membre d'Audit ne peut pas changer les droits de son groupe (`changeAuditGroupPermissions` l. 624) ; le groupe Audit ne peut pas recevoir de permission d'administration (route dédiée + liste blanche lecture seule).
+- Maker-checker intact : aucun chemin d'assignation ou de révocation sur soi-même, `notifyMembers` exclut l'acteur (SQL `u.id <> $3`) et le sujet.
+
+**F-D046-01 — LOW — CVSS 3.1 2,7 (AV:N/AC:L/PR:H/UI:N/S:U/C:L/I:N/A:N) — CONFIRMED (PoC) — owner A06, après le correctif F-D044-08.**
+Un administrateur qui reçoit un rôle ordinaire portant `audit.read` n'est pas signalé (accepté sans motif, 0 notification, `administratorAndAudit` faux), car `isAuditGroupMember` regarde le groupe seulement. Le contre-pouvoir propre à l'Audit (`rolegroup.audit.validate`, réception des notifications de cumul) reste réservé aux groupes (`rolegroupAuditPermissionAllowedOn`). Le résidu se limite donc à une lecture du journal sans signalement du cumul. **L'extension F-D044-08 aux permissions `audit.*` ne change pas ce score** : elle ferme le résidu. Correctif : appliquer à `isAuditGroupMember` le même prédicat `groupe ou audit.*` que q58, quand F-D044-08 sera codé. Test : admin + rôle ordinaire `audit.read` → motif exigé et notification.
+
+INFO : (a) des droits d'administration portés par `users.roles` hérité ne sont pas comptés par `isAdministrator`. Ce cas se rattache à F-D044-04 / F-B8t-02. (b) La réactivation d'un admin + Audit suspendu ne redemande pas de motif. C'est le même comportement que q63/q80, et le cumul a été motivé à sa création.
+
+### 2. Retest F-D044-03 — `RatingScaleService` : RETEST_PASS (portion RatingScale)
+
+- Les 8 mutations (create, 5 sous-configurations, activation, disable) passent par `audited()`. En production, `PostgresRatingScaleRepository.auditsInTransaction = true` (`server.ts` l. 196). L'audit est inséré par le même client avant `COMMIT` et `ROLLBACK` est exécuté sur toute erreur. Plus aucun `this.audit.record` direct n'existe hors repli.
+- Rejeu Postgres réel, avec un trigger d'échec forcé sur `audit_log`. Create, updateThresholds, disable et activation (niveau repository) → erreur. Aucune ligne n'est créée, les seuils sont inchangés, `deleted_at` reste NULL, l'ACTIVE précédente reste ACTIVE, et aucun audit orphelin n'est écrit. **Témoin** (indicateur forcé à `false` = comportement d'avant `0d68095`) : la ligne est créée sans audit. L'inverse (audit sans donnée) est impossible : l'audit suit l'écriture dans la même transaction, et une écriture à 0 ligne lève avant.
+- `tenant_id` de l'audit = `actor.tenantId`, comme le filtre d'écriture. 0 ligne dans un autre tenant. Un acteur d'un autre tenant → 404, sans audit.
+- F-D044-03 peut être **fermé pour RatingScale**, mais reste **ouvert pour les ~32 autres services** (Role, User et Config en priorité). L'exclusion d'auteurs `authorsOf` ne peut plus être ouverte (fail-open) par un audit RatingScale perdu.
+
+**F-D046-02 — INFO — owner A06/A08.** Le repli `audited()` est silencieux : un futur repository Postgres qui oublierait `auditsInTransaction` repasserait sans bruit en audit hors transaction. Reco : un test garde qui vérifie que `new PostgresRatingScaleRepository(pool).auditsInTransaction === true`, à étendre à chaque service migré.
+
+### 3. Frontend journal d'audit, anomalies, KRI/KPI (PASS)
+
+- Journal d'audit : un seul appel `GET /api/v1/audit-log` (aucune écriture possible). Les filtres passent par `URLSearchParams` (encodés). `entityId` n'est envoyé qu'avec `entityType`. Une date invalide est rattrapée dans le `try`. Le détail JSON est rendu par `JSON.stringify` dans un `<pre>` en texte React (échappé).
+- Aucun `dangerouslySetInnerHTML`, `href`, `innerHTML`, `window.location` ni `target` dans `features/audit`, `features/anomalies`, `features/indicators` et `api/`. Le point « `javascript:` » de DS vague 2 reste sans objet sur ces écrans.
+- Attribution : `CreateAnomalyInput` n'a pas de `detectedBy`, et `KriMeasureInput`/`KpiMeasureInput` n'ont pas de `recordedBy`. Le backend les force à `actor.userId`. `owner` (KPI) est une affectation, pas une attribution d'auteur. Les ids dans les chemins passent par `encodeURIComponent`.
+
+**F-D046-03 — INFO — owner frontend.** L'union `AuditAction` ne contient pas `READ` (F-EVD2-03). Un auditeur ne peut donc pas filtrer les lectures d'évidences depuis l'écran ; elles s'affichent avec le libellé brut. Il s'agit d'un manque de détection, pas d'une faille.
+
+### Statut et tracker (7bis)
+
+F-D046-01 (A06, avec F-D044-08), F-D046-02 (A06/A08), F-D046-03 (frontend). F-D044-03 : RatingScale RETEST_PASS, reste ouvert pour les autres services.

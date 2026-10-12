@@ -28,6 +28,14 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
 8. **Audit dans la même transaction que l'action** (q90) est désormais le contrat du Dispositif ;
    notifications après commit, indépendantes de l'audit. Ne pas l'étendre d'office à d'autres modules
    (lot transverse Compliance B-8).
+9. **Un état « définitif » se mémorise, il ne se recalcule pas** sur l'état courant (sinon révoquer/suspendre
+   un tiers le rouvre). Marqueur posé par un trigger sur les événements qui le font naître (pas un appel dans
+   chaque service : un chemin futur l'oublierait), sous un verrou unique (ligne `tenants`), plus un garde
+   « set-once » ; vérifier l'ordre des verrous contre les chemins existants (users → roles → tenants).
+10. **« Valeurs par défaut du contrat » ne couvre que les paramètres qui ont une valeur au contrat** ; ceux
+    « fixés à la création / par le client » n'en ont pas : le dire et le lister (I-D8), ne pas en inventer.
+11. **Un garde-fou transitoire réutilise un régime existant + une cause tracée** (q100 : repli FALLBACK +
+    `fallback_cause`), jamais un nouveau régime ; écrire quand il disparaît (B-12).
 
 ## Positions prises
 
@@ -38,6 +46,15 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
   antérieures : affichées avec le Dispositif par défaut mais `frameworkVersionId: null`, jamais rattachées.
   Amorçage : route dédiée `bootstrap-approve`, base limitée au premier Dispositif du tenant, pas de
   ratification (q83, à confirmer A13). Questions résiduelles : spec §14.2 (I-D1..I-D6, R1..R5, I-C1..I-C3).
+- 2026-10-12 (bis) : spec B-6 mise à jour avec DECISION-045 (q98, q99) et DECISION-046 (q100–q103) + revue A13.
+  B-6d dispatchable après fusion de B-6b. Choix : fin d'amorçage = `tenants.risk_framework_bootstrap_ended_at`
+  posée par trigger AFTER sur `user_roles`/`users` (réactivation) sous `FOR UPDATE` du tenant, garde BEFORE
+  UPDATE set-once ; ouverture = marqueur NULL + aucun circuit fonctionnel (≥2 RM ou ≥2 Comité ou ≥2 Audit) +
+  demandeur unique RM ; `bootstrapRefusal(ctx)` renvoie une raison. Motif structuré (`bootstrap_justification`
+  jsonb : askedUserId admin, askedOn, outcome). q98 contrôlé au service seulement (`contractDefaultViolations`).
+  q100 : `foldVoteBeforeB12` dans `resolveFor`, colonne `fallback_cause`, requête n° 10 du pré-déploiement.
+  q103 : personne d'autre prévenu (PO contre A13). Ouverts non bloquants : I-D7 (seuil q103, A13), I-D8
+  (paramètres sans défaut contractuel), I-D9 (RM admin qui se désigne comme sollicité), I-D10 (info).
 
 ## Pièges rencontrés
 
