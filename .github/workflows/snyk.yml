@@ -1,0 +1,66 @@
+name: Snyk
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snyk-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Scan npm dependencies
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pinned Snyk CLI
+        if: ${{ env.SNYK_TOKEN != '' }}
+        run: npm install --global snyk@1.1307.3
+
+      - name: Test all detected projects (HIGH and CRITICAL)
+        id: snyk-test
+        if: ${{ env.SNYK_TOKEN != '' }}
+        continue-on-error: true
+        run: snyk test --all-projects --severity-threshold=high --sarif-file-output=snyk-results.sarif
+
+      - name: Upload Snyk SARIF to GitHub Code Scanning
+        if: ${{ always() && env.SNYK_TOKEN != '' && hashFiles('snyk-results.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          sarif_file: snyk-results.sarif
+          category: snyk
+
+      - name: Preserve Snyk report
+        if: ${{ always() && env.SNYK_TOKEN != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snyk-sarif-report
+          path: snyk-results.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Enforce Snyk result
+        if: ${{ steps.snyk-test.outcome == 'failure' }}
+        run: |
+          echo "::error::Snyk reported HIGH/CRITICAL vulnerabilities or the scan failed."
+          exit 1
+
+      - name: Explain skipped scan
+        if: ${{ env.SNYK_TOKEN == '' }}
+        run: |
+          echo "::notice::Snyk scan skipped: configure the SNYK_TOKEN repository Actions secret."

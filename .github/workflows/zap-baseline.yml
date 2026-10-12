@@ -1,0 +1,33 @@
+name: OWASP ZAP Baseline (staging)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "31 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Passive baseline scan
+    if: ${{ vars.ZAP_TARGET_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Run OWASP ZAP Baseline
+        uses: zaproxy/action-baseline@7c4deb10e6261301961c86d65d54a516394f9aed # v0.14.0
+        with:
+          target: ${{ vars.ZAP_TARGET_URL }}
+          allow_issue_writing: false
+          fail_action: false
+          artifact_name: zap-baseline-staging
+
+  not-configured:
+    name: Explain skipped scan
+    if: ${{ vars.ZAP_TARGET_URL == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain missing staging URL
+        run: |
+          echo "::notice::ZAP scan skipped: set the ZAP_TARGET_URL Actions variable to the authorized HTTPS staging URL."
