@@ -199,7 +199,14 @@ export type Permission =
    * administrator is also a Risk Manager. Two distinct permissions, never role.update.
    */
   | "rolegroup.audit.update"
-  | "rolegroup.audit.validate";
+  | "rolegroup.audit.validate"
+  /** B-6a: the Dispositif. `activate` (decide) and `archive` (terminal) are never reachable through `update`. */
+  | "riskframework.read"
+  | "riskframework.create"
+  | "riskframework.update"
+  | "riskframework.activate"
+  | "riskframework.archive"
+  | "riskframework.process.assign";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -312,6 +319,12 @@ export const ALL_PERMISSIONS: Permission[] = [
   "treatmentdecision.validate.committee",
   "rolegroup.audit.update",
   "rolegroup.audit.validate",
+  "riskframework.read",
+  "riskframework.create",
+  "riskframework.update",
+  "riskframework.activate",
+  "riskframework.archive",
+  "riskframework.process.assign",
 ];
 
 /**

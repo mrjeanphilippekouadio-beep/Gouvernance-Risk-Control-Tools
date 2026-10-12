@@ -19,6 +19,8 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "raci.assign", "raci.revoke", "kpi.read", "kpi.create", "kpi.update", "riskappetite.read", "ratingscale.read",
     "process.read", "department.read", "cartography.read", "dashboard.read", "dashboard.executive",
     "governance.read", "governance.create", "notification.read",
+    "riskframework.read", "riskframework.create", "riskframework.update", "riskframework.activate", "riskframework.archive",
+    "riskframework.process.assign",
   ],
   RISK_COMMITTEE: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",
@@ -26,14 +28,14 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "raci.read", "kpi.read", "riskappetite.read", "ratingscale.read", "process.read", "department.read",
     "cartography.read", "dashboard.read", "dashboard.executive", "governance.read", "notification.read",
     "riskevaluation.validate.committee", "treatmentdecision.validate.committee", "governance.validate",
-    "rolegroup.audit.validate",
+    "rolegroup.audit.validate", "riskframework.read",
   ],
   AUDIT: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",
     "effectiveness.read", "anomaly.read", "treatmentdecision.read", "evidence.read", "evidence.download",
     "raci.read", "kpi.read", "riskappetite.read", "ratingscale.read", "process.read", "department.read",
     "cartography.read", "dashboard.read", "dashboard.executive", "governance.read", "notification.read",
-    "audit.read", "audit.mission.read", "audit.finding.read", "rolegroup.audit.validate",
+    "audit.read", "audit.mission.read", "audit.finding.read", "rolegroup.audit.validate", "riskframework.read",
   ],
 };
 

@@ -99,8 +99,15 @@ describe("B8bis-02 single source of truth for the fixed groups' rights", () => {
     return [...m![1]!.matchAll(/'([^']+)'/g)].map((x) => x[1]);
   };
 
-  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051", (g) => {
-    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual(fromMigration(g));
+  // B-6a: migration 055 adds the riskframework.* rights to the existing groups; the constant = 051 + 055.
+  const up55 = readFileSync("../database/postgresql/migrations/055_risk_frameworks.sql", "utf8");
+  const addedBy055 = (g: string) => {
+    const m = up55.match(new RegExp(`ARRAY\\[([^\\]]*)\\]::text\\[\\]\\)\\)\\s*WHERE system_group (?:= '${g}'|IN \\([^)]*'${g}'[^)]*\\))`));
+    return [...m![1]!.matchAll(/'([^']+)'/g)].map((x) => x[1]);
+  };
+
+  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055", (g) => {
+    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g)]);
     expect(FIXED_GROUP_PERMISSIONS[g].every((p) => ALL_PERMISSIONS.includes(p))).toBe(true);
   });
 

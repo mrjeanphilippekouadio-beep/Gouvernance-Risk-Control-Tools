@@ -17,6 +17,7 @@ import { requirePermission } from "../domain/permissions.js";
 import type { RiskAppetiteRepository } from "../domain/repositories/RiskAppetiteRepository.js";
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import { maxScoreForScale } from "../domain/scoring.js";
+import { assertDescriptors, assertLevels, assertReadyToActivate } from "../domain/ratingScaleRules.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 const LEVEL_BOUNDS = { min: 1, max: 5 } as const;
@@ -31,49 +32,6 @@ function assertDimension(value: number, fieldName: string): void {
     throw new ValidationError(
       `${fieldName} must be an integer between ${SCALE_SIZE_BOUNDS.min} and ${SCALE_SIZE_BOUNDS.max}`,
     );
-  }
-}
-
-/** B-9: one descriptor per level, so exactly `size` entries (assertLevels alone accepts fewer). */
-function assertDescriptors(levels: ScaleLevel[], fieldName: string, size: number): void {
-  assertLevels(levels, fieldName, { min: 1, max: size });
-  if (levels.length !== size) {
-    throw new ValidationError(`${fieldName} must have exactly one descriptor per level (${size})`);
-  }
-}
-
-/**
- * B-9 bis (q50): descriptors are optional in DRAFT but mandatory to activate — probability,
- * impact, and every impact axis (when axes are configured) need one non-empty descriptor per level.
- */
-function assertReadyToActivate(scale: RatingScale): void {
-  if (!scale.probabilityLabels) throw new ValidationError("probabilityLabels are required to activate a rating scale");
-  assertDescriptors(scale.probabilityLabels, "probabilityLabels", scale.probabilityLevels);
-  if (!scale.impactLabels) throw new ValidationError("impactLabels are required to activate a rating scale");
-  assertDescriptors(scale.impactLabels, "impactLabels", scale.impactLevels);
-  for (const axis of scale.impactAxes?.axes ?? []) {
-    if (!axis.levelLabels) throw new ValidationError(`axis ${axis.code} levelLabels are required to activate a rating scale`);
-    assertDescriptors(axis.levelLabels, `axis ${axis.code} levelLabels`, scale.impactLevels);
-  }
-}
-
-/** Levels must be 1..N, contiguous, unique, with a non-empty label each. */
-function assertLevels(levels: ScaleLevel[], fieldName: string, bounds: { min: number; max: number }): void {
-  if (!Array.isArray(levels) || levels.length === 0) {
-    throw new ValidationError(`${fieldName} must be a non-empty array`);
-  }
-  if (levels.length > bounds.max) {
-    throw new ValidationError(`${fieldName} cannot have more than ${bounds.max} levels`);
-  }
-  const sorted = [...levels].sort((a, b) => a.level - b.level);
-  for (let i = 0; i < sorted.length; i++) {
-    const entry = sorted[i]!;
-    if (!Number.isInteger(entry.level) || entry.level !== i + bounds.min) {
-      throw new ValidationError(`${fieldName} must have contiguous levels starting at ${bounds.min}`);
-    }
-    if (!entry.label?.trim()) {
-      throw new ValidationError(`${fieldName}[${entry.level}] requires a non-empty label`);
-    }
   }
 }
 
