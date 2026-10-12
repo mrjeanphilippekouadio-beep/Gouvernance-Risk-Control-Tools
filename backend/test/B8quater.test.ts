@@ -65,13 +65,15 @@ describe("q58 Committee + Audit cumul setting", () => {
     await expect(service.assignToUser(assigner, "co", "u2", "r", "motif")).rejects.toThrow(ValidationError);
   });
 
-  it("never lifts Risk Manager + Audit, and Risk Manager + Committee stays allowed", async () => {
+  it("never lifts Risk Manager + Audit nor Risk Manager + Committee, whatever the setting (q94)", async () => {
     const { service } = setupRoles(true);
     await service.assignToUser(assigner, "rm", "u1", "r", "motif");
     await expect(service.assignToUser(assigner, "au", "u1", "r", "motif")).rejects.toThrow(ValidationError);
     const forbidding = setupRoles(false);
     await forbidding.service.assignToUser(assigner, "rm", "u3", "r", "motif");
-    await expect(forbidding.service.assignToUser(assigner, "co", "u3", "r", "motif")).resolves.toBeUndefined();
+    await expect(forbidding.service.assignToUser(assigner, "co", "u3", "r", "motif")).rejects.toThrow(ValidationError);
+    await service.assignToUser(assigner, "co", "u5", "r", "motif");
+    await expect(service.assignToUser(assigner, "rm", "u5", "r", "motif")).rejects.toThrow(ValidationError);
   });
 
   it("ConfigService.setCommitteeAuditCumul: dedicated permission, reason, audit", async () => {

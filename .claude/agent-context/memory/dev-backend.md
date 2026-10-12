@@ -179,3 +179,13 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - `mirrorScale` : après les deux UPDATE des échelles, `SELECT min(probability_levels * impact_levels) FROM rating_scales WHERE status = 'ACTIVE'` (= activée + conservées car référencées par une version ACTIVE) ; tout seuil collecté (version, `configs`, appétences actives) au-dessus de ce plus petit plafond -> ValidationError listant les seuils, donc ROLLBACK de la décision. Le contrôle contre l'échelle activée reste en premier (messages existants inchangés).
 - Fakes de B6abis/QA-B6abis : ajout d'un handler pour la nouvelle requête `SELECT min(` (source de vérité changée, à signaler à A08). Test : `B6aFix10.test.ts` (scénario A10, 30 refusé / 25 accepté).
 - Leçon : un contrôle ajouté APRÈS les UPDATE reste annulé par le ROLLBACK ; pas besoin de pré-calculer l'ensemble des échelles restantes en SQL ou en JS.
+
+## 2026-10-12 RBAC DECISION-044 : q94 / q80 / q79 (branche wt/rbac-q79q80q94, base 37766ab, aucune migration)
+
+- q94 : `assertNoCumul` (RoleService) refuse aussi Risk Manager + Comité (groupes), dans tous les chemins qui passent par `assertCumulRules` (assignation, rejeu sous verrou F-B8s-01, élargissement d'un rôle). Non configurable. `UserService.reactivate` appelle `RoleService.assertReactivable` : refuse de réactiver un utilisateur qui détient encore un cumul interdit (RM + Comité ou RM + Audit) antérieur à la règle. `riskManagerAndCommittee` sur la fiche est conservé uniquement pour repérer les cumuls pré-existants.
+- q80 : `createsAdminCommitteeCumul` calculé comme admin + RM ; motif obligatoire (message distinct), même événement `ADMIN_RISK_MANAGER_CUMUL` (type obligatoire déjà au catalogue, message « Comité des risques »), champ `administratorAndCommittee` sur `GET /users/:id`. Pas de nouveau type de notification (évite de toucher aux tests « 4 types obligatoires »).
+- q79 : « gestion du client » = `config.manage` (clients, modules, référentiels, catégories de risque, import Excel) ajouté à `ADMIN_PERMISSIONS` ; la méthodologie (`config.update`) non.
+- Requêtes de repérage 8 (RM + Comité) et 9 (config.manage, avec RM/Comité) ajoutées à `docs/security/B8-predeploy-checks.sql` — lecture seule, HUMAN seul exécute.
+- Exigence B-12 consignée (rien de construit, aucun code de vote n'existe) : l'administrateur ne vote ni ne ratifie jamais une demande qu'il a faite ou un changement de droits qu'il a appliqué (q80).
+- Tests QA adaptés (source de vérité PO changée) : B8bis (2), B8quater (1), QA-B8bis (2), QA-B8quater (2) ; nouveau `Rbac044.test.ts`.
+- Leçon : un rôle de test portant `role.assign` est « administrateur » : après q80 l'ajouter à un membre du Comité exige un motif.

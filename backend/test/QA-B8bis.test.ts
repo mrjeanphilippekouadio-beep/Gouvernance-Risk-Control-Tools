@@ -222,20 +222,25 @@ describe("QA-B8bis cumul rule (q43)", () => {
     expect((await w.roleService.fixedGroupsOf(T1, "u1"))).toEqual(["AUDIT"]);
   });
 
-  it("allows Risk Manager + Committee in both orders and Committee + Audit", async () => {
+  it("refuses Risk Manager + Committee in both orders (q94), still allows Committee + Audit", async () => {
     const w = world();
-    await w.put(w.groups.RISK_MANAGER, "a"); await w.put(w.groups.RISK_COMMITTEE, "a");
-    await w.put(w.groups.RISK_COMMITTEE, "b"); await w.put(w.groups.RISK_MANAGER, "b");
+    await w.put(w.groups.RISK_MANAGER, "a");
+    await expect(w.put(w.groups.RISK_COMMITTEE, "a")).rejects.toThrow(/Committee/);
+    await w.put(w.groups.RISK_COMMITTEE, "b");
+    await expect(w.put(w.groups.RISK_MANAGER, "b")).rejects.toThrow(/Committee/);
     await w.put(w.groups.RISK_COMMITTEE, "c"); await w.put(w.groups.AUDIT, "c");
-    expect(await w.roleService.fixedGroupsOf(T1, "a")).toHaveLength(2);
-    expect(await w.roleService.fixedGroupsOf(T1, "b")).toHaveLength(2);
+    expect(await w.roleService.fixedGroupsOf(T1, "a")).toHaveLength(1);
+    expect(await w.roleService.fixedGroupsOf(T1, "b")).toHaveLength(1);
     expect(await w.roleService.fixedGroupsOf(T1, "c")).toHaveLength(2);
   });
 
   it("fixedGroups / riskManagerAndCommittee on the user sheet: flag only for RM + Committee", async () => {
     const w = world();
     const reader = actor("reader", ["user.read"]);
-    await w.put(w.groups.RISK_MANAGER, "rm"); await w.put(w.groups.RISK_MANAGER, "rmco"); await w.put(w.groups.RISK_COMMITTEE, "rmco");
+    await w.put(w.groups.RISK_MANAGER, "rm");
+    // q94: the cumul can no longer be created through the service; a pre-existing one is simulated in the held map
+    await w.put(w.groups.RISK_MANAGER, "rmco");
+    await w.roleRepo.assignToUser(T1, w.groups.RISK_COMMITTEE.id, "rmco", "setup-admin");
     await w.put(w.groups.RISK_COMMITTEE, "coau"); await w.put(w.groups.AUDIT, "coau");
     await w.put(w.filler, "plain");
     const d = (id: string) => w.userService.getDetail(reader, id);
