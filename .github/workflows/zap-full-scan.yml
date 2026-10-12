@@ -4,87 +4,108 @@ name: ZAP Full Scan
 permissions:
   contents: read
 
-# Manual trigger only. This runs ZAP's *active* scan (real XSS/SQLi/etc.
-# payloads against the target), authenticated as a dedicated QA account —
-# never wire this to push/pull_request.
-# Safe here because ZAP_TARGET_URL points at an environment whose DB only
-# holds test data, never real user records.
+# Manual staging-only active scan. It sends real attack payloads and must not
+# be selectable against production. Keep it off push/pull_request.
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "GitHub environment holding ZAP_TARGET_URL / ZAP_TEST_PASSWORD"
+        description: "Active ZAP scans are restricted to the staging environment"
         type: choice
         options:
           - staging
-          - production
         default: staging
 
 jobs:
   zap-full-scan:
     runs-on: ubuntu-latest
-    # Safety net: spiderAjax/activeScan have their own per-job max durations
-    # (see automation-plan.yaml) but bound the whole job in case of a hang.
     timeout-minutes: 60
-    environment: ${{ inputs.environment }}
+    environment: staging
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Resolve ZAP automation plan secrets
-        # ZAP's own Automation Framework ${VAR} substitution resolves fine
-        # for context.urls / authentication.parameters.loginPageUrl (confirmed:
-        # GitHub's secret masking showed *** there, proving the real value was
-        # substituted in) but silently FAILS for
-        # authentication.verification.pollUrl: the poll request was sent with
-        # the literal, unsubstituted string "${ZAP_TARGET_URL}/api/v1/users/me"
-        # (org.apache.commons.httpclient.URIException: incorrect path, seen
-        # on every run). Every verification poll then errored, so ZAP could
-        # never confirm a login succeeded even when it did — THIS, not the
-        # rate limiter, is what produced the 42%/80% "authentication failure"
-        # aborts. Fix: substitute the variables ourselves before ZAP ever
-        # parses the file, so AF's partial/inconsistent substitution is never
-        # in the loop.
+      - name: Resolve and validate ZAP plan
         env:
           ZAP_TARGET_URL: ${{ secrets.ZAP_TARGET_URL }}
-          ZAP_TEST_EMAIL: "qagrctest@gmail.com"
+          ZAP_API_BASE_URL: https://gouvernance-risk-control-tools-staging.onrender.com
+          ZAP_TEST_EMAIL: qagrctest@gmail.com
           ZAP_TEST_PASSWORD: ${{ secrets.ZAP_TEST_PASSWORD }}
         run: |
-          envsubst '$ZAP_TARGET_URL $ZAP_TEST_EMAIL $ZAP_TEST_PASSWORD' \
-            < .github/zap/automation-plan.yaml \
-            > "$RUNNER_TEMP/automation-plan.resolved.yaml"
+          set -euo pipefail
+          # The resolved file contains the QA password. Keep it owner-readable
+          # only; it lives outside the workspace and is removed after the scan.
+          umask 077
+          ruby <<'RUBY'
+          require "yaml"
+          require "uri"
 
-      - name: ZAP Full Scan (authenticated, via Automation Framework)
-        # No marketplace action here: authenticating as a real QA user
-        # (browser-driven login + header-based session management, see
-        # automation-plan.yaml) requires an Automation Framework plan,
-        # which zaproxy/action-full-scan does not expose — so the ZAP
-        # stable image is run directly with the plan mounted in.
+          target_uri = URI.parse(ENV.fetch("ZAP_TARGET_URL"))
+          api_uri = URI.parse(ENV.fetch("ZAP_API_BASE_URL"))
+          expected_frontend = "gouvernanceriskcontroltools-staging.onrender.com"
+          expected_backend = "gouvernance-risk-control-tools-staging.onrender.com"
+
+          unless target_uri.scheme == "https" &&
+                 target_uri.host == expected_frontend &&
+                 [nil, "", "/"].include?(target_uri.path) &&
+                 target_uri.query.nil? && target_uri.fragment.nil?
+            abort("ZAP_TARGET_URL must be the staging frontend origin; refusing to scan an unexpected target.")
+          end
+
+          unless api_uri.scheme == "https" &&
+                 api_uri.host == expected_backend &&
+                 [nil, "", "/"].include?(api_uri.path) &&
+                 api_uri.query.nil? && api_uri.fragment.nil?
+            abort("ZAP_API_BASE_URL is not the expected staging API origin; refusing to scan an unexpected target.")
+          end
+
+          target_url = "#{target_uri.scheme}://#{target_uri.host}"
+          api_url = "#{api_uri.scheme}://#{api_uri.host}"
+          plan = YAML.safe_load(File.read(".github/zap/automation-plan.yaml"), aliases: false)
+          context = plan.fetch("env").fetch("contexts").find { |item| item.fetch("name") == "grc-tools" }
+          abort("Context grc-tools is missing") unless context
+
+          # ZAP authenticates through the frontend but the API is a distinct
+          # Render origin. Both must belong to the same ZAP context.
+          context["urls"] = [target_url, api_url].uniq
+          auth = context.fetch("authentication")
+          auth.fetch("parameters")["loginPageUrl"] = target_url
+          auth.fetch("verification")["pollUrl"] = "#{api_url}/api/v1/users/me"
+
+          qa_user = context.fetch("users").find { |item| item.fetch("name") == "qa" }
+          abort("QA user is missing from ZAP context") unless qa_user
+          credentials = qa_user.fetch("credentials")
+          credentials["username"] = ENV.fetch("ZAP_TEST_EMAIL")
+          credentials["password"] = ENV.fetch("ZAP_TEST_PASSWORD")
+
+          plan.fetch("jobs").each do |job|
+            next unless %w[spider spiderClient].include?(job.fetch("type"))
+            job.fetch("parameters")["url"] = target_url
+          end
+
+          resolved = YAML.dump(plan)
+          if resolved.match?(/\$\{ZAP_(?:TARGET_URL|API_BASE_URL|TEST_EMAIL|TEST_PASSWORD)\}/)
+            abort("Unresolved ZAP environment placeholder remains in the plan")
+          end
+
+          output = File.join(ENV.fetch("RUNNER_TEMP"), "automation-plan.resolved.yaml")
+          File.write(output, resolved, mode: "w", perm: 0o600)
+          RUBY
+
+      - name: ZAP authenticated full scan
+        env:
+          ZAP_API_BASE_URL: https://gouvernance-risk-control-tools-staging.onrender.com
         run: |
+          set -euo pipefail
           mkdir -p report zap-home
-          # The image runs as its own non-root "zap" user, uid 1000
-          # (docker/Dockerfile-stable: `useradd -u 1000 ... zap`), which
-          # doesn't own this bind-mounted directory by default (first run
-          # failed with AccessDeniedException writing report_html.html).
-          # Hand it over to that exact uid rather than opening it to everyone.
+          # The stable image runs as uid 1000 ("zap"). Do not make the
+          # workspace world-writable just to let ZAP produce its reports.
           sudo chown 1000:1000 report zap-home
-          set +e
-          # Every browser-driven step (spiderAjax/Crawljax, and the DomXss /
-          # ActiveScript active-scan rules, which also launch a real
-          # headless Firefox) logged
-          # "RedirectScript - Failed to configure ZAP extension on browser
-          # launch" followed by Firefox reaching
-          # about:neterror?e=proxyConnectFailure for
-          # https://zap/zapCallBackUrl/... — the browser's proxy config
-          # points at hostname "zap", a convention from ZAP's official
-          # docker-compose setups (where the service is literally named
-          # "zap" and gets that hostname for free via Compose's DNS). We run
-          # this as a single standalone `docker run`, so nothing resolves
-          # "zap" inside the container, the extension can never phone back,
-          # and every browser-driven job silently falls back to crawling/
-          # scanning with no ZAP proxy in the loop — explaining why
-          # Crawljax never saw the authenticated app (0 links beyond the
-          # login form) even after auth itself started working. Map it to
-          # the container's own loopback so it resolves to ZAP itself.
+
+          rc=0
+          # The browser extension uses the proxy host "zap". In a standalone
+          # docker run there is no Compose DNS, so map it to loopback AND
+          # explicitly start ZAP's main proxy listener on that same address.
+          # The host mapping alone did not clear proxyConnectFailure in #161.
           docker run --rm \
             -v "${{ github.workspace }}/report:/zap/wrk/report:rw" \
             -v "${{ github.workspace }}/zap-home:/home/zap/.ZAP:rw" \
@@ -92,19 +113,84 @@ jobs:
             --add-host=zap:127.0.0.1 \
             --entrypoint bash \
             ghcr.io/zaproxy/zaproxy:stable \
-            -c 'zap.sh -cmd -autorun /zap/plan/automation-plan.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null; exit $rc'
-          rc=$?
-          set -e
-          # The previous attempt to grab the auth-attempt detail from
-          # zap.log via a fixed mounted path (zap-home/zap.log) silently
-          # found nothing — the find above prints it straight into this
-          # job's log instead of guessing the path, so it's always visible.
-          # No exitStatus job in the plan, so ZAP uses its own default exit
-          # codes: 0 ok, 2 warnings found (expected — don't fail the build
-          # just because alerts exist), 1 a real plan/execution error.
+            -c 'zap.sh -cmd -host 127.0.0.1 -port 8080 -autorun /zap/plan/automation-plan.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null; exit $rc' || rc=$?
+
+          zap_log="zap-home/zap.log"
+          if [ ! -s "$zap_log" ]; then
+            echo "::error::ZAP log is missing; authenticated browser configuration cannot be verified."
+            rc=1
+          else
+            if grep -Fq "RedirectScript - Failed to configure ZAP extension on browser launch" "$zap_log"; then
+              echo "::error::ZAP browser extension still cannot configure its proxy; scan coverage is not trustworthy."
+              rc=1
+            fi
+            if grep -Fq "insight.auth.failure" "$zap_log"; then
+              echo "::error::ZAP reported authentication failure; refusing to accept an unauthenticated scan."
+              rc=1
+            fi
+            if ! grep -Fq "Job spiderClient finished" "$zap_log"; then
+              echo "::error::The authenticated Client Spider did not finish."
+              rc=1
+            fi
+            if ! grep -Fq "Job activeScan finished" "$zap_log"; then
+              echo "::error::The active scan did not finish."
+              rc=1
+            fi
+          fi
+
+          # Exported Sites Tree is evidence, not just the alert-only report.
+          # Require at least the login, identity-verification and one further
+          # backend endpoint so a green job cannot mean "login page only".
+          if [ ! -s report/site-tree.yaml ]; then
+            echo "::error::ZAP Sites Tree evidence is missing."
+            rc=1
+          else
+            if ! ruby -ryaml -ruri -e '
+              api_host = URI.parse(ENV.fetch("ZAP_API_BASE_URL")).host
+              tree = YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)
+              urls = []
+              walk = lambda do |node|
+                case node
+                when Hash
+                  if node["url"].is_a?(String)
+                    begin
+                      uri = URI.parse(node["url"])
+                      if uri.host == api_host && uri.path && uri.path != "/" && !uri.path.empty?
+                        urls << uri.path
+                      end
+                    rescue URI::InvalidURIError
+                      # Ignore malformed/non-URL tree labels.
+                    end
+                  end
+                  node.each_value { |value| walk.call(value) }
+                when Array
+                  node.each { |value| walk.call(value) }
+                end
+              end
+              walk.call(tree)
+              paths = urls.uniq
+              if paths.length < 3
+                warn "::error::ZAP coverage gate failed: fewer than 3 distinct non-root API paths were captured."
+                exit 1
+              end
+              puts "ZAP API coverage gate passed (#{paths.length} distinct non-root paths)."
+            ' report/site-tree.yaml; then
+              rc=1
+            fi
+          fi
+
+          for report_file in report_html.html report_md.md report_json.json client-map.yaml; do
+            if [ ! -s "report/$report_file" ]; then
+              echo "::error::Expected ZAP artifact report/$report_file is missing."
+              rc=1
+            fi
+          done
+
+          rm -f "$RUNNER_TEMP/automation-plan.resolved.yaml"
           echo "ZAP exit code: $rc"
+          # Exit 2 means the plan ran with warnings (including detected alerts).
+          # Real execution errors and failed authentication/coverage gates fail.
           if [ "$rc" = "1" ]; then
-            echo "::error::ZAP automation plan failed to execute (see log above)"
             exit 1
           fi
 
