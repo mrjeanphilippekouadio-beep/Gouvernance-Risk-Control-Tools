@@ -157,7 +157,8 @@ export function NotificationCenter({ token, onNavigate }: { token: string; onNav
             {items !== null && items.length > 0 && (
               <ul className="notif-list">
                 {items.map((n) => {
-                  const target = n.resourceId !== null ? TARGETS[n.resourceType] : undefined;
+                  // Dispositif notices are MANAGEMENT too but have no screen yet: no link rather than "roles".
+                  const target = n.resourceId !== null && !n.eventType.startsWith("RISK_FRAMEWORK_") ? TARGETS[n.resourceType] : undefined;
                   const isUnread = n.readAt === null;
                   return (
                     <li key={n.id} className="notif-item" data-unread={isUnread || undefined}>
