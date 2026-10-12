@@ -31,3 +31,6 @@ Mémoire persistante du rôle Orchestrateur sur GRC Tools. Obligatoire : la mett
 - Deuxième retard le même jour : q96–q99 répondues à 08:46–08:48, découvertes à 13:20 seulement parce qu'une écriture épinglée a échoué (version_mismatch). La leçon de DECISION-044 (« relire à chaque transition ») ne suffit pas.
 - Règle renforcée : **avant chaque message au PO et avant chaque dispatch**, `query questions where status == "answered"` sur les ordres ≥ dernière question journalisée. Une réponse trouvée → Decision Log d'abord, tout le reste ensuite.
 - Signal utile : un `version_mismatch` sur un document `questions` = le PO l'a probablement tranché.
+
+## Leçon 2026-10-12 : le frontend oublié
+Le PO a constaté que le frontend n'avançait plus : 13 écrans pour 43 modules backend. Cause : à chaque décision PO je dispatchais le backend, et les specs renvoyaient l'écran à « un lot F » jamais planifié. Règle : à chaque transition de module, compter les modules backend sans écran ; tout renvoi à un « lot F » devient une ligne ACTION_ITEMS ; au moins un lot frontend tourne en parallèle des lots backend dès qu'un backend stable existe sans écran.
