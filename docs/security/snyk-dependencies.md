@@ -851,3 +851,70 @@ Titre : les effets de bord de `recordDecision` ne sont pas audités sur leur pro
 F-D044-01 LOW 2,7 : REMEDIATION_REQUIRED (A06, arbitrage A13/A14 sur le sens Comité → permissions RM). F-D044-02 LOW 2,2 : REMEDIATION_REQUIRED (A06). F-D044-03 LOW 3,1 : REVIEW_REQUIRED (A06/A13, `RatingScaleService` en premier). F-D044-04/05/06 INFO. AUD-D044-14 INFO (A07).
 CVSS max 3,1 : **aucune escalade HUMAN** (seuil 7 non atteint).
 **Feu vert A10 pour la PR staging** de `0c4384b` + `2b14eb7` + `e5b6381`. F-D044-01 doit être corrigé avant la production : il vide de sa substance une décision PO explicite (q94).
+
+### Retest F-D044-01 (A10, 2026-10-12)
+
+Périmètre : correctif A06 `ea4ef9f` (intégré à `6ee162a`, PR #168) + complément `6aebb98` (q80/G1, demandé par l'orchestrateur après la remarque Gitar). Branche `wt/sec-fd04401`. Méthode : PoC vitest temporaire (24 cas) sur le vrai `RoleService`, avec un faux repository qui rejoue le `recheck` sous verrou, supprimé avant commit. Témoin : le même fichier contre `RoleService.ts` de `6d3940b` (avant correctif) échoue sur 12 cas, puis passe sur les 18 cas q94 après correctif. Requête 8 exécutée sur Postgres 16 local jetable (jamais Neon). `npm run typecheck && npm test` : 1788 verts, 15 ignorés.
+
+```text
+SECURITY_RETEST
+FINDING_ID: F-D044-01
+ORIGINAL_RESULT: CONFIRMED (PoC), q94 contourné par un rôle ordinaire ou par l'élargissement du groupe RM
+FIX_ANALYZED: ea4ef9f (COMMITTEE_VALIDATION_PERMISSIONS, assertNoCumul, assertRolePermissionRules) + 6aebb98 (isCommitteeRole)
+RETEST_PERFORMED: oui (PoC 3 scénarios d'origine + contournements)
+BYPASS_CHECKED: oui
+RESULT: RETEST_PASS pour q94 ; complément 6aebb98 partiel (voir F-D044-07/08)
+STATUS: F-D044-01 CLOSED (q94) ; F-D044-07 / F-D044-08 REMEDIATION_REQUIRED
+```
+
+**Rejeu du PoC d'origine (3 scénarios), pour chacune des 3 permissions :**
+- témoin `rm` puis `co` (et l'inverse) → refus « Committee group » ;
+- `rm` puis un rôle ordinaire portant `riskevaluation.validate.committee`, `treatmentdecision.validate.committee` ou `governance.validate` (et l'inverse) → refus. Rien n'est assigné : 0 notification, état inchangé ;
+- `update(rm, permissions + p)` → refus « cannot carry Committee validation », avec ou sans titulaire. Le groupe reste inchangé.
+
+**Couverture de `COMMITTEE_VALIDATION_PERMISSIONS`** : complète.
+- Le groupe fixe Comité (`FIXED_GROUP_PERMISSIONS.RISK_COMMITTEE`) ne porte que 4 permissions hors lecture : les 3 de la liste et `rolegroup.audit.validate`.
+- Ces 3 permissions sont les seules gardes `requirePermission` des validations « en Comité » :
+  - `RiskEvaluationService.validateByCommittee` : l. 506 ;
+  - `TreatmentDecisionService.validateByCommittee` : l. 145 ;
+  - `GovernanceService.close` : l. 129.
+- `rolegroup.audit.validate` est déjà refusée à tout rôle autre que les groupes Audit/Comité (`rolegroupAuditPermissionAllowedOn`, rejoué : refus sur le groupe RM et sur un rôle ordinaire). `decideAuditPermissionChange` exige en plus le groupe et refuse un RM.
+- Les autres permissions liées au Comité ne sont pas des validations : `config.committeethreshold.set` et `config.committeeenforcement.set` relèvent du paramétrage, et `riskframework.activate` revient au RM par q87.
+
+**Contournements vérifiés (tous refusés) :**
+- **Élargissement d'un rôle ordinaire déjà détenu par un RM** (non testé par A06), pour les 3 permissions : refus, rôle inchangé.
+  - Pré-contrôle neutralisé (`listAssignments` vide, course simulée) : le `recheck` sous verrou du repository refuse seul.
+  - Les titulaires relus sous verrou incluent les suspendus (`holdersSql` sans filtre `users.deleted_at`).
+  - Un élargissement sans permission Comité reste accepté.
+- **`assertReactivable` / `UserService.reactivate`** :
+  - RM + rôle ordinaire portant l'une des 3 permissions → refus ;
+  - groupe RM hérité portant lui-même une permission Comité → refus, et son assignation à un tiers est refusée aussi (`isRm(role) && isCommittee(role)`) ;
+  - RM « propre » → accepté.
+- Les seuls chemins d'assignation sont `roles.routes.ts` et `UserService.create`, qui passent tous deux par `RoleService.assignToUser`.
+
+**Requête 8 (`B8-predeploy-checks.sql`)** :
+- Elle ne contient que du `SELECT` : aucune écriture, aucun DDL, aucun `SET`, aucun verrou.
+- Exécutée dans une transaction `BEGIN TRANSACTION READ ONLY` sur un schéma minimal jetable : pas d'erreur. Résultat :
+  - remontés, comme attendu : RM + groupe Comité, RM suspendu + rôle ordinaire `governance.validate`, groupe RM hérité portant `treatmentdecision.validate.committee` ;
+  - exclus, comme attendu : RM + rôle ordinaire sans permission Comité, assignation révoquée.
+- Un RM dont `users.roles` porte une permission Comité n'est **pas** détecté. C'est F-D044-04 (`users.roles` hérité), hors périmètre de ce retest : toujours ouvert, simplement noté.
+
+**Complément `6aebb98` (q80 / G1)** : `isCommitteeMember` passe par `isCommitteeRole` (groupe ou pouvoirs de validation).
+- q80 : RETEST_PASS pour les 3 permissions et dans les deux ordres. Un administrateur qui reçoit un rôle ordinaire portant une permission Comité doit fournir un motif, et `ADMIN_RISK_MANAGER_CUMUL` est notifié. C'est aussi vrai à l'élargissement d'un rôle ordinaire déjà détenu, et `isAdminAndCommittee` est vrai.
+- En revanche, « utilisé partout » est inexact : 3 tests restent « groupe seulement » (F-D044-07 et F-D044-08 ci-dessous). Le refus de `decideAuditPermissionChange` (l. 758) est volontairement « groupe seulement » : il échoue fermé et reste correct.
+
+**F-D044-07 — LOW — CVSS 3.1 2,7 (AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:L/A:N) — CONFIRMED (PoC) — owner A06.**
+Titre : G1 (DECISION-044) ignore les pouvoirs Comité portés par un rôle ordinaire.
+- Cause : `changeAuditGroupPermissions` (l. 622) teste `r.systemGroup === "RISK_MANAGER" || r.systemGroup === "RISK_COMMITTEE"` au lieu d'utiliser `isCommitteeRole`.
+- Preuve : un administrateur porteur de `rolegroup.audit.update` et d'un rôle ordinaire `governance.validate` modifie les droits du groupe Audit → `APPLIED` (attendu : `PENDING`). Le témoin avec le groupe Comité donne bien `PENDING`.
+- Atténuation : `rolegroup.audit.update` n'est portable par aucun rôle (seulement via `users.roles`), et la liste blanche lecture seule reste appliquée. Impact limité à l'absence de validation par un tiers.
+- Correctif : `held.some((r) => r.systemGroup === "RISK_MANAGER" || isCommitteeRole(r))`.
+- Test de régression : le cas ci-dessus doit donner `PENDING`.
+
+**F-D044-08 — LOW — CVSS 3.1 2,2 (AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:N) — CONFIRMED (PoC) — owner A06, arbitrage A13 sur la portée.**
+Titre : q58 et q65 restent « groupe seulement ».
+- (a) q58 (`assertCumulRules` l. 378). Le tenant interdit le cumul Comité + Audit. Pourtant, le groupe Audit + un rôle ordinaire `riskevaluation.validate.committee` → accepté (le témoin avec le groupe Comité est refusé). Le paramètre du tenant est contourné.
+- (b) q65 (`assignToUser` l. 455) : entrer au Comité par un rôle ordinaire ne notifie pas `COMMITTEE_MEMBER_ADDED` aux membres Audit (0 notification).
+- Correctif : `isCommitteeRole` aux deux endroits (q58 à appliquer dans les deux sens, en assignation comme en élargissement). A13 confirme que q58/q65 visent bien les pouvoirs effectifs, comme q94.
+
+CVSS max 2,7 : **aucune escalade HUMAN**. F-D044-01 est **RETEST_PASS / CLOSED** : q94 tient sur l'assignation, l'élargissement, le groupe RM et la réactivation. Feu vert A10 maintenu pour la PR staging #168. F-D044-07 doit être corrigé avant la production, puisque G1 était l'objet explicite de `6aebb98`. F-D044-08 peut suivre dans le même correctif.
