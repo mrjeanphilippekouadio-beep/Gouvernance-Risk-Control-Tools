@@ -32,7 +32,7 @@ env:
         verification:
           method: "poll"
           pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
-          loggedOutRegex: "\\Q\\\"error\\":\\\"Missing bearer token\\\"\\E|\\Q\\\"error\\":\\\"Invalid or expired token\\\"\\E"
+          loggedOutRegex: "Missing bearer token|Invalid or expired token"
           pollFrequency: 20
           pollUnits: "requests"
       sessionManagement:
