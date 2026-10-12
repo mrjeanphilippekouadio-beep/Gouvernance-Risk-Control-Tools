@@ -126,6 +126,11 @@ export class ActionPlanService {
       const riskIds = new Set<string>();
       if (action.sourceType === "RISK" && action.sourceId) riskIds.add(action.sourceId);
       for (const l of await this.actions.listLinks(actor.tenantId, action.id)) if (l.resourceType === "RISK") riskIds.add(l.resourceId);
+      // q96: a KRI-born action also covers the risk that KRI monitors (Kri.riskId, mandatory), tenant-scoped read.
+      if (action.sourceType === "KRI" && action.sourceId && this.kris) {
+        const kri = await this.kris.getById(actor.tenantId, action.sourceId);
+        if (kri?.riskId) riskIds.add(kri.riskId);
+      }
       for (const riskId of riskIds) {
         const risk = await this.risks.getById(actor.tenantId, riskId);
         if (!risk || risk.status === "ARCHIVED" || risk.deletedAt) continue;
