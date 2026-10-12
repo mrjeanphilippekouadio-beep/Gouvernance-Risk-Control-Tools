@@ -619,7 +619,7 @@ export class RoleService {
     }
 
     // G1 (DECISION-044): an administrator who is also a Committee member would otherwise apply alone, like a Risk Manager.
-    if (held.some((r) => r.systemGroup === "RISK_MANAGER" || r.systemGroup === "RISK_COMMITTEE")) {
+    if (held.some((r) => r.systemGroup === "RISK_MANAGER" || isCommitteeRole(r))) {
       if (!this.permissionChanges) throw new Error("RoleService requires a RolePermissionChangeRepository");
       const change = await this.permissionChanges.create({
         tenantId: actor.tenantId,

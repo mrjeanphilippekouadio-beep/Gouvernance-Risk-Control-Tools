@@ -15,7 +15,7 @@ function role(id: string, systemGroup: SystemGroup | null, permissions: Permissi
 }
 
 function setup() {
-  const roles = [role("rm", "RISK_MANAGER"), role("co", "RISK_COMMITTEE"), role("au", "AUDIT"), role("plain", null, ["role.assign"])];
+  const roles = [role("rm", "RISK_MANAGER"), role("co", "RISK_COMMITTEE"), role("au", "AUDIT"), role("plain", null, ["role.assign"]), role("gov", null, ["governance.validate"])];
   const held = new Map<string, string[]>(); // userId -> roleIds
   const changes: RolePermissionChange[] = [];
   const events: AuditEvent[] = [];
@@ -141,6 +141,12 @@ describe("G1 administrator who is a Committee member", () => {
     expect(changes[0]?.status).toBe("PENDING");
     await service.decideAuditPermissionChange(actor("aud", validate), "c1", true, "r");
     expect(changes[0]?.status).toBe("APPROVED");
+  });
+
+  it("also queues when Committee validation powers come from an ordinary role (F-D044-07)", async () => {
+    const { service, held } = setup();
+    held.set("admin", ["gov"]);
+    expect((await service.changeAuditGroupPermissions(admin, ["audit.read"], "r", "motif de test")).status).toBe("PENDING");
   });
 
   it("Risk Manager case unchanged: still queued", async () => {
