@@ -173,7 +173,7 @@ const R = "req";
 async function created(s: ReturnType<typeof setup>, params: { changeApprover?: string } = {}) {
   // C-B6a-02: a non-RISK_MANAGER approver cannot be written through the service before B-12: seed it as stored data.
   const { changeApprover, ...allowed } = params;
-  const { framework, version } = await s.service.create(u1, { name: "Dispositif A", ratingScaleId: "s1", params: allowed }, R);
+  const { framework, version } = await s.service.create(u1, { name: "Dispositif A", ratingScaleId: "s1", params: { lowCriticalityThreshold: 5, ...allowed } }, R);
   if (changeApprover) s.versions.find((x) => x.id === version.id)!.changeApprover = changeApprover as never;
   return { fw: framework.id, v: version.id };
 }
@@ -532,5 +532,59 @@ describe("B-6a permissions and migration (static; nothing is applied)", () => {
     expect(up).toMatch(/decided_by <> requested_by OR decision_regime = 'BOOTSTRAP'/);
     expect(up).toMatch(/WHERE NOT EXISTS|AND NOT EXISTS \(SELECT 1 FROM risk_frameworks/);
     expect(readFileSync("../database/postgresql/migrations/055_risk_frameworks.down.sql", "utf8")).toMatch(/^BEGIN;/m);
+  });
+});
+
+describe("B-6b q91 parameters", () => {
+  it("defaults are the contract's; the 'low' threshold has none (R2: never pre-filled)", async () => {
+    const s = setup();
+    const { version } = await s.service.create(u1, { name: "A", ratingScaleId: "s1" }, R);
+    expect(version).toMatchObject({
+      lowCriticalityThreshold: null, riskOwnerExecutorCumulAllowed: true, delegateExecutorCumulAllowed: true,
+      delegationMaxDays: null, hybridPolicyEnabled: false, masteryAuthoritativeSource: "RISK_TEAM",
+      committeeVoteRule: "DEFAULT", committeeVoteCustom: null,
+    });
+  });
+
+  it("activation request refused without a 'low' threshold, or above n x n; accepted at the ceiling", async () => {
+    const s = setup();
+    const { version } = await s.service.create(u1, { name: "A", ratingScaleId: "s1" }, R);
+    const fw = s.versions[0]!.frameworkId;
+    await expect(s.service.requestActivation(u1, fw, version.id, "go", R)).rejects.toThrow(/faible/);
+    await s.service.updateDraft(u1, fw, version.id, { lowCriticalityThreshold: 26 }, R);
+    await expect(s.service.requestActivation(u1, fw, version.id, "go", R)).rejects.toThrow(/faible/);
+    await s.service.updateDraft(u1, fw, version.id, { lowCriticalityThreshold: 25 }, R);
+    await expect(s.service.requestActivation(u1, fw, version.id, "go", R)).resolves.toBeDefined();
+  });
+
+  it("CUSTOM vote rule and any custom body are refused until B-12; invalid enums and durations are refused", async () => {
+    const s = setup();
+    const bad = (params: object) => s.service.create(u1, { name: "A", ratingScaleId: "s1", params: params as never }, R);
+    await expect(bad({ committeeVoteRule: "CUSTOM" })).rejects.toThrow(/B-12/);
+    await expect(bad({ committeeVoteCustom: {} })).rejects.toThrow(/B-12/);
+    await expect(bad({ masteryAuthoritativeSource: "NOBODY" })).rejects.toThrow(ValidationError);
+    await expect(bad({ delegationMaxDays: 0 })).rejects.toThrow(ValidationError);
+    await expect(bad({ hybridPolicyEnabled: "yes" })).rejects.toThrow(ValidationError);
+    await expect(bad({ committeeVoteRule: "B", masteryAuthoritativeSource: "FIRST_LINE", delegationMaxDays: 30, riskOwnerExecutorCumulAllowed: false }))
+      .resolves.toBeDefined();
+  });
+
+  it("a non-default value whose reader is not delivered yet is accepted (hybrid policy)", async () => {
+    const s = setup();
+    const { version } = await s.service.create(u1, { name: "A", ratingScaleId: "s1", params: { hybridPolicyEnabled: true } }, R);
+    expect(version.hybridPolicyEnabled).toBe(true);
+  });
+
+  it("059 redefines the guard with the eight q91 columns and the pinned search_path; its down restores 056 with search_path", () => {
+    const mig = readFileSync("../database/postgresql/migrations/059_risk_framework_branching.sql", "utf8");
+    const down = readFileSync("../database/postgresql/migrations/059_risk_framework_branching.down.sql", "utf8");
+    expect(mig).toMatch(/LANGUAGE plpgsql\s+SET search_path = pg_catalog, public, pg_temp AS/);
+    for (const c of ["low_criticality_threshold", "risk_owner_executor_cumul_allowed", "delegate_executor_cumul_allowed", "delegation_max_days",
+      "hybrid_policy_enabled", "mastery_authoritative_source", "committee_vote_rule", "committee_vote_custom"]) {
+      expect(mig).toContain(`NEW.${c}`);
+      expect(mig).toContain(`OLD.${c}`);
+    }
+    expect(down).toMatch(/LANGUAGE plpgsql\s+SET search_path = pg_catalog, public, pg_temp AS/);
+    expect(down).toMatch(/^BEGIN;/m);
   });
 });

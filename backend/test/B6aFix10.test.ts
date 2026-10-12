@@ -12,7 +12,7 @@ function pool(cfg: number) {
   ];
   const ver = {
     id: "v2", tenant_id: "t1", framework_id: "fw2", version_number: 2, status: "PENDING_APPROVAL", rating_scale_id: "old6",
-    default_evaluation_mode: "CLASSIQUE", committee_evaluation_min_score: null, committee_evaluation_enforced: false,
+    default_evaluation_mode: "CLASSIQUE", committee_evaluation_min_score: cfg, committee_evaluation_enforced: false, // B-6b: the threshold now lives on the version (configs is no longer read)
     committee_treatment_min_score: null, appetite_thresholds: [], change_approver: "RISK_MANAGER", self_proposal_allowed: false,
   };
   const client = {
@@ -41,7 +41,7 @@ describe("F-B6a-10 mirrorScale checks the smallest ceiling of the scales left AC
   it("configs 30 with Small5 still ACTIVE: refused, names the threshold, full ROLLBACK", async () => {
     const f = pool(30);
     await expect(new PostgresRiskFrameworkRepository(f.pool).recordDecision("t1", "r1", decision))
-      .rejects.toThrow(/smallest maximum score \(25\).*seuil Comité évaluation \(configs\) \(30\)/);
+      .rejects.toThrow(/smallest maximum score \(25\).*seuil Comité évaluation de la version \(30\)/);
     expect(f.log.at(-1)).toBe("ROLLBACK");
     expect(f.log).not.toContain("COMMIT");
   });

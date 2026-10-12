@@ -16,6 +16,15 @@ function readScore(value: unknown, fieldName: string): number | undefined {
   return n;
 }
 
+/** B-6b: optional Dispositif to display; a malformed id is a 400, never passed to the repository. */
+function readFrameworkId(value: unknown): string | undefined {
+  const raw = readString(value);
+  if (raw === undefined) return undefined;
+  const parsed = z.guid().safeParse(raw);
+  if (!parsed.success) throw new ValidationError("frameworkId must be a valid identifier");
+  return parsed.data;
+}
+
 /** ACT-181/183: combinable, all-optional query filters shared by every cartography endpoint. */
 function parseFilters(query: Record<string, unknown>): CartographyFilters {
   const filters: CartographyFilters = {};
@@ -27,6 +36,8 @@ function parseFilters(query: Record<string, unknown>): CartographyFilters {
   if (departmentId !== undefined) filters.departmentId = departmentId;
   const ownerId = readString(query["ownerId"]);
   if (ownerId !== undefined) filters.ownerId = ownerId;
+  const frameworkId = readFrameworkId(query["frameworkId"]);
+  if (frameworkId !== undefined) filters.frameworkId = frameworkId;
   const minScore = readScore(query["minScore"], "minScore");
   if (minScore !== undefined) filters.minScore = minScore;
   const maxScore = readScore(query["maxScore"], "maxScore");
@@ -61,7 +72,7 @@ export function cartographyRouter(cartographyService: CartographyService): Route
   // DECISION-041: active scale + effective bands (data: null when no scale is active).
   router.get("/scale", async (req, res, next) => {
     try {
-      res.json({ data: await cartographyService.getActiveScale(req.user) });
+      res.json({ data: await cartographyService.getActiveScale(req.user, readFrameworkId(req.query["frameworkId"])) });
     } catch (err) {
       next(err);
     }

@@ -28,6 +28,12 @@ export interface RiskFrameworkRepository {
   listVersions(tenantId: string, frameworkId: string): Promise<RiskFrameworkVersion[]>;
   getVersion(tenantId: string, frameworkId: string, versionId: string): Promise<RiskFrameworkVersion | null>;
   getActiveVersion(tenantId: string, frameworkId: string): Promise<RiskFrameworkVersion | null>;
+  /** B-6b: a version by id alone (an evaluation stores only `risk_framework_version_id`). */
+  getVersionById(tenantId: string, versionId: string): Promise<RiskFrameworkVersion | null>;
+  /** B-6b: the tenant's non-archived Dispositif marked `is_default`, or null. */
+  getDefaultFramework(tenantId: string): Promise<RiskFramework | null>;
+  /** B-6b: `processes.risk_framework_id` (written by B-6c only); null = not attached. */
+  getProcessFrameworkId(tenantId: string, processId: string): Promise<string | null>;
 
   /** One transaction: the identity and its version 1 in DRAFT. */
   createWithDraft(input: {

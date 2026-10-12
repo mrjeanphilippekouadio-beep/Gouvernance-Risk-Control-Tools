@@ -36,8 +36,42 @@ export interface AppetiteThresholdEntry {
   description: string | null;
 }
 
-/** The methodology parameters of a version (spec §2.2 — only those B-6 consumes). */
-export interface FrameworkParams {
+export type MasteryAuthoritativeSource = "RISK_TEAM" | "FIRST_LINE";
+export type CommitteeVoteRule = "DEFAULT" | "A" | "B" | "C" | "CUSTOM";
+
+/** B-6b (q91): contract §10 parameters carried by every version; defaults = the contract's implicit behaviour. */
+export interface ContractParams {
+  /** NULL until the author fills it in; required (and <= n x n) when activation is requested. Read by B-5. */
+  lowCriticalityThreshold: number | null;
+  /** true = allowed up to the "low" threshold, approved exception beyond; false = forbidden. Read by B-5. */
+  riskOwnerExecutorCumulAllowed: boolean;
+  /** The Delegate never validates their own execution: that is an invariant, not this parameter. Read by B-5. */
+  delegateExecutorCumulAllowed: boolean;
+  /** NULL = no ceiling set by the client (B-5 still requires an end date on each dated delegation). */
+  delegationMaxDays: number | null;
+  /** Read by B-2. */
+  hybridPolicyEnabled: boolean;
+  /** Read by B-1. */
+  masteryAuthoritativeSource: MasteryAuthoritativeSource;
+  /** Read by B-12; CUSTOM is refused until B-12 defines its shape. */
+  committeeVoteRule: CommitteeVoteRule;
+  committeeVoteCustom: Record<string, unknown> | null;
+}
+
+/** Contract §10 defaults (= the migration's column DEFAULTs). The "low" threshold has none: it is entered explicitly. */
+export const DEFAULT_CONTRACT_PARAMS: ContractParams = {
+  lowCriticalityThreshold: null,
+  riskOwnerExecutorCumulAllowed: true,
+  delegateExecutorCumulAllowed: true,
+  delegationMaxDays: null,
+  hybridPolicyEnabled: false,
+  masteryAuthoritativeSource: "RISK_TEAM",
+  committeeVoteRule: "DEFAULT",
+  committeeVoteCustom: null,
+};
+
+/** The methodology parameters of a version (spec §2.2). */
+export interface FrameworkParams extends ContractParams {
   ratingScaleId: string;
   defaultEvaluationMode: EvaluationMode;
   committeeEvaluationMinScore: number;

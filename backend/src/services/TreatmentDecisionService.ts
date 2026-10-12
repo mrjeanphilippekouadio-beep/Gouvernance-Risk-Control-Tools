@@ -153,12 +153,16 @@ export class TreatmentDecisionService {
       throw new ForbiddenError("The proposer of a treatment decision cannot validate it through the committee path either");
     }
 
-    const minScore = await this.resolveCommitteeTreatmentMinScore(actor.tenantId);
+    const evaluation = await this.evaluations.getById(actor.tenantId, before.riskEvaluationId);
+    // B-6b (F-8): the threshold frozen on the parent evaluation (from its Dispositif version). An evaluation
+    // attached to a version never falls back to `configs`; only one from before the Dispositif does.
+    const minScore = evaluation?.riskFrameworkVersionId
+      ? evaluation.committeeTreatmentMinScore ?? null
+      : evaluation?.committeeTreatmentMinScore ?? (await this.resolveCommitteeTreatmentMinScore(actor.tenantId));
     if (minScore === null) {
       throw new ValidationError("No committee threshold is configured for treatment decisions yet — set Config.committeeTreatmentMinScore first");
     }
 
-    const evaluation = await this.evaluations.getById(actor.tenantId, before.riskEvaluationId);
     if (!evaluation || evaluation.residualScore === null) {
       throw new ValidationError("The parent risk evaluation has no residual score recorded");
     }

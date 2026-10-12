@@ -269,16 +269,20 @@ const roleService = new RoleService(roleRepository, auditRepository, userReposit
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
-const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository, riskCategoryRepository, ratingScaleRepository);
+// B-6b: the Dispositif is wired into the services that read or used to own the methodology parameters.
+const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
+const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository, riskCategoryRepository, ratingScaleRepository, riskFrameworkRepository);
 const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository, riskEvaluationRepository, riskAppetiteRepository, configRepository);
 const riskFrameworkService = new RiskFrameworkService(
-  new PostgresRiskFrameworkRepository(pool),
+  riskFrameworkRepository,
   ratingScaleRepository,
   roleRepository,
   userRepository,
   auditRepository,
   riskCategoryRepository,
   notificationService,
+  riskRepository,
+  processRepository,
 );
 const riskEvaluationService = new RiskEvaluationService(
   riskEvaluationRepository,
@@ -288,6 +292,7 @@ const riskEvaluationService = new RiskEvaluationService(
   riskAppetiteRepository,
   processRepository,
   configRepository,
+  riskFrameworkRepository,
 );
 const treatmentDecisionService = new TreatmentDecisionService(
   treatmentDecisionRepository,
@@ -320,7 +325,7 @@ const actionPlanService = new ActionPlanService(
   findingRepository,
   notificationService,
 );
-const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository);
+const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository, riskFrameworkRepository);
 const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository);
 // RACI read-side wiring (PO-confirmed follow-up to Lot 1, see RaciEnrichmentViewService
 // doc comment): composes risk/control/actionPlan services with raciAssignmentService,
@@ -343,6 +348,9 @@ const riskDeviceViewService = new RiskDeviceViewService(
   actionPlanService,
   raciEnrichmentViewService,
   riskAppetiteService,
+  riskFrameworkRepository,
+  ratingScaleRepository,
+  processRepository,
 );
 
 function createDocumentStorage(): DocumentStorage {
@@ -381,7 +389,7 @@ const dashboardService = new DashboardService(
   ratingScaleRepository,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
-const configService = new ConfigService(configRepository, auditRepository, ratingScaleRepository);
+const configService = new ConfigService(configRepository, auditRepository, ratingScaleRepository, riskFrameworkRepository);
 const moduleToggleService = new ModuleToggleService(moduleToggleRepository, auditRepository);
 const tenantService = new TenantService(tenantRepository, auditRepository);
 const regulatoryFrameworkService = new RegulatoryFrameworkService(regulatoryFrameworkRepository, auditRepository);

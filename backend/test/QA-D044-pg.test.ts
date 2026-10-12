@@ -76,7 +76,7 @@ describe.skipIf(!enabled)("QA-D044 q90 on real PostgreSQL", () => {
     const q = async <R extends object = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await pool.query<R>(sql, [t, ...params])).rows;
     const count = async (table: string, extra = "") => Number((await q<{ n: string }>(`SELECT count(*) AS n FROM ${table} WHERE tenant_id = $1 ${extra}`))[0]!.n);
     const audits = async () => (await q<{ entity_type: string; action: string }>(`SELECT entity_type, action FROM audit_log WHERE tenant_id = $1 ORDER BY timestamp, action`)).map((r) => `${r.entity_type}:${r.action}`);
-    const create = async (by = rm1) => svc.create(actor(by), { name: `F-${Math.random()}`, ratingScaleId: scaleId, params: {} }, "r-create");
+    const create = async (by = rm1) => svc.create(actor(by), { name: `F-${Math.random()}`, ratingScaleId: scaleId, params: { lowCriticalityThreshold: 5 } }, "r-create");
     return { t, rm1, rm2, rm3, rm4, scaleId, svc, repo, actor, failAudit, heal, q, count, audits, notified, create };
   }
   type W = Awaited<ReturnType<typeof world>>;

@@ -6,8 +6,9 @@ import type { RoleRepository } from "../domain/repositories/RoleRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { SystemGroup } from "../domain/entities/Role.js";
 import type { AuditEvent } from "../domain/entities/AuditEvent.js";
-import type {
-  AppetiteThresholdEntry,
+import {
+  DEFAULT_CONTRACT_PARAMS,
+  type AppetiteThresholdEntry,
   ApproverGroup,
   ChangeApprover,
   ChangeRequestStatus,
@@ -26,6 +27,9 @@ import { assertReadyToActivate } from "../domain/ratingScaleRules.js";
 import { ABSOLUTE_MAX_SCORE, defaultCommitteeThreshold, maxScoreForScale } from "../domain/scoring.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { NotificationService } from "./NotificationService.js";
+import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
+import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
+import { resolveApplicableVersion } from "./riskFrameworkResolution.js";
 
 const MAX_NAME = 120;
 const MAX_DESCRIPTION = 1000;
@@ -35,9 +39,15 @@ const MAX_APPETITE_ENTRIES = 200;
 const MAX_LABEL = 200;
 
 const EVALUATION_MODES = ["CLASSIQUE", "PARTICIPATIF"];
+const MASTERY_SOURCES = ["RISK_TEAM", "FIRST_LINE"];
+const VOTE_RULES = ["DEFAULT", "A", "B", "C", "CUSTOM"];
+/** Technical guard against abuse, not a business rule (the client fixes the real duration). */
+const MAX_DELEGATION_DAYS = 3650;
 const PARAM_KEYS = [
   "ratingScaleId", "defaultEvaluationMode", "committeeEvaluationMinScore", "committeeEvaluationEnforced",
   "committeeTreatmentMinScore", "appetiteThresholds", "changeApprover", "selfProposalAllowed",
+  "lowCriticalityThreshold", "riskOwnerExecutorCumulAllowed", "delegateExecutorCumulAllowed", "delegationMaxDays",
+  "hybridPolicyEnabled", "masteryAuthoritativeSource", "committeeVoteRule", "committeeVoteCustom",
 ];
 const APPROVERS: ChangeApprover[] = ["RISK_MANAGER", "AUDIT", "COMMITTEE", "AUDIT_AND_COMMITTEE"];
 
@@ -117,6 +127,24 @@ function checkParams<T extends UpdateDraftParams>(input: T): T {
     throw new ValidationError(`changeApprover must be one of: ${APPROVERS.join(", ")}`);
   }
   if (p.changeApprover !== undefined) assertApproverAllowed(p.changeApprover);
+  if (p.masteryAuthoritativeSource !== undefined && !MASTERY_SOURCES.includes(p.masteryAuthoritativeSource)) {
+    throw new ValidationError(`masteryAuthoritativeSource must be one of: ${MASTERY_SOURCES.join(", ")}`);
+  }
+  if (p.committeeVoteRule !== undefined && !VOTE_RULES.includes(p.committeeVoteRule)) {
+    throw new ValidationError(`committeeVoteRule must be one of: ${VOTE_RULES.join(", ")}`);
+  }
+  // Same principle as q87: a setting no code can apply yet is not accepted (B-12 defines the CUSTOM shape).
+  if (p.committeeVoteRule === "CUSTOM" || (p.committeeVoteCustom !== undefined && p.committeeVoteCustom !== null)) {
+    throw new ValidationError("La règle de vote personnalisée sera disponible avec B-12 (vote du Comité)");
+  }
+  if (p.lowCriticalityThreshold !== undefined && p.lowCriticalityThreshold !== null) assertScore(p.lowCriticalityThreshold, "lowCriticalityThreshold");
+  if (p.delegationMaxDays !== undefined && p.delegationMaxDays !== null
+      && (!Number.isInteger(p.delegationMaxDays) || p.delegationMaxDays < 1 || p.delegationMaxDays > MAX_DELEGATION_DAYS)) {
+    throw new ValidationError(`delegationMaxDays must be an integer between 1 and ${MAX_DELEGATION_DAYS}`);
+  }
+  for (const flag of ["riskOwnerExecutorCumulAllowed", "delegateExecutorCumulAllowed", "hybridPolicyEnabled"] as const) {
+    if (p[flag] !== undefined && typeof p[flag] !== "boolean") throw new ValidationError(`${flag} must be a boolean`);
+  }
   if (p.committeeEvaluationMinScore !== undefined) assertScore(p.committeeEvaluationMinScore, "committeeEvaluationMinScore");
   if (p.committeeTreatmentMinScore !== undefined && p.committeeTreatmentMinScore !== null) {
     assertScore(p.committeeTreatmentMinScore, "committeeTreatmentMinScore");
@@ -142,8 +170,30 @@ export class RiskFrameworkService {
     private readonly riskCategories?: Pick<RiskCategoryRepository, "getById">,
     /** Optional: notifications are best effort. */
     private readonly notifications?: Pick<NotificationService, "record"> & Partial<Pick<NotificationService, "emit">>,
-
+    /** B-6b, GET /applicable: optional; without `risks` a riskId is refused, without `processes` the process chain is not walked. */
+    private readonly risks?: Pick<RiskRepository, "getById">,
+    private readonly processes?: Pick<ProcessRepository, "getById">,
   ) {}
+
+  /** B-6b (spec §7), read-only: the ACTIVE version that applies to a risk (through its process) or to a process; null if none. */
+  async getApplicable(actor: AuthenticatedUser, q: { riskId?: string; processId?: string }) {
+    requirePermission(actor, "riskframework.read");
+    let processId: string | null = q.processId ?? null;
+    if (q.riskId) {
+      if (!this.risks) throw new ValidationError("Risk lookup is not available");
+      const risk = await this.risks.getById(actor.tenantId, q.riskId);
+      if (!risk) throw new NotFoundError("Risk", q.riskId);
+      processId = risk.processId ?? null;
+    } else if (processId) {
+      if (!this.processes || !(await this.processes.getById(actor.tenantId, processId))) throw new NotFoundError("Process", processId);
+    }
+    const found = await resolveApplicableVersion(
+      { frameworks: this.frameworks, ratingScales: this.ratingScales, processes: this.processes },
+      actor.tenantId,
+      processId,
+    );
+    return found ? { frameworkId: found.frameworkId, version: found.version, ratingScaleId: found.scale.id } : null;
+  }
 
   // -- reads ------------------------------------------------------------
 
@@ -199,6 +249,14 @@ export class RiskFrameworkService {
       appetiteThresholds: given.appetiteThresholds ?? [],
       changeApprover: given.changeApprover ?? "RISK_MANAGER",
       selfProposalAllowed: given.selfProposalAllowed ?? false,
+      lowCriticalityThreshold: given.lowCriticalityThreshold ?? DEFAULT_CONTRACT_PARAMS.lowCriticalityThreshold,
+      riskOwnerExecutorCumulAllowed: given.riskOwnerExecutorCumulAllowed ?? DEFAULT_CONTRACT_PARAMS.riskOwnerExecutorCumulAllowed,
+      delegateExecutorCumulAllowed: given.delegateExecutorCumulAllowed ?? DEFAULT_CONTRACT_PARAMS.delegateExecutorCumulAllowed,
+      delegationMaxDays: given.delegationMaxDays ?? DEFAULT_CONTRACT_PARAMS.delegationMaxDays,
+      hybridPolicyEnabled: given.hybridPolicyEnabled ?? DEFAULT_CONTRACT_PARAMS.hybridPolicyEnabled,
+      masteryAuthoritativeSource: given.masteryAuthoritativeSource ?? DEFAULT_CONTRACT_PARAMS.masteryAuthoritativeSource,
+      committeeVoteRule: given.committeeVoteRule ?? DEFAULT_CONTRACT_PARAMS.committeeVoteRule,
+      committeeVoteCustom: null,
     };
     await this.assertSubCategories(actor.tenantId, params.appetiteThresholds);
 
@@ -497,6 +555,11 @@ export class RiskFrameworkService {
     for (const a of normalizeAppetite(v.appetiteThresholds)) {
       if (a.threshold > ceiling) over.push(`appétence "${a.subCategory}" (${a.threshold})`);
     }
+    // R2 (A13): the "low" threshold has no default and is never pre-filled; the author enters it explicitly.
+    if (v.lowCriticalityThreshold === null) {
+      throw new ValidationError("Le seuil de criticité « faible » est obligatoire pour demander l'activation : renseignez-le dans le brouillon");
+    }
+    if (v.lowCriticalityThreshold > ceiling) over.push(`seuil de criticité « faible » (${v.lowCriticalityThreshold})`);
     for (const b of scale.criticalityThresholds ?? []) {
       if (b.max > ceiling) over.push(`bande "${b.label}" (${b.max})`);
     }

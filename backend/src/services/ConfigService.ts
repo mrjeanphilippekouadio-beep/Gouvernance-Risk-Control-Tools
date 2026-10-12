@@ -8,6 +8,8 @@ import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRe
 import { MIN_APPETITE_THRESHOLD } from "./RiskEvaluationService.js";
 import { defaultCommitteeThreshold } from "../domain/scoring.js";
 import { resolveMaxScore } from "./scoreCeiling.js";
+import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
+import { FRAMEWORK_OWNS_SETTING_MESSAGE } from "./riskFrameworkResolution.js";
 
 const SCORE_FORMULAS = ["P_X_I", "WEIGHTED_SUM"] as const;
 const IMPACT_RETENU_RULES = ["MAX", "AVERAGE", "WEIGHTED_SUM"] as const;
@@ -76,7 +78,17 @@ export class ConfigService {
     private readonly audit: AuditRepository,
     /** B-9 bis: optional; without it the committee ceiling stays at the historical 25. Wired in server.ts. */
     private readonly ratingScales?: Pick<RatingScaleRepository, "list">,
+    /**
+     * B-6b (spec §3): when wired (always in server.ts) the Dispositif owns the Committee thresholds, the
+     * enforcement flag and the default evaluation mode, so their writers here answer a ValidationError.
+     * Absent: the pre-B-6b behaviour (tests). GET /config stays available as obsolete history.
+     */
+    private readonly frameworks?: Pick<RiskFrameworkRepository, "listFrameworks">,
   ) {}
+
+  private assertNotOwnedByFramework(): void {
+    if (this.frameworks) throw new ValidationError(FRAMEWORK_OWNS_SETTING_MESSAGE);
+  }
 
   /**
    * The first write creates the tenant's row, whose column DEFAULT for the Committee threshold is
@@ -180,6 +192,7 @@ export class ConfigService {
     requestId: string,
   ): Promise<Config> {
     requirePermission(actor, "config.update");
+    this.assertNotOwnedByFramework();
     if (!reason.trim()) {
       throw new ValidationError("A reason is required to change the evaluation mode — this affects the default risk evaluation methodology tenant-wide");
     }
@@ -219,6 +232,7 @@ export class ConfigService {
     requestId: string,
   ): Promise<Config> {
     requirePermission(actor, "config.committeethreshold.set");
+    this.assertNotOwnedByFramework();
     const MAX_APPETITE_THRESHOLD = await resolveMaxScore(this.ratingScales, actor.tenantId);
     if (!reason.trim()) {
       throw new ValidationError("A reason is required to change the committee thresholds — this affects which risk evaluations can reach committee validation");
@@ -282,6 +296,7 @@ export class ConfigService {
    */
   async setCommitteeEnforcement(actor: AuthenticatedUser, enforced: boolean, reason: string, requestId: string): Promise<Config> {
     requirePermission(actor, "config.committeeenforcement.set");
+    this.assertNotOwnedByFramework();
     if (!reason.trim()) {
       throw new ValidationError("A reason is required to change the committee validation enforcement — disabling it removes a governance control tenant-wide");
     }

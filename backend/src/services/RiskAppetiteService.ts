@@ -10,6 +10,8 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
 import { requirePermission } from "../domain/permissions.js";
 import { resolveMaxScore } from "./scoreCeiling.js";
+import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
+import { FRAMEWORK_OWNS_SETTING_MESSAGE } from "./riskFrameworkResolution.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 const MIN_THRESHOLD = 1;
@@ -39,6 +41,8 @@ export class RiskAppetiteService {
     private readonly riskCategories?: RiskCategoryRepository,
     /** B-9 bis: optional; without it the threshold ceiling stays at the historical 25. Wired in server.ts. */
     private readonly ratingScales?: Pick<RatingScaleRepository, "list">,
+    /** B-6b (spec §3): when wired (server.ts) the Dispositif owns the appetite list; setThreshold and archive are closed. */
+    private readonly frameworks?: Pick<RiskFrameworkRepository, "listFrameworks">,
   ) {}
 
   /**
@@ -60,6 +64,7 @@ export class RiskAppetiteService {
     if (input.active === false) {
       requirePermission(actor, "riskappetite.delete");
     }
+    if (this.frameworks) throw new ValidationError(FRAMEWORK_OWNS_SETTING_MESSAGE);
 
     const trimmedSubCategory = subCategory.trim();
     if (!trimmedSubCategory) throw new ValidationError("sous_categorie is required");
@@ -147,6 +152,7 @@ export class RiskAppetiteService {
    */
   async archive(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<void> {
     requirePermission(actor, "riskappetite.delete");
+    if (this.frameworks) throw new ValidationError(FRAMEWORK_OWNS_SETTING_MESSAGE);
     if (!reason.trim()) throw new ValidationError("A reason is required to retire a risk appetite threshold");
     const before = await this.get(actor, id);
 

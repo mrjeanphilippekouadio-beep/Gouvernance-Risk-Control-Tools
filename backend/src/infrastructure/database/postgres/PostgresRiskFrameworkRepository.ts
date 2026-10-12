@@ -6,10 +6,12 @@ import type {
   ChangeApprover,
   ChangeRequestKind,
   ChangeRequestStatus,
+  CommitteeVoteRule,
   CreateActivationRequestInput,
   DecisionRegime,
   DecisionResult,
   FrameworkParams,
+  MasteryAuthoritativeSource,
   RecordDecisionInput,
   RiskFramework,
   RiskFrameworkChangeRequest,
@@ -51,6 +53,14 @@ interface VersionRow {
   appetite_thresholds: AppetiteThresholdEntry[];
   change_approver: ChangeApprover;
   self_proposal_allowed: boolean;
+  low_criticality_threshold: number | null;
+  risk_owner_executor_cumul_allowed: boolean;
+  delegate_executor_cumul_allowed: boolean;
+  delegation_max_days: number | null;
+  hybrid_policy_enabled: boolean;
+  mastery_authoritative_source: MasteryAuthoritativeSource;
+  committee_vote_rule: CommitteeVoteRule;
+  committee_vote_custom: Record<string, unknown> | null;
   created_by: string | null;
   last_edited_by: string | null;
   created_at: Date;
@@ -110,6 +120,14 @@ const versionOf = (r: VersionRow): RiskFrameworkVersion => ({
   appetiteThresholds: r.appetite_thresholds,
   changeApprover: r.change_approver,
   selfProposalAllowed: r.self_proposal_allowed,
+  lowCriticalityThreshold: r.low_criticality_threshold,
+  riskOwnerExecutorCumulAllowed: r.risk_owner_executor_cumul_allowed,
+  delegateExecutorCumulAllowed: r.delegate_executor_cumul_allowed,
+  delegationMaxDays: r.delegation_max_days,
+  hybridPolicyEnabled: r.hybrid_policy_enabled,
+  masteryAuthoritativeSource: r.mastery_authoritative_source,
+  committeeVoteRule: r.committee_vote_rule,
+  committeeVoteCustom: r.committee_vote_custom,
   createdBy: r.created_by,
   lastEditedBy: r.last_edited_by,
   createdAt: r.created_at,
@@ -151,7 +169,18 @@ const DRAFT_COLUMNS: Record<keyof UpdateDraftParams, string> = {
   appetiteThresholds: "appetite_thresholds",
   changeApprover: "change_approver",
   selfProposalAllowed: "self_proposal_allowed",
+  lowCriticalityThreshold: "low_criticality_threshold",
+  riskOwnerExecutorCumulAllowed: "risk_owner_executor_cumul_allowed",
+  delegateExecutorCumulAllowed: "delegate_executor_cumul_allowed",
+  delegationMaxDays: "delegation_max_days",
+  hybridPolicyEnabled: "hybrid_policy_enabled",
+  masteryAuthoritativeSource: "mastery_authoritative_source",
+  committeeVoteRule: "committee_vote_rule",
+  committeeVoteCustom: "committee_vote_custom",
 };
+
+/** jsonb columns: serialised explicitly (pg would turn a JS array into a Postgres array). */
+const JSON_KEYS = new Set<string>(["appetiteThresholds", "committeeVoteCustom"]);
 
 /** A failing ROLLBACK (dead connection) must not replace the error that caused it. */
 async function rollbackQuietly(client: PoolClient): Promise<void> {
@@ -247,6 +276,30 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     return rows[0] ? versionOf(rows[0]) : null;
   }
 
+  async getVersionById(tenantId: string, versionId: string): Promise<RiskFrameworkVersion | null> {
+    const { rows } = await this.pool.query<VersionRow>(
+      `SELECT * FROM risk_framework_versions WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, versionId],
+    );
+    return rows[0] ? versionOf(rows[0]) : null;
+  }
+
+  async getDefaultFramework(tenantId: string): Promise<RiskFramework | null> {
+    const { rows } = await this.pool.query<FrameworkRow>(
+      `SELECT * FROM risk_frameworks WHERE tenant_id = $1 AND is_default AND archived_at IS NULL`,
+      [tenantId],
+    );
+    return rows[0] ? frameworkOf(rows[0]) : null;
+  }
+
+  async getProcessFrameworkId(tenantId: string, processId: string): Promise<string | null> {
+    const { rows } = await this.pool.query<{ risk_framework_id: string | null }>(
+      `SELECT risk_framework_id FROM processes WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
+      [tenantId, processId],
+    );
+    return rows[0]?.risk_framework_id ?? null;
+  }
+
   async createWithDraft(input: {
     tenantId: string;
     name: string;
@@ -266,8 +319,12 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
         `INSERT INTO risk_framework_versions
            (tenant_id, framework_id, version_number, status, rating_scale_id, default_evaluation_mode,
             committee_evaluation_min_score, committee_evaluation_enforced, committee_treatment_min_score,
-            appetite_thresholds, change_approver, self_proposal_allowed, created_by, last_edited_by)
-         VALUES ($1, $2, 1, 'DRAFT', $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+            appetite_thresholds, change_approver, self_proposal_allowed, created_by, last_edited_by,
+            low_criticality_threshold, risk_owner_executor_cumul_allowed, delegate_executor_cumul_allowed,
+            delegation_max_days, hybrid_policy_enabled, mastery_authoritative_source, committee_vote_rule,
+            committee_vote_custom)
+         VALUES ($1, $2, 1, 'DRAFT', $3, $4, $5, $6, $7, $8, $9, $10, $11, $11,
+                 $12, $13, $14, $15, $16, $17, $18, $19)
          RETURNING *`,
         [
           input.tenantId,
@@ -281,6 +338,14 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
           p.changeApprover,
           p.selfProposalAllowed,
           input.createdBy,
+          p.lowCriticalityThreshold,
+          p.riskOwnerExecutorCumulAllowed,
+          p.delegateExecutorCumulAllowed,
+          p.delegationMaxDays,
+          p.hybridPolicyEnabled,
+          p.masteryAuthoritativeSource,
+          p.committeeVoteRule,
+          p.committeeVoteCustom === null ? null : JSON.stringify(p.committeeVoteCustom),
         ],
       );
       return this.audited(c, { framework: frameworkOf(fw.rows[0]!), version: versionOf(ver.rows[0]!) }, input.audit);
@@ -325,12 +390,18 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
         `INSERT INTO risk_framework_versions
            (tenant_id, framework_id, version_number, status, rating_scale_id, default_evaluation_mode,
             committee_evaluation_min_score, committee_evaluation_enforced, committee_treatment_min_score,
-            appetite_thresholds, change_approver, self_proposal_allowed, created_by, last_edited_by)
+            appetite_thresholds, change_approver, self_proposal_allowed, created_by, last_edited_by,
+            low_criticality_threshold, risk_owner_executor_cumul_allowed, delegate_executor_cumul_allowed,
+            delegation_max_days, hybrid_policy_enabled, mastery_authoritative_source, committee_vote_rule,
+            committee_vote_custom)
          SELECT s.tenant_id, s.framework_id,
                 (SELECT COALESCE(MAX(version_number), 0) + 1 FROM risk_framework_versions WHERE framework_id = s.framework_id),
                 'DRAFT', s.rating_scale_id, s.default_evaluation_mode, s.committee_evaluation_min_score,
                 s.committee_evaluation_enforced, s.committee_treatment_min_score, s.appetite_thresholds,
-                'RISK_MANAGER', s.self_proposal_allowed, $4, $4
+                'RISK_MANAGER', s.self_proposal_allowed, $4, $4,
+                s.low_criticality_threshold, s.risk_owner_executor_cumul_allowed, s.delegate_executor_cumul_allowed,
+                s.delegation_max_days, s.hybrid_policy_enabled, s.mastery_authoritative_source, s.committee_vote_rule,
+                s.committee_vote_custom
          FROM risk_framework_versions s
          WHERE s.tenant_id = $1 AND s.framework_id = $2 AND s.id = $3
          RETURNING *`,
@@ -352,7 +423,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     const columns: Record<string, unknown> = {};
     for (const [key, column] of Object.entries(DRAFT_COLUMNS)) {
       const value = fields[key as keyof UpdateDraftParams];
-      columns[column] = key === "appetiteThresholds" && value !== undefined ? JSON.stringify(value) : value;
+      columns[column] = JSON_KEYS.has(key) && value !== undefined && value !== null ? JSON.stringify(value) : value;
     }
     const { setClauses, values } = buildUpdateSet(columns, 5);
     if (setClauses.length === 0) throw new ValidationError("Nothing to update");
@@ -451,7 +522,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
 
   /**
    * F-B6a-01. The scale of the activated version becomes ACTIVE: refused when ARCHIVED, refused when a
-   * threshold (version, configs, legacy appetites) exceeds its n x n ceiling (F-B9b-01, fail-closed:
+   * threshold of the version exceeds its n x n ceiling (F-B9b-01, fail-closed:
    * the throw rolls the whole decision back). Any other ACTIVE scale that no ACTIVE version references is
    * archived, so the legacy readers (newest ACTIVE scale wins) cannot pick a scale this one outranks.
    */
@@ -477,17 +548,9 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     check("seuil Comité évaluation de la version", v.committeeEvaluationMinScore);
     check("seuil Comité traitement de la version", v.committeeTreatmentMinScore);
     for (const a of v.appetiteThresholds) check(`appétence "${a.subCategory}" de la version`, a.threshold);
-    const cfg = await c.query<{ e: number; t: number | null }>(
-      `SELECT committee_evaluation_min_score AS e, committee_treatment_min_score AS t FROM configs WHERE tenant_id = $1`,
-      [tenantId],
-    );
-    check("seuil Comité évaluation (configs)", cfg.rows[0]?.e ?? null);
-    check("seuil Comité traitement (configs)", cfg.rows[0]?.t ?? null);
-    const apps = await c.query<{ sub_category: string; threshold: number }>(
-      `SELECT sub_category, threshold FROM risk_appetites WHERE tenant_id = $1 AND active AND deleted_at IS NULL`,
-      [tenantId],
-    );
-    for (const a of apps.rows) check(`appétence "${a.sub_category}"`, a.threshold);
+    check("seuil « faible » de la version", v.lowCriticalityThreshold);
+    // B-6b (F-B6a-12 closed): `configs` and `risk_appetites` are no longer read here. Their writers are
+    // closed once the Dispositif is wired, so they carry no threshold that could outlive this version.
     if (over.length > 0) {
       throw new ValidationError(`Cannot activate: these thresholds exceed the maximum score of the scale (${ceiling}): ${over.join(", ")}. Lower them first.`);
     }

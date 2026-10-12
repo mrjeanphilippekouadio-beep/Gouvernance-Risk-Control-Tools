@@ -17,6 +17,8 @@ import type { ActionPlanView } from "../domain/entities/ActionPlan.js";
 import type { RaciAssignment } from "../domain/entities/RaciAssignment.js";
 import type { RiskAppetite } from "../domain/entities/RiskAppetite.js";
 import { NotFoundError } from "../domain/errors/DomainErrors.js";
+import { findAppetite } from "../domain/frameworkAppetite.js";
+import { resolveApplicableVersion, type FrameworkResolutionDeps } from "./riskFrameworkResolution.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
@@ -134,7 +136,45 @@ export class RiskDeviceViewService {
     private readonly actionPlans: ActionPlanService,
     private readonly raci: RaciEnrichmentViewService,
     private readonly riskAppetites: RiskAppetiteService,
+    /** B-6b: with these three, the "current" threshold is read from the Dispositif applicable to the risk (spec §7); absent: RiskAppetiteService. */
+    private readonly frameworks?: FrameworkResolutionDeps["frameworks"],
+    private readonly ratingScales?: FrameworkResolutionDeps["ratingScales"],
+    private readonly processes?: FrameworkResolutionDeps["processes"],
   ) {}
+
+  /** The appetite of the version applicable to the risk, shaped as a RiskAppetite (read-only, no row behind it). */
+  private async currentFromFramework(
+    tenantId: string,
+    risk: Risk,
+    subCategory: string,
+    entity: string | null,
+  ): Promise<RiskAppetite | null> {
+    if (!this.frameworks || !this.ratingScales) return null;
+    const applicable = await resolveApplicableVersion(
+      { frameworks: this.frameworks, ratingScales: this.ratingScales, processes: this.processes },
+      tenantId,
+      risk.processId ?? null,
+    );
+    const entry = applicable ? findAppetite(applicable.version.appetiteThresholds, subCategory, entity) : null;
+    if (!applicable || !entry) return null;
+    const at = applicable.version.activatedAt ?? applicable.version.createdAt;
+    return {
+      id: `${applicable.version.id}`,
+      tenantId,
+      subCategory: entry.subCategory,
+      subCategoryId: entry.subCategoryId,
+      entity: entry.entity,
+      threshold: entry.threshold,
+      methodologyVersion: `v${applicable.version.versionNumber}`,
+      description: entry.description,
+      active: true,
+      createdAt: at,
+      updatedAt: at,
+      deletedAt: null,
+      deletedBy: null,
+      deletionReason: null,
+    };
+  }
 
   async getDevice(actor: AuthenticatedUser, riskId: string): Promise<RiskDeviceView> {
     // Every permission this service's own reads need, checked up front —
@@ -171,13 +211,20 @@ export class RiskDeviceViewService {
     const actionPlans = await this.actionPlans.listForRisk(actor, riskId);
     const { raci } = await this.raci.getRiskWithRaci(actor, riskId);
 
-    const currentThreshold = latestAuthoritativeEvaluation
-      ? await this.riskAppetites.getApplicable(
-          actor,
-          latestAuthoritativeEvaluation.subCategory,
-          latestAuthoritativeEvaluation.entity,
-        )
-      : null;
+    const currentThreshold = !latestAuthoritativeEvaluation
+      ? null
+      : this.frameworks
+        ? await this.currentFromFramework(
+            actor.tenantId,
+            risk,
+            latestAuthoritativeEvaluation.subCategory,
+            latestAuthoritativeEvaluation.entity,
+          )
+        : await this.riskAppetites.getApplicable(
+            actor,
+            latestAuthoritativeEvaluation.subCategory,
+            latestAuthoritativeEvaluation.entity,
+          );
 
     return {
       risk,

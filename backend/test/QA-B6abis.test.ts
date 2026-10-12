@@ -145,7 +145,7 @@ function world(o: Opts = {}) {
 type W = ReturnType<typeof world>;
 
 async function mk(w: W, by = u1) {
-  const { version } = await w.service.create(by, { name: "D", ratingScaleId: "s1" }, R);
+  const { version } = await w.service.create(by, { name: "D", ratingScaleId: "s1", params: { lowCriticalityThreshold: 5 } }, R);
   return version.id;
 }
 async function pending(w: W, by = u1) {
@@ -861,9 +861,6 @@ describe("QA-B6abis mirrorScale through recordDecision (F-B6a-01)", () => {
       ["version evaluation threshold 26", (d) => { verOf(d, "v1")["committee_evaluation_min_score"] = 26; }, /évaluation de la version \(26\)/],
       ["version treatment threshold 26", (d) => { verOf(d, "v1")["committee_treatment_min_score"] = 26; }, /traitement de la version \(26\)/],
       ["version appetite 26", (d) => { verOf(d, "v1")["appetite_thresholds"] = [entry(26)]; }, /appétence "Fraude" de la version \(26\)/],
-      ["configs evaluation 26", (d) => { d.configs[T1] = { e: 26, t: null }; }, /évaluation \(configs\) \(26\)/],
-      ["configs treatment 26", (d) => { d.configs[T1] = { e: 15, t: 26 }; }, /traitement \(configs\) \(26\)/],
-      ["legacy appetite 26", (d) => { d.appetites.push({ tenant_id: T1, sub_category: "Cyber", threshold: 26, active: true, deleted_at: null }); }, /appétence "Cyber" \(26\)/],
     ])("%s -> refused, rollback, state identical", async (_l, mutate, msg) => {
       const db0 = seedDb();
       mutate(db0);
@@ -871,6 +868,17 @@ describe("QA-B6abis mirrorScale through recordDecision (F-B6a-01)", () => {
       await expect(new PostgresRiskFrameworkRepository(f.pool).recordDecision(T1, "r1", approve)).rejects.toThrow(msg);
       expect(f.log.at(-1)).toBe("ROLLBACK");
       expect(f.state()).toEqual(db0);
+    });
+
+    // B-6b (F-B6a-12 closed): configs / risk_appetites are no longer read, whatever they hold.
+    it("configs and legacy appetites above the ceiling are NOT read any more (activation committed)", async () => {
+      const db0 = seedDb();
+      db0.configs[T1] = { e: 99, t: 99 };
+      db0.appetites.push({ tenant_id: T1, sub_category: "Cyber", threshold: 99, active: true, deleted_at: null });
+      const f = statefulPool(db0);
+      await new PostgresRiskFrameworkRepository(f.pool).recordDecision(T1, "r1", approve);
+      expect(verOf(f.state(), "v1").status).toBe("ACTIVE");
+      expect(f.log.some((q) => /FROM configs|FROM risk_appetites/.test(q))).toBe(false);
     });
 
     it("boundary: every threshold equal to the ceiling (25) is accepted", async () => {
@@ -910,8 +918,8 @@ describe("QA-B6abis mirrorScale through recordDecision (F-B6a-01)", () => {
     it("all offenders are listed at once (one error, every label), not just the first", async () => {
       const db0 = seedDb();
       verOf(db0, "v1")["committee_evaluation_min_score"] = 30;
-      db0.configs[T1] = { e: 31, t: 32 };
-      db0.appetites.push({ tenant_id: T1, sub_category: "Cyber", threshold: 33, active: true, deleted_at: null });
+      verOf(db0, "v1")["committee_treatment_min_score"] = 32;
+      verOf(db0, "v1")["appetite_thresholds"] = [entry(33, "Cyber"), entry(31, "Fraude")];
       const f = statefulPool(db0);
       const err = await new PostgresRiskFrameworkRepository(f.pool).recordDecision(T1, "r1", approve).catch((e: Error) => e);
       expect(err).toBeInstanceOf(ValidationError);
@@ -958,8 +966,8 @@ describe("QA-B6abis mirrorScale through recordDecision (F-B6a-01)", () => {
   it("every scale-related statement carries tenant_id = $1 and is parameterised (no value interpolated in the SQL)", async () => {
     const f = statefulPool(seedDb());
     await new PostgresRiskFrameworkRepository(f.pool).recordDecision(T1, "r1", approve);
-    const scaleSql = f.log.filter((q) => /rating_scales|FROM configs|FROM risk_appetites/.test(q));
-    expect(scaleSql.length).toBeGreaterThanOrEqual(5);
+    const scaleSql = f.log.filter((q) => /rating_scales/.test(q));
+    expect(scaleSql.length).toBeGreaterThanOrEqual(4);
     for (const q of scaleSql) {
       expect(q).toMatch(/tenant_id = \$1/);
       expect(q).not.toMatch(/'(sNew|sOld|t1|u2)'/);

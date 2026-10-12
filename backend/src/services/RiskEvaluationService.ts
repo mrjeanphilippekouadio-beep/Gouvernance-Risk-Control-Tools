@@ -20,6 +20,12 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors
 import { requirePermission } from "../domain/permissions.js";
 import { defaultCommitteeThreshold, maxScoreForScale } from "../domain/scoring.js";
 import { resolveMaxScore } from "./scoreCeiling.js";
+import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
+import { findAppetite } from "../domain/frameworkAppetite.js";
+import { NO_APPLICABLE_FRAMEWORK_MESSAGE, resolveApplicableVersion } from "./riskFrameworkResolution.js";
+
+/** B-6b: the read side of the Dispositif this service needs. */
+export type FrameworkReads = Pick<RiskFrameworkRepository, "getDefaultFramework" | "getProcessFrameworkId" | "getActiveVersion" | "getVersionById">;
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 /** Mirrors ConfigService's own defaultConfig()/030_evaluation_mode.sql's DB default — the tenant-wide fallback when no Config row exists yet and/or no ConfigRepository is wired. */
@@ -158,6 +164,12 @@ export class RiskEvaluationService {
     private readonly processes?: ProcessRepository,
     /** Optional — if absent, evaluationMode resolution falls back to FALLBACK_EVALUATION_MODE instead of the tenant's saved Config row. */
     private readonly configs?: ConfigRepository,
+    /**
+     * B-6b: when wired (always in server.ts), the Dispositif is the single source of the methodology: create()
+     * resolves the applicable version and freezes it on the evaluation (F-8), with no fallback to `configs` nor to
+     * the "ACTIVE scale". When absent the pre-B-6b behaviour is kept (tests that never exercise it).
+     */
+    private readonly frameworks?: FrameworkReads,
   ) {}
 
   async create(
@@ -179,10 +191,34 @@ export class RiskEvaluationService {
       if (!risk) throw new ValidationError(`Risk ${input.riskId} does not exist in this tenant`);
     }
 
+    // B-6b (spec §8.1): the applicable Dispositif version is resolved once, here, and frozen on the evaluation.
+    let snapshot: CreateRiskEvaluationInput["snapshot"];
+    let frameworkMode: EvaluationMode | undefined;
+    if (this.frameworks) {
+      if (!this.ratingScales) throw new Error("RatingScaleRepository is not configured for RiskEvaluationService");
+      const applicable = await resolveApplicableVersion(
+        { frameworks: this.frameworks, ratingScales: this.ratingScales, processes: this.processes },
+        actor.tenantId,
+        risk?.processId ?? null,
+      );
+      if (!applicable) throw new ValidationError(NO_APPLICABLE_FRAMEWORK_MESSAGE);
+      const v = applicable.version;
+      snapshot = {
+        riskFrameworkVersionId: v.id,
+        ratingScaleId: applicable.scale.id,
+        ratingScaleVersion: applicable.scale.version,
+        committeeEvaluationMinScore: v.committeeEvaluationMinScore,
+        committeeEvaluationEnforced: v.committeeEvaluationEnforced,
+        committeeTreatmentMinScore: v.committeeTreatmentMinScore,
+      };
+      frameworkMode = v.defaultEvaluationMode;
+    }
+
     // DIV-06 wiring: resolved exactly once, here, and never again — see
     // RiskEvaluation.evaluationMode's doc comment. Never client-supplied,
     // same gesture as evaluatorId above (excluded from the input type).
-    const evaluationMode = await this.resolveEvaluationModeForRisk(actor.tenantId, risk?.processId ?? null);
+    // B-6b: with a Dispositif, its default mode replaces `Config.evaluationMode` as the tenant default.
+    const evaluationMode = await this.resolveEvaluationModeForRisk(actor.tenantId, risk?.processId ?? null, frameworkMode);
 
     const evaluation = await this.evaluations.create({
       tenantId: actor.tenantId,
@@ -194,6 +230,7 @@ export class RiskEvaluationService {
       subCategory: input.subCategory.trim(),
       entity: input.entity?.trim() || null,
       evaluationMode,
+      ...(snapshot ? { snapshot } : {}),
     });
 
     await this.audit.record({
@@ -244,7 +281,7 @@ export class RiskEvaluationService {
     assertMutable(before);
     assertIsEvaluator(actor, before);
 
-    const ratingScale = await this.resolveActiveRatingScale(actor.tenantId);
+    const ratingScale = await this.resolveScaleForInherent(actor.tenantId, before);
     const axesConfig = ratingScale.impactAxes;
     if (!axesConfig) throw new ValidationError("The active rating scale has no impact axes configured");
 
@@ -353,12 +390,7 @@ export class RiskEvaluationService {
     const impactRetained = computeImpactRetained(input.impacts, axesConfig.retainedImpactRule);
     const score = input.probability * impactRetained;
 
-    let suggested: number | null = null;
-    if (this.riskAppetites) {
-      const appetite = await this.riskAppetites.getBySubCategory(actor.tenantId, before.subCategory, before.entity);
-      // SEC-015: a retired threshold (active: false) must be treated as absent, not applied.
-      suggested = appetite?.active !== false ? appetite?.threshold ?? null : null;
-    }
+    const suggested = (await this.suggestedAppetite(actor.tenantId, before)).threshold;
 
     let override: number | null = input.appetiteOverride ?? null;
     if (override !== null) {
@@ -387,18 +419,31 @@ export class RiskEvaluationService {
   /** ACT-155: read-only appetite suggestion for (subCategory, entity), overridable but never invented here. */
   async suggestAppetite(actor: AuthenticatedUser, id: string): Promise<AppetiteSuggestion> {
     const evaluation = await this.get(actor, id);
-    if (!this.riskAppetites) {
-      return { subCategory: evaluation.subCategory, entity: evaluation.entity, suggested: null, methodologyVersion: null };
+    const s = await this.suggestedAppetite(actor.tenantId, evaluation);
+    return { subCategory: evaluation.subCategory, entity: evaluation.entity, suggested: s.threshold, methodologyVersion: s.methodologyVersion };
+  }
+
+  /**
+   * B-6b (spec §8.1): an evaluation frozen on a Dispositif version reads that version's appetite list
+   * (`findAppetite`); a row from before the Dispositif keeps the historical read of `risk_appetites`
+   * (read-only legacy path). Fail closed when the evaluation names a version but the Dispositif is not wired.
+   */
+  private async suggestedAppetite(
+    tenantId: string,
+    evaluation: RiskEvaluation,
+  ): Promise<{ threshold: number | null; methodologyVersion: string | null }> {
+    if (evaluation.riskFrameworkVersionId) {
+      if (!this.frameworks) throw new Error("RiskFrameworkRepository is not configured for RiskEvaluationService");
+      const version = await this.frameworks.getVersionById(tenantId, evaluation.riskFrameworkVersionId);
+      if (!version) throw new ValidationError("The Dispositif version of this evaluation no longer exists");
+      const entry = findAppetite(version.appetiteThresholds, evaluation.subCategory, evaluation.entity);
+      return { threshold: entry?.threshold ?? null, methodologyVersion: entry ? `v${version.versionNumber}` : null };
     }
-    const appetite = await this.riskAppetites.getBySubCategory(actor.tenantId, evaluation.subCategory, evaluation.entity);
+    if (!this.riskAppetites) return { threshold: null, methodologyVersion: null };
+    const appetite = await this.riskAppetites.getBySubCategory(tenantId, evaluation.subCategory, evaluation.entity);
     // SEC-015: a retired threshold (active: false) must be treated as absent, not applied.
     const active = appetite?.active !== false ? appetite : null;
-    return {
-      subCategory: evaluation.subCategory,
-      entity: evaluation.entity,
-      suggested: active?.threshold ?? null,
-      methodologyVersion: active?.methodologyVersion ?? null,
-    };
+    return { threshold: active?.threshold ?? null, methodologyVersion: active?.methodologyVersion ?? null };
   }
 
   /** ACT-160: residual score vs the applicable appetite threshold, flagged if exceeded. */
@@ -433,7 +478,7 @@ export class RiskEvaluationService {
       throw new ForbiddenError("An evaluator cannot validate their own risk evaluation");
     }
 
-    const { minScore, enforced } = await this.resolveCommitteeEvaluationSettings(actor.tenantId);
+    const { minScore, enforced } = await this.committeeSettingsOf(actor.tenantId, before);
     if (enforced && before.residualScore >= minScore) {
       throw new ValidationError(
         `This evaluation scored ${before.residualScore}, at or above the committee threshold (${minScore}) — ` +
@@ -515,7 +560,7 @@ export class RiskEvaluationService {
     // Lot A (§8): the Committee floor is checked unconditionally here, independent of
     // committeeEvaluationEnforced — disabling the *obligation* in validate() must never
     // loosen access to Committee validation itself.
-    const { minScore } = await this.resolveCommitteeEvaluationSettings(actor.tenantId);
+    const { minScore } = await this.committeeSettingsOf(actor.tenantId, before);
     if (before.residualScore < minScore) {
       throw new ValidationError(
         `Committee validation only applies to residual scores at or above the committee threshold (${minScore}) (this evaluation scored ${before.residualScore})`,
@@ -553,8 +598,12 @@ export class RiskEvaluationService {
    * actual inheritance rule (`resolveInheritedEvaluationMode`) is reused
    * as-is — only the I/O/permission wrapper differs.
    */
-  private async resolveEvaluationModeForRisk(tenantId: string, processId: string | null): Promise<EvaluationMode> {
-    const tenantDefault = await this.resolveTenantDefaultEvaluationMode(tenantId);
+  private async resolveEvaluationModeForRisk(
+    tenantId: string,
+    processId: string | null,
+    frameworkDefault?: EvaluationMode,
+  ): Promise<EvaluationMode> {
+    const tenantDefault = frameworkDefault ?? (await this.resolveTenantDefaultEvaluationMode(tenantId));
     if (!processId || !this.processes) return tenantDefault;
 
     const chain: Pick<Process, "evaluationMode">[] = [];
@@ -594,6 +643,36 @@ export class RiskEvaluationService {
       minScore: config?.committeeEvaluationMinScore ?? defaultMinScore,
       enforced: config?.committeeEvaluationEnforced ?? COMMITTEE_EVALUATION_ENFORCED_DEFAULT,
     };
+  }
+
+  /**
+   * B-6b (F-8): the Committee settings are read from the evaluation itself (copied from its Dispositif version at
+   * creation, or by migration 059 for older rows). Only an evaluation without a copy (never the case in
+   * production once 059 ran) falls back to the pre-B-6b resolution.
+   */
+  private async committeeSettingsOf(tenantId: string, e: RiskEvaluation): Promise<{ minScore: number; enforced: boolean }> {
+    if (e.committeeEvaluationMinScore != null) {
+      return { minScore: e.committeeEvaluationMinScore, enforced: e.committeeEvaluationEnforced ?? COMMITTEE_EVALUATION_ENFORCED_DEFAULT };
+    }
+    return this.resolveCommitteeEvaluationSettings(tenantId);
+  }
+
+  /**
+   * Inherent scoring: the scale frozen at creation (F-8). A row without one (created before B-6b) takes the scale
+   * of the applicable version (spec §8.1), never the old "ACTIVE scale". Without the Dispositif wired: legacy.
+   */
+  private async resolveScaleForInherent(tenantId: string, e: RiskEvaluation): Promise<RatingScale> {
+    if (!this.frameworks) return this.resolveActiveRatingScale(tenantId);
+    if (e.ratingScaleId) return this.getRatingScaleOrThrow(tenantId, e.ratingScaleId);
+    if (!this.ratingScales) throw new Error("RatingScaleRepository is not configured for RiskEvaluationService");
+    const risk = this.risks ? await this.risks.getById(tenantId, e.riskId) : null;
+    const applicable = await resolveApplicableVersion(
+      { frameworks: this.frameworks, ratingScales: this.ratingScales, processes: this.processes },
+      tenantId,
+      risk?.processId ?? null,
+    );
+    if (!applicable) throw new ValidationError(NO_APPLICABLE_FRAMEWORK_MESSAGE);
+    return applicable.scale;
   }
 
   private async resolveActiveRatingScale(tenantId: string): Promise<RatingScale> {

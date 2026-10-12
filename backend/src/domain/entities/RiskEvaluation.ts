@@ -95,6 +95,17 @@ export interface RiskEvaluation {
   ratingScaleId: string | null;
   ratingScaleVersion: string | null;
 
+  /**
+   * B-6b (F-8, invariant 9): the Dispositif version in force when the evaluation was created, and the
+   * three Committee thresholds copied from it. The version is immutable, so its FK already freezes
+   * every other parameter. NULL version = evaluation created before the Dispositif ("antérieure au
+   * Dispositif"): never re-attached, never rewritten. The copies are filled by migration 059 for those rows.
+   */
+  riskFrameworkVersionId: string | null;
+  committeeEvaluationMinScore: number | null;
+  committeeEvaluationEnforced: boolean | null;
+  committeeTreatmentMinScore: number | null;
+
   inherentProbability: number | null;
   inherentImpacts: ImpactAxisScore[] | null;
   /** MAX (or config rule) of inherentImpacts — server-computed, never client-supplied (ACT-154). */
@@ -142,6 +153,15 @@ export interface CreateRiskEvaluationInput {
   entity?: string | null;
   /** Never client-supplied — always resolved server-side by RiskEvaluationService.create (see RiskEvaluation.evaluationMode's doc comment). */
   evaluationMode: EvaluationMode;
+  /** B-6b: never client-supplied; set by RiskEvaluationService.create from the applicable Dispositif version (absent only when the service is not wired to it). */
+  snapshot?: {
+    riskFrameworkVersionId: string;
+    ratingScaleId: string;
+    ratingScaleVersion: string;
+    committeeEvaluationMinScore: number;
+    committeeEvaluationEnforced: boolean;
+    committeeTreatmentMinScore: number | null;
+  };
 }
 
 export interface RecordInherentScoringInput {
