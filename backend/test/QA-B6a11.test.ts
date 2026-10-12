@@ -59,9 +59,11 @@ describe("trigger functions from 058 on pin search_path (F-B6a-14)", () => {
   const ups = readdirSync(dir).filter((f) => /^\d{3}_.*\.sql$/.test(f) && !f.endsWith(".down.sql") && Number(f.slice(0, 3)) >= 58);
   it.each(ups)("%s", (f) => {
     const sql = strip(read(f));
-    for (const m of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([a-z_0-9.]+)\s*\([^)]*\)\s*RETURNS\s+trigger([\s\S]*?)\$\$/gi)) {
+    for (const m of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([a-z_0-9.]+)\s*\([^)]*\)\s*RETURNS\s+trigger([\s\S]*?)(\$[A-Za-z_]*\$)/gi)) {
       const inline = /SET\s+search_path\s*=/i.test(m[2]);
-      const altered = new RegExp(`ALTER\\s+FUNCTION\\s+${m[1].replace(".", "\\.")}\\s*\\([^)]*\\)\\s+SET\\s+search_path\\s*=`, "i").test(sql);
+      // Only an ALTER after this CREATE counts: a CREATE OR REPLACE resets any earlier SET.
+      const re = new RegExp(`ALTER\\s+FUNCTION\\s+${m[1].replace(".", "\\.")}\\s*\\([^)]*\\)\\s+SET\\s+search_path\\s*=`, "gi");
+      const altered = [...sql.matchAll(re)].some((a) => a.index! > m.index!);
       expect(inline || altered, `${f}: ${m[1]} must SET search_path = pg_catalog, public, pg_temp`).toBe(true);
     }
   });
