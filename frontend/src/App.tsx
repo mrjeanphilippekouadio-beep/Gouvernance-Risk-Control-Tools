@@ -17,6 +17,9 @@ import { AnomaliesPage } from "./features/anomalies/AnomaliesPage";
 import { NotificationCenter } from "./features/notifications/NotificationCenter";
 import { KriPage } from "./features/indicators/KriPage";
 import { KpiPage } from "./features/indicators/KpiPage";
+import { ProcessesPage } from "./features/referentials/ProcessesPage";
+import { DepartmentsPage } from "./features/referentials/DepartmentsPage";
+import { RiskCategoriesPage } from "./features/referentials/RiskCategoriesPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import { useLocalSignIn } from "./auth/useLocalSignIn";
@@ -28,7 +31,7 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories";
 type NavItem = { id: View; label: string; icon: string; available?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -64,6 +67,9 @@ const NAV_GROUPS: NavGroup[] = [
   ] },
   { label: "Administration", items: [
     { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
+    { id: "processes", label: "Processus", icon: "table", available: true },
+    { id: "departments", label: "Départements", icon: "table", available: true },
+    { id: "riskcategories", label: "Catégories de risque", icon: "table", available: true },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
   ] },
@@ -86,6 +92,9 @@ const PAGE_TITLES: Record<View, string> = {
   anomalies: "Anomalies",
   kri: "Indicateurs de risque (KRI)",
   kpi: "Indicateurs de performance (KPI)",
+  processes: "Processus",
+  departments: "Départements",
+  riskcategories: "Catégories de risque",
 };
 
 function App() {
@@ -199,6 +208,9 @@ function App() {
             {view === "anomalies" && <AnomaliesPage token={token} />}
             {view === "kri" && <KriPage token={token} />}
             {view === "kpi" && <KpiPage token={token} />}
+            {view === "processes" && <ProcessesPage token={token} />}
+            {view === "departments" && <DepartmentsPage token={token} />}
+            {view === "riskcategories" && <RiskCategoriesPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} initialRiskId={evaluationRiskId} />}
             {view === "risks" && <RisksPage token={token} onEvaluate={(riskId) => { setEvaluationRiskId(riskId); setView("evaluation"); }} />}
             {view === "roles" && <RolesAdmin token={token} />}
