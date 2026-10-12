@@ -221,9 +221,10 @@ describe("QA-B6bF 42501 -> ValidationError in PostgresRiskEvaluationRepository.r
     expect((q.mock.calls[0] as unknown[])[1]).toEqual(expect.arrayContaining([T2, "e1"]));
     expect(String((q.mock.calls[0] as unknown[])[0])).toMatch(/WHERE tenant_id = \$1 AND id = \$2/);
   });
-  it("OBSERVATION QA-B6bF-02: a genuine privilege error (also 42501, 'permission denied for table') is mapped to the same 'frozen' ValidationError", async () => {
-    const r = repoWith(async () => { throw Object.assign(new Error("permission denied for table risk_evaluations"), { code: "42501" }); });
-    await expect(r.recordInherentScoring(T1, "e1", input)).rejects.toThrow(/frozen/); // misleading 400; should stay a 500 / match on the trigger message
+  it("QA-B6bF-02 fixed: a genuine privilege error (also 42501, 'permission denied for table') is rethrown as is, not mapped to 'frozen'", async () => {
+    const boom = Object.assign(new Error("permission denied for table risk_evaluations"), { code: "42501" });
+    const r = repoWith(async () => { throw boom; });
+    await expect(r.recordInherentScoring(T1, "e1", input)).rejects.toBe(boom);
   });
 });
 

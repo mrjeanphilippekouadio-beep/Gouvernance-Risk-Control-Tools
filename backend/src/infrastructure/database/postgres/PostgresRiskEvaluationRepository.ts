@@ -197,7 +197,9 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
     ));
     } catch (err) {
       // Migration 060: the frozen snapshot (scale, version, thresholds) cannot change once set (SQLSTATE 42501).
-      if ((err as { code?: string }).code === "42501") {
+      // Match the trigger's own message: a genuine privilege error is also 42501 and must stay a 500 (QA-B6bF-02).
+      const e = err as { code?: string; message?: string };
+      if (e.code === "42501" && /framework snapshot/.test(e.message ?? "")) {
         throw new ValidationError("The rating scale of this evaluation is frozen and cannot be changed by a new inherent scoring");
       }
       throw err;
