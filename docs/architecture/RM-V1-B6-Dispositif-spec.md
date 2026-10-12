@@ -219,10 +219,52 @@ La fonction pure `resolveDecider(approver, groups, excluded)` est placée dans `
 | `AUDIT` | B-12. Audit éligible → **vote** ; sinon Comité éligible → **vote** ; sinon RM en `FALLBACK` |
 | `AUDIT_AND_COMMITTEE` | B-12. Deux votes, **Comité d'abord, puis Audit** (q88) ; sinon même repli |
 
-- **Choix d'Audit ou du Comité interdit avant B-12 (q87, contrat).** Toute écriture qui ferait porter à une version un `change_approver` autre que `RISK_MANAGER` est refusée par `ValidationError` (« disponible avec le vote du Comité, B-12 ») : à la création, à la modification d'un brouillon et, en dernier rempart, à la demande d'activation. Aucune demande n'est donc créée avec un approbateur que personne ne peut exercer (C-B6a-02). Le chemin 409 « vote requis » de `decide()` reste en place comme défense en profondeur. Avant la mise en production, une requête de contrôle vérifie qu'aucune version DRAFT, PENDING ou ACTIVE ne porte un autre approbateur (staging a pu en créer avant le correctif). B-12 lève la garde.
+- **Choix d'Audit ou du Comité interdit avant B-12 (q87, contrat).** Toute écriture qui ferait porter à une version un `change_approver` autre que `RISK_MANAGER` est refusée par `ValidationError` (« disponible avec le vote du Comité, B-12 ») : à la création, à la modification d'un brouillon et, en dernier rempart, à la demande d'activation. Aucune demande n'est donc créée avec un approbateur que personne ne peut exercer (C-B6a-02). Avant la mise en production, une requête de contrôle vérifie qu'aucune version DRAFT, PENDING ou ACTIVE ne porte un autre approbateur (staging a pu en créer avant le correctif) : requête n° 10 du §5.4.1. B-12 lève la garde. Le cas d'une version **ACTIVE** héritée, qui fixe la règle des demandes suivantes (§5.2), est traité au §5.4.1 (q100) ; depuis B-6d, le chemin 409 « vote requis » de `decide()` n'est plus atteignable avant B-12.
 - **Repli (`FALLBACK`)** : la décision est prise par un RM (§5.3), avec un commentaire **obligatoire**. `ratification_status = 'PENDING'`, Audit est notifié s'il n'est pas vide (q56), et la décision est marquée pour la vue « décisions prises en votre absence » (B-12).
 - **Auto-proposition (q65, q92).** Une demande qui fait passer `self_proposal_allowed` de `false` (ou d'une absence de version active) à `true` n'est recevable **que si le décideur résolu est un vote du Comité**. Si le résultat est un vote d'Audit, une décision RM, un repli ou un amorçage, la demande est **refusée dès sa création** (`ValidationError`) : « L'activation de l'auto-proposition exige un vote du Comité ». Le PO confirme qu'elle reste désactivée jusqu'à B-12 (q92).
 - **Plus personne pour décider** (q75). Si aucun RM ne remplit les conditions du §5.3 (par exemple un seul RM, qui est le demandeur), la demande reste PENDING. Une notification `RISK_FRAMEWORK_NO_DECIDER` est envoyée à tous les membres RM. Jamais de validation tacite, jamais par l'administrateur. Si les conditions de l'amorçage sont réunies (§5.6), la notification l'indique.
+
+### 5.4.1 Version ACTIVE héritée avec approbateur Audit ou Comité (q100, B-6d)
+
+**Problème** (revue A13 §2.1). Une version ACTIVE créée avant le correctif q87 peut porter `change_approver` = `COMMITTEE`, `AUDIT` ou `AUDIT_AND_COMMITTEE`. Elle fixe la règle de toutes les demandes suivantes de son Dispositif (§5.2). Si le groupe concerné compte au moins 2 éligibles, `resolveDecider` renvoie un vote, que personne ne peut exercer avant B-12 : `decide()` répond 409 (y compris pour un refus) et le Dispositif est gelé. La seule autre issue serait de désactiver le trigger d'immuabilité, hors audit : c'est exclu. Depuis q87, aucune nouvelle version de ce type ne peut être créée : la population est finie et fermée.
+
+**Décision (q100, DECISION-046 point 1) : repérage avant production ET garde-fou construit tout de suite.**
+
+**Régime.** C'est le repli **existant** (q62, §5.4 « Repli »), avec une cause tracée. Aucun nouveau régime, jamais `NORMAL` :
+- fonction pure `foldVoteBeforeB12(decider)` dans `domain/frameworkApproval.ts` : si `decider.kind === "VOTE"`, elle renvoie `{ decider: { kind: "RISK_MANAGER", regime: "FALLBACK" }, fallbackCause: "LEGACY_APPROVER_PRE_B12", bypassedGroups: decider.groups }` ; sinon `{ decider, fallbackCause: null, bypassedGroups: [] }`. Elle est appliquée **dans `resolveFor`**, juste après `resolveDecider`, pour que tous les appelants (demande, relecture verrouillée F-B6a-02, approbation, refus, contrôle d'auto-proposition) voient le même résultat ;
+- conséquence sur q65 : le contrôle « auto-proposition seulement sur vote du Comité » voit désormais toujours un repli et refuse, ce qui est cohérent avec q92 ;
+- le garde-fou **disparaît avec B-12**, quand le vote devient exécutable : B-12 retire l'appel à `foldVoteBeforeB12` (les décisions déjà prises gardent leur cause).
+
+**Décision.** Par `approve` ou `reject`, sans nouvelle route :
+- décideur : §5.3 points 1 à 4 (RM actif, tiers, non auteur). Si aucun RM n'est éligible, la demande reste PENDING avec `RISK_FRAMEWORK_NO_DECIDER` (q75). L'amorçage ne s'applique jamais ici : une version ACTIVE existe, donc ce n'est pas le premier Dispositif (q81) ;
+- permission `riskframework.activate` (inchangée) ;
+- commentaire **obligatoire** (repli) ;
+- colonnes écrites par `recordDecision` : `decision_regime = 'FALLBACK'`, `decider_group = 'RISK_MANAGER'`, `ratification_status = 'PENDING'` (**ratification ultérieure**, B-12), `fallback_cause = 'LEGACY_APPROVER_PRE_B12'`. Le CHECK du §5.1 interdit une cause sans ratification en attente.
+
+**Différence avec l'amorçage.** Le repli q100 est décidé par un **tiers** RM et **reste à ratifier** (q62). L'amorçage (§5.6) est décidé par le demandeur lui-même et **n'a pas de ratification** (q83). Les deux régimes ne se combinent jamais.
+
+**Audit** (dans la transaction, q90) : `APPROVE` ou `REJECT` sur `RiskFrameworkChangeRequest` ; à l'approbation, `STATUS_CHANGE` sur `RiskFrameworkVersion` avec, dans `new`, `decisionRegime: "FALLBACK"`, `fallbackCause` et `bypassedGroups` (le ou les groupes dont le vote a été contourné).
+
+**Notifications** (après commit, au mieux) : `RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE` aux détenteurs de `audit.read` (comme tout repli, q56), **plus** les membres actifs des groupes contournés (`bypassedGroups`), sans doublon. Le message nomme la cause : « décidée en repli par un Risk Manager : l'approbation par le Comité/Audit n'est pas encore disponible (ratification à venir) ».
+
+**Repérage avant production** (lecture seule, exécuté et journalisé par HUMAN) : A06 ajoute à `docs/security/B8-predeploy-checks.sql` une requête n° 10, sur le modèle des n° 8 et 9 :
+
+```sql
+-- 10. q100 (DECISION-046) : versions de Dispositif dont l'approbateur n'est pas RISK_MANAGER (creees avant q87).
+-- Lecture seule, a executer par HUMAN. Attendu : 0 ligne.
+-- ACTIVE : le garde-fou q100 s'applique (repli RM + ratification), aucune correction en base.
+-- PENDING_APPROVAL : approuvable ; une fois ACTIVE, le garde-fou s'appliquera aux demandes suivantes.
+-- DRAFT : le RM corrige le brouillon (change_approver = RISK_MANAGER) avant toute demande (q87 la refuserait).
+SELECT v.tenant_id, v.framework_id, f.name AS framework_name, v.id AS version_id,
+       v.version_number, v.status, v.change_approver
+FROM risk_framework_versions v
+JOIN risk_frameworks f ON f.id = v.framework_id AND f.tenant_id = v.tenant_id
+WHERE v.status IN ('DRAFT', 'PENDING_APPROVAL', 'ACTIVE')
+  AND v.change_approver <> 'RISK_MANAGER'
+ORDER BY v.tenant_id, f.name, v.version_number;
+```
+
+Elle remplace la « requête de contrôle » mentionnée plus haut au §5.4 (q87) : une seule requête pour les deux usages.
 
 ### 5.5 Notifications (au mieux, sur le modèle de `RoleService.notifyMembers`)
 
@@ -234,8 +276,9 @@ Un échec de notification est journalisé et n'est jamais fatal. Les notificatio
 | `RISK_FRAMEWORK_CHANGE_DECIDED` | Le demandeur |
 | `RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE` | Détenteurs de `audit.read` (même convention qu'en q65), quand Audit n'est pas le décideur |
 | `RISK_FRAMEWORK_NO_DECIDER` | Membres RM |
+| `RISK_FRAMEWORK_BOOTSTRAP_NOTICE` (**B-6d**, obligatoire au catalogue, q99) | Membres actifs d'Audit et du Comité : à chaque décision BOOTSTRAP, et à l'arrivée d'un membre dans l'un de ces groupes si le tenant a au moins une décision BOOTSTRAP (§5.6 point 7). Personne d'autre (q103) |
 
-B-6d ajoute un cinquième type (§5.6, §14.2 point I-D6).
+En repli q100, `RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE` part aussi aux membres des groupes contournés (§5.4.1).
 
 ### 5.6 Amorçage (B-6d : q77, q81, q82, q83, q93)
 
