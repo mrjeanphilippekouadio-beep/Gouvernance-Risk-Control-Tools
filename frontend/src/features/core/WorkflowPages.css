@@ -16,3 +16,4 @@
 .workflow-cell-stack>span,.workflow-cell-stack small{color:var(--gs-text-secondary);white-space:normal}
 .workflow-cell-stack strong{font-weight:600}
 @media(max-width:760px){.workflow-form-grid,.workflow-filter-row{grid-template-columns:minmax(0,1fr)}.workflow-field-span{grid-column:auto}.workflow-heading h1{font-size:24px}}
+.audit-json{margin:0;padding:var(--gs-space-2) var(--gs-space-3);background:var(--gs-bg-surface);border:1px solid var(--gs-border);border-radius:var(--gs-radius);font:12px/1.5 var(--gs-font-mono);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto}

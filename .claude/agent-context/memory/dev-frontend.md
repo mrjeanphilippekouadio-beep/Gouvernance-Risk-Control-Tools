@@ -1,3 +1,15 @@
+## Principes (audit/anomalies)
+- Réutiliser strictement `@djamo/design-system` (Table, Card, Modal, MessageBanner, Pagination, DatePicker, StatusBadge, FormField). Tokens `--gs-*` uniquement (ex. `--gs-bg-surface`, pas `--gs-surface`).
+- Jamais de donnée inventée, jamais de règle métier recalculée côté front, jamais de champ `...By` envoyé au backend.
+- Pas de parameter properties en frontend (`erasableSyntaxOnly`).
+- Build : `npm run build -w @djamo/design-system` AVANT `npm run build -w @grc-tools/frontend` (worktree neuf : `npm install` à la racine ; restaurer `package-lock.json` ensuite avec `git checkout package-lock.json`).
+- Pas de tests frontend dans le repo.
+
+## 2026-10-12 — Journal d'audit (ACT-071) + Anomalies
+- Écrans : `features/audit/AuditLogPage.tsx` (lecture seule, `GET /api/v1/audit-log`), `features/anomalies/AnomaliesPage.tsx`. Clients : `api/auditLog.ts`, `api/anomalies.ts`.
+- 403 : `PermissionDeniedDialog` global (`features/errors`, déclenché par `api/client.ts` sur les écritures refusées) ; les pages n'ont pas de dialog local, elles affichent l'erreur en ligne (les GET 403 ne déclenchent pas la fenêtre). Mon worktree était parti d'un `main` en retard : toujours merger la branche de travail avant de commencer.
+- Gaps backend : (1) aucun endpoint "mes permissions" (`/permissions` liste les permissions existantes, pas celles de l'utilisateur) -> impossible de masquer/désactiver les actions selon permissions, on s'appuie sur le 403 ; (2) pas de transitions possibles exposées par l'API anomalies -> UI propose tous les statuts sauf l'actuel, le backend refuse ; (3) audit-log : pas d'offset/total, max 500 -> pagination client sur 500 événements ; `entityId` seul est ignoré par la route (retombe sur "recent") -> UI désactive entityId sans entityType ; (4) pas de libellés lisibles pour userId/controlId/riskId (IDs bruts).
+- Pas de QA navigateur faite (pas de backend/navigateur dans l'environnement) : build/tsc verts seulement.
 # Mémoire — @dev-frontend
 
 Créée le 2026-10-11 (vague 2 du design system). À lire en premier par tout agent Dev Frontend ; la mettre à jour en fin de tâche.
