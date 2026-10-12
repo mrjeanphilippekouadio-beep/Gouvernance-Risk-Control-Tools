@@ -160,7 +160,11 @@ export class TreatmentDecisionService {
       ? evaluation.committeeTreatmentMinScore ?? null
       : evaluation?.committeeTreatmentMinScore ?? (await this.resolveCommitteeTreatmentMinScore(actor.tenantId));
     if (minScore === null) {
-      throw new ValidationError("No committee threshold is configured for treatment decisions yet — set Config.committeeTreatmentMinScore first");
+      throw new ValidationError(
+        evaluation?.riskFrameworkVersionId
+          ? "The Dispositif version of this evaluation sets no committee threshold for treatment decisions — set it in a new version"
+          : "No committee threshold is configured for treatment decisions yet — set Config.committeeTreatmentMinScore first",
+      );
     }
 
     if (!evaluation || evaluation.residualScore === null) {

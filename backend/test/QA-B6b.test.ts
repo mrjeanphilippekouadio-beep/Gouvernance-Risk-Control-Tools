@@ -299,7 +299,7 @@ describe("QA-B6b copied thresholds missing on the evaluation (fakes / raw insert
     });
     it("version set + copied treatment threshold NULL (version without one): refused fail-closed, configs never consulted even when they hold a value", async () => {
       const s = treat({ riskFrameworkVersionId: "v", committeeTreatmentMinScore: null, residualScore: 25 }, 1);
-      await expect(s.validateByCommittee(committee, "d1", null, "rq")).rejects.toThrow(/No committee threshold/);
+      await expect(s.validateByCommittee(committee, "d1", null, "rq")).rejects.toThrow(/Dispositif version of this evaluation sets no committee threshold/);
     });
     it("legacy evaluation (no version) without a copy: falls back to configs; with a copy: the copy wins", async () => {
       await expect(treat({ riskFrameworkVersionId: null, committeeTreatmentMinScore: null, residualScore: 25 }, 10).validateByCommittee(committee, "d1", null, "rq")).resolves.toMatchObject({ status: "VALIDEE_COMITE" });
