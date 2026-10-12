@@ -101,19 +101,28 @@ jobs:
           # workspace world-writable just to let ZAP produce its reports.
           sudo chown 1000:1000 report zap-home
 
+          plan_path="$RUNNER_TEMP/automation-plan.resolved.yaml"
+          if [ ! -s "$plan_path" ]; then
+            echo "::error::Resolved ZAP plan is missing or empty; refusing to start the scanner."
+            exit 1
+          fi
+
           rc=0
           # The browser extension uses the proxy host "zap". In a standalone
           # docker run there is no Compose DNS, so map it to loopback AND
           # explicitly start ZAP's main proxy listener on that same address.
           # The host mapping alone did not clear proxyConnectFailure in #161.
+          # Mount the plan below /zap/wrk: the official image has this directory
+          # for scan artifacts. /zap/plan is not guaranteed to exist (the prior
+          # attempt failed before AF could read its plan).
           docker run --rm \
             -v "${{ github.workspace }}/report:/zap/wrk/report:rw" \
             -v "${{ github.workspace }}/zap-home:/home/zap/.ZAP:rw" \
-            -v "$RUNNER_TEMP/automation-plan.resolved.yaml:/zap/plan/automation-plan.yaml:ro" \
+            --mount "type=bind,src=$plan_path,dst=/zap/wrk/automation-plan.resolved.yaml,readonly" \
             --add-host=zap:127.0.0.1 \
             --entrypoint bash \
             ghcr.io/zaproxy/zaproxy:stable \
-            -c 'zap.sh -cmd -host 127.0.0.1 -port 8080 -autorun /zap/plan/automation-plan.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null; exit $rc' || rc=$?
+            -c 'test -r /zap/wrk/automation-plan.resolved.yaml || { echo "Resolved plan is not readable inside ZAP container" >&2; exit 1; }; zap.sh -cmd -host 127.0.0.1 -port 8080 -autorun /zap/wrk/automation-plan.resolved.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \\; -exec cat {} \\; 2>/dev/null; exit $rc' || rc=$?
 
           zap_log="zap-home/zap.log"
           if [ ! -s "$zap_log" ]; then
