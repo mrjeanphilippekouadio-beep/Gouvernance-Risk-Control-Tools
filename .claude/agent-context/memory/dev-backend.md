@@ -211,3 +211,8 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 
 - `ActionPlanService.resolveRecipients` : une action sourceType KRI ajoute `Kri.riskId` (lu via `kris.getById(actor.tenantId, sourceId)`, dépendance déjà injectée, gardée par `this.kris`) aux risques couverts ; même boucle que q84 (dédoublonnage, archivé/supprimé ignoré, échec loggé non fatal). Limite : un échec de lecture du KRI saute aussi les autres risques (même try).
 - Test : `NotificationsCenter.test.ts` (1 nouveau). Piège de test : ne pas laisser un lien RISK vers le même risque, il masque le chemin KRI.
+
+## 2026-10-12 F-D044-01 (branche wt/fd04401, base 6d3940b)
+- Pour q94, "Comité" = groupe RISK_COMMITTEE OU permission `riskevaluation.validate.committee` / `treatmentdecision.validate.committee` / `governance.validate` (`COMMITTEE_VALIDATION_PERMISSIONS` dans RoleService). Appliqué dans `assertNoCumul` (donc assignation, rejeu sous verrou, élargissement, `assertReactivable`) ; `assertRolePermissionRules` interdit ces permissions au groupe RM ; requête 8 de B8-predeploy-checks.sql étendue (colonne `committee_permission_roles`).
+- Leçon : une règle de cumul portant sur un groupe doit aussi être exprimée sur les permissions effectives (même faille que F-B8b-05 pour audit.*). Reste ouvert : F-D044-04 (users.roles hérités), sens inverse Comité -> permissions RM (arbitrage A13).
+- Tests : Rbac044.test.ts (describe F-D044-01, 4 tests). Aucune assertion existante modifiée (rôle `comval` ajouté à world()).

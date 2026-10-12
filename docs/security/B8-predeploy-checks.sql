@@ -54,16 +54,19 @@ WHERE c.status = 'APPROVED'
       AND a.entity_id = c.id AND a.action = 'APPROVE'
   );
 
--- 8. q94 (DECISION-044) : cumuls Risk Manager + Comite DEJA existants (interdits depuis, non configurable). Lecture seule, a executer par HUMAN.
+-- 8. q94 (DECISION-044 + F-D044-01) : cumuls Risk Manager + Comite DEJA existants (interdits depuis, non configurable). Le Comite
+-- compte aussi par permission : riskevaluation.validate.committee, treatmentdecision.validate.committee, governance.validate. Lecture seule, a executer par HUMAN.
 -- Attendu : 0 ligne ; sinon decider avec le PO qui garde quel groupe (jamais de revocation silencieuse). Un tel utilisateur ne peut plus etre reactive tant que le cumul subsiste.
 SELECT u.tenant_id, u.id AS user_id, u.email, (u.deleted_at IS NOT NULL) AS suspended,
        array_agg(DISTINCT r.name) FILTER (WHERE r.system_group = 'RISK_MANAGER') AS risk_manager_roles,
-       array_agg(DISTINCT r.name) FILTER (WHERE r.system_group = 'RISK_COMMITTEE') AS committee_roles
+       array_agg(DISTINCT r.name) FILTER (WHERE r.system_group = 'RISK_COMMITTEE') AS committee_roles,
+       array_agg(DISTINCT r.name) FILTER (WHERE r.permissions && ARRAY['riskevaluation.validate.committee','treatmentdecision.validate.committee','governance.validate']) AS committee_permission_roles
 FROM users u
 JOIN user_roles ur ON ur.tenant_id = u.tenant_id AND ur.user_id = u.id AND ur.revoked_at IS NULL
 JOIN roles r ON r.id = ur.role_id AND r.tenant_id = ur.tenant_id AND r.deleted_at IS NULL
 GROUP BY u.tenant_id, u.id, u.email, u.deleted_at
-HAVING bool_or(r.system_group = 'RISK_MANAGER') AND bool_or(r.system_group = 'RISK_COMMITTEE');
+HAVING bool_or(r.system_group = 'RISK_MANAGER')
+   AND bool_or(r.system_group = 'RISK_COMMITTEE' OR r.permissions && ARRAY['riskevaluation.validate.committee','treatmentdecision.validate.committee','governance.validate']);
 
 -- 9. q79 (DECISION-044) : personnes devenues « administrateur » par la seule permission de gestion du client (config.manage :
 -- clients, modules, referentiels, categories de risque, import Excel) et qui sont aussi Risk Manager ou Comite

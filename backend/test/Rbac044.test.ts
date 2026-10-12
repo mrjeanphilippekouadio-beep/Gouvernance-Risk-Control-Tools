@@ -21,6 +21,7 @@ function world() {
     role("client", null, ["config.manage"]),
     role("method", null, ["config.update"]),
     role("plain", null, ["risk.read"]),
+    role("comval", null, ["risk.read", "riskevaluation.validate.committee"]),
   ];
   const held = new Map<string, string[]>();
   const sent: Array<{ recipientUserId: string; eventType: string; message: string }> = [];
@@ -102,5 +103,37 @@ describe("DECISION-044 q79: client management counts as administrator, methodolo
     await expect(service.assignToUser(assigner, "client", "u1", "r")).rejects.toThrow(/administrator/);
     await service.assignToUser(assigner, "client", "u1", "r", "motif");
     await expect(service.assignToUser(assigner, "method", "u2", "r")).resolves.toBeUndefined();
+  });
+});
+
+describe("F-D044-01: Committee validation permissions count as Committee membership for q94", () => {
+  const admin = actor("admin", ["role.assign", "role.update", "role.read", "user.read", "user.reactivate"]);
+
+  it("refuses an ordinary role carrying a Committee permission to a Risk Manager, in both orders", async () => {
+    const { service } = world();
+    await service.assignToUser(assigner, "rm", "u1", "r", "motif");
+    await expect(service.assignToUser(assigner, "comval", "u1", "r", "motif")).rejects.toThrow(/Risk Manager group and in the Committee group/);
+    await service.assignToUser(assigner, "comval", "u2", "r", "motif");
+    await expect(service.assignToUser(assigner, "rm", "u2", "r", "motif")).rejects.toThrow(ValidationError);
+  });
+
+  it("refuses to add a Committee validation permission to the Risk Manager group", async () => {
+    const { service } = world();
+    for (const p of ["riskevaluation.validate.committee", "treatmentdecision.validate.committee", "governance.validate"] as Permission[]) {
+      await expect(service.update(admin, "rm", { permissions: ["risk.read", p] }, "r")).rejects.toThrow(/cannot carry Committee validation/);
+    }
+  });
+
+  it("refuses to reactivate a Risk Manager who already holds such an ordinary role", async () => {
+    const w = world();
+    w.held.set("old", ["rm", "comval"]);
+    const svc = new UserService(w.users as never, w.audit as never, w.service);
+    await expect(svc.reactivate(assigner, "old", "r")).rejects.toThrow(ValidationError);
+  });
+
+  it("still lets a non-Risk-Manager hold these permissions", async () => {
+    const { service } = world();
+    await service.assignToUser(assigner, "comval", "u3", "r", "motif");
+    await expect(service.assignToUser(assigner, "plain", "u3", "r", "motif")).resolves.not.toThrow();
   });
 });

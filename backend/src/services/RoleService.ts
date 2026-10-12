@@ -41,6 +41,11 @@ const ADMIN_PERMISSIONS: Permission[] = [
   "config.manage",
 ];
 const isAdministrator = (roles: Role[]): boolean => roles.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));
+/** F-D044-01: holding one of these counts as Committee membership for the q94 rule (RM + Committee). */
+const COMMITTEE_VALIDATION_PERMISSIONS: Permission[] = [
+  "riskevaluation.validate.committee", "treatmentdecision.validate.committee", "governance.validate",
+];
+const isCommitteeValidationPermission = (p: Permission): boolean => COMMITTEE_VALIDATION_PERMISSIONS.includes(p);
 const isRiskManagerMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "RISK_MANAGER");
 const isCommitteeMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "RISK_COMMITTEE");
 
@@ -60,6 +65,12 @@ function assertRolePermissionRules(group: SystemGroup | null, permissions: Permi
   if (misplaced.length > 0) {
     throw new ValidationError(`Permission(s) not grantable to this role: ${misplaced.join(", ")}`);
   }
+  if (group === "RISK_MANAGER") {
+    const committee = permissions.filter(isCommitteeValidationPermission);
+    if (committee.length > 0) {
+      throw new ValidationError(`The Risk Manager group cannot carry Committee validation permissions (${committee.join(", ")}): Risk Manager and Committee never cumulate`);
+    }
+  }
   if (group === "RISK_MANAGER" || group === "RISK_COMMITTEE") {
     const audit = permissions.filter(isAuditPermission);
     if (audit.length > 0) {
@@ -74,8 +85,8 @@ function assertRolePermissionRules(group: SystemGroup | null, permissions: Permi
  */
 function assertNoCumul(role: Role, held: Role[]): void {
   const isRm = (r: Role) => r.systemGroup === "RISK_MANAGER";
-  const isCommittee = (r: Role) => r.systemGroup === "RISK_COMMITTEE";
-  if ((isRm(role) && held.some(isCommittee)) || (isCommittee(role) && held.some(isRm))) {
+  const isCommittee = (r: Role) => r.systemGroup === "RISK_COMMITTEE" || r.permissions.some(isCommitteeValidationPermission);
+  if ((isRm(role) && (isCommittee(role) || held.some(isCommittee))) || (isCommittee(role) && held.some(isRm))) {
     throw new ValidationError("A user cannot be both in the Risk Manager group and in the Committee group");
   }
   const isAuditor = (r: Role) => r.systemGroup === "AUDIT" || r.permissions.some(isAuditPermission);
