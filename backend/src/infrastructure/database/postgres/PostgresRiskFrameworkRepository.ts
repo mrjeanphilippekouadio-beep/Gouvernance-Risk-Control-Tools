@@ -457,8 +457,11 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     }
     const ceiling = scale.probability_levels * scale.impact_levels;
     const over: string[] = [];
+    const all: Array<[string, number]> = [];
     const check = (label: string, value: number | null) => {
-      if (value !== null && value > ceiling) over.push(`${label} (${value})`);
+      if (value === null) return;
+      all.push([label, value]);
+      if (value > ceiling) over.push(`${label} (${value})`);
     };
     check("seuil Comité évaluation de la version", v.committeeEvaluationMinScore);
     check("seuil Comité traitement de la version", v.committeeTreatmentMinScore);
@@ -489,6 +492,18 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
                          WHERE x.tenant_id = $1 AND x.rating_scale_id = rating_scales.id AND x.status = 'ACTIVE')`,
       [tenantId, v.ratingScaleId],
     );
+    // F-B6a-10. Scales kept ACTIVE (referenced by another ACTIVE version) can be the one the legacy readers
+    // pick (newest ACTIVE wins): every threshold must also fit the smallest ceiling among ALL scales left ACTIVE.
+    const left = await c.query<{ ceiling: number | null }>(
+      `SELECT min(probability_levels * impact_levels)::int AS ceiling FROM rating_scales
+       WHERE tenant_id = $1 AND status = 'ACTIVE' AND deleted_at IS NULL`,
+      [tenantId],
+    );
+    const min = left.rows[0]?.ceiling ?? ceiling;
+    const tooHigh = all.filter(([, value]) => value > min).map(([label, value]) => `${label} (${value})`);
+    if (tooHigh.length > 0) {
+      throw new ValidationError(`Cannot activate: these thresholds exceed the smallest maximum score (${min}) among the rating scales that stay ACTIVE: ${tooHigh.join(", ")}. Lower them first.`);
+    }
   }
 
   async recordDecision(tenantId: string, requestId: string, d: RecordDecisionInput): Promise<DecisionResult> {

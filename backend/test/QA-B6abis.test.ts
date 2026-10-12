@@ -754,6 +754,10 @@ function statefulPool(initial: DbState) {
         }
         return res([], 1);
       }
+      if (/^SELECT min\(probability_levels/.test(s)) {
+        const n = db.scales.filter((x) => x.tenant_id === t && x.status === "ACTIVE" && !x.deleted_at).map((x) => x.probability_levels * x.impact_levels);
+        return res([{ ceiling: n.length ? Math.min(...n) : null }]);
+      }
       if (/^UPDATE risk_frameworks SET is_default = true/.test(s)) {
         const none = !db.frameworks.some((f) => f.tenant_id === t && f.is_default && !f.archived_at);
         const f = db.frameworks.find((x) => x.tenant_id === t && x.id === p[1] && !x.archived_at);
