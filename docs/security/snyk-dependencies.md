@@ -483,6 +483,46 @@ F-EVD2-02 + F-EVD2-03 : un compte `import` lit le contenu partiel d'une preuve s
 ### Statut et tracker (7bis)
 F-B8s-01 (A06, LOW) ; F-EVD2-01 (A06, MEDIUM, + A09/A16 pour la mémoire du conteneur) ; F-EVD2-02 (A06, MEDIUM, reco (a)) ; F-EVD2-03 (A06, LOW, reco (b)) : REMEDIATION_REQUIRED. Retest attendu : fichier sparse/dense 400 ou refus de concurrence, `examples` vides sans `download`, ligne `READ` en audit, deux affectations parallèles RM + Audit sur Postgres réel. Non rejoué sur une vraie base ni avec Drive réel.
 
+### Retest EVD-2 bis — 2026-10-12 (A10, correctif `d22abf9` fusionné en `74c8993`, tête `f520794`)
+
+**Escalade HUMAN : aucune.** Max CVSS du résidu = 3,1. Aucun code modifié. Méthode : relecture du diff, vitest (4 suites, 74 verts), PoC xlsx rejoués sur le vrai `analyzeXlsx` (fichiers générés hors dépôt, supprimés), et pour la première fois **rejeu sur un vrai Postgres 16** (instance jetable, migrations 001-054 + seed dev, supprimée après) avec les vrais `PostgresRoleRepository`/`PostgresUserRepository`/`RoleService`.
+
+| Finding | Verdict | Résidu |
+|---|---|---|
+| F-B8s-01 | **RETEST_PASS** | nouveau F-EVD2b-01 LOW 2,2 (deadlock avec `suspend`) |
+| F-EVD2-01 | **RETEST_PASS avec résidu** | LOW 3,1 (AV:N/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:L) |
+| F-EVD2-02 | **RETEST_PASS** | aucun |
+| F-EVD2-03 | **RETEST_PASS** | aucun |
+
+**F-B8s-01 — RETEST_PASS (Postgres réel).**
+- Témoin (ancien comportement : contrôle hors verrou, repository sans `recheck`) : cumul RM + Audit créé **20/20**. Le harnais détecte donc bien la course.
+- Correctif, `RoleService.assignToUser` RM et Audit en parallèle sur un utilisateur neuf : cumul **0/50**, 50 refus « Risk Manager + Audit » (le verrou `users` sérialise les deux rôles différents).
+- `update` élargissant un rôle C à `audit.read` en parallèle de `assignToUser(C -> titulaire RM)` : cumul **0/40** sur deux exécutions ; soit l'affectation lit les droits élargis sous verrou et est refusée, soit `update` voit le nouveau titulaire et lève le 409 « retry ». Le rejeu se fait sur la ligne `roles` relue `FOR UPDATE` (READ COMMITTED relit la dernière version) : pas d'état périmé.
+- Utilisateur suspendu : `assignToUser` -> `NotFoundError("User")` (404), vérifié en base. Comportement correct (aucun droit attribué à un compte suspendu) ; `revokeFromUser` ne filtre pas sur l'utilisateur, le nettoyage des rôles d'un suspendu reste possible. Message limité à l'id fourni par l'admin, tenant-scopé : pas d'énumération.
+- Ordre des verrous : `assignToUser` users -> roles ; `updateUnderLock` users triés par id -> roles ; `revokeFromUser` roles seul (aucun cycle possible, rejoué : revoke || assign même rôle, sans erreur) ; chemins `roles.update` sans `recheck` (groupe Audit, application d'un changement approuvé) : une seule instruction, aucun cycle. Pas de deadlock entre ces chemins. **Exception : `PostgresUserRepository.suspend`** (voir F-EVD2b-01).
+- `rollbackQuietly` : une erreur de ROLLBACK ne masque plus l'erreur d'origine (OK). INFO : dans `updateUnderLock`, un titulaire révoqué entre les deux lectures reste évalué (refus éventuel à tort, fail-closed) et peut être notifié comme cumul q63 à tort.
+
+**F-EVD2-01 — RETEST_PASS avec résidu LOW 3,1.**
+| fichier PoC | XML décompressé | résultat | durée | pic RSS (base ~100 Mo) | retard event loop |
+|---|---|---|---|---|---|
+| dense 7 000 x 50 (PoC d'origine) | 19,5 Mo | **400** « decompressed size exceeds » | 4 ms | 107 Mo | 0 |
+| sparse 55 x 16 000 (PoC d'origine) | 17,4 Mo | **400** | 5 ms | 103 Mo | 0 |
+| dense sous plafond (6,2 + 1,9 Mo) | 8,1 Mo | 200 | 0,9 s | 209 Mo | 325 ms |
+| sparse sous plafond | 7,7 Mo | 200 | 1,3 s | 281 Mo | 395 ms |
+| cellules sans `r`, entropie juste au-dessus du ratio 100 | 8,1 Mo | 400 après chargement | 1,5 s | 345 Mo | ~1 s |
+| idem x 2 en parallèle (= sémaphore) | | | 1,8 s | **362 Mo** | 1,05 s |
+| idem x 3 en parallèle (hors sémaphore, témoin) | | | 3,7 s | 828 Mo | 2,4 s |
+Plafond 8 Mo / 6 Mo par entrée appliqué avant `xlsx.load` (OK) ; sémaphore : test de la limite et `activeAnalyses++` synchrones (aucun `await` entre les deux, pas de course), `--` dans `finally` couvrant Drive, SHA, audit et analyse : **pas de fuite sur exception** (vérifié aussi par le test 409 puis libération). Les refus avant le `++` (permission, lookup, taille) ne prennent pas de place. `perUserRateLimiter` (20 / 15 min, clé `tenant:user`) monté après `authMiddleware` : clé jamais anonyme. Résidu : (1) chaque analyse sous plafond bloque encore l'event loop jusqu'à ~1 s (GC + sax), mesure plus haute que la revue précédente (47-50 ms, autre forme de fichier) ; un compte `evidence.import` dégrade donc la latence de toute l'instance par à-coups, borné par les limiteurs ; (2) pic ~360 Mo par processus : tient dans 512 Mo mais sans marge, confirmer la mémoire du conteneur (A09/A16, déjà au tracker) ; (3) INFO : aucun délai maximal sur `analyzeXlsx` ; un chargement exceljs qui ne se terminerait jamais garderait sa place et 2 cas suffiraient à rendre l'analyse indisponible jusqu'au redémarrage (SUSPECTED, non reproduit) ; 409 au lieu de 429/503 pour la saturation (sémantique). Reco non bloquante A06 : `Promise.race` avec délai (ex. 15 s) qui libère la place.
+
+**F-EVD2-02 — RETEST_PASS.** `withExamples = actor.roles.includes("evidence.download")`, même source que `requirePermission` de `getUrl` ; `analyzeXlsx` n'a qu'un appelant. Test : `import` seul -> `examples` vides ; `import`+`download` -> exemples. Pas de contournement trouvé.
+
+**F-EVD2-03 — RETEST_PASS.** `audit.record` `READ` après le contrôle SHA-256 et avant l'analyse, `await` sans `catch` (fail-closed : pas d'analyse ni de réponse si l'écriture échoue, testé) ; `newValue` = `fileName`, `sha256`, `examplesReturned`, jamais de valeurs de cellules ; `requestId` transmis par la route. Insertion `READ` acceptée par le vrai schéma (CHECK de la migration 051). `sheetCount` absent (connu seulement après l'analyse) : acceptable.
+
+**F-EVD2b-01 — LOW 2,2 (AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:L), CONFIRMED (Postgres réel, entrelacement forcé).** `PostgresUserRepository.suspend` verrouille la ligne `roles` du groupe RM (`FOR UPDATE OF r`) PUIS met à jour `users` ; `updateUnderLock` (et `assignToUser`) verrouillent `users` PUIS `roles`. `suspend(U)` en parallèle de `roles.update(RM, élargissement)` avec U titulaire : **deadlock 3/3**, Postgres annule `suspend` (40P01) après ~1 s, `update` réussit. Même cycle possible avec `assignToUser(U, RM)` si U est déjà RM (qui aurait fini en 409). Impact : une action d'administration échoue (500 générique, aucune correspondance de 40P01), à rejouer ; aucun droit ni état incohérent (rollback complet). Fenêtre naturelle étroite (deux actions privilégiées simultanées). Reco A06 : dans `suspend`, verrouiller d'abord `users` (`SELECT ... FOR UPDATE` sur U) puis la ligne du groupe RM, pour respecter l'ordre users -> roles posé par F-B8s-01 ; optionnel : mapper 40P01 en 409 « retry ». Test de régression : `suspend(U)` || `update(RM)` sur Postgres, aucune 40P01.
+
+### Statut et tracker (7bis)
+F-B8s-01, F-EVD2-02, F-EVD2-03 : **CLOSED** côté sécurité. F-EVD2-01 : **CLOSED avec résidu LOW** (délai maximal d'analyse recommandé, mémoire conteneur A09/A16). Nouveau : F-EVD2b-01 (A06, LOW) REMEDIATION_REQUIRED. Limite : Drive réel non rejoué.
+
 ## Revue centre de notifications — 2026-10-12 (A10, `20e703d` backend + `de605e4` frontend, tête `e1765ec`, statique + vitest 7 verts)
 
 **Escalade HUMAN : aucune.** Max CVSS 3.1 = 5,4 (F-NOTIF-01). Aucun code modifié.
