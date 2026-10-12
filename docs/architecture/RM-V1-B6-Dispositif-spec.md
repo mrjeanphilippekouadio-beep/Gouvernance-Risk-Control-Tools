@@ -499,11 +499,11 @@ Validation zod :
 | `POST /risk-frameworks/:id/versions/:vid/discard` | archive | `{reason}` | a |
 | `POST /risk-frameworks/:id/versions/:vid/activation-requests` | update | `{reason}` → 201, demande | a |
 | `GET /risk-frameworks/change-requests?status=&regime=` | read | — (`regime` : d) | a |
-| `POST /risk-frameworks/change-requests/:rid/approve` | activate | `{comment?}` (obligatoire en repli) ; 409 si un vote est requis | a |
+| `POST /risk-frameworks/change-requests/:rid/approve` | activate | `{comment?}` (obligatoire en repli, y compris le repli q100) ; 409 si un vote est requis, plus atteignable avant B-12 depuis B-6d (§5.4.1) | a |
 | `POST /risk-frameworks/change-requests/:rid/reject` | activate | `{comment}` | a |
 | `POST /risk-frameworks/change-requests/:rid/withdraw` | update | `{reason?}` ; demandeur seulement | a |
 | `GET /risk-frameworks/applicable?riskId=` ou `?processId=` | read | version applicable (§7), en lecture seule pour F-1 | b |
-| `POST /risk-frameworks/change-requests/:rid/bootstrap-approve` | activate | `{comment}` obligatoire ; demandeur seulement, conditions du §5.6 | d |
+| `POST /risk-frameworks/change-requests/:rid/bootstrap-approve` | activate | `{comment, justification: {askedUserId, askedOn, outcome}}`, tout obligatoire ; demandeur seulement, conditions du §5.6 | d |
 | `POST /risk-frameworks/:id/process-assignments` | process.assign | `{processId, reason}` → demande `ASSIGN_PROCESS` | c |
 | `POST /risk-frameworks/:id/default-requests` | update | `{reason}` → demande `SET_DEFAULT` | c |
 | `POST /risk-frameworks/:id/archive` | archive | `{reason}` ; refusé si un Processus y est rattaché ou si c'est le Dispositif par défaut | c |
@@ -682,9 +682,20 @@ Les cas limites inter-modules relèvent d'A08.
 - écritures fermées (`updateCommitteeThresholds`, `setThreshold`, `activateVersion`) quand le dépôt du Dispositif est câblé ; comportement inchangé quand il ne l'est pas ;
 - paramètres q91 : défauts posés à la création, recopiés dans un brouillon ; demande d'activation refusée sans seuil « faible » ou avec un seuil « faible » supérieur à n² ; `CUSTOM` refusé ; `mirrorScale` ne lit plus `configs`.
 
-**B-6d** :
-- `isBootstrapAllowed` : vrai pour un seul RM, Comité et Audit vides, premier Dispositif, sans auto-proposition ; faux dans chacun des cas contraires (second RM, un membre au Comité, un membre à Audit, v2, `SET_DEFAULT`, `ASSIGN_PROCESS`, auto-proposition) ;
-- `bootstrap-approve` : régime BOOTSTRAP, `decided_by = requested_by`, commentaire obligatoire, `ratification_status` NULL, audit dans la transaction ; refusé par un autre que le demandeur ; `approve` garde son refus de l'auto-décision.
+**B-6d** (fonctions pures dans `test/frameworkApproval.test.ts`, service dans `test/RiskFrameworkService.test.ts`, faux dépôts) :
+- **q101, fin quand un circuit fonctionne** : `isCircuitFunctional` vrai pour 2 RM, 2 membres du Comité, 2 membres d'Audit ; faux pour 1 RM + 1 membre au Comité + 1 membre à Audit. `bootstrapRefusal` renvoie `null` pour un RM seul avec **un** membre au Comité et **un** à Audit (l'amorçage reste ouvert) ; `CIRCUIT_FUNCTIONAL` dès 2 RM, 2 au Comité ou 2 à Audit ; `NOT_SOLE_RISK_MANAGER`, `OUT_OF_SCOPE` (`SET_DEFAULT`, `ASSIGN_PROCESS`), `NOT_FIRST_ACTIVATION` (v2), `SELF_PROPOSAL`, chacun sur un cas dédié ; `DESIGNATION` autorisé ;
+- **q102, fin mémorisée** : `bootstrapRefusal` renvoie `ENDED` quand `endedAt` est renseigné, **même si** les compteurs sont revenus à 1 RM et 0 membre (cas « le second RM a été révoqué ») ; service : `bootstrap-approve` refusé dans ce cas avec le message de fin définitive ;
+- **q98** : `contractDefaultViolations` vide pour une version aux défauts (échelles 3 à 6 : seuil 5, 9, 15, 21) ; une violation par colonne du tableau du §5.6 point 2 (au moins : seuil Comité différent, `committee_evaluation_enforced = false`) ; une appétence renseignée ne compte pas comme violation (I-D8) ; service : `bootstrap-approve` refusé avec `NOT_CONTRACT_DEFAULTS` et la liste des champs ;
+- **q83 / I-D2** : `bootstrap-approve` enregistre le régime BOOTSTRAP, `decided_by = requested_by`, `ratification_status` NULL, `fallback_cause` NULL, `bootstrap_justification` égale au corps, audit dans la transaction (`APPROVE` + `STATUS_CHANGE` avec `decisionRegime`) ; refusé sans `justification`, avec un `askedUserId` hors tenant ou sans permission d'administrateur, avec `askedOn` dans le futur ; refusé par un autre que le demandeur ; `approve` garde son refus de l'auto-décision ;
+- **q99 / q101 / q103, notifications** : après une décision BOOTSTRAP, `RISK_FRAMEWORK_BOOTSTRAP_NOTICE` part aux membres actifs d'Audit et du Comité (un seul membre suffit) et à personne d'autre ; avec les deux groupes vides, **aucune** notification n'est émise (ni administrateur, ni autre) ; le type est au catalogue comme obligatoire ; `RoleService` : affecter un membre à Audit ou au Comité dans un tenant qui a une décision BOOTSTRAP lui envoie la notification, et ne l'envoie pas s'il n'y en a pas ;
+- **q100, repli d'une version héritée** : `foldVoteBeforeB12` transforme chaque `VOTE` en `FALLBACK` avec `LEGACY_APPROVER_PRE_B12` et `bypassedGroups`, et laisse `NORMAL` et `FALLBACK` intacts. Service, avec une version ACTIVE `COMMITTEE` et un Comité de 2 membres éligibles : `approve` par un second RM réussit (plus de 409), `decision_regime = 'FALLBACK'`, `ratification_status = 'PENDING'`, `fallback_cause` renseignée ; commentaire obligatoire ; `reject` fonctionne aussi ; le demandeur ne peut pas décider ; Audit et les membres du Comité reçoivent l'avis ; une demande qui active l'auto-proposition reste refusée.
+
+**Migrations B-6d** (A07, Postgres jetable) :
+- appliquée deux fois sans erreur ; le remplissage pose la fin pour un tenant à 2 RM et la laisse NULL pour un tenant à 1 RM ;
+- **trigger de fin** : affecter un second RM pose `risk_framework_bootstrap_ended_at` ; un second membre d'Audit aussi ; un seul membre au Comité, non. Révoquer ensuite le second RM laisse le marqueur posé. Réactiver un utilisateur suspendu qui fait passer Audit à 2 pose le marqueur. (La concurrence, deux premiers membres d'Audit affectés en parallèle, relève d'A08, §17) ;
+- `UPDATE tenants SET risk_framework_bootstrap_ended_at = NULL` (ou une autre date) refusé (`42501`) une fois posé ;
+- activation BOOTSTRAP refusée en base quand le marqueur est posé ; demande BOOTSTRAP sans `bootstrap_justification` refusée par le CHECK ; `fallback_cause` sans `ratification_status = 'PENDING'` refusée ;
+- `QA-B6a11.test.ts` vert sur les trois nouvelles fonctions (`search_path`).
 
 **B-6c** :
 - rattachement approuvé : `risk_framework_id` est écrit au niveau PROCESS seulement, et un sous-processus en hérite par la résolution ; la règle appliquée est celle du Dispositif d'arrivée ; une évaluation créée avant l'approbation garde sa version ;
@@ -696,7 +707,7 @@ Les cas limites inter-modules relèvent d'A08.
 - chaque migration appliquée deux fois de suite sans erreur ;
 - trigger : `UPDATE` d'une version ACTIVE refusé, **y compris sur chacune des colonnes q91** ; `DELETE` refusé ;
 - modification du contenu d'une échelle référencée par une version PENDING refusée ;
-- B-6d : activation BOOTSTRAP acceptée pour le premier Dispositif, refusée en base pour une seconde activation du tenant, pour un autre type de demande ou avec `ratification_status` renseigné ;
+- B-6d : activation BOOTSTRAP acceptée pour le premier Dispositif, refusée en base pour une seconde activation du tenant, pour un autre type de demande ou avec `ratification_status` renseigné (compléments B-6d ci-dessus) ;
 - `.down.sql` testés sur un Postgres jetable (procédure de `memory/dev-db.md`), fonction restaurée avec son `search_path`.
 
 **Vérification avant rapport** : `npm run typecheck && npm test` dans `backend/`.
@@ -721,15 +732,17 @@ Les cas limites inter-modules relèvent d'A08.
   - `RiskEvaluationService` et `TreatmentDecisionService` (instantané, B-6b) ;
   - `CartographyService` et `cartography.routes.ts` (B-6b) ;
   - `RiskDeviceViewService` (B-6b) ;
-  - `domain/notificationCatalog.ts` (B-6d : type d'amorçage) ;
-  - le point d'ajout d'un membre au Comité ou à Audit (`RoleService`, B-6d : notification d'amorçage).
+  - `domain/notificationCatalog.ts` (B-6d : type d'amorçage, obligatoire) ;
+  - le point d'ajout d'un membre au Comité ou à Audit (`RoleService`, `UserService.reactivate`, B-6d : notification d'amorçage après commit) ; `ADMIN_PERMISSIONS` exporté de `RoleService` vers le domaine (B-6d, §5.6 point 6) ;
+  - `domain/frameworkApproval.ts` (B-6d : `isCircuitFunctional`, `bootstrapRefusal`/`isBootstrapAllowed`, `contractDefaultViolations`, `foldVoteBeforeB12`) ; `RiskFrameworkService.resolveFor` (q100) ; `PostgresRiskFrameworkRepository` (`recordBootstrapDecision`, colonnes `fallback_cause` et `bootstrap_justification`) ;
+  - `docs/security/B8-predeploy-checks.sql` (B-6d : requête n° 10, §5.4.1).
 - Toute nouvelle dépendance de constructeur est un **paramètre optionnel avec garde**. Une dépendance qui porte une règle de sécurité échoue de façon fermée (fail-closed), comme le prévoit le principe 9 de `memory/dev-backend.md`.
 
 ## 17. Passages après merge
 
-- **Security (A10)** : circuit d'activation, exclusion des auteurs, triggers d'immuabilité, fermeture des écritures concurrentes. CLAUDE.md impose de vérifier tout champ `...By` d'un `Create...Input` : `requestedBy`, `decidedBy`, `createdBy` et `lastEditedBy` doivent tous être forcés côté serveur. B-6d : contournement de l'amorçage (seconde activation, autre type, ajout concurrent d'un membre).
-- **QA (A08)** : cas limites du circuit, concurrence des approbations (`FOR UPDATE`), lignes antérieures sans version, rollback complet sur échec d'audit (q90).
-- **Compliance (A14)** : B-6b (gouvernance des paramètres, ligne de la GRC Trigger Matrix) et **B-6d** (seule exception à « jamais d'auto-approbation »). B-6c si A13 ne confirme pas I-C1 sans réserve.
+- **Security (A10)** : circuit d'activation, exclusion des auteurs, triggers d'immuabilité, fermeture des écritures concurrentes. CLAUDE.md impose de vérifier tout champ `...By` d'un `Create...Input` : `requestedBy`, `decidedBy`, `createdBy` et `lastEditedBy` doivent tous être forcés côté serveur. B-6d : contournement de l'amorçage (seconde activation, autre type, ajout concurrent d'un membre) ; **réouverture de la fin** (révocation ou suspension du second membre, `UPDATE tenants` direct, chemin d'affectation qui échapperait au trigger, par exemple un rôle dont le `system_group` changerait) ; `askedUserId` arbitraire ; repli q100 (le demandeur ou un auteur ne décide jamais, `fallback_cause` jamais posée hors repli).
+- **QA (A08)** : cas limites du circuit, concurrence des approbations (`FOR UPDATE`), lignes antérieures sans version, rollback complet sur échec d'audit (q90). B-6d : deux premiers membres d'Audit affectés en parallèle (marqueur posé), `bootstrap-approve` concurrent d'une affectation de second RM (l'un des deux gagne, jamais une décision BOOTSTRAP après la fin), absence d'interblocage entre affectation, réactivation et `recordBootstrapDecision`.
+- **Compliance (A14)** : B-6b (gouvernance des paramètres, ligne de la GRC Trigger Matrix) et **B-6d** (seule exception à « jamais d'auto-approbation », repli q100 avec ratification, q103 « personne d'autre prévenu » contre la recommandation A13). B-6c si A13 ne confirme pas I-C1 sans réserve.
 
 ## 18. Plan de dispatch
 
@@ -737,7 +750,7 @@ Les cas limites inter-modules relèvent d'A08.
 |---|---|---|---|---|
 | 0 | Correctifs B-6a q87 + q90 | A06 (en cours, worktree `wt/b6a-q87q90`) | aucune prévue | — ; puis A08, A10 ; ferme C-B6a-01 et C-B6a-02 |
 | 1 | **B-6b** branchement + paramètres q91 | A06 ; A07 pour la migration (spawn par A06 autorisé) | une (n° suivant le dernier, indicatif 059) | correctifs q87/q90 fusionnés ; A13 sur R1 à R5 (non bloquant : la spec applique les défauts du contrat et laisse NULL ce qui n'en a pas) |
-| 2 | **B-6d** amorçage | A06 ; A07 pour la migration | une (n° suivant celui de B-6b) | **A13 confirme I-D1 à I-D4 ; PO tranche I-D5 et I-D6** ; doit être en production **avant ou avec** B-6b (q93) |
+| 2 | **B-6d** amorçage + repli q100 | A06 ; A07 pour la migration (spawn par A06 autorisé) | une (n° suivant celui de B-6b) | **B-6b fusionné** (la garde de version de B-6d reprend celle de B-6b, et le numéro de migration en dépend). I-D1 à I-D6 tranchés (DECISION-045, DECISION-046, revue A13) ; I-D7 à I-D10 non bloquants. Doit être en production **avant ou avec** B-6b (q93). Requête n° 10 jouée par HUMAN avant la production |
 | 3 | **B-6c** multi-Dispositif | A06 | aucune | B-6b fusionné, inventaire des lecteurs hérités vide ; A13 sur I-C1 |
 
 - Les quatre sous-lots modifient `RiskFrameworkService`, les routes et la fonction de garde : ils sont **séquentiels**, un seul A06 à la fois, en worktree (fichiers partagés `server.ts`, `permissions.ts`).
