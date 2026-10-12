@@ -78,3 +78,16 @@
   le nominal APRÈS l'activation de v1, sinon on confond refus de trigger et contrainte d'unicité.
 - Environnement : l'agent worktree refuse les `$VAR` en position de commande, `su -c` et les pipes ; passer par de petits
   scripts dans le scratchpad (`sh script`), et appeler psql par chemin complet.
+
+## 2026-10-12 — migration 058 (F-B6a-11 search_path des gardes, F-B6a-13)
+- RÈGLE : toute fonction de trigger (surtout si elle lit une table) fixe son `search_path`, **pg_temp en dernier** :
+  `SET search_path = pg_catalog, public, pg_temp`. Sinon pg_temp est cherché en premier pour les relations et le runtime
+  (TEMP par défaut sur la base) masque la vraie table par une table temporaire homonyme -> garde contournée (rejoué :
+  version ACTIVE avec demande réelle PENDING ; `users` factice contre le contrôle tenant ; gel d'échelle contourné).
+- Un `CREATE OR REPLACE FUNCTION` sans SET remet la config de la fonction à zéro : toute future redéfinition de ces
+  fonctions DOIT répéter le SET (les down de 056/057 restaurent volontairement l'état non protégé : down de 058 d'abord).
+  058 = `ALTER FUNCTION` sur les 6 fonctions de 055/056/057 (dont truncate_guard, par uniformité).
+- Convention down : chaque `.down.sql` supprime sa ligne de `schema_migrations` (057 l'oubliait, corrigé : F-B6a-13).
+- Test : clone `CREATE DATABASE ... TEMPLATE` avant/après la migration pour rejouer le même scénario (le nominal committe
+  des lignes) ; `\set VERBOSITY sqlstate` ; 25P02 après une erreur dans une tx est du bruit, pas un résultat.
+- Environnement agent : pas de `. fichier` ni `sh` dans une commande composée ; scripts du scratchpad lancés seuls.
