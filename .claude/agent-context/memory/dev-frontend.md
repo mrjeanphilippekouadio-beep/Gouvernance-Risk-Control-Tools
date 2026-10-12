@@ -65,3 +65,17 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 ## 2026-10-12 — q97 abonnements en lecture seule (`wt/q97`, DECISION-045 pt 2)
 
 - Le code gérait déjà `mandatory` (badge « Obligatoire », bouton masqué). Ajouts : MessageBanner info « notifications obligatoires » (affichée si au moins un type `mandatory`) et état vide « Aucun type de notification reçu ». Le comportement des types `mandatory:false` (Activer/Désactiver) est conservé. Aucune règle recalculée côté front.
+# Mémoire — @dev-frontend
+
+## Principes
+- Réutiliser strictement `@djamo/design-system` (Table, Card, Modal, FormField, StatusBadge, MessageBanner, LineChart) ; pas de nouveau composant générique.
+- Jamais de règle métier recalculée côté front (statut/seuils) : afficher `status` renvoyé par le backend ; sinon bannière de gap + signalement A06.
+- Jamais de champ d'attribution (`recordedBy`…) envoyé par le client.
+- `erasableSyntaxOnly` : pas de parameter properties. Build : `npm install` à la racine (workspace), builder `packages/design-system` puis `frontend` (`npm run build`). Ne pas commiter `package-lock.json` modifié par l'install.
+- `apiRequest` ne renvoie que `payload.data` : l'enveloppe de pagination (`total`) est perdue (ex. `/kri-measures`).
+
+## Lot KRI / KPI (2026-10-12)
+- Écrans : `features/indicators/KriPage.tsx`, `KpiPage.tsx`, helpers + `FormModal` dans `shared.tsx`, client `api/indicators.ts`. Navigation : vues `kri` / `kpi` dans `App.tsx` (+ type `View` de `ContextRail.tsx`).
+- Correction orchestrateur : `PermissionDeniedDialog` existait bien (`features/errors`), le worktree partait d'un `main` en retard ; le doublon a été retiré à l'intégration, le dialogue global s'ouvre seul sur un 403 d'écriture.
+- Masquage par permission impossible : aucun endpoint « mes permissions » sans `role.read` (`/roles/users/:id/permissions`). Actions toujours visibles, 403 -> dialogue.
+- Pas de QA navigateur faite (pas de backend/login dans le worktree) : à faire en staging.
