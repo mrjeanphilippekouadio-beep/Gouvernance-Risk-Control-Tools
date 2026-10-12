@@ -279,7 +279,7 @@ describe("QA-B6a maker-checker: who can never decide", () => {
     ["createDraft", (w, i, a) => w.service.createDraft(a, i.fw, i.v, R), "riskframework.update"],
     ["updateDraft", (w, i, a) => w.service.updateDraft(a, i.fw, i.v, { changeApprover: "AUDIT" }, R), "riskframework.update"],
     ["requestActivation", (w, i, a) => w.service.requestActivation(a, i.fw, i.v, "r", R), "riskframework.update"],
-    ["withdraw", (w, i, a) => w.service.withdraw(a, i.r, undefined, R), "riskframework.update"],
+    ["withdraw", (w, i, a) => w.service.withdraw(a, i.r, "retrait", R), "riskframework.update"],
     ["approve", (w, i, a) => w.service.approve(a, i.r, undefined, R), "riskframework.activate"],
     ["reject", (w, i, a) => w.service.reject(a, i.r, "no", R), "riskframework.activate"],
   ];
@@ -340,8 +340,8 @@ describe("QA-B6a decisions: wrong state, double decision, concurrency", () => {
     const { v, r } = await pend(w);
     const calls = {
       "approve vs reject": () => [w.service.approve(u2, r, "a", R), w.service.reject(u3, r, "no", R)],
-      "approve vs withdraw": () => [w.service.approve(u2, r, "a", R), w.service.withdraw(u1, r, undefined, R)],
-      "reject vs withdraw": () => [w.service.reject(u2, r, "no", R), w.service.withdraw(u1, r, undefined, R)],
+      "approve vs withdraw": () => [w.service.approve(u2, r, "a", R), w.service.withdraw(u1, r, "retrait", R)],
+      "reject vs withdraw": () => [w.service.reject(u2, r, "no", R), w.service.withdraw(u1, r, "retrait", R)],
     }[label]!;
     const res = await Promise.allSettled(calls());
     expect(res.filter((x) => x.status === "fulfilled")).toHaveLength(1);
