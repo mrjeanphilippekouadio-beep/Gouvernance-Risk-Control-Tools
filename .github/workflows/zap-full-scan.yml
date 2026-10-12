@@ -106,6 +106,11 @@ jobs:
             echo "::error::Resolved ZAP plan is missing or empty; refusing to start the scanner."
             exit 1
           fi
+          # The official image runs as uid 1000 ("zap"), while the runner
+          # creates this secret-bearing file as its own user. Keep mode 0600
+          # and transfer ownership so the non-root container user can read it.
+          sudo chown 1000:1000 "$plan_path"
+          sudo chmod 600 "$plan_path"
 
           rc=0
           # The browser extension uses the proxy host "zap". In a standalone
