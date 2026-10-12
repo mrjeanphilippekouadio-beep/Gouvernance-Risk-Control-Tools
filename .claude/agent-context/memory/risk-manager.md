@@ -451,3 +451,8 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
 34. Quand le PO écarte un acteur pour un motif de nature (ex. administrateur
     = possible équipe technique), vérifier ce motif sur les autres règles du
     même document avant de conclure ; signaler sans modifier.
+
+- 2026-10-12 : arbitrage B-6a (`docs/architecture/RM-V1-B6a-arbitrage-A13.md`, **recommandations non arbitrées**). F-B6a-04 : exclure aussi les auteurs de l'échelle encore en brouillon (audit `RatingScale`), ne pas exiger une échelle figée (circulaire : l'échelle devient ACTIVE par la décision du Dispositif, et ce serait une 2e approbation hors contrat) ; échelle déjà ACTIVE/ARCHIVED : pas d'exclusion (hypothèse à confirmer A06) ; prévenir le PO qu'il faut 3 Risk Managers pour éviter le blocage q75. F-B6a-05 : voulu par le contrat §8 (exclusion = quorum impossible -> circuit) ; garder la règle, mais enregistrer la cause du repli (ABSENCE / EXCLUSION), ratifier en priorité par les non concernés, KRI ; question PO facultative (3 options, option 1 recommandée). C-B6a-03 : rejoint A14, repli marqué « double contrôle dégradé » (régime FALLBACK, jamais NORMAL), Audit seul marqué 3e ligne, ratification append-only, q88 reste ouverte.
+
+39. L'exclusion d'un auteur est de la séparation des tâches ; son effet sur le régime de décision (vote -> repli) doit être tracé avec sa cause, pas bloqué (principe 9).
+40. Ce qui est approuvé comprend les objets que la demande référence (échelle, descriptifs), pas seulement la ligne de demande : l'exclusion des auteurs couvre l'ensemble.
