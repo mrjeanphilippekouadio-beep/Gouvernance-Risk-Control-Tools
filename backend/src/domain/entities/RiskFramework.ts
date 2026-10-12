@@ -1,0 +1,118 @@
+import type { EvaluationMode } from "./Config.js";
+
+/**
+ * B-6a: the Dispositif. A stable identity (`RiskFramework`) and immutable versions
+ * (`RiskFrameworkVersion`); every change to the active methodology goes through a
+ * `RiskFrameworkChangeRequest` (append-only, decided by a third party).
+ * Spec: docs/architecture/RM-V1-B6-Dispositif-spec.md.
+ */
+
+export type RiskFrameworkVersionStatus = "DRAFT" | "PENDING_APPROVAL" | "ACTIVE" | "ARCHIVED";
+export type ChangeApprover = "RISK_MANAGER" | "AUDIT" | "COMMITTEE" | "AUDIT_AND_COMMITTEE";
+export type ApproverGroup = "RISK_MANAGER" | "AUDIT" | "COMMITTEE";
+
+export interface RiskFramework {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  isDefault: boolean;
+  /** NULL = created by the migration (resumption draft). */
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  archivedAt: Date | null;
+  archivedBy: string | null;
+  archiveReason: string | null;
+}
+
+/** One appetite threshold carried by a version (spec §2.2); no identity of its own. */
+export interface AppetiteThresholdEntry {
+  subCategory: string;
+  subCategoryId: string | null;
+  entity: string | null;
+  threshold: number;
+  description: string | null;
+}
+
+/** The methodology parameters of a version (spec §2.2 — only those B-6 consumes). */
+export interface FrameworkParams {
+  ratingScaleId: string;
+  defaultEvaluationMode: EvaluationMode;
+  committeeEvaluationMinScore: number;
+  committeeEvaluationEnforced: boolean;
+  committeeTreatmentMinScore: number | null;
+  appetiteThresholds: AppetiteThresholdEntry[];
+  changeApprover: ChangeApprover;
+  selfProposalAllowed: boolean;
+}
+
+/** What a draft may change. Deliberately has no `status`: an edit is never a transition. */
+export type UpdateDraftParams = Partial<FrameworkParams>;
+
+export interface RiskFrameworkVersion extends FrameworkParams {
+  id: string;
+  tenantId: string;
+  frameworkId: string;
+  versionNumber: number;
+  status: RiskFrameworkVersionStatus;
+  createdBy: string | null;
+  lastEditedBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  activatedAt: Date | null;
+  activationRequestId: string | null;
+  archivedAt: Date | null;
+  archivedBy: string | null;
+  archiveReason: string | null;
+}
+
+export type ChangeRequestKind = "ACTIVATE_VERSION" | "ASSIGN_PROCESS" | "SET_DEFAULT";
+export type ChangeRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+export type DecisionRegime = "NORMAL" | "FALLBACK" | "BOOTSTRAP";
+
+export interface RiskFrameworkChangeRequest {
+  id: string;
+  tenantId: string;
+  kind: ChangeRequestKind;
+  frameworkId: string;
+  versionId: string | null;
+  processId: string | null;
+  previousValue: unknown;
+  reason: string;
+  status: ChangeRequestStatus;
+  requestedBy: string;
+  createdAt: Date;
+  decidedBy: string | null;
+  decidedAt: Date | null;
+  decisionComment: string | null;
+  decisionRegime: DecisionRegime | null;
+  deciderGroup: ApproverGroup | null;
+  ratificationStatus: "PENDING" | null;
+}
+
+/** Everything the repository needs to open an activation request (requestedBy is set by the service). */
+export interface CreateActivationRequestInput {
+  tenantId: string;
+  frameworkId: string;
+  versionId: string;
+  reason: string;
+  requestedBy: string;
+  previousValue: unknown;
+}
+
+export interface RecordDecisionInput {
+  outcome: "APPROVED" | "REJECTED";
+  decidedBy: string;
+  comment: string | null;
+  decisionRegime: DecisionRegime;
+  deciderGroup: ApproverGroup;
+  ratificationStatus: "PENDING" | null;
+}
+
+export interface DecisionResult {
+  request: RiskFrameworkChangeRequest;
+  version: RiskFrameworkVersion;
+  /** The ACTIVE version replaced by this approval (null if none, or on a rejection). */
+  previousActive: RiskFrameworkVersion | null;
+}

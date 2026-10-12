@@ -548,10 +548,11 @@ describe("migration 054 and persistence mapping (static; nothing is applied)", (
   });
   it("053 and 054 are consecutive (no gap, no reuse)", () => {
     const nums = readdirSync("../database/postgresql/migrations").filter((f) => /^\d+_.*(?<!\.down)\.sql$/.test(f)).map((f) => Number(f.slice(0, 3))).sort((a, b) => a - b);
-    expect(nums.at(-1)).toBe(54);
+    // B-6a added 055: the tail must stay gap-free from 53 on (no gap, no reuse).
+    expect(nums.at(-1)).toBeGreaterThanOrEqual(54);
     // observation: two migrations share the number 044 (pre-existing, applied by filename so harmless); none after it.
     const recent = nums.filter((n) => n > 44);
     expect(new Set(recent).size).toBe(recent.length);
-    expect(nums.slice(-2)).toEqual([53, 54]);
+    expect(nums.slice(nums.indexOf(53)).map((n, i) => n - 53 - i)).toEqual(nums.slice(nums.indexOf(53)).map(() => 0));
   });
 });
