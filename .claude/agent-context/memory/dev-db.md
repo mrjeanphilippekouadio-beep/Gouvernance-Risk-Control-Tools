@@ -13,3 +13,22 @@
   `grc_app_runtime` + table `schema_migrations` à créer avant 043) en appliquant
   003…N avec ET sans noms de contraintes altérés. Un fichier non enregistré dans
   `schema_migrations` (rollback transactionnel) peut être corrigé en place.
+
+## 2026-10-12 — validation migration 055 (lot B-6a, risk_frameworks)
+- Première exécution réelle de 055 (écrite sans jamais tourner) : 2 défauts trouvés, corrigés en place
+  (fichier jamais enregistré dans `schema_migrations`).
+  1. Un `CONSTRAINT x_kind_check` de niveau table portait le même nom que l'auto-nom du CHECK de colonne
+     `kind` -> 42710 « already exists ». Règle : ne jamais nommer un CHECK de table `<table>_<col>_check`
+     si la colonne `<col>` a elle-même un CHECK inline ; utiliser un nom distinct (ici `_kind_columns_check`).
+  2. `risk_frameworks` n'avait pas de trigger `BEFORE TRUNCATE` alors que l'en-tête promettait les 3 tables
+     (protégée seulement indirectement via FK + garde des versions). Ajouté.
+- Méthode : `runMigrations.ts` impose SSL (`rejectUnauthorized: true`) donc inutilisable sur un Postgres local
+  sans TLS ; j'ai rejoué la même boucle en shell (psql, BEGIN; fichier; INSERT schema_migrations; COMMIT par
+  fichier, ordre trié, `.down.sql` exclus). initdb doit tourner sous l'utilisateur `postgres` (refuse root) :
+  `su postgres -c`, socket unix dans /tmp, `listen_addresses=''`. Créer le rôle `grc_app_runtime` avant 043.
+- Fixtures utiles pour tester un DO$$ de reprise : tenants avec/sans config, échelle ACTIVE vs DRAFT/ARCHIVED,
+  un pg_dump -Fc avant la migration pour rejouer proprement ; comparer `pg_dump -s` (hors lignes \restrict)
+  d'une base « up » et d'une base « up→down→up » pour prouver que le down est complet.
+- Constats de comportement à connaître côté app : une version ACTIVE refuse même un UPDATE de `updated_at`
+  seul ; le runtime a UPDATE sur les change requests (append-only garanti par trigger, pas par GRANT) ;
+  DELETE/TRUNCATE révoqués sur les 3 tables.

@@ -91,8 +91,9 @@ CREATE TABLE IF NOT EXISTS risk_framework_change_requests (
   decision_regime      text CHECK (decision_regime IN ('NORMAL', 'FALLBACK', 'BOOTSTRAP')),
   decider_group        text CHECK (decider_group IN ('RISK_MANAGER', 'AUDIT', 'COMMITTEE')),
   ratification_status  text CHECK (ratification_status = 'PENDING'),
-  -- Cohérence entre le type de demande et ses colonnes.
-  CONSTRAINT risk_framework_change_requests_kind_check CHECK (
+  -- Cohérence entre le type de demande et ses colonnes. Nom explicite distinct de
+  -- risk_framework_change_requests_kind_check, déjà pris par le CHECK de la colonne `kind` (sinon 42710).
+  CONSTRAINT risk_framework_change_requests_kind_columns_check CHECK (
     (kind = 'ACTIVATE_VERSION' AND version_id IS NOT NULL AND process_id IS NULL)
     OR (kind = 'ASSIGN_PROCESS' AND process_id IS NOT NULL)
     OR (kind = 'SET_DEFAULT' AND process_id IS NULL)
@@ -197,6 +198,12 @@ DROP TRIGGER IF EXISTS risk_framework_versions_guard ON risk_framework_versions;
 CREATE TRIGGER risk_framework_versions_guard
   BEFORE UPDATE OR DELETE ON risk_framework_versions
   FOR EACH ROW EXECUTE FUNCTION risk_framework_versions_guard();
+
+-- risk_frameworks : seul TRUNCATE est gardé (UPDATE/archivage restent permis ; DELETE est révoqué en section 4).
+DROP TRIGGER IF EXISTS risk_frameworks_truncate_guard ON risk_frameworks;
+CREATE TRIGGER risk_frameworks_truncate_guard
+  BEFORE TRUNCATE ON risk_frameworks
+  FOR EACH STATEMENT EXECUTE FUNCTION risk_framework_truncate_guard();
 
 DROP TRIGGER IF EXISTS risk_framework_versions_truncate_guard ON risk_framework_versions;
 CREATE TRIGGER risk_framework_versions_truncate_guard
