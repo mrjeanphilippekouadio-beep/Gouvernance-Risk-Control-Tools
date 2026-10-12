@@ -140,6 +140,7 @@ both a general update and an archive/close action.
     `deleted_at` (diff + soft-delete the removed pairs) instead of
     stretching this exception. Every `DELETE`/`INSERT` on a link table
     must still filter by `tenant_id`, exception or not.
+- **Every trigger/guard function pins `SET search_path = pg_catalog, public, pg_temp`** (`pg_temp` last — otherwise a session temp table shadows the real one and bypasses the guard, F-B6a-11, migration 058). A later `CREATE OR REPLACE` silently drops an `ALTER FUNCTION … SET`, so repeat it on every redefinition; `test/QA-B6a11.test.ts` fails on a trigger function from 058 on without it.
 - `tenant_id` on every business table from the first migration touching
   it, even though the product is currently single-tenant.
 - Secrets only via env vars (`backend/.env`, `frontend/.env.local`),

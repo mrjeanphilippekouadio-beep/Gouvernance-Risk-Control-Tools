@@ -4,6 +4,8 @@
 -- telle que définie par 055 (sans contrôle de tenant de decided_by). Aucune donnée supprimée ou modifiée.
 -- Si 055 change un jour risk_framework_change_requests_guard(), resynchroniser la copie ci-dessous.
 -- Le fichier gère sa transaction : l'exécuter avec `psql -v ON_ERROR_STOP=1 -f` (sans -1).
+-- Ordre (F-B6a-14) : jouer 058.down AVANT ce fichier. Le CREATE OR REPLACE ci-dessous efface le
+-- SET search_path posé par 058 ; exécuté avec 058 encore appliquée, la garde redeviendrait vulnérable (F-B6a-11).
 BEGIN;
 
 DROP TRIGGER IF EXISTS risk_framework_versions_insert_guard ON risk_framework_versions;

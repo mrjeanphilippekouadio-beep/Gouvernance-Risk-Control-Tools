@@ -52,3 +52,17 @@ describe("down migrations remove their schema_migrations row (F-B6a-13)", () => 
     });
   }
 });
+
+// F-B6a-14: CREATE OR REPLACE drops a function's SET search_path. Any trigger function (re)defined from 058 on
+// must pin it, either in its definition or by an ALTER FUNCTION ... SET search_path in the same migration.
+describe("trigger functions from 058 on pin search_path (F-B6a-14)", () => {
+  const ups = readdirSync(dir).filter((f) => /^\d{3}_.*\.sql$/.test(f) && !f.endsWith(".down.sql") && Number(f.slice(0, 3)) >= 58);
+  it.each(ups)("%s", (f) => {
+    const sql = strip(read(f));
+    for (const m of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([a-z_0-9.]+)\s*\([^)]*\)\s*RETURNS\s+trigger([\s\S]*?)\$\$/gi)) {
+      const inline = /SET\s+search_path\s*=/i.test(m[2]);
+      const altered = new RegExp(`ALTER\\s+FUNCTION\\s+${m[1].replace(".", "\\.")}\\s*\\([^)]*\\)\\s+SET\\s+search_path\\s*=`, "i").test(sql);
+      expect(inline || altered, `${f}: ${m[1]} must SET search_path = pg_catalog, public, pg_temp`).toBe(true);
+    }
+  });
+});
