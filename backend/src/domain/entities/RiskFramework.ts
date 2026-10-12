@@ -1,3 +1,4 @@
+import type { AuditEvent } from "./AuditEvent.js";
 import type { EvaluationMode } from "./Config.js";
 
 /**
@@ -92,6 +93,9 @@ export interface RiskFrameworkChangeRequest {
 }
 
 /** Everything the repository needs to open an activation request (requestedBy is set by the service). */
+/** q90: built from the stored result; the repository inserts these audit_log rows in the SAME transaction as the action. */
+export type TransactionalAudit<R> = (result: R) => Array<Omit<AuditEvent, "id" | "timestamp">>;
+
 export interface CreateActivationRequestInput {
   tenantId: string;
   frameworkId: string;
@@ -101,6 +105,7 @@ export interface CreateActivationRequestInput {
   previousValue: unknown;
   /** F-B6a-02: replayed by the repository on the version it has just locked (FOR UPDATE); a throw aborts. */
   validateLocked?: (version: RiskFrameworkVersion) => Promise<void>;
+  audit?: TransactionalAudit<RiskFrameworkChangeRequest>;
 }
 
 export interface RecordDecisionInput {
