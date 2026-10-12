@@ -2,6 +2,7 @@
 
 **Statut** : spécification de l'Architecte (A05), 2026-10-11. Aucun code ni migration produits.
 **Mise à jour 2026-10-12 (A05)** : réponses du PO de DECISION-044 (q81 à q83, q86 à q93) intégrées. Les §0, §1, §2.2, §5, §8, §9, §11 à §17 sont modifiés, le §18 (plan de dispatch) est nouveau. B-6a est livré (migrations 055 à 058, voir `ACTION_ITEMS.md`).
+**Mise à jour 2026-10-12 bis (A05)** : DECISION-045 (q98, q99) et DECISION-046 (q100 à q103), plus la revue A13 (`docs/risk/A13-review-DECISION-044.md`, I-D2 et I-D4 confirmés). Modifiés : §0, §1, §5.4 (nouveau §5.4.1, q100), §5.5, §5.6 (réécrit), §12.3, §13, §14.2, §15, §16, §17, §18. B-6d est dispatchable après la fusion de B-6b ; les points encore ouverts (§14.2 : I-D7, I-D8, I-D9) ne le bloquent pas.
 **Roadmap** : R1.4 (`docs/ROADMAP-V1.md`). **Destinataires** : A06 (code), A07 (migrations), A13 (interprétations du §14.2), A08/A10/A14 (passages après merge).
 **Sources** : `RM-V1-Lots-contrat-amende.md` (B-6, F-8, §4 invariants) ; contrat `RISK_MANAGEMENT_V1_FINAL_DECISIONS.md` §6, §8, §10 ; `RM-V1-Contrat-etape2-PROJET.md` §7 et §13.1 bis (N8 à N10) ; Decision Log jusqu'à **DECISION-044** ; avis Compliance `docs/compliance/B6a-compliance-review.md` ; arbitrage `RM-V1-B6a-arbitrage-A13.md`.
 
@@ -19,7 +20,8 @@ Sauf mention contraire, chaque règle ci-dessous est **décidée**. Les points d
 4. À partir de B-6b, le Dispositif devient la **source unique** des paramètres. Les écritures concurrentes dans `configs`, `risk_appetites` et `RatingScaleService.activateVersion` sont fermées. **Tous** les paramètres du contrat §10 sont portés par la version dès B-6b (q91), y compris ceux que des lots ultérieurs consomment.
 5. Une évaluation fige à sa création la version du Dispositif, l'échelle et les seuils Comité (F-8, invariant 9).
 6. Chaque action sur le Dispositif écrit son audit dans la même transaction que l'action (q90).
-7. L'amorçage (q77) est isolé dans B-6d, désormais spécifié (q81 à q83, q93) sous réserve des points d'interprétation du §14.2.
+7. L'amorçage (q77) est isolé dans B-6d, désormais spécifié (q81 à q83, q93, q98, q99, q101 à q103). Sa fin est mémorisée par tenant et ne se rouvre jamais (q102).
+8. Une version ACTIVE héritée dont l'approbateur est Audit ou le Comité (créée avant q87) ne gèle pas le Dispositif : jusqu'à B-12, la demande se replie vers un Risk Manager, avec ratification ultérieure (q100, §5.4.1, B-6d).
 
 ## 1. Découpage en sous-lots
 
@@ -29,7 +31,7 @@ Le lot est de taille L. Il est découpé en quatre sous-lots. L'ordre de merge e
 |---|---|---|---|---|
 | **B-6a** Socle | Tables, cycle de vie, demandes et circuit d'approbation (fonction risque et repli), immuabilité, permissions, routes, audit, brouillon de reprise par tenant. Correctifs q87 et q90 en cours (A06) | M | **055** ; durcissements **056** (activation liée à une demande, BOOTSTRAP refusé), **057** (gardes INSERT), **058** (`search_path`) — livrées | — |
 | **B-6b** Branchement | Résolution du Dispositif applicable, instantané F-8 sur l'évaluation, Cartographie, Risk 360, fermeture des écritures concurrentes, **paramètres q91** | M+ | **une** migration, numéro suivant le dernier présent (indicatif : 059) | B-6a, y compris q87/q90 |
-| **B-6d** Amorçage | Exception q77 limitée à la liste fermée q81, fin q82, sans ratification (q83), réouverture contrôlée de BOOTSTRAP en base | S | **une** migration (numéro suivant celui de B-6b) | B-6a ; **§14.2 confirmé par A13** |
+| **B-6d** Amorçage + repli q100 | Exception q77 limitée à la liste fermée q81, valeurs par défaut du contrat (q98), fin quand un circuit fonctionne (q101), fin mémorisée et définitive (q102), sans ratification (q83), notification obligatoire (q99) ; réouverture contrôlée de BOOTSTRAP en base ; repli d'une version héritée Audit/Comité (q100) | S+ | **une** migration (numéro suivant celui de B-6b) | B-6b fusionné |
 | **B-6c** Multi-Dispositif | Rattachement Processus → Dispositif (règle du Dispositif d'arrivée, q89), changement du Dispositif par défaut, archivage d'un Dispositif, retrait du contrôle de plafond inter-Dispositifs | S | aucune (schéma dans 055) | B-6b |
 
 B-6a et B-6b suffisent à faire fonctionner un tenant qui a un seul Dispositif **et au moins deux Risk Managers**. Avec un seul Risk Manager (cas de Djamo au démarrage, q93), B-6d est nécessaire avant la mise en production de B-6b (§8.0).
@@ -175,7 +177,9 @@ DRAFT ──(abandon, riskframework.archive)──► ARCHIVED   (activated_at I
 | `decided_by`, `decided_at`, `decision_comment` | renseignés à la décision |
 | `decision_regime` | NULL tant que la demande est PENDING ; sinon `NORMAL` \| `FALLBACK` \| `BOOTSTRAP` |
 | `decider_group` | `RISK_MANAGER` \| `AUDIT` \| `COMMITTEE` |
-| `ratification_status` | NULL, ou `PENDING` pour une décision `FALLBACK` (q62). La ratification elle-même relève de B-12. **Une décision `BOOTSTRAP` n'est pas soumise à ratification** (q83, sous réserve du §14.2 point I-D4) : `ratification_status` reste NULL |
+| `ratification_status` | NULL, ou `PENDING` pour une décision `FALLBACK` (q62). La ratification elle-même relève de B-12. **Une décision `BOOTSTRAP` n'est pas soumise à ratification** (q83, confirmé par A13, §14.2 point I-D4) : `ratification_status` reste NULL |
+| `fallback_cause` | **B-6d.** NULL, ou `LEGACY_APPROVER_PRE_B12` quand une décision `FALLBACK` vient du garde-fou q100 (§5.4.1). CHECK : `fallback_cause IS NULL OR (decision_regime = 'FALLBACK' AND ratification_status = 'PENDING')` |
+| `bootstrap_justification` | **B-6d.** jsonb, motif structuré d'une décision `BOOTSTRAP` (§5.6 point 6). CHECK : `(decision_regime IS NOT DISTINCT FROM 'BOOTSTRAP') = (bootstrap_justification IS NOT NULL)` et `jsonb_typeof = 'object'` |
 
 Contraintes :
 - `CHECK (decided_by IS NULL OR decided_by <> requested_by OR decision_regime = 'BOOTSTRAP')` (055). Inchangé par B-6d.

@@ -34,3 +34,4 @@ Mémoire persistante du rôle Orchestrateur sur GRC Tools. Obligatoire : la mett
 
 ## Leçon 2026-10-12 : le frontend oublié
 Le PO a constaté que le frontend n'avançait plus : 13 écrans pour 43 modules backend. Cause : à chaque décision PO je dispatchais le backend, et les specs renvoyaient l'écran à « un lot F » jamais planifié. Règle : à chaque transition de module, compter les modules backend sans écran ; tout renvoi à un « lot F » devient une ligne ACTION_ITEMS ; au moins un lot frontend tourne en parallèle des lots backend dès qu'un backend stable existe sans écran.
+- 2026-10-12 13:30 : q105 répondue 13:12:50, juste après ma lecture ; j'ai affirmé au PO qu'elle restait ouverte. Règle : ne jamais affirmer qu'une question est « en attente » sans relire `questions` à l'instant du message (une lecture de quelques minutes est déjà périmée).

@@ -220,7 +220,7 @@ pour l'usage.
 | @risk-manager | **Non bloquant B-6b/B-6c (spec §14.2)** — R1 statuts de contribution / mode d'appétence dans « tous les paramètres » ? R2 seuil « faible » sans défaut contractuel ; R3 options de cumul booléennes ; R4 `FIRST_LINE` ; R5 délégation sans durée max → date de fin obligatoire ? I-C1 réserve QA échelles inter-Dispositifs ; I-C2 un `ReviewCycle` ouvert verrouille-t-il le Dispositif ? | 2026-10-12 | **Ouvert — A13 (dispatché)** |
 | @product-manager | **Questions PO (q98, q99)** — q98 (I-D5) : un Dispositif activé par bootstrap doit-il utiliser les valeurs par défaut du contrat ? q99 (I-D6) : la notification de bootstrap est-elle obligatoire au catalogue ? | 2026-10-12 | **Décidé (DECISION-045)** |
 | @risk-manager @dev-backend @security | **Revue A13 DECISION-044** (`docs/risk/A13-review-DECISION-044.md`) : **G1** (MEDIUM, séparation des tâches) — `changeAuditGroupPermissions` ne met en attente que si l'auteur est RM ; un admin + Comité (légal depuis q80) applique seul des droits d'Audit → correctif A06 dispatché. Autres demandes A13 pour B-6d : fin d'amorçage mémorisée, motif structuré, notification lue/non lue tracée, KRI « âge de l'amorçage ». | 2026-10-12 | **G1 en cours (A06)** |
-| @product-manager | **Questions PO q100–q105** (issues de la revue A13) : q100 version héritée COMMITTEE/AUDIT (Q-A13-1) ; q101 sens de « fin » du démarrage (I-D1) ; q102 fin définitive (I-D3) ; q103 tiers prévenu si groupes vides (Q-A13-4) ; q104 admin + Audit (Q-A13-5) ; q105 `config.manage` et import (Q-A13-6). q101–q103 bloquent B-6d. | 2026-10-12 | **q100–q104 décidées (DECISION-046) ; q105 ouverte — owner HUMAN** |
+| @product-manager | **Questions PO q100–q105** (issues de la revue A13) : q100 version héritée COMMITTEE/AUDIT (Q-A13-1) ; q101 sens de « fin » du démarrage (I-D1) ; q102 fin définitive (I-D3) ; q103 tiers prévenu si groupes vides (Q-A13-4) ; q104 admin + Audit (Q-A13-5) ; q105 `config.manage` et import (Q-A13-6). q101–q103 bloquent B-6d. | 2026-10-12 | **q100–q105 répondues** (q105 à 13:12, réponse libre à faire préciser au PO, voir DECISION-046 point 6) |
 | @dev-backend @dev-frontend | Mise en œuvre DECISION-045 : q96 (risque du KRI source = risque couvert, A06) et q97 (écran abonnements en lecture seule, Dev Frontend). | 2026-10-12 | **Fait** (q96 `5ce5d39`, q97 `dc06a38`) |
 | @qa-engineer @security @audit @dev-backend | **Revues du lot DECISION-044 + G1 + DECISION-045** : QA A08 `3de31bf` **PASS** (40 tests, dont 15 sur Postgres 16 jetable : ROLLBACK réel des 8 mutations du Dispositif si l'audit échoue) ; Security A10 `5a6e117` **feu vert staging** (CVSS max 3,1) ; Audit A23 `a3b5e40` 14 constats sans bloquant ; G1 corrigé `180c015`. Intégration : 1783 tests + 15 Postgres, build frontend OK. | 2026-10-12 | **Fait** |
 | @dev-backend @risk-manager | **F-D044-01** LOW 2,7 CONFIRMÉ (PoC) — q94 contourné par les permissions effectives : un admin peut donner à un RM les permissions de validation du Comité via un rôle ordinaire ou le groupe RM, sans motif ni notification. **À corriger avant production** (dispatché A06) + requête de repérage 8 à étendre. | 2026-10-12 | **Corrigé `ea4ef9f` (A06) + `6aebb98` (q80). Retest A10 : RETEST_PASS, CLOSED (`70e2d74`).** |
@@ -1436,7 +1436,13 @@ DECISION (PO, cockpit) :
 RELATED: DECISION-044, DECISION-045, spec B-6 §5.6 et §14.2.
 OWNER: HUMAN (Product Owner)
 STATUS: DÉCIDÉ — q104 dispatché (A06) ; q100–q103 intégrées à la spec
-  B-6d (A05) ; q105 reste ouverte. Journalisé 3 minutes après la
-  dernière réponse : la relecture `status == "answered"` avant chaque
-  transition a fonctionné.
+  B-6d (A05). CORRECTIF ORCHESTRATEUR (13:30) : q105 avait été
+  répondue à 13:12:50, quelques secondes après la lecture du cockpit ;
+  annoncée à tort comme « encore ouverte » au PO, qui l'a signalé.
+  6. q105 (Q-A13-6) : réponse libre « conserver pour les deux rôles
+     admin et manager de risque ». Lecture probable : l'import de
+     risques et les catégories restent ouverts aux deux rôles, sans
+     que le Risk Manager devienne « administrateur + RM » signalé, ce
+     qui suppose des droits dédiés hors `config.manage` (option B).
+     Précision demandée au PO le 2026-10-12 — OUVERT, owner HUMAN.
 ```
