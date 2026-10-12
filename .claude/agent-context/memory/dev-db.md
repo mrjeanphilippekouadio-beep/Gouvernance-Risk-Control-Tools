@@ -44,3 +44,19 @@
   « jamais enregistrée » du 2026-10-12 ci-dessus).
 - F-B6a-06 : analysé, non implémenté, en attente de décision (voir rapport : lien version<->demande APPROVED
   par un tiers, interdiction BOOTSTRAP tant que B-6d absent).
+
+## 2026-10-12 — migration 056 (F-B6a-06, garde d'activation du Dispositif)
+- 056 implémente F-B6a-06 : UNIQUE (id, tenant_id, framework_id, version_id) sur les demandes + FK composite
+  NOT VALID `risk_framework_versions_activation_request_fk` (MATCH SIMPLE, ignorée si activation_request_id NULL) ;
+  garde `risk_framework_versions_guard()` : PENDING_APPROVAL -> ACTIVE exige une demande ACTIVATE_VERSION de CETTE version
+  (même tenant/Dispositif), APPROVED, decided_by non nul <> requested_by, régime NORMAL/FALLBACK ;
+  activation_request_id interdit sur DRAFT, immuable une fois ACTIVE ; index unique partiel (1 demande = 1 version) ;
+  CHECK `..._no_bootstrap_check` (NOT VALID) refuse BOOTSTRAP jusqu'à B-6d (nom distinct de tout auto-nom -> pas de 42710).
+- B-6d devra : DROP du CHECK no_bootstrap par une migration dédiée ET adapter la garde (`decision_regime IN ('NORMAL','FALLBACK')`
+  devra accepter BOOTSTRAP sous conditions) -- sinon l'activation BOOTSTRAP resterait refusée par le trigger.
+- Le down de 056 redéfinit la fonction avec le corps de 055 (copie) : si 055 change un jour, resynchroniser.
+- Compat code : `recordDecision` (d51e0c8) met la demande APPROVED d'abord, puis la version ACTIVE avec activation_request_id
+  dans le même UPDATE : compatible sans modification. Le trigger voit la demande car même transaction.
+- Validé sur Postgres 16 jetable (001->056, 056 x2, down x2, up->down->up identique en pg_dump -s) ; 14 cas SQL.
+- Technique de test : fonctions pg_temp (run/prep) avec sous-transaction forcée au rollback ; défense en profondeur testée en
+  désactivant seulement le trigger utilisateur (FK et index restent actifs).
