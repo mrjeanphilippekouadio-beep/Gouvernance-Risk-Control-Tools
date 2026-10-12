@@ -996,3 +996,67 @@ L'invariant F-8 (« jamais réattachée, jamais réécrite ») n'est tenu que pa
 ### Statut et tracker (7bis)
 
 F-B6b-01 (A06, avec B-6b-02, avant B-6c), F-B6b-02 (A07), B-6b-01 (A06, déjà ouvert), F-B6b-03/04/05 INFO.
+
+## B-6b follow-ups — retest A10 (2026-10-12)
+
+Périmètre : migration 060 (`c6ef708`, F-B6b-02) et correctifs A06 (revus dans l'arbre de travail, depuis commités en `a084834`, contenu `backend/src` identique) (`DashboardService`, `RatingScaleService`, `RiskEvaluationService`, `RiskFrameworkService`, `RiskFramework.ts`, `PostgresRiskEvaluationRepository`, `server.ts`). Méthode : revue statique, `typecheck` OK, vitest 1890 verts / 29 ignorés, Postgres 16 jetable (socket local, 001→060, rôle `grc_app_runtime`), sondes SQL exécutées sous le rôle runtime. Neon non touché.
+
+### Verdict : RETEST_PASS sur les quatre points, aucune escalade (max 2,7), feu vert staging
+
+| Finding | Résultat |
+|---|---|
+| F-B6b-02 (A07, 060) | **RETEST_PASS / CLOSED** |
+| F-B6b-01 (A06) | **RETEST_PASS / CLOSED** |
+| F-B6b-03 (A06) | **RETEST_PASS / CLOSED** |
+| B-6b-01 (A06) | **RETEST_PASS / CLOSED** |
+| QA-B6b-01 (A06) | PASS (fail-closed, aucune lecture de `configs` pour une évaluation rattachée) |
+
+**F-B6b-02, migration 060.**
+- Les six `UPDATE risk_evaluations` du repository sont inventoriés. Seul `recordInherentScoring` touche une colonne gelée (`rating_scale_id`), et il la réécrit avec la valeur figée : `resolveScaleForInherent` relit `e.ratingScaleId`. Les autres mises à jour (maîtrise, résiduel, validations) ne nomment aucune colonne gelée.
+- Aucun autre trigger `BEFORE` sur la table ne modifie `NEW`, donc `UPDATE OF` sur les cinq colonnes suffit. `INSERT … ON CONFLICT DO UPDATE SET committee_evaluation_min_score` est refusé (42501).
+- Le passage à NULL est refusé. NULL vers une valeur n'est permis que pour `rating_scale_id`.
+- `proconfig` = `search_path=pg_catalog, public, pg_temp`, posé dans la définition ET par `ALTER FUNCTION`. La fonction ne lit aucune table, donc l'ombrage pg_temp est sans objet.
+- Sous le runtime, `DISABLE TRIGGER`, `session_replication_role` et `CREATE OR REPLACE` sont refusés.
+- La FK composite `NOT VALID` est appliquée aux nouvelles écritures : `UPDATE tenant_id` d'une ligne figée vers un autre tenant donne 23503. Une version d'un autre tenant à l'INSERT donne aussi 23503 (test QA-FB6b02-pg, 4/4 verts sur ma base).
+- Laisser la contrainte non validée est acceptable. Les seules lignes antérieures viennent de l'application (version résolue par `actor.tenantId`) ou valent NULL. `VALIDATE CONSTRAINT` passe sur la base jetable. Recommandation : jouer `VALIDATE CONSTRAINT risk_evaluations_framework_version_tenant_fk` en staging puis en prod, après un `SELECT` de contrôle (lecture seule).
+- Le down est sûr : trigger, fonction, FK, UNIQUE et ligne `schema_migrations` sont retirés, les données sont intactes. La réapplication est idempotente (jouée deux fois). `059.down` échoue tant que 060 est en place (le trigger dépend des colonnes) : c'est un échec fermé, et l'ordre de rollback est imposé.
+
+**F-B6b-01.** Avec le Dispositif câblé (toujours le cas dans `server.ts`), `getAppetiteVsResidual` ne lit plus `risk_appetites`. Pour chaque risque, il lit la version applicable (`resolveApplicableVersion` + `findAppetite`), avec un cache par processus. Toutes les lectures se font par `actor.tenantId` (processus, rattachement, Dispositif par défaut, version ACTIVE, échelle) et les risques proviennent de la liste scopée. Aucune fuite inter-tenant n'existe.
+
+**F-B6b-03.** `requirePermission(actor, "risk.read")` est appelé avant `risks.getById` sur la branche `riskId`. La branche `processId` n'est pas un oracle d'existence : un processus inconnu ou hors tenant retombe sur le Dispositif par défaut, sans 404 (voir INFO F-B6b-08).
+
+**B-6b-01.** `activateVersion` vérifie d'abord `ratingscale.delete`, puis refuse toujours quand le Dispositif est câblé. Il ne reste aucun autre écrivain de statut ACTIVE/ARCHIVED : `create` crée un DRAFT, `update*` sont bloqués par `assertMutable`, `disable` refuse l'ACTIVE.
+
+### Nouveaux points
+
+**F-B6b-06 — LOW — CVSS 3.1 2,2 (AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:N) — CONFIRMED (Postgres réel, rôle runtime) — owner A07.**
+060 ne garde que `UPDATE`. Sous le runtime, un `INSERT` peut créer une évaluation rattachée à une version du tenant avec un instantané fabriqué : `committee_evaluation_min_score = 1`, `committee_evaluation_enforced = false`, `rating_scale_id` ≠ l'échelle de la version. C'est le contournement « naître dans l'état final » de F-B6a-09, ici sur l'instantané. Défense en profondeur seulement : le chemin applicatif construit l'instantané côté serveur. Recommandation : trigger `BEFORE INSERT` (même `SET search_path`) qui, quand `risk_framework_version_id` est non NULL, impose `rating_scale_id` et les seuils Comité égaux à ceux de la version (lecture `public.risk_framework_versions`). Test : INSERT forgé → 42501.
+
+**F-B6b-07 — INFO — owner A07.** Ces points sont antérieurs au batch et ne sont pas couverts par 060. `rating_scale_id` n'a qu'une FK simple (019), donc un INSERT peut référencer l'échelle d'un autre tenant (vérifié sous le runtime). `rating_scale_version` (libellé) reste modifiable alors que `rating_scale_id` est gelé (vérifié). Recommandation : FK composite `(tenant_id, rating_scale_id)` `NOT VALID`, et ajouter `rating_scale_version` à la garde.
+
+**F-B6b-08 — INFO — owner A06.** `/applicable?processId=` révèle à un détenteur de `riskframework.read` le Dispositif rattaché à un processus du tenant, sans exiger `process.read`. Pas d'oracle d'existence. Information déjà accessible aux mêmes groupes.
+
+**F-B6b-09 — INFO — owner A06.** Rapport appétence/résiduel : sans version applicable, `threshold` vaut null et les dépassements valent 0 en silence. Le marqueur `frameworkVersionId: null` signale le cas. Recommandation : le faire apparaître dans l'UI du rapport.
+
+### Question orchestrateur : désactivation des catégories de risque
+
+**F-CAT-01 — INFO, pas de violation SEC-013/014 — owner A06.**
+`PUT /risk-categories/:id {active:false}` sous `config.manage` n'est pas une transition terminale :
+- la désactivation est réversible par le même `PUT {active:true}`, sans garde ;
+- rien n'est archivé ni gelé ;
+- l'opération est auditée en `STATUS_CHANGE` ;
+- seul effet : la catégorie est masquée de la liste par défaut ; `getById` ignore `active`, donc les références des Dispositifs et appétences restent valides.
+
+La règle « permission dédiée pour un état terminal » ne s'applique donc pas. Recommandation optionnelle : exiger un motif à la désactivation. À revoir si une désactivation devient irréversible ou bloque des écritures.
+
+**F-CAT-02 — LOW — CVSS 3.1 2,7 (AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:L/A:N) — CONFIRMED (code) — owner A06 (+ A07).**
+`RiskCategoryService.update` n'applique pas à `parentId` les contrôles de `create`. Il ne vérifie que `parentId !== id`. Conséquences :
+- le parent n'est pas relu par `actor.tenantId` ; avec la FK simple (024), un `parentId` d'un autre tenant est accepté, et le 23503 sert d'oracle d'existence inter-tenant ;
+- il n'y a pas de contrôle « un parent ne peut pas être une sous-catégorie » ;
+- il n'y a pas de détection de cycle A→B→A.
+
+Recommandation : réutiliser la validation de `create` dans `update` (parent du même tenant, de premier niveau, pas de descendant), puis ajouter une FK composite `(tenant_id, parent_id)`. Test : `PUT parentId` hors tenant → 400, cycle → 400.
+
+### Tracker (7bis)
+
+F-B6b-06 (A07, migration 061), F-B6b-07 (A07), F-CAT-02 (A06 + A07), INFO F-B6b-08/09 et F-CAT-01 (A06, non bloquants). F-B6b-01/02/03 et B-6b-01 : CLOSED. Correctifs A06 retestés = `a084834`.

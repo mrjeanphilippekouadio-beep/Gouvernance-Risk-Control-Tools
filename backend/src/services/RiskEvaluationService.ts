@@ -654,6 +654,12 @@ export class RiskEvaluationService {
     if (e.committeeEvaluationMinScore != null) {
       return { minScore: e.committeeEvaluationMinScore, enforced: e.committeeEvaluationEnforced ?? COMMITTEE_EVALUATION_ENFORCED_DEFAULT };
     }
+    // QA-B6b-01 (spec §8.1): an evaluation attached to a version never reads `configs`; a missing copy fails closed.
+    if (e.riskFrameworkVersionId) {
+      throw new ValidationError(
+        "The Dispositif version of this evaluation carries no committee threshold copy — it cannot be validated; contact a Risk Manager",
+      );
+    }
     return this.resolveCommitteeEvaluationSettings(tenantId);
   }
 

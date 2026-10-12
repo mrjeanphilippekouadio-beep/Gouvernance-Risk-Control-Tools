@@ -272,7 +272,7 @@ const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiReposit
 // B-6b: the Dispositif is wired into the services that read or used to own the methodology parameters.
 const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
 const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository, riskCategoryRepository, ratingScaleRepository, riskFrameworkRepository);
-const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository, riskEvaluationRepository, riskAppetiteRepository, configRepository);
+const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository, riskEvaluationRepository, riskAppetiteRepository, configRepository, riskFrameworkRepository);
 const riskFrameworkService = new RiskFrameworkService(
   riskFrameworkRepository,
   ratingScaleRepository,
@@ -387,6 +387,7 @@ const dashboardService = new DashboardService(
   processRepository,
   dashboardScopeResolver,
   ratingScaleRepository,
+  riskFrameworkRepository,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
 const configService = new ConfigService(configRepository, auditRepository, ratingScaleRepository, riskFrameworkRepository);

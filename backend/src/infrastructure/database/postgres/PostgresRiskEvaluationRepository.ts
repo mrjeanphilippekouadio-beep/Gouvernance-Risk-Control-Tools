@@ -10,7 +10,7 @@ import type {
   RecordResidualScoringInput,
   RiskEvaluation,
 } from "../../../domain/entities/RiskEvaluation.js";
-import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 
 interface RiskEvaluationRow {
   id: string;
@@ -171,7 +171,9 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
     id: string,
     input: RecordInherentScoringInput,
   ): Promise<RiskEvaluation> {
-    const { rows } = await this.pool.query<RiskEvaluationRow>(
+    let rows: RiskEvaluationRow[];
+    try {
+      ({ rows } = await this.pool.query<RiskEvaluationRow>(
       `UPDATE risk_evaluations
        SET rating_scale_id = $3,
            rating_scale_version = $4,
@@ -192,7 +194,16 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
         input.impactRetained,
         input.score,
       ],
-    );
+    ));
+    } catch (err) {
+      // Migration 060: the frozen snapshot (scale, version, thresholds) cannot change once set (SQLSTATE 42501).
+      // Match the trigger's own message: a genuine privilege error is also 42501 and must stay a 500 (QA-B6bF-02).
+      const e = err as { code?: string; message?: string };
+      if (e.code === "42501" && /framework snapshot/.test(e.message ?? "")) {
+        throw new ValidationError("The rating scale of this evaluation is frozen and cannot be changed by a new inherent scoring");
+      }
+      throw err;
+    }
     const row = rows[0];
     if (!row) throw new NotFoundError("RiskEvaluation", id);
     return toDomain(row);

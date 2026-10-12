@@ -202,6 +202,6 @@ describe("GET /risk-frameworks/applicable input", () => {
     await expect(s.getApplicable(actor("u", []), { riskId: "r" })).rejects.toThrow();
     const out = await s.getApplicable(actor("u", ["riskframework.read"]), {});
     expect(out?.frameworkId).toBe("fw1");
-    await expect(s.getApplicable(actor("u", ["riskframework.read"]), { riskId: "r" })).rejects.toThrow(ValidationError);
+    await expect(s.getApplicable(actor("u", ["riskframework.read", "risk.read"]), { riskId: "r" })).rejects.toThrow(ValidationError);
   });
 });

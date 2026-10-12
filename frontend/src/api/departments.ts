@@ -7,6 +7,28 @@ export interface DepartmentSummary {
   active: boolean;
 }
 
+/** Full department as returned by GET /api/v1/departments[/:id] (dates are ISO strings). */
+export interface Department extends DepartmentSummary {
+  manager: string;
+  riskOwner: string;
+  riskOwnerDesignatedBy: string | null;
+  riskOwnerDesignatedAt: string | null;
+  linkedProcesses: string | null;
+  deletionReason?: string | null;
+}
+
+/** riskOwner is accepted on creation only; a later change goes through designateRiskOwner (audited). */
+export interface DepartmentCreateInput {
+  name: string;
+  manager: string;
+  entity?: string | null;
+  riskOwner?: string | null;
+  linkedProcesses?: string | null;
+  active?: boolean;
+}
+
+export type DepartmentUpdateInput = Partial<Omit<DepartmentCreateInput, "riskOwner">>;
+
 /**
  * GET /api/v1/departments requires "department.read" — not every Risk
  * Owner carries it. Callers should treat a 403 here as "no directory
@@ -15,4 +37,14 @@ export interface DepartmentSummary {
  */
 export const departmentsApi = {
   list: (token: string) => apiRequest<DepartmentSummary[]>("/api/v1/departments", { token }),
+  listFull: (token: string, includeInactive = false) =>
+    apiRequest<Department[]>(`/api/v1/departments${includeInactive ? "?includeInactive=true" : ""}`, { token }),
+  create: (token: string, body: DepartmentCreateInput) =>
+    apiRequest<Department>("/api/v1/departments", { method: "POST", body, token }),
+  update: (token: string, id: string, body: DepartmentUpdateInput) =>
+    apiRequest<Department>(`/api/v1/departments/${id}`, { method: "PATCH", body, token }),
+  designateRiskOwner: (token: string, id: string, riskOwner: string) =>
+    apiRequest<Department>(`/api/v1/departments/${id}/designate-risk-owner`, { method: "POST", body: { riskOwner }, token }),
+  archive: (token: string, id: string, reason: string) =>
+    apiRequest<{ status: string }>(`/api/v1/departments/${id}/archive`, { method: "POST", body: { reason }, token }),
 };

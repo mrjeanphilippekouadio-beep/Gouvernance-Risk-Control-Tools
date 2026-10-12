@@ -19,6 +19,8 @@ import {
   RiskFrameworkVersion,
   TransactionalAudit,
   UpdateDraftParams,
+  withMasteryIndependence,
+  type WithMasteryIndependence,
 } from "../domain/entities/RiskFramework.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -58,7 +60,7 @@ const SYSTEM_GROUP_OF: Record<ApproverGroup, SystemGroup> = {
 };
 
 export interface FrameworkSummary extends RiskFramework {
-  activeVersion: { id: string; versionNumber: number; activatedAt: Date | null; ratingScaleId: string } | null;
+  activeVersion: { id: string; versionNumber: number; activatedAt: Date | null; ratingScaleId: string; reducedMasteryIndependence: boolean } | null;
 }
 
 export interface CreateRiskFrameworkInput {
@@ -180,6 +182,7 @@ export class RiskFrameworkService {
     requirePermission(actor, "riskframework.read");
     let processId: string | null = q.processId ?? null;
     if (q.riskId) {
+      requirePermission(actor, "risk.read"); // F-B6b-03: the existence of a risk must not be deducible without it
       if (!this.risks) throw new ValidationError("Risk lookup is not available");
       const risk = await this.risks.getById(actor.tenantId, q.riskId);
       if (!risk) throw new NotFoundError("Risk", q.riskId);
@@ -192,7 +195,7 @@ export class RiskFrameworkService {
       actor.tenantId,
       processId,
     );
-    return found ? { frameworkId: found.frameworkId, version: found.version, ratingScaleId: found.scale.id } : null;
+    return found ? { frameworkId: found.frameworkId, version: withMasteryIndependence(found.version), ratingScaleId: found.scale.id } : null;
   }
 
   // -- reads ------------------------------------------------------------
@@ -206,22 +209,28 @@ export class RiskFrameworkService {
         return {
           ...f,
           activeVersion: a
-            ? { id: a.id, versionNumber: a.versionNumber, activatedAt: a.activatedAt, ratingScaleId: a.ratingScaleId }
+            ? {
+                id: a.id,
+                versionNumber: a.versionNumber,
+                activatedAt: a.activatedAt,
+                ratingScaleId: a.ratingScaleId,
+                reducedMasteryIndependence: a.masteryAuthoritativeSource === "FIRST_LINE",
+              }
             : null,
         };
       }),
     );
   }
 
-  async get(actor: AuthenticatedUser, id: string): Promise<RiskFramework & { versions: RiskFrameworkVersion[] }> {
+  async get(actor: AuthenticatedUser, id: string): Promise<RiskFramework & { versions: WithMasteryIndependence<RiskFrameworkVersion>[] }> {
     requirePermission(actor, "riskframework.read");
     const framework = await this.getFrameworkOrThrow(actor.tenantId, id);
-    return { ...framework, versions: await this.frameworks.listVersions(actor.tenantId, id) };
+    return { ...framework, versions: (await this.frameworks.listVersions(actor.tenantId, id)).map(withMasteryIndependence) };
   }
 
-  async getVersion(actor: AuthenticatedUser, frameworkId: string, versionId: string): Promise<RiskFrameworkVersion> {
+  async getVersion(actor: AuthenticatedUser, frameworkId: string, versionId: string): Promise<WithMasteryIndependence<RiskFrameworkVersion>> {
     requirePermission(actor, "riskframework.read");
-    return this.getVersionOrThrow(actor.tenantId, frameworkId, versionId);
+    return withMasteryIndependence(await this.getVersionOrThrow(actor.tenantId, frameworkId, versionId));
   }
 
   async listRequests(actor: AuthenticatedUser, status?: ChangeRequestStatus): Promise<RiskFrameworkChangeRequest[]> {

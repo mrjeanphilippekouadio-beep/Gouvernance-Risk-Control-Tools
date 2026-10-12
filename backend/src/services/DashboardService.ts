@@ -41,6 +41,8 @@ import type { ScoreThreshold } from "../domain/entities/RatingScale.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { DashboardScopeMode, RiskScope } from "../domain/entities/DashboardScope.js";
 import type { DashboardScopeResolver } from "./DashboardScopeResolver.js";
+import { findAppetite } from "../domain/frameworkAppetite.js";
+import { resolveApplicableVersion, type FrameworkResolutionDeps } from "./riskFrameworkResolution.js";
 
 // ---------------------------------------------------------------------
 // Shared read models
@@ -177,6 +179,8 @@ export interface AppetiteVsResidualRow {
   exceedanceCount: number;
   exceeded: boolean;
   riskIds: string[];
+  /** B-6b: Dispositif version the threshold comes from (present only when the Dispositif is wired; null = none applicable). */
+  frameworkVersionId?: string | null;
 }
 
 export interface KriConsolidatedReport {
@@ -288,6 +292,12 @@ export class DashboardService {
      * bands, else defaults for its size), like CartographyService. Absent: 5x5 bands.
      */
     private readonly ratingScales?: Pick<RatingScaleRepository, "getById">,
+    /**
+     * B-6b (F-B6b-01): when wired (server.ts, with `ratingScales` and `processes`), the appetite of
+     * appetite-vs-residual comes from the Dispositif version applicable to each risk (spec §7), never from
+     * `risk_appetites`. Absent: legacy read (tests).
+     */
+    private readonly frameworks?: FrameworkResolutionDeps["frameworks"],
   ) {}
 
   // -- ACT-080 ---------------------------------------------------------
@@ -634,7 +644,7 @@ export class DashboardService {
 
   // -- ACT-214 -----------------------------------------------------------------
 
-  /** GET /reports/appetite-vs-residual — per (subCategory, entity), max current residual score vs the active RiskAppetite threshold, exceedances highlighted. */
+  /** GET /reports/appetite-vs-residual — per (subCategory, entity), max current residual score vs the appetite threshold of the Dispositif version applicable to each risk (B-6b; legacy `risk_appetites` only when the Dispositif is not wired), exceedances highlighted. */
   /**
    * Return shape stays a bare array on purpose (pre-existing API
    * contract, unlike the 4 other dashboard.executive endpoints which
@@ -650,43 +660,64 @@ export class DashboardService {
     if (this.scopeIsEmpty(scope)) return [];
 
     const riskListOptions = this.riskListOptionsForScope(scope);
-    const [scored, appetites] = await Promise.all([
-      this.getScoredRisks(actor.tenantId, riskListOptions),
-      this.riskAppetites.list(actor.tenantId, { activeOnly: true }),
-    ]);
+    const scored = await this.getScoredRisks(actor.tenantId, riskListOptions);
 
     interface Group {
       subCategory: string;
       entity: string | null;
+      versionId: string | null;
+      threshold: number | null;
       scores: number[];
       riskIds: string[];
     }
     const groups = new Map<string, Group>();
-    const keyOf = (subCategory: string, entity: string | null) => `${subCategory}::${entity ?? ""}`;
-
-    for (const s of scored) {
-      const key = keyOf(s.evaluation.subCategory, s.evaluation.entity);
+    const keyOf = (versionId: string | null, subCategory: string, entity: string | null) =>
+      `${versionId ?? ""}::${subCategory}::${entity ?? ""}`;
+    const addGroup = (versionId: string | null, subCategory: string, entity: string | null, threshold: number | null) => {
+      const key = keyOf(versionId, subCategory, entity);
       let group = groups.get(key);
       if (!group) {
-        group = { subCategory: s.evaluation.subCategory, entity: s.evaluation.entity, scores: [], riskIds: [] };
+        group = { subCategory, entity, versionId, threshold, scores: [], riskIds: [] };
         groups.set(key, group);
       }
-      group.scores.push(s.score);
-      group.riskIds.push(s.risk.id);
-    }
-    for (const appetite of appetites) {
-      const key = keyOf(appetite.subCategory, appetite.entity);
-      if (!groups.has(key)) {
-        groups.set(key, { subCategory: appetite.subCategory, entity: appetite.entity, scores: [], riskIds: [] });
+      return group;
+    };
+
+    if (this.frameworks) {
+      // Applicable version per risk (spec §7, same choice as Risk 360 / q110), cached by process. No fallback.
+      if (!this.ratingScales) throw new Error("RatingScaleRepository is not configured for DashboardService");
+      const deps = { frameworks: this.frameworks, ratingScales: this.ratingScales, processes: this.processes };
+      const byProcess = new Map<string, Awaited<ReturnType<typeof resolveApplicableVersion>>>();
+      const applicableFor = async (processId: string | null) => {
+        const cacheKey = processId ?? "";
+        if (!byProcess.has(cacheKey)) byProcess.set(cacheKey, await resolveApplicableVersion(deps, actor.tenantId, processId));
+        return byProcess.get(cacheKey) ?? null;
+      };
+      for (const s of scored) {
+        const applicable = await applicableFor(s.risk.processId ?? null);
+        const entry = applicable ? findAppetite(applicable.version.appetiteThresholds, s.evaluation.subCategory, s.evaluation.entity) : null;
+        const group = addGroup(applicable?.version.id ?? null, s.evaluation.subCategory, s.evaluation.entity, entry?.threshold ?? null);
+        group.scores.push(s.score);
+        group.riskIds.push(s.risk.id);
+      }
+      // Appetites with no risk yet: those of the default Dispositif (no process).
+      const def = await applicableFor(null);
+      for (const a of def?.version.appetiteThresholds ?? []) addGroup(def!.version.id, a.subCategory, a.entity, a.threshold);
+    } else {
+      const appetites = await this.riskAppetites.list(actor.tenantId, { activeOnly: true });
+      for (const a of appetites) addGroup(null, a.subCategory, a.entity, a.threshold);
+      for (const s of scored) {
+        const entity = s.evaluation.entity;
+        const known = appetites.find((a) => a.subCategory === s.evaluation.subCategory && (a.entity ?? null) === entity);
+        const group = addGroup(null, s.evaluation.subCategory, entity, known?.threshold ?? null);
+        group.scores.push(s.score);
+        group.riskIds.push(s.risk.id);
       }
     }
 
     const rows: AppetiteVsResidualRow[] = [];
     for (const group of groups.values()) {
-      const appetite = appetites.find(
-        (a) => a.subCategory === group.subCategory && (a.entity ?? null) === group.entity,
-      );
-      const threshold = appetite?.threshold ?? null;
+      const threshold = group.threshold;
       const maxResidualScore = group.scores.length > 0 ? Math.max(...group.scores) : null;
       const exceedanceCount = threshold !== null ? group.scores.filter((sc) => sc > threshold).length : 0;
       rows.push({
@@ -697,6 +728,7 @@ export class DashboardService {
         exceedanceCount,
         exceeded: threshold !== null && maxResidualScore !== null && maxResidualScore > threshold,
         riskIds: group.riskIds,
+        ...(this.frameworks ? { frameworkVersionId: group.versionId } : {}),
       });
     }
 
