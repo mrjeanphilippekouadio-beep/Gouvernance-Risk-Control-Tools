@@ -173,6 +173,16 @@ Détail : `docs/compliance/B6a-compliance-review.md`. Verdict : conforme avec r�
 16. Un contrôle fail-closed ne doit pas pouvoir être configuré de manière à se verrouiller lui-même (approbateur indisponible) ; refuser l'option tant que le mécanisme n'existe pas.
 17. Une dégradation d'un double contrôle (un seul groupe sur deux) est un repli : marquée, notifiée, ratifiée, jamais écrite comme régime normal.
 
+## Passage Compliance B-6b branchement du Dispositif (2026-10-12, commit 45cbd86, tête e25820f)
+
+Détail : `docs/compliance/A14-review-B6b.md`. Verdict : conforme avec réserves, aucun bloquant de merge ni de staging. Statut : recommandation, en attente du PO (Q-A14-B6b-1 à 3). Pas de texte BCEAO consulté ; tests non relus.
+- Instantané correct (version, échelle, 3 seuils figés à la création, FK vers version immuable). Faiblesse : le rattrapage (copie de `configs` à la date de migration, ou repli floor) n'est marqué que par `version_id NULL` ; origines indiscernables, valeur de reprise et non preuve. Comptage HUMAN avant prod, colonne de provenance si compte > 0.
+- Fermeture des écrivains et instantané dépendent d'un paramètre de constructeur optionnel : exiger un test de câblage `server.ts`.
+- Conditions de production : B-6d avant ou avec B-6b ; B-6b-01 fermé ou compensé ; B-6b-02 bloque seulement B-6c ; B-6b-03 non bloquant.
+- À vérifier : marquage « indépendance réduite » pour `FIRST_LINE` (A13 R4 ii) ; B-5 doit traiter `low_criticality_threshold` NULL en fail-closed.
+18. Une valeur rattrapée par migration doit rester distinguable d'une preuve d'origine, par sa provenance et non seulement par l'absence d'une clé ; on ne l'affiche jamais comme application d'une méthodologie.
+19. Un contrôle qui dépend d'une dépendance optionnelle de constructeur n'est preuve que si un test garantit son câblage en production.
+
 12. Un hash calculé à l'upload prouve l'identité du contenu depuis ce
     moment, pas son authenticité d'origine ni sa non-altération sur Drive
     tant qu'il n'est pas recontrôlé.
