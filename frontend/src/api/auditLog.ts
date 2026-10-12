@@ -2,7 +2,7 @@ import { apiRequest } from "./client";
 
 export type AuditAction =
   | "CREATE" | "UPDATE" | "DELETE" | "SUBMIT" | "VALIDATE" | "REJECT" | "APPROVE" | "CLOSE"
-  | "REOPEN" | "ASSIGN" | "UNASSIGN" | "ESCALATE" | "STATUS_CHANGE" | "ROLE_CHANGE" | "PERMISSION_CHANGE";
+  | "REOPEN" | "ASSIGN" | "UNASSIGN" | "ESCALATE" | "STATUS_CHANGE" | "ROLE_CHANGE" | "PERMISSION_CHANGE" | "DOWNLOAD" | "READ";
 
 export interface AuditEvent {
   id: string;

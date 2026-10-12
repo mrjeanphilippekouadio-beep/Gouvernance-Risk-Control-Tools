@@ -12,7 +12,8 @@ const actionLabels: Record<AuditAction, string> = {
   CREATE: "Création", UPDATE: "Modification", DELETE: "Suppression", SUBMIT: "Soumission", VALIDATE: "Validation",
   REJECT: "Rejet", APPROVE: "Approbation", CLOSE: "Clôture", REOPEN: "Réouverture", ASSIGN: "Attribution",
   UNASSIGN: "Retrait d'attribution", ESCALATE: "Escalade", STATUS_CHANGE: "Changement de statut",
-  ROLE_CHANGE: "Changement de rôle", PERMISSION_CHANGE: "Changement de permission",
+  ROLE_CHANGE: "Changement de rôle", PERMISSION_CHANGE: "Changement de permission", DOWNLOAD: "Téléchargement",
+  READ: "Consultation",
 };
 const toneForAction = (action: AuditAction): StatusTone =>
   action === "DELETE" || action === "REJECT" || action === "ESCALATE" ? "danger"
