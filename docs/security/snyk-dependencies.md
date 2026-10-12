@@ -659,3 +659,58 @@ F-B6a-01 et F-B6a-02 : **REMEDIATION_REQUIRED** (A06), à corriger avant tout d�
 Aucun abonnement désactivé dans le jeu de test, ce qui exclut un faux PASS. Le témoin s'exécute sur la même base : la course existe bien dans l'environnement, et c'est le verrou qui la ferme. Il y a 1 ligne d'audit par notification créée et aucune pour un appel dédoublonné. `POST /kri-measures` porte désormais `perUserRateLimiter()` (20 / 15 min, clé `tenant:user`).
 Résidus INFO : le limiteur garde un magasin mémoire par instance, donc la borne est multipliée par le nombre d'instances Cloud Run (A09/A16). Une collision du hachage 64 bits ne fait que sérialiser deux clés, sans perte. `ACTION_STARTED_LATE` reste sans dédoublonnage, sans impact (voir retest précédent).
 **Statut** : F-NOTIF-01 **CLOSED** côté sécurité. La chaîne F-NOTIF-01 + 02 est réduite à une notification par cycle de lecture. F-NOTIF-02 attend toujours la décision PO q85.
+
+### Retest B-6a bis — 2026-10-12 (A10, correctifs `d51e0c8` + `531558c`, tête `531558c`, vitest 123 verts `B6a`/`B6abis`/`QA-B6abis` + typecheck + Postgres 16 réel jetable 001→056)
+
+**Méthode.** Cluster Postgres 16 local jetable (supprimé à la fin) : migrations 001 à 056 appliquées sous un rôle propriétaire distinct, seed dev, puis 055 rejouée pour donner `riskframework.*` au groupe RM (F-B6a-08). Les scénarios tournent sur le vrai `RiskFrameworkService`, câblé aux vrais repositories Postgres sous `grc_app_runtime`, avec `ConfigService`, `RatingScaleService` et `resolveMaxScore` pour lire le monde hérité. Aucun code modifié.
+
+| Finding | Résultat | Preuve |
+|---|---|---|
+| F-B6a-01 | **RETEST_PASS, avec un résidu ouvert, F-B6a-10** | Chaîne d'origine (6x6 héritée ACTIVE, `configs` 30, Dispositif sur une 5x5) : l'approbation est refusée (« seuil Comité évaluation (configs) (30) »), la demande reste PENDING et 6x6 reste seule ACTIVE. Seuil abaissé à 20 : approbation OK, 6x6 archivée, **1 seule ACTIVE**. Appétence active 28 sous 5x5 : refusée. Échelle ARCHIVED : refusée dès la demande (`531558c`) et de nouveau par `mirrorScale`. |
+| F-B6a-02 | **RETEST_PASS** | Course PATCH {auto-proposition, seuil 36} contre demande d'activation, 30 essais, délai aléatoire 0 à 40 ms, 2 séries : **0/60** version PENDING invalide (24-25 PENDING, 5-6 PATCH gagnants puis demande refusée). Témoin sur la même base, `validateLocked` retiré : **3/30**. La course existe et c'est le verrou qui la ferme. `decide` rejoue `validateRequestable` à l'approbation. |
+| F-B6a-03 | **RETEST_PASS** | Un non-RM qui détient `riskframework.archive` reçoit 403 « Réservé aux membres du groupe Risk Manager », et le brouillon reste DRAFT. |
+| F-B6a-04 | **RETEST_PASS** | Échelle DRAFT créée par RM3 (`RatingScaleService.create`), axes modifiés par RM4 : les deux reçoivent 403 sur l'approbation, et un 5e RM approuve. |
+| F-B6a-07 | **RETEST_PASS** | 5 cycles demande/retrait donnent 1 notification `CHANGE_PENDING` non lue par destinataire (1,1,1,1). |
+| B6a-QA-01 | **RETEST_PASS** | `INSERT` sur `audit_log` révoqué : le PATCH échoue et n'est pas stocké (seuil inchangé, `last_edited_by` inchangé). Sur la même panne, la demande est stockée et les notifications partent quand même (C-B6a-01). Le demandeur sans ligne SUBMIT reste refusé par la colonne `requested_by`. |
+| `531558c` (B6abis-QA-01/02) | **PASS** | ARCHIVED refusée dès la demande (voir ci-dessus). Avec un `try/catch` par destinataire, chaque échec d'audit de notification est journalisé sans bloquer les autres destinataires (4 sur 4 notifiés). |
+
+**Chaîne F-B6a-02 + F-B6a-01 (garde Comité neutralisée) : fermée.** La course ne fige plus de contenu invalide (0/60). Le miroir refuse toute activation qui laisserait un seuil `configs`/appétence au-dessus du n² de l'échelle activée.
+
+**Écart déclaré (deux Dispositifs actifs, donc deux échelles ACTIVE) : évalué, il ouvre F-B6a-10.**
+
+**F-B6a-10 — LOW 3,3 (AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:L), CONFIRMED, owner A06.** `mirrorScale` (`PostgresRiskFrameworkRepository.ts`) vérifie les seuils contre l'échelle **activée**. Or les lecteurs hérités (`resolveMaxScore`, `RiskEvaluationService`, `CartographyService`) prennent la première ACTIVE par `created_at DESC`. Quand le miroir archive l'échelle choisie par ce lecteur, le choix bascule vers une autre ACTIVE dont le plafond n'a jamais été comparé aux seuils en vigueur.
+Rejeu : échelles Old6 (DRAFT, la plus ancienne), Small5 et Big6 (la plus récente). Le Dispositif A est activé sur Small5 et le Dispositif B sur Big6 : ACTIVE = {Big6, Small5}, `resolveMaxScore` = 36. `ConfigService.updateCommitteeThresholds(30)` est accepté parce qu'il compare à 36. La v2 de B sur Old6 est ensuite approuvée par un tiers : `mirrorScale` compare 30 à 36 et laisse passer, Old6 devient ACTIVE, Big6 est archivée. Résultat : ACTIVE = {Small5, Old6}, le lecteur prend Small5, `resolveMaxScore` = **25** alors que `configs` vaut **30**. La garde Comité héritée est **fail-open** (F-B9b-01 par un 3e chemin).
+Conditions : 2 Dispositifs actifs, une échelle DRAFT plus ancienne que celle de l'autre Dispositif, 3 RM dont un approbateur tiers qui ne voit pas l'effet de bord. D'où AC:H.
+**Correctif attendu** : dans `mirrorScale`, après les deux UPDATE, rejouer le contrôle des seuils `configs`/appétences contre le **plus petit plafond de toutes les échelles restées ACTIVE**, ou au minimum contre celle que choisit le lecteur hérité (première ACTIVE par `created_at DESC`).
+Test de régression : le scénario ci-dessus est refusé, et la décision est entièrement annulée (ROLLBACK).
+Rappel : `RatingScaleService.activateVersion` (chemin hérité) archive encore toute autre ACTIVE, y compris une échelle référencée par une version ACTIVE de Dispositif. C'est connu et fermé par B-6b ; ce lot n'en est pas la cause.
+
+INFO : `validateLocked` verrouille la version, pas l'échelle, et `assertActivatable` lit l'échelle hors de la transaction. Une modification concurrente d'une échelle DRAFT peut donc être figée dans une demande PENDING. Elle est sans effet : `decide` revalide, `mirrorScale` verrouille l'échelle, et l'auteur de la modification est exclu (F-B6a-04).
+
+### Revue migration 056 — 2026-10-12 (A10, `169b528`, F-B6a-06, Postgres 16 réel jetable)
+
+**Verdict : PASS avec réserve. Escalade HUMAN : aucune.**
+
+**Ce qui tient** (vérifié sous `grc_app_runtime`) :
+- Migration rejouable : la double application, le `.down.sql` puis la ré-application et le seed passent.
+- FK composite et CHECK sont bien créés `NOT VALID` (`convalidated = f`) et s'appliquent aux nouvelles lignes.
+- `UPDATE PENDING_APPROVAL -> ACTIVE` sans demande est refusé (42501).
+- Une demande `BOOTSTRAP` est refusée par `no_bootstrap_check`.
+- Le runtime ne peut ni `DISABLE TRIGGER`, ni `DROP CONSTRAINT` (« must be owner »), ni poser `session_replication_role` (« permission denied »), ni `CREATE OR REPLACE` la fonction de garde (pas de CREATE sur `public`, pas propriétaire).
+- Les fonctions de garde ne sont pas `SECURITY DEFINER`.
+- L'unicité de `activation_request_id` et la FK `(id, tenant_id, framework_id, version_id)` interdisent de réutiliser une demande sur une autre version, un autre Dispositif ou un autre tenant.
+- `NULL` est explicitement refusé.
+- **Compatibilité avec le vrai service** : `recordDecision` passe la demande en APPROVED avant l'UPDATE de la version et pose `activation_request_id` dans le même UPDATE. Ont été testés sans erreur : activation v1, refus, retrait et réactivation v2 (v1 ARCHIVED et liée, v2 ACTIVE et liée), ainsi que tous les scénarios du retest.
+
+**F-B6a-09 — LOW 2,2 (AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:N), CONFIRMED, owner A07.** La garde ne couvre pas `INSERT`. Le trigger de 055/056 est `BEFORE UPDATE OR DELETE`, et le runtime a `INSERT` (ACL `arw`) sur les deux tables. Deux contournements ont été rejoués sous `grc_app_runtime` :
+1. `INSERT INTO risk_framework_versions (..., status) VALUES (..., 'ACTIVE', ...)` dans un Dispositif inséré lui aussi, avec un seuil de 36 et `activation_request_id` NULL : accepté.
+2. `INSERT INTO risk_framework_change_requests (..., status, decided_by, decision_regime) VALUES (..., 'APPROVED', <autre user>, 'NORMAL')`, c'est-à-dire une demande « décidée » qui n'est jamais passée par PENDING, puis `UPDATE` de la version PENDING vers ACTIVE avec cet id : accepté.
+
+Par ailleurs, `decided_by` référence `users(id)` sans `tenant_id` : un utilisateur d'un autre tenant passe la FK. L'objectif annoncé par 056 (« un UPDATE direct ou un bug applicatif ne peut pas activer sans demande approuvée par un tiers ») n'est donc atteint que pour UPDATE. La prérequis reste du SQL arbitraire sous le runtime (injection ou identifiants), d'où PR:H et AC:H.
+**Correctif attendu** (migration 057) : un trigger `BEFORE INSERT` sur `risk_framework_versions` qui impose `status = 'DRAFT'` et `activation_request_id`, `activated_at` et `archived_*` NULL ; un trigger `BEFORE INSERT` sur `risk_framework_change_requests` qui impose `status = 'PENDING'` et `decided_*`, `decision_regime`, `decider_group` et `ratification_status` NULL. C'est compatible avec le code (`createWithDraft`/`createDraft` insèrent DRAFT, `createActivationRequest` insère PENDING) et avec le brouillon de reprise de 055 (DRAFT). En option : FK composite `(decided_by, tenant_id)` vers `users(id, tenant_id)`.
+Test de régression : les deux `INSERT` ci-dessus échouent en 42501 sous `grc_app_runtime`.
+INFO hors périmètre : le runtime a `DELETE` (`d`) sur `rating_scales` (privilège par défaut de 043). La FK depuis les versions protège les échelles référencées.
+
+### Statut et tracker (7bis)
+F-B6a-02, F-B6a-03, F-B6a-04, F-B6a-07, B6a-QA-01 : **CLOSED** côté sécurité. F-B6a-01 : **RETEST_PASS**, avec le résidu **F-B6a-10** en REMEDIATION_REQUIRED (A06, avant un déploiement en production de B-6a sans B-6b). F-B6a-06 : traité par 056, avec le résidu **F-B6a-09** en REMEDIATION_REQUIRED (A07, migration 057, non bloquant pour staging).
+**Feu vert pour une PR vers staging (B-6a + 055 + 056)** : oui, CVSS max 3,3, sans escalade. Réserve : F-B6a-10 et F-B6a-09 sont à traiter avant la production.
