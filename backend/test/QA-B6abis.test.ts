@@ -258,7 +258,7 @@ describe("QA-B6abis approval replays the rules (F-B6a-02)", () => {
     expect(out.request).toMatchObject({ status: "APPROVED" });
   });
 
-  it.fails("KNOWN GAP B6abis-QA-01: a version on an ARCHIVED scale can be submitted (and RMs are notified) although it can never be approved", async () => {
+  it("B6abis-QA-01 (fixed): a version on an ARCHIVED scale can be submitted (and RMs are notified) although it can never be approved", async () => {
     // Fail-fast expected: assertActivatable only checks existence/squareness/descriptors; the ARCHIVED check lives in the repository
     // transaction (mirrorScale) and fires at approval only. Minor: a review cycle is wasted, the request must be withdrawn.
     const w = world({ scales: [scale("s1", "ARCHIVED")] });
@@ -339,8 +339,9 @@ describe("QA-B6abis exclusion of DRAFT rating-scale authors (F-B6a-04)", () => {
     await expect(w.service.approve(u2, r, undefined, R)).resolves.toBeDefined(); // a third party still can
   });
 
-  it.each(["ACTIVE", "ARCHIVED"] as const)("no exclusion once the scale is %s (it is frozen)", async (status) => {
-    const w = world({ scales: [scale("s1", status)] });
+  // ARCHIVED is no longer reachable here: a version on an ARCHIVED scale is refused at request time (B6abis-QA-01).
+  it("no exclusion once the scale is ACTIVE (it is frozen)", async () => {
+    const w = world({ scales: [scale("s1", "ACTIVE")] });
     w.events.push(scaleEv("u3", "UPDATE"));
     const { r } = await pending(w);
     await expect(w.service.approve(u3, r, undefined, R)).resolves.toBeDefined();
@@ -591,7 +592,7 @@ describe("QA-B6abis notifications (C-B6a-01, F-B6a-07)", () => {
     expect(spy.mock.calls.flat().join(" ")).toContain("could not be notified");
   });
 
-  it.fails("KNOWN GAP B6abis-QA-02: one failing recipient aborts the notification of the remaining Risk Managers", async () => {
+  it("B6abis-QA-02 (fixed): one failing recipient aborts the notification of the remaining Risk Managers", async () => {
     // notify() wraps the whole loop in a single try/catch: a failure for the first recipient (e.g. an inconsistent user row)
     // silently skips everybody after them. MINOR: a pending request may go unseen by part of the risk function.
     vi.spyOn(console, "error").mockImplementation(() => undefined);

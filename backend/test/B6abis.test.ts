@@ -193,8 +193,8 @@ describe("B-6a bis service rules", () => {
     expect(w.versions[0]!.lastEditedBy).toBe("u1");
   });
 
-  it("F-B6a-04: authors of a DRAFT rating scale cannot decide; no exclusion once the scale is ACTIVE or ARCHIVED", async () => {
-    for (const [status, blocked] of [["DRAFT", true], ["ACTIVE", false], ["ARCHIVED", false]] as const) {
+  it("F-B6a-04: authors of a DRAFT rating scale cannot decide; no exclusion once the scale is ACTIVE (an ARCHIVED scale is refused at request time)", async () => {
+    for (const [status, blocked] of [["DRAFT", true], ["ACTIVE", false]] as const) {
       const w = world({ scales: [scale("s1", status)] });
       const v = await draft(w);
       w.events.push({ userId: "u3", entityType: "RatingScale", entityId: "s1", action: "UPDATE" });

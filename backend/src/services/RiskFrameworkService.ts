@@ -455,6 +455,7 @@ export class RiskFrameworkService {
   private async assertActivatable(tenantId: string, v: RiskFrameworkVersion): Promise<void> {
     const scale = await this.ratingScales.getById(tenantId, v.ratingScaleId);
     if (!scale) throw new ValidationError("The rating scale of this version no longer exists");
+    if (scale.status === "ARCHIVED") throw new ValidationError("The rating scale of this version is archived; pick an active or draft scale");
     if (scale.probabilityLevels !== scale.impactLevels) {
       throw new ValidationError("The rating scale must be square (probabilityLevels = impactLevels)");
     }
@@ -603,8 +604,9 @@ export class RiskFrameworkService {
     dedupe = false,
   ): Promise<void> {
     if (!this.notifications) return;
-    try {
-      for (const recipientUserId of new Set(userIds)) {
+    // One try per recipient (B6abis-QA-02): a failure for one member must not skip the others.
+    for (const recipientUserId of new Set(userIds)) {
+      try {
         const n = {
           tenantId: actor.tenantId,
           recipientUserId,
@@ -617,9 +619,9 @@ export class RiskFrameworkService {
         };
         if (dedupe && this.notifications.emit) await this.notifications.emit({ ...n, skipIfUnread: true });
         else await this.notifications.record(n);
+      } catch (err) {
+        console.error(`${eventType} ${resourceId}: members could not be notified (requestId ${requestId})`, err instanceof Error ? err.message : err);
       }
-    } catch (err) {
-      console.error(`${eventType} ${resourceId}: members could not be notified (requestId ${requestId})`, err instanceof Error ? err.message : err);
     }
   }
 }
