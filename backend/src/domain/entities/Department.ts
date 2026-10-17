@@ -27,9 +27,11 @@ export interface CreateDepartmentInput {
   name: string;
   entity?: string | null;
   manager: string;
-  /** If omitted, the manager becomes the risk owner by default (legacy rule). */
+  /**
+   * If omitted, the manager becomes the risk owner by default (legacy rule). The designating user is never
+   * client-supplied: the service passes actor.userId to the repository.
+   */
   riskOwner?: string | null;
-  riskOwnerDesignatedBy?: string | null;
   linkedProcesses?: string | null;
   active?: boolean;
 }

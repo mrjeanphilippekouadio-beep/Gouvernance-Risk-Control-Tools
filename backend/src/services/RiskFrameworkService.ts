@@ -315,10 +315,10 @@ export class RiskFrameworkService {
     // q87: the repository copies every parameter except the approver, which is always RISK_MANAGER in a new
     // draft (a Committee/Audit approver of a legacy source is never carried over; the circuit of a request
     // still follows the ACTIVE version, fail-closed).
-    return this.audited<RiskFrameworkVersion>(
+    return withMasteryIndependence(await this.audited<RiskFrameworkVersion>(
       (draft) => [this.event(actor, "RiskFrameworkVersion", draft.id, "CREATE", null, draft, null, requestId)],
       (audit) => this.frameworks.createDraftFrom(actor.tenantId, frameworkId, source.id, actor.userId, audit),
-    );
+    ));
   }
 
   /** Partial update of a DRAFT. There is no `status` in the input: an edit is never a transition. */
@@ -345,11 +345,11 @@ export class RiskFrameworkService {
     // the audit line, which feeds the author exclusion, is written BEFORE the edit is stored: worst case an
     // UPDATE entry for an edit that failed to store (over-excludes that person, never under-excludes).
     if (this.inTx) {
-      return this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId,
-        (after) => [this.event(actor, "RiskFrameworkVersion", versionId, "UPDATE", before, after, null, requestId)]);
+      return withMasteryIndependence(await this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId,
+        (after) => [this.event(actor, "RiskFrameworkVersion", versionId, "UPDATE", before, after, null, requestId)]));
     }
     await this.record(actor, "RiskFrameworkVersion", versionId, "UPDATE", before, { ...before, ...clean, lastEditedBy: actor.userId }, null, requestId);
-    return this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId);
+    return withMasteryIndependence(await this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId));
   }
 
   /** DRAFT -> ARCHIVED. A terminal transition: `riskframework.archive`, never `update`. */
@@ -365,10 +365,10 @@ export class RiskFrameworkService {
     const clean = cleanText(reason, "reason", MAX_REASON, true)!;
     const before = await this.getVersionOrThrow(actor.tenantId, frameworkId, versionId);
     this.assertDraft(before);
-    return this.audited(
+    return withMasteryIndependence(await this.audited<RiskFrameworkVersion>(
       (after) => [this.event(actor, "RiskFrameworkVersion", versionId, "STATUS_CHANGE", before, after, clean, requestId)],
       (audit) => this.frameworks.discardDraft(actor.tenantId, frameworkId, versionId, actor.userId, clean, audit),
-    );
+    ));
   }
 
   // -- change requests --------------------------------------------------

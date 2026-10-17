@@ -247,3 +247,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - QA-B6b-01 : version posée + copie NULL => ValidationError, `configs` jamais lu. F-B6b-03 : `risk.read` exigé sur la branche riskId de `/applicable`. B-6b-05 : `reducedMasteryIndependence` dérivé en lecture (`withMasteryIndependence`, aucune colonne) sur get/getVersion/getApplicable/list.
 - 060 (dev-db) : `recordInherentScoring` (Postgres) traduit 42501 en ValidationError.
 - Tests existants adaptés (source de vérité changée, à signaler à A08) : QA-B6b (observation épinglée QA-B6b-01 convertie ; acteurs `/applicable` + `risk.read`), B6b (idem).
+
+## 2026-10-17 F-CAT-02/QA-REF-01, QA-REF-02, QA-B6bF-03 (répertoire principal, aucune migration)
+
+- `RiskCategoryService.update` : `assertValidParent` partagé avec `create` (existence dans le tenant de l'acteur, message uniforme = pas d'oracle cross-tenant, parent sans parent) + refus si la catégorie a des enfants (`list(activeOnly:false)`) -> profondeur max 2, aucun cycle. `parentId: null` (détacher) reste permis. Pas de FK composite (A07).
+- `DepartmentService.archive` : 3e param. constructeur OPTIONNEL `processes` (câblé dans server.ts) ; refus ValidationError si un processus actif (`list` par défaut = actifs) a `departmentId === id`. Sans dépôt : ancien comportement.
+- `riskOwnerDesignatedBy` retiré de `CreateDepartmentBody` et `CreateDepartmentInput`. `DepartmentRepository.create(input, designatedBy)` : le service passe `actor.userId` ; le dépôt l'utilise si un riskOwner explicite est donné, sinon libellé « Pilote par défaut … » inchangé. Ancien repli sur `manager` supprimé. Le service construit la liste de champs explicitement (une clé forgée n'atteint jamais le dépôt). `update` n'avait déjà pas le champ (SEC-003).
+- QA-B6bF-03 : `createDraft/updateDraft/discardDraft` renvoient `withMasteryIndependence(...)` (l'audit enregistre la version brute).
+- Test existant adapté (assertait exactement le comportement fautif) : QA-B6bF « OBSERVATION QA-B6bF-03 » inversée. Faux dépôt de DepartmentService.test : `create(input, actorUserId)`.
+- Leçon : `python3 - <<'EOF'` seul fonctionne ici ; un type générique (`audited<T>`) doit être explicité quand on enveloppe le résultat.

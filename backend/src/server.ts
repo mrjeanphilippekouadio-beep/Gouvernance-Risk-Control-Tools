@@ -225,7 +225,7 @@ const riskService = new RiskService(
   riskEscalationRepository,
   processRepository,
 );
-const departmentService = new DepartmentService(departmentRepository, auditRepository);
+const departmentService = new DepartmentService(departmentRepository, auditRepository, processRepository);
 const processService = new ProcessService(
   processRepository,
   auditRepository,

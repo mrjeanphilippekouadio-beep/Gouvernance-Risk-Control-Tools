@@ -1,4 +1,5 @@
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
+import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { CreateDepartmentInput, Department, UpdateDepartmentInput } from "../domain/entities/Department.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
@@ -15,6 +16,7 @@ export class DepartmentService {
   constructor(
     private readonly departments: DepartmentRepository,
     private readonly audit: AuditRepository,
+    private readonly processes?: ProcessRepository,
   ) {}
 
   async create(
@@ -28,7 +30,19 @@ export class DepartmentService {
       throw new ValidationError("manager (hierarchical superior) is required");
     }
 
-    const department = await this.departments.create({ ...input, tenantId: actor.tenantId });
+    // Explicit field list: any extra key a caller smuggles in (e.g. riskOwnerDesignatedBy) never reaches the repository.
+    const department = await this.departments.create(
+      {
+        tenantId: actor.tenantId,
+        name: input.name,
+        entity: input.entity,
+        manager: input.manager,
+        riskOwner: input.riskOwner,
+        linkedProcesses: input.linkedProcesses,
+        active: input.active,
+      },
+      actor.userId,
+    );
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -119,6 +133,14 @@ export class DepartmentService {
     requirePermission(actor, "department.delete");
     if (!reason.trim()) throw new ValidationError("A reason is required to archive a department");
     const before = await this.get(actor, id);
+    if (this.processes) {
+      const attached = await this.processes.list(actor.tenantId);
+      if (attached.some((p) => p.departmentId === id)) {
+        throw new ValidationError(
+          "Cannot archive this department: active processes are still attached to it — reassign or archive them first",
+        );
+      }
+    }
 
     await this.departments.softDelete(actor.tenantId, id, actor.userId, reason);
 

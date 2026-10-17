@@ -7,17 +7,16 @@ const CreateDepartmentBody = z.object({
   entity: z.string().nullish(),
   manager: z.string().min(1),
   riskOwner: z.string().nullish(),
-  riskOwnerDesignatedBy: z.string().nullish(),
   linkedProcesses: z.string().nullish(),
   active: z.boolean().optional(),
 });
 
-// SEC-003: riskOwner/riskOwnerDesignatedBy are intentionally excluded —
+// SEC-003: riskOwner is intentionally excluded (riskOwnerDesignatedBy is never accepted from HTTP, it is stamped server-side) —
 // a generic PATCH must never bypass the audited ASSIGN event that
 // designate-risk-owner records. Setting an initial risk owner at
 // creation is fine (no prior designation to protect); changing one
 // later must go through POST /:id/designate-risk-owner.
-const UpdateDepartmentBody = CreateDepartmentBody.omit({ riskOwner: true, riskOwnerDesignatedBy: true }).partial();
+const UpdateDepartmentBody = CreateDepartmentBody.omit({ riskOwner: true }).partial();
 
 const DesignateRiskOwnerBody = z.object({ riskOwner: z.string().min(1) });
 const ArchiveDepartmentBody = z.object({ reason: z.string().min(1) });
