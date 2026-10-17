@@ -134,10 +134,11 @@ export class DepartmentService {
     if (!reason.trim()) throw new ValidationError("A reason is required to archive a department");
     const before = await this.get(actor, id);
     if (this.processes) {
-      const attached = await this.processes.list(actor.tenantId);
+      // Inactive processes too (QA-REF2-01): reactivating one does not re-check its department.
+      const attached = await this.processes.list(actor.tenantId, { includeInactive: true });
       if (attached.some((p) => p.departmentId === id)) {
         throw new ValidationError(
-          "Cannot archive this department: active processes are still attached to it — reassign or archive them first",
+          "Cannot archive this department: processes are still attached to it — reassign or archive them first",
         );
       }
     }
