@@ -79,3 +79,22 @@ Toutes ces tentatives ont été faites sous `grc_app_runtime` :
 - F-REF-04, F-REF-05 : A06
 - F-061-01 : A07
 - F-REF-01, F-REF-03 : A06 / dev-frontend, cosmétique
+
+## Retest 2026-10-18 — F-REF-04/05
+
+Périmètre : `6d5bdf7` (F-REF-04/05) et `30d1359` (`FOR SHARE`, Codex P1), fusionnés sur staging (PR #184). Preuves sur Postgres 16 local jetable (`grc_qa`, 001→061), jamais Neon. Fixtures validées sous `session_replication_role = replica` (tenants `a10-retest-*`), attaques sous `SET ROLE grc_app_runtime`.
+
+| Finding | Verdict | Preuve |
+|---|---|---|
+| F-REF-04 | RETEST_PASS → CLOSED | Le trigger a deux `RAISE` distincts. Réel : version d'un autre tenant → `…does not belong to the tenant` (relancée telle quelle, donc 500) ; version archivée → `…must be ACTIVE` (seule à matcher `/framework version must be ACTIVE/`, donc `ConflictError` 409). Le test unitaire couvre les deux, plus un vrai 42501 de privilège. |
+| F-REF-05 | RETEST_PASS → CLOSED | `mapPgError` ne traduit plus en 400 que les 42501 dont le message commence par `risk_framework` ou `risk framework`. Tous les `RAISE` de 055/056/057 commencent ainsi. `permission denied for table …` et `new row violates row-level security …` ne matchent pas et restent des 500. Le test couvre les deux branches. |
+| `30d1359` `FOR SHARE` | PASS | `proconfig` reste `search_path=pg_catalog, public, pg_temp` sur les deux fonctions (la définition déployée contient bien `FOR SHARE`). L'attaque par ombrage `pg_temp` (table temporaire qui montre la version ACTIVE + `search_path = pg_temp, public`) est toujours refusée. Course A : l'insertion tient la version, et l'archivage concurrent attend 2,05 s, jusqu'au COMMIT de l'insertion. Course B : l'archivage est en cours, l'insertion attend 2,06 s puis relit l'état validé et est refusée par `must be ACTIVE`, donc 409. `grc_app_runtime` a bien `UPDATE` sur `risk_framework_versions` (requis par `FOR SHARE`, pas de 42501 de privilège). |
+| Interblocage | Aucun chemin identifié | L'insertion est en autocommit (`pool.query`). Elle prend la version (FOR SHARE, trigger), puis les FK (KEY SHARE). `recordDecision` verrouille d'abord la version ACTIVE (FOR UPDATE), puis `mirrorScale` verrouille `rating_scales`. Aucun code ne prend `rating_scales` puis la version, donc pas de cycle. |
+| Verrouillage du message (QA-REF2-06) | Renforcé | Le test unitaire reprenait le message à la main, sans lien avec le SQL : une dérive du libellé dans 061 serait passée inaperçue (les tests `-pg` sont ignorés en CI). Ajout dans `backend/test/RiskEvaluationInsertRace.test.ts` d'une assertion qui lit 061 et exige les deux messages tels quels. |
+
+Nouveau constat :
+- INFO F-REF-06 (A06, CVSS 0) : le motif `^risk[ _]framework` de F-REF-05 couvre aussi les gardes d'isolement de 057 (`requested_by` / `decided_by must belong to the tenant`). Ces refus deviendraient un 400 « version figée » au lieu d'une 500, ce qui est la même fusion que F-REF-04 en plus étroit. Ce n'est pas atteignable aujourd'hui, car les deux champs sont forcés à `actor.userId` côté serveur et tenant-scopés. Recommandation : exclure `must belong to the tenant` du motif, lors d'un prochain passage sur ce fichier.
+
+Commandes : `npm run typecheck` OK ; `npx vitest run` 1952 tests verts, 39 ignorés (114 fichiers) ; tests pg (`--no-file-parallelism test/*-pg.test.ts`) 39/39 verts ; PoC SQL deux sessions (A, A', B, C, ombrage `pg_temp`) conforme.
+
+Tracker (7bis) : F-REF-04 et F-REF-05 sont CLOSED. F-REF-06 INFO est à traiter par A06, non bloquant.
