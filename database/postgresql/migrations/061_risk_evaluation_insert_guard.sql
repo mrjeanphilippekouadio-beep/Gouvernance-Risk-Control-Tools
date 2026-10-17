@@ -48,7 +48,9 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT * INTO v FROM risk_framework_versions WHERE tenant_id = NEW.tenant_id AND id = NEW.risk_framework_version_id;
+  -- FOR SHARE (Codex P1): an activation that archives this version waits for this insert, and an insert that
+  -- arrives during the archival re-reads the committed status, so no evaluation can snapshot an ARCHIVED version.
+  SELECT * INTO v FROM risk_framework_versions WHERE tenant_id = NEW.tenant_id AND id = NEW.risk_framework_version_id FOR SHARE;
   -- Two messages on purpose (F-REF-04): only "must be ACTIVE" is a retryable race for the application (409);
   -- a version outside the tenant is an isolation bug and must stay a logged 500.
   IF NOT FOUND THEN
