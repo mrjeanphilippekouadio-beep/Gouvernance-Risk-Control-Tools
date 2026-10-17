@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, StatusBadge, Table, type TableColumn } from "@djamo/design-system";
 import { riskCategoriesApi, type RiskCategory } from "../../api/riskCategories";
 import { FormModal, describeError, isForbidden } from "../indicators/shared";
@@ -28,11 +28,15 @@ export function RiskCategoriesPage({ token }: { token: string }) {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const latest = useRef(0);
   const refresh = useCallback(async () => {
+    const id = ++latest.current;
     setLoading(true); setError(null);
-    try { setRows(await riskCategoriesApi.list(token, includeInactive)); }
-    catch (err) { setError(describeError(err)); }
-    finally { setLoading(false); }
+    try {
+      const data = await riskCategoriesApi.list(token, includeInactive);
+      if (id === latest.current) setRows(data);
+    } catch (err) { if (id === latest.current) setError(describeError(err)); }
+    finally { if (id === latest.current) setLoading(false); }
   }, [token, includeInactive]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -49,7 +53,10 @@ export function RiskCategoriesPage({ token }: { token: string }) {
     const body = { name: form.name.trim(), parentId: form.parentId || null, active: form.active };
     try {
       if (editing) await riskCategoriesApi.update(token, editing.id, body);
-      else await riskCategoriesApi.create(token, body);
+      else {
+        await riskCategoriesApi.create(token, body);
+        if (!body.active) setIncludeInactive(true); // keep the new inactive category visible
+      }
       setFormOpen(false);
       await refresh();
     } catch (err) { setFormError(describeError(err)); if (isForbidden(err)) setFormOpen(false); }
@@ -86,6 +93,7 @@ export function RiskCategoriesPage({ token }: { token: string }) {
         <FormField label="Catégorie parente" htmlFor="cat-parent" help="Vide : catégorie de premier niveau.">
           <select id="cat-parent" value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })}>
             <option value="">Aucune</option>
+            {form.parentId && !rows.some((r) => r.id === form.parentId && !r.parentId) && <option value={form.parentId}>Parent actuel (non listé : inactif ou hors niveau)</option>}
             {rows.filter((r) => !r.parentId && r.id !== editing?.id).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </FormField>

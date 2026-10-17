@@ -6,7 +6,7 @@ import { NotFoundError, ValidationError } from "../src/domain/errors/DomainError
 /**
  * QA-B6bF on a REAL PostgreSQL 16 (disposable, local unix socket): PostgresRiskEvaluationRepository.recordInherentScoring
  * against migration 060. Skipped unless QA_FB6B02_PGHOST is a unix socket DIRECTORY (starts with "/"); never a TCP host / Neon.
- * Migrations 001..060 applied. One transaction rolled back; each repository query runs in a savepoint.
+ * Migrations 001..061 applied. One transaction rolled back; each repository query runs in a savepoint.
  */
 const HOST = process.env.QA_FB6B02_PGHOST ?? "";
 const enabled = HOST.startsWith("/");
@@ -34,10 +34,14 @@ describe.skipIf(!enabled)("recordInherentScoring vs the snapshot guard (real Pos
     ids.s1 = await scale("s1"); ids.s2 = await scale("s2");
     const f = await one(`INSERT INTO risk_frameworks (tenant_id, name) VALUES ($1, 'fw') RETURNING id`, [ids.t]);
     ids.v = await one(`INSERT INTO risk_framework_versions (tenant_id, framework_id, version_number, rating_scale_id, committee_evaluation_min_score) VALUES ($1, $2, 1, $3, 15) RETURNING id`, [ids.t, f, ids.s1]);
+    // 061: the insert guard needs an ACTIVE version; test-only shortcut (superuser, rolled back).
+    await c.query("SET LOCAL session_replication_role = replica");
+    await c.query(`UPDATE risk_framework_versions SET status = 'ACTIVE' WHERE id = $1`, [ids.v]);
+    await c.query("SET LOCAL session_replication_role = origin");
     ids.risk = await one(`INSERT INTO risks (tenant_id, process, description) VALUES ($1, 'p', 'd') RETURNING id`, [ids.t]);
     ids.frozen = await one(
-      `INSERT INTO risk_evaluations (tenant_id, risk_id, evaluation_type, evaluator_id, sub_category, risk_framework_version_id, rating_scale_id, committee_evaluation_min_score, committee_evaluation_enforced)
-       VALUES ($1, $2, 'AD_HOC', $3, 'x', $4, $5, 15, true) RETURNING id`, [ids.t, ids.risk, ids.u, ids.v, ids.s1]);
+      `INSERT INTO risk_evaluations (tenant_id, risk_id, evaluation_type, evaluator_id, sub_category, risk_framework_version_id, rating_scale_id, rating_scale_version, committee_evaluation_min_score, committee_evaluation_enforced)
+       VALUES ($1, $2, 'AD_HOC', $3, 'x', $4, $5, '1', 15, true) RETURNING id`, [ids.t, ids.risk, ids.u, ids.v, ids.s1]);
     ids.legacy = await one(`INSERT INTO risk_evaluations (tenant_id, risk_id, evaluation_type, evaluator_id, sub_category) VALUES ($1, $2, 'AD_HOC', $3, 'x') RETURNING id`, [ids.t, ids.risk, ids.u]);
   });
   afterAll(async () => { await c?.query("ROLLBACK"); c?.release(); await pool?.end(); });

@@ -68,13 +68,13 @@ export class PostgresDepartmentRepository implements DepartmentRepository {
     return rows.map(toDomain);
   }
 
-  async create(input: CreateDepartmentInput): Promise<Department> {
+  async create(input: CreateDepartmentInput, actorUserId: string): Promise<Department> {
     // Legacy rule: an unspecified risk owner defaults to the manager,
     // reapplied on every write so it stays consistent if the manager
     // changes (06_Departements.gs, ecrireLigneDepartement_).
     const riskOwner = input.riskOwner?.trim() || input.manager;
     const designatedBy = input.riskOwner?.trim()
-      ? (input.riskOwnerDesignatedBy ?? input.manager)
+      ? actorUserId
       : "Pilote par défaut (manager, aucune désignation explicite)";
 
     const { rows } = await this.pool.query<DepartmentRow>(

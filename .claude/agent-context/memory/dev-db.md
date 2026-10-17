@@ -104,3 +104,20 @@
   backend/test/QA-FB6b02.test.ts (statique) et QA-FB6b02-pg.test.ts (QA_FB6B02_PGHOST = dossier socket, QA_FB6B02_PGDB).
 - Skill `ponytail` introuvable dans cet environnement (Unknown skill) : principe appliqué à la main (pas d'abstraction en plus).
 - Script PG jetable : `runuser -u postgres -- sh pg.sh` (initdb + pg_ctl -k <scratchpad>, listen_addresses='') puis boucle psql -1.
+
+## 2026-10-17 — migration 061 (F-B6b-06, F-B6b-07, F-CAT-02 partie DB)
+- 061 : trigger `risk_evaluations_snapshot_insert_guard` (BEFORE INSERT, 42501) : version NULL => tout l'instantané NULL
+  (échelle, version d'échelle, 3 seuils) ; version renseignée => version du MÊME tenant ET `ACTIVE` (le service résout
+  getActiveVersion) et rating_scale_id / rating_scale_version (= rating_scales.version) / 3 seuils identiques à la version.
+  UNIQUE (tenant_id,id) sur rating_scales + FK composite NOT VALID `risk_evaluations_rating_scale_tenant_fk` ;
+  `rating_scale_version` rejoint le gel UPDATE de 060 (fonction redéfinie AVEC son SET search_path, trigger recréé).
+  risk_categories : UNIQUE (tenant_id,id) + FK composite NOT VALID `risk_categories_parent_tenant_fk` (FK simple conservée).
+- Down de 061 restaure le corps de la garde UPDATE de 060 (copie : resynchroniser si 060 change).
+- Validé sur PG16 jetable (001->060, 061 x2, down x2 = pg_dump -s identique à l'état 060, re-up identique au up).
+- Effet de bord tests : les fixtures pg de QA-FB6b02-pg et QA-B6bF-pg insérait un instantané « fabriqué » -> corrigées
+  (version passée ACTIVE par `SET LOCAL session_replication_role = replica`, snapshot cohérent). Le refus de version
+  étrangère devient 42501 (garde avant FK). Un test qui fait ALTER TABLE ... TRIGGER prend un verrou : lancer les fichiers pg
+  avec `--no-file-parallelism` (deadlock constaté sinon). Attention : replica désactive aussi les FK.
+- Rappel : toute nouvelle écriture d'un instantané devra venir d'une version ACTIVE ; une évaluation créée alors que la
+  version n'est plus ACTIVE (course avec archivage) est refusée par le trigger : le service doit réessayer/retourner 409.
+- Env : psql en root sur le socket du cluster (le postgres ne traverse pas /tmp/claude-0) ; `runuser -u postgres -- sh < script`.

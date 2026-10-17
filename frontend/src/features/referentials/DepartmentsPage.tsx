@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, StatusBadge, Table, type TableColumn } from "@djamo/design-system";
 import { departmentsApi, type Department, type DepartmentCreateInput } from "../../api/departments";
 import { FormModal, dateOnly, describeError, isForbidden } from "../indicators/shared";
@@ -9,6 +9,8 @@ interface Form { name: string; manager: string; entity: string; riskOwner: strin
 const EMPTY_FORM: Form = { name: "", manager: "", entity: "", riskOwner: "", linkedProcesses: "", active: true };
 
 const nullable = (value: string) => value.trim() || null;
+/** Server marker of a Risk Owner that still tracks the manager (PostgresDepartmentRepository). */
+const isDefaultOwner = (d: Department) => d.riskOwnerDesignatedBy?.startsWith("Pilote par défaut") ?? false;
 
 export function DepartmentsPage({ token }: { token: string }) {
   const [rows, setRows] = useState<Department[]>([]);
@@ -24,11 +26,15 @@ export function DepartmentsPage({ token }: { token: string }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
 
+  const latest = useRef(0);
   const refresh = useCallback(async () => {
+    const id = ++latest.current;
     setLoading(true); setError(null);
-    try { setRows(await departmentsApi.listFull(token, includeInactive)); }
-    catch (err) { setError(describeError(err)); }
-    finally { setLoading(false); }
+    try {
+      const data = await departmentsApi.listFull(token, includeInactive);
+      if (id === latest.current) setRows(data);
+    } catch (err) { if (id === latest.current) setError(describeError(err)); }
+    finally { if (id === latest.current) setLoading(false); }
   }, [token, includeInactive]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -50,6 +56,7 @@ export function DepartmentsPage({ token }: { token: string }) {
         const input: DepartmentCreateInput = { ...base, riskOwner: nullable(form.riskOwner) };
         const created = await departmentsApi.create(token, input);
         setSelectedId(created.id);
+        if (!created.active) setIncludeInactive(true);
       }
       setFormOpen(null);
       await refresh();
@@ -97,7 +104,7 @@ export function DepartmentsPage({ token }: { token: string }) {
       footer={<><Button onClick={() => openEdit(selected)}>Modifier</Button><Button onClick={() => { setOwnerValue(""); setFormError(null); setOwnerOpen(true); }}>Désigner le Risk Owner</Button><Button variant="destructive" onClick={() => setArchiveOpen(true)}>Archiver</Button></>}
     >
       <p className="muted">Entité : {selected.entity ?? "—"} · Responsable : {selected.manager}</p>
-      <p className="muted">Risk Owner : {selected.riskOwner}{selected.riskOwnerDesignatedAt ? ` · désigné le ${dateOnly(selected.riskOwnerDesignatedAt)}` : " · non désigné explicitement"}</p>
+      <p className="muted">Risk Owner : {selected.riskOwner}{isDefaultOwner(selected) ? " · pilote par défaut (aucune désignation explicite)" : selected.riskOwnerDesignatedAt ? ` · désigné le ${dateOnly(selected.riskOwnerDesignatedAt)}` : ""}</p>
       <p className="muted">Processus liés (texte libre hérité) : {selected.linkedProcesses ?? "—"}</p>
       <MessageBanner tone="info">Les processus rattachés à ce département ne sont pas listés ici : l'API des départements n'expose pas ce lien (voir l'écran Processus).</MessageBanner>
     </Card>}
@@ -106,7 +113,7 @@ export function DepartmentsPage({ token }: { token: string }) {
       <form id="dept-form" onSubmit={submit}>
         {formError && <MessageBanner tone="danger">{formError}</MessageBanner>}
         <FormField label="Nom *" htmlFor="dept-name"><input id="dept-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></FormField>
-        <FormField label="Responsable *" htmlFor="dept-manager"><input id="dept-manager" value={form.manager} onChange={(e) => setForm({ ...form, manager: e.target.value })} required /></FormField>
+        <FormField label="Responsable *" htmlFor="dept-manager" help={formOpen === "edit" && selected && isDefaultOwner(selected) && form.manager.trim() !== selected.manager ? "Le Risk Owner est le pilote par défaut : le serveur le fera suivre ce nouveau responsable." : undefined}><input id="dept-manager" value={form.manager} onChange={(e) => setForm({ ...form, manager: e.target.value })} required /></FormField>
         <FormField label="Entité" htmlFor="dept-entity"><input id="dept-entity" value={form.entity} onChange={(e) => setForm({ ...form, entity: e.target.value })} /></FormField>
         {formOpen === "create" && <FormField label="Risk Owner" htmlFor="dept-owner" help="Laisser vide : le serveur applique sa règle par défaut. Un changement ultérieur passe par « Désigner le Risk Owner »."><input id="dept-owner" value={form.riskOwner} onChange={(e) => setForm({ ...form, riskOwner: e.target.value })} /></FormField>}
         <FormField label="Processus liés (texte libre)" htmlFor="dept-linked"><input id="dept-linked" value={form.linkedProcesses} onChange={(e) => setForm({ ...form, linkedProcesses: e.target.value })} /></FormField>

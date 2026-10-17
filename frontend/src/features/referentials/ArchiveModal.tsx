@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, FormField, MessageBanner, Modal } from "@djamo/design-system";
-import { describeError } from "../indicators/shared";
+import { describeError, isForbidden } from "../indicators/shared";
 
 /**
  * Archive confirmation with the mandatory reason. The server owns every rule
@@ -19,7 +19,11 @@ export function ArchiveModal({ open, subject, title, onClose, onConfirm }: {
     if (!reason.trim() || busy) return;
     setBusy(true); setError(null);
     try { await onConfirm(reason.trim()); setReason(""); }
-    catch (err) { setError(describeError(err)); }
+    catch (err) {
+      // Same posture as the forms: on 403 the global permission dialog speaks, the modal closes.
+      if (isForbidden(err)) { setReason(""); setError(null); onClose(); }
+      else setError(describeError(err));
+    }
     finally { setBusy(false); }
   }
 

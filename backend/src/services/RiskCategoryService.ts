@@ -32,13 +32,7 @@ export class RiskCategoryService {
     requirePermission(actor, "config.manage");
     if (!input.name.trim()) throw new ValidationError("name is required");
 
-    if (input.parentId) {
-      const parent = await this.categories.getById(actor.tenantId, input.parentId);
-      if (!parent) throw new ValidationError(`parentId "${input.parentId}" does not exist for this tenant`);
-      if (parent.parentId) {
-        throw new ValidationError("A sub-category cannot itself be the parent of another sub-category");
-      }
-    }
+    if (input.parentId) await this.assertValidParent(actor.tenantId, input.parentId);
 
     const category = await this.categories.create({ ...input, tenantId: actor.tenantId });
 
@@ -67,6 +61,14 @@ export class RiskCategoryService {
     if (input.name !== undefined && !input.name.trim()) throw new ValidationError("name cannot be empty");
     if (input.parentId === id) throw new ValidationError("A category cannot be its own parent");
     const before = await this.get(actor, id);
+    if (input.parentId) {
+      await this.assertValidParent(actor.tenantId, input.parentId);
+      // Max depth is 2: a category that already has children cannot become a sub-category (no chain, no cycle).
+      const all = await this.categories.list(actor.tenantId, { activeOnly: false });
+      if (all.some((c) => c.parentId === id)) {
+        throw new ValidationError("A category that has sub-categories cannot itself become a sub-category");
+      }
+    }
 
     const after = await this.categories.update(actor.tenantId, id, input);
 
@@ -83,5 +85,14 @@ export class RiskCategoryService {
     });
 
     return after;
+  }
+
+  /** Same uniform error whether the parent is missing or belongs to another tenant (no existence oracle). */
+  private async assertValidParent(tenantId: string, parentId: string): Promise<void> {
+    const parent = await this.categories.getById(tenantId, parentId);
+    if (!parent) throw new ValidationError(`parentId "${parentId}" does not exist for this tenant`);
+    if (parent.parentId) {
+      throw new ValidationError("A sub-category cannot itself be the parent of another sub-category");
+    }
   }
 }

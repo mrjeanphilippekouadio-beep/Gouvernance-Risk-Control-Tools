@@ -256,14 +256,11 @@ describe("QA-B6bF reducedMasteryIndependence on the read paths (B-6b-05)", () =>
     const s2 = new RiskFrameworkService({ ...repo, async getVersion() { return forged; } } as never, scales as never, {} as never, {} as never, {} as never);
     expect((await s2.getVersion(reader, "fw1", "v2")).reducedMasteryIndependence).toBe(false);
   });
-  it("OBSERVATION QA-B6bF-03: draft write responses (createDraft/updateDraft/discardDraft) return the raw version WITHOUT the mark", () => {
+  it("QA-B6bF-03 fixed: draft write responses (createDraft/updateDraft/discardDraft) return the version WITH the mark", () => {
     const src = readFileSync(join(SRC, "services/RiskFrameworkService.ts"), "utf8");
-    const uses = (src.match(/withMasteryIndependence\(|reducedMasteryIndependence/g) ?? []).length;
-    // 4 read paths use it; the three draft writers do not. If this count grows, the observation is (partly) fixed: update it.
-    expect(uses).toBeGreaterThanOrEqual(4);
     for (const m of ["createDraft", "updateDraft", "discardDraft"]) {
       const body = src.slice(src.indexOf(`async ${m}(`), src.indexOf(`async ${m}(`) + 2500);
-      expect(body.slice(0, body.indexOf("\n  }\n"))).not.toMatch(/withMasteryIndependence/);
+      expect(body.slice(0, body.indexOf("\n  }\n"))).toMatch(/withMasteryIndependence/);
     }
   });
 });

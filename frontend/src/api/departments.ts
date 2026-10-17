@@ -36,7 +36,8 @@ export type DepartmentUpdateInput = Partial<Omit<DepartmentCreateInput, "riskOwn
  * as usersApi), never as a fatal error.
  */
 export const departmentsApi = {
-  list: (token: string) => apiRequest<DepartmentSummary[]>("/api/v1/departments", { token }),
+  list: (token: string, includeInactive = false) =>
+    apiRequest<DepartmentSummary[]>(`/api/v1/departments${includeInactive ? "?includeInactive=true" : ""}`, { token }),
   listFull: (token: string, includeInactive = false) =>
     apiRequest<Department[]>(`/api/v1/departments${includeInactive ? "?includeInactive=true" : ""}`, { token }),
   create: (token: string, body: DepartmentCreateInput) =>

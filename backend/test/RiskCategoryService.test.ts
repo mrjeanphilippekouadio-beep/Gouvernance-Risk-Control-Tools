@@ -98,4 +98,19 @@ describe("RiskCategoryService", () => {
     const updated = await service.update(admin, category.id, { active: false }, "REQ-2");
     expect(updated.active).toBe(false);
   });
+
+  it("update revalidates parentId: unknown/other-tenant parent, sub-category parent, and parent-with-children are rejected", async () => {
+    const service = new RiskCategoryService(inMemoryRepository(), inMemoryAuditRepository());
+    const a = await service.create(admin, { name: "A" }, "R1");
+    const b = await service.create(admin, { name: "B" }, "R2");
+    const child = await service.create(admin, { name: "A1", parentId: a.id }, "R3");
+    await expect(service.update(admin, b.id, { parentId: "nope" }, "R4")).rejects.toThrow(ValidationError);
+    await expect(service.update(admin, b.id, { parentId: child.id }, "R5")).rejects.toThrow(ValidationError);
+    // A has a child: it cannot become a sub-category of B (would be depth 2, and A<->B cycle path).
+    await expect(service.update(admin, a.id, { parentId: b.id }, "R6")).rejects.toThrow(ValidationError);
+    const moved = await service.update(admin, b.id, { parentId: a.id }, "R7");
+    expect(moved.parentId).toBe(a.id);
+    const detached = await service.update(admin, b.id, { parentId: null }, "R8");
+    expect(detached.parentId).toBeNull();
+  });
 });

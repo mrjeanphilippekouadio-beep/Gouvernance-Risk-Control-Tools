@@ -21,10 +21,10 @@ function inMemoryDepartmentRepository(): DepartmentRepository {
         (d) => d.tenantId === tenantId && !d.deletedAt && (options?.includeInactive || d.active),
       );
     },
-    async create(input) {
+    async create(input, actorUserId) {
       const riskOwner = input.riskOwner?.trim() || input.manager;
       const designatedBy = input.riskOwner?.trim()
-        ? (input.riskOwnerDesignatedBy ?? input.manager)
+        ? actorUserId
         : DEFAULT_DESIGNATION_LABEL;
       const department: Department = {
         id: randomUUID(),
@@ -128,5 +128,28 @@ describe("DepartmentService", () => {
     const service = new DepartmentService(inMemoryDepartmentRepository(), inMemoryAuditRepository());
     const dept = await service.create(actor, { name: "Finance", manager: "alice@djamo.com" }, "REQ-6");
     await expect(service.archive(actor, dept.id, "", "REQ-7")).rejects.toThrow(ValidationError);
+  });
+
+  it("stamps actor.userId on an explicit risk owner at creation (never a client value)", async () => {
+    const repo = inMemoryDepartmentRepository();
+    const service = new DepartmentService(repo, inMemoryAuditRepository());
+    const forged = { name: "Ops", manager: "a@x.com", riskOwner: "b@x.com", riskOwnerDesignatedBy: "ceo@x.com" };
+    const dept = await service.create(actor, forged as never, "REQ-8");
+    expect(dept.riskOwnerDesignatedBy).toBe("user-1");
+  });
+
+  it("refuses to archive a department that still has active processes, allows it otherwise", async () => {
+    const processes = {
+      async list() {
+        return [{ id: "p1", departmentId: deptId }] as never;
+      },
+    } as never;
+    let deptId = "";
+    const service = new DepartmentService(inMemoryDepartmentRepository(), inMemoryAuditRepository(), processes);
+    const dept = await service.create(actor, { name: "Finance", manager: "alice@djamo.com" }, "REQ-9");
+    deptId = dept.id;
+    await expect(service.archive(actor, dept.id, "obsolete", "REQ-10")).rejects.toThrow(ValidationError);
+    const other = await service.create(actor, { name: "HR", manager: "alice@djamo.com" }, "REQ-11");
+    await expect(service.archive(actor, other.id, "obsolete", "REQ-12")).resolves.toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, StatusBadge, Table, type TableColumn } from "@djamo/design-system";
 import {
   processesApi,
@@ -69,22 +69,31 @@ export function ProcessesPage({ token }: { token: string }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
 
+  const latest = useRef(0);
   const refresh = useCallback(async () => {
+    const id = ++latest.current;
     setLoading(true); setError(null);
-    try { setRows(await processesApi.list(token, includeInactive)); }
-    catch (err) { setError(describeError(err)); }
-    finally { setLoading(false); }
+    try {
+      const data = await processesApi.list(token, includeInactive);
+      if (id === latest.current) setRows(data);
+    } catch (err) { if (id === latest.current) setError(describeError(err)); }
+    finally { if (id === latest.current) setLoading(false); }
   }, [token, includeInactive]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    departmentsApi.list(token).then((d) => { setDepartments(d); setDepartmentsUnavailable(false); })
+    departmentsApi.list(token, true).then((d) => { setDepartments(d); setDepartmentsUnavailable(false); })
       .catch(() => { setDepartments([]); setDepartmentsUnavailable(true); });
   }, [token]);
 
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) ?? null, [rows, selectedId]);
   const ordered = useMemo(() => inTreeOrder(rows), [rows]);
-  const departmentLabel = (id: string | null) => id === null ? "—" : (departments.find((d) => d.id === id)?.name ?? id);
+  const departmentLabel = (id: string | null) => {
+    if (id === null) return "—";
+    const found = departments.find((d) => d.id === id);
+    if (found) return found.active ? found.name : `${found.name} (inactif)`;
+    return departmentsUnavailable ? id : `${id} (archivé ou introuvable)`;
+  };
   const parentLabel = (id: string | null) => id === null ? "—" : (rows.find((r) => r.id === id)?.name ?? id);
 
   function openCreate() { setForm(EMPTY_FORM); setFormError(null); setFormOpen("create"); }
@@ -111,6 +120,7 @@ export function ProcessesPage({ token }: { token: string }) {
       } else {
         const created = await processesApi.create(token, { ...input, departmentId: form.departmentId });
         setSelectedId(created.id);
+        if (!created.active) setIncludeInactive(true); // keep the new inactive process visible and selected
       }
       setFormOpen(null);
       await refresh();
@@ -167,13 +177,15 @@ export function ProcessesPage({ token }: { token: string }) {
         <FormField label="Parent" htmlFor="proc-parent" help="Un Processus n'a pas de parent ; le serveur valide le niveau du parent.">
           <select id="proc-parent" value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })}>
             <option value="">Aucun</option>
-            {rows.filter((r) => r.id !== selected?.id || formOpen !== "edit").map((r) => <option key={r.id} value={r.id}>{r.name} ({LEVEL_LABELS[r.level]})</option>)}
+            {form.parentId && !rows.some((r) => r.id === form.parentId) && <option value={form.parentId}>Parent actuel (non listé : inactif ou archivé)</option>}
+            {rows.filter((r) => r.id !== selected?.id || formOpen !== "edit").map((r) => <option key={r.id} value={r.id}>{r.name} ({LEVEL_LABELS[r.level]}){r.active ? "" : " — inactif"}</option>)}
           </select>
         </FormField>
         <FormField label={formOpen === "create" ? "Département *" : "Département"} htmlFor="proc-dept" help={formOpen === "edit" ? "Un département peut être changé, jamais retiré." : undefined}>
           <select id="proc-dept" value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })} required={formOpen === "create"}>
             <option value="">Sélectionner…</option>
-            {departments.filter((d) => d.active || d.id === form.departmentId).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            {form.departmentId && !departments.some((d) => d.id === form.departmentId) && <option value={form.departmentId}>Département actuel (non listé : archivé ou illisible)</option>}
+            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}{d.active ? "" : " — inactif"}</option>)}
           </select>
         </FormField>
         <FormField label="Responsable" htmlFor="proc-owner"><input id="proc-owner" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} /></FormField>

@@ -20,6 +20,7 @@ import { KpiPage } from "./features/indicators/KpiPage";
 import { ProcessesPage } from "./features/referentials/ProcessesPage";
 import { DepartmentsPage } from "./features/referentials/DepartmentsPage";
 import { RiskCategoriesPage } from "./features/referentials/RiskCategoriesPage";
+import { FrameworksPage } from "./features/frameworks/FrameworksPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import { useLocalSignIn } from "./auth/useLocalSignIn";
@@ -31,7 +32,7 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks";
 type NavItem = { id: View; label: string; icon: string; available?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -42,7 +43,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "appetite", label: "Appétence", icon: "scale", available: true },
     { id: "scales", label: "Grilles de cotation", icon: "table", available: true },
     { id: "risks", label: "Registre", icon: "table", available: true },
-    { id: "placeholder", label: "Dispositif de risque", icon: "shield" },
+    { id: "frameworks", label: "Dispositif de risque", icon: "shield", available: true },
   ] },
   { label: "Contrôle interne", items: [
     { id: "controls", label: "Contrôles", icon: "check", available: true },
@@ -95,6 +96,7 @@ const PAGE_TITLES: Record<View, string> = {
   processes: "Processus",
   departments: "Départements",
   riskcategories: "Catégories de risque",
+  frameworks: "Dispositif de risque",
 };
 
 function App() {
@@ -211,6 +213,7 @@ function App() {
             {view === "processes" && <ProcessesPage token={token} />}
             {view === "departments" && <DepartmentsPage token={token} />}
             {view === "riskcategories" && <RiskCategoriesPage token={token} />}
+            {view === "frameworks" && <FrameworksPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} initialRiskId={evaluationRiskId} />}
             {view === "risks" && <RisksPage token={token} onEvaluate={(riskId) => { setEvaluationRiskId(riskId); setView("evaluation"); }} />}
             {view === "roles" && <RolesAdmin token={token} />}

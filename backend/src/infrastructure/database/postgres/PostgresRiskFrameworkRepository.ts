@@ -192,8 +192,8 @@ async function rollbackQuietly(client: PoolClient): Promise<void> {
 }
 
 /** Unique-index violations and the immutability triggers (42501) become clean domain errors. */
-function mapPgError(err: unknown): unknown {
-  const e = err as { code?: string; constraint?: string };
+export function mapPgError(err: unknown): unknown {
+  const e = err as { code?: string; constraint?: string; message?: string };
   if (e?.code === "23505") {
     if (e.constraint === "risk_frameworks_tenant_name_idx") return new ConflictError("Un Dispositif porte déjà ce nom");
     if (e.constraint === "risk_framework_versions_open_idx") {
@@ -204,7 +204,10 @@ function mapPgError(err: unknown): unknown {
     }
     return new ConflictError("Conflit avec une donnée existante");
   }
-  if (e?.code === "42501") return new ValidationError("Cette version est figée : créez une nouvelle version");
+  // Only the 055 guards' own refusals (F-REF-05): a genuine privilege error is also 42501 and must stay a 500.
+  if (e?.code === "42501" && /^risk[ _]framework/.test(e.message ?? "")) {
+    return new ValidationError("Cette version est figée : créez une nouvelle version");
+  }
   return err;
 }
 
