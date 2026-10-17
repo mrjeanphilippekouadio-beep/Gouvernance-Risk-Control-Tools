@@ -1581,4 +1581,18 @@ DECISION (PO, cockpit) : « Refuser : une catégorie désactivée ne peut pas
 RELATED: q112, QA-REF2-02.
 OWNER: @orchestrator (fait) ; @qa-engineer (retest) ; @dev-frontend (options)
 STATUS: DÉCIDÉ — implémenté, retest A08 à faire.
+
+DECISION-053
+DATE: 2026-10-18
+CONTEXT: Étape 3 de la passation du 2026-10-17 : B-6d (amorçage avec un
+  seul Risk Manager, q81–q83, q93, q98–q103 ; repli q100), obligatoire
+  avant la mise en production de B-6b (spec B-6 §0, §8.0).
+DECISION (PO, conversation) : « Go pour B-6d ».
+  → Dispatch A06 (+ A07 pour la migration, numéro suivant le dernier
+  présent : 062) ; I-D8/I-D9 (§14.2) instruits en parallèle par A13,
+  non bloquants selon la spec §0.
+RELATED: spec `docs/architecture/RM-V1-B6-Dispositif-spec.md` §5.4.1,
+  §5.6, §12.3, §15, §18 ; DECISION-045, DECISION-046.
+OWNER: @dev-backend @dev-db ; @risk-manager (I-D8, I-D9)
+STATUS: DÉCIDÉ — dispatché.
 ```
