@@ -10,7 +10,7 @@ import type {
   RecordResidualScoringInput,
   RiskEvaluation,
 } from "../../../domain/entities/RiskEvaluation.js";
-import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 
 interface RiskEvaluationRow {
   id: string;
@@ -160,7 +160,15 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
         snap?.committeeEvaluationEnforced ?? null,
         snap?.committeeTreatmentMinScore ?? null,
       ],
-    );
+    ).catch((err: unknown) => {
+      // Migration 061: the Dispositif version was archived between its resolution and this insert — a race, not a bug.
+      // Only that message; any other 42501 (snapshot mismatch, real privilege error) stays a 500.
+      const e = err as { code?: string; message?: string };
+      if (e.code === "42501" && /framework version must be ACTIVE/.test(e.message ?? "")) {
+        throw new ConflictError("The Dispositif version changed while this evaluation was being created — retry");
+      }
+      throw err;
+    });
     const row = rows[0];
     if (!row) throw new Error("Insert into risk_evaluations returned no row");
     return toDomain(row);
