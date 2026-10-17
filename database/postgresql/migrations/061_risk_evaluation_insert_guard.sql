@@ -49,8 +49,13 @@ BEGIN
   END IF;
 
   SELECT * INTO v FROM risk_framework_versions WHERE tenant_id = NEW.tenant_id AND id = NEW.risk_framework_version_id;
-  IF NOT FOUND OR v.status <> 'ACTIVE' THEN
-    RAISE EXCEPTION 'risk_evaluations: the framework version must be ACTIVE and belong to the tenant' USING ERRCODE = '42501';
+  -- Two messages on purpose (F-REF-04): only "must be ACTIVE" is a retryable race for the application (409);
+  -- a version outside the tenant is an isolation bug and must stay a logged 500.
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'risk_evaluations: the framework version does not belong to the tenant' USING ERRCODE = '42501';
+  END IF;
+  IF v.status <> 'ACTIVE' THEN
+    RAISE EXCEPTION 'risk_evaluations: the framework version must be ACTIVE' USING ERRCODE = '42501';
   END IF;
   SELECT s.version INTO scale_version FROM rating_scales s WHERE s.tenant_id = NEW.tenant_id AND s.id = v.rating_scale_id;
   IF NEW.rating_scale_id IS DISTINCT FROM v.rating_scale_id
