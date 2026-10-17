@@ -239,8 +239,10 @@ pour l'usage.
 | @dev-backend @qa-engineer @security @compliance | **B-6b** intégré (45cbd86, migration 059 jamais appliquée hors Postgres jetable) ; typecheck + 1828 tests verts sur la base fusionnée. Passages A08 / A10 / A14 (ligne GRC Trigger Matrix « gouvernance des paramètres ») à faire. | 2026-10-12 | En revue |
 | @compliance | **Compliance B-6b (A14, 2026-10-12) : conforme avec réserves**, aucun blocage staging (`docs/compliance/A14-review-B6b.md`). C-B6b-01 moyen : valeurs de seuil rattrapées peu distinguables (seul repère : version NULL). B-6d annoncé COMPLIANCE_BLOCK s'il n'est pas déployé avant ou avec B-6b en production. | 2026-10-12 | Revue faite |
 | HUMAN | **Q-A14-B6b-1 / q107** Marquer l'origine « reprise » des seuils des évaluations antérieures au Dispositif ? Décidé (DECISION-047) : compter d'abord en production, colonne d'origine seulement si le compte > 0. Reste : le comptage HUMAN avant production. | 2026-10-12 | Décidé — comptage HUMAN en attente |
-| HUMAN | **Q-A14-B6b-2 / q108** Fermeture de B-6b-01 = condition de mise en production ? (recommandé : oui) | 2026-10-12 | Ouvert (HUMAN) |
-| HUMAN | **Q-A14-B6b-3 / q109** Présentation des évaluations sans version : « antérieures au Dispositif, seuils de reprise » ? (recommandé : oui) | 2026-10-12 | Ouvert (HUMAN) |
+| HUMAN | **Q-A14-B6b-2 / q108** Fermeture de B-6b-01 = condition de mise en production ? (recommandé : oui) | 2026-10-12 | **Décidé (DECISION-048)** : oui, condition de mise en production. B-6b-01 déjà corrigé (A06) → à revérifier dans la checklist pré-production |
+| HUMAN | **Q-A14-B6b-3 / q109** Présentation des évaluations sans version : « antérieures au Dispositif, seuils de reprise » ? (recommandé : oui) | 2026-10-12 | **Décidé (DECISION-049)** : oui → item @dev-frontend ci-dessous |
+| @dev-frontend @dev-backend | **DECISION-049** Afficher les évaluations sans version de Dispositif comme « antérieures au Dispositif, seuils de reprise », sans conclure sur leur conformité à la méthode — écrans et exports. Donnée déjà disponible (`risk_framework_version_id` NULL), aucun recalcul côté frontend. | 2026-10-18 | Ouvert |
+| @orchestrator | **Passage A14 du lot PR #184 (référentiels + 061) : non requis selon la GRC Trigger Matrix** (vérifiée le 2026-10-18) — aucune nouvelle route (`git diff a3b8594^1 a3b8594 -- backend/src/api` : aucune), aucun nouveau traitement de données, aucun changement de rôle ; correctifs d'intégrité et écran sur API existante (= « UI simple » : Compliance Non). 061 renforce l'instantané B-6b déjà revu par A14 (`A14-review-B6b.md`). Le PO peut demander une revue supplémentaire. | 2026-10-18 | Décidé (orchestrateur) |
 | @dev-backend | **B-6b-04** Test de câblage `server.ts` : le service d'évaluation et les écrivains fermés (`ConfigService`, `RiskAppetiteService`) reçoivent bien la dépendance Dispositif (sinon instantané absent et écrivains ouverts en silence). | 2026-10-12 | Corrigé (A06) — test statique du câblage server.ts |
 | @dev-backend @risk-manager | **B-6b-05** Source de maîtrise `FIRST_LINE` : le marquage « indépendance réduite » demandé par A13 (R4 ii) n'existe pas (vérifié : aucune occurrence hors l'énumération). | 2026-10-12 | Corrigé (A06) — `reducedMasteryIndependence` dérivé à la lecture ; persistance à l'approbation seulement si A13 la demande |
 | @dev-backend @qa-engineer | **B-6b-06** B-5 doit traiter un seuil « faible » NULL (versions déjà ACTIVE) en refus, avec un test explicite. | 2026-10-12 | Ouvert (à faire avec B-5) |
@@ -1512,5 +1514,29 @@ DECISION (PO, cockpit) : « Compter d'abord les évaluations concernées
 RELATED: q107, Q-A14-B6b-1, B-6b.
 OWNER: HUMAN (comptage en production) ; @dev-db (requête lecture seule)
 STATUS: DÉCIDÉ — en attente du comptage HUMAN.
-```
 
+DECISION-048
+DATE: 2026-10-18 (réponse cockpit q108 le 2026-10-17 21:02 UTC, non relue à la passation, journalisée 2026-10-18)
+CONTEXT: Q-A14-B6b-2 / B-6b-01 : seconde façon d'activer une échelle
+  (`RatingScaleService.activateVersion`) alors que le Dispositif gouverne.
+DECISION (PO, cockpit) : « Condition de mise en production : fermé avant
+  la première mise en production » (recommandation acceptée).
+  → B-6b-01 est déjà corrigé (A06, activateVersion refusé quand le
+  Dispositif est branché) : l'item entre dans la checklist pré-production
+  comme point à revérifier, pas comme travail neuf.
+RELATED: q108, Q-A14-B6b-2, B-6b-01.
+OWNER: @orchestrator (checklist pré-production)
+STATUS: DÉCIDÉ — satisfait sous réserve de revérification pré-production.
+
+DECISION-049
+DATE: 2026-10-18 (réponse cockpit q109 le 2026-10-17 21:02 UTC, journalisée 2026-10-18)
+CONTEXT: Q-A14-B6b-3 : présentation des évaluations sans version de Dispositif.
+DECISION (PO, cockpit) : « Les afficher "antérieures au Dispositif, seuils
+  de reprise", sans conclure sur leur conformité à la méthode »
+  (recommandation acceptée).
+  → Travail frontend (écrans + exports), aucune règle recalculée côté
+  client : le critère est `risk_framework_version_id` NULL renvoyé par l'API.
+RELATED: q109, Q-A14-B6b-3, DECISION-047 (q107).
+OWNER: @dev-frontend
+STATUS: DÉCIDÉ — à implémenter.
+```
