@@ -280,7 +280,7 @@ pour l'usage.
 | @dev-backend | **F-B6b-08** INFO : `/applicable?processId=` révèle le Dispositif d'un processus aux détenteurs de `riskframework.read` (déjà visible par ailleurs). | 2026-10-12 | Accepté (info) |
 | @risk-manager | **I-D8 (spec B-6 §14.2, A05)** : q98 ne contraint en amorçage que les paramètres qui ont une valeur par défaut au contrat. Restent libres : échelle, appétence, seuil « faible », durée de délégation, seuil Comité de traitement → un Risk Manager seul peut fixer une appétence ou un seuil « faible » élevés au démarrage. Acceptable, ou question PO ? | 2026-10-12 | **Tranché A13 (2026-10-18, `A13-review-DECISION-044.md` §7)** : acceptable sans plafond (un plafond serait une décision PO nouvelle) ; les 5 valeurs libres figées dans `bootstrap_justification`/audit et montrées dans la route BOOTSTRAP et la notification ; R2 = « valeur à examiner », non bloquant. Transmis à A06 (B-6d) |
 | @risk-manager | **I-D9 (spec B-6 §14.2, A05)** : un Risk Manager qui est aussi administrateur peut se désigner lui-même comme « administrateur sollicité » dans le motif structuré d'amorçage (I-D2). Faut-il l'interdire ? | 2026-10-12 | **Position A13 (2026-10-18) : interdire** (refus si `askedUserId = actor.userId`, `askedUserId` doit être un administrateur actif du tenant). Implémentée isolée par A06, **en attente PO (q113)** — spec §5.6 pt 6 non modifiée tant que le PO n'a pas tranché |
-| HUMAN | **q113 (I-D9)** Si la même personne est à la fois l'unique administrateur et l'unique Risk Manager, le démarrage du Dispositif par simple déclaration (« aucun autre administrateur ne peut créer un second membre ») reste-t-il permis ? A13 recommande de l'interdire : il faut alors un second administrateur, ou créer un second membre du groupe Risk Manager avant d'activer. Vérifier si c'est le cas de Djamo au démarrage (q93). Posée dans le cockpit. | 2026-10-18 | Ouvert (HUMAN) |
+| HUMAN | **q113 (I-D9)** [**Répondue → DECISION-055** : tout configurable par client, défaut strict ; consultation A13/A06/A10/A05 en cours] Si la même personne est à la fois l'unique administrateur et l'unique Risk Manager, le démarrage du Dispositif par simple déclaration (« aucun autre administrateur ne peut créer un second membre ») reste-t-il permis ? A13 recommande de l'interdire : il faut alors un second administrateur, ou créer un second membre du groupe Risk Manager avant d'activer. Vérifier si c'est le cas de Djamo au démarrage (q93). Posée dans le cockpit. | 2026-10-18 | Ouvert (HUMAN) |
 | @dev-backend @dev-db @qa-engineer @security @compliance | **B-6d livré (A06, 2026-10-18, migration 062 jamais appliquée hors PG16 local)** : repli q100 (`foldVoteBeforeB12`, `fallback_cause = LEGACY_APPROVER_PRE_B12`), amorçage §5.6 (route `POST /change-requests/:rid/bootstrap-approve`, fin mémorisée `tenants.risk_framework_bootstrap_ended_at` posée par trigger, jamais rouverte, notification `RISK_FRAMEWORK_BOOTSTRAP_NOTICE`), I-D8 (valeurs libres figées dans `bootstrap_justification.freeParameters`), I-D9 isolée (`BOOTSTRAP_ASKED_ADMIN_MAY_BE_SELF = false`, en attente q113). Vérifié par l'orchestrateur : typecheck OK, 1974 passed / 46 skipped, pg 46/46 (base recréée 001..062). **Tests existants adaptés** (409 → repli q100 dans B6a, QA-B6a, QA-B6abis, QA-D044 ; catalogue 11 → 12) : à revoir par A08. **Limite connue** : un changement de `roles.system_group` ou la réactivation d'un rôle désactivé ne pose pas le marqueur de fin d'amorçage. A07 non spawné (migration écrite par A06). Passages A08, A10, A14 (spec §17) dispatchés. | 2026-10-18 | Livré, en revue |
 | HUMAN | **Requête pré-production n° 10** (`docs/security/B8-predeploy-checks.sql`, lecture seule, B-6d / q100) : à exécuter par le PO avant production, attendu 0 ligne. | 2026-10-18 | Ouvert (HUMAN, avant production) |
 | @compliance @dev-backend @dev-db @dev-frontend HUMAN | **Compliance B-6d (A14, `docs/compliance/A14-review-B6d.md`) : CONFORME AVEC RÉSERVES, aucun COMPLIANCE_BLOCK pour staging** ; le bloc est levé pour le code mais **maintenu comme règle de livraison : B-6b ne part jamais en production sans B-6d (059 à 062 ensemble)**. Limite de la revue : ni tests ni `git show` lancés par l'agent. | 2026-10-18 | Revue faite |
@@ -1611,4 +1611,43 @@ RELATED: spec `docs/architecture/RM-V1-B6-Dispositif-spec.md` §5.4.1,
   §5.6, §12.3, §15, §18 ; DECISION-045, DECISION-046.
 OWNER: @dev-backend @dev-db ; @risk-manager (I-D8, I-D9)
 STATUS: DÉCIDÉ — dispatché.
+
+DECISION-054
+DATE: 2026-10-18
+CONTEXT: Refonte de la section Risques, points (a) et (b) laissés ouverts
+  par q13 (réglages du Dispositif « dans son espace », Administration en
+  lecture).
+DECISION (PO, conversation) : (a) Les réglages vivent dans
+  l'Administration ; les autres sections n'y donnent qu'un accès, pour
+  l'ergonomie, et appellent les mêmes actions que l'Administration.
+  (b) Même modifiés depuis une autre section, c'est côté backend le même
+  appel que dans l'Administration : une seule action, une seule règle,
+  un seul audit — jamais un second chemin d'écriture.
+  → Précise et remplace q13 sur le lieu de réglage du Dispositif.
+  Consultation A05 + A06 demandée par le PO (« ce qui doit être mieux »).
+RELATED: q13, DECISION-017 n° 5, contrat §13, item « Refonte de la
+  section Risques ».
+OWNER: @architect @dev-backend (consultation) ; puis @ux-designer @dev-frontend
+STATUS: DÉCIDÉ — consultation en cours.
+
+DECISION-055
+DATE: 2026-10-18 (réponse cockpit q113, horodatée 2026-10-17 21:36 UTC)
+CONTEXT: q113 / I-D9 — auto-désignation de l'« administrateur sollicité »
+  pendant l'amorçage.
+DECISION (PO, cockpit, réponse libre) : principe produit transverse —
+  « le produit est destiné à être commercialisé à des entreprises dont les
+  configurations seront atypiques d'un client à l'autre : tout doit être
+  modulable ; la configuration par défaut part sur une gouvernance
+  stricte, en laissant au client la possibilité de configurer à sa
+  guise ». Demande de redispatcher Risk Manager, Dev Backend et Sécurité
+  et de lui rapporter leur retour.
+  → Lecture orchestrateur pour I-D9 : réglage par client, défaut strict
+  (interdit) ; à confirmer par la consultation A13/A06/A10. Les invariants
+  non négociables éventuels (ex. append-only de l'audit, maker-checker)
+  doivent être identifiés par la consultation et soumis au PO, jamais
+  décidés seuls.
+RELATED: q113, I-D9, F-B6d-01, QA-B6d-01, contrat §10 (paramètres du
+  Dispositif, 9 invariants).
+OWNER: HUMAN ; @risk-manager @dev-backend @security @architect (consultation)
+STATUS: DÉCIDÉ (principe) — déclinaison en consultation.
 ```
