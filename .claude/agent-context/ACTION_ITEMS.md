@@ -238,7 +238,7 @@ pour l'usage.
 | @ux-designer @dev-frontend | **B-6b-03** Avertissement non bloquant R2 (seuil « faible » au-dessus du haut de la bande la plus basse) non implémenté — à porter dans le lot F / UX. | 2026-10-12 | Ouvert |
 | @dev-backend @qa-engineer @security @compliance | **B-6b** intégré (45cbd86, migration 059 jamais appliquée hors Postgres jetable) ; typecheck + 1828 tests verts sur la base fusionnée. Passages A08 / A10 / A14 (ligne GRC Trigger Matrix « gouvernance des paramètres ») à faire. | 2026-10-12 | En revue |
 | @compliance | **Compliance B-6b (A14, 2026-10-12) : conforme avec réserves**, aucun blocage staging (`docs/compliance/A14-review-B6b.md`). C-B6b-01 moyen : valeurs de seuil rattrapées peu distinguables (seul repère : version NULL). B-6d annoncé COMPLIANCE_BLOCK s'il n'est pas déployé avant ou avec B-6b en production. | 2026-10-12 | Revue faite |
-| HUMAN | **Q-A14-B6b-1 / q107** Marquer l'origine « reprise » des seuils des évaluations antérieures au Dispositif ? (recommandé : compter d'abord en production). Inclut le comptage HUMAN des évaluations sans version avant production. | 2026-10-12 | Ouvert (HUMAN) |
+| HUMAN | **Q-A14-B6b-1 / q107** Marquer l'origine « reprise » des seuils des évaluations antérieures au Dispositif ? Décidé (DECISION-047) : compter d'abord en production, colonne d'origine seulement si le compte > 0. Reste : le comptage HUMAN avant production. | 2026-10-12 | Décidé — comptage HUMAN en attente |
 | HUMAN | **Q-A14-B6b-2 / q108** Fermeture de B-6b-01 = condition de mise en production ? (recommandé : oui) | 2026-10-12 | Ouvert (HUMAN) |
 | HUMAN | **Q-A14-B6b-3 / q109** Présentation des évaluations sans version : « antérieures au Dispositif, seuils de reprise » ? (recommandé : oui) | 2026-10-12 | Ouvert (HUMAN) |
 | @dev-backend | **B-6b-04** Test de câblage `server.ts` : le service d'évaluation et les écrivains fermés (`ConfigService`, `RiskAppetiteService`) reçoivent bien la dépendance Dispositif (sinon instantané absent et écrivains ouverts en silence). | 2026-10-12 | Corrigé (A06) — test statique du câblage server.ts |
@@ -1490,3 +1490,21 @@ STATUS: DÉCIDÉ — q104 dispatché (A06) ; q100–q103 intégrées à la spec
      gestion client et reste signalé administrateur + Risk Manager ».
      → Aucun changement de code (option A de Q-A13-6). DÉCIDÉ.
 ```
+
+```
+DECISION-047
+DATE: 2026-10-17 (réponse cockpit q107 le 2026-10-14 12:26 UTC, journalisée 2026-10-17)
+CONTEXT: Q-A14-B6b-1 / C-B6b-01 (docs/compliance/A14-review-B6b.md) :
+  marquer l'origine « reprise » des seuils des évaluations antérieures
+  au Dispositif ?
+DECISION (PO, cockpit) : « Compter d'abord les évaluations concernées
+  en production, puis décider (ajout d'une colonne d'origine seulement
+  s'il y en a) » (recommandation acceptée).
+  → Aucun code maintenant. Le comptage (requête lecture seule, jamais
+  exécutée par un agent sur Neon) est à fournir au PO avant la mise en
+  production ; si le compte > 0, une colonne d'origine sera spécifiée.
+RELATED: q107, Q-A14-B6b-1, B-6b.
+OWNER: HUMAN (comptage en production) ; @dev-db (requête lecture seule)
+STATUS: DÉCIDÉ — en attente du comptage HUMAN.
+```
+
