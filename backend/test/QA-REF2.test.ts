@@ -181,10 +181,16 @@ describe("QA-REF2 RiskCategoryService.update parent revalidation (QA-REF-01)", (
     await expect(svc.update(mgr, a1.id, { parentId: A.id, name: "a1b" }, "r")).resolves.toMatchObject({ name: "a1b" });
     await expect(svc.update(mgr, A.id, { name: "A2" }, "r")).resolves.toMatchObject({ name: "A2" });
   });
-  it("QA-REF2-02: an INACTIVE top-level category is accepted as parent (current behaviour, not stated by any rule)", async () => {
+  it("QA-REF2-02 / q112 (DECISION-052): an INACTIVE category cannot become a parent, on update or create", async () => {
     const { svc, B, a1 } = await setup();
     await svc.update(mgr, B.id, { active: false }, "r");
-    await expect(svc.update(mgr, a1.id, { parentId: B.id }, "r")).resolves.toMatchObject({ parentId: B.id });
+    await expect(svc.update(mgr, a1.id, { parentId: B.id }, "r")).rejects.toThrow(ValidationError);
+    await expect(svc.create(mgr, { name: "N", parentId: B.id }, "r")).rejects.toThrow(ValidationError);
+  });
+  it("q112: a sub-category whose parent was deactivated later can still be re-saved with that same parent", async () => {
+    const { svc, A, a1 } = await setup();
+    await svc.update(mgr, A.id, { active: false }, "r");
+    await expect(svc.update(mgr, a1.id, { parentId: A.id, name: "a1b" }, "r")).resolves.toMatchObject({ name: "a1b", parentId: A.id });
   });
 });
 

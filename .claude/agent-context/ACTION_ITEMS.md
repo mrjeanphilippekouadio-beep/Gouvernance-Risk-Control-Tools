@@ -248,7 +248,7 @@ pour l'usage.
 | @dev-backend @qa-engineer | **B-6b-06** B-5 doit traiter un seuil « faible » NULL (versions déjà ACTIVE) en refus, avec un test explicite. | 2026-10-12 | Ouvert (à faire avec B-5) |
 | @qa-engineer | **QA B-6b (A08, 2026-10-12) : PASS avec réserves** — 42 tests (`QA-B6b.test.ts`), 1870 verts ; modifications de fixtures A06 acceptées ; Postgres réel non exercé (059 et concurrence). | 2026-10-12 | Revue faite |
 | @dev-backend | **QA-B6b-01** MINEUR : évaluation avec version mais seuil Comité copié NULL → `RiskEvaluationService.committeeSettingsOf` relit `configs` (contraire spec §8.1, incohérent avec TreatmentDecision). Inatteignable via le service ; corriger en fail-closed. | 2026-10-12 | Corrigé (A06) — fail-closed |
-| HUMAN | **QA-B6b-02 / q110** Vue 360 du risque : afficher l'appétence de la version actuellement applicable (comportement actuel) ou celle figée sur l'évaluation ? | 2026-10-12 | Ouvert (HUMAN) |
+| HUMAN | **QA-B6b-02 / q110** Vue 360 du risque : afficher l'appétence de la version actuellement applicable (comportement actuel) ou celle figée sur l'évaluation ? | 2026-10-12 | **Décidé (DECISION-050)** : appétence actuelle en principal, appétence figée à titre d'information quand elles diffèrent → item @dev-backend @dev-frontend |
 | @security | **Sécurité B-6b (A10, 2026-10-12) : feu vert staging avec réserves**, max CVSS 2.7, aucune escalade HUMAN (`docs/security/snyk-dependencies.md` §B-6b). | 2026-10-12 | Revue faite |
 | @dev-backend | **F-B6b-01** LOW 2.7 : `DashboardService.getAppetiteVsResidual` (`GET /reports/appetite-vs-residual`) lit encore `risk_appetites` (plus alimentée) → rapport de direction faux après une nouvelle version. À traiter avec B-6b-02, avant B-6c. | 2026-10-12 | Corrigé (A06) — appétence lue dans la version applicable (spec §9 ; à revoir selon q110) |
 | @dev-db | **F-B6b-02** LOW 2.0 : l'instantané d'évaluation n'est figé qu'en applicatif ; ajouter un trigger BEFORE UPDATE (search_path épinglé) refusant la modification des colonnes figées une fois renseignées + contrôle tenant sur la FK de version. | 2026-10-12 | Corrigé (A07) — migration 060 (non appliquée) |
@@ -258,7 +258,7 @@ pour l'usage.
 | @dev-backend | **QA-B6bF-02** MINEUR : toute erreur 42501 (y compris un vrai défaut de droit) devenait « échelle figée » (400). | 2026-10-12 | Corrigé (orchestrateur) — correspondance sur le message du trigger |
 | @qa-engineer @dev-backend | **QA-B6bF-01** MINEUR : le test d'inventaire B-6c ne voit pas un champ renommé ; garde ajoutée par A08 (noms canoniques), accès par crochets/déstructuration non couverts. | 2026-10-12 | Atténué |
 | @dev-backend | **QA-B6bF-03** INFO : `createDraft`/`updateDraft`/`discardDraft` renvoient la version sans `reducedMasteryIndependence`. | 2026-10-12 | Fermé (A08, 2026-10-17) |
-| HUMAN @risk-manager | **QA-B6bF-04 / F-B6b-09 / q111** Rapport appétence : un risque dont la sous-catégorie n'a pas de seuil dans le Dispositif (ou sans Dispositif applicable) apparaît « non dépassé » — à signaler comme « non suivi » ? | 2026-10-12 | Ouvert (HUMAN) |
+| HUMAN @risk-manager | **QA-B6bF-04 / F-B6b-09 / q111** Rapport appétence : un risque dont la sous-catégorie n'a pas de seuil dans le Dispositif (ou sans Dispositif applicable) apparaît « non dépassé » — à signaler comme « non suivi » ? | 2026-10-12 | **Décidé (DECISION-051)** : signaler « pas d'appétence rattachée », distinct de « non dépassé » → item @dev-backend @dev-frontend |
 | @dev-db | **F-B6b-06** LOW 2.2 : 060 ne garde que l'UPDATE ; un INSERT direct peut créer une évaluation à l'instantané fabriqué → trigger BEFORE INSERT (search_path épinglé). **F-B6b-07** INFO : FK composite `(tenant_id, rating_scale_id)` et `rating_scale_version` à geler. Migration 061. | 2026-10-12 | Migration 061 écrite (590b745), à revue A08/A10 — jamais appliquée à la main |
 | @dev-backend @dev-db | **F-CAT-02** LOW 2.7 : `RiskCategoryService.update` ne revérifie pas `parentId` comme `create` (parent d'un autre tenant accepté, oracle d'existence via 23503, cycle possible) → réutiliser les contrôles de `create` + FK composite `(tenant_id, parent_id)`. F-CAT-01 (désactivation sous `config.manage`) : INFO, non terminal, conforme. | 2026-10-12 | Corrigé (service 60560c4 + FK 061), à retest A10 |
 | @dev-backend @security | **QA-REF-01** MAJOR (= F-CAT-02 côté écran) : `RiskCategoryService.update` ne valide ni existence ni profondeur du parent → chaîne de profondeur 2 invisible à l'écran, cycle A↔B possible. | 2026-10-12 | Fermé (A08 + A10, 2026-10-17) |
@@ -268,10 +268,14 @@ pour l'usage.
 | @dev-backend | **QA-REF2-01** MAJOR : un processus inactif ne bloquait pas l'archivage de son département (réactivation ensuite sur département archivé). Corrigé par l'orchestrateur : `archive` compte aussi les inactifs ; test QA-REF2 réécrit. | 2026-10-17 | **Fermé — RETEST_PASS A08 (2026-10-18)**, invariant « jamais un processus, actif ou non, sur un département archivé » vérifié sur tous les chemins séquentiels (`QA-REF2b.test.ts`) |
 | @qa-engineer @dev-db HUMAN | **Réserves retest QA-REF2-01 (A08, 2026-10-18)** : (1) lignes antérieures à `3792a89` non réparées — processus inactif déjà rattaché à un département archivé possible en production ; requête lecture seule de contrôle à ajouter à la checklist pré-production ; invariant tenu par le service seul (FK aveugle au soft delete, cf. F-REF-02). (2) Un département `active: false` non archivé reste rattachable — conforme à « archivé », à confirmer PO si besoin. (3) **Test `QA-D044-pg` (l. 115) fragile** : compte les sessions `idle in transaction` de toute la base, échoue dès qu'une autre session (psql, autre agent) est ouverte en parallèle — restreindre au pool du test. | 2026-10-18 | Ouvert |
 | @product-manager @dev-frontend | **QA-REF2-02..05** MINOR/TRIVIAL : parent de catégorie inactif accepté à l'update (règle produit à trancher) ; bouton « Retirer » proposé à tous alors que réservé au demandeur ; commentaire d'approbation non marqué requis en régime FALLBACK ; demandes ASSIGN_PROCESS/SET_DEFAULT affichées « — ». **QA-REF2-06** : le 409 de course 061 dépend du texte du message PG — ne pas reformuler ce message sans le test. Hors périmètre : utilisateurs rattachés à un département archivé (UserService) non vérifié. | 2026-10-17 | Ouvert (mineur) |
-| HUMAN | **QA-REF2-02 / q112** Une catégorie désactivée peut-elle servir de parent ? (recommandé : refuser). Posée dans le cockpit. | 2026-10-17 | Ouvert (HUMAN) |
+| HUMAN | **QA-REF2-02 / q112** Une catégorie désactivée peut-elle servir de parent ? (recommandé : refuser). Posée dans le cockpit. | 2026-10-17 | **Décidé (DECISION-052) et implémenté (2026-10-18)** : refus d'un parent inactif à la création ou au changement de parent ; lien existant conservé |
+| @dev-backend @dev-frontend | **DECISION-050 (q110)** Fiche 360 : garder l'appétence de la version actuellement applicable comme référence, et afficher l'appétence figée sur l'évaluation à titre d'information quand elle diffère. Le backend doit exposer les deux valeurs (aucun recalcul frontend). | 2026-10-18 | Ouvert |
+| @dev-backend @dev-frontend | **DECISION-051 (q111)** Rapport appétence vs résiduel (`GET /reports/appetite-vs-residual`) : un risque sans seuil d'appétence (sous-catégorie sans seuil ou sans Dispositif applicable) est signalé « pas d'appétence rattachée », état distinct de « non dépassé », calculé côté backend. | 2026-10-18 | Ouvert |
+| @dev-backend | **F-REF-06** INFO, CVSS 0 (A10 retest 2026-10-18) : le motif `risk_framework…` de `mapPgError` (F-REF-05) attrape aussi les gardes d'isolement tenant de 057 (`requested_by/decided_by must belong to the tenant`) → 400 « figé » au lieu de 500. Inatteignable (champs forcés à `actor.userId`). Exclure ce message au prochain passage sur le fichier. | 2026-10-18 | Ouvert (non bloquant) |
+| @dev-frontend | **q112 côté écran** : l'écran Catégories peut encore proposer une catégorie inactive comme parent ; le serveur refuse désormais (400). Filtrer les inactives des options de parent (garder l'option « parent actuel »). | 2026-10-18 | Ouvert (mineur) |
 | @dev-backend @dev-db | **F-CAT-03** LOW 2.2 (A10, `docs/security/review-referentials-2026-10-17.md`) : deux updates croisés concurrents (A→B, B→A) créent un cycle de catégories (PoC `[OK, OK]`) ; exige `config.manage`. Confirmé aussi par Codex sur PR #184 (P2). Correctif proposé : trigger (search_path épinglé) qui verrouille la ligne parente `FOR UPDATE` et vérifie la profondeur. **Avant production.** | 2026-10-17 | Ouvert (A06 + A07) |
 | @dev-backend @dev-db | **F-REF-02 / Codex P2 (PR #184)** : archivage d'un département non atomique — une création/réaffectation de processus concurrente peut rattacher un processus à un département archivé (la FK ne voit pas le soft delete). À traiter avec F-CAT-03 (même famille : invariant à porter en base, verrou ou trigger). **Avant production.** Codex P1 (061 : lecture de la version sans verrou) corrigé par `FOR SHARE`, prouvé sur PG16 local. | 2026-10-17 | Ouvert (A06 + A07) |
-| @dev-backend @dev-db @dev-frontend | **A10 INFO** : F-REF-02 limites de l'archivage (repo processus optionnel, course création/archivage) ; F-061-01 version d'échelle NULL→texte libre sur évaluation sans Dispositif ; F-REF-01 commentaire périmé `Department.ts` ; F-REF-03 identifiants dans les URL sans `encodeURIComponent`. **F-REF-04** (message 061 ACTIVE/tenant séparé) et **F-REF-05** (`mapPgError` ne masque plus un vrai 42501 de privilège) : corrigés par l'orchestrateur. | 2026-10-17 | INFO ouverts ; F-REF-04/05 corrigés |
+| @dev-backend @dev-db @dev-frontend | **A10 INFO** : F-REF-02 limites de l'archivage (repo processus optionnel, course création/archivage) ; F-061-01 version d'échelle NULL→texte libre sur évaluation sans Dispositif ; F-REF-01 commentaire périmé `Department.ts` ; F-REF-03 identifiants dans les URL sans `encodeURIComponent`. **F-REF-04** (message 061 ACTIVE/tenant séparé) et **F-REF-05** (`mapPgError` ne masque plus un vrai 42501 de privilège) : corrigés par l'orchestrateur. | 2026-10-17 | INFO ouverts ; **F-REF-04/05 RETEST_PASS A10 (2026-10-18), fermés** ; `FOR SHARE` (30d1359) PASS |
 | @dev-db @qa-engineer | **061 — tests pg** : les fichiers pg qui font `ALTER TABLE … TRIGGER` se bloquent en parallèle → lancer avec `--no-file-parallelism`. FK composites 061 NOT VALID : `VALIDATE CONSTRAINT` à jouer à part après contrôle des données (requête pré-déploiement à fournir au PO). | 2026-10-17 | Ouvert |
 | @dev-backend | **F-B6b-08** INFO : `/applicable?processId=` révèle le Dispositif d'un processus aux détenteurs de `riskframework.read` (déjà visible par ailleurs). | 2026-10-12 | Accepté (info) |
 | @risk-manager | **I-D8 (spec B-6 §14.2, A05)** : q98 ne contraint en amorçage que les paramètres qui ont une valeur par défaut au contrat. Restent libres : échelle, appétence, seuil « faible », durée de délégation, seuil Comité de traitement → un Risk Manager seul peut fixer une appétence ou un seuil « faible » élevés au démarrage. Acceptable, ou question PO ? | 2026-10-12 | Ouvert — A13 (PO si besoin) |
@@ -1540,4 +1544,41 @@ DECISION (PO, cockpit) : « Les afficher "antérieures au Dispositif, seuils
 RELATED: q109, Q-A14-B6b-3, DECISION-047 (q107).
 OWNER: @dev-frontend
 STATUS: DÉCIDÉ — à implémenter.
+
+DECISION-050
+DATE: 2026-10-18 (réponse cockpit q110 le 2026-10-17 21:04 UTC)
+CONTEXT: QA-B6b-02 — fiche 360 : quelle appétence afficher quand le
+  Dispositif a changé depuis l'évaluation ?
+DECISION (PO, cockpit, réponse libre) : « Garder l'appétence actuelle et
+  indiquer l'autre à titre d'information ». Lecture orchestrateur : la
+  référence affichée reste l'appétence de la version applicable ;
+  l'appétence figée sur l'évaluation apparaît en information quand elle
+  diffère (variante de la recommandation « afficher les deux »).
+RELATED: q110, QA-B6b-02, F-B6b-01.
+OWNER: @dev-backend (exposer les deux valeurs) ; @dev-frontend
+STATUS: DÉCIDÉ — à implémenter.
+
+DECISION-051
+DATE: 2026-10-18 (réponse cockpit q111 le 2026-10-17 21:05 UTC)
+CONTEXT: QA-B6bF-04 / F-B6b-09 — rapport appétence vs résiduel : risque
+  sans seuil d'appétence présenté « non dépassé ».
+DECISION (PO, cockpit, réponse libre) : « Signalement pas d'appétence
+  rattachée » — équivalent à la recommandation : état explicite, distinct
+  de « non dépassé ».
+RELATED: q111, QA-B6bF-04, F-B6b-09.
+OWNER: @dev-backend (état calculé serveur) ; @dev-frontend
+STATUS: DÉCIDÉ — à implémenter.
+
+DECISION-052
+DATE: 2026-10-18 (réponse cockpit q112 le 2026-10-17 21:05 UTC)
+CONTEXT: QA-REF2-02 — une catégorie désactivée peut-elle servir de parent ?
+DECISION (PO, cockpit) : « Refuser : une catégorie désactivée ne peut pas
+  devenir parente » (recommandation acceptée).
+  → Implémenté par l'orchestrateur (`RiskCategoryService.assertValidParent`) :
+  refus à la création et au changement de parent ; une sous-catégorie dont
+  le parent a été désactivé plus tard reste modifiable avec ce même parent
+  (sinon l'écran, qui renvoie toujours `parentId`, la bloquerait).
+RELATED: q112, QA-REF2-02.
+OWNER: @orchestrator (fait) ; @qa-engineer (retest) ; @dev-frontend (options)
+STATUS: DÉCIDÉ — implémenté, retest A08 à faire.
 ```
