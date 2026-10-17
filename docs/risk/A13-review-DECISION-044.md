@@ -223,3 +223,55 @@ Analyse :
 | I-D7 | Lecture orchestrateur confirmée ; « > 1 » = fin de l'amorçage, compté en éligibles actifs | Non bloquant ; confirmation d'une ligne facultative |
 
 Actions : A06 (q58, q65, éventuellement `assertReactivable`), A05 (formulation « éligibles actifs » dans B-6d). Aucun nouveau risque identifié ; le risque résiduel de F-D044-08 reste **faible** (CVSS A10 2,2) et passe à **très faible** après correctif.
+
+---
+
+## 7. I-D8 / I-D9 (2026-10-18)
+
+**Statut** : positions A13. Le PO (N0) reste décideur final ; rien ci-dessous ne modifie q98 ni q83. Sources relues : spec B-6 §5.6 points 2, 6, 7 et §14.2 (I-D8, I-D9), DECISION-045 point 3, DECISION-044 (q81-q83), DECISION-046 (q101-q103), §1.2 de la présente revue.
+
+### 7.1 I-D8 : q98 et les paramètres sans valeur par défaut au contrat
+
+**Faits** : [Fait] q98 impose « uniquement les valeurs par défaut du contrat ». [Fait] Pour l'échelle, l'appétence, le seuil « faible », la durée de délégation et le seuil Comité de traitement, le contrat ne donne aucune valeur (« fixés à la création / par le client ») ; une contrainte par défaut est donc matériellement impossible, et le seuil « faible » est obligatoire sans défaut (B-6b). [Fait] Le premier Dispositif d'un RM seul n'est revu par personne tant qu'Audit et Comité sont vides (q103, accepté par le PO).
+
+**Position** :
+- Lecture A05 **fidèle** : q98 vise à empêcher qu'un RM seul choisisse une méthodologie plus laxiste que celle que le contrat a posée. Là où le contrat a posé une valeur, elle est imposée ; là où il n'en a pas posé, il n'y a pas de référence contre laquelle contraindre. Inventer un plafond (appétence maximale, seuil « faible » maximal) serait créer une règle de gouvernance que le PO n'a pas prise (mandat §5, principe 29 : le Dispositif est configurable par le client).
+- **L'exposition est réelle mais bornée** : (i) un seuil « faible » élevé élargit l'exception de cumul RO + Exécuteur (R2) ; (ii) une appétence haute fait paraître acceptables des Résiduels qui ne le seraient pas ; (iii) l'ISO 31000 (6.3, appétence et critères de risque fixés par l'organisation, avec la réserve de sourcing du principe 16) et le COSO ERM (appétence arrêtée par la gouvernance, pas par l'opérateur) vont dans le sens d'une visibilité pour les instances, pas d'une valeur imposée. (iv) Bornes : c'est une activation unique par tenant (q102), et les évaluations figent leur version à la création (F-8) : les évaluations faites sous le Dispositif amorcé gardent ses valeurs jusqu'à leur clôture, même après une v2 [Hypothèse à vérifier par A06, cohérente avec F-8].
+- Ce qui manque n'est donc pas une contrainte mais de la **visibilité** : l'information q101 (« l'auditeur est informé ») ne vaut contrôle que si le tiers voit ce qui a été fixé librement.
+
+**Verdict : tranché par A13 (interprétation du contrat, sans changer q98). Acceptable, avec trois conditions de traçabilité, aucune bloquante.**
+Règle à appliquer par A06 :
+1. **Ne pas étendre `contractDefaultViolations`** aux cinq paramètres libres. Aucun plafond.
+2. **Figer et exposer les valeurs libres** : `bootstrap_justification` (ou le payload d'audit de la décision BOOTSTRAP) enregistre la taille d'échelle, `appetite_thresholds`, `low_criticality_threshold`, `delegation_max_days` (NULL inclus) et `committee_treatment_min_score`. La route de consultation `change-requests?regime=BOOTSTRAP` et `RISK_FRAMEWORK_BOOTSTRAP_NOTICE` les affichent, pour que le premier membre d'Audit/Comité arrivé puisse les juger.
+3. **Signaler sans bloquer** : l'avertissement R2 (seuil « faible » au-dessus de la borne haute de la bande de criticité la plus basse) est repris dans la notice et dans la vue BOOTSTRAP comme « valeur à examiner ». Aucun refus.
+4. KRI (lot KRI, pas B-6d) : part des Dispositifs amorcés dont une valeur libre dépasse la référence R2 ; ancienneté de l'amorçage (déjà demandé).
+
+**Risque résiduel** : faible à moyen tant que Audit et Comité sont vides (revue par personne, accepté par le PO via q103), faible dès qu'un tiers est arrivé et peut lire les valeurs ; correction ensuite par une v2 au circuit normal.
+**Question PO** : aucune requise. Pour information au Decision Log : « I-D8 : q98 lu comme ne contraignant que les paramètres ayant une défaut au contrat ; valeurs libres tracées et affichées, sans plafond ». Si le PO veut un plafond (appétence ou seuil « faible »), c'est une décision nouvelle, pas une lecture de q98.
+
+### 7.2 I-D9 : un RM administrateur se nomme « administrateur sollicité »
+
+**Faits** : [Fait] L'exception q83 est acceptée par le PO parce que le RM n'a pas `user.create` (droit d'administrateur, q79) : il ne peut pas créer lui-même un second membre, donc il le fait demander. [Fait] Un RM qui cumule administrateur + RM (autorisé et marqué, q63) a `user.create`. [Fait] Le système ne peut pas vérifier l'impossibilité déclarée (I-D2 point 4).
+
+**Position** :
+- Si le RM se nomme lui-même dans `askedUserId`, la « demande à un tiers » devient une **déclaration de non-action sur soi-même** : une même personne demande, refuse (ou n'agit pas) et décide, sans qu'aucun tiers ne figure au dossier. C'est la définition de ce que la séparation des tâches (mandat §43) interdit : créer le besoin, attester son impossibilité et en tirer seul le bénéfice (s'auto-approuver).
+- La prémisse de q83 (impossibilité faute de droit) **n'existe pas** pour l'administrateur : pour lui la lecture littérale (« créer d'abord un autre utilisateur du groupe risque ») est possible. Lui laisser la voie déclarative revient à étendre l'exception à un cas que le PO n'a pas visé, et en rend la justification invérifiable.
+- Contre-argument de A05 : l'organisation qui n'a vraiment qu'une personne serait bloquée. Réponse : elle ne l'est pas, elle a deux sorties déjà existantes, sans règle nouvelle : (a) un autre administrateur du tenant (la demande est alors réelle et tracée) ; (b) la lecture littérale de q83, le RM administrateur crée le second membre du groupe risque (ce qui, dans ce cas seulement, met fin à l'amorçage, q101). Je reconnais le risque de compte de complaisance en (b) ; il n'est pas aggravé par cette règle (un administrateur peut déjà le faire aujourd'hui) et reste visible par le marquage q63 et la notification d'arrivée.
+- Un blocage de l'amorçage pour un RM administrateur seul est **fail-closed, visible et sans contournement en base** : il vaut mieux qu'une auto-approbation sans tiers au dossier.
+
+**Verdict : tranché par A13 (interprétation de q83 ; c'est un resserrement de la lecture A05, pas une décision PO). Oui, interdire.**
+Règle à appliquer par A06 :
+1. `justification.askedUserId` doit désigner un utilisateur du tenant, détenteur d'une permission d'administrateur (`ADMIN_PERMISSIONS`), **et différent du demandeur** (`askedUserId !== actor.userId`, comparé côté serveur, pas déduit du corps). Refus `ValidationError` avec un message qui nomme les deux sorties (autre administrateur, ou création d'un second membre du groupe risque).
+2. Aucune autre modification de l'amorçage : un RM administrateur n'est pas exclu de l'amorçage, il doit seulement nommer un tiers. Le marquage administrateur + RM (q63) apparaît dans la notice BOOTSTRAP.
+3. Test de niveau 1 : refus quand `askedUserId` = demandeur ; refus quand `askedUserId` n'est pas administrateur ; acceptation avec un autre administrateur.
+4. Mettre à jour la ligne I-D9 de la spec §14.2 et §5.6 point 6 (supprimer « Il peut s'agir du demandeur lui-même »).
+
+**Risque résiduel** : l'invérifiabilité de la demande reste (le tiers nommé n'atteste rien, I-D2 point 4) ; mais le dossier porte désormais deux personnes distinctes. Faible.
+**Question PO** : aucune requise. Pour information au Decision Log, avec la conséquence : un tenant dont l'unique administrateur est aussi l'unique RM ne peut pas s'amorcer par déclaration ; il crée le second membre du groupe risque ou désigne un autre administrateur. Si le PO préfère maintenir la voie déclarative pour ce cas, c'est un assouplissement à lui seul d'acter.
+
+### 7.3 Récapitulatif
+
+| Point | Verdict | Règle pour A06 | PO ? |
+|---|---|---|---|
+| I-D8 | Acceptable, tranché A13 | Pas de plafond ; figer et afficher les 5 valeurs libres (justification, route BOOTSTRAP, notice) ; avertissement R2 non bloquant | Non (information) ; plafond = décision nouvelle du PO |
+| I-D9 | Interdire, tranché A13 | `askedUserId` ≠ demandeur, côté serveur ; sorties nommées dans l'erreur | Non (information) ; assouplissement = PO |
