@@ -280,6 +280,9 @@ export class UserService {
       requestId,
     });
 
+    // B-6d (q77): a member (re)joining Audit or the Committee learns of the tenant's bootstrap decisions (best effort).
+    await this.roleService?.notifyBootstrapArrival?.(actor, id, requestId);
+
     if (lostRoles.length > 0) {
       // B8bis-04: the reactivation is already committed and audited; a notification failure is logged, not fatal.
       try {

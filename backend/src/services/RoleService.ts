@@ -16,10 +16,13 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { NotificationService } from "./NotificationService.js";
 import {
+  ADMIN_PERMISSIONS,
   isAuditGroupPermission,
   isAuditPermission,
   rolegroupAuditPermissionAllowedOn,
 } from "../domain/fixedGroupPermissions.js";
+import { bootstrapNoticeMessage } from "../domain/frameworkApproval.js";
+import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
 import type { DashboardScopeMode } from "../domain/entities/DashboardScope.js";
 
 const MAX_GROUP_REASON_LENGTH = 500;
@@ -27,19 +30,6 @@ const MAX_GROUP_REASON_LENGTH = 500;
 /** B-8 bis (q43): hard-coded for now (configurable part waits for PO q58). Risk Manager and Audit never cumulate. */
 const FORBIDDEN_CUMUL: Partial<Record<SystemGroup, SystemGroup>> = { RISK_MANAGER: "AUDIT", AUDIT: "RISK_MANAGER" };
 
-/**
- * DECISION-042 q63: "application administrator" = holds, through any active role, at least one of
- * these management permissions (role/user reads do not count). rolegroup.audit.update is the
- * administrator-only right on the Audit group's permissions.
- */
-const ADMIN_PERMISSIONS: Permission[] = [
-  "role.create", "role.update", "role.delete", "role.assign",
-  "user.create", "user.update", "user.delete", "user.reactivate",
-  "rolegroup.audit.update", "config.cumul.set", "config.committeeenforcement.set",
-  // q79 (DECISION-044): client management (module toggles, tenants, regulatory frameworks, risk categories,
-  // Excel import) counts. Methodology (config.update) does not.
-  "config.manage",
-];
 const isAdministrator = (roles: Role[]): boolean => roles.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));
 /** F-D044-01: holding one of these counts as Committee membership for the q94 rule (RM + Committee). */
 const COMMITTEE_VALIDATION_PERMISSIONS: Permission[] = [
@@ -151,6 +141,8 @@ export class RoleService {
     private readonly notifications?: NotificationService,
     /** DECISION-042 q58: Committee + Audit cumul setting; absent = allowed (the default). */
     private readonly configs?: Pick<ConfigRepository, "getByTenant">,
+    /** B-6d (q77): to tell a member arriving in Audit/Committee about bootstrap decisions; absent = no notice. */
+    private readonly frameworks?: Pick<RiskFrameworkRepository, "latestBootstrapRequest">,
   ) {}
 
   private readonly grantorsSeen = new Set<string>();
@@ -455,6 +447,34 @@ export class RoleService {
     if (role.systemGroup === "RISK_COMMITTEE") {
       await this.notifyMembers(actor, "audit.read", userId, userId, "COMMITTEE_MEMBER_ADDED",
         "Un utilisateur vient d'entrer dans le groupe Comité des risques.", requestId);
+    }
+    if (role.systemGroup === "RISK_COMMITTEE" || role.systemGroup === "AUDIT") {
+      await this.notifyBootstrapArrival(actor, userId, requestId);
+    }
+  }
+
+  /**
+   * B-6d (q77, q99): a member arriving in Audit or the Committee (assignment or reactivation) is told about the
+   * bootstrap decisions already taken in the tenant. Best effort, after commit; nothing without a BOOTSTRAP decision.
+   */
+  async notifyBootstrapArrival(actor: AuthenticatedUser, userId: string, requestId: string): Promise<void> {
+    try {
+      const decision = await this.frameworks?.latestBootstrapRequest?.(actor.tenantId);
+      if (!decision?.bootstrapJustification || !this.notifications) return;
+      const held = await this.roles.listForUser(actor.tenantId, userId);
+      if (!held.some((r) => r.systemGroup === "AUDIT" || r.systemGroup === "RISK_COMMITTEE")) return;
+      await this.notifications.record({
+        tenantId: actor.tenantId,
+        recipientUserId: userId,
+        resourceType: "MANAGEMENT",
+        resourceId: decision.id,
+        eventType: "RISK_FRAMEWORK_BOOTSTRAP_NOTICE",
+        message: bootstrapNoticeMessage(decision.bootstrapJustification),
+        triggeredBy: actor.userId,
+        requestId,
+      });
+    } catch (err) {
+      console.error(`bootstrap arrival notice for user ${userId} failed (requestId ${requestId})`, err instanceof Error ? err.message : err);
     }
   }
 

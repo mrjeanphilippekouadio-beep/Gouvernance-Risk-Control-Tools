@@ -421,28 +421,27 @@ describe("QA-B6a circuit (q34/q72/q76/q87) and self-proposal (q92)", () => {
   }
 
   it.each([
-    ["COMMITTEE", { committee: ["c1", "c2"] }, /Comité/],
-    ["AUDIT", { audit: ["a1", "a2"] }, /Audit/],
-    ["AUDIT_AND_COMMITTEE", { audit: ["a1", "a2"], committee: ["c1", "c2"] }, /Comité et Audit/],
-  ] as const)("q87: %s with 2 eligible members: approve AND reject answer 409, request stays PENDING, nothing written, withdraw still works", async (approver, o, msg) => {
+    ["COMMITTEE", { committee: ["c1", "c2"] }],
+    ["AUDIT", { audit: ["a1", "a2"] }],
+    ["AUDIT_AND_COMMITTEE", { audit: ["a1", "a2"], committee: ["c1", "c2"] }],
+  ] as const)("q100 (was q87 409): %s with 2 eligible members: a vote cannot exist before B-12, approve AND reject fall back to a Risk Manager (comment mandatory, nothing written without it)", async (approver, o) => {
     const { w, v2, r2 } = await under(approver, o);
     const before = w.snapshot();
-    await expect(w.service.approve(u2, r2, "x", R)).rejects.toThrow(ConflictError);
-    await expect(w.service.approve(u2, r2, "x", R)).rejects.toThrow(msg);
-    await expect(w.service.reject(u2, r2, "x", R)).rejects.toThrow(ConflictError);
+    await expect(w.service.approve(u2, r2, undefined, R)).rejects.toThrow(ValidationError);
+    await expect(w.service.reject(u2, r2, "  ", R)).rejects.toThrow(ValidationError);
     expect(w.snapshot()).toBe(before);
     expect(reqOf(w, r2).status).toBe("PENDING");
-    await w.service.withdraw(u1, r2, "retrait", R);
+    const out = await w.service.reject(u2, r2, "non", R);
+    expect(out.request).toMatchObject({ status: "REJECTED", decisionRegime: "FALLBACK", ratificationStatus: "PENDING" });
     expect(verOf(w, v2).status).toBe("DRAFT");
   });
 
-  it("q87 over HTTP: approve and reject answer 409 with a message naming the group", async () => {
+  it("q100 over HTTP: approve without comment answers 400 (fallback needs one), reject with a comment answers 200", async () => {
     const { w, r2 } = await under("COMMITTEE", { committee: ["c1", "c2"] });
     await withHttp(w, async (call) => {
       const a = await call("POST", `/change-requests/${r2}/approve`, {}, u2);
       const b = await call("POST", `/change-requests/${r2}/reject`, { comment: "no" }, u2);
-      expect([a.status, b.status]).toEqual([409, 409]);
-      expect(a.json.error).toMatch(/Comité/);
+      expect([a.status, b.status]).toEqual([400, 200]);
     });
   });
 
@@ -452,16 +451,16 @@ describe("QA-B6a circuit (q34/q72/q76/q87) and self-proposal (q92)", () => {
     expect(out.request).toMatchObject({ decisionRegime: "FALLBACK", ratificationStatus: "PENDING" });
   });
 
-  it("3 members of which the requester: 2 remain eligible -> a vote; a suspended member does not count", async () => {
+  it("3 members of which the requester: 2 remain eligible -> a vote (folded into a fallback, q100); a suspended member does not count", async () => {
     const a = await under("COMMITTEE", { committee: ["u1", "c2", "c3"] });
-    await expect(a.w.service.approve(u2, a.r2, "x", R)).rejects.toThrow(ConflictError);
+    await expect(a.w.service.approve(u2, a.r2, "x", R)).resolves.toMatchObject({ request: { decisionRegime: "FALLBACK" } });
     const b = await under("COMMITTEE", { committee: ["c1", "c2"], suspended: ["c2"] });
     await expect(b.w.service.approve(u2, b.r2, "repli", R)).resolves.toBeDefined();
   });
 
-  it("AUDIT_AND_COMMITTEE with a single eligible group (declared deviation): a vote of that one group only", async () => {
+  it("AUDIT_AND_COMMITTEE with a single eligible group (declared deviation): that one group's vote, folded into a fallback before B-12 (q100)", async () => {
     const { w, r2 } = await under("AUDIT_AND_COMMITTEE", { committee: ["c1", "c2"], audit: ["a1"] });
-    await expect(w.service.approve(u2, r2, "x", R)).rejects.toThrow(/groupe Comité \(/);
+    await expect(w.service.approve(u2, r2, "x", R)).resolves.toMatchObject({ request: { decisionRegime: "FALLBACK" } });
   });
 
   it("the first activation follows the Risk Manager rule even if the draft names the Committee; the rule then comes from the ACTIVE version, not from the next draft", async () => {
@@ -473,7 +472,7 @@ describe("QA-B6a circuit (q34/q72/q76/q87) and self-proposal (q92)", () => {
     const d = await w.service.createDraft(u1, p.fw, undefined, R);
     await w.service.updateDraft(u1, p.fw, d.id, { changeApprover: "RISK_MANAGER" }, R);
     const r2 = await w.service.requestActivation(u1, p.fw, d.id, "v2", R);
-    await expect(w.service.approve(u2, r2.id, undefined, R)).rejects.toThrow(ConflictError);
+    await expect(w.service.approve(u2, r2.id, undefined, R)).rejects.toThrow(ValidationError); // still governed by COMMITTEE: fallback, comment mandatory
   });
 
   it("fallback: a blank comment is refused, rejection also needs one, Audit is notified only when it has members, ratification PENDING on both outcomes (observation)", async () => {
@@ -518,15 +517,12 @@ describe("QA-B6a circuit (q34/q72/q76/q87) and self-proposal (q92)", () => {
       expect(verOf(w, v).status).toBe("DRAFT");
     });
 
-    it("receivable under a Committee vote (approve is then 409 until B-12); true -> true is not a switch", async () => {
+    it("q100: no Committee vote exists before B-12, so a switch is refused even with a Committee of 2; true -> true is not a switch", async () => {
       const w = world({ rm: ["u1", "u2", "u3"], committee: ["c1", "c2"] });
       const p = await live(w, { changeApprover: "COMMITTEE" });
       const d = await w.service.createDraft(u1, p.fw, undefined, R);
       await w.service.updateDraft(u1, p.fw, d.id, { selfProposalAllowed: true }, R);
-      const r = await w.service.requestActivation(u1, p.fw, d.id, "go", R);
-      expect(r.status).toBe("PENDING");
-      await expect(w.service.approve(u2, r.id, "x", R)).rejects.toThrow(ConflictError);
-      await w.service.withdraw(u1, r.id, "retrait", R);
+      await expect(w.service.requestActivation(u1, p.fw, d.id, "go", R)).rejects.toThrow(/auto-proposition/);
       // active already true (state only reachable after B-12): the next draft inherits true and is not refused
       const w2 = world({ rm: ["u1", "u2", "u3"], committee: ["c1", "c2"] });
       const p2 = await live(w2, { changeApprover: "COMMITTEE" });
@@ -886,7 +882,8 @@ describe("QA-B6a static checks: repository SQL, migration 055, permissions (noth
   it("every SQL statement of the repository is tenant-scoped and none deletes", () => {
     const sqls = [...repoSrc.matchAll(/`((?:SELECT|UPDATE|INSERT)[^`]*)`/g)].map((m) => m[1]!);
     expect(sqls.length).toBeGreaterThanOrEqual(20);
-    for (const s of sqls) expect(s, s).toMatch(/tenant_id/);
+    // B-6d: the tenants table is scoped by its own id (the tenant IS the row); every other statement carries tenant_id.
+    for (const s of sqls) expect(s, s).toMatch(/tenant_id|FROM tenants WHERE id = \$1/);
     expect(repoSrc).not.toMatch(/DELETE\s+FROM/i);
     // the lock that serialises concurrent decisions is on the request row, tenant-scoped, and re-checks the version status
     expect(repoSrc).toMatch(/risk_framework_change_requests WHERE tenant_id = \$1 AND id = \$2 FOR UPDATE/);

@@ -1,5 +1,8 @@
 import type {
+  BootstrapFacts,
   ChangeRequestStatus,
+  DecisionRegime,
+  RecordBootstrapDecisionInput,
   CreateActivationRequestInput,
   DecisionResult,
   FrameworkParams,
@@ -57,12 +60,28 @@ export interface RiskFrameworkRepository {
   /** One transaction: version DRAFT -> PENDING_APPROVAL and the request row. */
   createActivationRequest(input: CreateActivationRequestInput): Promise<RiskFrameworkChangeRequest>;
   getRequest(tenantId: string, id: string): Promise<RiskFrameworkChangeRequest | null>;
-  listRequests(tenantId: string, filter?: { status?: ChangeRequestStatus }): Promise<RiskFrameworkChangeRequest[]>;
+  listRequests(tenantId: string, filter?: { status?: ChangeRequestStatus; regime?: DecisionRegime }): Promise<RiskFrameworkChangeRequest[]>;
   /**
    * One transaction. APPROVED: reserve the request (FOR UPDATE), version -> ACTIVE, previous ACTIVE ->
    * ARCHIVED, scale mirror, first default. REJECTED: version back to DRAFT.
    */
   recordDecision(tenantId: string, requestId: string, decision: RecordDecisionInput, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult>;
+  /** B-6d, non-locking read for messages only (the decision never relies on it). `requesterId` = would-be decider. */
+  getBootstrapFacts?(tenantId: string, requesterId: string): Promise<BootstrapFacts>;
+  /**
+   * B-6d (spec §5.6 point 9), one transaction: lock the tenant row, reserve the request (FOR UPDATE), read the
+   * facts, call `validateLocked(facts)` (a throw aborts), then the approval steps of recordDecision with
+   * regime BOOTSTRAP. Optional on the interface (fakes); the service fails closed without it.
+   */
+  recordBootstrapDecision?(
+    tenantId: string,
+    requestId: string,
+    decision: RecordBootstrapDecisionInput,
+    validateLocked: (facts: BootstrapFacts) => Promise<void> | void,
+    audit?: TransactionalAudit<DecisionResult>,
+  ): Promise<DecisionResult>;
+  /** B-6d (q77): the latest BOOTSTRAP decision of the tenant, or null (arrival notices). */
+  latestBootstrapRequest?(tenantId: string): Promise<RiskFrameworkChangeRequest | null>;
   /** Requester's own retraction; version back to DRAFT. The service checks who may call it. */
   withdraw(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult>;
 }

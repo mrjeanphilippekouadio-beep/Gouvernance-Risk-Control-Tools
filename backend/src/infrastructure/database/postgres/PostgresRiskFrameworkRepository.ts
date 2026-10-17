@@ -7,11 +7,14 @@ import type {
   ChangeRequestKind,
   ChangeRequestStatus,
   CommitteeVoteRule,
+  BootstrapFacts,
+  BootstrapJustification,
   CreateActivationRequestInput,
   DecisionRegime,
   DecisionResult,
   FrameworkParams,
   MasteryAuthoritativeSource,
+  RecordBootstrapDecisionInput,
   RecordDecisionInput,
   RiskFramework,
   RiskFrameworkChangeRequest,
@@ -90,6 +93,8 @@ interface RequestRow {
   decision_regime: DecisionRegime | null;
   decider_group: ApproverGroup | null;
   ratification_status: "PENDING" | null;
+  fallback_cause: "LEGACY_APPROVER_PRE_B12" | null;
+  bootstrap_justification: BootstrapJustification | null;
 }
 
 const frameworkOf = (r: FrameworkRow): RiskFramework => ({
@@ -157,6 +162,8 @@ const requestOf = (r: RequestRow): RiskFrameworkChangeRequest => ({
   decisionRegime: r.decision_regime,
   deciderGroup: r.decider_group,
   ratificationStatus: r.ratification_status,
+  fallbackCause: r.fallback_cause ?? null,
+  bootstrapJustification: r.bootstrap_justification ?? null,
 });
 
 /** Domain key -> column. The only columns a draft update may ever write (whitelist, never client-named). */
@@ -498,12 +505,12 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     return rows[0] ? requestOf(rows[0]) : null;
   }
 
-  async listRequests(tenantId: string, filter?: { status?: ChangeRequestStatus }): Promise<RiskFrameworkChangeRequest[]> {
+  async listRequests(tenantId: string, filter?: { status?: ChangeRequestStatus; regime?: DecisionRegime }): Promise<RiskFrameworkChangeRequest[]> {
     const { rows } = await this.pool.query<RequestRow>(
       `SELECT * FROM risk_framework_change_requests
-       WHERE tenant_id = $1 AND ($2::text IS NULL OR status = $2)
+       WHERE tenant_id = $1 AND ($2::text IS NULL OR status = $2) AND ($3::text IS NULL OR decision_regime = $3)
        ORDER BY created_at DESC LIMIT 500`,
-      [tenantId, filter?.status ?? null],
+      [tenantId, filter?.status ?? null, filter?.regime ?? null],
     );
     return rows.map(requestOf);
   }
@@ -589,9 +596,9 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
       const decided = await c.query<RequestRow>(
         `UPDATE risk_framework_change_requests
          SET status = $3, decided_by = $4, decided_at = now(), decision_comment = $5,
-             decision_regime = $6, decider_group = $7, ratification_status = $8
+             decision_regime = $6, decider_group = $7, ratification_status = $8, fallback_cause = $9
          WHERE tenant_id = $1 AND id = $2 RETURNING *`,
-        [tenantId, requestId, d.outcome, d.decidedBy, d.comment, d.decisionRegime, d.deciderGroup, d.ratificationStatus],
+        [tenantId, requestId, d.outcome, d.decidedBy, d.comment, d.decisionRegime, d.deciderGroup, d.ratificationStatus, d.fallbackCause ?? null],
       );
       const request = requestOf(decided.rows[0]!);
 
@@ -605,45 +612,129 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
         return this.audited(c, { request, version: versionOf(back.rows[0]), previousActive: null }, audit);
       }
 
-      // The previous ACTIVE goes first: at most one ACTIVE version per Dispositif (unique index).
-      const prev = await c.query<VersionRow>(
-        `SELECT * FROM risk_framework_versions
-         WHERE tenant_id = $1 AND framework_id = $2 AND status = 'ACTIVE' FOR UPDATE`,
-        [tenantId, req.framework_id],
-      );
-      const previousActive = prev.rows[0] ? versionOf(prev.rows[0]) : null;
-      if (previousActive) {
-        const next = await c.query<{ version_number: number }>(
-          `SELECT version_number FROM risk_framework_versions WHERE tenant_id = $1 AND id = $2`,
-          [tenantId, req.version_id],
-        );
-        await c.query(
-          `UPDATE risk_framework_versions
-           SET status = 'ARCHIVED', archived_at = now(), archived_by = $3, archive_reason = $4, updated_at = now()
-           WHERE tenant_id = $1 AND id = $2`,
-          [tenantId, previousActive.id, d.decidedBy, `remplacée par v${next.rows[0]?.version_number}`],
-        );
-      }
-      const activated = await c.query<VersionRow>(
-        `UPDATE risk_framework_versions
-         SET status = 'ACTIVE', activated_at = now(), activation_request_id = $3, updated_at = now()
-         WHERE tenant_id = $1 AND id = $2 AND status = 'PENDING_APPROVAL' RETURNING *`,
-        [tenantId, req.version_id, requestId],
-      );
-      const version = activated.rows[0];
-      if (!version) throw new ConflictError("La version n'est plus en attente d'approbation");
-
-      // Scale status mirror (spec §2.3), F-B6a-01: same guards as RatingScaleService.activateVersion, same transaction.
-      await this.mirrorScale(c, tenantId, versionOf(version));
-      // The first activated Dispositif of a tenant becomes its default.
-      await c.query(
-        `UPDATE risk_frameworks SET is_default = true, updated_at = now()
-         WHERE tenant_id = $1 AND id = $2 AND archived_at IS NULL
-           AND NOT EXISTS (SELECT 1 FROM risk_frameworks WHERE tenant_id = $1 AND is_default AND archived_at IS NULL)`,
-        [tenantId, req.framework_id],
-      );
-      return this.audited(c, { request, version: versionOf(version), previousActive }, audit);
+      return this.activate(c, tenantId, req, requestId, d.decidedBy, request, audit);
     });
+  }
+
+  /**
+   * Approval steps shared by recordDecision and recordBootstrapDecision (spec §4): previous ACTIVE archived,
+   * version ACTIVE, scale mirror, first default, audit. The version guard (059/062) re-checks the request in SQL.
+   */
+  private async activate(
+    c: PoolClient,
+    tenantId: string,
+    req: RequestRow,
+    requestId: string,
+    decidedBy: string,
+    request: RiskFrameworkChangeRequest,
+    audit?: TransactionalAudit<DecisionResult>,
+  ): Promise<DecisionResult> {
+    // The previous ACTIVE goes first: at most one ACTIVE version per Dispositif (unique index).
+    const prev = await c.query<VersionRow>(
+      `SELECT * FROM risk_framework_versions
+       WHERE tenant_id = $1 AND framework_id = $2 AND status = 'ACTIVE' FOR UPDATE`,
+      [tenantId, req.framework_id],
+    );
+    const previousActive = prev.rows[0] ? versionOf(prev.rows[0]) : null;
+    if (previousActive) {
+      const next = await c.query<{ version_number: number }>(
+        `SELECT version_number FROM risk_framework_versions WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, req.version_id],
+      );
+      await c.query(
+        `UPDATE risk_framework_versions
+         SET status = 'ARCHIVED', archived_at = now(), archived_by = $3, archive_reason = $4, updated_at = now()
+         WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, previousActive.id, decidedBy, `remplacée par v${next.rows[0]?.version_number}`],
+      );
+    }
+    const activated = await c.query<VersionRow>(
+      `UPDATE risk_framework_versions
+       SET status = 'ACTIVE', activated_at = now(), activation_request_id = $3, updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND status = 'PENDING_APPROVAL' RETURNING *`,
+      [tenantId, req.version_id, requestId],
+    );
+    const version = activated.rows[0];
+    if (!version) throw new ConflictError("La version n'est plus en attente d'approbation");
+
+    // Scale status mirror (spec §2.3), F-B6a-01: same guards as RatingScaleService.activateVersion, same transaction.
+    await this.mirrorScale(c, tenantId, versionOf(version));
+    // The first activated Dispositif of a tenant becomes its default.
+    await c.query(
+      `UPDATE risk_frameworks SET is_default = true, updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND archived_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM risk_frameworks WHERE tenant_id = $1 AND is_default AND archived_at IS NULL)`,
+      [tenantId, req.framework_id],
+    );
+    return this.audited(c, { request, version: versionOf(version), previousActive }, audit);
+  }
+
+  async getBootstrapFacts(tenantId: string, requesterId: string): Promise<BootstrapFacts> {
+    const c = await this.pool.connect();
+    try {
+      return await this.readBootstrapFacts(c, tenantId, requesterId);
+    } finally {
+      c.release();
+    }
+  }
+
+  private async readBootstrapFacts(c: Pick<PoolClient, "query">, tenantId: string, requesterId: string): Promise<BootstrapFacts> {
+    const ended = await c.query<{ ended: Date | null }>(
+      `SELECT risk_framework_bootstrap_ended_at AS ended FROM tenants WHERE id = $1`, [tenantId]);
+    // Active member = assignment not revoked, user not suspended, role not disabled (same as B-8 / the 062 trigger).
+    const groups = await c.query<{ system_group: string; user_ids: string[] }>(
+      `SELECT r.system_group, array_agg(DISTINCT ur.user_id::text) AS user_ids
+       FROM user_roles ur
+       JOIN roles r ON r.id = ur.role_id AND r.tenant_id = ur.tenant_id AND r.deleted_at IS NULL AND r.system_group IS NOT NULL
+       JOIN users u ON u.id = ur.user_id AND u.tenant_id = ur.tenant_id AND u.deleted_at IS NULL
+       WHERE ur.tenant_id = $1 AND ur.revoked_at IS NULL
+       GROUP BY r.system_group`,
+      [tenantId],
+    );
+    const ids = (g: string) => groups.rows.find((r) => r.system_group === g)?.user_ids ?? [];
+    const first = await c.query(
+      `SELECT 1 FROM risk_framework_versions WHERE tenant_id = $1 AND activated_at IS NOT NULL LIMIT 1`, [tenantId]);
+    return {
+      endedAt: ended.rows[0]?.ended ?? null,
+      activeMembers: { RISK_MANAGER: ids("RISK_MANAGER").length, COMMITTEE: ids("RISK_COMMITTEE").length, AUDIT: ids("AUDIT").length },
+      requesterIsActiveRiskManager: ids("RISK_MANAGER").includes(requesterId),
+      firstActivationOfTenant: first.rows.length === 0,
+    };
+  }
+
+  async recordBootstrapDecision(
+    tenantId: string,
+    requestId: string,
+    d: RecordBootstrapDecisionInput,
+    validateLocked: (facts: BootstrapFacts) => Promise<void> | void,
+    audit?: TransactionalAudit<DecisionResult>,
+  ): Promise<DecisionResult> {
+    return this.tx(async (c) => {
+      // Same lock as the 062 end-marker trigger: a concurrent member assignment waits for us, or has already ended it.
+      const tenant = await c.query(`SELECT id FROM tenants WHERE id = $1 FOR UPDATE`, [tenantId]);
+      if (tenant.rows.length === 0) throw new NotFoundError("Tenant", tenantId);
+      const req = await this.lockPending(c, tenantId, requestId);
+      if (req.requested_by !== d.decidedBy) throw new ValidationError("L'amorçage ne peut être décidé que par le demandeur");
+      await validateLocked(await this.readBootstrapFacts(c, tenantId, req.requested_by));
+      const decided = await c.query<RequestRow>(
+        `UPDATE risk_framework_change_requests
+         SET status = 'APPROVED', decided_by = $3, decided_at = now(), decision_comment = $4,
+             decision_regime = 'BOOTSTRAP', decider_group = 'RISK_MANAGER', ratification_status = NULL,
+             fallback_cause = NULL, bootstrap_justification = $5
+         WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+        [tenantId, requestId, d.decidedBy, d.comment, JSON.stringify(d.justification)],
+      );
+      return this.activate(c, tenantId, req, requestId, d.decidedBy, requestOf(decided.rows[0]!), audit);
+    });
+  }
+
+  async latestBootstrapRequest(tenantId: string): Promise<RiskFrameworkChangeRequest | null> {
+    const { rows } = await this.pool.query<RequestRow>(
+      `SELECT * FROM risk_framework_change_requests
+       WHERE tenant_id = $1 AND decision_regime = 'BOOTSTRAP' ORDER BY decided_at DESC LIMIT 1`,
+      [tenantId],
+    );
+    return rows[0] ? requestOf(rows[0]) : null;
   }
 
   async withdraw(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult> {

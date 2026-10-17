@@ -265,12 +265,12 @@ const findingService = new FindingService(
   anomalyRepository,
 );
 const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
-const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository);
+const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
+const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
 // B-6b: the Dispositif is wired into the services that read or used to own the methodology parameters.
-const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
 const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository, riskCategoryRepository, ratingScaleRepository, riskFrameworkRepository);
 const ratingScaleService = new RatingScaleService(ratingScaleRepository, auditRepository, riskEvaluationRepository, riskAppetiteRepository, configRepository, riskFrameworkRepository);
 const riskFrameworkService = new RiskFrameworkService(

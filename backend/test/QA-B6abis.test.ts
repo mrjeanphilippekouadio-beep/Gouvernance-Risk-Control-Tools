@@ -452,12 +452,11 @@ describe("QA-B6abis changeApprover guard (C-B6a-02) and withdraw reason (C-B6a-0
     // no Committee member: fallback to a Risk Manager, whose comment becomes mandatory
     await expect(w.service.approve(u3, r2.id, undefined, R)).rejects.toThrow(ValidationError);
     expect(w.requests.find((x) => x.id === r2.id)!.status).toBe("PENDING");
-    // a Committee of 2: the vote (B-12) is awaited, 409
+    // a Committee of 2: the vote (B-12) cannot be exercised, q100 folds it into the same fallback (comment mandatory)
     w.groups.RISK_COMMITTEE = ["c1", "c2"];
-    await expect(w.service.approve(u3, r2.id, "x", R)).rejects.toThrow(ConflictError);
-    await expect(w.service.reject(u3, r2.id, "x", R)).rejects.toThrow(ConflictError);
+    await expect(w.service.reject(u3, r2.id, undefined, R)).rejects.toThrow(ValidationError);
     expect(w.requests.find((x) => x.id === r2.id)!.status).toBe("PENDING");
-    await expect(w.service.withdraw(u2, r2.id, "retrait", R)).resolves.toBeDefined();
+    await expect(w.service.reject(u3, r2.id, "x", R)).resolves.toMatchObject({ request: { status: "REJECTED" } });
   });
 
   it("withdraw: missing / blank / too long reason -> 400 and the request stays PENDING; a real reason works and is audited", async () => {
