@@ -1,26 +1,7 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import { z } from "zod";
-import { boundedArray } from "../validation.js";
 import { ABSOLUTE_MAX_SCORE } from "../../domain/scoring.js";
 import type { ConfigService } from "../../services/ConfigService.js";
-
-const LevelThresholdBody = z.object({
-  label: z.string().min(1),
-  min: z.number().int(),
-  max: z.number().int(),
-});
-
-const UpdateMethodologyBody = z.object({
-  scoreFormula: z.enum(["P_X_I", "WEIGHTED_SUM"]).optional(),
-  levelThresholds: boundedArray(LevelThresholdBody, 50).optional(),
-  impactRetenuRule: z.enum(["MAX", "AVERAGE", "WEIGHTED_SUM"]).optional(),
-  reason: z.string().min(1),
-});
-
-const UpdateAppetiteModeBody = z.object({
-  mode: z.enum(["AUTO", "MANUEL", "AUTO_AVEC_SURCHARGE_MANUELLE"]),
-  reason: z.string().min(1),
-});
 
 const UpdateEvaluationModeBody = z.object({
   mode: z.enum(["CLASSIQUE", "PARTICIPATIF"]),
@@ -43,7 +24,7 @@ const UpdateCommitteeAuditCumulBody = z.object({
   reason: z.string().min(1).max(500),
 });
 
-/** ACT-220 (PUT /config), ACT-226 (PUT /config/appetite-mode) and DIV-06 (PUT /config/evaluation-mode) — see ConfigService for what's deliberately not wired yet. */
+/** PUT /config and PUT /config/appetite-mode answer 410 (DECISION-054); DIV-06 evaluation-mode and Lot A committee settings stay. */
 export function configRouter(configService: ConfigService): Router {
   const router = Router();
 
@@ -56,26 +37,13 @@ export function configRouter(configService: ConfigService): Router {
     }
   });
 
-  router.put("/", async (req, res, next) => {
-    try {
-      const body = UpdateMethodologyBody.parse(req.body);
-      const { reason, ...input } = body;
-      const config = await configService.updateMethodology(req.user, input, reason, req.requestId);
-      res.json({ data: config });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.put("/appetite-mode", async (req, res, next) => {
-    try {
-      const body = UpdateAppetiteModeBody.parse(req.body);
-      const config = await configService.updateAppetiteMode(req.user, body.mode, body.reason, req.requestId);
-      res.json({ data: config });
-    } catch (err) {
-      next(err);
-    }
-  });
+  // DECISION-054: these two settings are read by no code (scoring and appetite are driven by the Dispositif).
+  // Accepting a write would let a client believe it changed something: answer clearly instead.
+  const notApplied: RequestHandler = (_req, res) => {
+    res.status(410).json({ error: "Réglage non appliqué : la formule de score, les seuils de niveau, la règle d'impact retenu et le mode d'appétence sont portés par le Dispositif (nouvelle version)." });
+  };
+  router.put("/", notApplied);
+  router.put("/appetite-mode", notApplied);
 
   router.put("/evaluation-mode", async (req, res, next) => {
     try {

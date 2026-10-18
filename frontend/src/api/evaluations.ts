@@ -151,8 +151,6 @@ export const ratingScalesApi = {
   list: (token: string, includeArchived = false) => apiRequest<RatingScale[]>(`/api/v1/rating-scales${includeArchived ? "?includeArchived=true" : ""}`, { token }),
   create: (token: string, input: { name: string; version: string; probabilityLevels: number; impactLevels: number }) =>
     apiRequest<RatingScale>("/api/v1/rating-scales", { method: "POST", body: input, token }),
-  activate: (token: string, id: string) =>
-    apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/activate`, { method: "PATCH", token }),
   updateThresholds: (token: string, id: string, thresholds: ScoreThreshold[]) =>
     apiRequest<RatingScale>(`/api/v1/rating-scales/${encodeURIComponent(id)}/thresholds`, { method: "PUT", body: { thresholds }, token }),
   updateImpactAxes: (token: string, id: string, input: { axes: ImpactAxis[]; retainedImpactRule?: "MAX" | "AVERAGE" | "WEIGHTED_SUM" }) =>

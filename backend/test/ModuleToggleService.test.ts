@@ -65,19 +65,32 @@ describe("ModuleToggleService", () => {
 
   it("rejects toggle for an actor without config.manage", async () => {
     const service = new ModuleToggleService(inMemoryModuleToggleRepository(), inMemoryAuditRepository());
-    await expect(service.toggle(readOnlyActor, "RISK", false, "REQ-1")).rejects.toThrow(ForbiddenError);
+    await expect(service.toggle(readOnlyActor, "RISK", false, "motif", "REQ-1")).rejects.toThrow(ForbiddenError);
   });
 
   it("rejects an unknown module name", async () => {
     const service = new ModuleToggleService(inMemoryModuleToggleRepository(), inMemoryAuditRepository());
-    await expect(service.toggle(admin, "NOT_A_MODULE", false, "REQ-1")).rejects.toThrow(ValidationError);
+    await expect(service.toggle(admin, "NOT_A_MODULE", false, "motif", "REQ-1")).rejects.toThrow(ValidationError);
   });
 
   it("disables a module and reflects it back in list()", async () => {
     const service = new ModuleToggleService(inMemoryModuleToggleRepository(), inMemoryAuditRepository());
-    await service.toggle(admin, "KRI", false, "REQ-1");
+    await service.toggle(admin, "KRI", false, "motif", "REQ-1");
     const modules = await service.list(admin);
     expect(modules.find((m) => m.moduleName === "KRI")?.enabled).toBe(false);
     expect(modules.find((m) => m.moduleName === "KPI")?.enabled).toBe(true);
+  });
+
+  it("DECISION-058: requires a reason, and the audit row carries before, after and the reason", async () => {
+    const events: Array<{ oldValue: unknown; newValue: unknown; reason: string | null }> = [];
+    const audit: AuditRepository = { ...inMemoryAuditRepository(), async record(e) { events.push(e as never); } };
+    const service = new ModuleToggleService(inMemoryModuleToggleRepository(), audit);
+    await expect(service.toggle(admin, "KRI", false, "   ", "REQ-1")).rejects.toThrow(ValidationError);
+    expect(events).toHaveLength(0);
+    await service.toggle(admin, "KRI", false, " maintenance ", "REQ-2");
+    await service.toggle(admin, "KRI", true, "fin de maintenance", "REQ-3");
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ oldValue: null, newValue: { enabled: false }, reason: "maintenance" });
+    expect(events[1]).toMatchObject({ oldValue: { enabled: false }, newValue: { enabled: true } });
   });
 });

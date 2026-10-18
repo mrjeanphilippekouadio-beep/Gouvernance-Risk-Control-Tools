@@ -4,7 +4,6 @@ import type { ProcessService } from "../../services/ProcessService.js";
 
 const Level = z.enum(["PROCESS", "SUBPROCESS", "ACTIVITY"]);
 const DocumentType = z.enum(["CHARTER", "POLICY", "PROCEDURES_MANUAL", "PROCEDURE", "WORK_INSTRUCTION"]);
-const EvaluationMode = z.enum(["CLASSIQUE", "PARTICIPATIF"]);
 
 /**
  * Governance finding (2026-09-29 architect review, DECISION-006; widened
@@ -32,7 +31,6 @@ const UpdateProcessBody = CreateProcessBody.partial();
 // B-8 bis (q46): mandatory on creation only (the update body keeps it optional/nullish).
 const CreateProcessBodyStrict = CreateProcessBody.extend({ departmentId: z.guid() });
 const ArchiveProcessBody = z.object({ reason: z.string().min(1) });
-const SetEvaluationModeBody = z.object({ evaluationMode: EvaluationMode.nullable() });
 
 export function processesRouter(processService: ProcessService): Router {
   const router = Router();
@@ -77,23 +75,12 @@ export function processesRouter(processService: ProcessService): Router {
   });
 
   /**
-   * DECISION-006 governance finding: dedicated route for
-   * Process.evaluationMode, gated by process.evaluationmode.set (reserved
-   * to the Risk Manager) instead of the generic PATCH above.
+   * DECISION-054 (one write path): the direct write of Process.evaluationMode is closed — contract §10
+   * withdraws process.evaluationmode.set. The only path is the propose/validate circuit
+   * (POST /process-evaluation-mode-requests, then /:id/validate), maker-checker.
    */
-  router.put("/:id/evaluation-mode", async (req, res, next) => {
-    try {
-      const body = SetEvaluationModeBody.parse(req.body);
-      const process = await processService.setEvaluationMode(
-        req.user,
-        req.params["id"] as string,
-        body.evaluationMode,
-        req.requestId,
-      );
-      res.json({ data: process });
-    } catch (err) {
-      next(err);
-    }
+  router.put("/:id/evaluation-mode", (_req, res) => {
+    res.status(410).json({ error: "Écriture directe fermée : proposez le changement via /process-evaluation-mode-requests (validation par un tiers)." });
   });
 
   router.post("/:id/archive", async (req, res, next) => {
