@@ -570,7 +570,7 @@ describe("QA-B6b static guarantees behind the loosened tests", () => {
 
   it("PostgresRiskEvaluationRepository.create writes all six snapshot columns in order and has no UPDATE path for them", () => {
     const src = readFileSync("src/infrastructure/database/postgres/PostgresRiskEvaluationRepository.ts", "utf8");
-    expect(src).toMatch(/risk_framework_version_id, rating_scale_id, rating_scale_version,\s+committee_evaluation_min_score, committee_evaluation_enforced, committee_treatment_min_score\)\s+VALUES \(\$1, \$2, \$3, 'BROUILLON', \$4, \$5, \$6, \$7, \$8, \$9, \$10, \$11, \$12, \$13\)/);
+    expect(src).toMatch(/risk_framework_version_id, rating_scale_id, rating_scale_version,\s+committee_evaluation_min_score, committee_evaluation_enforced, committee_treatment_min_score, sub_category_id\)\s+VALUES \(\$1, \$2, \$3, 'BROUILLON', \$4, \$5, \$6, \$7, \$8, \$9, \$10, \$11, \$12, \$13, \$14\)/);
     expect(src).not.toMatch(/SET[^`]*risk_framework_version_id/);
     expect(src).not.toMatch(/SET[^`]*committee_(evaluation|treatment)_/);
   });

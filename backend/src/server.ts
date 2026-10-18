@@ -295,6 +295,7 @@ const riskEvaluationService = new RiskEvaluationService(
   processRepository,
   configRepository,
   riskFrameworkRepository,
+  riskCategoryRepository,
 );
 const treatmentDecisionService = new TreatmentDecisionService(
   treatmentDecisionRepository,

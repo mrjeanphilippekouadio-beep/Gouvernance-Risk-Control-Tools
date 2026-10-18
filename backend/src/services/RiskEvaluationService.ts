@@ -20,6 +20,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors
 import { requirePermission } from "../domain/permissions.js";
 import { defaultCommitteeThreshold, maxScoreForScale } from "../domain/scoring.js";
 import { resolveMaxScore } from "./scoreCeiling.js";
+import type { RiskCategoryRepository } from "../domain/repositories/RiskCategoryRepository.js";
 import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
 import { findAppetite } from "../domain/frameworkAppetite.js";
 import { NO_APPLICABLE_FRAMEWORK_MESSAGE, resolveApplicableVersion } from "./riskFrameworkResolution.js";
@@ -70,6 +71,8 @@ export interface AppetiteSuggestion {
 
 export interface AppetiteComparison {
   residualScore: number;
+  /** q145: false = evaluation with a legacy free label (threshold matched by label, may be missing or wrong). */
+  linkedToCategory: boolean;
   threshold: number | null;
   source: "OVERRIDE" | "AUTO" | "NONE";
   exceeded: boolean | null;
@@ -170,11 +173,17 @@ export class RiskEvaluationService {
      * the "ACTIVE scale". When absent the pre-B-6b behaviour is kept (tests that never exercise it).
      */
     private readonly frameworks?: FrameworkReads,
+    /**
+     * q145: when wired (always in server.ts), the sub-category of an evaluation is chosen by `subCategoryId` in the
+     * referential (tenant, active, with a parent) and its label is derived here. Without it (tests only) the legacy
+     * free-text `subCategory` is kept; a `subCategoryId` without this dependency is refused (fail closed).
+     */
+    private readonly riskCategories?: Pick<RiskCategoryRepository, "getById">,
   ) {}
 
   async create(
     actor: AuthenticatedUser,
-    input: Omit<CreateRiskEvaluationInput, "tenantId" | "evaluatorId" | "evaluationMode">,
+    input: Omit<CreateRiskEvaluationInput, "tenantId" | "evaluatorId" | "evaluationMode" | "subCategory"> & { subCategory?: string },
     requestId: string,
   ): Promise<RiskEvaluation> {
     requirePermission(actor, "riskevaluation.create");
@@ -182,7 +191,7 @@ export class RiskEvaluationService {
     if (!EVALUATION_TYPES.includes(input.evaluationType)) {
       throw new ValidationError(`evaluationType must be one of: ${EVALUATION_TYPES.join(", ")}`);
     }
-    if (!input.subCategory?.trim()) throw new ValidationError("subCategory is required");
+    const { subCategory, subCategoryId } = await this.resolveSubCategory(actor.tenantId, input);
     if (!input.riskId?.trim()) throw new ValidationError("riskId is required");
 
     let risk = null;
@@ -227,7 +236,8 @@ export class RiskEvaluationService {
       // Never client-supplied — the caller's Omit<...> above already
       // excludes it from the input type, this is belt-and-braces.
       evaluatorId: actor.userId,
-      subCategory: input.subCategory.trim(),
+      subCategory,
+      subCategoryId,
       entity: input.entity?.trim() || null,
       evaluationMode,
       ...(snapshot ? { snapshot } : {}),
@@ -246,6 +256,26 @@ export class RiskEvaluationService {
     });
 
     return evaluation;
+  }
+
+  /**
+   * q145 (same rule as q133): `subCategoryId` must be an active sub-category (parent set) of the actor's tenant; the label is the
+   * category name, never the client's text. Same message for unknown, foreign-tenant and inactive ids (no oracle).
+   */
+  private async resolveSubCategory(
+    tenantId: string,
+    input: { subCategory?: string; subCategoryId?: string | null },
+  ): Promise<{ subCategory: string; subCategoryId: string | null }> {
+    if (!this.riskCategories) {
+      if (input.subCategoryId) throw new ValidationError("Risk category validation is not available: RiskCategoryRepository is not configured");
+      if (!input.subCategory?.trim()) throw new ValidationError("subCategory is required");
+      return { subCategory: input.subCategory.trim(), subCategoryId: null };
+    }
+    if (!input.subCategoryId) throw new ValidationError("subCategoryId is required: pick a sub-category of the risk categories");
+    const cat = await this.riskCategories.getById(tenantId, input.subCategoryId);
+    if (!cat || !cat.active) throw new ValidationError(`Risk category ${input.subCategoryId} does not exist in this tenant`);
+    if (!cat.parentId) throw new ValidationError(`Risk category ${input.subCategoryId} is a top-level category: pick a sub-category`);
+    return { subCategory: cat.name, subCategoryId: cat.id };
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<RiskEvaluation> {
@@ -436,7 +466,7 @@ export class RiskEvaluationService {
       if (!this.frameworks) throw new Error("RiskFrameworkRepository is not configured for RiskEvaluationService");
       const version = await this.frameworks.getVersionById(tenantId, evaluation.riskFrameworkVersionId);
       if (!version) throw new ValidationError("The Dispositif version of this evaluation no longer exists");
-      const entry = findAppetite(version.appetiteThresholds, evaluation.subCategory, evaluation.entity);
+      const entry = findAppetite(version.appetiteThresholds, evaluation.subCategory, evaluation.entity, evaluation.subCategoryId);
       return { threshold: entry?.threshold ?? null, methodologyVersion: entry ? `v${version.versionNumber}` : null };
     }
     if (!this.riskAppetites) return { threshold: null, methodologyVersion: null };
@@ -457,6 +487,7 @@ export class RiskEvaluationService {
 
     return {
       residualScore: evaluation.residualScore,
+      linkedToCategory: Boolean(evaluation.subCategoryId),
       threshold: evaluation.appetiteThresholdApplied,
       source,
       exceeded: evaluation.appetiteExceeded,
