@@ -203,3 +203,28 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 - Diff de mes tests relu : seuls `it.fails` -> `it` (QA-B6d-01, 3 limites connues), faux dépôts enrichis, clé `deciderAlsoAdministrator`, `REFUSED:ENDED` pour « consequence » (cohérent : la fin est désormais posée). Aucune assertion affaiblie. Titre périmé « (currently accepted) » restant dans QA-B6d.test.ts (cosmétique).
 - INFO : F-B6d-01 ne remonte pas la chaîne (le demandeur peut faire accorder le droit par un tiers qu'il a lui-même créé) ; grantedBy NULL (seed) passe. Limite de conception, pour Security/PO, pas un défaut.
 - Ajouts : +2 tests service (QA-B6d.test.ts), +4 tests PG (QA-B6d-pg.test.ts).
+
+## 2026-10-18 — QA-SWP (lot « un seul chemin d'écriture », 5b35762 / ebbc70d, DECISION-054/058/062) — PASS_WITH_RESERVES
+
+- `backend/test/QA-SWP.test.ts` : 23 tests (18 PASS + 1 `it.fails` ; 5 PG réels sur `grc_qa_a08`, socket `/tmp/claude-0/pgsock`, port 5531, var `QA_SWP_PGHOST`, avec PG : 21 PASS + 2 `it.fails`). Suite 2033 pass + 1 expected fail ; typecheck OK. Pas un avis Security/Privacy/Compliance.
+- Tient : 410 sur PUT /config, /config/appetite-mode, /processes/:id/evaluation-mode quels que soient corps/permissions, rien écrit ; aucun appelant de `updateMethodology/updateAppetiteMode/setEvaluationMode/setMode` dans src ; PATCH/POST /processes ignorent `evaluationMode` (zod strip) ; import Excel n'écrit aucun réglage ; écrivains appétence/échelle/comité fermés quand le Dispositif est câblé ; toggle : motif absent/vide/espaces/non-chaîne/>500 = 400 sans écriture, 500 exact accepté, trim en audit, idempotence.
+- QA-SWP-01 MAJOR : toggle = upsert PUIS audit, pas de transaction ; audit en panne => module désactivé sans trace (confirmé sur PG). Les dépôts RatingScale ont `auditsInTransaction`, pas ModuleToggle.
+- QA-SWP-02 MINOR : premier changement d'un module jamais persisté audite `oldValue: null` alors que l'état effectif est « activé ».
+- QA-SWP-03 MAJOR (hors lot, listé « à vérifier ») : `RatingScaleService.disable` ne regarde pas les versions de Dispositif BROUILLON ; le trigger de gel ne couvre que status <> DRAFT ; la suppression douce réussit, `getById` renvoie null, et `RiskFrameworkService` utilise `getById(...)!` (l. 598).
+- QA-SWP-04 MINOR : textes périmés (AppetitePage « formulaire ci-dessus » ; RatingScalesPage « Une version doit être activée » et « RiskFramework n'existe pas côté backend » dans la même alerte que le nouveau texte ; commentaire de `processEvaluationModeRequests.routes.ts` dit que PUT existe).
+- INFO : « remettre à hérité » perdue sans écran concerné (aucun appel frontend) ; le circuit ne sait pas exprimer null (zod + CHECK) ; un mode explicite gagne pour toujours sur le défaut du Dispositif ; `process.evaluationmode.set` orpheline (ne donne plus rien) ; circuit inutilisable en structure à une personne (maker-checker, q126/q127) ; `committee-audit-cumul` reste un écrivain admin seul non fermé (conforme DECISION-058).
+- Pratique : corps JSON non-objet sur un PUT => 500 dans mon harnais (hors lot, harnais sans le middleware de server.ts, non confirmé).
+
+## 2026-10-18 — Retest QA-SWP (07055f2) — RETEST_PASS
+
+- QA-SWP-01/02/03/04 et F-SWP-01 fermés. Suite complète avec les 3 jeux pg sur `grc_qa_a08` (`PGPORT=5531 QA_FB6B02_PGHOST=/tmp/claude-0/pgsock QA_FB6B02_PGDB=grc_qa_a08 QA_SWP_PGHOST=...`, `--no-file-parallelism`) : 2085 pass, 0 échec ; sans pg : 2046 pass. Typecheck OK.
+- Tests modifiés par A06 relus : faux dépôt toggle modélise rollback (même contrat que le dépôt PG), PG-01 provoque l'échec par entity_type NULL puis vérifie 0 ligne, PG-03 attend un refus /Dispositif/ et getById non null, oldValue `{enabled:true}` : durcissements, aucun affaiblissement.
+- Câblage : `server.ts` l.198/277 passe `PostgresRatingScaleRepository` (qui implémente `isReferencedByFrameworkVersion`) à `RatingScaleService` ; le service l'appelle avec `?.`. INFO : méthode optionnelle => un autre dépôt sans elle échoue ouvert ; la rendre obligatoire.
+- Pratique : après redémarrage du conteneur, relancer PG avec `chmod 755 /tmp/claude-0; rm postmaster.pid; setpriv --reuid=postgres ... pg_ctl -D /tmp/claude-0/pgdata -o "-k /tmp/claude-0/pgsock -p 5531 -c listen_addresses=''" start` ; les suites *-pg lisent le port via PGPORT (défaut 5432). Un premier lancement à froid a échoué 1 test pg sans reproduction.
+
+## 2026-10-18 — QA-063 (PR #186 : migration 063 + édition des seuils d'appétence) — GO avec réserves
+
+- `backend/test/QA-063.test.ts` (5 tests PG réels, `QA_SWP_PGHOST`) : version sur échelle d'un autre tenant refusée (23514, insert et update), échelle référencée par version ARCHIVED non supprimable (23503), ligne héritée (version sur échelle déjà supprimée) : autres écritures OK, nouvelle référence refusée, `softDelete` traduit 23503 en ValidationError (679930f), search_path épinglé. Suite 2097 pass + 25 skipped (3 jeux pg) ; typecheck et build frontend OK. Down/up/down/up rejoués sur copie : OK.
+- RÉGRESSION trouvée et corrigée (fixture) : `QA-FB6b02-pg.test.ts` créait une version du tenant B sur l'échelle du tenant A (légal avant 063) ; 063 la refuse. Fixture : échelle propre au tenant.
+- Constat frontend : `JSON.stringify` vs ordre des clés jsonb (entity, threshold, description, subCategory, subCategoryId) => liste envoyée à chaque sauvegarde ; confirmé par PG ; corrigé par l'orchestrateur (6cb0b67, 01325d3).
+- Piège : `SET session_replication_role = replica` sur une connexion du pool y reste après `release()` : RESET avant de rendre la connexion, sinon les triggers sont ignorés pour les requêtes suivantes.

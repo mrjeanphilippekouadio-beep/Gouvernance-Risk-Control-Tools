@@ -12,12 +12,10 @@ const RejectBody = z.object({ reason: z.string().min(1) });
 
 /**
  * DECISION-006 (Option A, PO-confirmed 2026-09-29): the process-owner
- * proposal/validation workflow. `ProcessEvaluationModeRequestService.
- * setMode` (the direct Risk-Manager path) deliberately has no route
- * here — `processes.routes.ts`'s existing `PUT /:id/evaluation-mode`
- * (ProcessService.setEvaluationMode) already exposes that exact
- * operation under the same `process.evaluationmode.set` permission;
- * adding a second route for it would just be two paths to one write.
+ * proposal/validation workflow. DECISION-054: this circuit is the ONLY
+ * write path to `processes.evaluation_mode`. The direct Risk-Manager path
+ * (the former direct setter on the process service) has no route: `PUT
+ * /processes/:id/evaluation-mode` answers 410. Do not re-expose it.
  */
 export function processEvaluationModeRequestsRouter(service: ProcessEvaluationModeRequestService): Router {
   const router = Router();

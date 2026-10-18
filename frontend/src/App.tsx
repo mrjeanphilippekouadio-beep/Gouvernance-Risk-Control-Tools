@@ -200,8 +200,8 @@ function App() {
         <div className="workspace-grid">
           <main className="app-content">
             {view === "cartography" && <CartographyPage token={token} />}
-            {view === "appetite" && <AppetitePage token={token} />}
-            {view === "scales" && <RatingScalesPage token={token} />}
+            {view === "appetite" && <AppetitePage token={token} onOpenFrameworks={() => go("frameworks")} />}
+            {view === "scales" && <RatingScalesPage token={token} onOpenFrameworks={() => go("frameworks")} />}
             {view === "controls" && <ControlsPage token={token} />}
             {view === "monitoring" && <ControlMonitoringPage token={token} />}
             {view === "findings" && <AuditFindingsPage token={token} />}

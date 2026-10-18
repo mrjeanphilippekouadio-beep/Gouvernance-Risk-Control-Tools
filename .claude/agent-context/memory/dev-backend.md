@@ -280,3 +280,34 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - 062 : colonnes `tenants.risk_framework_bootstrap_end_cause` + `_end_ref` (CHECK valeurs + cohérence avec `ended_at`, garde 42501 étendue ; une cause manquante peut être complétée une fois). Causes : SECOND_ELIGIBLE_MEMBER, USER_REACTIVATED, ROLE_REACTIVATED, ROLE_GROUP_CHANGED, PRE_EXISTING_AT_MIGRATION. Trigger `roles_bootstrap_end_mark` (AFTER UPDATE OF system_group, deleted_at). Verrou `FOR NO KEY UPDATE` (trigger + `recordBootstrapDecision`). Piège : un `--` de commentaire dans une ligne de faux dépôt en one-liner avale le `},` suivant.
 - Notice : `BootstrapJustification.deciderAlsoAdministrator` (construit serveur, optionnel) ; message = motif (administrateur cité, date, résultat) + marquage. Aucune notification à l'administrateur cité (q103/q-PO en attente).
 - Tests : B6d.test (F-B6d-01, notice, câblage server.ts C-B6d-08), QA-B6d(-pg) `.fails` retirés + causes. Les revues restent à refaire (A10/A08/A14).
+
+## 2026-10-18 Correctifs « un seul chemin d'écriture » (DECISION-054/058)
+
+- Le worktree dispatché était sur `main` (388 commits de retard) : `git reset --hard <branche cible>` sur un arbre propre avant tout (principe 1 confirmé). Le frontend exige `npm ci` depuis la RACINE puis `npm run build` dans `packages/design-system` avant `frontend npm run build`.
+- Fermeture par réponse 410 plutôt que suppression de route (message clair au client) : `PUT /processes/:id/evaluation-mode`, `PUT /config`, `PUT /config/appetite-mode`. Les méthodes de service (`ProcessService.setEvaluationMode`, `ConfigService.updateMethodology/updateAppetiteMode`) et la permission `process.evaluationmode.set` restent : des tests QA/SEC les épinglent ; retrait à faire dans un lot dédié.
+- Circuit demande/validation ne gère pas le retour à `null` (hérité) ; l'ancienne route le permettait. Aucun écran ne l'utilisait.
+- `PATCH /rating-scales/:id/disable` : pas un second chemin (ACTIVE refusée, trigger 055 fige toute échelle référencée par une version non-brouillon).
+- `ModuleToggleService.toggle(actor, name, enabled, reason, requestId)` : motif obligatoire, audit avant/après. `setCommitteeAuditCumul` avait déjà motif+audit. `setCommitteeEnforcement` : NE PAS toucher (fermé par le Dispositif, A13). `assertRiskManager` (DECISION-060) : lot séparé.
+- Test de garde : `test/SingleWritePath.test.ts`.
+
+## 2026-10-18 Correctifs revues QA/Sécurité « un seul chemin » (QA-SWP-01..04, F-SWP-01/02/03/05/06)
+
+- Audit atomique du toggle : `ModuleToggleRepository.upsert(..., audit?)` + `auditsInTransaction` ; le « avant » est lu `FOR UPDATE` dans la transaction ; défaut explicite `{ enabled: true }` si jamais enregistré. Repli (faux dépôts) = ancien flux getByName/upsert/record.
+- F-SWP-01 : `ProcessEvaluationModeRequestRepository.validateAndApply` (optionnel) = UPDATE conditionnel PENDING -> VALIDATED (0 ligne = NotFoundError), PUIS `processes.evaluation_mode`, PUIS audit, une transaction. Repli service : même ordre (demande, processus, audit), non atomique. `toDomain`/`ProcessRow` de PostgresProcessRepository exportés pour la réutilisation.
+- QA-SWP-03 : `RatingScaleRepository.isReferencedByFrameworkVersion?` (toute version, brouillon inclus), appelée par `disable` ; optionnelle pour les faux dépôts (garde `?.`), donc fail-open sans dépôt PG : le câblage server.ts utilise le dépôt PG.
+- Tests existants adaptés (source de vérité changée) : `ModuleToggleService.test` (oldValue `{enabled:true}`), `QA-SWP.test` (.fails retirés, faux dépôt transactionnel, test PG 01 = événement invalide fait échouer l'upsert, test PG 03 attend un refus). Nouveau : `SWPFixes.test.ts` (+ cas PG gaté `QA_SWP_PGHOST`).
+- Piège : un commentaire de source qui cite `setMode`/`setEvaluationMode` fait échouer un test de garde par regex sur `src/api` ; reformuler le commentaire. Heredoc multi-ligne + `cd` composé refusés par le garde du worktree : utiliser Write et des commandes simples.
+- Non fait (lot dédié) : retrait du code mort et de `process.evaluationmode.set`, q131, DECISION-060, F-SWP-04.
+
+## 2026-10-18 DECISION-068 : inventaire factuel des droits (aucun code produit modifié)
+
+- Livré : `docs/governance/droits-acces/inventory.json` (111 permissions, 7 groupes, 30 gardes, 19 relations de données, 16 réglages ; 18 anomalies). Généré par un script dans le scratchpad qui lit `permissions.ts`, `fixedGroupPermissions.ts`, le seed et les `requirePermission(` du code (lignes `fichier:ligne` calculées, pas écrites à la main).
+- Constats à retenir : `riskframework.process.assign` n'est vérifiée nulle part ; 44 permissions sur 111 n'ont aucun groupe fixe ; evaluationmode.* / process.evaluationmode.* sans détenteur par défaut ; `config.update`, `config.committee*`, `riskappetite.*`, activation d'échelle inopérants en production (Dispositif câblé) ; paramètres du contrat du Dispositif (cumul propriétaire/exécutant, délégation, hybride, maîtrise, vote) stockés mais lus par aucune règle ; `Process.owner` et `Department.riskOwner` sont du texte libre (aucune donnée « N-1 du processus » ni « délégué » : à créer pour DECISION-064).
+- Limite : droits réels des rôles personnalisés et colonne `users.roles` en base non vérifiés (aucun accès Neon).
+- Leçon : pour un inventaire, dériver les listes par script depuis le code plutôt que les recopier ; `python3 -I` sur un script du scratchpad fonctionne, heredoc `python3 -` seul aussi.
+
+## 2026-10-18 P2 Codex PR #186 : suppression d échelle vs brouillon de Dispositif (migration 063)
+
+- Course contrôle-puis-écriture entre deux tables : un trigger seul ne suffit pas (MVCC). Il faut un verrou de ligne des DEUX côtés : trigger d insertion de version avec `SELECT ... FOR SHARE` sur l échelle (même tenant, deleted_at IS NULL), et trigger BEFORE UPDATE de la suppression douce qui revérifie les références (instantané frais après l attente du verrou, READ COMMITTED). Test déterministe : `test/ScaleDeleteRace.test.ts` (client en BEGIN non validé + délai 300 ms, motif SWPFixes), échoue avec QA_SKIP_063=1.
+- Le service `disable` garde son contrôle (message clair) ; dans la course seule l erreur SQL 23503 sort (500 générique, non mappée) : acceptable, rare.
+- Worktree dispatché sur un vieux main : `git reset --hard` sur la branche cible d abord ; `npm install` dans backend/ requis.

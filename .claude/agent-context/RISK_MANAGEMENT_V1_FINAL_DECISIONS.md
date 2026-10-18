@@ -17,11 +17,13 @@
 > **Amendement du 2026-10-08** (DECISION-014 et DECISION-015, `.claude/agent-context/ACTION_ITEMS.md`) : modes de cotation, rôles Risk Owner / Délégué / Exécuteur, paramètres du Dispositif. Paragraphes touchés : §4, §5, §7, §8, §10, §16, §17 (Phase 4). Origine : `docs/architecture/RM-V1-Modes-cotation-objections.md` et `docs/architecture/RM-V1-Amendement-contrat-modes-PROJET.md`.
 >
 > **Amendement du 2026-10-11** (étape 2, DECISION-016 à 020, 025, 026, 027, 029, 030, 033 à 042) : échelle, axes et descriptifs dans le Dispositif ; groupes ; approbateur configurable ; auto-proposition de désignation ; Comité asynchrone ; état « Rejeté » ; statuts des contributions ; temps réel reporté en V2. Paragraphes touchés : §4, §5, §6, §7, §8, §10, §13, §14, §17.
+>
+> **Amendé le 2026-10-18 (DECISION-054, DECISION-060).** (1) L'administrateur du client peut aussi modifier la méthodologie (Dispositif : échelles, appétence, paramètres) ; le circuit d'approbation ne change pas : l'administrateur **propose**, un membre du groupe Risk Manager **approuve** (DECISION-060). (2) Les réglages du Dispositif vivent dans l'Administration ; les autres sections n'en donnent que l'accès, par la même action côté backend (DECISION-054). Paragraphes touchés : §1, §5, §10, §13, §16. Non touchés : champs « Analyse » (§4, en attente de q121) ; régime « structure à une personne » (DECISION-059, spec A13 à venir, non intégré). Analyse de code à l'appui : entrée `SHARED_LOG.md` du 2026-10-18 (@risk-manager, DECISION-060).
 
 ## 1. Gouvernance de conception
 
 - **Jean-Philippe / N0** : décision finale et arbitrage.
-- **Risk Manager** : porte la logique Risk Management, impulse la méthodologie, challenge les propositions et vérifie leur cohérence avec les principes de référence.
+- **Risk Manager** : porte la logique Risk Management, impulse la méthodologie, challenge les propositions et vérifie leur cohérence avec les principes de référence. *(Amendé le 2026-10-18 (DECISION-054, DECISION-060) : l'administrateur du client peut aussi proposer et modifier un brouillon de méthodologie ; seul le Risk Manager porte l'approbation. Voir §10.)*
 - **UX Designer** : transforme la logique validée en parcours, information architecture, interactions et design Penpot.
 - **Architecte** : analyse l'existant, vérifie la faisabilité, propose la traduction technique et identifie les écarts ; il ne redéfinit pas la logique Risk.
 - **Orchestrator** : transforme les décisions validées en lots d'exécution bornés.
@@ -135,6 +137,8 @@ L'Évaluation couvre :
 La saisie de l'Inhérent, de la Maîtrise et du Résiduel est attribuée selon le mode effectif de l'évaluation (§7). L'équipe risque saisit le Résiduel dans tous les modes.
 
 **Groupes.** L'« équipe risque » est le groupe fixe **Risk Manager**. Il ne peut jamais être vide (on ne peut donc pas retirer son dernier membre). Deux autres groupes fixes existent, **Risk Committee** et **Audit** ; ils peuvent être vides. Les départements sont aussi des groupes.
+
+**Administrateur et méthodologie** *(Amendé le 2026-10-18 (DECISION-060) ; pas encore implémenté : le serveur réserve encore ces actions au groupe Risk Manager, voir `ACTION_ITEMS.md`, ligne DECISION-060)*. L'administrateur du client (au sens de q63 : détenteur, par un rôle actif, d'une permission d'administration) peut lire, créer et modifier un brouillon de Dispositif, rédiger les échelles qu'il référence, demander l'activation d'une version et retirer sa propre demande. Il n'approuve ni ne rejette jamais une demande de Dispositif, y compris la sienne : l'approbation reste au groupe Risk Manager (ou au circuit du §10), tiers distinct de tous les auteurs. Un administrateur qui est aussi Risk Manager (cumul q63) garde les deux droits, marqués, mais ne décide pas sa propre demande ni une version qu'il a rédigée. Cela remplace, pour la configuration, la réserve « l'administrateur seul ne suffit pas » ; elle subsiste pour l'approbation et pour la première activation (§10).
 
 **Responsable de la fonction risque.** Le « responsable de la fonction risque » est le responsable du service risque : il a des droits sur tous les risques, les contrôles et l'administration. « Responsable du risque » dans les règles d'escalade = responsable de la fonction risque (DECISION-040, q53).
 
@@ -295,7 +299,7 @@ Il est distinct du Risque, du Processus, de l'Évaluation, du Meeting et de Risk
 - Le contexte méthodologique applicable doit être conservé dans l'évaluation.
 - La création d'un Dispositif se fait par un **assistant pas à pas**, activé par défaut. Une configuration directe reste possible pour les utilisateurs experts.
 - L'organisation peut **activer un Dispositif par défaut** fourni avec l'outil. Un Dispositif par défaut respecte les invariants comme tous les autres.
-- **Première activation (DECISION-040, q51).** ~~On demande d'abord de créer un utilisateur dans le groupe risque au niveau hiérarchique le plus élevé ; à défaut, l'administrateur du client l'active, une seule fois.~~ **Seul un membre du groupe Risk Manager active le premier Dispositif ; l'administrateur est retiré de cette règle. Le premier utilisateur créé par l'administrateur est le Risk Manager (groupe risque, plus haut niveau d'accès) ; l'administrateur peut, dans certains cas, être lui-même le Risk Manager.** Ce cumul est autorisé ; il est marqué sur la fiche, le motif est exigé et un tiers est prévenu (Audit ou Comité dès qu'ils existent) (DECISION-042 q63).
+- **Première activation (DECISION-040, q51).** ~~On demande d'abord de créer un utilisateur dans le groupe risque au niveau hiérarchique le plus élevé ; à défaut, l'administrateur du client l'active, une seule fois.~~ **Seul un membre du groupe Risk Manager active le premier Dispositif ; l'administrateur est retiré de cette règle** *(Amendé le 2026-10-18 (DECISION-060) : l'administrateur peut préparer ce premier Dispositif et en demander l'activation ; l'activation reste réservée à un membre du groupe Risk Manager, différent du demandeur)*. **Le premier utilisateur créé par l'administrateur est le Risk Manager (groupe risque, plus haut niveau d'accès) ; l'administrateur peut, dans certains cas, être lui-même le Risk Manager.** Ce cumul est autorisé ; il est marqué sur la fiche, le motif est exigé et un tiers est prévenu (Audit ou Comité dès qu'ils existent) (DECISION-042 q63).
 - **Amorçage avec un seul Risk Manager (DECISION-043 q77).** Au démarrage avec un seul Risk Manager, des actions sont autorisées en phase de démarrage. Elles sont marquées « amorçage » avec un motif. Elles apparaissent dans la vue « décisions prises en votre absence » des premiers membres d'Audit et du Comité, qui sont alors prévenus. *(Rédaction : la liste des actions, la fin de la phase et le rapport avec les invariants 1 et 5, q66 et q67 ne sont pas dits : points N8 à N10, projet d'étape 2, 13.1 bis.)*
 
 ### Traduction technique validée
@@ -321,7 +325,7 @@ Le Dispositif est **configurable** : le client final peut demander des modificat
 | Politique Hybride (choix du mode par risque) | Désactivée |
 | Qui note la Maîtrise, et quelle saisie fait foi | Selon le mode (§7) ; l'équipe risque fait foi |
 | Cumul Risk Owner + Exécuteur | Autorisé jusqu'au seuil de criticité « faible » ; au-delà, exception approuvée et revue à chaque cycle |
-| Seuil de criticité « faible » | Inscrit à la création du Dispositif ; configurable par le groupe Risk Manager, tout changement est tracé et approuvé |
+| Seuil de criticité « faible » | Inscrit à la création du Dispositif ; configurable par le groupe Risk Manager ou l'administrateur *(Amendé le 2026-10-18 (DECISION-060))*, tout changement est tracé et approuvé par un tiers du groupe Risk Manager |
 | Cumul Délégué + Exécuteur | Autorisé, le Délégué ne validant pas sa propre exécution |
 | Délégué | Recommandé, jamais bloquant (« Non désigné (équipe trop réduite) ») |
 | Durée d'une délégation datée | Fixée par le client |
@@ -349,9 +353,11 @@ Le Dispositif est **configurable** : le client final peut demander des modificat
 ~~10. Quelle que soit la règle de Comité choisie (prédéfinie ou personnalisée) : jamais de validation tacite ni de clôture automatique (escalade à l'échéance), jamais un seul membre, auteurs et Risk Owner / Délégué / Exécuteur exclus du vote, vote motivé et tracé, groupe vide refusé.~~
 10. (Reformulé, DECISION-042 q61 / R1.) Quelle que soit la règle de Comité choisie (prédéfinie, personnalisée ou règle par défaut) : jamais de validation tacite ni de clôture automatique (escalade à l'échéance) ; jamais un seul membre au sens suivant : un groupe n'est sollicité pour un vote que s'il compte au moins deux membres éligibles, et le vote seul d'un membre ne vaut pas décision collective du Comité ; une décision de repli du circuit unique est un autre régime : marquée, journalisée, ratifiée a posteriori ; auteurs et Risk Owner / Délégué / Exécuteur exclus du vote ; vote motivé et tracé ; groupe vide refusé (le circuit unique s'applique alors). Sens de « jamais un seul membre » validé par le PO (DECISION-043 q72) ; une décision prise par un seul vote exprimé est marquée « vote unique ».
 
-**Gouvernance d'un changement de paramètre** : les possibilités de configuration sont détenues par la fonction risque (groupe Risk Manager) et tracées. Le changement est demandé avec un motif écrit. **Par défaut, la fonction risque approuve le changement, différente du demandeur, et Audit est notifié si son groupe n'est pas vide. Le Dispositif peut exiger l'approbation d'Audit et/ou du Comité.** Quand l'approbateur est Audit, il vote avec les règles du Comité (§8). Si le groupe Comité est vide, le circuit unique du §5 s'applique : Audit, puis la fonction risque, avec journalisation (DECISION-040, q54) ; l'approbateur choisi au Dispositif décide en premier, et s'il est vide ou ne peut pas décider on saute ce maillon (q69) ; les décisions de repli sont marquées et ratifiées a posteriori (q62) ; ~~une personne au moins de la fonction risque prend en charge ce que le Comité aurait approuvé~~. On ne peut pas vider un groupe déjà choisi comme approbateur ; pour un Comité vide, le circuit s'applique. Les droits du groupe Audit ne sont modifiables que par l'administrateur de l'application, avec validation par Audit ou le Comité s'il est aussi responsable de la fonction risque (§5, q45). Le changement crée une nouvelle version du Dispositif (`DRAFT → ACTIVE`), jamais une modification en place. Tant que l'approbateur n'a pas décidé, la version reste en `DRAFT` ; rien n'impose une décision immédiate, puisque l'effet n'intervient qu'au cycle suivant. Quand l'approbateur est le Comité, il décide en séance ou par vote asynchrone selon sa règle (§8). L'audit conserve l'ancienne et la nouvelle valeur.
+**Gouvernance d'un changement de paramètre** : les possibilités de configuration sont détenues par la fonction risque (groupe Risk Manager) **et par l'administrateur du client** *(Amendé le 2026-10-18 (DECISION-060))*, et tracées. L'administrateur propose ou modifie un brouillon ; l'approbation ne change pas (invariants 1 et 5) : tiers du groupe Risk Manager, ou circuit unique du §5, différent de tous les auteurs. Un administrateur qui a rédigé ou modifié une version ne l'approuve pas ; un Risk Manager qui a modifié le brouillon d'un administrateur en devient co-auteur et ne l'approuve plus. Le droit de configurer et le droit d'approuver sont deux droits distincts, jamais un seul. *(Rédaction A13, lecture du code du 2026-10-18 à valider par le PO : `RiskFrameworkService`, garde d'approbation distincte de la garde de rédaction.)* Le changement est demandé avec un motif écrit. **Par défaut, la fonction risque approuve le changement, différente du demandeur, et Audit est notifié si son groupe n'est pas vide. Le Dispositif peut exiger l'approbation d'Audit et/ou du Comité.** Quand l'approbateur est Audit, il vote avec les règles du Comité (§8). Si le groupe Comité est vide, le circuit unique du §5 s'applique : Audit, puis la fonction risque, avec journalisation (DECISION-040, q54) ; l'approbateur choisi au Dispositif décide en premier, et s'il est vide ou ne peut pas décider on saute ce maillon (q69) ; les décisions de repli sont marquées et ratifiées a posteriori (q62) ; ~~une personne au moins de la fonction risque prend en charge ce que le Comité aurait approuvé~~. On ne peut pas vider un groupe déjà choisi comme approbateur ; pour un Comité vide, le circuit s'applique. Les droits du groupe Audit ne sont modifiables que par l'administrateur de l'application, avec validation par Audit ou le Comité s'il est aussi responsable de la fonction risque (§5, q45). Le changement crée une nouvelle version du Dispositif (`DRAFT → ACTIVE`), jamais une modification en place. Tant que l'approbateur n'a pas décidé, la version reste en `DRAFT` ; rien n'impose une décision immédiate, puisque l'effet n'intervient qu'au cycle suivant. Quand l'approbateur est le Comité, il décide en séance ou par vote asynchrone selon sa règle (§8). L'audit conserve l'ancienne et la nouvelle valeur.
 
 Le mode d'un risque donné ne peut différer de celui du Processus que si la politique Hybride l'autorise ; ce choix est motivé, approuvé et prend effet au cycle suivant. Le Dispositif n'est jamais redéfini risque par risque : il est résolu et affiché à l'ajout du risque. Les paramètres et les désignations en vigueur sont figés par instantané dans chaque évaluation.
+
+**Lieu de réglage** *(Amendé le 2026-10-18 (DECISION-054))*. Les réglages du Dispositif vivent dans l'**Administration**. Les autres sections (Risques, Cartographie, Processus) n'y donnent qu'un **accès**, par ergonomie, et appellent les mêmes actions que l'Administration. Côté backend, c'est le même appel : une seule action, une seule règle, un seul audit. Jamais de second chemin d'écriture. Un réglage porté par le Dispositif ne se modifie pas ailleurs (échelle active, appétence, seuils Comité, mode par défaut, activation d'enforcement) ; une section qui l'affiche en lecture le fait depuis la version active.
 
 Permissions cibles :
 
@@ -361,6 +367,8 @@ Permissions cibles :
 - `riskframework.activate`
 - `riskframework.archive`
 - `riskframework.process.assign`
+
+*(Amendé le 2026-10-18 (DECISION-060).)* Attribution : le groupe Risk Manager détient les six. L'administrateur détient `riskframework.read`, `create`, `update` et `archive` (abandon d'un brouillon, avec motif), ainsi que `ratingscale.read`, `ratingscale.create`, `ratingscale.update` pour rédiger l'échelle d'une version. Il ne détient jamais `riskframework.activate` (approuver, rejeter). `riskframework.process.assign` : non attribué à l'administrateur tant que l'affectation d'un Processus n'est pas spécifiée (question au PO). Le Comité et Audit gardent `riskframework.read`.
 
 ### Risk 360
 
@@ -396,7 +404,7 @@ L'expérience doit privilégier :
 - historique lisible ;
 - Cartographie/Risk 360 comme vues de synthèse.
 
-Le Dispositif peut être présenté comme **Référentiel méthodologique** dans l'UX. Dans l'évaluation, il apparaît comme contexte en lecture seule et ne devient pas une étape de cotation.
+Le Dispositif peut être présenté comme **Référentiel méthodologique** dans l'UX. Dans l'évaluation, il apparaît comme contexte en lecture seule et ne devient pas une étape de cotation. *(Amendé le 2026-10-18 (DECISION-054, DECISION-060))* Il se règle dans l'Administration, par le groupe Risk Manager ou l'administrateur du client ; les autres sections n'en donnent que l'accès (voir §10, « Lieu de réglage »), et l'écran affiche à chacun ce qu'il peut faire : proposer ou modifier (administrateur, Risk Manager), approuver (Risk Manager tiers uniquement), consulter (Comité, Audit).
 
 Autres points validés :
 
@@ -445,6 +453,7 @@ Ne pas :
 - créer de migration ;
 - créer un nouveau Design System ;
 - créer une autre source de vérité ;
+- créer un second chemin d'écriture d'un réglage du Dispositif hors de l'Administration (DECISION-054, amendé le 2026-10-18) ;
 - implémenter le serveur WebSocket ;
 - décider seul des règles maker-checker, Comité, Dispositif ou paramètres du Dispositif ;
 - utiliser l'ancien frontend comme définition du produit.

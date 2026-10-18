@@ -264,7 +264,7 @@ pour l'usage.
 | @dev-backend @security | **QA-REF-01** MAJOR (= F-CAT-02 côté écran) : `RiskCategoryService.update` ne valide ni existence ni profondeur du parent → chaîne de profondeur 2 invisible à l'écran, cycle A↔B possible. | 2026-10-12 | Fermé (A08 + A10, 2026-10-17) |
 | @dev-backend @security | **QA-REF-02** MAJOR : `DepartmentService.archive` sans contrôle de références (processus gardant un département archivé). **+ violation CLAUDE.md** : `CreateDepartmentBody` accepte `riskOwnerDesignatedBy` (attribution client-settable) → à forcer côté serveur ou retirer. | 2026-10-12 | Fermé (A08 + A10, 2026-10-17 ; complété par QA-REF2-01) |
 | @dev-frontend | **QA-REF-03..06** MINOR : libellé « désigné le … » faux pour un Risk Owner par défaut ; courses de réponses périmées sur `refresh` ; selects parent/département qui perdent une valeur inactive/archivée ; filtre client `d.active` ; ArchiveModal ouvert sur 403 ; création de processus inactif ; resynchro silencieuse du Risk Owner. | 2026-10-12 | Fermé par revue statique (A08, 2026-10-17) — pas de QA navigateur |
-| @dev-backend @dev-frontend | **Gaps écran Dispositif (94b3d9d)** : pas d'endpoint « mes permissions » (actions toujours visibles, serveur tranche) ; seuils d'appétence en lecture seule dans le brouillon (éditeur de liste à construire) ; `changeApprover` figé RISK_MANAGER jusqu'à B-12 ; B-6b-03 (avertissement R2) non fait ; `GET /applicable` et assignation Dispositif→processus non couverts (aucune route d'assignation vue) ; pas d'archivage de Dispositif ; demandes de changement sans libellés (identifiants bruts). | 2026-10-17 | Ouvert |
+| @dev-backend @dev-frontend | **Gaps écran Dispositif (94b3d9d)** : pas d'endpoint « mes permissions » (actions toujours visibles, serveur tranche) ; seuils d'appétence en lecture seule dans le brouillon (éditeur de liste à construire) ; `changeApprover` figé RISK_MANAGER jusqu'à B-12 ; B-6b-03 (avertissement R2) non fait ; `GET /applicable` et assignation Dispositif→processus non couverts (aucune route d'assignation vue) ; pas d'archivage de Dispositif ; demandes de changement sans libellés (identifiants bruts). **Ajout 2026-10-18 (revue Codex PR #186)** : la page Appétence lit encore l'ancien référentiel `GET /appetite` (libellé « ancien référentiel » posé) ; afficher les seuils de la version active du Dispositif ; l'éditeur de seuils dans le brouillon est le seul chemin d'écriture restant à construire. | 2026-10-17 | Ouvert |
 | @dev-backend | **QA-REF2-01** MAJOR : un processus inactif ne bloquait pas l'archivage de son département (réactivation ensuite sur département archivé). Corrigé par l'orchestrateur : `archive` compte aussi les inactifs ; test QA-REF2 réécrit. | 2026-10-17 | **Fermé — RETEST_PASS A08 (2026-10-18)**, invariant « jamais un processus, actif ou non, sur un département archivé » vérifié sur tous les chemins séquentiels (`QA-REF2b.test.ts`) |
 | @qa-engineer @dev-db HUMAN | **Réserves retest QA-REF2-01 (A08, 2026-10-18)** : (1) lignes antérieures à `3792a89` non réparées — processus inactif déjà rattaché à un département archivé possible en production ; requête lecture seule de contrôle à ajouter à la checklist pré-production ; invariant tenu par le service seul (FK aveugle au soft delete, cf. F-REF-02). (2) Un département `active: false` non archivé reste rattachable — conforme à « archivé », à confirmer PO si besoin. (3) **Test `QA-D044-pg` (l. 115) fragile** : compte les sessions `idle in transaction` de toute la base, échoue dès qu'une autre session (psql, autre agent) est ouverte en parallèle — restreindre au pool du test. | 2026-10-18 | Ouvert |
 | @product-manager @dev-frontend | **QA-REF2-02..05** MINOR/TRIVIAL : parent de catégorie inactif accepté à l'update (règle produit à trancher) ; bouton « Retirer » proposé à tous alors que réservé au demandeur ; commentaire d'approbation non marqué requis en régime FALLBACK ; demandes ASSIGN_PROCESS/SET_DEFAULT affichées « — ». **QA-REF2-06** : le 409 de course 061 dépend du texte du message PG — ne pas reformuler ce message sans le test. Hors périmètre : utilisateurs rattachés à un département archivé (UserService) non vérifié. | 2026-10-17 | Ouvert (mineur) |
@@ -294,9 +294,29 @@ pour l'usage.
 | @dev-backend | **C-B6d-03** FAIBLE-MOYEN : l'administrateur cité dans le motif d'amorçage n'est pas prévenu ; la notice ne reprend ni le motif ni le marquage administrateur + Risk Manager. | 2026-10-18 | Ouvert (A06) |
 | @dev-backend | **C-B6d-05** MOYEN : aucune écriture possible de la ratification q100 avant B-12 ; indicateur « en attente de ratification » non vérifié. Table de ratification avec B-12. | 2026-10-18 | Ouvert (A06, B-12) |
 | @architect @dev-db @dev-backend @qa-engineer HUMAN | **C-B6d-04/06/07/08** FAIBLES : risque accepté par le PO (amorçage sans ratification ni échéance, q83) ; spec §5.6 pt 6 / §14.2 à aligner après q113 (A05) ; 062 à jouer sur une copie de staging + `VALIDATE CONSTRAINT` du CHECK NOT VALID (HUMAN/A07) ; test de câblage `RoleService` manquant (A06/A08). | 2026-10-18 | Ouvert |
-| HUMAN | **q114 (Q-A14-B6d-2)** La vue « décisions prises en votre absence » doit-elle être livrée avant l'arrivée du premier membre Audit ou Comité en production, avec à défaut une procédure écrite tenue par le PO ? (A14 recommande : oui). Posée dans le cockpit. | 2026-10-18 | Ouvert (HUMAN) |
-| HUMAN | **Consultation configurabilité (DECISION-054/055) terminée** — A05, A06, A10, A13 : `docs/architecture/consultation-configurabilite-2026-10-18.md`. Arbitrages posés au PO dans le cockpit : **q115** (éléments jamais configurables), **q116** (assouplir = deux personnes, jamais la personne contrainte), **q117** (régime « structure à une personne » à la place de l'auto-désignation I-D9), **q118** (qui modifie la méthodologie dans l'Administration : Risk Manager seul ou aussi l'admin), **q119** (cumul Comité + Audit : interdit par défaut ?). Aucune implémentation de la configurabilité avant réponse. | 2026-10-18 | Ouvert (HUMAN) |
-| @dev-backend @dev-frontend @qa-engineer | **Correctifs « un seul chemin d'écriture » (A05, DECISION-054), sans arbitrage PO requis** : (1) fermer `PUT /processes/:id/evaluation-mode` (contrat §10 retire la permission ; seul le circuit demande/validation reste) ; (2) fermer ou marquer « non appliqué » `PUT /config` et `/config/appetite-mode` (réglages inertes, lus par aucun code) ; (4) écrans Appétence / Grilles : retirer les écritures mortes (`frontend/src/api/riskAppetite.ts:29,31`, `evaluations.ts:155`) au profit d'un lien vers le brouillon du Dispositif ; (7) test de garde « porté par le Dispositif ». À vérifier : `PATCH /rating-scales/:id/disable`. | 2026-10-18 | Ouvert (A06, A11, A08) |
+| HUMAN | **q114 (Q-A14-B6d-2)** La vue « décisions prises en votre absence » doit-elle être livrée avant l'arrivée du premier membre Audit ou Comité en production, avec à défaut une procédure écrite tenue par le PO ? (A14 recommande : oui). Posée dans le cockpit. **Répondue : oui → DECISION-056.** | 2026-10-18 | Fermé |
+| HUMAN | **Consultation configurabilité (DECISION-054/055) terminée** — A05, A06, A10, A13 : `docs/architecture/consultation-configurabilite-2026-10-18.md`. Arbitrages posés au PO dans le cockpit : **q115** (éléments jamais configurables), **q116** (assouplir = deux personnes, jamais la personne contrainte), **q117** (régime « structure à une personne » à la place de l'auto-désignation I-D9), **q118** (qui modifie la méthodologie dans l'Administration : Risk Manager seul ou aussi l'admin), **q119** (cumul Comité + Audit : interdit par défaut ?). Aucune implémentation de la configurabilité avant réponse. **Répondues le 18/10 → DECISION-057 à 061.** Reste : q120 (3 invariants absents de la réponse q115). | 2026-10-18 | Fermé (sauf q120) |
+| @dev-backend @dev-frontend @qa-engineer | **Correctifs « un seul chemin d'écriture » (A05, DECISION-054), sans arbitrage PO requis** : (1) fermer `PUT /processes/:id/evaluation-mode` (contrat §10 retire la permission ; seul le circuit demande/validation reste) ; (2) fermer ou marquer « non appliqué » `PUT /config` et `/config/appetite-mode` (réglages inertes, lus par aucun code) ; (4) écrans Appétence / Grilles : retirer les écritures mortes (`frontend/src/api/riskAppetite.ts:29,31`, `evaluations.ts:155`) au profit d'un lien vers le brouillon du Dispositif ; (7) test de garde « porté par le Dispositif ». À vérifier : `PATCH /rating-scales/:id/disable`. **Livré A06 `5b35762` (fusion `ebbc70d`)** : 3 routes en 410, écritures mortes retirées du frontend, `SingleWritePath.test.ts`, motif obligatoire sur le toggle de module (DECISION-058) ; `disable` n'est pas un second chemin. Restes : (a) le retour d'un processus à « hérité » (null) n'est plus possible — impact évalué par A08 avant question PO ; (b) code mort sans route à retirer en lot dédié (`ProcessService.setEvaluationMode`, `ConfigService.updateMethodology/updateAppetiteMode`, permission `process.evaluationmode.set`, épinglés par SEC-017/QA-B6b). Revues A08 + A10 en cours. | 2026-10-18 | Livré, en revue |
+| HUMAN | **q120 (suite q115 / DECISION-057)** Votre réponse à q115 cite 6 invariants ; la liste proposée en contenait 3 de plus : pas de validation tacite ; cumul de rôles toujours visible ; historique jamais réécrit. Les garder aussi non configurables ? Posée dans le cockpit. | 2026-10-18 | Décidé (DECISION-063) |
+| HUMAN | **q121 (OD-10)** Étape Analyse de la refonte Risques : structure (listes causes/événements/impacts + contexte, figées à chaque évaluation) et qui l'écrit (recommandé : Risk Owner seul, les autres contribuent). Posée dans le cockpit. Bloque la partie Analyse de DECISION-062. | 2026-10-18 | Décidé (DECISION-064) |
+| HUMAN | **q122 à q125 (UX navigation Risques, `docs/ux/RM-V1-Navigation-Risques.md` Q1-Q4)** : q122 grille modifiable seulement depuis un brouillon de Dispositif ; q123 raccourci = ouvrir l'écran d'Administration seulement (V1) ; q124 Méthodologie en lecture seule pour tous les lecteurs des risques ; q125 garder l'entrée « Évaluations ». Recommandé : oui aux quatre. Posées dans le cockpit. Ne bloquent ni le déplacement des entrées ni le retrait des écritures d'appétence. | 2026-10-18 | Décidé (DECISION-065) |
+| HUMAN | **q126 à q130 (A13, vérification DECISION-060)** : q126 structure à une personne : auto-approbation « sans second regard » après le premier Dispositif ? ; q127 levée du régime à l'arrivée d'un 2e Risk Manager ou de toute 2e personne ? ; q128 l'admin peut-il abandonner un brouillon ? ; q129 l'admin propose-t-il le rattachement processus → Dispositif (B-6c) ? ; q130 DECISION-058 limitée aux réglages hors Dispositif ? Recommandations A13 : oui / 2e Risk Manager / oui / oui / oui. Posées dans le cockpit. Aussi à valider : passage §10 « Gouvernance d'un changement de paramètre » du contrat amendé, marqué « Rédaction A13, à valider par le PO ». | 2026-10-18 | Décidé (DECISION-066/067/068) |
+| HUMAN | **q131 (QA-SWP-05)** Un processus doit-il pouvoir revenir au mode d'évaluation de son Dispositif (« hérité ») ? Le circuit ne sait plus l'exprimer depuis la fermeture de `PUT /processes/:id/evaluation-mode`. Recommandé : oui, demande « revenir au mode du Dispositif » dans le circuit. Lien QA-SWP-07 : en structure à une personne (q126/q127), plus personne ne peut changer le mode d'un processus. Posée dans le cockpit. | 2026-10-18 | Décidé (DECISION-069) |
+| HUMAN | **Revue Codex PR #186, 2 constats non corrigés (choix de l'orchestrateur, à confirmer)** : (a) P2 course « désactivation d'échelle / brouillon de Dispositif qui la référence » : seul effet, un brouillon non activable, corrigé par son auteur ; correction = verrou de ligne sur deux chemins, jugée disproportionnée (déjà résidu INFO de la Sécurité). (b) P1 « plus d'éditeur de seuils d'appétence » : l'ancien formulaire échouait déjà à chaque envoi (refus serveur depuis le Dispositif) ; l'éditeur dans le brouillon relève de l'étape 2 de DECISION-062. Fils laissés ouverts sur la PR. | 2026-10-18 | **Fermé par DECISION-070** (le PO demande de corriger les deux). |
+| HUMAN | **Arbitrage des droits et accès (DECISION-068)** : catalogue fusionné `docs/governance/droits-acces/catalogue.json` (209 droits, 12 rôles), publié dans la section « Droits et accès » du cockpit. 20 conflits de gouvernance signalés par A13, dont 5 élevés : `config.committeeenforcement.set` et `config.cumul.set` (un administrateur seul assouplit, alors que le Dispositif exige deux personnes), `rolegroup.audit.update` (l'Audit réglé par un non-Audit), `guard:noSelfRoleChange` et `guard:noSelfValidation` (structure d'une personne, à concilier avec DECISION-066). L'arbitrage se fait dans le cockpit (collection `rightDecisions`) ; chaque réponse devient une entrée du Decision Log. Bloque : DECISION-060/067, DECISION-064, DECISION-066, DECISION-069. | 2026-10-18 | Ouvert |
+| HUMAN | **q132 / q133 (cockpit) — éditeur des seuils d'appétence dans le brouillon du Dispositif (correctif Codex P1, commit 60f7757)** : q132 placement (fenêtre « Modifier le brouillon » actuelle ou onglet dédié) ; q133 sous-catégorie choisie dans le référentiel ou en texte libre (`subCategoryId` non alimentable depuis l'écran aujourd'hui). Mineur, non soumis : une erreur serveur sur la liste s'affiche en bannière globale, sans pointer la ligne. | 2026-10-18 | Ouvert |
+| HUMAN | **q134 (cockpit) — A10 F-063-03** : un brouillon de Dispositif abandonné (ARCHIVED) bloque pour toujours la désactivation de l'échelle qu'il référençait (règle `isReferencedByFrameworkVersion` + migration 063). Recommandation : seules les versions approuvées (en vigueur ou anciennes) bloquent. | 2026-10-18 | Ouvert |
+| @dev-backend | **A10 F-FW-01 LOW 2.2** (`docs/security/review-codex-fixes-pr186-2026-10-18.md`) : le libellé libre `subCategory` d'un seuil d'appétence n'est pas relié à `subCategoryId` (libellé trompeur possible). Correctif : déduire le libellé de l'id côté serveur — à traiter avec la réponse PO à q133. | 2026-10-18 | Ouvert |
+| @dev-db | **A10 F-063-01 INFO** : la garde de la migration 063 suppose READ COMMITTED (en REPEATABLE READ la course revient ; aucun code applicatif ne change l'isolation). Documenter cette hypothèse dans la migration suivante qui touche ces triggers. | 2026-10-18 | Ouvert (optionnel) |
+| HUMAN @devops | **A08 — vérification staging avant/après migration 063** : une version de Dispositif qui référencerait déjà une échelle supprimée reste lisible, mais cloner une nouvelle version depuis elle sera refusé. Requête de contrôle (lecture seule, à lancer par le PO ou un accès autorisé — l'orchestrateur ne touche pas Neon) : `SELECT v.id FROM risk_framework_versions v JOIN rating_scales s ON s.id = v.rating_scale_id WHERE s.deleted_at IS NOT NULL`. Aussi INFO A08 : rendre `isReferencedByFrameworkVersion` obligatoire sur `RatingScaleRepository` (le trigger 063 reste le filet). | 2026-10-18 | Ouvert |
+| @dev-backend @dev-db @dev-frontend | **Revue QA lot « un seul chemin » (A08, PASS_WITH_RESERVES, `QA-SWP.test.ts`)** : **QA-SWP-01 MAJOR** toggle de module écrit l'état puis l'audit hors transaction (module désactivé sans trace si l'audit tombe) → audit transactionnel comme `RatingScaleRepository` ; **QA-SWP-03 MAJOR** `RatingScaleService.disable` accepte une échelle référencée par une version BROUILLON → `getById(...)!` (RiskFrameworkService l.598) en 500 → refuser si une version quelconque la référence ; QA-SWP-02 MINOR audit `oldValue: null` au 1er toggle → `{enabled:true}` ; QA-SWP-04 MINOR textes périmés (AppetitePage, RatingScalesPage, commentaire `processEvaluationModeRequests.routes.ts`) ; QA-SWP-06 INFO permission `process.evaluationmode.set` orpheline → retirer. `it.fails` QA-SWP-01/03 à basculer au correctif. **Revue A10 (`docs/security/review-SWP-2026-10-18.md`, feu vert staging, CVSS max 2,2)** : F-SWP-01 LOW 2,2 `ProcessEvaluationModeRequestService.validate()` écrit le mode avant le statut, hors transaction (validation + rejet simultanés → demande REJECTED mais mode appliqué, sans audit) ; F-SWP-02 = QA-SWP-01 ; F-SWP-03 = QA-SWP-02 ; F-SWP-05 = QA-SWP-04 (commentaire) + test de garde « méthodes mortes absentes de `src/api` » ; F-SWP-06 = QA-SWP-03 ; F-SWP-04 INFO option PO : permission dédiée `config.module.toggle`. Correctifs QA-SWP-01..04 + F-SWP-01 dispatchés à A06 le 2026-10-18. **Corrigés en `07055f2` : RETEST_PASS A08 et A10.** | 2026-10-18 | Fermé |
+| @dev-backend @dev-db | **Résidus INFO du retest SWP (A10/A08, 2026-10-18)** : F-SWP-07 deux premiers toggles simultanés enregistrent tous deux « avant = activé » ; F-SWP-08 (A07) `risk_framework_versions.rating_scale_id` FK sans `tenant_id` (contrairement à `risk_evaluations` depuis 061) ; F-SWP-09 le perdant d'une course reçoit 404 au lieu de « déjà décidé » ; garde F-SWP-05 à étendre à `setMode` (lot de retrait) ; `RatingScaleService.disable` contrôle hors transaction (course avec une modification de brouillon, non rejouée) ; A08 : rendre `isReferencedByFrameworkVersion` obligatoire sur l'interface. F-SWP-04 (permission dédiée `config.module.toggle`) : option PO. | 2026-10-18 | Ouvert (INFO) |
+| @dev-backend @dev-db | **DECISION-060 — mise en œuvre (A13, vérifiée dans le code)** : retirer `assertRiskManager` des 7 méthodes de rédaction de `RiskFrameworkService` (create l.262, updateIdentity l.305, createDraft l.321, updateDraft l.350, discardDraft l.381, requestActivation l.401, withdraw l.458), la permission devient la garde ; **la garder** dans `decide` (l.481) et `bootstrapApprove` (l.583) ; réécrire le commentaire q51 (l.794). Migration (modèle 047) : donner aux rôles administrateur `riskframework.read/create/update`, `ratingscale.read/create/update` (+ `riskframework.archive` si q128 = oui). Jamais `riskframework.activate`, rien dans `ADMIN_PERMISSIONS`. Piège à documenter : un Risk Manager unique qui édite le brouillon de l'admin devient auteur et n'est plus éligible (q75). Après le lot A06 en cours. | 2026-10-18 | Ouvert |
+| @dev-backend @security | **DECISION-058 (q116)** : assouplir un réglage = un administrateur seul, mais toujours avec motif obligatoire et audit avant/après. À aligner : `PATCH /modules/:name/toggle` (aucun motif aujourd'hui), `setCommitteeAuditCumul`. Correction A13 : `setCommitteeEnforcement` est déjà fermé quand le Dispositif est branché (`ConfigService.ts` l.89-91) — hors périmètre ; portée Dispositif/hors Dispositif posée en q130. Dispatché à A06 (DECISION-062). | 2026-10-18 | Ouvert |
+| @risk-manager @dev-backend @security | **DECISION-059 (q117)** : régime « structure à une personne », déclaré par l'éditeur seul à l'ouverture du compte, affiché partout, levé définitivement à l'arrivée d'une 2e personne. Spec A13 puis lot A06. | 2026-10-18 | Ouvert |
+| @architect @risk-manager | **DECISION-060 (q118)** : l'administrateur peut aussi modifier la méthodologie — amender le contrat ; confirmer que le circuit d'approbation des changements de Dispositif reste inchangé. | 2026-10-18 | Ouvert |
+| @dev-backend @dev-db | **DECISION-061 (q119)** : cumul Comité + Audit interdit par défaut, autorisable par le client — sans révoquer silencieusement un cumul existant (Djamo). | 2026-10-18 | Ouvert |
+| @dev-frontend | **DECISION-056 (q114)** : écran « décisions prises en votre absence » avant l'arrivée du premier membre Audit ou Comité en production. | 2026-10-18 | Ouvert |
 | @dev-backend @security | **Assouplissements à un seul administrateur (A10, A05)** : `ConfigService.setCommitteeEnforcement(false)` et `setCommitteeAuditCumul(true)` sans second approbateur ; `PATCH /modules/:name/toggle` sans motif ni tiers (un admin seul peut désactiver le module AUDIT). À aligner après q116. | 2026-10-18 | Ouvert (attend q116) |
 | @qa-engineer @security | **Revues B-6d : QA PASS_WITH_RESERVES (A08, `QA-B6d.test.ts` + `QA-B6d-pg.test.ts`, 1999 passed + 4 `it.fails` témoins) ; Sécurité feu vert staging, CVSS max 2,7 (A10, `docs/security/review-B6d-2026-10-18.md`).** Tests adaptés par A06 relus : aucune assertion affaiblie. Comme 062 s'applique sur staging à la fusion, les correctifs touchant 062 passent **avant** la PR. | 2026-10-18 | Revues faites, correctifs dispatchés |
 | @dev-backend | **QA-B6d-01** MAJOR : I-D9 contourné par un `askedUserId` en MAJUSCULES (`z.guid()` l'accepte, comparaison texte avec `actor.userId`, PG résout le même utilisateur). Correctif : comparer et stocker `asked.id` renvoyé par la base. **F-B6d-01** LOW 2,7 : contournement par un compte créé et promu administrateur par le demandeur lui-même, `askedOn` sans borne basse → refuser un droit d'administrateur accordé par le demandeur ou postérieur à `askedOn`. | 2026-10-18 | Dispatché A06 |
@@ -304,7 +324,7 @@ pour l'usage.
 | @risk-manager | **F-B6d-02** LOW 2,7 (A10) : q87 force RISK_MANAGER comme approbateur de toute nouvelle version ; après une première activation en repli q100, Comité/Audit perdent définitivement leur rôle d'approbateur, pas seulement jusqu'à B-12. À trancher par A13, puis Decision Log. | 2026-10-18 | **Tranché A13 (`A13-review-DECISION-044.md` §8)** : perte non voulue, mais rien à coder avant B-12 (option facultative : `legacyChangeApprover` dans l'audit du repli). Aucune décision PO modifiée. |
 | @architect | **F-B6d-02 suite (A13)** : écrire dans la spec B-12 une demande de rétablissement de l'approbateur d'origine (Comité/Audit) par le circuit, jamais décidée par le RM ni le demandeur d'origine ; obligatoire si la ratification est refusée ; confirmation explicite du client s'il garde RISK_MANAGER ; tenant signalé + KRI d'ancienneté tant que non clos. Bloquant pour B-12 seulement si la requête n° 10 renvoie ≥ 1 ligne. Lié à C-B6d-05. | 2026-10-18 | Ouvert (A05, échéance : spec B-12) |
 | @dev-backend HUMAN | **INFO-05 (A10) / C-B6d-03 (A14)** : la notice BOOTSTRAP ne reprend ni le motif ni le marquage administrateur + Risk Manager (à corriger, A06). Prévenir l'administrateur cité : relève du PO (q103), non fait. | 2026-10-18 | Notice dispatchée A06 ; notification de l'admin cité en attente PO |
-| HUMAN @ux-designer @dev-frontend @dev-backend | **Refonte de la section Risques — sources retrouvées le 2026-10-18 (aucune trace dans les sessions du 12 au 17/10, aucun commit de navigation)** : contrat `RISK_MANAGEMENT_V1_FINAL_DECISIONS.md` §3-§4-§13 (Cartographie conservée ; Analyse = étape distincte : causes, événements, impacts potentiels, contexte, contrôles connus ; contexte cumulatif Identification → Analyse → Évaluation, visible sans être éditable ; fiche risque portant le cycle ; Dispositif en contexte lecture seule dans l'évaluation) ; q13 (réglages Plateforme dans l'Administration, réglages Dispositif dans son espace, Administration les montre en lecture, raccourcis « Configurer » dans les sections, jamais un second formulaire) ; proposition UX `docs/ux/RM-V1-Experience-Dispositif.md` §4 (groupe Dispositif séparé, « À faire »), DECISION-017 n° 5. **État du code** : `App.tsx` suit encore l'ancien découpage ; Appétence et Grilles encore éditables hors Dispositif ; Évaluation montre Identification (Risk Owner) + Analyse (contrôles connus seulement) ; causes/événements/impacts absents du modèle (lié à OD-10). **À confirmer par le PO avant tout dispatch** : (a) Processus visible aussi dans Administration ? (b) réglages du Dispositif seulement visibles dans Admin, ou modifiables ? | 2026-10-18 | Ouvert (HUMAN) |
+| HUMAN @ux-designer @dev-frontend @dev-backend | **Refonte de la section Risques — sources retrouvées le 2026-10-18 (aucune trace dans les sessions du 12 au 17/10, aucun commit de navigation)** : contrat `RISK_MANAGEMENT_V1_FINAL_DECISIONS.md` §3-§4-§13 (Cartographie conservée ; Analyse = étape distincte : causes, événements, impacts potentiels, contexte, contrôles connus ; contexte cumulatif Identification → Analyse → Évaluation, visible sans être éditable ; fiche risque portant le cycle ; Dispositif en contexte lecture seule dans l'évaluation) ; q13 (réglages Plateforme dans l'Administration, réglages Dispositif dans son espace, Administration les montre en lecture, raccourcis « Configurer » dans les sections, jamais un second formulaire) ; proposition UX `docs/ux/RM-V1-Experience-Dispositif.md` §4 (groupe Dispositif séparé, « À faire »), DECISION-017 n° 5. **État du code** : `App.tsx` suit encore l'ancien découpage ; Appétence et Grilles encore éditables hors Dispositif ; Évaluation montre Identification (Risk Owner) + Analyse (contrôles connus seulement) ; causes/événements/impacts absents du modèle (lié à OD-10). **À confirmer par le PO avant tout dispatch** : (a) Processus visible aussi dans Administration ? (b) réglages du Dispositif seulement visibles dans Admin, ou modifiables ? **Points (a)/(b) tranchés → DECISION-054 ; droits sur la méthodologie → DECISION-060 (q118). Débloqué côté PO au 2026-10-18, rien d'implémenté : `App.tsx` toujours à l'ancien découpage.** Prérequis : correctifs « un seul chemin d'écriture » (A05/A06), amendement du contrat (DECISION-060), modèle causes/événements/impacts (OD-10). | 2026-10-18 | En cours (DECISION-062) — Analyse en attente de q121 |
 | @risk-manager | **I-D7 (lecture de q103)** : q103 dit « journalisées pour consultation dès que l'un des groupes Audit et/ou Comité est supérieur à un membre », q101 dit « l'auditeur [unique] est informé ». Lecture orchestrateur retenue : la consultation et l'information sont ouvertes dès le premier membre (sinon q101 serait contredit) ; « > 1 membre » = condition de **fin** de l'amorçage. A13 confirme. | 2026-10-12 | **Confirmé par A13** (2026-10-12, `A13-review-DECISION-044.md` §6) : ouverture dès le 1er membre actif ; fin à 2 membres **éligibles actifs** (nuance à reporter dans la spec B-6d, A05) |
 | @risk-manager @dev-backend | **F-D044-08** LOW 2,2 (retest A10) : q58 (paramètre tenant interdisant Comité + Audit, `RoleService` l. 378) et q65 (notification `COMMITTEE_MEMBER_ADDED`, l. 455) ne reconnaissent le Comité que par le groupe. Faut-il étendre la définition q94 (groupe ou pouvoirs de validation) à ces deux règles ? | 2026-10-12 | **A13 : étendre les deux** (q58 dans les deux sens + `assertReactivable` ; q65 aussi à l'élargissement, à la transition non-membre → membre). Ne relève pas du PO. À dispatcher A06 |
 | @dev-backend @security | **F-D044-03** (RatingScale : corrigé `0d68095`, RETEST_PASS A10 sur Postgres jetable ; reste ~32 services, Role/User/Config d'abord) LOW 3,1 — audit écrit hors transaction dans ~33 services ; chaîne concrète : `RatingScaleService` (audit après l'écriture → `authorsOf` peut ignorer un auteur d'échelle). Priorité : RatingScale, puis Role, User, Config. **F-D044-02** LOW (effets de bord de l'approbation sans audit propre, = AUD-D044-01). **F-D044-06** INFO (libellé de notification admin + Comité ; tenant dans `audited()`). | 2026-10-12 | **Ouvert — A06** |
@@ -1659,4 +1679,213 @@ RELATED: q113, I-D9, F-B6d-01, QA-B6d-01, contrat §10 (paramètres du
   Dispositif, 9 invariants).
 OWNER: HUMAN ; @risk-manager @dev-backend @security @architect (consultation)
 STATUS: DÉCIDÉ (principe) — déclinaison en consultation.
+
+DECISION-056
+DATE: 2026-10-18 (réponse cockpit q114, horodatée 2026-10-17 21:40 UTC)
+CONTEXT: C-B6d-02 / Q-A14-B6d-2 — la vue « décisions prises en votre
+  absence » (amorçage, repli) n'existe qu'en API.
+DECISION (PO, cockpit, option recommandée) : livrer l'écran avant
+  l'arrivée du premier membre Audit ou Comité en production ; à défaut,
+  une procédure écrite tenue par le PO.
+RELATED: q114, C-B6d-02, B-6d.
+OWNER: @dev-frontend (écran) ; HUMAN (procédure de repli)
+STATUS: DÉCIDÉ — à planifier avant la mise en production de B-6d avec un
+  premier membre Audit/Comité.
+
+DECISION-057
+DATE: 2026-10-18 (réponse cockpit q115, horodatée 01:48 UTC)
+CONTEXT: Consultation DECISION-055 — éléments qui restent hors de toute
+  configuration client.
+DECISION (PO, cockpit, réponse libre) : non configurables — isolation
+  entre clients ; journal d'audit jamais modifiable ; « qui a fait quoi »
+  toujours enregistré par le serveur ; suppression logique seulement ;
+  personne ne valide ce qu'il a saisi ni ne s'attribue ses propres rôles ;
+  vérification de la connexion. Sur l'authentification : si d'autres
+  mécanismes que le SSO existent, laisser le choix au client, avec
+  e-mail + mot de passe par défaut.
+  → Lecture orchestrateur : le mode de connexion devient un réglage client
+  (défaut e-mail/mot de passe, SSO en option) ; la vérification du mode
+  choisi reste non configurable. Le PO a demandé « à toi de valider » :
+  trois éléments de la liste proposée ne figurent pas dans sa réponse
+  (pas de validation tacite ; cumul de rôles toujours visible ; historique
+  jamais réécrit) — non tranché, à reconfirmer (item ouvert, q120).
+RELATED: q115, DECISION-055, consultation-configurabilite-2026-10-18.md.
+OWNER: HUMAN (q120) ; @architect @security
+STATUS: DÉCIDÉ pour les 6 éléments cités — 3 éléments à reconfirmer.
+
+DECISION-058
+DATE: 2026-10-18 (réponse cockpit q116, horodatée 01:49 UTC)
+CONTEXT: Assouplir un réglage de gouvernance : une ou deux personnes ?
+DECISION (PO, cockpit, contre la recommandation A10) : un administrateur
+  seul peut assouplir, avec motif obligatoire et trace d'audit (avant/après).
+  → Les écarts relevés par A10/A05 (`setCommitteeEnforcement`,
+  `setCommitteeAuditCumul`, `PATCH /modules/:name/toggle`) n'ont pas à
+  passer en maker-checker ; ils doivent en revanche tous exiger un motif
+  et tracer avant/après (le toggle de module n'a aujourd'hui ni motif ni
+  trace complète).
+RELATED: q116, DECISION-055, item « Assouplissements à un seul
+  administrateur ».
+OWNER: @dev-backend @security
+STATUS: DÉCIDÉ (risque accepté par le PO).
+
+DECISION-059
+DATE: 2026-10-18 (réponse cockpit q117, horodatée 01:50 UTC)
+CONTEXT: I-D9 — auto-désignation de l'« administrateur sollicité ».
+DECISION (PO, cockpit) : créer un régime « structure à une personne »,
+  désactivé par défaut, déclaré **seulement par l'éditeur** à l'ouverture
+  du compte client (jamais par le client lui-même), affiché sur chaque
+  décision, rapport et cartographie (« sans second regard »), levé
+  définitivement dès qu'une deuxième personne arrive. L'auto-désignation
+  reste interdite.
+RELATED: q117, q113, DECISION-055, I-D9, B-6d.
+OWNER: @risk-manager @dev-backend @security
+STATUS: DÉCIDÉ — à spécifier (lot à créer).
+
+DECISION-060
+DATE: 2026-10-18 (réponse cockpit q118, horodatée 01:50 UTC)
+CONTEXT: Dans l'Administration, qui peut modifier la méthodologie
+  (Dispositif : échelles, appétence, paramètres) ?
+DECISION (PO, cockpit, contre la recommandation A05) : l'administrateur
+  peut aussi modifier la méthodologie.
+  → Amende le contrat (méthodologie réservée au groupe Risk Manager).
+  Lecture orchestrateur : le circuit d'approbation des changements de
+  Dispositif (maker-checker, B-6a/B-6d) reste inchangé ; seul le droit de
+  proposer/modifier s'étend à l'administrateur. À confirmer avec A13
+  avant implémentation.
+RELATED: q118, DECISION-054, contrat §13.
+OWNER: @architect @risk-manager @dev-backend
+STATUS: DÉCIDÉ — mise à jour du contrat à faire.
+
+DECISION-061
+DATE: 2026-10-18 (réponse cockpit q119, horodatée 01:50 UTC)
+CONTEXT: Cumul Comité + Audit autorisé par défaut (DECISION-042, q58),
+  seul défaut non strict.
+DECISION (PO, cockpit, option recommandée) : interdit par défaut,
+  autorisable par le client.
+  → Remplace le défaut de DECISION-042. Point d'attention pour Djamo
+  (tenant existant) : changer le défaut ne doit pas révoquer
+  silencieusement un cumul déjà en place — à traiter dans le lot.
+RELATED: q119, DECISION-042, q58.
+OWNER: @dev-backend @dev-db
+STATUS: DÉCIDÉ — à implémenter.
+
+DECISION-062
+DATE: 2026-10-18
+CONTEXT: Refonte de la section Risques, débloquée par DECISION-054/060.
+  Plan proposé par l'orchestrateur : UX (A04) nouvelle navigation +
+  Dev Backend (A06) « un seul chemin d'écriture » + Risk Manager (A13)
+  confirmation DECISION-060, en parallèle ; puis Dev Frontend ; puis
+  QA + Sécurité.
+DECISION (PO, conversation : « Lance ») : go pour ce plan.
+  → Réserve orchestrateur (règle 7bis) : le modèle causes/événements/
+  impacts touche OD-10, jamais tranché (structure + qui édite l'Analyse).
+  Il est retiré du dispatch et posé au PO en q121 ; A06 ne crée aucune
+  colonne Analyse avant la réponse.
+RELATED: item « Refonte de la section Risques », DECISION-054, DECISION-060,
+  OD-10, q121.
+OWNER: @ux-designer @dev-backend @risk-manager ; puis @dev-frontend
+STATUS: DÉCIDÉ — dispatch en cours.
+
+DECISION-063
+DATE: 2026-10-18 (cockpit q120)
+CONTEXT: 3 invariants proposés par les agents, absents de la réponse q115.
+DECISION (PO, option recommandée) : restent non configurables — pas de
+  validation tacite, cumul de rôles toujours visible, historique jamais
+  réécrit. Liste complète des invariants : 9 (q115 + q120).
+RELATED: q115, q120, DECISION-057.
+OWNER: @architect @security
+STATUS: DÉCIDÉ.
+
+DECISION-064
+DATE: 2026-10-18 (cockpit q121, réponse libre)
+CONTEXT: Étape Analyse de la refonte Risques (OD-10).
+DECISION (PO) : une étape Analyse distincte, avec la structure prévue par
+  la refonte (listes causes/événements/impacts + contexte). Peut la
+  réaliser : la personne à qui le propriétaire du risque a attribué le
+  risque sur un processus, ou la personne désignée en N-1 sur le
+  processus, ou le propriétaire du risque, ou le propriétaire du
+  processus.
+  → À traduire en droits par A13/A05/A06 dans la section « Droits et
+  accès » (DECISION-068) ; « N-1 désigné sur le processus » est à
+  rattacher à une donnée existante ou à créer.
+RELATED: q121, OD-10, DECISION-062.
+OWNER: @risk-manager @dev-backend @ux-designer
+STATUS: DÉCIDÉ — modèle à concevoir.
+
+DECISION-065
+DATE: 2026-10-18 (cockpit q122 à q125, options recommandées)
+DECISION (PO) : q122 une grille se crée et se modifie seulement depuis un
+  brouillon de Dispositif ; q123 en V1 un raccourci ouvre seulement
+  l'écran d'Administration ; q124 tous ceux qui lisent les risques voient
+  Administration > Méthodologie en lecture seule ; q125 l'entrée
+  « Évaluations » reste dans la barre latérale.
+RELATED: docs/ux/RM-V1-Navigation-Risques.md Q1-Q4.
+OWNER: @ux-designer @dev-frontend
+STATUS: DÉCIDÉ — la spec de navigation sort de l'état DRAFT.
+
+DECISION-066
+DATE: 2026-10-18 (cockpit q126, q127, q129, réponses libres)
+CONTEXT: Structure à une personne ; qui lève le régime ; admin et Risk
+  Manager.
+DECISION (PO) — principe produit transverse, « ne jamais bloquer » :
+  GRC Tools est un produit commercial ; il ne doit jamais se bloquer
+  parce que la maturité du client ne fournit pas assez de rôles clés.
+  Quand une règle de gouvernance ne peut pas être respectée :
+  (1) l'action reste possible ; (2) l'outil signale le point de
+  gouvernance mis à mal (le risque pris) ; (3) l'auteur confirme une
+  seconde fois (double validation par la même personne) ; (4) tout est
+  tracé ; (5) on peut désigner un compte (ex. le gérant) qui statue ou
+  est seulement informé ; (6) le seuil qui lève ce régime (ex. arrivée
+  d'un 2e Risk Manager) est configurable. L'administrateur peut aussi
+  être Risk Manager (RSSI, IT…) : à gérer intelligemment, pas à
+  interdire.
+  → Remplace l'option « bloqué à vie » (q126). Tension avec l'invariant
+  « personne ne valide sa propre saisie » (q115) : à arbitrer dans la
+  section « Droits et accès » (DECISION-068), cas par cas, avec motif.
+RELATED: q126, q127, q129, DECISION-059, DECISION-060, q115.
+OWNER: @risk-manager @architect @dev-backend @security
+STATUS: DÉCIDÉ — principe ; application cas par cas via DECISION-068.
+
+DECISION-067
+DATE: 2026-10-18 (cockpit q128, option recommandée)
+DECISION (PO) : l'administrateur peut abandonner un brouillon de
+  Dispositif (motif, trace).
+RELATED: q128, DECISION-060.
+OWNER: @dev-backend
+STATUS: DÉCIDÉ — inclus dans la mise en œuvre DECISION-060.
+
+DECISION-068
+DATE: 2026-10-18 (cockpit q130, réponse libre + conversation)
+CONTEXT: Les droits se tranchaient question par question (q12, q37, q109,
+  q116, q130…) et l'intention se perdait.
+DECISION (PO) : une section « Droits et accès » dans le cockpit, avec la
+  liste de tous les droits, accès et habilitations possibles, pourquoi
+  chacun existe et son objectif selon l'Architecte, le Risk Manager et le
+  Dev Backend. Tout droit qui met à mal un principe de gouvernance ou de
+  risque est surligné avec son motif, et le PO arbitre là, sur une base
+  claire des rôles, au lieu de questions isolées. q130 est arbitrée dans
+  cette section.
+RELATED: q130, DECISION-066, DECISION-058, DECISION-060.
+OWNER: @architect @risk-manager @dev-backend ; orchestrateur (cockpit)
+STATUS: DÉCIDÉ — dispatch en cours.
+
+DECISION-069
+DATE: 2026-10-18 (cockpit q131, option recommandée)
+DECISION (PO) : ajouter au circuit une demande « revenir au mode du
+  Dispositif », validée comme les autres.
+RELATED: q131, QA-SWP-05.
+OWNER: @dev-backend
+STATUS: DÉCIDÉ — à implémenter.
+
+DECISION-070
+DATE: 2026-10-18 (consigne PO en conversation)
+CONTEXT: Revue Codex PR #186, deux constats laissés ouverts par
+  l'orchestrateur (ligne HUMAN « Revue Codex PR #186 ») : P2 course
+  désactivation d'échelle / brouillon de Dispositif, P1 absence d'éditeur
+  des seuils d'appétence.
+DECISION (PO) : corriger les deux constats dans la PR #186 ; tout point
+  qui demande un arbitrage passe par le cockpit.
+RELATED: PR #186, q132, q133.
+OWNER: @dev-backend (P2) @dev-frontend (P1, commit 60f7757)
+STATUS: DÉCIDÉ — P1 livré, P2 en cours ; q132/q133 ouvertes.
 ```

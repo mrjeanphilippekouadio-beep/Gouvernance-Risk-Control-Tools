@@ -81,8 +81,8 @@ export interface ChangeRequest {
   decisionComment: string | null;
 }
 
-/** Scalar draft parameters sent on PATCH (appetiteThresholds and committeeVoteCustom are never sent from this screen). */
-export type DraftPatch = Partial<Omit<FrameworkParams, "appetiteThresholds" | "committeeVoteCustom">>;
+/** Draft parameters sent on PATCH (committeeVoteCustom is never sent from this screen; appetiteThresholds replaces the whole list). */
+export type DraftPatch = Partial<Omit<FrameworkParams, "committeeVoteCustom">>;
 
 const base = "/api/v1/risk-frameworks";
 

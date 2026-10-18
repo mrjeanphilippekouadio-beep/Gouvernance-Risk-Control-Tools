@@ -93,6 +93,14 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
+  async isReferencedByFrameworkVersion(tenantId: string, id: string): Promise<boolean> {
+    const { rows } = await this.pool.query(
+      `SELECT 1 FROM risk_framework_versions WHERE tenant_id = $1 AND rating_scale_id = $2 LIMIT 1`,
+      [tenantId, id],
+    );
+    return rows.length > 0;
+  }
+
   async list(tenantId: string, options?: { includeArchived?: boolean }): Promise<RatingScale[]> {
     const statusFilter = options?.includeArchived ? "" : "AND status != 'ARCHIVED'";
     const { rows } = await this.pool.query<RatingScaleRow>(
@@ -199,14 +207,23 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
   }
 
   async softDelete(tenantId: string, id: string, deletedBy: string, reason: string, audit?: TransactionalAudit<void>): Promise<void> {
-    return this.tx(audit, async (c) => {
-    const { rowCount } = await c.query(
-      `UPDATE rating_scales
-       SET deleted_at = now(), deleted_by = $3, deletion_reason = $4
-       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
-      [tenantId, id, deletedBy, reason],
-    );
-    if (!rowCount) throw new NotFoundError("RatingScale", id);
-    });
+    try {
+      return await this.tx(audit, async (c) => {
+      const { rowCount } = await c.query(
+        `UPDATE rating_scales
+         SET deleted_at = now(), deleted_by = $3, deletion_reason = $4
+         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
+        [tenantId, id, deletedBy, reason],
+      );
+      if (!rowCount) throw new NotFoundError("RatingScale", id);
+      });
+    } catch (err) {
+      // Migration 063: a Dispositif draft started using this scale while it was being disabled (Codex P2, PR #186).
+      const e = err as { code?: string; message?: string };
+      if (e?.code === "23503" && /^rating_scales: this scale is referenced/.test(e.message ?? "")) {
+        throw new ValidationError("Cette échelle de cotation vient d'être reprise dans un brouillon de Dispositif : elle ne peut pas être désactivée");
+      }
+      throw err;
+    }
   }
 }

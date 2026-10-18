@@ -31,11 +31,11 @@ describe.skipIf(!enabled)("F-B6b-02 snapshot guard on real PostgreSQL", () => {
     ids.ta = await one(`INSERT INTO tenants (name) VALUES ('fb6b02-a') RETURNING id`);
     ids.tb = await one(`INSERT INTO tenants (name) VALUES ('fb6b02-b') RETURNING id`);
     ids.u = await one(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, 'u@fb6b02', 'u') RETURNING id`, [ids.ta]);
-    const scale = (n: string) => one(`INSERT INTO rating_scales (tenant_id, name, version, probability_levels, impact_levels) VALUES ($1, $2, '1', 5, 5) RETURNING id`, [ids.ta, n]);
+    const scale = (n: string, t: string = ids.ta) => one(`INSERT INTO rating_scales (tenant_id, name, version, probability_levels, impact_levels) VALUES ($1, $2, '1', 5, 5) RETURNING id`, [t, n]);
     ids.s1 = await scale("s1"); ids.s2 = await scale("s2");
     const version = async (t: string) => {
       const f = await one(`INSERT INTO risk_frameworks (tenant_id, name) VALUES ($1, 'fw') RETURNING id`, [t]);
-      return one(`INSERT INTO risk_framework_versions (tenant_id, framework_id, version_number, rating_scale_id, committee_evaluation_min_score, committee_treatment_min_score) VALUES ($1, $2, 1, $3, 15, 20) RETURNING id`, [t, f, ids.s1]);
+      return one(`INSERT INTO risk_framework_versions (tenant_id, framework_id, version_number, rating_scale_id, committee_evaluation_min_score, committee_treatment_min_score) VALUES ($1, $2, 1, $3, 15, 20) RETURNING id`, [t, f, t === ids.ta ? ids.s1 : await scale("sb", t)]); // 063: a version may only reference a live scale of its own tenant
     };
     ids.va = await version(ids.ta); ids.vb = await version(ids.tb);
     // 061: the insert guard needs an ACTIVE version; test-only shortcut (superuser, rolled back).
