@@ -8,6 +8,8 @@ import type { ProcessEvaluationModeRequest, RiskOwnerRef } from "../domain/entit
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 export interface ProcessEvaluationModeRequestWithOwners extends ProcessEvaluationModeRequest {
   /**
@@ -29,12 +31,11 @@ export interface ProcessEvaluationModeRequestWithOwners extends ProcessEvaluatio
  * `evaluationmode.validate` who also proposed the change must still have
  * a different person decide it.
  */
+const SELF_VALIDATION_REFUSAL =
+  "The actor who proposed this evaluation-mode change cannot also validate or reject it (maker-checker) — no exception, even for a Risk Manager holding evaluationmode.validate";
+
 function assertNotSelfValidated(actor: AuthenticatedUser, request: ProcessEvaluationModeRequest): void {
-  if (request.requestedBy === actor.userId) {
-    throw new ForbiddenError(
-      "The actor who proposed this evaluation-mode change cannot also validate or reject it (maker-checker) — no exception, even for a Risk Manager holding evaluationmode.validate",
-    );
-  }
+  if (request.requestedBy === actor.userId) throw new ForbiddenError(SELF_VALIDATION_REFUSAL);
 }
 
 function assertPending(request: ProcessEvaluationModeRequest): void {
@@ -87,6 +88,8 @@ export class ProcessEvaluationModeRequestService {
     private readonly processes: ProcessRepository,
     private readonly risks: RiskRepository,
     private readonly audit: AuditRepository,
+    /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   /** Maker step: process owner (or Risk Manager) proposes a mode change. Creates a PENDING_VALIDATION row; never touches Process.evaluationMode. */
@@ -145,12 +148,18 @@ export class ProcessEvaluationModeRequestService {
    * owners of the process are captured on the audit record (visible +
    * audited, never authoritative — DECISION-006).
    */
-  async validate(actor: AuthenticatedUser, id: string, requestId: string): Promise<Process> {
+  async validate(actor: AuthenticatedUser, id: string, requestId: string, confirmation?: GovernanceConfirmation): Promise<Process> {
     requirePermission(actor, "evaluationmode.validate");
     const request = await this.requests.getById(actor.tenantId, id);
     if (!request) throw new NotFoundError("ProcessEvaluationModeRequest", id);
     assertPending(request);
-    assertNotSelfValidated(actor, request);
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: request.requestedBy === actor.userId,
+      permission: "evaluationmode.validate",
+      makerIds: [request.requestedBy],
+      refusal: SELF_VALIDATION_REFUSAL,
+      confirmation,
+    });
 
     const beforeProcess = await this.processes.getById(actor.tenantId, request.processId);
     if (!beforeProcess) throw new NotFoundError("Process", request.processId);
@@ -182,9 +191,10 @@ export class ProcessEvaluationModeRequestService {
         // riskOwners embedded here so validation-time risk ownership is
         // captured in the audit trail (DECISION-006: visible + audited,
         // never authoritative — not read by any permission check above).
-        newValue: { ...validatedRequest, riskOwners },
+        newValue: { ...validatedRequest, riskOwners, ...selfValidated?.newValueExtra },
         reason: null,
         requestId,
+        ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
       },
     ];
 

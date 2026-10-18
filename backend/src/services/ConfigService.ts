@@ -5,6 +5,7 @@ import { ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
+import { SELF_VALIDATION_POLICIES, type GovernanceThirdPartyQuery, type SelfValidationPolicy } from "../domain/governance/selfValidation.js";
 import { MIN_APPETITE_THRESHOLD } from "./RiskEvaluationService.js";
 import { defaultCommitteeThreshold } from "../domain/scoring.js";
 import { resolveMaxScore } from "./scoreCeiling.js";
@@ -39,6 +40,7 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     committeeTreatmentMinScore: null,
     committeeEvaluationEnforced: true,
     committeeAuditCumulAllowed: true,
+    selfValidationPolicy: "REFUSE",
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),
@@ -84,6 +86,8 @@ export class ConfigService {
      * Absent: the pre-B-6b behaviour (tests). GET /config stays available as obsolete history.
      */
     private readonly frameworks?: Pick<RiskFrameworkRepository, "listFrameworks">,
+    /** DECISION-074 D4: tells whether a Risk Manager / Audit / Committee member exists besides the actor. Optional. */
+    private readonly thirdParties?: GovernanceThirdPartyQuery,
   ) {}
 
   private assertNotOwnedByFramework(): void {
@@ -342,6 +346,38 @@ export class ConfigService {
       newValue: after,
       reason,
       requestId,
+    });
+    return after;
+  }
+
+  /**
+   * PUT /config/self-validation-policy — DECISION-074 q141. Chooses what happens when someone validates their own
+   * input: REFUSE (default) or DOUBLE_CONFIRMATION (only offered when nobody else can validate). Relaxes a control:
+   * dedicated administrator permission, mandatory reason, audited in both directions.
+   * DECISION-072 hybrid rule, partly built: the administrator decides alone. The audit entry carries
+   * `governance_exception`: `config.selfvalidation.adminAlone` while no Risk Manager / Audit / Committee member
+   * exists, `config.selfvalidation.direct` when one exists (the two-person circuit is NOT built yet: the entry is
+   * the trace a reviewer will find).
+   */
+  async setSelfValidationPolicy(actor: AuthenticatedUser, policy: SelfValidationPolicy, reason: string, requestId: string): Promise<Config> {
+    requirePermission(actor, "config.selfvalidation.set");
+    if (!SELF_VALIDATION_POLICIES.includes(policy)) throw new ValidationError(`Unknown self-validation policy: ${policy}`);
+    if (!reason?.trim()) throw new ValidationError("A reason is required to change the self-validation policy");
+
+    const thirdPartyExists = this.thirdParties ? await this.thirdParties.existsGovernanceThirdParty(actor.tenantId, actor.userId) : true;
+    const before = await this.get(actor);
+    const after = await this.upsertConfig(actor.tenantId, { selfValidationPolicy: policy }, actor.userId);
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Config",
+      entityId: after.id,
+      action: "UPDATE",
+      oldValue: before,
+      newValue: after,
+      reason: reason.trim(),
+      requestId,
+      governanceException: thirdPartyExists ? "config.selfvalidation.direct" : "config.selfvalidation.adminAlone",
     });
     return after;
   }

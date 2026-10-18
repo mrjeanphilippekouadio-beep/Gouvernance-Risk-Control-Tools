@@ -86,6 +86,8 @@ import { DashboardScopeResolver } from "./services/DashboardScopeResolver.js";
 import { widestScopeMode, type DashboardScopeMode } from "./domain/entities/DashboardScope.js";
 import { BrandingService } from "./services/BrandingService.js";
 import { ConfigService } from "./services/ConfigService.js";
+import { SelfValidationGate } from "./services/SelfValidationGate.js";
+import { PostgresGovernanceQueries } from "./infrastructure/database/postgres/PostgresGovernanceQueries.js";
 import { ModuleToggleService } from "./services/ModuleToggleService.js";
 import { TenantService } from "./services/TenantService.js";
 import { RegulatoryFrameworkService } from "./services/RegulatoryFrameworkService.js";
@@ -238,19 +240,24 @@ const processService = new ProcessService(
   departmentRepository,
   userRepository,
 );
+// DECISION-074 D4: one gate for every self-validation guard, one query object for validators / third parties / markers.
+const governanceQueries = new PostgresGovernanceQueries(pool);
+const selfValidationGate = new SelfValidationGate(configRepository, governanceQueries);
 const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
   processEvaluationModeRequestRepository,
   processRepository,
   riskRepository,
   auditRepository,
+  selfValidationGate,
 );
 const auditLogService = new AuditLogService(auditRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository);
-const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository);
+const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository, selfValidationGate);
 const effectivenessService = new ControlEffectivenessService(
   effectivenessRepository,
   controlRepository,
   auditRepository,
+  selfValidationGate,
 );
 const anomalyService = new AnomalyService(
   anomalyRepository,
@@ -267,6 +274,7 @@ const findingService = new FindingService(
   riskRepository,
   controlRepository,
   anomalyRepository,
+  selfValidationGate,
 );
 const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
 const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
@@ -298,6 +306,7 @@ const riskEvaluationService = new RiskEvaluationService(
   configRepository,
   riskFrameworkRepository,
   riskCategoryRepository,
+  selfValidationGate,
 );
 const treatmentDecisionService = new TreatmentDecisionService(
   treatmentDecisionRepository,
@@ -305,6 +314,7 @@ const treatmentDecisionService = new TreatmentDecisionService(
   riskRepository,
   auditRepository,
   configRepository,
+  selfValidationGate,
 );
 // DIV-07: read-only companion of riskEvaluationService — composes only, never scores.
 const riskEvaluationViewService = new RiskEvaluationViewService(
@@ -329,6 +339,7 @@ const actionPlanService = new ActionPlanService(
   departmentRepository,
   findingRepository,
   notificationService,
+  selfValidationGate,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository, riskFrameworkRepository);
 const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository);
@@ -395,14 +406,14 @@ const dashboardService = new DashboardService(
   riskFrameworkRepository,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
-const configService = new ConfigService(configRepository, auditRepository, ratingScaleRepository, riskFrameworkRepository);
+const configService = new ConfigService(configRepository, auditRepository, ratingScaleRepository, riskFrameworkRepository, governanceQueries);
 const moduleToggleService = new ModuleToggleService(moduleToggleRepository, auditRepository);
 const tenantService = new TenantService(tenantRepository, auditRepository);
 const regulatoryFrameworkService = new RegulatoryFrameworkService(regulatoryFrameworkRepository, auditRepository);
 const riskCategoryService = new RiskCategoryService(riskCategoryRepository, auditRepository);
 const riskImportService = new RiskImportService(riskService);
 const userService = new UserService(userRepository, auditRepository, roleService, departmentRepository, notificationService);
-const governanceService = new GovernanceService(reviewCycleRepository, auditRepository, notifier);
+const governanceService = new GovernanceService(reviewCycleRepository, auditRepository, notifier, selfValidationGate);
 
 const lookupMembership = async (email: string) => {
   const { rows } = await pool.query<{ id: string; tenant_id: string; roles: string[]; email: string; display_name: string | null }>(
@@ -510,8 +521,8 @@ app.use(
   moduleGuard(moduleToggleService, "CONTROL"),
   controlsRouter(controlService, raciEnrichmentViewService),
 );
-app.use("/api/v1/executions", authMiddleware(identityProvider), executionsRouter(executionService));
-app.use("/api/v1/effectiveness", authMiddleware(identityProvider), effectivenessRouter(effectivenessService));
+app.use("/api/v1/executions", authMiddleware(identityProvider), executionsRouter(executionService, governanceQueries));
+app.use("/api/v1/effectiveness", authMiddleware(identityProvider), effectivenessRouter(effectivenessService, governanceQueries));
 app.use(
   "/api/v1/anomalies",
   authMiddleware(identityProvider),
@@ -528,14 +539,14 @@ app.use(
   "/api/v1/findings",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "AUDIT"),
-  findingsRouter(findingService),
+  findingsRouter(findingService, governanceQueries),
 );
 app.use("/api/v1/departments", authMiddleware(identityProvider), departmentsRouter(departmentService));
 app.use("/api/v1/processes", authMiddleware(identityProvider), processesRouter(processService));
 app.use(
   "/api/v1/process-evaluation-mode-requests",
   authMiddleware(identityProvider),
-  processEvaluationModeRequestsRouter(processEvaluationModeRequestService),
+  processEvaluationModeRequestsRouter(processEvaluationModeRequestService, governanceQueries),
 );
 app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(auditLogService));
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
@@ -554,9 +565,9 @@ app.use("/api/v1/risk-frameworks", authMiddleware(identityProvider), riskFramewo
 app.use(
   "/api/v1/risk-evaluations",
   authMiddleware(identityProvider),
-  riskEvaluationsRouter(riskEvaluationService, riskEvaluationViewService, treatmentDecisionService),
+  riskEvaluationsRouter(riskEvaluationService, riskEvaluationViewService, treatmentDecisionService, governanceQueries),
 );
-app.use("/api/v1/treatment-decisions", authMiddleware(identityProvider), treatmentDecisionsRouter(treatmentDecisionService));
+app.use("/api/v1/treatment-decisions", authMiddleware(identityProvider), treatmentDecisionsRouter(treatmentDecisionService, governanceQueries));
 app.use(
   "/api/v1/kris",
   authMiddleware(identityProvider),
@@ -570,7 +581,7 @@ app.use(
   "/api/v1/actions",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "ACTION_PLAN"),
-  actionPlansRouter(actionPlanService, raciEnrichmentViewService),
+  actionPlansRouter(actionPlanService, raciEnrichmentViewService, governanceQueries),
 );
 app.use("/api/v1/raci", authMiddleware(identityProvider), raciRouter(raciAssignmentService));
 app.use(
@@ -609,7 +620,7 @@ app.use(
   authMiddleware(identityProvider),
   notificationSubscriptionsRouter(notificationService),
 );
-app.use("/api/v1/review-cycles", authMiddleware(identityProvider), reviewCyclesRouter(governanceService));
+app.use("/api/v1/review-cycles", authMiddleware(identityProvider), reviewCyclesRouter(governanceService, governanceQueries));
 
 app.use(errorHandler);
 

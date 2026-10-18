@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { ControlEffectivenessService } from "../../services/ControlEffectivenessService.js";
+import { GovernanceConfirmationBody } from "../validation.js";
+import { withIndependence } from "../validationIndependence.js";
+import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
 const Rating = z.enum(["EFFECTIVE", "PARTIALLY_EFFECTIVE", "INEFFECTIVE"]);
 const Result = z.enum(["EFFECTIVE", "PARTIALLY_EFFECTIVE", "INEFFECTIVE", "INCONCLUSIVE"]);
@@ -21,10 +24,11 @@ const CreateAssessmentBody = z.object({
   status: AssessmentStatus.optional(),
 });
 
-const ValidateAssessmentBody = z.object({ comment: z.string().nullish() });
+const ValidateAssessmentBody = z.object({ comment: z.string().nullish(), governanceConfirmation: GovernanceConfirmationBody.optional() });
 
-export function effectivenessRouter(effectivenessService: ControlEffectivenessService): Router {
+export function effectivenessRouter(effectivenessService: ControlEffectivenessService, independence?: GovernanceExceptionLookup): Router {
   const router = Router();
+  const indep = withIndependence(independence, "ControlEffectivenessAssessment");
 
   router.get("/", async (req, res, next) => {
     try {
@@ -34,7 +38,7 @@ export function effectivenessRouter(effectivenessService: ControlEffectivenessSe
         return;
       }
       const assessments = await effectivenessService.listForControl(req.user, controlId);
-      res.json({ data: assessments });
+      res.json({ data: await indep(req.user.tenantId, assessments) });
     } catch (err) {
       next(err);
     }
@@ -43,7 +47,7 @@ export function effectivenessRouter(effectivenessService: ControlEffectivenessSe
   router.get("/:id", async (req, res, next) => {
     try {
       const assessment = await effectivenessService.get(req.user, req.params["id"] as string);
-      res.json({ data: assessment });
+      res.json({ data: await indep(req.user.tenantId, assessment) });
     } catch (err) {
       next(err);
     }
@@ -67,8 +71,9 @@ export function effectivenessRouter(effectivenessService: ControlEffectivenessSe
         req.params["id"] as string,
         body.comment ?? null,
         req.requestId,
+        body.governanceConfirmation,
       );
-      res.json({ data: assessment });
+      res.json({ data: await indep(req.user.tenantId, assessment) });
     } catch (err) {
       next(err);
     }

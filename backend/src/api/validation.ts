@@ -11,6 +11,12 @@ export function boundedArray<T extends z.ZodType>(element: T, max: number, min =
   return z.array(z.unknown()).min(min).max(max).pipe(z.array(element));
 }
 
+/** DECISION-074: the explicit second confirmation of a self-validation (`governanceConfirmation` in the request body). */
+export const GovernanceConfirmationBody = z.object({
+  rule: z.literal("noSelfValidation"),
+  reason: z.string().trim().min(1).max(500),
+});
+
 /** Shared by the scale's `defenseLines` and the mastery assessment's `lines` (one entry per defense line). */
 export const MAX_DEFENSE_LINES = 50;
 /** B-9: impact scale size ceiling (6 levels) and impact axes ceiling (7 axes) — mirrored in RatingScaleService. */

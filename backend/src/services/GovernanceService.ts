@@ -1,10 +1,12 @@
 import type { ReviewCycleRepository } from "../domain/repositories/ReviewCycleRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { ReviewCycle, ReviewCycleType } from "../domain/entities/ReviewCycle.js";
-import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
+import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 const CYCLE_TYPES: ReviewCycleType[] = ["ANNUELLE", "ANTICIPEE"];
 
@@ -30,6 +32,8 @@ export class GovernanceService {
     private readonly audit: AuditRepository,
     /** Optional — same pattern as ActionPlanService/KriMeasureService/FeedbackService. */
     private readonly notifier?: Notifier,
+    /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   /** ACT-250 (type=ANNUELLE) and ACT-251 (type=ANTICIPEE, motif obligatoire) — same endpoint, differentiated by type. */
@@ -125,16 +129,20 @@ export class GovernanceService {
    * checker), mirroring RiskEvaluationService's evaluator != validator
    * guard and ActionPlanService's creator != closer guard.
    */
-  async close(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string): Promise<ReviewCycle> {
+  async close(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string, confirmation?: GovernanceConfirmation): Promise<ReviewCycle> {
     requirePermission(actor, "governance.validate");
     const before = await this.get(actor, id);
 
     if (before.status !== "CLOTURE_PROPOSEE") {
       throw new ValidationError(`Cannot close a cycle that has no pending closure proposal (current status: ${before.status})`);
     }
-    if (before.proposedClosureBy === actor.userId) {
-      throw new ForbiddenError("The actor who proposed closing this review cycle cannot also validate it (maker-checker)");
-    }
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: before.proposedClosureBy === actor.userId,
+      permission: "governance.validate",
+      makerIds: before.proposedClosureBy ? [before.proposedClosureBy] : [],
+      refusal: "The actor who proposed closing this review cycle cannot also validate it (maker-checker)",
+      confirmation,
+    });
 
     const after = await this.cycles.close(actor.tenantId, id, actor.userId, comment?.trim() || null);
 
@@ -145,9 +153,10 @@ export class GovernanceService {
       entityId: id,
       action: "CLOSE",
       oldValue: before,
-      newValue: after,
+      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
       reason: comment ?? null,
       requestId,
+      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
     });
 
     return after;
