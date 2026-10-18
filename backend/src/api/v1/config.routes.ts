@@ -24,6 +24,11 @@ const UpdateCommitteeAuditCumulBody = z.object({
   reason: z.string().min(1).max(500),
 });
 
+const UpdateSelfValidationPolicyBody = z.object({
+  policy: z.enum(["REFUSE", "DOUBLE_CONFIRMATION"]),
+  reason: z.string().min(1).max(500),
+});
+
 /** PUT /config and PUT /config/appetite-mode answer 410 (DECISION-054); DIV-06 evaluation-mode and Lot A committee settings stay. */
 export function configRouter(configService: ConfigService): Router {
   const router = Router();
@@ -85,6 +90,16 @@ export function configRouter(configService: ConfigService): Router {
     try {
       const body = UpdateCommitteeAuditCumulBody.parse(req.body);
       const config = await configService.setCommitteeAuditCumul(req.user, body.allowed, body.reason, req.requestId);
+      res.json({ data: config });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/self-validation-policy", async (req, res, next) => {
+    try {
+      const body = UpdateSelfValidationPolicyBody.parse(req.body);
+      const config = await configService.setSelfValidationPolicy(req.user, body.policy, body.reason, req.requestId);
       res.json({ data: config });
     } catch (err) {
       next(err);

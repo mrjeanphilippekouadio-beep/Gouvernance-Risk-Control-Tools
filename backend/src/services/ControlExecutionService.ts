@@ -2,9 +2,11 @@ import type { ControlExecutionRepository } from "../domain/repositories/ControlE
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { ControlExecution, CreateControlExecutionInput } from "../domain/entities/ControlExecution.js";
-import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 /**
  * Rules ported from apps-script-legacy/12_Executions.gs: append-only
@@ -18,6 +20,8 @@ export class ControlExecutionService {
     private readonly executions: ControlExecutionRepository,
     private readonly controls: ControlRepository,
     private readonly audit: AuditRepository,
+    /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   async create(
@@ -78,13 +82,18 @@ export class ControlExecutionService {
     id: string,
     comment: string | null,
     requestId: string,
+    confirmation?: GovernanceConfirmation,
   ): Promise<ControlExecution> {
     requirePermission(actor, "execution.validate");
     const before = await this.get(actor, id);
 
-    if (before.executedBy === actor.userId) {
-      throw new ForbiddenError("An executor cannot validate their own execution");
-    }
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: before.executedBy === actor.userId,
+      permission: "execution.validate",
+      makerIds: [before.executedBy],
+      refusal: "An executor cannot validate their own execution",
+      confirmation,
+    });
     if (before.validatedAt) {
       throw new ValidationError("This execution has already been validated");
     }
@@ -98,9 +107,10 @@ export class ControlExecutionService {
       entityId: id,
       action: "VALIDATE",
       oldValue: before,
-      newValue: after,
+      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
       reason: comment,
       requestId,
+      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
     });
 
     return after;

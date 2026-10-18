@@ -27,6 +27,8 @@
  * Don't assume this field silently supersedes the RatingScale one.
  */
 
+import type { SelfValidationPolicy } from "../governance/selfValidation.js";
+
 export type ScoreFormula = "P_X_I" | "WEIGHTED_SUM";
 
 /** Mirrors RatingScale.ts's RetainedImpactRule literal-for-literal on purpose — see file header design note. */
@@ -74,6 +76,8 @@ export interface Config {
   committeeEvaluationEnforced: boolean;
   /** DECISION-042 §1 (q58): may a user be in both the Committee and Audit groups? Default true. Risk Manager + Audit is always refused, whatever this says. */
   committeeAuditCumulAllowed: boolean;
+  /** DECISION-074 q141: what happens when someone validates their own input. Default REFUSE. */
+  selfValidationPolicy: SelfValidationPolicy;
   /** 0 means "default, never explicitly saved" — see DEFAULT_CONFIG in ConfigService. */
   version: number;
   updatedBy: string | null;
@@ -99,4 +103,5 @@ export interface ConfigPatch {
   committeeTreatmentMinScore?: number | null;
   committeeEvaluationEnforced?: boolean;
   committeeAuditCumulAllowed?: boolean;
+  selfValidationPolicy?: SelfValidationPolicy;
 }

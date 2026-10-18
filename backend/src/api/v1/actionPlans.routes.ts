@@ -4,6 +4,9 @@ import { boundedArray } from "../validation.js";
 import { perUserRateLimiter } from "../middleware/rateLimit.js";
 import type { ActionPlanService } from "../../services/ActionPlanService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
+import { GovernanceConfirmationBody } from "../validation.js";
+import { withIndependence } from "../validationIndependence.js";
+import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 import {
   ACTION_LINK_RESOURCE_TYPES,
   ACTION_PLAN_SOURCE_TYPES,
@@ -44,6 +47,7 @@ const LinksBody = z.object({
 const CloseBody = z.object({
   evidenceId: z.string().min(1),
   comment: z.string().nullish(),
+  governanceConfirmation: GovernanceConfirmationBody.optional(),
 });
 
 function parseListFilters(query: Record<string, unknown>) {
@@ -67,13 +71,15 @@ function parseListFilters(query: Record<string, unknown>) {
 export function actionPlansRouter(
   actionPlanService: ActionPlanService,
   raciEnrichmentViewService: RaciEnrichmentViewService,
+  independence?: GovernanceExceptionLookup,
 ): Router {
   const router = Router();
+  const indep = withIndependence(independence, "ActionPlan");
 
   router.get("/", async (req, res, next) => {
     try {
       const actions = await actionPlanService.list(req.user, parseListFilters(req.query as Record<string, unknown>));
-      res.json({ data: actions });
+      res.json({ data: await indep(req.user.tenantId, actions) });
     } catch (err) {
       next(err);
     }
@@ -82,7 +88,7 @@ export function actionPlansRouter(
   router.get("/:id", async (req, res, next) => {
     try {
       const action = await actionPlanService.get(req.user, req.params["id"] as string);
-      res.json({ data: action });
+      res.json({ data: await indep(req.user.tenantId, action) });
     } catch (err) {
       next(err);
     }
@@ -182,8 +188,9 @@ export function actionPlansRouter(
         body.evidenceId,
         body.comment ?? null,
         req.requestId,
+        body.governanceConfirmation,
       );
-      res.json({ data: action });
+      res.json({ data: await indep(req.user.tenantId, action) });
     } catch (err) {
       next(err);
     }

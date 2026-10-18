@@ -8,6 +8,8 @@ import { TREATMENT_OPTIONS, type ListTreatmentDecisionsOptions, type TreatmentDe
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { checkSelfValidation, type AcceptedSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 export interface CreateTreatmentDecisionRequest {
   riskEvaluationId: string;
@@ -29,6 +31,8 @@ export class TreatmentDecisionService {
     private readonly audit: AuditRepository,
     /** OD-5: optional only to keep the constructor pattern consistent with RiskEvaluationService — if absent, validateByCommittee always fails closed (no threshold found). server.ts must wire the real repository for Committee validation to ever succeed. */
     private readonly configs?: ConfigRepository,
+    /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   async create(actor: AuthenticatedUser, input: CreateTreatmentDecisionRequest, requestId: string): Promise<TreatmentDecision> {
@@ -141,7 +145,7 @@ export class TreatmentDecisionService {
    * (treatmentdecision.validate.committee — never treatmentdecision.validate).
    * OD-5: fail-closed if no committee threshold is configured yet.
    */
-  async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string): Promise<TreatmentDecision> {
+  async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string, confirmation?: GovernanceConfirmation): Promise<TreatmentDecision> {
     requirePermission(actor, "treatmentdecision.validate.committee");
     const before = await this.getOrThrow(actor.tenantId, id);
     this.assertProposed(before);
@@ -149,9 +153,13 @@ export class TreatmentDecisionService {
     // through the committee path either — same maker-checker invariant
     // as G4 on the ordinary path, closed after dev-backend flagged the
     // asymmetry rather than silently deciding either way.
-    if (actor.userId === before.decidedBy) {
-      throw new ForbiddenError("The proposer of a treatment decision cannot validate it through the committee path either");
-    }
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: actor.userId === before.decidedBy,
+      permission: "treatmentdecision.validate.committee",
+      makerIds: [before.decidedBy],
+      refusal: "The proposer of a treatment decision cannot validate it through the committee path either",
+      confirmation,
+    });
 
     const evaluation = await this.evaluations.getById(actor.tenantId, before.riskEvaluationId);
     // B-6b (F-8): the threshold frozen on the parent evaluation (from its Dispositif version). An evaluation
@@ -177,7 +185,7 @@ export class TreatmentDecisionService {
     }
 
     const after = await this.treatmentDecisions.recordCommitteeValidation(actor.tenantId, id, actor.userId, comment);
-    await this.recordAudit(actor, id, before, after, "VALIDATE", comment, requestId);
+    await this.recordAudit(actor, id, before, after, "VALIDATE", comment, requestId, selfValidated);
     return after;
   }
 
@@ -216,6 +224,7 @@ export class TreatmentDecisionService {
     action: "VALIDATE" | "REJECT",
     reason: string | null,
     requestId: string,
+    selfValidated?: AcceptedSelfValidation | null,
   ): Promise<void> {
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -224,9 +233,10 @@ export class TreatmentDecisionService {
       entityId: id,
       action,
       oldValue: before,
-      newValue: after,
+      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
       reason,
       requestId,
+      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
     });
   }
 }

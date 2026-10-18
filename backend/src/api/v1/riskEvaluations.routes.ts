@@ -4,6 +4,9 @@ import { boundedArray, MAX_DEFENSE_LINES } from "../validation.js";
 import type { RiskEvaluationService } from "../../services/RiskEvaluationService.js";
 import type { RiskEvaluationViewService } from "../../services/RiskEvaluationViewService.js";
 import type { TreatmentDecisionService } from "../../services/TreatmentDecisionService.js";
+import { GovernanceConfirmationBody } from "../validation.js";
+import { withIndependence } from "../validationIndependence.js";
+import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
 const EvaluationType = z.enum(["AD_HOC", "ANNUELLE", "ANTICIPEE"]);
 const EvaluationStatus = z.enum(["BROUILLON", "VALIDATED", "REJECTED", "VALIDE_COMITE"]);
@@ -50,7 +53,7 @@ const ResidualScoringBody = z.object({
   appetiteOverride: z.number().int().nullish(),
 });
 
-const ValidateBody = z.object({ comment: z.string().nullish() });
+const ValidateBody = z.object({ comment: z.string().nullish(), governanceConfirmation: GovernanceConfirmationBody.optional() });
 const RejectBody = z.object({ comment: z.string().min(1) });
 
 export function riskEvaluationsRouter(
@@ -58,8 +61,11 @@ export function riskEvaluationsRouter(
   riskEvaluationViewService: RiskEvaluationViewService,
   /** Lot B: optional so existing tests/callers built before TreatmentDecision existed keep compiling — server.ts must wire the real service for this sub-route to work. */
   treatmentDecisionService?: TreatmentDecisionService,
+  independence?: GovernanceExceptionLookup,
 ): Router {
   const router = Router();
+  const indep = withIndependence(independence, "RiskEvaluation");
+  const indepTreatment = withIndependence(independence, "TreatmentDecision");
 
   // DIV-07: read-only composition — the covering controls and their last
   // known effectiveness, to inform the human mastery rating. Never a
@@ -87,7 +93,7 @@ export function riskEvaluationsRouter(
 
 
       const evaluations = await riskEvaluationService.listForRisk(req.user, riskId, { status, limit, offset });
-      res.json({ data: evaluations });
+      res.json({ data: await indep(req.user.tenantId, evaluations) });
     } catch (err) {
       next(err);
     }
@@ -96,7 +102,7 @@ export function riskEvaluationsRouter(
   router.get("/:id", async (req, res, next) => {
     try {
       const evaluation = await riskEvaluationService.get(req.user, req.params["id"] as string);
-      res.json({ data: evaluation });
+      res.json({ data: await indep(req.user.tenantId, evaluation) });
     } catch (err) {
       next(err);
     }
@@ -170,8 +176,8 @@ export function riskEvaluationsRouter(
   router.patch("/:id/validate", async (req, res, next) => {
     try {
       const body = ValidateBody.parse(req.body);
-      const evaluation = await riskEvaluationService.validate(req.user, req.params["id"] as string, body.comment ?? null, req.requestId);
-      res.json({ data: evaluation });
+      const evaluation = await riskEvaluationService.validate(req.user, req.params["id"] as string, body.comment ?? null, req.requestId, body.governanceConfirmation);
+      res.json({ data: await indep(req.user.tenantId, evaluation) });
     } catch (err) {
       next(err);
     }
@@ -195,7 +201,7 @@ export function riskEvaluationsRouter(
         throw new Error("TreatmentDecisionService is not configured for this router");
       }
       const decision = await treatmentDecisionService.getForEvaluation(req.user, req.params["id"] as string);
-      res.json({ data: decision });
+      res.json({ data: await indepTreatment(req.user.tenantId, decision) });
     } catch (err) {
       next(err);
     }
@@ -210,8 +216,9 @@ export function riskEvaluationsRouter(
         req.params["id"] as string,
         body.comment ?? null,
         req.requestId,
+        body.governanceConfirmation,
       );
-      res.json({ data: evaluation });
+      res.json({ data: await indep(req.user.tenantId, evaluation) });
     } catch (err) {
       next(err);
     }

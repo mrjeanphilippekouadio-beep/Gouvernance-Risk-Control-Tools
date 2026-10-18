@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { FindingService } from "../../services/FindingService.js";
+import { GovernanceConfirmationBody } from "../validation.js";
+import { withIndependence } from "../validationIndependence.js";
+import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
 const Severity = z.enum(["LOW", "MODERATE", "HIGH", "MAJOR", "CRITICAL"]);
 const Status = z.enum(["OUVERT", "EN_TRAITEMENT", "CLOS"]);
@@ -18,10 +21,12 @@ const CreateFindingBody = z.object({
 
 const CloseFindingBody = z.object({
   comment: z.string().min(1),
+  governanceConfirmation: GovernanceConfirmationBody.optional(),
 });
 
-export function findingsRouter(findingService: FindingService): Router {
+export function findingsRouter(findingService: FindingService, independence?: GovernanceExceptionLookup): Router {
   const router = Router();
+  const indep = withIndependence(independence, "Finding");
 
   router.get("/", async (req, res, next) => {
     try {
@@ -33,7 +38,7 @@ export function findingsRouter(findingService: FindingService): Router {
         status: typeof status === "string" ? Status.parse(status) : undefined,
         severity: typeof severity === "string" ? Severity.parse(severity) : undefined,
       });
-      res.json({ data: findings });
+      res.json({ data: await indep(req.user.tenantId, findings) });
     } catch (err) {
       next(err);
     }
@@ -42,7 +47,7 @@ export function findingsRouter(findingService: FindingService): Router {
   router.get("/:id", async (req, res, next) => {
     try {
       const finding = await findingService.get(req.user, req.params["id"] as string);
-      res.json({ data: finding });
+      res.json({ data: await indep(req.user.tenantId, finding) });
     } catch (err) {
       next(err);
     }
@@ -70,8 +75,8 @@ export function findingsRouter(findingService: FindingService): Router {
   router.post("/:id/close", async (req, res, next) => {
     try {
       const body = CloseFindingBody.parse(req.body);
-      const finding = await findingService.close(req.user, req.params["id"] as string, body.comment, req.requestId);
-      res.json({ data: finding });
+      const finding = await findingService.close(req.user, req.params["id"] as string, body.comment, req.requestId, body.governanceConfirmation);
+      res.json({ data: await indep(req.user.tenantId, finding) });
     } catch (err) {
       next(err);
     }

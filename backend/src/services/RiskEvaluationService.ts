@@ -28,6 +28,8 @@ import { NO_APPLICABLE_FRAMEWORK_MESSAGE, resolveApplicableVersion } from "./ris
 /** B-6b: the read side of the Dispositif this service needs. */
 export type FrameworkReads = Pick<RiskFrameworkRepository, "getDefaultFramework" | "getProcessFrameworkId" | "getActiveVersion" | "getVersionById">;
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 /** Mirrors ConfigService's own defaultConfig()/030_evaluation_mode.sql's DB default — the tenant-wide fallback when no Config row exists yet and/or no ConfigRepository is wired. */
 const FALLBACK_EVALUATION_MODE: EvaluationMode = "CLASSIQUE";
@@ -179,6 +181,8 @@ export class RiskEvaluationService {
      * free-text `subCategory` is kept; a `subCategoryId` without this dependency is refused (fail closed).
      */
     private readonly riskCategories?: Pick<RiskCategoryRepository, "getById">,
+    /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   async create(
@@ -495,7 +499,7 @@ export class RiskEvaluationService {
   }
 
   /** ACT-156: maker-checker — validator must never be the evaluator. Terminal, immutable afterwards. */
-  async validate(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string): Promise<RiskEvaluation> {
+  async validate(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string, confirmation?: GovernanceConfirmation): Promise<RiskEvaluation> {
     requirePermission(actor, "riskevaluation.validate");
     const before = await this.get(actor, id);
 
@@ -505,9 +509,13 @@ export class RiskEvaluationService {
     if (before.residualScore === null) {
       throw new ValidationError("Cannot validate an evaluation before residual scoring is completed");
     }
-    if (before.evaluatorId === actor.userId) {
-      throw new ForbiddenError("An evaluator cannot validate their own risk evaluation");
-    }
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: before.evaluatorId === actor.userId,
+      permission: "riskevaluation.validate",
+      makerIds: [before.evaluatorId],
+      refusal: "An evaluator cannot validate their own risk evaluation",
+      confirmation,
+    });
 
     const { minScore, enforced } = await this.committeeSettingsOf(actor.tenantId, before);
     if (enforced && before.residualScore >= minScore) {
@@ -526,9 +534,10 @@ export class RiskEvaluationService {
       entityId: id,
       action: "VALIDATE",
       oldValue: before,
-      newValue: after,
+      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
       reason: comment,
       requestId,
+      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
     });
 
     return after;
@@ -578,7 +587,7 @@ export class RiskEvaluationService {
    * above the same threshold when committeeEvaluationEnforced is true,
    * so this is no longer "purely additive" with no effect on validate().
    */
-  async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string): Promise<RiskEvaluation> {
+  async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string, confirmation?: GovernanceConfirmation): Promise<RiskEvaluation> {
     requirePermission(actor, "riskevaluation.validate.committee");
     const before = await this.get(actor, id);
 
@@ -597,9 +606,13 @@ export class RiskEvaluationService {
         `Committee validation only applies to residual scores at or above the committee threshold (${minScore}) (this evaluation scored ${before.residualScore})`,
       );
     }
-    if (before.evaluatorId === actor.userId) {
-      throw new ForbiddenError("An evaluator cannot validate their own risk evaluation, including committee validation");
-    }
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: before.evaluatorId === actor.userId,
+      permission: "riskevaluation.validate.committee",
+      makerIds: [before.evaluatorId],
+      refusal: "An evaluator cannot validate their own risk evaluation, including committee validation",
+      confirmation,
+    });
 
     const after = await this.evaluations.recordCommitteeValidation(actor.tenantId, id, actor.userId, comment);
 
@@ -610,9 +623,10 @@ export class RiskEvaluationService {
       entityId: id,
       action: "VALIDATE",
       oldValue: before,
-      newValue: after,
+      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
       reason: comment,
       requestId,
+      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
     });
 
     return after;

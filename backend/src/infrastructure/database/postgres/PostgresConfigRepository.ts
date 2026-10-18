@@ -9,6 +9,7 @@ import type {
   RetainedImpactRule,
   ScoreFormula,
 } from "../../../domain/entities/Config.js";
+import type { SelfValidationPolicy } from "../../../domain/governance/selfValidation.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 
 interface ConfigRow {
@@ -23,6 +24,7 @@ interface ConfigRow {
   committee_treatment_min_score: number | null;
   committee_evaluation_enforced: boolean;
   committee_audit_cumul_allowed: boolean;
+  self_validation_policy: SelfValidationPolicy;
   version: number;
   updated_by: string | null;
   created_at: Date;
@@ -42,6 +44,7 @@ function toDomain(row: ConfigRow): Config {
     committeeTreatmentMinScore: row.committee_treatment_min_score,
     committeeEvaluationEnforced: row.committee_evaluation_enforced,
     committeeAuditCumulAllowed: row.committee_audit_cumul_allowed,
+    selfValidationPolicy: row.self_validation_policy,
     version: row.version,
     updatedBy: row.updated_by,
     createdAt: row.created_at,
@@ -83,6 +86,7 @@ export class PostgresConfigRepository implements ConfigRepository {
         committee_treatment_min_score: patch.committeeTreatmentMinScore,
         committee_evaluation_enforced: patch.committeeEvaluationEnforced,
         committee_audit_cumul_allowed: patch.committeeAuditCumulAllowed,
+        self_validation_policy: patch.selfValidationPolicy,
       },
       3,
     );
