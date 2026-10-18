@@ -58,3 +58,17 @@ export function rolegroupAuditPermissionAllowedOn(p: Permission, group: SystemGr
 export function isAuditPermission(p: Permission): boolean {
   return p.startsWith("audit.");
 }
+
+/**
+ * DECISION-042 q63: "application administrator" = holds, through any active role, at least one of
+ * these management permissions (role/user reads do not count). rolegroup.audit.update is the
+ * administrator-only right on the Audit group's permissions.
+ */
+export const ADMIN_PERMISSIONS: Permission[] = [
+  "role.create", "role.update", "role.delete", "role.assign",
+  "user.create", "user.update", "user.delete", "user.reactivate",
+  "rolegroup.audit.update", "config.cumul.set", "config.committeeenforcement.set",
+  // q79 (DECISION-044): client management (module toggles, tenants, regulatory frameworks, risk categories,
+  // Excel import) counts. Methodology (config.update) does not.
+  "config.manage",
+];

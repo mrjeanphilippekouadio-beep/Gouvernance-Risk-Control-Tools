@@ -64,6 +64,16 @@ const ApplicableQuery = z
   .object({ riskId: Id.optional(), processId: Id.optional() })
   .refine((q) => (q.riskId === undefined) !== (q.processId === undefined), { message: "Exactly one of riskId or processId is required" });
 const StatusQuery = z.enum(["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"]).optional();
+const RegimeQuery = z.enum(["NORMAL", "FALLBACK", "BOOTSTRAP"]).optional();
+/** B-6d (q83, I-D2): structured motive of a bootstrap decision; the free parameters are frozen server-side, never sent. */
+const BootstrapBody = z
+  .object({
+    comment: Comment.min(1),
+    justification: z
+      .object({ askedUserId: Id, askedOn: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/), outcome: z.string().trim().min(1).max(500) })
+      .strict(),
+  })
+  .strict();
 
 /**
  * B-6a: the Dispositif. Parses and shapes only — every rule (permissions, Risk Manager membership,
@@ -105,7 +115,7 @@ export function riskFrameworksRouter(service: RiskFrameworkService): Router {
   // Declared before "/:id" so "change-requests" is never read as an id.
   router.get("/change-requests", async (req, res, next) => {
     try {
-      res.json({ data: await service.listRequests(req.user, StatusQuery.parse(req.query["status"])) });
+      res.json({ data: await service.listRequests(req.user, StatusQuery.parse(req.query["status"]), RegimeQuery.parse(req.query["regime"])) });
     } catch (err) {
       next(err);
     }
@@ -116,6 +126,16 @@ export function riskFrameworksRouter(service: RiskFrameworkService): Router {
       const body = ApproveBody.parse(req.body ?? {});
       const result = await service.approve(req.user, id(req.params["rid"]), body.comment, req.requestId);
       res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // B-6d: the sole Risk Manager decides their own first-activation request; distinct from /approve (explicit in the logs).
+  router.post("/change-requests/:rid/bootstrap-approve", async (req, res, next) => {
+    try {
+      const body = BootstrapBody.parse(req.body);
+      res.json({ data: await service.bootstrapApprove(req.user, id(req.params["rid"]), body, req.requestId) });
     } catch (err) {
       next(err);
     }

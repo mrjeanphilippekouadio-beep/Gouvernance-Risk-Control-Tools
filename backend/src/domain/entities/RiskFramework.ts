@@ -135,6 +135,32 @@ export interface RiskFrameworkChangeRequest {
   decisionRegime: DecisionRegime | null;
   deciderGroup: ApproverGroup | null;
   ratificationStatus: "PENDING" | null;
+  /** B-6d (q100): set only on a FALLBACK decision taken because the legacy approver's vote cannot exist before B-12. */
+  fallbackCause: "LEGACY_APPROVER_PRE_B12" | null;
+  /** B-6d (q83, I-D2, I-D8): structured motive + frozen free parameters of a BOOTSTRAP decision; null otherwise. */
+  bootstrapJustification: BootstrapJustification | null;
+}
+
+/** Declared by the Risk Manager (`askedUserId`, `askedOn`, `outcome`) + the free parameters frozen by the server (I-D8). */
+export interface BootstrapDeclaration {
+  askedUserId: string;
+  /** YYYY-MM-DD */
+  askedOn: string;
+  outcome: string;
+}
+export interface BootstrapJustification extends BootstrapDeclaration {
+  /** q63 / A13 §7.2: server-built, the deciding Risk Manager also held an administrator permission. */
+  deciderAlsoAdministrator?: boolean;
+  /** I-D8 (A13): the values q98 leaves free, frozen so Audit / the Committee can judge them. Server-built. */
+  freeParameters: {
+    scaleSize: number;
+    appetiteThresholds: AppetiteThresholdEntry[];
+    lowCriticalityThreshold: number | null;
+    delegationMaxDays: number | null;
+    committeeTreatmentMinScore: number | null;
+    /** R2: "low" threshold above the upper bound of the lowest criticality band: a value to examine, never blocking. */
+    lowThresholdToExamine: boolean;
+  };
 }
 
 /** Everything the repository needs to open an activation request (requestedBy is set by the service). */
@@ -160,6 +186,22 @@ export interface RecordDecisionInput {
   decisionRegime: DecisionRegime;
   deciderGroup: ApproverGroup;
   ratificationStatus: "PENDING" | null;
+  /** q100 */
+  fallbackCause?: "LEGACY_APPROVER_PRE_B12" | null;
+}
+
+/** B-6d: the facts the repository reads (under the tenant lock for a decision) to judge the bootstrap. */
+export interface BootstrapFacts {
+  endedAt: Date | null;
+  activeMembers: { RISK_MANAGER: number; COMMITTEE: number; AUDIT: number };
+  requesterIsActiveRiskManager: boolean;
+  firstActivationOfTenant: boolean;
+}
+
+export interface RecordBootstrapDecisionInput {
+  decidedBy: string;
+  comment: string;
+  justification: BootstrapJustification;
 }
 
 export interface DecisionResult {

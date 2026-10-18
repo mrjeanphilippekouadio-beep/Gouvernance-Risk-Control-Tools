@@ -177,6 +177,8 @@ describe("RoleService", () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
     const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-5");
     await expect(service.assignToUser(admin, role.id, admin.userId, "REQ-6", "motif de test")).rejects.toThrow(ForbiddenError);
+    // Upper-case form of the actor's own id: same user for Postgres, must be refused too (QA-B6d-01 class)
+    await expect(service.assignToUser(admin, role.id, ` ${admin.userId.toUpperCase()}`, "REQ-6b", "motif de test")).rejects.toThrow(ForbiddenError);
   });
 
   it("assigns a role to another user, granting it via listForUser", async () => {
@@ -206,6 +208,7 @@ describe("RoleService", () => {
     const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-15");
     await service.assignToUser(otherAdmin, role.id, admin.userId, "REQ-16", "motif de test");
     await expect(service.revokeFromUser(admin, role.id, admin.userId, "REQ-17", "motif de test")).rejects.toThrow(ForbiddenError);
+    await expect(service.revokeFromUser(admin, role.id, admin.userId.toUpperCase(), "REQ-17b", "motif de test")).rejects.toThrow(ForbiddenError);
   });
 
   describe("dashboardScopeMode (@architect design, 2026-09-30)", () => {

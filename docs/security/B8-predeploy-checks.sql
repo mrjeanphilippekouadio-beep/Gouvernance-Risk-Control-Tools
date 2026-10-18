@@ -83,3 +83,16 @@ JOIN user_roles ur ON ur.tenant_id = u.tenant_id AND ur.user_id = u.id AND ur.re
 JOIN roles r ON r.id = ur.role_id AND r.tenant_id = ur.tenant_id AND r.deleted_at IS NULL
 GROUP BY u.tenant_id, u.id, u.email, u.deleted_at
 HAVING bool_or('config.manage' = ANY (r.permissions));
+
+-- 10. q100 (DECISION-046) : versions de Dispositif dont l'approbateur n'est pas RISK_MANAGER (creees avant q87).
+-- Lecture seule, a executer par HUMAN. Attendu : 0 ligne.
+-- ACTIVE : le garde-fou q100 s'applique (repli RM + ratification), aucune correction en base.
+-- PENDING_APPROVAL : approuvable ; une fois ACTIVE, le garde-fou s'appliquera aux demandes suivantes.
+-- DRAFT : le RM corrige le brouillon (change_approver = RISK_MANAGER) avant toute demande (q87 la refuserait).
+SELECT v.tenant_id, v.framework_id, f.name AS framework_name, v.id AS version_id,
+       v.version_number, v.status, v.change_approver
+FROM risk_framework_versions v
+JOIN risk_frameworks f ON f.id = v.framework_id AND f.tenant_id = v.tenant_id
+WHERE v.status IN ('DRAFT', 'PENDING_APPROVAL', 'ACTIVE')
+  AND v.change_approver <> 'RISK_MANAGER'
+ORDER BY v.tenant_id, f.name, v.version_number;

@@ -121,3 +121,7 @@
 - Rappel : toute nouvelle écriture d'un instantané devra venir d'une version ACTIVE ; une évaluation créée alors que la
   version n'est plus ACTIVE (course avec archivage) est refusée par le trigger : le service doit réessayer/retourner 409.
 - Env : psql en root sur le socket du cluster (le postgres ne traverse pas /tmp/claude-0) ; `runuser -u postgres -- sh < script`.
+
+## 2026-10-18 — migration 062 (B-6d), écrite par A06 (A07 non spawné)
+- Rejouée sur PG16 jetable : up x2, down x2, up->down->up OK ; 7 cas SQL dans `backend/test/B6dBootstrap-pg.test.ts` (fin posée par 2e RM/Audit/Comité, un seul membre non, révocation sans effet, UPDATE tenants refusé 42501, réactivation, activation BOOTSTRAP 1re seulement et seulement avant la fin, CHECK de forme).
+- À revoir par A07/A08 : concurrence réelle de deux affectations (verrou `tenants FOR UPDATE` dans le trigger), limite connue (changement de `roles.system_group` / réactivation d'un rôle ne déclenchent pas le marqueur), nom de contrainte <= 63 caractères.

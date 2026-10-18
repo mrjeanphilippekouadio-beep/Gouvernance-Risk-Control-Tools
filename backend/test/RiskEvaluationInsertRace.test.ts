@@ -29,3 +29,13 @@ describe("PostgresRiskFrameworkRepository mapPgError", () => {
     expect(mapPgError(boom)).toBe(boom);
   });
 });
+
+// A10 retest F-REF-04: the messages above must be the trigger's real ones, or the 409 mapping drifts silently.
+describe("061 trigger messages match the ones mapped above", () => {
+  it("both refusals exist verbatim in the migration", async () => {
+    const { readFileSync } = await import("node:fs");
+    const sql = readFileSync(new URL("../../database/postgresql/migrations/061_risk_evaluation_insert_guard.sql", import.meta.url), "utf8");
+    expect(sql).toContain("'risk_evaluations: the framework version must be ACTIVE'");
+    expect(sql).toContain("'risk_evaluations: the framework version does not belong to the tenant'");
+  });
+});

@@ -285,7 +285,7 @@ function inMemoryRoleRepository(): RoleRepository {
 
   return {
     async getById(tenantId, id) {
-      const r = roles.get(id);
+      const r = roles.get(id.toLowerCase()); // like Postgres uuid: any letter case resolves the same row
       return r && r.tenantId === tenantId && !r.deletedAt ? r : null;
     },
     async getByName(tenantId, name) {
@@ -379,6 +379,10 @@ describe("SEC-002 RBAC privilege escalation through role editing", () => {
       // pair of eyes. RoleService.update has no such guard.
       await expect(
         service.update(attacker, role.id, { permissions: ["risk.read", "risk.delete", "audit.read"] }, "REQ-SEC-002c"),
+      ).rejects.toThrow(ForbiddenError);
+      // SEC-ID-01: the upper-case spelling of the role id resolves the same role and must be refused too
+      await expect(
+        service.update(attacker, role.id.toUpperCase(), { permissions: ["risk.read", "risk.delete"] }, "REQ-SEC-002c2"),
       ).rejects.toThrow(ForbiddenError);
     },
   );

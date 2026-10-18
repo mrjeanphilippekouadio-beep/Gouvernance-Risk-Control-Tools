@@ -183,6 +183,18 @@ Détail : `docs/compliance/A14-review-B6b.md`. Verdict : conforme avec réserves
 18. Une valeur rattrapée par migration doit rester distinguable d'une preuve d'origine, par sa provenance et non seulement par l'absence d'une clé ; on ne l'affiche jamais comme application d'une méthodologie.
 19. Un contrôle qui dépend d'une dépendance optionnelle de constructeur n'est preuve que si un test garantit son câblage en production.
 
+## Passage Compliance B-6d amorçage et repli q100 (2026-10-18, commit 9f53463)
+
+Détail : `docs/compliance/A14-review-B6d.md`. Verdict : conforme avec réserves, aucun bloquant de merge ni de staging. Statut : recommandation, en attente du PO (q113 et Q-A14-B6d-2). Pas de texte BCEAO consulté ; tests non exécutés (titres lus).
+- COMPLIANCE_BLOCK de B-6b : levé pour le code, maintenu comme règle de livraison (B-6b jamais sans B-6d, migrations 059 à 062 ensemble).
+- Conforme : marquage BOOTSTRAP (CHECK, audit, route de consultation), motif structuré, valeurs libres figées côté serveur (I-D8), repli q100 jamais NORMAL, séparation des tâches, périmètre fermé sous verrou.
+- Réserves : cause de fin d'amorçage non mémorisée (date de reprise = date de migration, chemins system_group/rôle réactivé non couverts) ; vue « décisions prises en votre absence » non livrée (lot F) ; administrateur cité non prévenu, notice sans motif ; ratification q100 impossible avant B-12 ; spec I-D9 pas alignée ; 062 jamais appliquée hors PG16 local, CHECK NOT VALID.
+- q113 : A14 soutient l'interdiction de l'auto-désignation (vigilance : la sortie « l'administrateur-RM crée son second RM » est moins traçable que l'amorçage) ; préférer un second administrateur réel.
+- Conditions de production : livraison conjointe, requête n° 10 = 0, comptage DECISION-047, revérification B-6b-01 (q108), plan Djamo si administrateur unique = RM unique (q93), essai de 062 sur copie de staging.
+20. Une fin d'exception se prouve par le marqueur ET sa cause (affectation, utilisateur) ; une date posée par reprise de migration est signalée comme telle.
+21. Une information promise à la 3e ligne (notice, vue) n'est démontrable que par une trace de prise de connaissance, distincte d'une ratification ; une notification au mieux n'est pas une preuve.
+22. Une déclaration invérifiable (administrateur sollicité) doit au moins être contestable : le tiers cité est prévenu.
+
 12. Un hash calculé à l'upload prouve l'identité du contenu depuis ce
     moment, pas son authenticité d'origine ni sa non-altération sur Drive
     tant qu'il n'est pas recontrôlé.

@@ -20,6 +20,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeInfo[] = [
   { resourceType: "MANAGEMENT", eventType: "RISK_FRAMEWORK_CHANGE_DECIDED", label: "Changement du Dispositif décidé", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "RISK_FRAMEWORK_NO_DECIDER", label: "Dispositif sans décideur", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE", label: "Changement du Dispositif signalé à l’audit", mandatory: true },
+  { resourceType: "MANAGEMENT", eventType: "RISK_FRAMEWORK_BOOTSTRAP_NOTICE", label: "Dispositif activé en amorçage", mandatory: true },
   { resourceType: "ACTION_PLAN", eventType: "ACTION_STARTED_LATE", label: "Action démarrée en retard", mandatory: true },
   { resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE", label: "Action en retard", mandatory: true },
   { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", label: "Seuil KRI dépassé", mandatory: true },

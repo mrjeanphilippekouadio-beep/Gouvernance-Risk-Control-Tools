@@ -223,3 +223,78 @@ Analyse :
 | I-D7 | Lecture orchestrateur confirmée ; « > 1 » = fin de l'amorçage, compté en éligibles actifs | Non bloquant ; confirmation d'une ligne facultative |
 
 Actions : A06 (q58, q65, éventuellement `assertReactivable`), A05 (formulation « éligibles actifs » dans B-6d). Aucun nouveau risque identifié ; le risque résiduel de F-D044-08 reste **faible** (CVSS A10 2,2) et passe à **très faible** après correctif.
+
+---
+
+## 7. I-D8 / I-D9 (2026-10-18)
+
+**Statut** : positions A13. Le PO (N0) reste décideur final ; rien ci-dessous ne modifie q98 ni q83. Sources relues : spec B-6 §5.6 points 2, 6, 7 et §14.2 (I-D8, I-D9), DECISION-045 point 3, DECISION-044 (q81-q83), DECISION-046 (q101-q103), §1.2 de la présente revue.
+
+### 7.1 I-D8 : q98 et les paramètres sans valeur par défaut au contrat
+
+**Faits** : [Fait] q98 impose « uniquement les valeurs par défaut du contrat ». [Fait] Pour l'échelle, l'appétence, le seuil « faible », la durée de délégation et le seuil Comité de traitement, le contrat ne donne aucune valeur (« fixés à la création / par le client ») ; une contrainte par défaut est donc matériellement impossible, et le seuil « faible » est obligatoire sans défaut (B-6b). [Fait] Le premier Dispositif d'un RM seul n'est revu par personne tant qu'Audit et Comité sont vides (q103, accepté par le PO).
+
+**Position** :
+- Lecture A05 **fidèle** : q98 vise à empêcher qu'un RM seul choisisse une méthodologie plus laxiste que celle que le contrat a posée. Là où le contrat a posé une valeur, elle est imposée ; là où il n'en a pas posé, il n'y a pas de référence contre laquelle contraindre. Inventer un plafond (appétence maximale, seuil « faible » maximal) serait créer une règle de gouvernance que le PO n'a pas prise (mandat §5, principe 29 : le Dispositif est configurable par le client).
+- **L'exposition est réelle mais bornée** : (i) un seuil « faible » élevé élargit l'exception de cumul RO + Exécuteur (R2) ; (ii) une appétence haute fait paraître acceptables des Résiduels qui ne le seraient pas ; (iii) l'ISO 31000 (6.3, appétence et critères de risque fixés par l'organisation, avec la réserve de sourcing du principe 16) et le COSO ERM (appétence arrêtée par la gouvernance, pas par l'opérateur) vont dans le sens d'une visibilité pour les instances, pas d'une valeur imposée. (iv) Bornes : c'est une activation unique par tenant (q102), et les évaluations figent leur version à la création (F-8) : les évaluations faites sous le Dispositif amorcé gardent ses valeurs jusqu'à leur clôture, même après une v2 [Hypothèse à vérifier par A06, cohérente avec F-8].
+- Ce qui manque n'est donc pas une contrainte mais de la **visibilité** : l'information q101 (« l'auditeur est informé ») ne vaut contrôle que si le tiers voit ce qui a été fixé librement.
+
+**Verdict : tranché par A13 (interprétation du contrat, sans changer q98). Acceptable, avec trois conditions de traçabilité, aucune bloquante.**
+Règle à appliquer par A06 :
+1. **Ne pas étendre `contractDefaultViolations`** aux cinq paramètres libres. Aucun plafond.
+2. **Figer et exposer les valeurs libres** : `bootstrap_justification` (ou le payload d'audit de la décision BOOTSTRAP) enregistre la taille d'échelle, `appetite_thresholds`, `low_criticality_threshold`, `delegation_max_days` (NULL inclus) et `committee_treatment_min_score`. La route de consultation `change-requests?regime=BOOTSTRAP` et `RISK_FRAMEWORK_BOOTSTRAP_NOTICE` les affichent, pour que le premier membre d'Audit/Comité arrivé puisse les juger.
+3. **Signaler sans bloquer** : l'avertissement R2 (seuil « faible » au-dessus de la borne haute de la bande de criticité la plus basse) est repris dans la notice et dans la vue BOOTSTRAP comme « valeur à examiner ». Aucun refus.
+4. KRI (lot KRI, pas B-6d) : part des Dispositifs amorcés dont une valeur libre dépasse la référence R2 ; ancienneté de l'amorçage (déjà demandé).
+
+**Risque résiduel** : faible à moyen tant que Audit et Comité sont vides (revue par personne, accepté par le PO via q103), faible dès qu'un tiers est arrivé et peut lire les valeurs ; correction ensuite par une v2 au circuit normal.
+**Question PO** : aucune requise. Pour information au Decision Log : « I-D8 : q98 lu comme ne contraignant que les paramètres ayant une défaut au contrat ; valeurs libres tracées et affichées, sans plafond ». Si le PO veut un plafond (appétence ou seuil « faible »), c'est une décision nouvelle, pas une lecture de q98.
+
+### 7.2 I-D9 : un RM administrateur se nomme « administrateur sollicité »
+
+**Faits** : [Fait] L'exception q83 est acceptée par le PO parce que le RM n'a pas `user.create` (droit d'administrateur, q79) : il ne peut pas créer lui-même un second membre, donc il le fait demander. [Fait] Un RM qui cumule administrateur + RM (autorisé et marqué, q63) a `user.create`. [Fait] Le système ne peut pas vérifier l'impossibilité déclarée (I-D2 point 4).
+
+**Position** :
+- Si le RM se nomme lui-même dans `askedUserId`, la « demande à un tiers » devient une **déclaration de non-action sur soi-même** : une même personne demande, refuse (ou n'agit pas) et décide, sans qu'aucun tiers ne figure au dossier. C'est la définition de ce que la séparation des tâches (mandat §43) interdit : créer le besoin, attester son impossibilité et en tirer seul le bénéfice (s'auto-approuver).
+- La prémisse de q83 (impossibilité faute de droit) **n'existe pas** pour l'administrateur : pour lui la lecture littérale (« créer d'abord un autre utilisateur du groupe risque ») est possible. Lui laisser la voie déclarative revient à étendre l'exception à un cas que le PO n'a pas visé, et en rend la justification invérifiable.
+- Contre-argument de A05 : l'organisation qui n'a vraiment qu'une personne serait bloquée. Réponse : elle ne l'est pas, elle a deux sorties déjà existantes, sans règle nouvelle : (a) un autre administrateur du tenant (la demande est alors réelle et tracée) ; (b) la lecture littérale de q83, le RM administrateur crée le second membre du groupe risque (ce qui, dans ce cas seulement, met fin à l'amorçage, q101). Je reconnais le risque de compte de complaisance en (b) ; il n'est pas aggravé par cette règle (un administrateur peut déjà le faire aujourd'hui) et reste visible par le marquage q63 et la notification d'arrivée.
+- Un blocage de l'amorçage pour un RM administrateur seul est **fail-closed, visible et sans contournement en base** : il vaut mieux qu'une auto-approbation sans tiers au dossier.
+
+**Verdict : tranché par A13 (interprétation de q83 ; c'est un resserrement de la lecture A05, pas une décision PO). Oui, interdire.**
+Règle à appliquer par A06 :
+1. `justification.askedUserId` doit désigner un utilisateur du tenant, détenteur d'une permission d'administrateur (`ADMIN_PERMISSIONS`), **et différent du demandeur** (`askedUserId !== actor.userId`, comparé côté serveur, pas déduit du corps). Refus `ValidationError` avec un message qui nomme les deux sorties (autre administrateur, ou création d'un second membre du groupe risque).
+2. Aucune autre modification de l'amorçage : un RM administrateur n'est pas exclu de l'amorçage, il doit seulement nommer un tiers. Le marquage administrateur + RM (q63) apparaît dans la notice BOOTSTRAP.
+3. Test de niveau 1 : refus quand `askedUserId` = demandeur ; refus quand `askedUserId` n'est pas administrateur ; acceptation avec un autre administrateur.
+4. Mettre à jour la ligne I-D9 de la spec §14.2 et §5.6 point 6 (supprimer « Il peut s'agir du demandeur lui-même »).
+
+**Risque résiduel** : l'invérifiabilité de la demande reste (le tiers nommé n'atteste rien, I-D2 point 4) ; mais le dossier porte désormais deux personnes distinctes. Faible.
+**Question PO** : aucune requise. Pour information au Decision Log, avec la conséquence : un tenant dont l'unique administrateur est aussi l'unique RM ne peut pas s'amorcer par déclaration ; il crée le second membre du groupe risque ou désigne un autre administrateur. Si le PO préfère maintenir la voie déclarative pour ce cas, c'est un assouplissement à lui seul d'acter.
+
+### 7.3 Récapitulatif
+
+| Point | Verdict | Règle pour A06 | PO ? |
+|---|---|---|---|
+| I-D8 | Acceptable, tranché A13 | Pas de plafond ; figer et afficher les 5 valeurs libres (justification, route BOOTSTRAP, notice) ; avertissement R2 non bloquant | Non (information) ; plafond = décision nouvelle du PO |
+| I-D9 | Interdire, tranché A13 | `askedUserId` ≠ demandeur, côté serveur ; sorties nommées dans l'erreur | Non (information) ; assouplissement = PO |
+
+---
+
+## 8. F-B6d-02 (2026-10-18)
+
+**Statut** : position A13, lecture du contrat et de q87/q100/DECISION-046 point 1. Le PO (N0) reste décideur final. Sources relues : `docs/security/review-B6d-2026-10-18.md` F-B6d-02, spec B-6 §5.3, §5.4, §5.4.1, DECISION-046, contrat §5 et §10 (circuit unique, q69), ma revue §2.
+
+**Faits** : [Fait] q87 force `RISK_MANAGER` sur toute écriture de version, y compris la copie d'une source héritée (`createVersion`). [Fait] q100 replie une version ACTIVE héritée Comité/Audit vers un RM tiers, `FALLBACK`, ratification `PENDING`, cause `LEGACY_APPROVER_PRE_B12`. [Fait] La v2 approuvée en repli naît `RISK_MANAGER` : les demandes suivantes sont `NORMAL`, sans repli ni ratification, même après B-12. [Fait] La v1 reste en base (ARCHIVED, immuable) avec son `change_approver` d'origine, et l'audit de l'activation porte `bypassedGroups`. [Fait] Aucun retour arrière n'existe sur la ratification (C-B6d-05, B-12). [Hypothèse] La population est vide en production (requête n° 10, HUMAN, ouverte).
+
+**Position (séparation des tâches).** Ce n'est pas conforme à l'intention, mais le défaut est dans la fin de vie, pas dans le comportement avant B-12.
+- q87 répond à un seul problème : ne pas créer d'approbateur que personne ne peut exercer. Il ne dit pas que le Comité ou Audit cesse d'être approbateur. DECISION-046 point 1 dit « ne gèle pas… se replie… ratification ultérieure » : un contournement, pas une suppression. Il présuppose que l'approbateur choisi par le client reste l'approbateur de droit.
+- Avant B-12, le tenant concerné se comporte comme tous les autres (RM seul, q87) : la perte n'ajoute aucune exposition pendant cette période. Le défaut est la fin : le choix de gouvernance du client (revue par un organe indépendant du RM) disparaît sans décision de personne et sans trace exploitable. C'est le « traitement silencieux en NORMAL » que j'avais rejeté (§2.2 point 4) : il réapparaît à la première activation.
+- Option (a) du constat (conserver l'approbateur hérité sur la v2) : rejetée. Elle ouvre une exception dans le garde q87 décidé par le PO, ajoute du code à la zone sensible (création de version) pour une population probablement vide (ponytail), et fait dépendre un contrôle d'une copie plutôt que d'une décision. Option (c) seule (accepter) : insuffisante, car la ratification refusée ou ignorée n'aurait toujours aucun effet. La bonne cible est (b), à écrire avant d'oublier.
+- Le rétablissement ne peut pas être automatique : une version ACTIVE est immuable, et rétablir Comité/Audit est un changement de gouvernance qui exige lui-même le circuit (et, pour l'approbateur, jamais le seul RM qui avait décidé en repli).
+
+**Verdict : tranché A13, règle (interprétation du contrat, sans changer q87 ni q100).**
+1. **A06 : rien à coder avant B-12** (ni exception q87, ni colonne, ni migration). Seul ajout facultatif, gratuit : écrire dans le payload d'audit de la décision de repli q100 la valeur complète de l'ancien `change_approver` (`legacyChangeApprover`), à côté de `bypassedGroups`. Non bloquant ; la v1 archivée reste la source de vérité.
+2. **A05 : écrire dans la spec B-12** (lot suivant, avant son dispatch) : (i) à la livraison de B-12, pour chaque tenant dont une décision porte `fallback_cause = 'LEGACY_APPROVER_PRE_B12'`, lister l'approbateur d'origine (v1 archivée ou audit) et ouvrir une **demande de rétablissement** (changement de Dispositif ordinaire, résolue par le circuit, jamais décidée par le RM de la décision d'origine ni par son demandeur) ; (ii) ratification **refusée** => cette demande devient obligatoire et prioritaire ; ratification **acceptée** => le client confirme explicitement qu'il garde RISK_MANAGER, par une décision tracée (pas par défaut) ; (iii) tant que ni l'une ni l'autre n'est close, le tenant reste signalé « approbateur d'origine non rétabli » (vue décisions prises en l'absence, KRI d'ancienneté).
+3. **Orchestrateur : tracer** un item ouvert (owner A05, échéance : spec B-12) et le lier à C-B6d-05 (même table de ratification). HUMAN : le résultat de la requête n° 10 conditionne la suite : **0 ligne** => point 1 (rien) et point 2 (une ligne de spec) suffisent, risque résiduel très faible ; **≥ 1 ligne** => point 2 devient bloquant pour la mise en production de B-12 sur ce tenant.
+4. Régression côté A06 : aucune. Test d'acceptation B-12 (A05/A08) : v2 issue d'un repli q100 => B-12 produit la demande de rétablissement ; la ratification refusée la rend obligatoire.
+
+**Risque résiduel** : très faible si la requête n° 10 renvoie 0 ligne ; faible (contrôle dégradé mais tracé, rétablissement prévu) sinon, tant que le point 2 n'est pas écrit ; moyen si le point 2 est oublié et que B-12 sort (contrôle choisi par le client perdu durablement).
+**Question PO** : aucune requise (lecture du contrat, aucune décision PO modifiée). Pour information au Decision Log : « F-B6d-02 : la perte de l'approbateur d'origine après un repli q100 n'est pas voulue ; rétablissement ou confirmation explicite à traiter par B-12 ; rien à coder avant ». Si le PO veut au contraire que Comité/Audit ne reviennent jamais pour un tenant concerné, c'est une décision nouvelle à acter, avec confirmation du client.

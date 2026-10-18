@@ -391,13 +391,21 @@ describe("B-6a circuit", () => {
     return { s, r2 };
   }
 
-  it("COMMITTEE with at least 2 eligible members: a vote is required, approve answers 409 and nothing is written", async () => {
+  it("q100: COMMITTEE with at least 2 eligible members: the vote does not exist before B-12, the request is decided in Risk Manager FALLBACK (comment mandatory, ratification PENDING)", async () => {
     const { s, r2 } = await pendingUnder("COMMITTEE", { committee: ["c1", "c2"] });
     const before = s.calls.recordDecision;
-    await expect(s.service.approve(u2, r2.id, "x", R)).rejects.toThrow(ConflictError);
-    await expect(s.service.approve(u2, r2.id, "x", R)).rejects.toThrow(/Comité/);
+    await expect(s.service.approve(u2, r2.id, undefined, R)).rejects.toThrow(ValidationError);
     expect(s.calls.recordDecision).toBe(before);
-    expect(s.requests.find((r) => r.id === r2.id)!.status).toBe("PENDING");
+    const out = await s.service.approve(u2, r2.id, "x", R);
+    expect(out.request).toMatchObject({ decisionRegime: "FALLBACK", ratificationStatus: "PENDING" });
+  });
+
+  it("q100: the fallback notice goes to Audit AND to the members of the bypassed group, once each", async () => {
+    const { s, r2 } = await pendingUnder("COMMITTEE", { audit: ["a1"], committee: ["c1", "c2"] });
+    s.sent.length = 0;
+    await s.service.approve(u2, r2.id, "repli", R);
+    const to = s.sent.filter((n) => n.eventType === "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE").map((n) => n.recipientUserId).sort();
+    expect(to).toEqual(["a1", "c1", "c2"]);
   });
 
   it("Committee and Audit both empty: Risk Manager FALLBACK, comment mandatory, ratification PENDING, Audit notified", async () => {

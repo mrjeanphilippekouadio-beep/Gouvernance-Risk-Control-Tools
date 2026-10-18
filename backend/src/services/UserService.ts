@@ -9,6 +9,7 @@ import type { RoleService } from "./RoleService.js";
 import type { NotificationService } from "./NotificationService.js";
 import type { SystemGroup } from "../domain/entities/Role.js";
 import type { Permission } from "../domain/permissions.js";
+import { canonicalId } from "../domain/ids.js";
 
 /** B-8 bis (q43): user sheet with the fixed groups. riskManagerAndCommittee is now a forbidden cumul (q94): kept only to flag pre-existing ones. */
 export interface UserDetail extends User {
@@ -216,6 +217,7 @@ export class UserService {
    */
   async suspend(actor: AuthenticatedUser, id: string, requestId: string): Promise<void> {
     requirePermission(actor, "user.delete");
+    id = canonicalId(id);
     if (actor.userId === id) {
       throw new ForbiddenError("You cannot suspend your own account — ask another admin");
     }
@@ -279,6 +281,9 @@ export class UserService {
       reason: null,
       requestId,
     });
+
+    // B-6d (q77): a member (re)joining Audit or the Committee learns of the tenant's bootstrap decisions (best effort).
+    await this.roleService?.notifyBootstrapArrival?.(actor, id, requestId);
 
     if (lostRoles.length > 0) {
       // B8bis-04: the reactivation is already committed and audited; a notification failure is logged, not fatal.
