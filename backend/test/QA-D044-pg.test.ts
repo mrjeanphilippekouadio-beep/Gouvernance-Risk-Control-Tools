@@ -24,7 +24,7 @@ const RM_PERMS = ["riskframework.read", "riskframework.create", "riskframework.u
 describe.skipIf(!enabled)("QA-D044 q90 on real PostgreSQL", () => {
   let pool: Pool;
   beforeAll(async () => {
-    pool = new Pool({ host: HOST, user: "postgres", database: DB, max: 8 });
+    pool = new Pool({ host: HOST, user: "postgres", database: DB, max: 8, application_name: "qa-d044-own" });
     await pool.query(`CREATE TABLE IF NOT EXISTS qa_fail_audit (tenant_id uuid, entity_type text)`);
     await pool.query(`CREATE OR REPLACE FUNCTION qa_fail_audit_fn() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
@@ -112,7 +112,7 @@ describe.skipIf(!enabled)("QA-D044 q90 on real PostgreSQL", () => {
     await w.heal();
     await w.create();
     expect(await w.audits()).toEqual(["RiskFramework:CREATE", "RiskFrameworkVersion:CREATE"]);
-    expect((await pool.query(`SELECT 1 FROM pg_stat_activity WHERE datname = $1 AND state = 'idle in transaction'`, [DB])).rowCount).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM pg_stat_activity WHERE datname = $1 AND application_name = 'qa-d044-own' AND state = 'idle in transaction'`, [DB])).rowCount).toBe(0);
   });
 
   it("updateIdentity: audit failure keeps the old name and adds no audit row", async () => {
