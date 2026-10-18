@@ -144,6 +144,10 @@ export type Permission =
   | "config.committeeenforcement.set"
   /** DECISION-042 q58: allow/forbid the Committee + Audit cumul (sensitive tenant setting, application administrator). */
   | "config.cumul.set"
+  /** DECISION-074 R-0: client's choice for noSelfValidation (REFUSE / DOUBLE_CONFIRMATION) — relaxes a control, administrator only. */
+  | "config.selfvalidation.set"
+  /** DECISION-074: governance health panel; distinct prefix from governance.* (review cycles). */
+  | "governancehealth.read"
   | "notification.read"
   | "governance.read"
   | "governance.create"
@@ -297,6 +301,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   "config.committeethreshold.set",
   "config.committeeenforcement.set",
   "config.cumul.set",
+  "config.selfvalidation.set",
+  "governancehealth.read",
   "notification.read",
   "governance.read",
   "governance.create",

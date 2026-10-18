@@ -930,7 +930,7 @@ describe("QA-B6a static checks: repository SQL, migration 055, permissions (noth
 
   it("the legitimate adaptation of B8ter stays strict: constant == 051 list + 055 additions, in order, per group (the test would fail on any extra or missing right)", () => {
     const src = readFileSync("test/B8ter.test.ts", "utf8");
-    expect(src).toMatch(/toEqual\(\[\.\.\.fromMigration\(g\), \.\.\.addedBy055\(g\)\]\)/);
+    expect(src).toMatch(/toEqual\(\[\.\.\.fromMigration\(g\), \.\.\.addedBy055\(g\), "governancehealth\.read"\]\)/); // D1: + migration 066
     const q = readFileSync("test/QA-B8quater.test.ts", "utf8");
     expect(q).toMatch(/gap-free from 53/); // still no gap and no reuse from 53 on
   });

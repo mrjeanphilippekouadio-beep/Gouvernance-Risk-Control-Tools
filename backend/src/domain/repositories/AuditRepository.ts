@@ -7,6 +7,8 @@ export interface AuditSearchFilters {
   entityId?: string;
   from?: Date;
   to?: Date;
+  /** A rule id = exactly that exception; `true` = any marked row; absent/false = no filter. */
+  governanceException?: string | boolean;
 }
 
 export interface AuditRepository {
