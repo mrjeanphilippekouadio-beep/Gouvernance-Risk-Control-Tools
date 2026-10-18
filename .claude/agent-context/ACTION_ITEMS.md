@@ -294,9 +294,15 @@ pour l'usage.
 | @dev-backend | **C-B6d-03** FAIBLE-MOYEN : l'administrateur cité dans le motif d'amorçage n'est pas prévenu ; la notice ne reprend ni le motif ni le marquage administrateur + Risk Manager. | 2026-10-18 | Ouvert (A06) |
 | @dev-backend | **C-B6d-05** MOYEN : aucune écriture possible de la ratification q100 avant B-12 ; indicateur « en attente de ratification » non vérifié. Table de ratification avec B-12. | 2026-10-18 | Ouvert (A06, B-12) |
 | @architect @dev-db @dev-backend @qa-engineer HUMAN | **C-B6d-04/06/07/08** FAIBLES : risque accepté par le PO (amorçage sans ratification ni échéance, q83) ; spec §5.6 pt 6 / §14.2 à aligner après q113 (A05) ; 062 à jouer sur une copie de staging + `VALIDATE CONSTRAINT` du CHECK NOT VALID (HUMAN/A07) ; test de câblage `RoleService` manquant (A06/A08). | 2026-10-18 | Ouvert |
-| HUMAN | **q114 (Q-A14-B6d-2)** La vue « décisions prises en votre absence » doit-elle être livrée avant l'arrivée du premier membre Audit ou Comité en production, avec à défaut une procédure écrite tenue par le PO ? (A14 recommande : oui). Posée dans le cockpit. | 2026-10-18 | Ouvert (HUMAN) |
-| HUMAN | **Consultation configurabilité (DECISION-054/055) terminée** — A05, A06, A10, A13 : `docs/architecture/consultation-configurabilite-2026-10-18.md`. Arbitrages posés au PO dans le cockpit : **q115** (éléments jamais configurables), **q116** (assouplir = deux personnes, jamais la personne contrainte), **q117** (régime « structure à une personne » à la place de l'auto-désignation I-D9), **q118** (qui modifie la méthodologie dans l'Administration : Risk Manager seul ou aussi l'admin), **q119** (cumul Comité + Audit : interdit par défaut ?). Aucune implémentation de la configurabilité avant réponse. | 2026-10-18 | Ouvert (HUMAN) |
+| HUMAN | **q114 (Q-A14-B6d-2)** La vue « décisions prises en votre absence » doit-elle être livrée avant l'arrivée du premier membre Audit ou Comité en production, avec à défaut une procédure écrite tenue par le PO ? (A14 recommande : oui). Posée dans le cockpit. **Répondue : oui → DECISION-056.** | 2026-10-18 | Fermé |
+| HUMAN | **Consultation configurabilité (DECISION-054/055) terminée** — A05, A06, A10, A13 : `docs/architecture/consultation-configurabilite-2026-10-18.md`. Arbitrages posés au PO dans le cockpit : **q115** (éléments jamais configurables), **q116** (assouplir = deux personnes, jamais la personne contrainte), **q117** (régime « structure à une personne » à la place de l'auto-désignation I-D9), **q118** (qui modifie la méthodologie dans l'Administration : Risk Manager seul ou aussi l'admin), **q119** (cumul Comité + Audit : interdit par défaut ?). Aucune implémentation de la configurabilité avant réponse. **Répondues le 18/10 → DECISION-057 à 061.** Reste : q120 (3 invariants absents de la réponse q115). | 2026-10-18 | Fermé (sauf q120) |
 | @dev-backend @dev-frontend @qa-engineer | **Correctifs « un seul chemin d'écriture » (A05, DECISION-054), sans arbitrage PO requis** : (1) fermer `PUT /processes/:id/evaluation-mode` (contrat §10 retire la permission ; seul le circuit demande/validation reste) ; (2) fermer ou marquer « non appliqué » `PUT /config` et `/config/appetite-mode` (réglages inertes, lus par aucun code) ; (4) écrans Appétence / Grilles : retirer les écritures mortes (`frontend/src/api/riskAppetite.ts:29,31`, `evaluations.ts:155`) au profit d'un lien vers le brouillon du Dispositif ; (7) test de garde « porté par le Dispositif ». À vérifier : `PATCH /rating-scales/:id/disable`. | 2026-10-18 | Ouvert (A06, A11, A08) |
+| HUMAN | **q120 (suite q115 / DECISION-057)** Votre réponse à q115 cite 6 invariants ; la liste proposée en contenait 3 de plus : pas de validation tacite ; cumul de rôles toujours visible ; historique jamais réécrit. Les garder aussi non configurables ? Posée dans le cockpit. | 2026-10-18 | Ouvert (HUMAN) |
+| @dev-backend @security | **DECISION-058 (q116)** : assouplir un réglage = un administrateur seul, mais toujours avec motif obligatoire et audit avant/après. À aligner : `PATCH /modules/:name/toggle` (aucun motif aujourd'hui), `setCommitteeEnforcement`/`setCommitteeAuditCumul` (vérifier motif + audit). | 2026-10-18 | Ouvert |
+| @risk-manager @dev-backend @security | **DECISION-059 (q117)** : régime « structure à une personne », déclaré par l'éditeur seul à l'ouverture du compte, affiché partout, levé définitivement à l'arrivée d'une 2e personne. Spec A13 puis lot A06. | 2026-10-18 | Ouvert |
+| @architect @risk-manager | **DECISION-060 (q118)** : l'administrateur peut aussi modifier la méthodologie — amender le contrat ; confirmer que le circuit d'approbation des changements de Dispositif reste inchangé. | 2026-10-18 | Ouvert |
+| @dev-backend @dev-db | **DECISION-061 (q119)** : cumul Comité + Audit interdit par défaut, autorisable par le client — sans révoquer silencieusement un cumul existant (Djamo). | 2026-10-18 | Ouvert |
+| @dev-frontend | **DECISION-056 (q114)** : écran « décisions prises en votre absence » avant l'arrivée du premier membre Audit ou Comité en production. | 2026-10-18 | Ouvert |
 | @dev-backend @security | **Assouplissements à un seul administrateur (A10, A05)** : `ConfigService.setCommitteeEnforcement(false)` et `setCommitteeAuditCumul(true)` sans second approbateur ; `PATCH /modules/:name/toggle` sans motif ni tiers (un admin seul peut désactiver le module AUDIT). À aligner après q116. | 2026-10-18 | Ouvert (attend q116) |
 | @qa-engineer @security | **Revues B-6d : QA PASS_WITH_RESERVES (A08, `QA-B6d.test.ts` + `QA-B6d-pg.test.ts`, 1999 passed + 4 `it.fails` témoins) ; Sécurité feu vert staging, CVSS max 2,7 (A10, `docs/security/review-B6d-2026-10-18.md`).** Tests adaptés par A06 relus : aucune assertion affaiblie. Comme 062 s'applique sur staging à la fusion, les correctifs touchant 062 passent **avant** la PR. | 2026-10-18 | Revues faites, correctifs dispatchés |
 | @dev-backend | **QA-B6d-01** MAJOR : I-D9 contourné par un `askedUserId` en MAJUSCULES (`z.guid()` l'accepte, comparaison texte avec `actor.userId`, PG résout le même utilisateur). Correctif : comparer et stocker `asked.id` renvoyé par la base. **F-B6d-01** LOW 2,7 : contournement par un compte créé et promu administrateur par le demandeur lui-même, `askedOn` sans borne basse → refuser un droit d'administrateur accordé par le demandeur ou postérieur à `askedOn`. | 2026-10-18 | Dispatché A06 |
@@ -1659,4 +1665,93 @@ RELATED: q113, I-D9, F-B6d-01, QA-B6d-01, contrat §10 (paramètres du
   Dispositif, 9 invariants).
 OWNER: HUMAN ; @risk-manager @dev-backend @security @architect (consultation)
 STATUS: DÉCIDÉ (principe) — déclinaison en consultation.
+
+DECISION-056
+DATE: 2026-10-18 (réponse cockpit q114, horodatée 2026-10-17 21:40 UTC)
+CONTEXT: C-B6d-02 / Q-A14-B6d-2 — la vue « décisions prises en votre
+  absence » (amorçage, repli) n'existe qu'en API.
+DECISION (PO, cockpit, option recommandée) : livrer l'écran avant
+  l'arrivée du premier membre Audit ou Comité en production ; à défaut,
+  une procédure écrite tenue par le PO.
+RELATED: q114, C-B6d-02, B-6d.
+OWNER: @dev-frontend (écran) ; HUMAN (procédure de repli)
+STATUS: DÉCIDÉ — à planifier avant la mise en production de B-6d avec un
+  premier membre Audit/Comité.
+
+DECISION-057
+DATE: 2026-10-18 (réponse cockpit q115, horodatée 01:48 UTC)
+CONTEXT: Consultation DECISION-055 — éléments qui restent hors de toute
+  configuration client.
+DECISION (PO, cockpit, réponse libre) : non configurables — isolation
+  entre clients ; journal d'audit jamais modifiable ; « qui a fait quoi »
+  toujours enregistré par le serveur ; suppression logique seulement ;
+  personne ne valide ce qu'il a saisi ni ne s'attribue ses propres rôles ;
+  vérification de la connexion. Sur l'authentification : si d'autres
+  mécanismes que le SSO existent, laisser le choix au client, avec
+  e-mail + mot de passe par défaut.
+  → Lecture orchestrateur : le mode de connexion devient un réglage client
+  (défaut e-mail/mot de passe, SSO en option) ; la vérification du mode
+  choisi reste non configurable. Le PO a demandé « à toi de valider » :
+  trois éléments de la liste proposée ne figurent pas dans sa réponse
+  (pas de validation tacite ; cumul de rôles toujours visible ; historique
+  jamais réécrit) — non tranché, à reconfirmer (item ouvert, q120).
+RELATED: q115, DECISION-055, consultation-configurabilite-2026-10-18.md.
+OWNER: HUMAN (q120) ; @architect @security
+STATUS: DÉCIDÉ pour les 6 éléments cités — 3 éléments à reconfirmer.
+
+DECISION-058
+DATE: 2026-10-18 (réponse cockpit q116, horodatée 01:49 UTC)
+CONTEXT: Assouplir un réglage de gouvernance : une ou deux personnes ?
+DECISION (PO, cockpit, contre la recommandation A10) : un administrateur
+  seul peut assouplir, avec motif obligatoire et trace d'audit (avant/après).
+  → Les écarts relevés par A10/A05 (`setCommitteeEnforcement`,
+  `setCommitteeAuditCumul`, `PATCH /modules/:name/toggle`) n'ont pas à
+  passer en maker-checker ; ils doivent en revanche tous exiger un motif
+  et tracer avant/après (le toggle de module n'a aujourd'hui ni motif ni
+  trace complète).
+RELATED: q116, DECISION-055, item « Assouplissements à un seul
+  administrateur ».
+OWNER: @dev-backend @security
+STATUS: DÉCIDÉ (risque accepté par le PO).
+
+DECISION-059
+DATE: 2026-10-18 (réponse cockpit q117, horodatée 01:50 UTC)
+CONTEXT: I-D9 — auto-désignation de l'« administrateur sollicité ».
+DECISION (PO, cockpit) : créer un régime « structure à une personne »,
+  désactivé par défaut, déclaré **seulement par l'éditeur** à l'ouverture
+  du compte client (jamais par le client lui-même), affiché sur chaque
+  décision, rapport et cartographie (« sans second regard »), levé
+  définitivement dès qu'une deuxième personne arrive. L'auto-désignation
+  reste interdite.
+RELATED: q117, q113, DECISION-055, I-D9, B-6d.
+OWNER: @risk-manager @dev-backend @security
+STATUS: DÉCIDÉ — à spécifier (lot à créer).
+
+DECISION-060
+DATE: 2026-10-18 (réponse cockpit q118, horodatée 01:50 UTC)
+CONTEXT: Dans l'Administration, qui peut modifier la méthodologie
+  (Dispositif : échelles, appétence, paramètres) ?
+DECISION (PO, cockpit, contre la recommandation A05) : l'administrateur
+  peut aussi modifier la méthodologie.
+  → Amende le contrat (méthodologie réservée au groupe Risk Manager).
+  Lecture orchestrateur : le circuit d'approbation des changements de
+  Dispositif (maker-checker, B-6a/B-6d) reste inchangé ; seul le droit de
+  proposer/modifier s'étend à l'administrateur. À confirmer avec A13
+  avant implémentation.
+RELATED: q118, DECISION-054, contrat §13.
+OWNER: @architect @risk-manager @dev-backend
+STATUS: DÉCIDÉ — mise à jour du contrat à faire.
+
+DECISION-061
+DATE: 2026-10-18 (réponse cockpit q119, horodatée 01:50 UTC)
+CONTEXT: Cumul Comité + Audit autorisé par défaut (DECISION-042, q58),
+  seul défaut non strict.
+DECISION (PO, cockpit, option recommandée) : interdit par défaut,
+  autorisable par le client.
+  → Remplace le défaut de DECISION-042. Point d'attention pour Djamo
+  (tenant existant) : changer le défaut ne doit pas révoquer
+  silencieusement un cumul déjà en place — à traiter dans le lot.
+RELATED: q119, DECISION-042, q58.
+OWNER: @dev-backend @dev-db
+STATUS: DÉCIDÉ — à implémenter.
 ```
