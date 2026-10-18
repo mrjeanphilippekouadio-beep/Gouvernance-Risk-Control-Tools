@@ -62,6 +62,17 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
   réglage tenant (plateforme, effet immédiat, motif + audit) vs paramètre de version (approuvé, cycle suivant).
   Seconds chemins encore ouverts : `PUT /processes/:id/evaluation-mode` (permission retirée par §10),
   `PATCH /modules/:name/toggle` sans motif ni tiers (désactive AUDIT), 4 champs inertes `PUT /config`.
+- 2026-10-18 : DECISION-068, `docs/governance/droits-acces/architecture.json` (pourquoi/objectif/granularité/
+  configurabilité de chaque permission, groupe, garde, relation ; 15 domaines). Positions : 3 couches
+  (permission = quoi / rôle-groupe = qui / relation = sur quoi) ; « ne jamais bloquer » = UN catalogue de règles
+  de gouvernance + un point de contrôle unique (conforme | dérogation), 2e appel avec confirmation + motif,
+  marqué « sans second regard », audit même transaction, compte désigné informé ou décidant, politique par
+  client (mode, compte, condition de levée), amorçage/repli/structure à une personne/admin-RM en sont des cas.
+  Invariants hors catalogue. Proposé (à arbitrer PO) : en dérogation I5, statut « appliqué sans validation
+  indépendante », jamais « validé ». Auto-attribution de rôles : aucune dérogation. À retirer : ratingscale.
+  create/update/delete, riskappetite.update/delete, process.evaluationmode.set. À scinder : anomaly.close,
+  toggle de module hors config.manage. assertRiskManager à remplacer par riskframework.* (DECISION-060).
+  Propriétaire / N-1 de processus : partir du RACI (A / R).
 
 ## Pièges rencontrés
 
