@@ -706,11 +706,17 @@ export class RiskFrameworkService {
     }
     // F-B6d-01: the administrator right must predate the request and not come from the requester themselves.
     // Also the lower bound of askedOn: it cannot precede the grant, hence not the creation of the tenant.
-    // F-B6d-01 retest (A10): the role itself must not have changed after askedOn either — otherwise an admin
-    // permission added to an old ordinary role would pass. Conservative: any later edit of the role refuses.
-    const day = (d: Date) => d.toISOString().slice(0, 10);
-    if (!adminGrants.some((g) => g.grantedBy !== actor.userId && day(g.grantedAt) <= askedOn && day(g.role.updatedAt) <= askedOn)) {
-      throw new ValidationError("Le droit d'administrateur de l'utilisateur sollicité a été accordé par vous, ou après la date de sollicitation déclarée (attribution ou modification de son rôle) : indiquez un administrateur préexistant");
+    // F-B6d-01 retest 2 (A10): nor may the requester have created the role or changed its permissions (an admin
+    // permission added to an old ordinary role would pass the grant checks; a date check is beaten by askedOn = today).
+    const authoredByMe = async (roleId: string) => (await this.audit.listForEntity(actor.tenantId, "Role", roleId))
+      .some((e) => e.userId === actor.userId && (e.action === "CREATE" || e.action === "PERMISSION_CHANGE"));
+    let preExisting = false;
+    for (const g of adminGrants) {
+      if (g.grantedBy === actor.userId || g.grantedAt.toISOString().slice(0, 10) > askedOn) continue;
+      if (!(await authoredByMe(g.role.id))) { preExisting = true; break; }
+    }
+    if (!preExisting) {
+      throw new ValidationError("Le droit d'administrateur de l'utilisateur sollicité a été accordé par vous, ou après la date de sollicitation déclarée, ou son rôle a été créé ou modifié par vous : indiquez un administrateur préexistant");
     }
     const askedUserId = asked.id;
     return { askedUserId, askedOn, outcome };

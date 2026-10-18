@@ -1,4 +1,3 @@
-import { ADMIN_PERMISSIONS } from "../src/domain/fixedGroupPermissions.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -90,7 +89,7 @@ describe("B-6d pure rules", () => {
 
 const role = (id: string, systemGroup: SystemGroup | null, permissions: Permission[]): Role => ({
   id, tenantId: "t1", name: id, description: null, permissions, dashboardScopeMode: "GLOBAL",
-  systemGroup, departmentId: null, createdAt: new Date(), updatedAt: new Date("2020-01-01T00:00:00Z"), deletedAt: null,
+  systemGroup, departmentId: null, createdAt: new Date(), updatedAt: new Date(), deletedAt: null,
 });
 const level = (n: number) => Array.from({ length: n }, (_, i) => ({ level: i + 1, label: `L${i + 1}` }));
 const scale = (): RatingScale => ({
@@ -169,10 +168,11 @@ function world(o: { facts?: Partial<BootstrapFacts>; audit?: string[]; committee
   };
   const sent: Array<{ recipientUserId: string; eventType: string; message: string }> = [];
   const notifications = { async record(i: { recipientUserId: string; eventType: string; message: string }) { sent.push(i); } };
-  const audit = { async record() {}, async listForEntity() { return []; } };
+  const roleAudit: Array<{ entityId: string; userId: string; action: string }> = [];
+  const audit = { async record() {}, async listForEntity(_t: string, type: string, id: string) { return type === "Role" ? roleAudit.filter((e) => e.entityId === id) : []; } };
   const scales = { async getById() { return scale(); } };
   const service = new RiskFrameworkService(repo as never, scales as never, roleRepo as never, users as never, audit as never, undefined, notifications as never);
-  return { service, request, version, written, sent, stored, grantMeta, held };
+  return { service, request, version, written, sent, stored, grantMeta, held, roleAudit };
 }
 
 describe("B-6d bootstrapApprove (q83, q98, q99, I-D8, I-D9)", () => {
@@ -249,14 +249,16 @@ describe("B-6d bootstrapApprove (q83, q98, q99, I-D8, I-D9)", () => {
     expect(byMe.stored.calls + late.stored.calls + before.stored.calls).toBe(0);
   });
 
-  it("F-B6d-01 residual (A10 retest): an old grant of a role edited after askedOn (admin permission added later) is refused", async () => {
-    const w = world();
-    const r = w.held["adm"]!.find((x) => x.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)))!;
-    r.updatedAt = new Date(); // role edited today, askedOn = yesterday, grant from 2020 by a third party
-    await expect(w.service.bootstrapApprove(U1, "r1", GOOD(), "req")).rejects.toThrow(/modification de son rôle/);
-    expect(w.stored.calls).toBe(0);
-    r.updatedAt = new Date(Date.now() - 5 * 86_400_000); // edited before askedOn: accepted
-    await expect(w.service.bootstrapApprove(U1, "r1", GOOD(), "req")).resolves.toBeDefined();
+  it("F-B6d-01 retest 2 (A10): an old third-party grant of a role the requester created or widened is refused, even with askedOn = today", async () => {
+    for (const action of ["PERMISSION_CHANGE", "CREATE"]) {
+      const w = world();
+      w.roleAudit.push({ entityId: "adm", userId: "u1", action });
+      await expect(w.service.bootstrapApprove(U1, "r1", GOOD({ askedOn: ISO(0) }), "req")).rejects.toThrow(/créé ou modifié par vous/);
+      expect(w.stored.calls).toBe(0);
+    }
+    const other = world(); // widened by someone else, or merely renamed by the requester: accepted
+    other.roleAudit.push({ entityId: "adm", userId: "someone", action: "PERMISSION_CHANGE" }, { entityId: "adm", userId: "u1", action: "UPDATE" });
+    await expect(other.service.bootstrapApprove(U1, "r1", GOOD({ askedOn: ISO(0) }), "req")).resolves.toBeDefined();
   });
 
   it("C-B6d-03 / INFO-05: the notice carries the motive and flags a deciding Risk Manager who is also an administrator", async () => {

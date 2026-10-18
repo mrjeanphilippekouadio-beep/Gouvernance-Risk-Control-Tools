@@ -209,6 +209,11 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - Nouveau F-B6d-07 INFO (A07) : `UPDATE user_roles SET role_id/user_id` contourne le trigger de fin (ne suit que `revoked_at`) ; hors API.
 - Leçon : « quand X est-il devenu Y » a deux sources, l'affectation (user_roles) ET le contenu du rôle (roles.permissions) ; vérifier les deux. Pour un trigger « AFTER UPDATE OF col », lister toutes les colonnes qui changent l'appartenance (role_id, user_id), pas seulement le flag de révocation.
 
+## Retest 2 F-B6d-01 (2026-10-18, `5588fbd`, PoC pg réel PostgresRoleRepository + checkDeclaration, tag `rt5`) : RETEST_FAIL LOW 2,0, non bloquant staging
+- `updatedAt <= askedOn` refuse un élargissement de rôle si askedOn = hier, mais l'ACCEPTE si askedOn = aujourd'hui (date choisie par le demandeur). Correctif : provenance (audit `Role` PERMISSION_CHANGE/CREATE par actor.userId → refus, ou colonne `permissions_changed_by`).
+- `updated_at` posé par toutes les écritures applicatives de roles (update l.154/207, disable, Audit group via roles.update) ; aucun trigger DB (SQL direct/migrations aveugles, INFO).
+- Leçon (correction de ma position au retest 1) : une borne temporelle comparée à une date DÉCLARÉE par l'attaquant ne protège rien ; la « granularité au jour » n'était anodine que là où un contrôle de provenance (grantedBy) existait. Toujours tester le cas date déclarée = aujourd'hui.
+
 ## Consultation DECISION-055 « tout modulable, défaut strict » (2026-10-17, analyse seule, aucun code) : aucune escalade
 - Règle proposée « réglage sûr » : par tenant (actor.tenantId), permission dédiée par réglage, une seule écriture (DECISION-054), audit avant/après + motif dans la transaction, fail-closed (absent = strict). Durcir = un acteur, effet immédiat. Assouplir = maker-checker (B ≠ A, B ni bénéficiaire ni concerné), effet après approbation, non rétroactif, valeur du réglage figée sur chaque décision.
 - Écart actuel noté : `setCommitteeEnforcement`/`setCommitteeAuditCumul` assouplissent à un seul admin (motif + audit, sans second approbateur) → à aligner (A06), INFO.
