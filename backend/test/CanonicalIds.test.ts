@@ -13,7 +13,7 @@ describe("canonicalId / canonicalIdsMiddleware (SEC-ID-01)", () => {
     for (const s of SPELLINGS) expect(canonicalId(s)).toBe(ID);
   });
 
-  it("path, query and JSON body ids are canonical before routing; other strings and repeated keys are untouched", async () => {
+  it("path, query and JSON body ids are canonical before routing; non-id keys (password, free text) and repeated keys are untouched", async () => {
     const app = express();
     app.use(express.json());
     app.use(canonicalIdsMiddleware);
@@ -22,13 +22,14 @@ describe("canonicalId / canonicalIdsMiddleware (SEC-ID-01)", () => {
     try {
       const { port } = server.address() as { port: number };
       for (const s of SPELLINGS.slice(0, 4)) {
-        const res = await fetch(`http://127.0.0.1:${port}/roles/${s}/assign?userId=${encodeURIComponent(s)}&tag=Ab&tag=Cd`, {
+        const res = await fetch(`http://127.0.0.1:${port}/roles/${s}/assign?userId=${encodeURIComponent(s)}&q=${encodeURIComponent(s)}&tag=Ab&tag=Cd`, {
           method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ userId: s, ids: [s], nested: { by: s }, reason: "Keep Me", hash: "ABCDEF" }),
+          body: JSON.stringify({ userId: s, coveredRiskIds: [s], nested: { decidedBy: s }, password: s, reason: s }),
         });
         expect(await res.json()).toEqual({
-          id: ID, q: { userId: ID, tag: ["Ab", "Cd"] },
-          body: { userId: ID, ids: [ID], nested: { by: ID }, reason: "Keep Me", hash: "ABCDEF" },
+          id: ID, q: { userId: ID, q: s, tag: ["Ab", "Cd"] },
+          // a password or free text that happens to be 32 hex digits is never rewritten (Gitar review)
+          body: { userId: ID, coveredRiskIds: [ID], nested: { decidedBy: ID }, password: s, reason: s },
         });
       }
       // percent-encoded hex digit in the path is decoded only after the middleware: must be canonical anyway
