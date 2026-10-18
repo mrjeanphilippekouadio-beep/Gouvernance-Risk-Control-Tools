@@ -32,6 +32,8 @@ const UpdateRoleBody = z.object({
 
 // B-8 bis (q44): validated and bounded here, required by the service for the 3 fixed groups.
 const AssignmentBody = z.object({ userId: z.string().min(1), reason: z.string().trim().min(1).max(500).optional() });
+// q149: second confirmation to remove the last Risk Manager when no interim can take over.
+const RevokeBody = AssignmentBody.extend({ confirmEmptyGroup: z.boolean().optional() });
 // F-B8b-02 (q56): the reason is mandatory.
 const AuditGroupPermissionsBody = z.object({
   permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1),
@@ -191,8 +193,8 @@ export function rolesRouter(roleService: RoleService): Router {
 
   router.post("/:id/revoke", async (req, res, next) => {
     try {
-      const body = AssignmentBody.parse(req.body);
-      await roleService.revokeFromUser(req.user, req.params["id"] as string, body.userId, req.requestId, body.reason);
+      const body = RevokeBody.parse(req.body);
+      await roleService.revokeFromUser(req.user, req.params["id"] as string, body.userId, req.requestId, body.reason, body.confirmEmptyGroup);
       res.json({ data: { status: "REVOKED" } });
     } catch (err) {
       next(err);

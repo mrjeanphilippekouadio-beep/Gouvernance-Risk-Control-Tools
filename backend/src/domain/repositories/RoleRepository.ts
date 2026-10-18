@@ -1,4 +1,22 @@
 import type { CreateRoleInput, Role, RoleAssignment, UpdateRoleInput } from "../entities/Role.js";
+import type { AuditEvent } from "../entities/AuditEvent.js";
+
+type AuditToWrite = Omit<AuditEvent, "id" | "timestamp">;
+
+/** D2c (R-3): the last Risk Manager leaves and the designated interim takes the role, in ONE transaction. */
+export interface HandOverInput {
+  tenantId: string;
+  roleId: string;
+  leavingUserId: string;
+  interimUserId: string;
+  designationId: string;
+  /** Always the acting administrator (never client-supplied). */
+  grantedBy: string;
+  /** Replays the cumul rules on the interim's roles read under the locks; throws to abort. */
+  recheck?: RoleAssignRecheck;
+  /** Built from the new assignment; inserted in the same transaction. */
+  audit: (assignment: RoleAssignment) => AuditToWrite[];
+}
 
 /** F-B8s-01: run inside the repository transaction, under the user + role locks; throws to abort. */
 export type RoleAssignRecheck = (lockedRole: Role, held: Role[]) => Promise<void>;
@@ -20,7 +38,18 @@ export interface RoleRepository {
    * members would remain after the revoke — checked atomically (B-8: the
    * Risk Manager group is never left empty).
    */
-  revokeFromUser(tenantId: string, roleId: string, userId: string, options?: { minRemaining?: number }): Promise<void>;
+  revokeFromUser(
+    tenantId: string,
+    roleId: string,
+    userId: string,
+    options?: { minRemaining?: number; /** inserted in the same transaction (D2c: vacancy exception). */ auditEvents?: AuditToWrite[] },
+  ): Promise<void>;
+  /**
+   * D2c (R-3): lock order users -> roles -> tenants -> designation; revoke the leaving member THEN assign the interim
+   * (062's trigger counts RM members on each insert); mark the designation activated; audit; exactly one active member at COMMIT.
+   * Optional on the interface for the existing test doubles; RoleService fails closed without it.
+   */
+  handOverLastRiskManager?(input: HandOverInput): Promise<RoleAssignment>;
   listForUser(tenantId: string, userId: string): Promise<Role[]>;
   /** B-8 bis (F-B8-06): roles DISABLED since the user got them but whose non-revoked assignment remains. */
   listDisabledForUser?(tenantId: string, userId: string): Promise<Role[]>;

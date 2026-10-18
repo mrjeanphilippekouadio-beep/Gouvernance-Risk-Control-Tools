@@ -150,6 +150,8 @@ export type Permission =
   | "config.selfvalidation.set"
   /** DECISION-074: governance health panel; distinct prefix from governance.* (review cycles). */
   | "governancehealth.read"
+  /** DECISION-074/075 (D2c): designate / end the designated manager and the Risk Manager interim (opens Risk Manager rights; administrator only). */
+  | "designation.manage"
   | "notification.read"
   | "governance.read"
   | "governance.create"
@@ -306,6 +308,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "config.cumul.set",
   "config.selfvalidation.set",
   "governancehealth.read",
+  "designation.manage",
   "notification.read",
   "governance.read",
   "governance.create",

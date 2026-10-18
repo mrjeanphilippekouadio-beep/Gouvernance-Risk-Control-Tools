@@ -77,6 +77,8 @@ export const ADMIN_PERMISSIONS: Permission[] = [
   // DECISION-074 R-0 / §1.3: relaxing the no-self-validation control is an administrator act (same nature as config.cumul.set).
   // governancehealth.read is deliberately NOT here: reading the panel must not make someone an "administrator" (q63 cumul rules).
   "config.selfvalidation.set",
+  // DECISION-075 (D2c): designating an interim opens Risk Manager rights; never held by a fixed group.
+  "designation.manage",
 ];
 
 export const isAdministrator = (roles: Role[]): boolean => roles.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));
