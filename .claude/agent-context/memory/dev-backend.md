@@ -345,3 +345,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Prédicats de groupe (`isAdministrator`, `isRiskManagerMember`, `isCommitteeRole/Member`, `isAuditGroupMember`, `isCommitteeValidationPermission`) déplacés dans `domain/fixedGroupPermissions.ts`, sans changement de comportement.
 - Tests existants adaptés (inévitable) : B8ter (constante = 051 + 055 + 066), regex source dans QA-B6a, `CONFIG_ADMIN` de QA-D044.
 - Env : la base partagée `grc_qa_a08` est utilisée par plusieurs agents (068 déjà appliquée par un autre lot, sans 066/067) ; up/down/up fait sur une base jetable `grc_d1`. Serveur PG local : `/tmp/claude-0/-home-user/<session>/scratchpad/startpg.sh` (runuser + pg_ctl, port 5531, socket /tmp/claude-0/pgsock). Heredoc + `&&` dans Bash refusés dans le worktree : passer par un fichier .sh.
+
+## 2026-10-18 Lot D2a (migration 067, `users.last_seen_at`)
+
+- Le résolveur d'identité partagé est `lookupMembership` dans `server.ts` (pas dans `infrastructure/identity`) ; Google et Local le reçoivent en paramètre. Seul câblage possible = 3 lignes dans `server.ts` (signalé). Logique dans `infrastructure/identity/lastSeen.ts` : `createLastSeenRecorder(pool)` (Map mémoire 1 h + UPDATE conditionnel SQL `WHERE tenant_id AND id AND deleted_at IS NULL AND (last_seen_at IS NULL OR < now()-1h)`, fire-and-forget, `.catch` -> Pino warn sans PII autre que ids, retire la clé du cache pour réessayer) et `withLastSeen(lookup, record)` (enveloppe, résultat inchangé, try/catch).
+- Aucune route ni exposition API ; pas d'audit_log (télémétrie, DECISION-074). Aucune donnée au-delà de la date (q152).
+- Gap de numérotation : 066 réservé à un lot parallèle ; `QA-B8quater` ("053 and 054 are consecutive") échoue dans ce worktree tant que 066 n'est pas fusionné. Ne pas modifier ce test.
+- Postgres jetable : le serveur local (/tmp/claude-0/pgdata) peut être arrêté ; le relancer via un script (`runuser -u postgres -- pg_ctl ... -k /tmp/claude-0/pgsock -p 5531`), le harnais refuse `su`/`runuser` en commande directe.

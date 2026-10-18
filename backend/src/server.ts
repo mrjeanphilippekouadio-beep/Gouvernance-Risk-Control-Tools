@@ -4,6 +4,7 @@ import cors from "cors";
 import { env, getLocalAuthUsers } from "./config/env.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { pool } from "./infrastructure/database/pool.js";
+import { createLastSeenRecorder, withLastSeen } from "./infrastructure/identity/lastSeen.js";
 import { assertProductionDatabaseRole } from "./infrastructure/database/postgres/databaseRoleSecurity.js";
 import { PostgresRiskRepository } from "./infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresAuditRepository } from "./infrastructure/database/postgres/PostgresAuditRepository.js";
@@ -457,14 +458,16 @@ const lookupMembership = async (email: string) => {
   };
 };
 
+const lookupMembershipSeen = withLastSeen(lookupMembership, createLastSeenRecorder(pool));
+
 const identityProvider =
   env.AUTH_PROVIDER === "google"
-    ? new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID!, lookupMembership)
+    ? new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID!, lookupMembershipSeen)
     : new LocalIdentityProvider(
         getLocalAuthUsers(),
         env.LOCAL_AUTH_TOKEN_SECRET!,
         env.LOCAL_AUTH_TOKEN_TTL_SECONDS,
-        lookupMembership,
+        lookupMembershipSeen,
       );
 
 if (env.AUTH_PROVIDER === "local") {
