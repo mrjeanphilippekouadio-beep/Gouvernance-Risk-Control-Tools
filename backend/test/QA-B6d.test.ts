@@ -58,7 +58,7 @@ function scale(id: string, tenantId: string, n = 5, over: Partial<RatingScale> =
 }
 const role = (tenantId: string, systemGroup: SystemGroup): Role => ({
   id: `${tenantId}-${systemGroup}`, tenantId, name: systemGroup, description: null, permissions: [], dashboardScopeMode: "GLOBAL",
-  systemGroup, departmentId: null, createdAt: new Date(), updatedAt: new Date(), deletedAt: null,
+  systemGroup, departmentId: null, createdAt: new Date(), updatedAt: new Date("2020-01-01T00:00:00Z"), deletedAt: null,
 });
 
 interface Opts { rm?: string[]; audit?: string[]; committee?: string[]; suspended?: string[]; categories?: string[] }
@@ -336,7 +336,7 @@ describe("QA-B6d q100: legacy Committee/Audit approver folded into the Risk Mana
 // PostgreSQL compares uuids case-insensitively: listForUser below lower-cases like it.
 const brole = (id: string, systemGroup: SystemGroup | null, permissions: Permission[]): Role => ({
   id, tenantId: "t1", name: id, description: null, permissions, dashboardScopeMode: "GLOBAL",
-  systemGroup, departmentId: null, createdAt: new Date(), updatedAt: new Date(), deletedAt: null,
+  systemGroup, departmentId: null, createdAt: new Date(), updatedAt: new Date("2020-01-01T00:00:00Z"), deletedAt: null,
 });
 const blevel = (n: number) => Array.from({ length: n }, (_, i) => ({ level: i + 1, label: `L${i + 1}` }));
 const bscale = (): RatingScale => ({

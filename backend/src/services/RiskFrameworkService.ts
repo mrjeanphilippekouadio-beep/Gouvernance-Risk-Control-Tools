@@ -706,8 +706,11 @@ export class RiskFrameworkService {
     }
     // F-B6d-01: the administrator right must predate the request and not come from the requester themselves.
     // Also the lower bound of askedOn: it cannot precede the grant, hence not the creation of the tenant.
-    if (!adminGrants.some((g) => g.grantedBy !== actor.userId && g.grantedAt.toISOString().slice(0, 10) <= askedOn)) {
-      throw new ValidationError("Le droit d'administrateur de l'utilisateur sollicité a été accordé par vous, ou après la date de sollicitation déclarée : indiquez un administrateur préexistant");
+    // F-B6d-01 retest (A10): the role itself must not have changed after askedOn either — otherwise an admin
+    // permission added to an old ordinary role would pass. Conservative: any later edit of the role refuses.
+    const day = (d: Date) => d.toISOString().slice(0, 10);
+    if (!adminGrants.some((g) => g.grantedBy !== actor.userId && day(g.grantedAt) <= askedOn && day(g.role.updatedAt) <= askedOn)) {
+      throw new ValidationError("Le droit d'administrateur de l'utilisateur sollicité a été accordé par vous, ou après la date de sollicitation déclarée (attribution ou modification de son rôle) : indiquez un administrateur préexistant");
     }
     const askedUserId = asked.id;
     return { askedUserId, askedOn, outcome };
