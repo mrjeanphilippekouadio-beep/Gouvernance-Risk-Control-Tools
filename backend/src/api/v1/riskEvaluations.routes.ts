@@ -28,7 +28,9 @@ const MasteryLineScoreSchema = z.object({
 const CreateEvaluationBody = z.object({
   riskId: z.string().min(1),
   evaluationType: EvaluationType,
-  subCategory: z.string().min(1),
+  // q145: the sub-category is picked in the risk categories referential; the label is derived server-side.
+  // A legacy `subCategory` text sent by an old client is dropped by zod (unknown key), never read.
+  subCategoryId: z.guid(),
   entity: z.string().nullish(),
 });
 

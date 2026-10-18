@@ -87,7 +87,31 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
   validation seulement faute d'autre validateur — recommandé), Q2 (pas de rétroactivité), Q3 (notifier le 1er
   Audit/Comité).
 
+- 2026-10-18 : DECISION-074 (q135-q144), section « Révision DECISION-074 » du même fichier panel. Taille = questionnaire
+  versionné `organization_profiles` (ajout seul, ACTIVE/PENDING, hybride : seul si aucun tiers RM/Audit/Comité, sinon
+  approbation par un autre), classement recalculé à la lecture + `profileGaps`. Propriétaire/champion/N-1 = colonnes FK
+  sur `processes` (position « RACI A/R » révisée : valeur unique, FK, champion hors RACI), permission
+  `process.responsibility.assign`. Gérant + intérimaire RM = `governance_designations` (fin par `ended_at`).
+  Dernier RM avec intérimaire : `handOverLastRiskManager`, **retrait puis attribution** (sinon le trigger 062 compte
+  2 RM et termine l'amorçage à tort). « Appliqué sans validation indépendante » = marqueur `audit_log` + revues, aucun
+  statut ajouté aux tables métier, `validationIndependence` calculé serveur. q141 : `EligibleValidatorQuery` (union
+  RBAC + `users.roles`, portée). Acceptation : `governance_principle_acceptances`, snapshot des objets, expiration
+  lue (pas de tâche). `last_seen_at` throttlé 1/h, sans audit. Lots D0-D7, migrations indicatives 066-073.
+  Questions R-Q1 (dernier RM sans intérimaire), R-Q2 (deux comptes d'un humain), R-Q3 (données de fonctions non
+  construites). Interprétations I-R1..I-R6.
+
+## Principe ajouté (2026-10-18)
+
+12. **Un statut de gouvernance ne s'ajoute pas aux enums métier** quand ces enums sont lus par des calculs : on le
+    porte à côté (marqueur + helper serveur), sinon chaque lecteur filtrant `VALIDATED` casse en silence.
+13. **Un intérim/suppléance ne se désigne pas soi-même** dès que la désignation finit en attribution de rôle
+    (`guard:noSelfRoleAssign` sans dérogation) — c'est ce qui rend le cas « admin seul » non soluble sans PO.
+
 ## Pièges rencontrés
+
+- La table des paramètres est `configs` (pluriel, 024), contrairement à `audit_log` (singulier).
+- Les triggers AFTER INSERT de 062 comptent les membres de groupe ligne par ligne : tout échange de membre dans une
+  transaction doit retirer avant d'ajouter.
 
 - La table du journal s'appelle `audit_log` (singulier, migration 004), pas `audit_logs` comme dans CLAUDE.md.
 - Les prédicats `isAdministrator` / `isRiskManagerMember` sont privés dans `RoleService.ts` : à déplacer dans

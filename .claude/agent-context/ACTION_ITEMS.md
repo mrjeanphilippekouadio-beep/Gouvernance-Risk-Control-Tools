@@ -306,14 +306,21 @@ pour l'usage.
 | HUMAN | **Arbitrage des droits et accès (DECISION-068)** : catalogue fusionné `docs/governance/droits-acces/catalogue.json` (209 droits, 12 rôles), publié dans la section « Droits et accès » du cockpit. 20 conflits de gouvernance signalés par A13, dont 5 élevés : `config.committeeenforcement.set` et `config.cumul.set` (un administrateur seul assouplit, alors que le Dispositif exige deux personnes), `rolegroup.audit.update` (l'Audit réglé par un non-Audit), `guard:noSelfRoleChange` et `guard:noSelfValidation` (structure d'une personne, à concilier avec DECISION-066). L'arbitrage se fait dans le cockpit (collection `rightDecisions`) ; chaque réponse devient une entrée du Decision Log. Bloque : DECISION-060/067, DECISION-064, DECISION-066, DECISION-069. | 2026-10-18 | Fermé (DECISION-072, sauf `guard:notLastRiskManager` rouvert en question) |
 | HUMAN | **q132 / q133 (cockpit) — éditeur des seuils d'appétence dans le brouillon du Dispositif (correctif Codex P1, commit 60f7757)** : q132 placement (fenêtre « Modifier le brouillon » actuelle ou onglet dédié) ; q133 sous-catégorie choisie dans le référentiel ou en texte libre (`subCategoryId` non alimentable depuis l'écran aujourd'hui). Mineur, non soumis : une erreur serveur sur la liste s'affiche en bannière globale, sans pointer la ligne. | 2026-10-18 | Fermé (DECISION-071) |
 | HUMAN | **q134 (cockpit) — A10 F-063-03** : un brouillon de Dispositif abandonné (ARCHIVED) bloque pour toujours la désactivation de l'échelle qu'il référençait (règle `isReferencedByFrameworkVersion` + migration 063). Recommandation : seules les versions approuvées (en vigueur ou anciennes) bloquent. | 2026-10-18 | Fermé (DECISION-071) |
-| HUMAN | **`guard:notLastRiskManager` — démission ou absence du seul Risk Manager, intérim** : le PO a rouvert ce point dans son arbitrage (« comment gérons-nous une démission s'il n'y avait qu'un seul Risk Manager ? comment gérons-nous l'intérim ? le groupe peut être vide »). Options A13 posées en cockpit : **q137**. | 2026-10-18 | Ouvert |
-| HUMAN | **Panel « Principes de gouvernance non respectés » (DECISION-073)** : catalogue des principes et indications TPE / PME / grande entreprise (A13), règle de détection de la taille d'après les rôles assignés (A13), architecture du calcul côté serveur (A05), maquette (A04). Propositions livrées (`docs/governance/principes/`, `docs/architecture/RM-V1-Panel-Principes-Gouvernance.md`, `docs/ux/RM-V1-Panel-Principes-Gouvernance.md`). Questions cockpit **q135, q136, q138 à q144** (taille, principes affichés, acceptation, données manquantes, qui voit, portée de la double confirmation, statut, rétroactivité, notification). Bloque les lots P1 à P6 de la spec A05. | 2026-10-18 | Ouvert |
+| HUMAN | **`guard:notLastRiskManager` — démission ou absence du seul Risk Manager, intérim** : le PO a rouvert ce point dans son arbitrage (« comment gérons-nous une démission s'il n'y avait qu'un seul Risk Manager ? comment gérons-nous l'intérim ? le groupe peut être vide »). Options A13 posées en cockpit : **q137**. | 2026-10-18 | Fermé (DECISION-074) |
+| HUMAN | **Panel « Principes de gouvernance non respectés » (DECISION-073)** : catalogue des principes et indications TPE / PME / grande entreprise (A13), règle de détection de la taille d'après les rôles assignés (A13), architecture du calcul côté serveur (A05), maquette (A04). Propositions livrées (`docs/governance/principes/`, `docs/architecture/RM-V1-Panel-Principes-Gouvernance.md`, `docs/ux/RM-V1-Panel-Principes-Gouvernance.md`). Questions cockpit **q135, q136, q138 à q144** (taille, principes affichés, acceptation, données manquantes, qui voit, portée de la double confirmation, statut, rétroactivité, notification). Bloque les lots P1 à P6 de la spec A05. | 2026-10-18 | Fermé (DECISION-074) |
 | @dev-backend | **Constats A13/A05 pendant le cadrage DECISION-073** : (1) commentaire de `Config.committeeAuditCumulAllowed` « Default true » périmé depuis DECISION-061 ; (2) `isAdministrator` / `isRiskManagerMember` privés dans `RoleService.ts`, à déplacer dans `domain/fixedGroupPermissions.ts` (pas de duplication) au lot P2 ; (3) la table du journal s'appelle `audit_log` (singulier), CLAUDE.md écrit `audit_logs`. | 2026-10-18 | Ouvert |
 | @dev-backend | **A10 F-FW-01 LOW 2.2** (`docs/security/review-codex-fixes-pr186-2026-10-18.md`) : le libellé libre `subCategory` d'un seuil d'appétence n'est pas relié à `subCategoryId` (libellé trompeur possible). Correctif : déduire le libellé de l'id côté serveur — à traiter avec la réponse PO à q133. | 2026-10-18 | Fermé côté écriture (q133, d387257) ; résidu F-FW-01-R ci-dessous |
 | @dev-backend | **QA-064-01 (MINOR) + A10 F-FW-01-R (LOW 2,2)** (`docs/security/review-q132-q134-2026-10-18.md`) : à la demande d'activation, revérifier chaque seuil comme à l'écriture (id présent, catégorie active avec parent) et refuser un libellé hérité différent du nom de la catégorie. Corrigé (b485f5a, fusionné 64ac8c0) ; RETEST_PASS QA et A10. INFO A08 : une catégorie renommée pendant une demande PENDING_APPROVAL fait échouer l’approbation ; rejeter la demande rend le brouillon modifiable. | 2026-10-18 | Fermé |
-| HUMAN | **q145 (cockpit) — A10 F-FW-02 (LOW 4,3, antérieur au lot)** : le seuil d'appétence appliqué à une évaluation est retrouvé par égalité exacte du libellé de sous-catégorie, saisi librement dans l'évaluation ; un libellé un peu différent ou un renommage de catégorie fait disparaître le seuil sans message. Recommandation A10 : correspondance par `subCategoryId`. À traiter avant la production. | 2026-10-18 | Ouvert |
+| HUMAN | **q145 (cockpit) — A10 F-FW-02 (LOW 4,3, antérieur au lot)** : le seuil d'appétence appliqué à une évaluation est retrouvé par égalité exacte du libellé de sous-catégorie, saisi librement dans l'évaluation ; un libellé un peu différent ou un renommage de catégorie fait disparaître le seuil sans message. Recommandation A10 : correspondance par `subCategoryId`. À traiter avant la production. | 2026-10-18 | Fermé (DECISION-074, q145) — mise en œuvre @dev-backend |
+| @risk-manager @architect | **DECISION-074 — mise à jour du cadrage du panel** : questionnaire de profil d'organisation (q135), niveau d'exigence par taille (q136), règle intérimaire / suppléant (q137), inventaire et modèle de toutes les données manquantes (q139), acceptation datée (q138), statut « Appliqué sans validation indépendante » (q142). Le questionnaire et les seuils de classement repasseront en cockpit avant développement. | 2026-10-18 | Fait (A13 v0.2, A05 révision R-0 à R-9, lots D0 à D7) |
+| HUMAN | **q146 à q153 (cockpit) — panel de gouvernance, avant lancement des lots D1 à D7** : questionnaire et seuils (q146), qui remplit / baisse de taille (q147), comptage « plus d'une personne » (q148), départ du dernier Risk Manager sans intérimaire (q149), liste D01-D19 et reprise du propriétaire de processus (q150, A13 et A05 divergent), principes dépendant de fonctions non construites (q151), deux comptes d'une même personne (q152, rappel de l'arbitrage DECISION-072), acte appliqué sans validation indépendante dans les calculs (q153, change la taille du lot D4). Interprétations non bloquantes I-R1 à I-R6 : spec A05 §R. | 2026-10-18 | Ouvert |
+| @dev-backend | **q145 / A10 F-FW-02** : l'évaluation choisit sa sous-catégorie dans le référentiel ; le seuil d'appétence est retrouvé par `subCategoryId`, plus par libellé (+ F-FW-03). Avant production. | 2026-10-18 | Fermé (backend c44f0e7, frontend 7eb58ca ; retest A10 PASS addendum 2) |
 | @dev-db | **A10 F-064-01 (INFO)** : depuis 064, le contenu d'une échelle référencée seulement par des brouillons abandonnés redevient modifiable (cohérent avec q134 : un brouillon abandonné n'est la preuve d'aucune évaluation). À documenter dans le README des migrations. | 2026-10-18 | Ouvert |
-| @dev-backend | **A10 F-FW-03 (INFO)** : deux sous-catégories de même nom sous des parents différents ne peuvent pas porter chacune un seuil (unicité sur le libellé). À traiter avec q145. | 2026-10-18 | Ouvert |
+| @dev-backend | **A10 F-FW-03 (INFO)** : deux sous-catégories de même nom sous des parents différents ne peuvent pas porter chacune un seuil (unicité sur le libellé). À traiter avec q145. | 2026-10-18 | Fermé (backend c44f0e7, frontend 7eb58ca ; retest A10 PASS addendum 2) |
+| @dev-backend | **q145 régression** : `GET /risk-categories` exige `config.read`, qu'aucun groupe fixe ne porte ; le Risk Manager ne peut donc plus lister les sous-catégories pour créer une évaluation (ni régler les seuils, q132). Correctif : lecture des catégories actives aussi avec `riskevaluation.create` ou `riskframework.read`. Revue A10 requise. | 2026-10-18 | Fermé (be1a397 / ea6e435, A10 PASS addendum 3) |
+| @dev-backend | **A10 F-CAT-RD-01 INFO** : lecture de la taxonomie accordée via `riskevaluation.create`/`riskframework.read` plutôt qu'une permission dédiée `riskcategory.read` ; chaînes passées à `includes` non typées `Permission`. Optionnel. | 2026-10-18 | Ouvert (faible) |
+| HUMAN / @devops | **q145 staging** : après application de 065 par migrate.yml, compter `SELECT count(*) FROM risk_evaluations WHERE sub_category_id IS NULL` (évaluations antérieures, rapprochées par libellé et signalées « libellé libre hérité »). Lecture seule. | 2026-10-18 | Ouvert |
+| @dev-backend | **A10 résidu INFO q145** : la base n'impose ni que `sub_category_id` désigne une sous-catégorie ni que le libellé corresponde au nom (seul le service le vérifie). Retour arrière : down de 065 après retour arrière du code. | 2026-10-18 | Ouvert (faible) |
 | @dev-db | **A10 F-063-01 INFO** : la garde de la migration 063 suppose READ COMMITTED (en REPEATABLE READ la course revient ; aucun code applicatif ne change l'isolation). Documenter cette hypothèse dans la migration suivante qui touche ces triggers. | 2026-10-18 | Ouvert (optionnel) |
 | HUMAN @devops | **A08 — vérification staging avant/après migration 063** : une version de Dispositif qui référencerait déjà une échelle supprimée reste lisible, mais cloner une nouvelle version depuis elle sera refusé. Requête de contrôle (lecture seule, à lancer par le PO ou un accès autorisé — l'orchestrateur ne touche pas Neon) : `SELECT v.id FROM risk_framework_versions v JOIN rating_scales s ON s.id = v.rating_scale_id WHERE s.deleted_at IS NOT NULL`. Aussi INFO A08 : rendre `isReferencedByFrameworkVersion` obligatoire sur `RatingScaleRepository` (le trigger 063 reste le filet). | 2026-10-18 | Ouvert |
 | @dev-backend @dev-db @dev-frontend | **Revue QA lot « un seul chemin » (A08, PASS_WITH_RESERVES, `QA-SWP.test.ts`)** : **QA-SWP-01 MAJOR** toggle de module écrit l'état puis l'audit hors transaction (module désactivé sans trace si l'audit tombe) → audit transactionnel comme `RatingScaleRepository` ; **QA-SWP-03 MAJOR** `RatingScaleService.disable` accepte une échelle référencée par une version BROUILLON → `getById(...)!` (RiskFrameworkService l.598) en 500 → refuser si une version quelconque la référence ; QA-SWP-02 MINOR audit `oldValue: null` au 1er toggle → `{enabled:true}` ; QA-SWP-04 MINOR textes périmés (AppetitePage, RatingScalesPage, commentaire `processEvaluationModeRequests.routes.ts`) ; QA-SWP-06 INFO permission `process.evaluationmode.set` orpheline → retirer. `it.fails` QA-SWP-01/03 à basculer au correctif. **Revue A10 (`docs/security/review-SWP-2026-10-18.md`, feu vert staging, CVSS max 2,2)** : F-SWP-01 LOW 2,2 `ProcessEvaluationModeRequestService.validate()` écrit le mode avant le statut, hors transaction (validation + rejet simultanés → demande REJECTED mais mode appliqué, sans audit) ; F-SWP-02 = QA-SWP-01 ; F-SWP-03 = QA-SWP-02 ; F-SWP-05 = QA-SWP-04 (commentaire) + test de garde « méthodes mortes absentes de `src/api` » ; F-SWP-06 = QA-SWP-03 ; F-SWP-04 INFO option PO : permission dédiée `config.module.toggle`. Correctifs QA-SWP-01..04 + F-SWP-01 dispatchés à A06 le 2026-10-18. **Corrigés en `07055f2` : RETEST_PASS A08 et A10.** | 2026-10-18 | Fermé |
@@ -1958,4 +1965,48 @@ RELATED: DECISION-072 (`guard:noSelfValidation`, `riskappetite.update`).
 OWNER: @risk-manager (contenu) @architect (calcul serveur) @ux-designer
   (maquette), puis @dev-backend @dev-frontend
 STATUS: DÉCIDÉ — cadrage en cours, contenu à valider en cockpit.
+
+DECISION-074
+DATE: 2026-10-18 (cockpit q135 à q145)
+DECISION (PO) :
+  - q135 (réponse libre) : la taille ne se déduit pas des seuls comptes ;
+    on pose au client des questions sur les postes existants dans
+    l'entreprise (positions, nombre de personnes) et on en déduit le
+    classement TPE / PME / grande entreprise. Verbatim : « Je crois qu'il
+    faut poser des questions sur les disponibilités des postes dans
+    l'entreprise pour mieux situer, ça sera plus efficace : sur base de
+    questions sur les positions, nombre de personnes, déduire le
+    classement. »
+  - q136 : tous les principes, avec un niveau d'exigence propre à chaque
+    taille.
+  - q137 (réponse libre) : un intérimaire désigné ou un suppléant
+    (deuxième Risk Manager) est désigné à la création du rôle dès que le
+    nombre de personnes de la fonction risque dépasse 1 ; si ce n'est
+    pas fait, cela reste une action dans le panel. Verbatim :
+    « Intérimaire désigné ou suppléant deuxième risk manager désigné à
+    la création du rôle dès que le nombre de personnes dans risque
+    dépasse 1 ; si c'est pas fait, le garder comme action dans le
+    panel. »
+  - q138 : acceptation d'un principe non respecté avec motif et durée,
+    seconde confirmation dès qu'un tiers (Risk Manager, Audit, Comité)
+    existe.
+  - q139 : créer TOUTES les données manquantes avant de livrer le panel.
+  - q140 : panel visible par administrateur, Risk Manager, Audit et
+    Comité ; noms visibles seulement pour qui a accès au journal d'audit.
+  - q141 : auto-validation par double confirmation activable par le
+    client, proposée seulement si personne d'autre ne peut valider ;
+    sinon refus.
+  - q142 : statut « Appliqué sans validation indépendante », distinct de
+    « Validé ».
+  - q143 : « suivi depuis le <date de mise en service> », pas de
+    reconstitution.
+  - q144 : notification à l'attribution du rôle Audit ou Comité s'il
+    existe des actions sans seconde validation, avec lien vers le panel.
+  - q145 : l'évaluation choisit sa sous-catégorie dans le référentiel ;
+    le seuil est retrouvé par la catégorie (plus par le libellé).
+RELATED: DECISION-072, DECISION-073, A10 F-FW-02, F-FW-03.
+OWNER: @risk-manager @architect (cadrage), @dev-backend (q145 puis lots
+  du panel), @dev-frontend
+STATUS: DÉCIDÉ — q145 en développement ; panel : cadrage mis à jour,
+  questionnaire à valider en cockpit.
 ```

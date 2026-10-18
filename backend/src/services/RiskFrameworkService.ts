@@ -103,7 +103,7 @@ function assertScore(value: number, field: string): void {
 }
 
 /** Shape + uniqueness of the appetite list (the ceiling n² is checked when activation is requested). */
-function normalizeAppetite(entries: AppetiteThresholdEntry[]): AppetiteThresholdEntry[] {
+export function normalizeAppetite(entries: AppetiteThresholdEntry[]): AppetiteThresholdEntry[] {
   if (entries.length > MAX_APPETITE_ENTRIES) {
     throw new ValidationError(`appetiteThresholds cannot have more than ${MAX_APPETITE_ENTRIES} entries`);
   }
@@ -112,7 +112,9 @@ function normalizeAppetite(entries: AppetiteThresholdEntry[]): AppetiteThreshold
     const subCategory = cleanText(e.subCategory, "appetite subCategory", MAX_LABEL, true)!;
     const entity = cleanText(e.entity, "appetite entity", MAX_LABEL, false);
     assertScore(e.threshold, `appetite threshold of "${subCategory}"`);
-    const key = `${subCategory}\u0000${entity ?? ""}`;
+    // F-FW-03: the key is the category id (two homonymous sub-categories under different parents each get a threshold);
+    // an entry without id (legacy) falls back to its label.
+    const key = `${e.subCategoryId ? e.subCategoryId.toLowerCase() : subCategory}\u0000${entity ?? ""}`;
     if (seen.has(key)) throw new ValidationError(`Duplicate appetite for "${subCategory}"${entity ? ` / ${entity}` : ""}`);
     seen.add(key);
     return {

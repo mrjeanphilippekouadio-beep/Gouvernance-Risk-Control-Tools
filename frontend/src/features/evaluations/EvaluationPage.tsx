@@ -7,6 +7,7 @@ import {
   type MasteryLineScore, type RatingScale, type RiskEvaluation,
 } from "../../api/evaluations";
 import { risksApi, type Risk } from "../../api/risks";
+import { riskCategoriesApi, type RiskCategory } from "../../api/riskCategories";
 import {
   decisionsForEvaluation, treatmentDecisionsApi, TREATMENT_OPTIONS,
   type TreatmentDecision, type TreatmentDecisionStatus, type TreatmentOption,
@@ -82,7 +83,9 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
   const [treatmentNotice, setTreatmentNotice] = useState<string | null>(null);
 
   const [evaluationType, setEvaluationType] = useState<EvaluationType>("ANNUELLE");
-  const [subCategory, setSubCategory] = useState("");
+  const [subCategoryId, setSubCategoryId] = useState("");
+  const [categories, setCategories] = useState<RiskCategory[]>([]);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [entity, setEntity] = useState("");
   const [probability, setProbability] = useState(3);
   const [inherentImpacts, setInherentImpacts] = useState<Record<string, number>>({});
@@ -101,6 +104,8 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
   const [highlightCommittee, setHighlightCommittee] = useState(false);
   const committeeActionRef = useRef<HTMLDivElement | null>(null);
 
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const subCategoryOptions = categories.filter((c) => c.parentId && c.active);
   const selectedRisk = risks.find((risk) => risk.id === selectedRiskId);
   const selectedEvaluation = evaluations.find((evaluation) => evaluation.id === selectedEvaluationId);
   const activeScale = scales.find((scale) => scale.status === "ACTIVE") ?? null;
@@ -137,6 +142,10 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
         if (cancelled) return;
         setUserDirectory(Object.fromEntries(users.map((u) => [u.id, u])));
       } catch { /* no directory available — ids are shown verbatim */ }
+      try {
+        const cats = await riskCategoriesApi.list(token);
+        if (!cancelled) setCategories(cats);
+      } catch (err) { if (!cancelled) setCategoriesError(describeError(err)); }
     }
     void load();
     return () => { cancelled = true; };
@@ -274,11 +283,11 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
     event.preventDefault(); setSaving(true); setError(null); setNotice(null);
     try {
       const created = await evaluationsApi.create(token, {
-        riskId: selectedRiskId, evaluationType, subCategory: subCategory.trim(), entity: entity.trim() || null,
+        riskId: selectedRiskId, evaluationType, subCategoryId, entity: entity.trim() || null,
       });
       await refreshHistory(created.id);
       setNotice("Évaluation créée. Tu peux maintenant renseigner la cotation inhérente, la maîtrise et le résiduel.");
-      setSubCategory(""); setEntity("");
+      setSubCategoryId(""); setEntity("");
     } catch (err) { setError(describeError(err)); }
     finally { setSaving(false); }
   }
@@ -436,13 +445,17 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
                   <option value="ANNUELLE">Annuelle</option><option value="AD_HOC">Ponctuelle</option><option value="ANTICIPEE">Anticipée</option>
                 </select>
               </FormField>
-              <FormField label="Sous-catégorie" htmlFor="eval-subcategory" help="Utilisée pour rechercher le seuil d'appétence applicable.">
-                <input id="eval-subcategory" value={subCategory} onChange={(event) => setSubCategory(event.target.value)} required placeholder="Ex. : Fraude opérationnelle" />
+              <FormField label="Sous-catégorie" htmlFor="eval-subcategory" help="Choisie dans le référentiel des catégories de risque ; sert à retrouver le seuil d'appétence applicable.">
+                <select id="eval-subcategory" value={subCategoryId} onChange={(event) => setSubCategoryId(event.target.value)} required>
+                  <option value="">Choisir une sous-catégorie</option>
+                  {subCategoryOptions.map((c) => <option key={c.id} value={c.id}>{categoryById.get(c.parentId ?? "")?.name ?? "—"} › {c.name}</option>)}
+                </select>
               </FormField>
+              {categoriesError && <MessageBanner tone="warning" title="Catégories de risque indisponibles">{categoriesError} Sans cette liste, aucune sous-catégorie ne peut être choisie.</MessageBanner>}
               <FormField label="Entité (facultatif)" htmlFor="eval-entity">
                 <input id="eval-entity" value={entity} onChange={(event) => setEntity(event.target.value)} placeholder="Ex. : Côte d'Ivoire" />
               </FormField>
-              <Button type="submit" variant="primary" disabled={!selectedRiskId || !subCategory.trim() || saving}>Créer l'évaluation</Button>
+              <Button type="submit" variant="primary" disabled={!selectedRiskId || !subCategoryId || saving}>Créer l'évaluation</Button>
             </form>
           </Card>
 
@@ -454,7 +467,7 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
                 const cycleNumber = evaluations.length - index;
                 return <button type="button" key={evaluation.id} className={evaluation.id === selectedEvaluationId ? "eval-history-item selected" : "eval-history-item"} onClick={() => setSelectedEvaluationId(evaluation.id)}>
                   <span className="eval-history-icon">{evaluation.status === "BROUILLON" ? "◷" : "✓"}</span>
-                  <span className="eval-history-main"><strong>Évaluation #{cycleNumber} · {TYPE_LABEL[evaluation.evaluationType]}</strong><small>{new Date(evaluation.createdAt).toLocaleDateString("fr-FR")} · {evaluation.subCategory}{evaluation.entity ? ` · ${evaluation.entity}` : ""}</small></span>
+                  <span className="eval-history-main"><strong>Évaluation #{cycleNumber} · {TYPE_LABEL[evaluation.evaluationType]}</strong><small>{new Date(evaluation.createdAt).toLocaleDateString("fr-FR")} · {evaluation.subCategory}{evaluation.subCategoryId === null ? " (libellé libre hérité)" : ""}{evaluation.entity ? ` · ${evaluation.entity}` : ""}</small></span>
                   <span className="eval-history-score">{evaluation.residualScore ?? evaluation.inherentScore ?? "—"}</span>
                   <StatusBadge label={status.label} tone={status.tone} />
                 </button>;
@@ -471,6 +484,8 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
             </div>
             <div className="eval-summary-row"><span>Maîtrise globale (MIN non-compensatoire)</span><strong>{selectedEvaluation?.masteryGlobal === null || selectedEvaluation?.masteryGlobal === undefined ? "—" : selectedEvaluation.masteryGlobal.toFixed(2)}</strong></div>
             <div className="eval-summary-row"><span>Seuil d'appétence appliqué</span><strong>{appetiteComparison?.threshold ?? selectedEvaluation?.appetiteThresholdApplied ?? selectedEvaluation?.appetiteThresholdSuggested ?? "Non défini"}</strong></div>
+            {selectedEvaluation && selectedEvaluation.subCategoryId === null && <p className="eval-help" role="note">Libellé libre hérité, non relié au référentiel.</p>}
+            {appetiteComparison && appetiteComparison.linkedToCategory === false && <p className="eval-help" role="note">Seuil retrouvé par libellé, à vérifier.</p>}
             {appetiteComparison && <div className="eval-summary-row"><span>Source du seuil</span><strong>{appetiteComparison.source === "OVERRIDE" ? "Dérogation manuelle" : appetiteComparison.source === "AUTO" ? "Suggéré automatiquement" : "Aucun seuil applicable"}</strong></div>}
             {selectedEvaluation?.appetiteExceeded !== null && selectedEvaluation?.appetiteExceeded !== undefined &&
               <div className={selectedEvaluation.appetiteExceeded ? "eval-appetite-alert exceeded" : "eval-appetite-alert"}>{selectedEvaluation.appetiteExceeded ? "Seuil d'appétence dépassé" : "Sous le seuil d'appétence"}</div>}

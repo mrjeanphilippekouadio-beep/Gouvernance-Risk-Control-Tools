@@ -18,7 +18,7 @@ const PERMS = ["ratingscale.read", "ratingscale.create", "ratingscale.update", "
 describe.skipIf(!HOST.startsWith("/"))("QA-D046 F-D044-03 RatingScale audit in the transaction (real PostgreSQL)", () => {
   let pool: Pool;
   beforeAll(async () => {
-    pool = new Pool({ host: HOST, user: "postgres", database: DB, max: 6 });
+    pool = new Pool({ host: HOST, user: "postgres", database: DB, max: 6, application_name: "qa-d046-own" });
     await pool.query(`CREATE TABLE IF NOT EXISTS qa_d046_fail_audit (tenant_id uuid, entity_type text)`);
     await pool.query(`CREATE OR REPLACE FUNCTION qa_d046_fail_audit_fn() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
@@ -123,7 +123,7 @@ describe.skipIf(!HOST.startsWith("/"))("QA-D046 F-D044-03 RatingScale audit in t
     const auditsBefore = await w.audits();
     await expect(w.svc.updateVelocity(w.actor, s.id, { levels: lv(3) }, "r")).rejects.toThrow(/active rating scale/);
     expect(await w.audits()).toEqual(auditsBefore);
-    expect((await pool.query(`SELECT 1 FROM pg_stat_activity WHERE datname = $1 AND state = 'idle in transaction'`, [DB])).rowCount).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM pg_stat_activity WHERE datname = $1 AND application_name = 'qa-d046-own' AND state = 'idle in transaction'`, [DB])).rowCount).toBe(0);
   });
 
   it("audit failure only for another entity type does not block the write", async () => {

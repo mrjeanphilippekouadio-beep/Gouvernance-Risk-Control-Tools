@@ -75,6 +75,11 @@ export interface RiskEvaluation {
 
   /** Snapshot at creation time — see file header for why these live here rather than on Risk. */
   subCategory: string;
+  /**
+   * q145: the risk category (sub-category) chosen in the referential at creation; `subCategory` above is then its name
+   * at that time, derived server-side. NULL = evaluation from before q145 (free-text label, never re-attached).
+   */
+  subCategoryId: string | null;
   entity: string | null;
 
   /**
@@ -149,7 +154,10 @@ export interface CreateRiskEvaluationInput {
   evaluationType: RiskEvaluationType;
   /** Never client-supplied — always actor.userId (see RiskEvaluationService.create). */
   evaluatorId: string;
+  /** Label: the category name when `subCategoryId` is set (derived by the service), else legacy free text. */
   subCategory: string;
+  /** q145: id of a tenant sub-category (validated by the service). */
+  subCategoryId?: string | null;
   entity?: string | null;
   /** Never client-supplied — always resolved server-side by RiskEvaluationService.create (see RiskEvaluation.evaluationMode's doc comment). */
   evaluationMode: EvaluationMode;

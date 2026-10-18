@@ -323,3 +323,17 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 ## 2026-10-18 QA-064-01 + F-FW-01-R (activation = même règle qu'à l'écriture)
 - `assertSubCategories` (demande d'activation + bootstrap) appelle `withResolvedAppetite` (id présent, tenant, active, parentId) puis REFUSE si un libellé stocké != nom actuel de la catégorie (pas de réécriture de la version à l'activation). Un brouillon hérité en texte libre doit être réenregistré dans l'onglet « Seuils d'appétence ».
 - Fixtures B6d/QA-B6d : seuils avec `subCategoryId: "c1"` + faux dépôt de catégories (nom "Fraude", parentId) ; QA-B6d a deux constructions du service (monde + bootstrap), les deux à câbler. Ordre des contrôles inchangé (tous les tests existants passent sans toucher aux assertions).
+
+## 2026-10-18 q145 / F-FW-02 / F-FW-03 (migration 065)
+
+- L'évaluation désigne sa sous-catégorie par `subCategoryId` (POST /risk-evaluations) ; libellé = `cat.name` dérivé côté serveur (même règle que q133 : tenant, active, parent non nul, même message pour inconnu/autre tenant/inactif). Colonne `risk_evaluations.sub_category_id` NULL (jamais backfillée) + FK composite NOT VALID + garde UPDATE qui fige `sub_category`/`sub_category_id` (42501, y compris NULL -> id : pas de rattachement après coup).
+- `findAppetite(list, label, entity, subCategoryId?)` : id si l'évaluation ET l'entrée en ont un, sinon libellé (lecture tolérante des évaluations/entrées héritées). Appelants : RiskEvaluationService, DashboardService (groupes par id), RiskDeviceViewService. Chemin legacy `risk_appetites` (Dispositif non câblé / évaluation antérieure au Dispositif) inchangé, par libellé.
+- F-FW-03 : clé de doublon de `normalizeAppetite` = id (insensible à la casse) sinon libellé.
+- Service : 9e paramètre optionnel `riskCategories` (câblé dans server.ts). Non câblé (tests) : ancien chemin libellé libre ; `subCategoryId` sans dépôt = refus (fail closed). Obligatoire dès que câblé.
+- Test source-regex de QA-B6b (colonnes de l'INSERT) adapté d'une colonne + `$14` : seul test existant touché.
+- Piège : les suites PG partagent la base `grc_qa` ; en parallèle, `QA-D044-pg` échoue (compte les connexions « idle in transaction » d'autres fichiers). Lancer avec `--no-file-parallelism` et `PGPORT=5531` (les suites D044/FB6B02 ignorent `QA_SWP_PGPORT`).
+
+## 2026-10-18 q145 regression : lecture des categories
+
+- `RiskCategoryService.list` : config.read OU riskevaluation.create OU riskframework.read ; sans config.read, liste forcee aux actives (includeInactive ignore). Les permissions se lisent dans `actor.roles` (requirePermission fait `actor.roles.includes`), donc un test local suffit, pas de helper. Cause : un garde passe de lecture de reference a config.read sans verifier que les groupes fixes la detiennent ; verifier le groupe porteur avant de brancher un ecran sur un endpoint existant.
+- Piege outil : une commande composee (python + heredoc + cd) refusee en bloc par le garde du worktree, rien d execute ; utiliser Write/Edit.

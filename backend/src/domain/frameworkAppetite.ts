@@ -1,15 +1,24 @@
 import type { AppetiteThresholdEntry } from "./entities/RiskFramework.js";
 
+const sameId = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
 /**
- * Appetite of a version for (subCategory, entity). Same matching rule as
- * PostgresRiskAppetiteRepository.getBySubCategory: exact subCategory, and entity equal after
- * COALESCE(entity, '') on both sides (null and "" are the same key). Entries of a version are
- * the active thresholds, so there is no "active" filter here.
+ * Appetite of a version for (sub-category, entity); entity equal after COALESCE(entity, '') on both sides.
+ * q145: when the evaluation carries a `subCategoryId`, the entry is matched on that id (an entry saved before q133
+ * without id still matches on its label). An evaluation without id (free label from before q145) keeps the label match.
+ * Entries of a version are the active thresholds, so there is no "active" filter here.
  */
 export function findAppetite(
   list: readonly AppetiteThresholdEntry[],
   subCategory: string,
   entity: string | null,
+  subCategoryId?: string | null,
 ): AppetiteThresholdEntry | null {
-  return list.find((a) => a.subCategory === subCategory && (a.entity ?? "") === (entity ?? "")) ?? null;
+  const sameEntity = (a: AppetiteThresholdEntry) => (a.entity ?? "") === (entity ?? "");
+  // Exact id match first, so a legacy label-only entry listed earlier never shadows it.
+  if (subCategoryId) {
+    const byId = list.find((a) => sameEntity(a) && a.subCategoryId && sameId(a.subCategoryId, subCategoryId));
+    if (byId) return byId;
+  }
+  return list.find((a) => sameEntity(a) && !(subCategoryId && a.subCategoryId) && a.subCategory === subCategory) ?? null;
 }

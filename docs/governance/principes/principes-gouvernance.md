@@ -1,69 +1,139 @@
-# Principes de gouvernance : proposition A13 (DECISION-073)
+# Principes de gouvernance : proposition A13 (DECISION-073, mise à jour DECISION-074)
 
-Statut : **PROPOSITION à valider par le PO.** Rien n'est décidé. Tous les seuils sont « à valider PO ». Détail complet (détection, objets, indications) : `principes-gouvernance.json`.
+Statut : **PROPOSITION à valider par le PO.** Rien n'est décidé au-delà des réponses q135 à q145 de la DECISION-074. Tous les seuils sont « à valider PO ». Détail complet (détection, objets, indications, questionnaire, données) : `principes-gouvernance.json`.
 
-Réserve de sourcing : les normes ne sont pas dans le dépôt. COSO ERM 2017 (P2, P10-P17) est vérifié sur la synthèse IFACI. ISO 31000:2018 et le modèle des trois lignes de l'IIA sont cités de mémoire, « à vérifier sur le texte ». Le texte BCEAO / UEMOA sur le contrôle interne est une « référence à confirmer » (A14).
+Réserve de sourcing : les normes ne sont pas dans le dépôt. COSO ERM 2017 (P2, P10-P17) est vérifié sur la synthèse IFACI. ISO 31000:2018 et le modèle des trois lignes de l'IIA sont cités de mémoire, « à vérifier sur le texte ». Le texte BCEAO / UEMOA sur le contrôle interne est une « référence à confirmer » (A14). Le questionnaire ne cite aucun texte réglementaire.
+
+## 0. Ce qui a changé (v0.2)
+
+- q135 : la taille vient d'un questionnaire de 12 questions ; le calcul sur les comptes devient le « profil observé » et sert à afficher les écarts.
+- q136 : vérifié, les 19 principes portent les 3 niveaux (exigé / recommandé / informatif) pour TPE, PME, grande entreprise.
+- q137 : règle intérimaire / suppléant, sens du « nombre de personnes » à trancher (INTERIM-2).
+- q139 : inventaire définitif de 19 données à créer (D01 à D19).
+- Questions cockpit : 5 anciennes closes, 4 nouvelles (PROFIL-1, INTERIM-2, PROFIL-2, DONNEES-2).
 
 ## 1. Les 19 principes
 
-| Id | Principe | Gravité | Évaluable aujourd'hui |
-|---|---|---|---|
-| GOV-SOD-01 | Quatre yeux : on ne valide pas ce qu'on a saisi | élevée | oui (historique d'audit) |
-| GOV-SOD-02 | La méthode (Dispositif, échelles) ne se décide pas seul | élevée | oui |
-| GOV-SOD-03 | Pas d'auto-attribution de rôle | élevée | oui (`user_roles.grantedBy`) |
-| GOV-SOD-04 | Cumul de rôles visible et encadré | moyenne | oui |
-| GOV-SOD-05 | Pas de cumul de lignes de défense sur un dossier | moyenne | oui |
-| GOV-RISK-01 | Existence et indépendance de la fonction risque | élevée | oui |
-| GOV-RISK-02 | Continuité des rôles clés (intérim, vacance déclarée) | élevée | effectifs oui, intérim non |
-| GOV-AUD-01 | Audit informé, jamais décideur | élevée | oui, un point à vérifier |
-| GOV-AUD-02 | Une 3e ligne existe, ses droits ne sont pas réduits en solo | élevée | oui |
-| GOV-COM-01 | Supervision par un Comité (≥ 2 membres) | élevée | oui |
-| GOV-COM-02 | Pas de validation tacite ni par un seul membre | élevée | à vérifier (votes) |
-| GOV-APP-01 | Appétence non masquable, fixée par l'instance | élevée | changements oui, marqueur non |
-| GOV-OWN-01 | Chaque risque a un propriétaire actif | moyenne | oui |
-| GOV-OWN-02 | Propriétaire de processus et champion de risque | moyenne | partiel |
-| GOV-OWN-03 | L'auteur de l'Analyse ne valide pas l'évaluation | moyenne | non (Analyse inexistante) |
-| GOV-ACC-01 | Moindre privilège (administrateurs, rôles larges) | moyenne | oui hors comptes dormants |
-| GOV-TRC-01 | Décision sans seconde validation tracée et visible | moyenne | partiel (pas de marqueur) |
-| GOV-TRC-02 | Gérant désigné informé ou qui statue | moyenne | non (compte inexistant) |
-| GOV-REG-01 | Régime « structure à une personne » déclaré et levé | moyenne | non (drapeau inexistant) |
+| Id | Principe | Gravité | Évaluable aujourd'hui | Données à créer |
+|---|---|---|---|---|
+| GOV-SOD-01 | Quatre yeux : on ne valide pas ce qu'on a saisi | élevée | oui (historique d'audit) | D09, D10, D19 |
+| GOV-SOD-02 | La méthode (Dispositif, échelles) ne se décide pas seul | élevée | oui | aucune |
+| GOV-SOD-03 | Pas d'auto-attribution de rôle | élevée | oui (`user_roles.grantedBy`) | D14 |
+| GOV-SOD-04 | Cumul de rôles visible et encadré | moyenne | oui | aucune |
+| GOV-SOD-05 | Pas de cumul de lignes de défense sur un dossier | moyenne | oui | aucune |
+| GOV-RISK-01 | Existence et indépendance de la fonction risque | élevée | oui | D01, D04 |
+| GOV-RISK-02 | Continuité des rôles clés (intérim, vacance déclarée) | élevée | effectifs oui, intérim non | D04, D05, D18 |
+| GOV-AUD-01 | Audit informé, jamais décideur | élevée | oui, un point à vérifier | D19 |
+| GOV-AUD-02 | Une 3e ligne existe, ses droits ne sont pas réduits en solo | élevée | oui | D19 |
+| GOV-COM-01 | Supervision par un Comité (≥ 2 membres) | élevée | oui | aucune |
+| GOV-COM-02 | Pas de validation tacite ni par un seul membre | élevée | à vérifier (votes) | D16 |
+| GOV-APP-01 | Appétence non masquable, fixée par l'instance | élevée | changements oui, marqueur non | D09 |
+| GOV-OWN-01 | Chaque risque a un propriétaire actif | moyenne | oui | aucune |
+| GOV-OWN-02 | Propriétaire de processus et champion de risque | moyenne | partiel | D06, D07, D08 |
+| GOV-OWN-03 | L'auteur de l'Analyse ne valide pas l'évaluation | moyenne | non (Analyse inexistante) | D15 |
+| GOV-ACC-01 | Moindre privilège (administrateurs, rôles larges) | moyenne | oui hors comptes dormants | D13, D18 |
+| GOV-TRC-01 | Décision sans seconde validation tracée et visible | moyenne | partiel (pas de marqueur) | D09, D10, D11, D17 |
+| GOV-TRC-02 | Gérant désigné informé ou qui statue | moyenne | non (compte inexistant) | D03, D17 |
+| GOV-REG-01 | Régime « structure à une personne » déclaré et levé | moyenne | non (drapeau inexistant) | D14 |
 
-10 principes de gravité élevée, 9 de gravité moyenne. Chacun a, dans le JSON, une conséquence en langage métier, une règle de détection sur des données que l'application possède, les objets à lister (rôle, permission, utilisateur, nombre de personnes, paramètre) et trois indications (TPE, PME, grande entreprise) avec un niveau « exigé / recommandé / informatif ».
+10 principes de gravité élevée, 9 de gravité moyenne.
 
-## 2. Données qui manquent (à ne pas inventer)
+### Contrôle q136 (niveau par taille)
 
-- Marqueur « sans seconde validation » et statut « revu par un tiers » : à créer.
-- Régime « structure à une personne » (DECISION-059), gérant désigné, intérim / suppléant / vacance déclarée : inexistants.
-- `processes.owner` est un **texte libre**, pas un compte : on ne peut pas vérifier que le propriétaire d'un processus est une personne active. Pas de champion de risque. Pas de N-1 (DECISION-064).
-- Pas de dernière connexion : comptes dormants non détectables.
-- Pas d'effectif réel de l'entreprise : le classement de taille mesure la maturité de gouvernance visible dans l'outil.
+Complet : 19 principes x 3 tailles = 57 indications, chacune avec un niveau et une action. Points d'attention :
+- GOV-RISK-01, PME « exigé » (2 Risk Managers) : rend la règle q137 toujours applicable à une PME.
+- GOV-REG-01, PME « exigé » (le régime une personne ne doit pas exister) : une PME déclarant 1 seule personne dans le risque sera signalée en anomalie.
+- GOV-TRC-01 et GOV-TRC-02 sont « exigés » dès la TPE : ils dépendent de D03, D09, D10.
 
-Un principe sans donnée affiche « non évaluable : donnée absente », jamais « respecté ».
+## 2. Questionnaire de profil d'organisation (q135)
 
-## 3. Règle de classement de la taille (seuils à valider PO)
+À remplir par l'administrateur du client avec le dirigeant, à l'onboarding. Questions courtes, fermées. « Je ne sais pas » est admis partout sauf Q1.
 
-Indicateurs : P = personnes actives ayant au moins un rôle (une personne compte une fois) ; RM, COM, AUD = membres actifs des trois groupes fixes ; PO = propriétaires de processus distincts (indicatif seulement, texte libre).
+| # | Question | Type |
+|---|---|---|
+| Q1 | Combien de personnes travaillent dans l'entreprise (salariés, temps partiel, prestataires réguliers) ? | nombre |
+| Q2 | Combien de personnes s'occupent de la gestion des risques, même à temps partiel ? | nombre |
+| Q3 | La fonction risque est : inexistante / en plus d'un autre métier / un poste ou service dédié | choix |
+| Q4 | Combien de personnes s'occupent de la conformité ? | nombre |
+| Q5 | Avez-vous un audit interne ? Combien de personnes ? | nombre |
+| Q6 | Un auditeur ou commissaire aux comptes extérieur vous examine-t-il : non / de temps en temps / chaque année ? | choix |
+| Q7 | Avez-vous un conseil d'administration, de surveillance ou équivalent ? | choix |
+| Q8 | Avez-vous un comité des risques ou d'audit : non / informel / formel ? | choix |
+| Q9 | Combien de processus métier principaux avez-vous ? | nombre |
+| Q10 | Combien de directions ou services distincts ? | nombre |
+| Q11 | Activité sous contrôle d'une autorité de supervision avec agrément ou licence : non / oui / je ne sais pas ? | choix |
+| Q12 | Le dirigeant est-il une personne différente de l'administrateur de l'outil ? | choix |
 
-1. **TPE** si P ≤ 10 ET RM ≤ 1 ET COM = 0 ET AUD = 0.
-2. **Grande entreprise** si P ≥ 100 OU (RM ≥ 3 ET COM ≥ 3 ET AUD ≥ 2).
-3. **PME** sinon.
+### Règle de déduction (seuils à valider PO)
 
-Incertitude : valeur à moins de 20 % d'un seuil (« proche de la limite ») ; signaux contradictoires, ex. petit effectif mais Audit et Comité présents (« à confirmer ») ; aucune personne avec rôle (« non évaluable »).
+S = nombre de critères remplis parmi : Q2 ≥ 2 ; Q4 ≥ 1 ; Q5 ≥ 1 ; Q7 = oui ; Q8 = formel.
 
-Affichage si incertain : la colonne retenue est en surbrillance avec « classement à confirmer », la colonne voisine plausible est entourée « proche de ce profil », les valeurs P / RM / COM / AUD sont affichées. Pour un principe de gravité élevée, l'indication la plus stricte des deux colonnes est « à viser », l'autre « minimum acceptable ». Si non évaluable : aucune surbrillance. Option : une taille déclarée par l'éditeur qui prime sur le calcul.
+1. **Grande entreprise** si Q1 ≥ [250] ou (Q1 ≥ [100] et S ≥ [4]).
+2. **TPE** si Q1 ≤ [20] et S ≤ [1] et Q11 = non.
+3. **PME** sinon. Une entreprise supervisée (Q11 = oui) n'est jamais TPE.
 
-## 4. Point rouvert : `guard:notLastRiskManager`
+Incertain (« à confirmer », colonne voisine entourée) : Q1 à moins de 20 % d'un seuil ; signaux contradictoires (petit effectif et S ≥ 3, grand effectif et S = 0, supervisée et ≤ 20 personnes) ; Q11 « je ne sais pas ». Questionnaire non rempli : « non évaluable : profil non rempli », repli provisoire sur le profil observé étiqueté « calculé d'après les comptes ».
 
-Options : **INT-A** intérim désigné à l'avance (borné, 90 jours proposés) ; **INT-B** suppléant permanent (deuxième Risk Manager) ; **INT-C** repli sur le gérant ou l'administrateur en régime déclaré ; **INT-D** vacance déclarée, groupe vide toléré et signalé dans le panel.
+### Qui remplit, modification, trace
 
-Recommandation : **INT-D comme plancher** (on ne bloque jamais), **INT-A voie préférée**, **INT-C dernier repli**. Dans tous les cas l'accès de la personne qui part est coupé le jour même : garder un compte d'ancien salarié actif est pire que la vacance. L'intérimaire ne peut pas venir de l'Audit, ne valide pas ses propres actes, et son intérim a une fin obligatoire. INT-B reste une indication du panel, pas une obligation.
+Administrateur du client à l'onboarding, avec le dirigeant ; obligatoire avant l'ouverture du panel. Modifiable à tout moment, chaque version tracée (auteur, date, motif, ancien / nouveau), journal append-only, rappel de revue à 12 mois. Un passage à une taille moins exigeante exige une seconde confirmation dès qu'un tiers existe et le notifie ; sans tiers, motif et marquage « sans seconde validation ».
 
-## 5. Questions pour le cockpit
+### Combinaison avec ce que l'outil voit
 
-1. **TAILLE-1** : seuils du classement. Recommandation D (seuils proposés, taille déclarée facultative qui prime).
-2. **PRINCIPES-1** : principes affichés par défaut. Recommandation A (tous, triés par gravité puis exigence).
-3. **INTERIM-1** : démission du seul Risk Manager. Recommandation INT-D plancher, INT-A préféré, INT-C repli.
-4. **PANEL-1** : acceptation formelle datée d'un principe non respecté. Recommandation C (jamais implicite, expirée = remise en rouge).
-5. **DONNEES-1** : livrer avec les seuls principes détectables ou créer d'abord les données manquantes. Recommandation B (créer d'abord le gérant désigné et le marqueur « sans seconde validation »).
+Le profil déclaré fait foi. Le profil observé (comptes et rôles) est affiché à côté. Si l'observé est plus structuré que le déclaré, le plus exigeant des deux s'applique, avec la mention. Écarts affichés dans le panel (jamais bloquants) :
 
-Les questions complètes (contexte, options, recommandation) sont dans le JSON, section `questionsCockpit`.
+- E1 : Q2 supérieur aux comptes Risk Manager actifs (ex. « 3 personnes déclarées, 1 compte ») : comptes à créer ou déclaration à corriger.
+- E2 : Q2 inférieur aux comptes Risk Manager (déclaration périmée ou comptes en trop).
+- E3 : audit interne déclaré non présent dans l'outil, ou l'inverse.
+- E4 : comité formel déclaré avec moins de 2 membres dans l'outil, ou l'inverse.
+- E5 : processus déclarés non saisis (écart > 50 %, à valider PO).
+- E6 : cohérence dirigeant / administrateur.
+
+Aucune comparaison entre Q1 et le nombre de comptes (un faible nombre de comptes est normal au démarrage).
+
+## 3. Intérimaire et suppléant (q137)
+
+Lecture proposée : N = max(personnes déclarées Q2, comptes actifs du groupe Risk Manager). Dès que N ≥ 2, chaque titulaire du rôle Risk Manager a un remplaçant désigné à l'attribution du rôle : suppléant permanent (autre Risk Manager actif) ou intérimaire (compte actif hors Audit, sans droit tant que le titulaire est en poste, fin obligatoire, 90 jours proposés). Jamais bloquant : sans désignation, l'action « désigner un remplaçant » reste dans le panel avec son ancienneté. Une personne seule (N = 1) : aucune obligation, signalée comme point de défaillance unique ; le départ suit la vacance déclarée, accès coupé le jour même. D = 1 et comptes = 0 : écart E1, pas une vacance. D = 0 et un compte : écart E2. Sens de N : question INTERIM-2.
+
+## 4. Données à créer (q139)
+
+« Système » = posé par l'outil. Obligatoire : T = TPE, P = PME, G = grande entreprise.
+
+| Id | Donnée | Définition | Qui la renseigne | T / P / G |
+|---|---|---|---|---|
+| D01 | Profil d'organisation | Réponses Q1 à Q12, versionnées | Administrateur avec le dirigeant | oblig / oblig / oblig |
+| D02 | Classement retenu et écarts | Classe, indicateurs, incertitude, écarts E1 à E6 | Système | oblig / oblig / oblig |
+| D03 | Gérant désigné | Compte du dirigeant informé ou qui statue, second destinataire, indicateur « même personne que l'administrateur » | Administrateur, confirmé par un autre | oblig / oblig (DG + 2e) / reco |
+| D04 | Remplaçant du titulaire de rôle | Intérimaire ou suppléant, dates, désigné par, confirmé par, fin d'intérim | Titulaire ou gérant, confirmation par un tiers | reco (oblig si N ≥ 2) / oblig / oblig |
+| D05 | Vacance déclarée | Rôle, début, motif, échéance, déclarée par, confirmée par | Administrateur avec confirmation | facult / facult / facult |
+| D06 | Champion de risque par processus | Compte relais de la gestion des risques | Propriétaire du processus | sans objet / oblig / oblig |
+| D07 | Propriétaire de processus en compte | Lien vers un compte actif, reprise assistée du texte libre | Administrateur ou Risk Manager, confirmé par le propriétaire | reco / oblig / oblig |
+| D08 | N-1 / attributaire par processus | Personne à qui le propriétaire confie l'attribution (DECISION-064) | Propriétaire | sans objet / reco / oblig |
+| D09 | Marqueur « sans seconde validation » | Motif, seconde confirmation, date, auteur, revue par un tiers | Système, motif par l'acteur | oblig / oblig / oblig |
+| D10 | Statut « Appliqué sans validation indépendante » | Distinct de « Validé » (q142) | Système | oblig / oblig / oblig |
+| D11 | Date de mise en service du suivi | « Suivi depuis le <date> », pas de reconstitution (q143) | Système | oblig / oblig / oblig |
+| D12 | Acceptation d'un principe | Motif, durée, acceptant, seconde confirmation, échéance (q138) | Gérant ou administrateur, tiers pour la seconde confirmation | facult / facult / facult |
+| D13 | Dernière connexion | Dernière authentification réussie | Système | oblig / oblig / oblig |
+| D14 | Régime « structure à une personne » | Drapeau, déclaration, levée (DECISION-059) | Éditeur ; levée par le système | oblig si applicable / sans objet / sans objet |
+| D15 | Analyse du risque et auteurs | Entité Analyse, historique par auteur, droit d'édition (DECISION-064) | Propriétaire du risque et profils autorisés | reco / oblig / oblig |
+| D16 | Votes nominatifs du Comité | Un vote par membre, append-only (à vérifier si déjà lisible dans le journal) | Système | sans objet / oblig si Comité / oblig |
+| D17 | Notification et droit de lecture du panel | q140 et q144 | Système | oblig / oblig / oblig |
+| D18 | Paramètres du panel | Délais : intérim 90 j, vacance 60 j, inactivité 90 j, écart 90 j, revue du profil 12 mois, acceptation 12 mois | Éditeur ; administrateur dans la plage | oblig / oblig / oblig |
+| D19 | Tiers externe de relecture | Personne ou cabinet qui relit le journal, périodicité, dernière relecture | Administrateur avec le dirigeant | oblig / reco / sans objet |
+
+Volontairement non créées : détection de deux comptes d'un même humain (données personnelles, à soumettre à Privacy), import d'effectif RH, comptes rendus de séances du Comité (non vérifié dans le dépôt). Avec D01 à D19, les 19 principes sont évaluables, sous réserve de D15 et D16. Une donnée absente affiche « non évaluable : donnée absente », jamais « respecté ».
+
+## 5. Point rouvert : `guard:notLastRiskManager`
+
+Le PO a répondu (q137). Le reste de la recommandation demeure : INT-D (vacance déclarée) en plancher, INT-A (intérim désigné, borné) voie préférée, INT-C (gérant) dernier repli, INT-B en indication seulement. Accès du partant coupé le jour même ; l'intérimaire ne vient pas de l'Audit.
+
+## 6. Questions pour le cockpit
+
+1. **PROFIL-1** : questionnaire, règle de classement et seuils. Recommandation A.
+2. **INTERIM-2** : sens de « nombre de personnes dans la fonction risque ». Recommandation D (le plus grand des deux, personne seule recommandée seulement).
+3. **PROFIL-2** : qui remplit, modification, écart avec l'observé. Recommandation A.
+4. **DONNEES-2** : liste D01 à D19 et reprise du propriétaire de processus en compte. Recommandation A.
+
+Questions closes par DECISION-074 : TAILLE-1 (remplacée par le questionnaire), PRINCIPES-1 (tous), INTERIM-1 (q137), PANEL-1 (q138), DONNEES-1 (q139).
+
+Texte complet des questions : `principes-gouvernance.json`, section `questionsCockpit`.
