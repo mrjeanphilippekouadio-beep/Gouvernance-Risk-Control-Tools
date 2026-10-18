@@ -35,11 +35,11 @@ export function AppetitePage({ token, onOpenFrameworks }: Props) {
     </div>
     {error && <div className="core-alert core-alert--error" role="alert">{error}</div>}
     <div className="core-alert core-alert--info">
-      <strong>Les seuils d'appétence sont portés par le Dispositif de risque.</strong> Ils se modifient dans un brouillon de version du Dispositif, approuvé avant d'entrer en vigueur ; cette page les affiche en lecture seule.{" "}
+      <strong>Les seuils d'appétence sont portés par le Dispositif de risque.</strong> Ils se modifient dans un brouillon de version du Dispositif, approuvé avant d'entrer en vigueur, et se consultent dans le Dispositif. Le tableau ci-dessous est l'ancien référentiel, en lecture seule : il ne sert qu'aux évaluations qui ne sont rattachées à aucune version du Dispositif.{" "}
       {onOpenFrameworks && <Button onClick={onOpenFrameworks}>Ouvrir le Dispositif de risque</Button>}
     </div>
     <section className="core-panel">
-      <div className="core-panel__head"><div><h2>Référentiel des seuils</h2><p>Les seuils inactifs sont masqués par défaut.</p></div><label className="core-filter"><input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} /> Inclure les inactifs</label></div>
+      <div className="core-panel__head"><div><h2>Ancien référentiel des seuils</h2><p>Les seuils inactifs sont masqués par défaut.</p></div><label className="core-filter"><input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} /> Inclure les inactifs</label></div>
       {loading ? <div className="core-empty">Chargement des seuils…</div> : rows.length === 0 ? <div className="core-empty">Aucun seuil d’appétence enregistré. Les seuils se définissent dans un brouillon de version du Dispositif de risque.</div> :
       <div className="core-table-wrap"><table className="core-table"><thead><tr><th>Sous-catégorie</th><th>Entité</th><th>Seuil /25</th><th>Méthodologie</th><th>État</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong>{row.subCategory}</strong>{row.description && <div className="muted">{row.description}</div>}</td><td>{row.entity || <span className="muted">Toutes</span>}</td><td><strong>{row.threshold}/25</strong></td><td>{row.methodologyVersion}</td><td><span className={`core-badge ${row.active ? "core-badge--success" : "core-badge--warning"}`}>{row.active ? "Actif" : "Inactif"}</span></td></tr>)}</tbody></table></div>}
     </section>

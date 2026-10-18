@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
+import { PostgresModuleToggleRepository } from "../src/infrastructure/database/postgres/PostgresModuleToggleRepository.js";
 import { PostgresProcessEvaluationModeRequestRepository } from "../src/infrastructure/database/postgres/PostgresProcessEvaluationModeRequestRepository.js";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -145,5 +146,41 @@ describe.skipIf(!PGHOST.startsWith("/"))("F-SWP-01 on real PostgreSQL (dedicated
     expect(out.request.status).toBe("VALIDATED");
     expect(out.process.evaluationMode).toBe("CLASSIQUE");
     expect(await rows(`SELECT 1 FROM audit_log WHERE tenant_id=$1`, [tenant])).toHaveLength(1);
+  });
+});
+
+describe.skipIf(!PGHOST.startsWith("/"))("Module toggle first-time race on real PostgreSQL (dedicated database, never Neon)", () => {
+  let pool: Pool;
+  beforeAll(() => { pool = new Pool({ host: PGHOST, port: Number(process.env.QA_SWP_PGPORT ?? 5531), user: "postgres", database: process.env.QA_SWP_PGDB ?? "grc_qa_a08", max: 3 }); });
+  afterAll(async () => { await pool.end(); });
+
+  it("two concurrent first toggles: the second one audits the first one's committed state as its before", async () => {
+    const tenant = (await pool.query(`INSERT INTO tenants (name) VALUES ($1) RETURNING id`, [`swptoggle-${Date.now()}`])).rows[0].id as string;
+    const user = (await pool.query(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1,$2,'x') RETURNING id`, [tenant, `swptoggle-${Math.random()}@x`])).rows[0].id as string;
+    // The first transaction stalls before COMMIT while the second one starts, so its inserted row is
+    // still uncommitted (invisible to a plain FOR UPDATE) when the second one reads its "before".
+    let stallNextCommit = true;
+    const stallingPool = { connect: async () => {
+      const client = await pool.connect();
+      const query = client.query.bind(client) as (...a: unknown[]) => Promise<unknown>;
+      (client as unknown as { query: unknown }).query = async (...a: unknown[]) => {
+        if (a[0] === "COMMIT" && stallNextCommit) { stallNextCommit = false; await new Promise((r) => setTimeout(r, 300)); }
+        return query(...a);
+      };
+      return client;
+    } } as unknown as Pool;
+    const repo = new PostgresModuleToggleRepository(stallingPool);
+    const seen: Array<{ before: { enabled: boolean } | null; after: { enabled: boolean } }> = [];
+    let secondCall: Promise<unknown> | undefined;
+    const capture = (x: { before: { enabled: boolean } | null; after: { enabled: boolean } }) => {
+      seen.push(x);
+      secondCall ??= repo.upsert(tenant, "AUDIT", true, user, capture);
+      return [];
+    };
+    await repo.upsert(tenant, "AUDIT", false, user, capture);
+    await secondCall;
+    const [first, second] = seen;
+    expect(first!.before).toBeNull();
+    expect(second!.before?.enabled).toBe(first!.after.enabled);
   });
 });

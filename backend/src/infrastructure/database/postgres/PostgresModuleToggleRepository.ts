@@ -58,6 +58,9 @@ export class PostgresModuleToggleRepository implements ModuleToggleRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      // A never-persisted module has no row for FOR UPDATE to lock: serialize on the key itself so a
+      // concurrent first toggle reads the other's committed state as its "before" (Codex review, PR #186).
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext('module_toggles:' || $1 || ':' || $2))`, [tenantId, moduleName]);
       const prev = await client.query<ModuleToggleRow>(
         `SELECT * FROM module_toggles WHERE tenant_id = $1 AND module_name = $2 FOR UPDATE`,
         [tenantId, moduleName],
