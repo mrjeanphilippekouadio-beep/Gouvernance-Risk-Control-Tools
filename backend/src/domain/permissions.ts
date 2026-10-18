@@ -148,6 +148,10 @@ export type Permission =
   | "config.selfvalidation.set"
   /** DECISION-074: governance health panel; distinct prefix from governance.* (review cycles). */
   | "governancehealth.read"
+  /** DECISION-074 R-2 (lot D3): organization profile questionnaire. approve = the second confirmation of a size reduction. */
+  | "orgprofile.read"
+  | "orgprofile.submit"
+  | "orgprofile.approve"
   | "notification.read"
   | "governance.read"
   | "governance.create"
@@ -303,6 +307,9 @@ export const ALL_PERMISSIONS: Permission[] = [
   "config.cumul.set",
   "config.selfvalidation.set",
   "governancehealth.read",
+  "orgprofile.read",
+  "orgprofile.submit",
+  "orgprofile.approve",
   "notification.read",
   "governance.read",
   "governance.create",

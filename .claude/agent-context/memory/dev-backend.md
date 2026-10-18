@@ -352,3 +352,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Aucune route ni exposition API ; pas d'audit_log (télémétrie, DECISION-074). Aucune donnée au-delà de la date (q152).
 - Gap de numérotation : 066 réservé à un lot parallèle ; `QA-B8quater` ("053 and 054 are consecutive") échoue dans ce worktree tant que 066 n'est pas fusionné. Ne pas modifier ce test.
 - Postgres jetable : le serveur local (/tmp/claude-0/pgdata) peut être arrêté ; le relancer via un script (`runuser -u postgres -- pg_ctl ... -k /tmp/claude-0/pgsock -p 5531`), le harnais refuse `su`/`runuser` en commande directe.
+
+## 2026-10-18 Lot D3 (profil d'organisation, migration 071, base 21b6fc6)
+
+- Table `organization_profiles` = une ligne par VERSION (version par tenant, contenu immuable, statuts PENDING/ACTIVE/SUPERSEDED/REJECTED, regime ALONE/CONFIRMED, CHECK `decided_by <> submitted_by`, uniques partiels ACTIVE/PENDING, trigger de garde + TRUNCATE, REVOKE DELETE). Taille jamais stockée : `classifyOrganization(answers, observed, rule)` pure dans `domain/governance/`, recalculée à chaque lecture ; questionnaire en code (`organizationQuestionnaire.ts`, réponses en codes NO/YES/UNKNOWN, INFORMAL/FORMAL) avec test de synchro sur le JSON v0.3.
+- Règle retenue (écart au plan R-2, à confirmer) : seule une BAISSE de classe (classe nouvelle < classe active, mêmes comptes observés) avec un tiers (autre membre actif RM/Comité/Audit) passe PENDING ; sans tiers -> ACTIVE `regime ALONE` + `governance_exception = orgprofile.adminAlone` ; hausse, égalité et première saisie -> ACTIVE immédiat, non marqué. Un seul PENDING à la fois (409).
+- `orgprofile.approve` donné à RM, Comité ET Audit (plan R-7) : `isAuditGroupPermission` élargi à cette seule permission (comme rolegroup.audit.validate). À valider A10/A13 (Audit "jamais décideur").
+- Tests existants adaptés : B8ter (addedBy071), QA-B6a (regex sur B8ter). Test PG `D3-pg.test.ts` gaté par `D3_PGDB` explicite (jamais de défaut : la table est append-only, on ne nettoie pas).
+- Non fait : notification du tiers à la baisse (type de notification, lot D5) ; repli "profil observé" sans questionnaire (le plan dit value null).
+- Leçon : le serveur PG local s'arrête en cours de session ; relancer `startpg.sh` et refaire la suite complète si des échecs ENOENT apparaissent.
