@@ -74,7 +74,24 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
   toggle de module hors config.manage. assertRiskManager à remplacer par riskframework.* (DECISION-060).
   Propriétaire / N-1 de processus : partir du RACI (A / R).
 
+- 2026-10-18 : DECISION-073, `docs/architecture/RM-V1-Panel-Principes-Gouvernance.md`. `GovernanceHealthService`
+  + `GET /api/v1/governance-health` (permission `governancehealth.read`, préfixe distinct de `governance.*` = cycles
+  de revue ; HORS `ADMIN_PERMISSIONS`, sinon tout lecteur devient « admin » q63). Catalogue A13 recopié en code
+  (`domain/governance/catalog.ts`, test de synchro avec le JSON de `docs/`, le serveur ne lit jamais `docs/`) +
+  un détecteur TS pur par principe ; taille TPE/PME/GE = fonction pure, `null` tant que la règle A13 n'est pas
+  validée (pas de surbrillance devinée). Marqueur « sans seconde validation » = colonne nullable
+  `audit_log.governance_exception` posée à l'INSERT par le service (pas de trigger, pas de jsonb), seul point
+  d'insertion `insertAuditEvent`. `config.self_validation_policy` REFUSE | DOUBLE_CONFIRMATION, permission dédiée
+  `config.selfvalidation.set` (dans ADMIN_PERMISSIONS), auto-attribution de rôles exclue. Double confirmation sans
+  état : 409 puis 2e appel avec `governanceConfirmation { rule, reason }`. Lots P0-P6 ; questions Q1 (double
+  validation seulement faute d'autre validateur — recommandé), Q2 (pas de rétroactivité), Q3 (notifier le 1er
+  Audit/Comité).
+
 ## Pièges rencontrés
+
+- La table du journal s'appelle `audit_log` (singulier, migration 004), pas `audit_logs` comme dans CLAUDE.md.
+- Les prédicats `isAdministrator` / `isRiskManagerMember` sont privés dans `RoleService.ts` : à déplacer dans
+  `domain/fixedGroupPermissions.ts` avant de les réutiliser ailleurs, jamais les dupliquer.
 
 - Le worktree fourni peut être sur un ancien commit sans Bash pour le corriger : lire les sources dans le
   checkout principal, écrire dans le worktree, et le signaler dans le rapport.
