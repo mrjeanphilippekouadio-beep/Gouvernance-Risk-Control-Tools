@@ -10,8 +10,8 @@ const Score = z.number().int().min(1).max(36);
 
 const AppetiteEntry = z
   .object({
-    subCategory: z.string().trim().min(1).max(200),
-    subCategoryId: Id.nullable().default(null),
+    subCategory: z.string().trim().max(200).default(""), // ignored: the server derives the label from subCategoryId (q133)
+    subCategoryId: Id,
     entity: z.string().trim().min(1).max(200).nullable().default(null),
     threshold: Score,
     description: z.string().max(1000).nullable().default(null),

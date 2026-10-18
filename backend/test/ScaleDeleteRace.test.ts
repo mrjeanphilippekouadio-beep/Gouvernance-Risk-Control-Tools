@@ -8,13 +8,15 @@ import { PostgresRatingScaleRepository } from "../src/infrastructure/database/po
 // P2 Codex PR #186: scale soft-delete vs. a concurrent Dispositif draft that references it.
 // Real PostgreSQL only (dedicated local database, never Neon). Applies migration 063 (idempotent) first.
 const PGHOST = process.env.QA_SWP_PGHOST ?? "";
-const MIGRATION = join(dirname(fileURLToPath(import.meta.url)), "../../database/postgresql/migrations/063_rating_scale_delete_race.sql");
+const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), "../../database/postgresql/migrations");
+// 063 then 064 (q134) in ONE query = one implicit transaction: the head state, never the 063 state alone.
+const MIGRATION_SQL = () => ["063_rating_scale_delete_race.sql", "064_rating_scale_abandoned_draft.sql"].map((f) => readFileSync(join(MIGRATIONS, f), "utf8")).join("\n");
 
 describe.skipIf(!PGHOST.startsWith("/"))("scale soft-delete is atomic with draft references (migration 063)", () => {
   let pool: Pool;
   beforeAll(async () => {
     pool = new Pool({ host: PGHOST, port: Number(process.env.QA_SWP_PGPORT ?? 5531), user: "postgres", database: process.env.QA_SWP_PGDB ?? "grc_qa_a08", max: 4 });
-    if (process.env.QA_SKIP_063 !== "1") await pool.query(readFileSync(MIGRATION, "utf8"));
+    if (process.env.QA_SKIP_063 !== "1") await pool.query(MIGRATION_SQL());
   });
   afterAll(async () => { await pool.end(); });
 
@@ -79,5 +81,53 @@ describe.skipIf(!PGHOST.startsWith("/"))("scale soft-delete is atomic with draft
     const b = await seed();
     const r = await pool.query(`UPDATE rating_scales SET deleted_at = now() WHERE id = $1`, [b.scale]);
     expect(r.rowCount).toBe(1);
+  });
+});
+
+// DECISION-071 / q134, migration 064 (applied by the previous describe's beforeAll, same file = sequential).
+describe.skipIf(!PGHOST.startsWith("/"))("q134: an abandoned Dispositif draft no longer blocks disabling a scale (migration 064)", () => {
+  let pool: Pool;
+  beforeAll(() => { pool = new Pool({ host: PGHOST, port: Number(process.env.QA_SWP_PGPORT ?? 5531), user: "postgres", database: process.env.QA_SWP_PGDB ?? "grc_qa_a08", max: 2 }); });
+  afterAll(async () => { await pool.end(); });
+
+  const one = async (sql: string, p: unknown[] = []) => (await pool.query(sql, p)).rows[0].id as string;
+  const code = async (sql: string, p: unknown[] = []) => { try { await pool.query(sql, p); return "OK"; } catch (e) { return (e as { code: string }).code; } };
+
+  /** A scale referenced by one version, brought to a status (guards bypassed, session-local, test-only). */
+  async function scaleWith(kind: "DRAFT" | "PENDING_APPROVAL" | "ARCHIVED_ABANDONED" | "ARCHIVED_AFTER_ACTIVE") {
+    const t = await one(`INSERT INTO tenants (name) VALUES ($1) RETURNING id`, [`q134-${Math.random()}`]);
+    const scale = await one(`INSERT INTO rating_scales (tenant_id, name, version, probability_levels, impact_levels) VALUES ($1,'s','1',4,4) RETURNING id`, [t]);
+    const fw = await one(`INSERT INTO risk_frameworks (tenant_id, name) VALUES ($1,'f') RETURNING id`, [t]);
+    await pool.query(`INSERT INTO risk_framework_versions (tenant_id, framework_id, version_number, rating_scale_id, committee_evaluation_min_score) VALUES ($1,$2,1,$3,10)`, [t, fw, scale]);
+    const set = {
+      DRAFT: "status = 'DRAFT'",
+      PENDING_APPROVAL: "status = 'PENDING_APPROVAL'",
+      ARCHIVED_ABANDONED: "status = 'ARCHIVED', archived_at = now()",
+      ARCHIVED_AFTER_ACTIVE: "status = 'ARCHIVED', archived_at = now(), activated_at = now()",
+    }[kind];
+    const c = await pool.connect();
+    try {
+      await c.query("SET session_replication_role = replica");
+      await c.query(`UPDATE risk_framework_versions SET ${set} WHERE tenant_id = $1`, [t]);
+    } finally { await c.query("RESET session_replication_role"); c.release(); }
+    return { t, scale };
+  }
+
+  it("abandoned draft (ARCHIVED, never activated): soft delete goes through, repository reports no reference", async () => {
+    const w = await scaleWith("ARCHIVED_ABANDONED");
+    expect(await new PostgresRatingScaleRepository(pool).isReferencedByFrameworkVersion(w.t, w.scale)).toBe(false);
+    expect(await code(`UPDATE rating_scales SET deleted_at = now() WHERE id = $1`, [w.scale])).toBe("OK");
+  });
+
+  it.each(["DRAFT", "PENDING_APPROVAL", "ARCHIVED_AFTER_ACTIVE"] as const)("%s still blocks: repository true, soft delete refused", async (kind) => {
+    const w = await scaleWith(kind);
+    expect(await new PostgresRatingScaleRepository(pool).isReferencedByFrameworkVersion(w.t, w.scale)).toBe(true);
+    expect(await code(`UPDATE rating_scales SET deleted_at = now() WHERE id = $1`, [w.scale])).toMatch(/^(23503|42501)$/);
+  });
+
+  it("both redefined guard functions keep the pinned search_path (F-B6a-11)", async () => {
+    const { rows } = await pool.query(`SELECT proconfig FROM pg_proc WHERE proname IN ('rating_scales_delete_guard','rating_scales_framework_freeze')`);
+    expect(rows).toHaveLength(2);
+    for (const r of rows) expect(r.proconfig).toContain("search_path=pg_catalog, public, pg_temp");
   });
 });

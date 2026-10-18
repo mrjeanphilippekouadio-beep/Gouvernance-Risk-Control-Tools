@@ -196,7 +196,7 @@ function world(o: Opts = {}) {
   const notifications = { async record(i: { tenantId: string; recipientUserId: string; eventType: string }) { if (hooks.notifyDown) throw new Error("notif down"); sent.push(i); } };
   const ratingScales = { async getById(t: string, id: string) { return scales.find((s) => s.tenantId === t && s.id === id) ?? null; } };
   const cats = new Set(o.categories ?? []);
-  const categories = { async getById(t: string, id: string) { return cats.has(`${t}:${id}`) ? { id } : null; } };
+  const categories = { async getById(t: string, id: string) { return cats.has(`${t}:${id}`) ? { id, name: `Cat ${id}`, active: true, parentId: id.startsWith("root") ? null : "root" } : null; } };
   const service = new RiskFrameworkService(repo as never, ratingScales as never, roleRepo as never, users as never, audit as never, categories as never, notifications as never);
   const snapshot = (t = T1) => JSON.stringify([frameworks.filter((f) => f.tenantId === t), versions.filter((v) => v.tenantId === t), requests.filter((r) => r.tenantId === t), events.filter((e) => e.tenantId === t).length, sent.length]);
   return { service, frameworks, versions, requests, events, sent, calls, groups, scales, hooks, snapshot };
@@ -536,10 +536,13 @@ describe("QA-B6a circuit (q34/q72/q76/q87) and self-proposal (q92)", () => {
 
 describe("QA-B6a activation request validation (spec §2.3)", () => {
   const ask = async (w: W, fw: string, v: string) => w.service.requestActivation(u1, fw, v, "motif", R);
-  const e = (subCategory: string, threshold: number, entity: string | null = null) => ({ subCategory, subCategoryId: null, entity, threshold, description: null });
+  // q133: the category is chosen by id (the label is derived server-side); one registered category CAT.
+  const CAT = "00000000-0000-4000-8000-0000000000c1";
+  const cw = () => world({ categories: [`${T1}:${CAT}`] });
+  const e = (_label: string, threshold: number, entity: string | null = null) => ({ subCategory: "", subCategoryId: CAT, entity, threshold, description: null });
 
   it("boundary n^2 accepted, n^2+1 refused (appetite, Committee thresholds), on a 5x5 and a 3x3", async () => {
-    const w = world();
+    const w = cw();
     const ok = await draft(w, { committeeEvaluationMinScore: 25, committeeTreatmentMinScore: 25, appetiteThresholds: [e("A", 25)] });
     await expect(ask(w, ok.fw, ok.v)).resolves.toMatchObject({ status: "PENDING" });
     for (const params of [{ committeeEvaluationMinScore: 26 }, { committeeTreatmentMinScore: 26 }, { appetiteThresholds: [e("A", 26)] }]) {
@@ -574,21 +577,23 @@ describe("QA-B6a activation request validation (spec §2.3)", () => {
   });
 
   it("a scale of another tenant is refused on create and on edit; a category of another tenant is refused (fail-closed when not owned)", async () => {
-    const w = world({ categories: [`${T2}:c-t2`, `${T1}:c-t1`] });
+    const w = world({ categories: [`${T2}:c-t2`, `${T1}:c-t1`, `${T1}:root-t1`] });
     await expect(w.service.create(u1, { name: "X", ratingScaleId: S2 }, R)).rejects.toThrow(/does not exist/);
     const { fw, v } = await draft(w);
     await expect(w.service.updateDraft(u1, fw, v, { ratingScaleId: S2 }, R)).rejects.toThrow(/does not exist/);
     const cat = (id: string) => ({ subCategory: "F", subCategoryId: id, entity: null, threshold: 5, description: null });
     await expect(w.service.updateDraft(u1, fw, v, { appetiteThresholds: [cat("c-t2")] }, R)).rejects.toThrow(/does not exist in this tenant/);
     await expect(w.service.updateDraft(u1, fw, v, { appetiteThresholds: [cat("c-t1")] }, R)).resolves.toBeDefined();
+    // q133: a top-level category (no parent) is not a sub-category
+    await expect(w.service.updateDraft(u1, fw, v, { appetiteThresholds: [cat("root-t1")] }, R)).rejects.toThrow(/top-level/);
   });
 
-  it("appetite uniqueness: trimmed and null/empty entity collide; letter case does not (declared, same as the existing appetite repository)", async () => {
-    const w = world();
+  it("appetite uniqueness (same category): trimmed and null/empty entity collide; letter case of the entity does not", async () => {
+    const w = cw();
     const { fw, v } = await draft(w);
-    await expect(w.service.updateDraft(u1, fw, v, { appetiteThresholds: [e("Fraude", 5), e("  Fraude ", 6)] }, R)).rejects.toThrow(/Duplicate/);
-    await expect(w.service.updateDraft(u1, fw, v, { appetiteThresholds: [e("Fraude", 5, null), e("Fraude", 6, "")] }, R)).rejects.toThrow(/Duplicate/);
-    await expect(w.service.updateDraft(u1, fw, v, { appetiteThresholds: [e("Fraude", 5), e("fraude", 6)] }, R)).resolves.toBeDefined();
+    await expect(w.service.updateDraft(u1, fw, v, { appetiteThresholds: [e("", 5, "A"), e("", 6, "  A ")] }, R)).rejects.toThrow(/Duplicate/);
+    await expect(w.service.updateDraft(u1, fw, v, { appetiteThresholds: [e("", 5, null), e("", 6, "")] }, R)).rejects.toThrow(/Duplicate/);
+    await expect(w.service.updateDraft(u1, fw, v, { appetiteThresholds: [e("", 5, "A"), e("", 6, "a")] }, R)).resolves.toBeDefined();
   });
 
   it("framework name: unique per tenant ignoring case, allowed in another tenant", async () => {
@@ -808,7 +813,8 @@ describe("QA-B6a tenant isolation and HTTP surface", () => {
   });
 
   const long = (k: number) => "x".repeat(k);
-  const entries = (k: number) => Array.from({ length: k }, (_, i) => ({ subCategory: `c${i}`, threshold: 5 }));
+  const cid = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+  const entries = (k: number) => Array.from({ length: k }, (_, i) => ({ subCategoryId: cid(i), threshold: 5 }));
   it.each([
     ["name 120", { name: long(120), ratingScaleId: S1 }, 201], ["name 121", { name: long(121), ratingScaleId: S1 }, 400],
     ["name blank", { name: "   ", ratingScaleId: S1 }, 400], ["description 1000", { name: "a", description: long(1000), ratingScaleId: S1 }, 201],
@@ -826,11 +832,12 @@ describe("QA-B6a tenant isolation and HTTP surface", () => {
     ["appetite 201", { name: "a", ratingScaleId: S1, params: { appetiteThresholds: entries(201) } }, 400],
     ["appetite 5000 empty objects", { name: "a", ratingScaleId: S1, params: { appetiteThresholds: Array.from({ length: 5000 }, () => ({})) } }, 400],
     ["appetite not an array", { name: "a", ratingScaleId: S1, params: { appetiteThresholds: {} } }, 400],
-    ["appetite entry threshold 0", { name: "a", ratingScaleId: S1, params: { appetiteThresholds: [{ subCategory: "A", threshold: 0 }] } }, 400],
-    ["appetite entry subCategory blank", { name: "a", ratingScaleId: S1, params: { appetiteThresholds: [{ subCategory: " ", threshold: 3 }] } }, 400],
-    ["appetite entity 201", { name: "a", ratingScaleId: S1, params: { appetiteThresholds: [{ subCategory: "A", entity: long(201), threshold: 3 }] } }, 400],
+    ["appetite entry threshold 0", { name: "a", ratingScaleId: S1, params: { appetiteThresholds: [{ subCategoryId: cid(0), threshold: 0 }] } }, 400],
+    ["appetite entry without subCategoryId (q133)", { name: "a", ratingScaleId: S1, params: { appetiteThresholds: [{ subCategory: "A", threshold: 3 }] } }, 400],
+    ["appetite entry subCategory label blank: ignored, derived from the id (q133)", { name: "a", ratingScaleId: S1, params: { appetiteThresholds: [{ subCategory: " ", subCategoryId: cid(0), threshold: 3 }] } }, 201],
+    ["appetite entity 201", { name: "a", ratingScaleId: S1, params: { appetiteThresholds: [{ subCategoryId: cid(0), entity: long(201), threshold: 3 }] } }, 400],
   ] as Array<[string, object, number]>)("POST / %s -> %i", async (_l, body, status) => {
-    const w = world();
+    const w = world({ categories: Array.from({ length: 201 }, (_, i) => `${T1}:${cid(i)}`) });
     await withHttp(w, async (call) => expect((await call("POST", "/", body, u1)).status).toBe(status));
     expect(w.frameworks.length).toBe(status === 201 ? 1 : 0);
   });
