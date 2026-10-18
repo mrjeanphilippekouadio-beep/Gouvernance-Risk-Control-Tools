@@ -48,7 +48,10 @@ export interface RiskEvaluation {
   evaluationType: EvaluationType;
   status: EvaluationStatus;
   evaluatorId: string;
+  /** Derived label; free-text legacy label when subCategoryId is null. */
   subCategory: string;
+  /** null = legacy evaluation with a free-text label, not linked to the referential. */
+  subCategoryId: string | null;
   entity: string | null;
   evaluationMode: "CLASSIQUE" | "PARTICIPATIF" | null;
   ratingScaleId: string | null;
@@ -78,7 +81,7 @@ export interface RiskEvaluation {
 export interface CreateEvaluationInput {
   riskId: string;
   evaluationType: EvaluationType;
-  subCategory: string;
+  subCategoryId: string;
   entity?: string | null;
 }
 
@@ -100,6 +103,8 @@ export interface AppetiteComparison {
   threshold: number | null;
   source: "OVERRIDE" | "AUTO" | "NONE";
   exceeded: boolean | null;
+  /** false = threshold found by label (legacy), may be missing or wrong. */
+  linkedToCategory: boolean;
 }
 
 export const evaluationsApi = {
