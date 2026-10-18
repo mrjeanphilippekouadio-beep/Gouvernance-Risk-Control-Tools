@@ -9,6 +9,11 @@
 --   tenants.single_person_regime_lifted_at      levée MÉMORISÉE, posée par trigger, jamais remise à NULL.
 --   tenants.single_person_regime_lift_ref       id de la ligne déclencheuse (user_roles, users ou roles).
 --
+-- SEC-PNL-06 : le rôle d'exécution grc_app_runtime ne peut ni déclarer le régime, ni poser/modifier la levée ou le seuil
+-- (INSERT comme UPDATE) ; seul le trigger de levée, qui s'exécute sous le même rôle, pose lifted_at / lift_ref (sur un tenant
+-- déjà déclaré). La déclaration reste une opération d'exploitation hors API (rôle propriétaire/migration). Le CMP-PNL-15
+-- (audit de la déclaration) n'est pas faisable en SQL seul : elle n'a pas d'écrivain applicatif, donc pas de contexte d'audit.
+--
 -- Même modèle que 062 mais fonctions DISTINCTES (risk_framework_bootstrap_end_mark n'est pas redéfinie). Toutes les
 -- fonctions épinglent search_path = pg_catalog, public, pg_temp (F-B6a-11, migration 058).
 -- Idempotente : IF NOT EXISTS, DO $$ sur pg_constraint, CREATE OR REPLACE, DROP TRIGGER IF EXISTS.
@@ -52,6 +57,19 @@ $$;
 CREATE OR REPLACE FUNCTION tenants_single_person_regime_guard() RETURNS trigger LANGUAGE plpgsql
   SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF current_user = 'grc_app_runtime'
+       AND (NEW.single_person_regime_declared_at IS NOT NULL OR NEW.single_person_regime_lifted_at IS NOT NULL
+            OR NEW.single_person_regime_lift_ref IS NOT NULL OR NEW.single_person_regime_lift_threshold <> 2) THEN
+      RAISE EXCEPTION 'tenants: the single-person regime is declared by the publisher, not by the runtime role' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF current_user = 'grc_app_runtime'
+     AND (NEW.single_person_regime_declared_at IS DISTINCT FROM OLD.single_person_regime_declared_at
+          OR NEW.single_person_regime_lift_threshold IS DISTINCT FROM OLD.single_person_regime_lift_threshold) THEN
+    RAISE EXCEPTION 'tenants: the single-person regime is declared by the publisher, not by the runtime role' USING ERRCODE = '42501';
+  END IF;
   IF OLD.single_person_regime_declared_at IS NOT NULL
      AND NEW.single_person_regime_declared_at IS DISTINCT FROM OLD.single_person_regime_declared_at THEN
     RAISE EXCEPTION 'tenants: the single-person regime declaration is set-once' USING ERRCODE = '42501';
@@ -73,7 +91,7 @@ $$;
 
 DROP TRIGGER IF EXISTS tenants_single_person_regime_guard ON tenants;
 CREATE TRIGGER tenants_single_person_regime_guard
-  BEFORE UPDATE ON tenants
+  BEFORE INSERT OR UPDATE ON tenants
   FOR EACH ROW EXECUTE FUNCTION tenants_single_person_regime_guard();
 
 -- Levée mémorisée. Verrou NO KEY UPDATE du tenant comme 062 : deux affectations concurrentes sont sérialisées.

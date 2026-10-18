@@ -59,7 +59,7 @@ describe("QA-panel migrations 066-071 (static)", () => {
         expect(header, `${up(n)} ${m[1]}`).toMatch(/SET\s+search_path\s*=\s*pg_catalog,\s*public,\s*pg_temp\b/i);
       }
     }
-    expect(functions).toBe(5);
+    expect(functions).toBe(7); // 068 x3, 070 x2 (guard + truncate guard), 071 x2
   });
 
   it("066 adds the audit column without touching existing audit rows (no UPDATE/DELETE on audit_log)", () => {

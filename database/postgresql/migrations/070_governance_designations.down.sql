@@ -7,7 +7,11 @@ BEGIN;
 UPDATE roles SET permissions = array_remove(permissions, 'designation.manage') WHERE 'designation.manage' = ANY (permissions);
 UPDATE users SET roles = array_remove(roles, 'designation.manage') WHERE 'designation.manage' = ANY (roles);
 
+DROP TRIGGER IF EXISTS governance_designations_truncate_guard ON governance_designations;
+DROP TRIGGER IF EXISTS governance_designations_guard ON governance_designations;
 DROP TABLE IF EXISTS governance_designations;
+DROP FUNCTION IF EXISTS governance_designations_truncate_guard();
+DROP FUNCTION IF EXISTS governance_designations_guard();
 
 DELETE FROM schema_migrations WHERE filename = '070_governance_designations.sql';
 COMMIT;

@@ -201,7 +201,7 @@ describe("migration 071 (static)", () => {
   it("is append-only: no DELETE FROM, delete and truncate refused and revoked, search_path pinned on both guards", () => {
     expect(code).not.toMatch(/\bDELETE\s+FROM\b/i);
     expect(code).toMatch(/REVOKE DELETE, TRUNCATE ON organization_profiles/);
-    expect(code).toMatch(/BEFORE UPDATE OR DELETE ON organization_profiles/);
+    expect(code).toMatch(/BEFORE INSERT OR UPDATE OR DELETE ON organization_profiles/);
     expect(code).toMatch(/BEFORE TRUNCATE ON organization_profiles/);
     const pins = [...code.matchAll(/SET search_path = pg_catalog, public, pg_temp/g)];
     expect(pins.length).toBeGreaterThanOrEqual(4); // inline + ALTER for each of the two functions
