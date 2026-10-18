@@ -35,8 +35,10 @@ interface DraftForm {
 }
 
 /** Editable mirror of an AppetiteEntry (numbers as text); subCategoryId is carried through untouched, never typed. */
-interface AppetiteRow { subCategory: string; subCategoryId: string | null; entity: string; threshold: string; description: string; }
-const emptyAppetiteRow = (): AppetiteRow => ({ subCategory: "", subCategoryId: null, entity: "", threshold: "", description: "" });
+interface AppetiteRow { key: number; subCategory: string; subCategoryId: string | null; entity: string; threshold: string; description: string; }
+/** Stable React key per edited row (array indexes shift when a row is removed). */
+let appetiteRowSeq = 0;
+const emptyAppetiteRow = (): AppetiteRow => ({ key: ++appetiteRowSeq, subCategory: "", subCategoryId: null, entity: "", threshold: "", description: "" });
 const toAppetiteEntry = (r: AppetiteRow): AppetiteEntry => ({
   // Trimmed like the server stores them, so an untouched row compares equal (A10 addendum, PR #186).
   subCategory: r.subCategory.trim(), subCategoryId: r.subCategoryId,
@@ -53,7 +55,7 @@ const toForm = (v: FrameworkVersion): DraftForm => ({
   riskOwnerExecutorCumulAllowed: v.riskOwnerExecutorCumulAllowed, delegateExecutorCumulAllowed: v.delegateExecutorCumulAllowed,
   delegationMaxDays: v.delegationMaxDays === null ? "" : String(v.delegationMaxDays),
   hybridPolicyEnabled: v.hybridPolicyEnabled, masteryAuthoritativeSource: v.masteryAuthoritativeSource, committeeVoteRule: v.committeeVoteRule,
-  appetite: v.appetiteThresholds.map((a) => ({ subCategory: a.subCategory, subCategoryId: a.subCategoryId, entity: a.entity ?? "", threshold: String(a.threshold), description: a.description ?? "" })),
+  appetite: v.appetiteThresholds.map((a) => ({ key: ++appetiteRowSeq, subCategory: a.subCategory, subCategoryId: a.subCategoryId, entity: a.entity ?? "", threshold: String(a.threshold), description: a.description ?? "" })),
 });
 
 const num = (s: string) => Number(s);
@@ -364,13 +366,14 @@ export function FrameworksPage({ token }: { token: string }) {
           {draftForm.appetite.length === 0 && <p>Aucun seuil dans ce brouillon.</p>}
           {draftForm.appetite.map((row, i) => {
             const setRow = (patch: Partial<AppetiteRow>) => set("appetite", draftForm.appetite.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-            return <div key={i} role="group" aria-label={`Seuil ${i + 1}`}>
+            return <fieldset key={row.key}>
+              <legend>Seuil {i + 1}</legend>
               <FormField label="Sous-catégorie *" htmlFor={`fd-ap-sub-${i}`}><input id={`fd-ap-sub-${i}`} value={row.subCategory} onChange={(e) => setRow({ subCategory: e.target.value })} required maxLength={200} /></FormField>
               <FormField label="Entité" htmlFor={`fd-ap-ent-${i}`} help="Vide : toutes les entités."><input id={`fd-ap-ent-${i}`} value={row.entity} onChange={(e) => setRow({ entity: e.target.value })} maxLength={200} /></FormField>
               <FormField label="Seuil (1 à 36) *" htmlFor={`fd-ap-thr-${i}`}><input id={`fd-ap-thr-${i}`} type="number" min={1} max={36} step={1} value={row.threshold} onChange={(e) => setRow({ threshold: e.target.value })} required /></FormField>
               <FormField label="Description" htmlFor={`fd-ap-desc-${i}`}><textarea id={`fd-ap-desc-${i}`} value={row.description} onChange={(e) => setRow({ description: e.target.value })} maxLength={1000} /></FormField>
               <Button type="button" onClick={() => set("appetite", draftForm.appetite.filter((_, j) => j !== i))} aria-label={`Retirer le seuil ${i + 1}`}>Retirer</Button>
-            </div>;
+            </fieldset>;
           })}
           <Button type="button" onClick={() => set("appetite", [...draftForm.appetite, emptyAppetiteRow()])}>Ajouter un seuil</Button>
         </fieldset>
