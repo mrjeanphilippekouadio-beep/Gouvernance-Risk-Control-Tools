@@ -112,3 +112,48 @@ tout Bucket Lock GCS : rétention verrouillée de 10 ans vs effacement.
    aucune valeur personnelle dans les logs ou l'audit) n'est jamais
    paramétrable à la baisse ; la classification se relève librement et ne
    s'abaisse que par la fonction risque, tracée.
+
+## Avis D2a — `users.last_seen_at` (2026-10-18, PRIV-REV-D2A-001)
+
+Statut : **OK AVEC RÉSERVES** (non bloquant pour D2a). Document :
+`docs/privacy/review-d2a-last-seen-2026-10-18.md`. Statut global
+UNDER_REVIEW ; REVALIDATION_REQUIRED avant D6.
+
+- **Faits vérifiés** : une valeur par compte, écrasée, sans historique ;
+  pas de remplissage rétroactif ; écriture tenant-scopée, comptes non
+  supprimés ; pas d'`audit_log` ; mappeur `toDomain` explicite (pas
+  d'exposition API) ; `userId` journalisé en cas d'échec (`lastSeen.ts`).
+- **Écart de sémantique (R1, bloquant D6)** : le libellé est « dernière
+  connexion » (q152, D13), mais le déclencheur est `authMiddleware` →
+  `verifyToken` à chaque requête authentifiée. Une session ouverte rend un
+  compte dormant « actif » : contrôle GOV-ACC-01 affaibli. Choix PO :
+  renommer en « dernière activité authentifiée » ou limiter l'écriture aux
+  authentifications (Architecte pour le point d'écriture côté Google).
+- **Visibilité (R2, bloquant D6)** : le masquage R-6.1 couvre les noms, pas
+  les dates par pseudonyme « Personne N ». Sans `audit.read`, comptages
+  seuls. Test : `last_seen_at` absent de `/users` et `/users/me`.
+- **Durée (R3, bloquant mise en prod D6)** : aucune définie. Sauvegardes et
+  PITR inclus dans toute promesse. Décision PO + juriste, pas de durée
+  imposée par A24.
+- **Journal (R4)** : retirer `userId` du `log.warn` de `lastSeen.ts`.
+- **Information (R5)** : aucun texte ; à traiter au déploiement de 067 en
+  production, au plus tard avant D6.
+- **Cadre (R6)** : RGPD NOT_ESTABLISHED ; loi 2013-450 et ARTCI à confirmer
+  par le juriste de Djamo ; aucun article cité (non vérifié). Hypothèse :
+  données de salariés ou prestataires (à confirmer).
+- **Pré-existant (R7)** : journaux HTTP avec IP et user-agent par requête
+  (staging 2026-10-08). « Pas d'IP » (q152) vaut pour la base, pas pour le
+  système. Suivi via l'item journaux B-4, Security (A10).
+- **Libellé (R8, faible)** : `NULL` = pas d'authentification enregistrée
+  depuis 067, pas « pas de connexion depuis trackedSince ».
+
+Principes ajoutés :
+9. Le libellé d'une donnée doit correspondre à son déclencheur réel :
+   vérifier le point d'appel (middleware, résolveur) avant de valider une
+   finalité ou une information aux personnes.
+10. Une date par personne reste une donnée personnelle même si le nom est
+    masqué : sans droit de voir l'identité, n'exposer que des comptages.
+
+Points ouverts à inscrire dans ACTION_ITEMS (non fait par A24) : R1 (PO),
+R2 (PO), R3 (PO + juriste), R6 (juriste). Relecture A15 (Compliance)
+demandée par le plan RM-V1 ligne 595.

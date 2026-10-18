@@ -29,7 +29,7 @@ export function createLastSeenRecorder(pool: Pick<Pool, "query">) {
       )
       .catch((err: unknown) => {
         lastWrite.delete(key);
-        log.warn({ tenantId, userId, errorType: err instanceof Error ? err.name : "unknown" }, "last_seen_at update failed");
+        log.warn({ tenantId, errorType: err instanceof Error ? err.name : "unknown" }, "last_seen_at update failed");
       });
   };
 }
