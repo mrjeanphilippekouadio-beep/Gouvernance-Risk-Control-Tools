@@ -1,0 +1,741 @@
+{
+  "meta": {
+    "titre": "Principes de gouvernance de la gestion des risques : catalogue, détection, indications par taille",
+    "version": "0.1-PROPOSITION",
+    "date": "2026-10-18",
+    "auteur": "A13 Risk Manager",
+    "statut": "PROPOSITION à valider par le PO (DECISION-073). Rien de ce document n'est décidé. Tous les seuils sont marqués « à valider PO ».",
+    "decisionSource": "DECISION-073 ; arbitrages DECISION-072 (guard:noSelfValidation, riskappetite.update, risk.owner.assign, guard:notLastRiskManager)",
+    "sources": [
+      "docs/governance/droits-acces/risk.json",
+      "docs/governance/droits-acces/decisions-po.json",
+      "docs/governance/droits-acces/catalogue.json",
+      "backend/src/domain/ (Role.ts, User.ts, Process.ts, Risk.ts, Config.ts, RiskFramework.ts, AuditEvent.ts, fixedGroupPermissions.ts)"
+    ],
+    "legendeGravite": "elevee = un contrôle clé peut être contourné ou une instance de contre-pouvoir n'existe pas ; moyenne = affaiblissement partiel, compensable ; faible = hygiène de gouvernance.",
+    "legendeNiveauIndication": "exige = à faire quelle que soit la suite ; recommande = bonne pratique ; informatif = connaître le point, sans action requise à cette taille.",
+    "reserveReferences": "Les normes ne sont pas dans le dépôt (seule la synthèse COSO ERM 2017 de l'IFACI l'est). Les références ISO 31000:2018 et IIA sont données de mémoire et marquées « à vérifier sur le texte » avant toute citation littérale. Le texte BCEAO / UEMOA est marqué « référence à confirmer » (A14 Compliance)."
+  },
+
+  "donneesDisponibles": {
+    "existent": [
+      "users (actif = deletedAt null) ; users.departmentId",
+      "roles (systemGroup RISK_MANAGER / RISK_COMMITTEE / AUDIT, departmentId, permissions[])",
+      "user_roles (RoleAssignment : roleId, userId, grantedBy, grantedAt, revokedAt) : permet de détecter l'auto-attribution et le cumul",
+      "ADMIN_PERMISSIONS et FIXED_GROUP_PERMISSIONS (fixedGroupPermissions.ts) : permet de calculer « administrateur », « Audit en écriture », etc.",
+      "config.committeeEvaluationEnforced, config.committeeTreatmentMinScore (null = non configuré), config.committeeAuditCumulAllowed",
+      "risks.ownerId, risks.superiorOwner (N+1), risks.ownerDepartmentId ; processes.owner ; processes.departmentId",
+      "framework versions : decisionRegime (NORMAL / FALLBACK / BOOTSTRAP), ratificationStatus (PENDING / null), fallbackCause",
+      "audit_logs (AuditEvent : userId, action, entityType, entityId, oldValue, newValue, reason, timestamp), append-only",
+      "role_permission_changes (PENDING / APPROVED / REJECTED, requestedBy, decidedBy)",
+      "controls, control_executions, effectiveness assessments, evidence (traces de preuve)"
+    ],
+    "manquent": [
+      "Marqueur « sans second regard / sans seconde validation » sur les décisions (DECISION-072) : n'existe pas ; à créer. En attendant, on déduit l'auto-validation en croisant l'auteur de la création et celui de la validation dans audit_logs (hypothèse : l'historique est complet).",
+      "Régime « structure à une personne » (DECISION-059) : drapeau non codé.",
+      "Gérant désigné (compte informé ou qui statue, DECISION-066) : n'existe pas.",
+      "Intérim / suppléant / vacance déclarée d'un rôle clé : n'existe pas.",
+      "Champion de risque par processus : n'existe pas. processes.owner est un TEXTE LIBRE, pas un compte utilisateur : on ne peut donc pas vérifier que le propriétaire d'un processus est une personne active ayant des droits.",
+      "N-1 désigné sur le processus et attributaire du risque sur un processus (DECISION-064) : n'existent pas ; droit risk.analysis.update non créé.",
+      "Dernière connexion d'un utilisateur : n'existe pas, donc impossible de détecter les comptes dormants.",
+      "Taille réelle de l'entreprise (effectif) : n'existe pas, et on ne l'invente pas. Le classement ci-dessous mesure la maturité de gouvernance visible dans l'outil, pas l'effectif de l'entreprise.",
+      "Deux comptes d'un même humain : seuls des signaux (même e-mail, même appareil) pourraient le suggérer ; aucune donnée d'appareil n'est stockée."
+    ]
+  },
+
+  "principes": [
+    {
+      "id": "GOV-SOD-01",
+      "titre": "Quatre yeux : on ne valide pas ce que l'on a saisi",
+      "enonce": "Celui qui a saisi, évalué, exécuté, proposé ou conçu un acte (évaluation de risque, exécution de contrôle, efficacité, décision de traitement, clôture d'action ou de constat) ne le valide pas. Hors régime déclaré, le refus est le défaut ; une validation par la même personne reste possible seulement avec motif, seconde confirmation et marquage visible.",
+      "references": [
+        "Contrat RISK_MANAGEMENT_V1 §5 et §7 (contribution, cotation, décision, validation distinctes)",
+        "IIA Three Lines Model 2020 : principes 3 et 5 (rôles de 1re et 2e ligne, indépendance de la 3e) : à vérifier sur le texte",
+        "COSO ERM 2017 P2 (structures de gouvernance et d'exploitation) : vérifié dans la synthèse IFACI",
+        "Référentiel BCEAO / UEMOA sur le contrôle interne : référence à confirmer (A14)"
+      ],
+      "consequence": "Une évaluation, une action ou un traitement est donné comme contrôlé alors qu'une seule personne l'a produit et approuvé. Le Comité et l'Audit croient qu'un second regard a eu lieu. En cas d'erreur ou de manipulation, rien ne l'aurait arrêtée.",
+      "detection": {
+        "regle": "Pour chaque objet validé (evaluation, execution, effectiveness, treatmentdecision, actionplan, finding, framework), comparer l'utilisateur de l'événement CREATE/SUBMIT et celui de l'événement VALIDATE/APPROVE/CLOSE dans audit_logs. Si identiques : violation constatée. Prévention : compter les personnes actives qui détiennent à la fois le droit de saisir et le droit de valider (ex. groupe Risk Manager) lorsque ce groupe a un seul membre actif : violation probable (structurelle).",
+        "donnees": ["audit_logs (userId, action, entityType, entityId, timestamp)", "user_roles", "roles.permissions", "FIXED_GROUP_PERMISSIONS"],
+        "donneesManquantes": ["marqueur « sans second regard » posé au moment de l'acte (à créer ; DECISION-072)"],
+        "niveauConfiance": "constat (historique) ; probable (structurel)"
+      },
+      "objets": [
+        {"type": "utilisateur", "libelle": "Personne qui a validé son propre acte"},
+        {"type": "objet métier", "libelle": "Évaluation / exécution / action / décision concernée (type, identifiant, date)"},
+        {"type": "groupe", "libelle": "Groupe Risk Manager si un seul membre actif"},
+        {"type": "nombre", "libelle": "Nombre de validations sans second regard sur les 12 derniers mois"},
+        {"type": "paramètre", "libelle": "Invariant « validation par un autre » : état (strict / régime déclaré)"}
+      ],
+      "gravite": "elevee",
+      "indications": {
+        "tpe": {"niveau": "recommande", "action": "Accepter que la même personne valide, mais jamais en silence : motif écrit, seconde confirmation, mention « sans second regard » sur le rapport. Désigner un tiers externe (gérant, expert-comptable, conseil) qui reçoit le journal de ces validations et le relit une fois par trimestre ou au moins une fois par an."},
+        "pme": {"niveau": "exige", "action": "Faire valider toute évaluation sensible par un second Risk Manager ou par le directeur concerné. Si un seul Risk Manager existe, désigner un validateur de repli nommé (directeur financier, directeur général) et suivre la part de validations sans second regard (objectif proposé : moins de 10 % des validations, à valider PO)."},
+        "grande_entreprise": {"niveau": "exige", "action": "Aucune validation par l'auteur. La 2e ligne valide la 1re ; le Comité valide au-dessus d'un seuil. Toute exception exige l'accord d'un membre du Comité et apparaît dans le rapport trimestriel au Comité et à l'Audit."}
+      }
+    },
+    {
+      "id": "GOV-SOD-02",
+      "titre": "La méthode ne se décide pas seul (Dispositif, échelles, appétence)",
+      "enonce": "L'activation d'une version du Dispositif est décidée par un tiers : ni le demandeur ni les auteurs de la version. Le repli (Comité indisponible) est marqué, motivé, co-signé et ratifié ensuite.",
+      "references": [
+        "Contrat RISK_MANAGEMENT_V1 §8 et §10 (invariants 1, 5 et 10)",
+        "COSO ERM 2017 P2 et P15-P17 (revue et information) : vérifié dans la synthèse IFACI",
+        "ISO 31000:2018 §5.2 (leadership et engagement) : à vérifier sur le texte"
+      ],
+      "consequence": "Les échelles et seuils qui servent à juger tous les risques ont été fixés et approuvés par la même personne. Un risque peut passer pour acceptable simplement parce que la règle a été choisie sur mesure.",
+      "detection": {
+        "regle": "Lister les versions de Dispositif dont decisionRegime vaut FALLBACK ou BOOTSTRAP, avec ratificationStatus = PENDING, et leur ancienneté. Signaler aussi les versions où l'approbateur appartient à l'ensemble {demandeur, auteurs} (ne doit pas exister).",
+        "donnees": ["RiskFramework.decisionRegime", "RiskFramework.ratificationStatus", "RiskFramework.fallbackCause", "audit_logs"],
+        "donneesManquantes": [],
+        "niveauConfiance": "constat"
+      },
+      "objets": [
+        {"type": "version de Dispositif", "libelle": "Version décidée en repli ou en amorçage, ratification en attente, ancienneté en jours"},
+        {"type": "utilisateur", "libelle": "Décideur de repli"},
+        {"type": "nombre", "libelle": "Nombre de versions en repli non ratifiées"}
+      ],
+      "gravite": "elevee",
+      "indications": {
+        "tpe": {"niveau": "recommande", "action": "Accepter l'amorçage par une personne, avec marquage « décidé sans second regard ». Faire relire le Dispositif par un tiers (gérant, conseil externe) dans les 90 jours, et noter cette relecture dans l'outil."},
+        "pme": {"niveau": "exige", "action": "Faire approuver chaque version par le Comité ou à défaut par un second Risk Manager. Toute décision de repli est ratifiée à la séance suivante."},
+        "grande_entreprise": {"niveau": "exige", "action": "Approbation par le Comité, avis de l'Audit tracé, effet au cycle suivant. Aucun repli sans ratification sous 30 jours (délai à valider PO)."}
+      }
+    },
+    {
+      "id": "GOV-SOD-03",
+      "titre": "Pas d'auto-attribution de rôle ni d'auto-élévation",
+      "enonce": "Nul ne s'attribue, ne se retire un rôle, ni ne modifie un rôle qu'il détient. Le premier rôle est donné par un tiers (l'éditeur à l'ouverture, ou un autre administrateur). En structure à une personne, l'auto-attribution reste possible seulement en régime déclaré, avec motif, seconde confirmation et information du gérant.",
+      "references": [
+        "Contrat RISK_MANAGEMENT_V1 §10 (invariants) ; DECISION-063",
+        "ISO/IEC 27001 contrôle d'accès (principe général de séparation) : référence à confirmer",
+        "IIA Three Lines Model 2020 principe 5 : à vérifier"
+      ],
+      "consequence": "Un administrateur peut se donner la fonction de Risk Manager ou d'Audit, puis valider ses propres décisions : le contrôle existe sur le papier et n'existe plus dans les faits.",
+      "detection": {
+        "regle": "Dans user_roles, toute ligne où grantedBy = userId. Et tout événement PERMISSION_CHANGE / ROLE_CHANGE sur un rôle que son auteur détient.",
+        "donnees": ["user_roles.grantedBy", "user_roles.userId", "audit_logs ROLE_CHANGE / PERMISSION_CHANGE"],
+        "donneesManquantes": ["marqueur de régime déclaré (DECISION-059)"],
+        "niveauConfiance": "constat"
+      },
+      "objets": [
+        {"type": "utilisateur", "libelle": "Personne qui s'est attribué le rôle"},
+        {"type": "rôle", "libelle": "Rôle attribué ou modifié"},
+        {"type": "date", "libelle": "Date de l'attribution"}
+      ],
+      "gravite": "elevee",
+      "indications": {
+        "tpe": {"niveau": "recommande", "action": "Faire attribuer le premier rôle par l'éditeur à l'ouverture. Ensuite, toute auto-attribution passe par le régime déclaré avec information du gérant. Revoir la liste des rôles chaque année."},
+        "pme": {"niveau": "exige", "action": "Prévoir au moins deux administrateurs de confiance qui s'attribuent mutuellement leurs rôles ; revue trimestrielle des attributions par la fonction risque."},
+        "grande_entreprise": {"niveau": "exige", "action": "Attribution sur demande validée par le responsable hiérarchique et la sécurité ; recertification semestrielle des rôles par les propriétaires ; aucune auto-attribution."}
+      }
+    },
+    {
+      "id": "GOV-SOD-04",
+      "titre": "Le cumul de rôles est visible et encadré",
+      "enonce": "Un cumul (administrateur + Risk Manager, Risk Manager + Comité, Comité + Audit) peut être autorisé selon la taille, mais il n'est jamais silencieux : il est visible partout, marqué sur chaque décision concernée, et la personne ne vote pas sur ses propres demandes. Risk Manager + Audit reste interdit (indépendance de la 3e ligne).",
+      "references": [
+        "DECISION-063 (cumul de rôles toujours visible), DECISION-061 (Comité + Audit interdit par défaut), DECISION-066",
+        "IIA Three Lines Model 2020 principe 5 (indépendance de la 3e ligne) : à vérifier",
+        "COSO ERM 2017 P2 : vérifié dans la synthèse IFACI"
+      ],
+      "consequence": "La même personne contrôle et est contrôlée. Les décisions du Comité ou les constats de l'Audit n'apportent plus le regard indépendant qu'on leur prête.",
+      "detection": {
+        "regle": "Pour chaque utilisateur actif, calculer l'ensemble de ses groupes et rôles actifs (user_roles non révoqués). Signaler : (admin ET Risk Manager) où admin = au moins un droit de ADMIN_PERMISSIONS ; (admin ET Audit) ; (Risk Manager ET Comité) ; (Comité ET Audit), ce dernier cas selon config.committeeAuditCumulAllowed. Risk Manager ET Audit : toujours une anomalie (le code l'interdit, donc cas hérité).",
+        "donnees": ["user_roles", "roles.systemGroup", "roles.permissions", "ADMIN_PERMISSIONS", "config.committeeAuditCumulAllowed"],
+        "donneesManquantes": ["détection de deux comptes pour un même humain (signaux e-mail / appareil : non stockés)"],
+        "niveauConfiance": "constat"
+      },
+      "objets": [
+        {"type": "utilisateur", "libelle": "Personne qui cumule"},
+        {"type": "rôles", "libelle": "Combinaison de rôles (ex. administrateur + Risk Manager)"},
+        {"type": "paramètre", "libelle": "committeeAuditCumulAllowed : état et défaut"},
+        {"type": "nombre", "libelle": "Nombre de personnes en cumul / nombre de personnes actives avec rôle"}
+      ],
+      "gravite": "moyenne",
+      "indications": {
+        "tpe": {"niveau": "informatif", "action": "Accepter le cumul administrateur + Risk Manager (cas normal du gérant, du RSSI ou du responsable IT). Le laisser visible, faire relire annuellement ses décisions par un tiers externe."},
+        "pme": {"niveau": "recommande", "action": "Admettre admin + Risk Manager avec marquage. Séparer au moins Comité et Audit. Interdire qu'un cumulant vote sur ses propres demandes."},
+        "grande_entreprise": {"niveau": "exige", "action": "Aucun cumul entre fonctions de contrôle. Administrateur technique distinct du Risk Manager, du Comité et de l'Audit. Tout cumul résiduel est une exception datée, validée par le Comité."}
+      }
+    },
+    {
+      "id": "GOV-SOD-05",
+      "titre": "Une même personne ne tient pas plusieurs lignes de défense sur un même dossier",
+      "enonce": "Exécuter un contrôle (1re ligne), évaluer son efficacité et valider l'évaluation du risque lié (2e ligne) ne se fait pas par la même personne. Si la taille l'impose, le cumul est visible sur le dossier.",
+      "references": [
+        "IIA Three Lines Model 2020 principes 3 et 5 : à vérifier",
+        "Mandat Risk Manager §43 (séparation des tâches)",
+        "Référentiel BCEAO / UEMOA sur le contrôle interne : référence à confirmer (A14)"
+      ],
+      "consequence": "Le contrôle est jugé efficace par celui qui l'a exécuté. Le Comité reçoit un risque résiduel bas qui repose sur une auto-évaluation.",
+      "detection": {
+        "regle": "Pour un risque donné, intersecter les utilisateurs ayant exécuté (control_executions.recordedBy), évalué l'efficacité (effectiveness evaluator) et validé l'évaluation du risque lié dans audit_logs. Intersection non vide : cumul de lignes sur ce dossier. Au niveau des droits : groupe Risk Manager porte execution.create et effectiveness.validate (FIXED_GROUP_PERMISSIONS), donc le cumul est structurellement possible.",
+        "donnees": ["control_executions", "effectiveness assessments", "controls.coveredRisks (control_risks)", "audit_logs"],
+        "donneesManquantes": ["lien contrôle-processus-propriétaire vérifiable pour tous les contrôles (couverture à mesurer)"],
+        "niveauConfiance": "constat (dossier) ; probable (structurel)"
+      },
+      "objets": [
+        {"type": "risque", "libelle": "Risque dont le dossier a une seule personne sur plusieurs lignes"},
+        {"type": "utilisateur", "libelle": "Personne en cumul de lignes"},
+        {"type": "contrôle", "libelle": "Contrôle exécuté et évalué par la même personne"},
+        {"type": "groupe", "libelle": "Groupe Risk Manager (droits larges d'exécution)"}
+      ],
+      "gravite": "moyenne",
+      "indications": {
+        "tpe": {"niveau": "informatif", "action": "Admettre le cumul (peu de personnes), le tracer, et faire contrôler par échantillon (2 à 3 dossiers par an) par un tiers externe."},
+        "pme": {"niveau": "recommande", "action": "Désigner des exécutants de contrôle distincts du Risk Manager pour les contrôles clés. Garder le cumul comme exception visible sur le dossier."},
+        "grande_entreprise": {"niveau": "exige", "action": "Retirer au groupe Risk Manager les droits d'exécution de contrôle. 1re ligne exécute, 2e ligne évalue, 3e ligne vérifie."}
+      }
+    },
+    {
+      "id": "GOV-RISK-01",
+      "titre": "Indépendance et existence de la fonction risque",
+      "enonce": "La fonction risque (groupe Risk Manager) existe, est distincte de la 1re ligne qui porte les risques, et ne dépend pas d'une seule personne.",
+      "references": [
+        "IIA Three Lines Model 2020 principe 3 : à vérifier",
+        "COSO ERM 2017 P2 : vérifié dans la synthèse IFACI",
+        "ISO 31000:2018 §5.2 et §5.3 : à vérifier"
+      ],
+      "consequence": "Personne ne challenge les cotations des propriétaires de risques. Les risques sont cotés et validés dans la même ligne, avec un biais d'auto-évaluation.",
+      "detection": {
+        "regle": "Compter les membres actifs du groupe RISK_MANAGER. 0 : fonction vacante. 1 : dépendance à une seule personne. Pour chaque Risk Manager actif, calculer le nombre de risques dont il est propriétaire (risks.ownerId) et de contrôles dont il est exécutant : part élevée = fonction risque non indépendante de la 1re ligne.",
+        "donnees": ["user_roles", "roles.systemGroup", "risks.ownerId", "control_executions.recordedBy"],
+        "donneesManquantes": [],
+        "niveauConfiance": "constat"
+      },
+      "objets": [
+        {"type": "groupe", "libelle": "Groupe Risk Manager : effectif actif"},
+        {"type": "nombre", "libelle": "Nombre de Risk Managers actifs"},
+        {"type": "utilisateur", "libelle": "Risk Manager propriétaire de risques ou exécutant de contrôles"},
+        {"type": "nombre", "libelle": "Part des risques dont le propriétaire est un Risk Manager"}
+      ],
+      "gravite": "elevee",
+      "indications": {
+        "tpe": {"niveau": "recommande", "action": "Désigner une personne formellement responsable de la fonction risque (souvent le gérant ou le responsable conformité), et un suppléant nommé. Le cumul avec d'autres fonctions est accepté mais visible."},
+        "pme": {"niveau": "exige", "action": "Au moins deux Risk Managers (un titulaire, un suppléant actif) rattachés à la direction générale et non à un département opérationnel."},
+        "grande_entreprise": {"niveau": "exige", "action": "Équipe risque dédiée, trois Risk Managers ou plus, rattachée à la direction des risques, indépendante des métiers, avec revue par le Comité."}
+      }
+    },
+    {
+      "id": "GOV-RISK-02",
+      "titre": "Continuité des rôles clés : pas de groupe vidé, intérim ou vacance déclarée",
+      "enonce": "Le départ, la suspension ou l'absence de la dernière personne d'un rôle clé (Risk Manager d'abord, puis Comité et Audit) ne laisse pas le rôle vacant en silence : un intérim désigné à l'avance, un suppléant ou une vacance déclarée avec échéance doit exister. L'accès de la personne qui part est retiré sans attendre son remplaçant.",
+      "references": [
+        "Contrat RISK_MANAGEMENT_V1 §5 (groupe Risk Manager jamais vide) ; DECISION-066 (ne jamais bloquer)",
+        "ISO 31000:2018 §5.3 (rôles et responsabilités) : à vérifier sur le texte",
+        "Continuité d'activité : bonne pratique générale, référence à confirmer"
+      ],
+      "consequence": "Soit l'outil bloque le client parce que personne ne peut valider, soit un compte d'ancien salarié reste actif pour que l'outil continue de fonctionner. Dans les deux cas, la gouvernance est affaiblie ou l'accès n'est plus maîtrisé.",
+      "detection": {
+        "regle": "Groupe Risk Manager : 1 membre actif = point de défaillance unique ; 0 = vacance. Groupes Comité et Audit : membres actifs en dessous de 2 pour le Comité (invariant « jamais un seul membre sollicité »). Suspensions récentes de membres de ces groupes (audit_logs sur users et user_roles). Décisions de repli dont la cause est un groupe vidé récemment (fallbackCause, hypothèse à étendre).",
+        "donnees": ["user_roles", "roles.systemGroup", "users.deletedAt", "audit_logs", "RiskFramework.decisionRegime"],
+        "donneesManquantes": ["intérim désigné, suppléant nommé, vacance déclarée, date de fin d'intérim (rien n'existe)"],
+        "niveauConfiance": "constat (effectifs) ; non évaluable (intérim)"
+      },
+      "objets": [
+        {"type": "groupe", "libelle": "Groupe Risk Manager / Comité / Audit : effectif actif"},
+        {"type": "utilisateur", "libelle": "Dernier membre actif d'un rôle clé"},
+        {"type": "nombre", "libelle": "Nombre de rôles clés sans suppléant"},
+        {"type": "date", "libelle": "Date du départ ou de la suspension le plus récent"}
+      ],
+      "gravite": "elevee",
+      "indications": {
+        "tpe": {"niveau": "recommande", "action": "Nommer à l'avance un intérim (le gérant ou le responsable le plus proche) qui prend la fonction risque par écrit en cas de départ. Au départ du seul Risk Manager : couper son accès le jour même, déclarer la vacance dans l'outil, faire statuer le gérant pendant au plus 90 jours (délai à valider PO)."},
+        "pme": {"niveau": "exige", "action": "Un suppléant permanent par rôle clé (deuxième Risk Manager). Plan de remplacement écrit avec délai maximal de remplacement de 60 jours (à valider PO). Aucune vacance sans accord du directeur général."},
+        "grande_entreprise": {"niveau": "exige", "action": "Équipe et suppléants nommés, plan de succession pour chaque fonction de contrôle, intérim formel borné dans le temps, information du Comité de tout départ d'un membre d'Audit ou de Comité dans les 5 jours."}
+      }
+    },
+    {
+      "id": "GOV-AUD-01",
+      "titre": "Indépendance de l'Audit : informé, jamais décideur",
+      "enonce": "L'Audit lit tout et signale, il ne décide pas de ce qu'il devra ensuite auditer. Il reste en lecture seule hors missions d'audit, n'est pas cumulé avec la fonction risque, et ne règle pas ses propres droits.",
+      "references": [
+        "IIA Three Lines Model 2020 principe 5 (indépendance de la 3e ligne) : à vérifier sur le texte",
+        "Contrat RISK_MANAGEMENT_V1 §8 ; DECISION-072 (group:AUDIT)",
+        "Référentiel BCEAO / UEMOA sur le contrôle interne : référence à confirmer (A14)"
+      ],
+      "consequence": "Un auditeur qui a participé à une décision ne peut plus la contrôler librement. Les constats d'audit perdent leur valeur de preuve indépendante.",
+      "detection": {
+        "regle": "(a) Membres actifs du groupe Audit qui sont aussi Risk Manager (anomalie). (b) Groupe Audit portant un droit hors isAuditGroupPermission. (c) Décisions de repli prises par un membre d'Audit (decisionRegime FALLBACK dont le décideur appartient à AUDIT). (d) Changements des droits d'Audit appliqués sans contre-pouvoir d'Audit (role_permission_changes avec decidedBy absent du groupe Audit ou du Comité).",
+        "donnees": ["user_roles", "roles.permissions", "isAuditGroupPermission", "RiskFramework.decisionRegime", "role_permission_changes"],
+        "donneesManquantes": ["décideur de repli par groupe d'appartenance : à confirmer dans le modèle de version de Dispositif (hypothèse)"],
+        "niveauConfiance": "constat (a, b, d) ; à vérifier (c)"
+      },
+      "objets": [
+        {"type": "utilisateur", "libelle": "Membre d'Audit en position de décision ou en cumul"},
+        {"type": "rôle", "libelle": "Rôle Audit : droits au-delà de la lecture"},
+        {"type": "permission", "libelle": "rolegroup.audit.update ou droit d'écriture porté par l'Audit"},
+        {"type": "décision", "libelle": "Décision de repli où l'Audit a décidé"}
+      ],
+      "gravite": "elevee",
+      "indications": {
+        "tpe": {"niveau": "informatif", "action": "Pas d'Audit interne : désigner un auditeur externe (commissaire aux comptes, cabinet, pair) qui lit le journal une fois par an. Ne pas créer de faux compte d'Audit."},
+        "pme": {"niveau": "recommande", "action": "Une personne d'Audit ou de contrôle interne rattachée à la direction générale ou au conseil, sans droit d'écriture, qui reçoit les décisions prises en repli pour ratification."},
+        "grande_entreprise": {"niveau": "exige", "action": "Fonction d'audit interne rattachée au Comité d'audit ou au conseil. L'Audit est informé et ratifie, il ne décide jamais. Si une décision l'a impliqué, la mission correspondante est confiée à un autre auditeur."}
+      }
+    },
+    {
+      "id": "GOV-AUD-02",
+      "titre": "Une 3e ligne existe et sa visibilité n'est pas réduite par ceux qu'elle contrôle",
+      "enonce": "Il existe au moins un membre d'Audit (ou, à défaut, un auditeur externe déclaré) et les droits de l'Audit ne sont modifiés que sous le contrôle de l'Audit ou du Comité dès qu'ils existent.",
+      "references": [
+        "IIA Three Lines Model 2020 principes 4 et 5 : à vérifier",
+        "DECISION-072 (rolegroup.audit.update) : libre sans membre d'Audit, mis en attente dès qu'il y en a un"
+      ],
+      "consequence": "Personne n'examine l'ensemble de la gouvernance en indépendance. Un administrateur peut réduire la vue de l'Audit sur ses propres actions sans que personne ne le sache.",
+      "detection": {
+        "regle": "(a) Effectif actif du groupe AUDIT = 0. (b) Modifications des droits de l'Audit (PERMISSION_CHANGE sur le rôle AUDIT) par un administrateur alors qu'au moins un membre d'Audit existait, sans validation de ce membre (role_permission_changes).",
+        "donnees": ["user_roles", "roles.systemGroup", "role_permission_changes", "audit_logs"],
+        "donneesManquantes": ["déclaration d'un auditeur externe (à créer si le PO le veut)"],
+        "niveauConfiance": "constat"
+      },
+      "objets": [
+        {"type": "groupe", "libelle": "Groupe Audit : effectif actif"},
+        {"type": "rôle", "libelle": "Rôle Audit : changements de droits sans contre-pouvoir"},
+        {"type": "utilisateur", "libelle": "Administrateur auteur du changement"}
+      ],
+      "gravite": "elevee",
+      "indications": {
+        "tpe": {"niveau": "informatif", "action": "Pas de membre d'Audit : c'est attendu. Prévoir une revue externe annuelle du journal, et signaler dans le panel « aucun contre-pouvoir sur les droits d'Audit »."},
+        "pme": {"niveau": "recommande", "action": "Nommer au moins un membre d'Audit ou de contrôle interne. À son arrivée, tout changement de ses droits passe par sa validation."},
+        "grande_entreprise": {"niveau": "exige", "action": "Au moins deux membres d'Audit actifs. Tout changement de leurs droits est validé par l'un d'eux ou par le Comité, jamais appliqué seul par un administrateur."}
+      }
+    },
+    {
+      "id": "GOV-COM-01",
+      "titre": "Supervision par un Comité des risques",
+      "enonce": "Les évaluations et traitements sensibles passent par un Comité d'au moins deux membres éligibles. L'obligation de passage par le Comité n'est pas assouplie par une seule personne dès qu'un tiers existe.",
+      "references": [
+        "COSO ERM 2017 P2 (gouvernance) : vérifié dans la synthèse IFACI",
+        "ISO 31000:2018 §5.2 (leadership et engagement) : à vérifier",
+        "IIA Three Lines Model 2020 principe 2 (rôle de l'organe de gouvernance) : à vérifier",
+        "Contrat RISK_MANAGEMENT_V1 §8 ; DECISION-072 (config.committeeenforcement.set)"
+      ],
+      "consequence": "Les risques les plus graves sont décidés sans instance collective. Les risques sensibles ne sont pas vus par la direction ; personne n'est prévenu quand le passage au Comité est supprimé.",
+      "detection": {
+        "regle": "(a) Effectif actif du groupe RISK_COMMITTEE = 0 ou 1. (b) config.committeeEvaluationEnforced = false. (c) config.committeeTreatmentMinScore = null (aucune décision de traitement ne peut atteindre le Comité, fail-closed). (d) Assouplissement du réglage fait par un administrateur seul alors qu'un tiers existe (audit_logs sur config).",
+        "donnees": ["user_roles", "roles.systemGroup", "config.committeeEvaluationEnforced", "config.committeeTreatmentMinScore", "audit_logs entityType config"],
+        "donneesManquantes": [],
+        "niveauConfiance": "constat"
+      },
+      "objets": [
+        {"type": "groupe", "libelle": "Comité : effectif actif"},
+        {"type": "paramètre", "libelle": "committeeEvaluationEnforced, committeeEvaluationMinScore, committeeTreatmentMinScore (valeur et date du dernier changement)"},
+        {"type": "permission", "libelle": "config.committeeenforcement.set (qui la détient)"},
+        {"type": "utilisateur", "libelle": "Auteur du dernier assouplissement"}
+      ],
+      "gravite": "elevee",
+      "indications": {
+        "tpe": {"niveau": "recommande", "action": "Remplacer le Comité par une revue trimestrielle courte entre le gérant et le Risk Manager (30 minutes, compte rendu dans l'outil). Garder le seuil de passage au Comité configuré pour le jour où il existera."},
+        "pme": {"niveau": "exige", "action": "Comité de 3 personnes (direction générale, finance, Risk Manager sans droit de vote sur ses propres dossiers), réuni chaque trimestre. Fixer les deux seuils de score."},
+        "grande_entreprise": {"niveau": "exige", "action": "Comité des risques formel avec charte, quorum, président non exécutif ou indépendant si possible, réunion mensuelle ou trimestrielle, comptes rendus et suivi des décisions."}
+      }
+    },
+    {
+      "id": "GOV-COM-02",
+      "titre": "Pas de validation tacite, ni par un seul membre du Comité",
+      "enonce": "Un silence ne vaut jamais accord. L'échéance déclenche une escalade, pas une validation. Un seul membre ne représente pas le Comité ; un régime de repli est marqué et ratifié ensuite.",
+      "references": [
+        "DECISION-063 (invariant : pas de validation tacite) ; contrat §8 et invariant 10",
+        "COSO ERM 2017 P2 : vérifié dans la synthèse IFACI"
+      ],
+      "consequence": "Une décision attribuée au Comité a été prise par une seule personne ou par défaut. Le Comité croit avoir approuvé ce qu'il n'a pas vu.",
+      "detection": {
+        "regle": "Décisions « validées au niveau Comité » (riskevaluation.validate.committee, treatmentdecision.validate.committee) où le nombre de votants distincts est inférieur à 2 dans audit_logs, ou dont decisionRegime vaut FALLBACK sans ratification. Hypothèse à vérifier avec A06 : le décompte des votes est lisible dans audit_logs.",
+        "donnees": ["audit_logs (VALIDATE / APPROVE par groupe Comité)", "RiskFramework.decisionRegime", "RiskFramework.ratificationStatus"],
+        "donneesManquantes": ["table de votes nominatifs si elle n'est pas encore alimentée pour toutes les décisions (à confirmer)"],
+        "niveauConfiance": "à vérifier"
+      },
+      "objets": [
+        {"type": "décision", "libelle": "Décision validée par moins de deux votants distincts"},
+        {"type": "utilisateur", "libelle": "Votant unique"},
+        {"type": "nombre", "libelle": "Nombre de décisions concernées"}
+      ],
+      "gravite": "elevee",
+      "indications": {
+        "tpe": {"niveau": "informatif", "action": "Sans Comité, la décision du gérant est tracée avec son motif et marquée « sans second regard ». Elle est relue par un tiers externe au moins une fois par an."},
+        "pme": {"niveau": "exige", "action": "Décision écrite d'au moins deux membres. En cas d'absence de quorum, escalade au directeur général, jamais de validation par défaut."},
+        "grande_entreprise": {"niveau": "exige", "action": "Quorum et majorité définis dans la charte du Comité, votes nominatifs motivés, ratification de tout repli à la séance suivante."}
+      }
+    },
+    {
+      "id": "GOV-APP-01",
+      "titre": "L'appétence est fixée par l'instance de gouvernance et ne se modifie pas pour faire disparaître un dépassement",
+      "enonce": "Les seuils d'appétence au risque sont fixés ou approuvés par la fonction risque et le Comité (ou la direction). Une modification faite par une seule personne est tracée, marquée « sans seconde validation », et un dépassement ne disparaît jamais en silence : le rapport montre l'ancien et le nouveau seuil pendant un cycle.",
+      "references": [
+        "Contrat RISK_MANAGEMENT_V1 §10 invariant 8 (appétence non masquable) ; DECISION-072 (riskappetite.update)",
+        "COSO ERM 2017 P15-P17 et stratégie / appétence : vérifié en partie dans la synthèse IFACI, citation exacte à confirmer",
+        "ISO 31000:2018 §6.3 (périmètre, contexte, critères) : à vérifier"
+      ],
+      "consequence": "Un risque qui dépasse la limite peut devenir acceptable en déplaçant la limite. La direction croit que les risques restent dans ce qu'elle a accepté.",
+      "detection": {
+        "regle": "Événements UPDATE sur l'entité de seuil d'appétence : auteur, ancien et nouveau seuil (oldValue / newValue), motif (reason). Marquer « sans seconde validation » quand l'auteur est le seul à avoir agi alors qu'aucun membre d'Audit ni de Comité n'existait ; marquer « à revoir » quand un tel changement précède d'un cycle un dépassement qui disparaît. Droit : liste des détenteurs de riskappetite.update.",
+        "donnees": ["audit_logs (entityType appétence)", "RiskAppetite", "user_roles", "roles.permissions", "évaluations résiduelles"],
+        "donneesManquantes": ["marqueur « sans seconde validation » stocké (à créer, DECISION-072)", "double affichage ancien/nouveau seuil dans le rapport (à construire)"],
+        "niveauConfiance": "constat (changements) ; probable (lien avec un dépassement)"
+      },
+      "objets": [
+        {"type": "permission", "libelle": "riskappetite.update et riskframework.update : rôles et personnes qui les détiennent"},
+        {"type": "utilisateur", "libelle": "Auteur du changement de seuil"},
+        {"type": "paramètre", "libelle": "Seuil d'appétence : ancien, nouveau, motif, date"},
+        {"type": "risque", "libelle": "Risques dont le dépassement a changé après la modification"}
+      ],
+      "gravite": "elevee",
+      "indications": {
+        "tpe": {"niveau": "recommande", "action": "Autoriser le gérant ou l'administrateur seul à fixer ses seuils, avec motif et marquage « sans second regard ». Faire valider le niveau d'appétence une fois par an par un tiers (conseil, associé)."},
+        "pme": {"niveau": "exige", "action": "Faire approuver les seuils par le Comité ou la direction générale. Tout changement montre l'ancien et le nouveau dépassement pendant un cycle."},
+        "grande_entreprise": {"niveau": "exige", "action": "Appétence approuvée par le conseil ou le Comité, déclinée en limites, révisée annuellement, changement par le circuit du Dispositif (version, approbation d'un tiers, effet au cycle suivant)."}
+      }
+    },
+    {
+      "id": "GOV-OWN-01",
+      "titre": "Chaque risque a un propriétaire actif et la désignation est confirmée par un tiers",
+      "enonce": "Chaque risque a un propriétaire (responsable métier) qui est une personne active, ayant le droit de coter. La désignation n'est pas confirmée seul : en structure à une personne, l'auto-désignation est marquée « sans second regard ».",
+      "references": [
+        "ISO 31000:2018 §6.4 et §5.3 (responsabilité des risques) : à vérifier",
+        "COSO ERM 2017 P10-P14 : vérifié dans la synthèse IFACI",
+        "Mémoire A13 OD-9 ; DECISION-072 (risk.owner.assign)"
+      ],
+      "consequence": "Un risque sans propriétaire n'est piloté par personne. Un propriétaire qui s'est désigné seul peut minimiser le risque qu'il porte.",
+      "detection": {
+        "regle": "(a) risks.ownerId null. (b) ownerId pointe un utilisateur suspendu ou sans riskevaluation.create. (c) Événements ASSIGN dont l'acteur est aussi le nouveau propriétaire, sans confirmation d'un autre membre (audit_logs). (d) Part des risques dont le créateur est aussi le propriétaire.",
+        "donnees": ["risks.ownerId", "users.deletedAt", "roles.permissions", "audit_logs ASSIGN"],
+        "donneesManquantes": [],
+        "niveauConfiance": "constat"
+      },
+      "objets": [
+        {"type": "risque", "libelle": "Risque sans propriétaire ou à propriétaire inactif"},
+        {"type": "utilisateur", "libelle": "Propriétaire suspendu, ou propriétaire auto-désigné"},
+        {"type": "nombre", "libelle": "Nombre de risques concernés / total de risques"}
+      ],
+      "gravite": "moyenne",
+      "indications": {
+        "tpe": {"niveau": "recommande", "action": "Le gérant ou le responsable de service est propriétaire par défaut. Auto-désignation acceptée avec marquage ; revue annuelle de la liste par un tiers."},
+        "pme": {"niveau": "exige", "action": "Le propriétaire du processus est propriétaire par défaut, puis assigne à son équipe. Le Risk Manager confirme les désignations ; aucun risque sans propriétaire plus de 30 jours (à valider PO)."},
+        "grande_entreprise": {"niveau": "exige", "action": "Propriétaire nommé dans la fiche de poste, remplacé dans les 10 jours en cas de départ, revue par la 2e ligne chaque trimestre, aucune auto-désignation."}
+      }
+    },
+    {
+      "id": "GOV-OWN-02",
+      "titre": "Propriétaire de processus = propriétaire par défaut des risques, avec un champion de risque par processus",
+      "enonce": "Le propriétaire d'un processus porte par défaut les risques du processus et les assigne à son équipe. Chaque processus a un champion de risque (relais) désigné. Le Risk Manager peut préparer la répartition, que le propriétaire confirme en une seule action.",
+      "references": [
+        "DECISION-072 (risk.owner.assign), DECISION-064",
+        "ISO 31000:2018 §5.3 et §6.4 : à vérifier",
+        "IIA Three Lines Model 2020 principe 3 (la 1re ligne porte les risques) : à vérifier"
+      ],
+      "consequence": "Les risques d'un processus n'ont pas de responsable proche du terrain. Le Risk Manager les porte à la place des métiers, et la responsabilité se concentre sur la 2e ligne.",
+      "detection": {
+        "regle": "(a) Processus actifs dont processes.owner est vide. (b) Processus dont processes.owner ne correspond à aucun compte actif : IMPOSSIBLE à vérifier aujourd'hui car processes.owner est un texte libre. (c) Processus sans champion de risque : IMPOSSIBLE, la donnée n'existe pas. (d) Risques rattachés à un processus dont le propriétaire de risque est le propriétaire du processus par défaut depuis plus de N jours sans assignation (à valider PO).",
+        "donnees": ["processes.owner (texte)", "processes.active", "risks.processId", "risks.ownerId"],
+        "donneesManquantes": ["lien processus -> compte utilisateur propriétaire", "champion de risque par processus", "N-1 désigné par processus (DECISION-064)"],
+        "niveauConfiance": "partiel ; (b) et (c) non évaluables : le panel doit afficher « non évaluable : donnée absente »"
+      },
+      "objets": [
+        {"type": "processus", "libelle": "Processus sans propriétaire ou sans champion de risque"},
+        {"type": "utilisateur", "libelle": "Propriétaire de processus portant seul tous les risques"},
+        {"type": "nombre", "libelle": "Nombre de processus concernés / total"}
+      ],
+      "gravite": "moyenne",
+      "indications": {
+        "tpe": {"niveau": "informatif", "action": "Le gérant est propriétaire de tous les processus et champion unique. Se contenter d'une liste de 5 à 10 processus clés avec un nom pour chacun."},
+        "pme": {"niveau": "exige", "action": "Un propriétaire nommé par processus (responsable de service) et un champion de risque dans son équipe. Le Risk Manager prépare la répartition, le propriétaire confirme."},
+        "grande_entreprise": {"niveau": "exige", "action": "Réseau de champions de risque dans chaque direction, formés, animés par la 2e ligne, avec réunions périodiques et objectifs inscrits dans leur évaluation annuelle."}
+      }
+    },
+    {
+      "id": "GOV-OWN-03",
+      "titre": "Celui qui rédige l'Analyse ne valide pas l'évaluation qui s'en nourrit",
+      "enonce": "L'Analyse (causes, événements, impacts, contexte) peut être rédigée par quatre profils (DECISION-064), mais son auteur est exclu de la validation de l'évaluation qui l'utilise. L'Analyse reste une information, jamais une cotation ni une décision.",
+      "references": [
+        "DECISION-064 et réponse PO sur data:risk.analysisWriter (option 1 + exclusion de l'auteur)",
+        "Contrat RISK_MANAGEMENT_V1 §5 (contribution, cotation, décision, validation)"
+      ],
+      "consequence": "Le propriétaire du processus choisit les causes qui seront retenues, puis valide la cotation qui en découle, avec un intérêt à minimiser les causes de son propre processus.",
+      "detection": {
+        "regle": "NON ÉVALUABLE aujourd'hui : le droit risk.analysis.update et les champs d'Analyse n'existent pas encore dans le code. Règle cible : auteur(s) de l'Analyse d'une évaluation (audit par auteur) ∩ validateur de cette évaluation = vide.",
+        "donnees": ["audit_logs (quand l'Analyse sera écrite)"],
+        "donneesManquantes": ["entité Analyse, droit d'édition, historique par auteur (DECISION-064 à implémenter)"],
+        "niveauConfiance": "non évaluable"
+      },
+      "objets": [
+        {"type": "évaluation", "libelle": "Évaluation validée par l'auteur de son Analyse"},
+        {"type": "utilisateur", "libelle": "Auteur de l'Analyse et validateur"}
+      ],
+      "gravite": "moyenne",
+      "indications": {
+        "tpe": {"niveau": "informatif", "action": "Admettre qu'une personne rédige l'Analyse et valide, avec le marquage « validateur auteur de l'Analyse » et relecture externe annuelle."},
+        "pme": {"niveau": "recommande", "action": "Faire valider l'évaluation par le Risk Manager ou le Comité, jamais par le propriétaire du processus qui a rédigé l'Analyse."},
+        "grande_entreprise": {"niveau": "exige", "action": "Exclusion systématique de l'auteur de l'Analyse de la validation ; challenge de l'Analyse par la 2e ligne avant cotation."}
+      }
+    },
+    {
+      "id": "GOV-ACC-01",
+      "titre": "Moindre privilège : peu d'administrateurs, des rôles étroits",
+      "enonce": "Chaque personne n'a que les droits dont elle a besoin. Le nombre d'administrateurs reste faible, les droits terminaux (archivage, retrait) et les droits d'administration ne sont pas dans les rôles ordinaires, et les comptes inactifs sont suspendus.",
+      "references": [
+        "Convention du dépôt : un état terminal a son propre droit (CLAUDE.md, Security-sensitive conventions)",
+        "ISO/IEC 27001 contrôle d'accès, privilège minimal : référence à confirmer",
+        "Référentiel BCEAO / UEMOA sur le contrôle interne et la sécurité des systèmes d'information : référence à confirmer (A14)"
+      ],
+      "consequence": "Un compte avec trop de droits, ou qui n'est plus utilisé, devient la porte d'entrée d'une erreur ou d'une fraude. Plus il y a d'administrateurs, plus l'effet d'un compte compromis est grand.",
+      "detection": {
+        "regle": "(a) Nombre de personnes actives détenant au moins un droit de ADMIN_PERMISSIONS, et leur part des personnes actives avec rôle. (b) Rôles personnalisés (systemGroup null) dont le nombre de permissions dépasse un seuil (à valider PO) ou qui mêlent droits d'écriture métier et droits d'administration. (c) Rôles portant rolegroup.audit.update (interdit). (d) Comptes inactifs : NON ÉVALUABLE, pas de date de dernière connexion.",
+        "donnees": ["roles.permissions", "user_roles", "ADMIN_PERMISSIONS", "users"],
+        "donneesManquantes": ["dernière connexion par utilisateur (comptes dormants)"],
+        "niveauConfiance": "constat (a, b, c) ; non évaluable (d)"
+      },
+      "objets": [
+        {"type": "utilisateur", "libelle": "Personnes administratrices"},
+        {"type": "rôle", "libelle": "Rôle trop large ou mêlant administration et métier"},
+        {"type": "permission", "libelle": "Permissions d'administration portées par un rôle ordinaire"},
+        {"type": "nombre", "libelle": "Nombre d'administrateurs / personnes actives"}
+      ],
+      "gravite": "moyenne",
+      "indications": {
+        "tpe": {"niveau": "recommande", "action": "Un administrateur principal et un secours (gérant ou prestataire). Pas plus de deux administrateurs. Revue annuelle de la liste des comptes."},
+        "pme": {"niveau": "exige", "action": "Deux à trois administrateurs maximum, rôles nommés par fonction, revue semestrielle des droits et des comptes inactifs."},
+        "grande_entreprise": {"niveau": "exige", "action": "Administrateurs techniques distincts des fonctions de gouvernance, recertification trimestrielle, suspension automatique des comptes inactifs au-delà d'un délai à fixer."}
+      }
+    },
+    {
+      "id": "GOV-TRC-01",
+      "titre": "Toute décision sans seconde validation est tracée, motivée et visible",
+      "enonce": "Lorsqu'une action est faite sans second regard (administrateur seul, auto-validation, repli), l'outil l'autorise mais la marque « sans seconde validation », exige un motif et une seconde confirmation, et garde la trace dans le journal. Elle apparaît dans le panel pour être revue dès qu'un tiers existe.",
+      "references": [
+        "DECISION-066 (ne jamais bloquer) ; DECISION-072 (riskappetite.update, guard:noSelfValidation)",
+        "Contrat RISK_MANAGEMENT_V1 : audit append-only, historique jamais réécrit",
+        "COSO ERM 2017 P15-P17 (information et revue) : vérifié dans la synthèse IFACI"
+      ],
+      "consequence": "Une décision prise seule ne se distingue pas d'une décision contrôlée. Quand l'Audit ou le Comité arrive, il ne sait pas quoi rouvrir.",
+      "detection": {
+        "regle": "Compter les événements d'audit sensibles sans reason renseigné (champ reason null) et, une fois le marqueur créé, les décisions marquées « sans seconde validation » non encore revues par un tiers. Ancienneté de la première décision non revue.",
+        "donnees": ["audit_logs.reason", "audit_logs.action / entityType"],
+        "donneesManquantes": ["marqueur « sans seconde validation » et statut « revu par un tiers » (à créer)"],
+        "niveauConfiance": "partiel (motifs) ; non évaluable (marqueur)"
+      },
+      "objets": [
+        {"type": "décision", "libelle": "Décision prise sans second regard, motif, date, auteur"},
+        {"type": "nombre", "libelle": "Nombre de décisions non revues, ancienneté de la plus ancienne"},
+        {"type": "utilisateur", "libelle": "Auteur"}
+      ],
+      "gravite": "moyenne",
+      "indications": {
+        "tpe": {"niveau": "exige", "action": "Toujours un motif écrit, une seconde confirmation, et un récapitulatif annuel des décisions sans second regard envoyé au gérant ou à un tiers externe."},
+        "pme": {"niveau": "exige", "action": "Récapitulatif trimestriel au Comité ou à la direction ; chaque décision sans second regard est revue ou ratifiée dans les 90 jours (à valider PO)."},
+        "grande_entreprise": {"niveau": "exige", "action": "Les exceptions sont rares, datées, validées par le Comité, et leur nombre est un indicateur de risque (KRI) présenté au Comité et à l'Audit."}
+      }
+    },
+    {
+      "id": "GOV-TRC-02",
+      "titre": "Un gérant désigné est informé ou statue quand une règle ne peut pas être respectée",
+      "enonce": "Le client désigne un compte (gérant, directeur général ou, à défaut, une personne extérieure de confiance) informé des décisions sans second regard, des vacances de rôle et des changements de gouvernance. Ce compte n'est jamais l'administrateur technique lui-même.",
+      "references": [
+        "DECISION-066 (point 5 : compte désigné qui statue ou est informé) ; DECISION-072",
+        "IIA Three Lines Model 2020 principe 2 (l'organe de gouvernance est informé) : à vérifier"
+      ],
+      "consequence": "Quand le seul contrôle possible est de prévenir quelqu'un, personne n'est prévenu. Les décisions sans second regard n'ont aucun destinataire.",
+      "detection": {
+        "regle": "NON ÉVALUABLE aujourd'hui : le compte « gérant désigné » n'existe pas. Règle cible : si le panel signale au moins un principe de gravité élevée non respecté et qu'aucun gérant désigné n'existe : violation. Substitut provisoire : aucun.",
+        "donnees": [],
+        "donneesManquantes": ["compte gérant désigné (à créer)", "notifications de gouvernance obligatoires (catalogue notifications à étendre)"],
+        "niveauConfiance": "non évaluable"
+      },
+      "objets": [
+        {"type": "paramètre", "libelle": "Gérant désigné : absent / présent"},
+        {"type": "utilisateur", "libelle": "Compte désigné, administrateur technique si c'est la même personne"}
+      ],
+      "gravite": "moyenne",
+      "indications": {
+        "tpe": {"niveau": "exige", "action": "Désigner le gérant ou un conseil de confiance, qui reçoit un message à chaque décision sans second regard et chaque vacance de rôle clé."},
+        "pme": {"niveau": "exige", "action": "Désigner le directeur général, avec un second destinataire (directeur financier ou juridique)."},
+        "grande_entreprise": {"niveau": "recommande", "action": "Remplacer par le Comité des risques et l'Audit, qui reçoivent ces informations par le circuit normal. Le gérant désigné reste un destinataire de secours."}
+      }
+    },
+    {
+      "id": "GOV-REG-01",
+      "titre": "Le régime « structure à une personne » est déclaré, affiché et levé à l'arrivée d'un tiers",
+      "enonce": "Le régime dégradé est déclaré par l'éditeur, jamais par le client lui-même, affiché sur chaque décision et rapport (« sans second regard »), et levé définitivement dès qu'une deuxième personne arrive. Son seuil de levée est réglable par le client dans une plage fixée par l'éditeur.",
+      "references": [
+        "DECISION-059 (q117) ; DECISION-066 ; réponse PO sur guard:onePersonRegime",
+        "Mémoire A13, principe 49 : régime dégradé honnête plutôt que faux tiers"
+      ],
+      "consequence": "Soit le client contourne l'outil avec un faux deuxième compte, soit le régime reste actif alors qu'un tiers existe et la double validation n'est plus exigée.",
+      "detection": {
+        "regle": "NON ÉVALUABLE aujourd'hui : le drapeau de régime n'est pas codé. Règle cible : (a) régime actif et plus d'une personne active avec rôle de gouvernance (devrait être levé). (b) régime inactif, une seule personne active avec rôle, et des auto-validations constatées (GOV-SOD-01) : régime probablement nécessaire mais non déclaré, donc client contraint au contournement.",
+        "donnees": ["user_roles", "audit_logs"],
+        "donneesManquantes": ["drapeau de régime et date de déclaration/levée (DECISION-059 à implémenter)"],
+        "niveauConfiance": "non évaluable"
+      },
+      "objets": [
+        {"type": "paramètre", "libelle": "Régime : déclaré / non déclaré / à lever"},
+        {"type": "nombre", "libelle": "Personnes actives avec rôle de gouvernance"},
+        {"type": "utilisateur", "libelle": "Personne unique"}
+      ],
+      "gravite": "moyenne",
+      "indications": {
+        "tpe": {"niveau": "exige", "action": "Régime déclaré à l'ouverture, affiché partout. Revue annuelle : « avons-nous une deuxième personne, interne ou externe, qui peut regarder ? »."},
+        "pme": {"niveau": "exige", "action": "Le régime ne doit pas exister. Si le panel le détecte encore, c'est une anomalie à lever : nommer un second Risk Manager ou un validateur de repli."},
+        "grande_entreprise": {"niveau": "exige", "action": "Le régime ne doit pas exister. Sa détection est un incident de gouvernance à escalader au Comité."}
+      }
+    }
+  ],
+
+  "classementTaille": {
+    "statut": "PROPOSITION. Tous les seuils sont à valider PO (question TAILLE-1).",
+    "avertissement": "Ce classement mesure la maturité de gouvernance visible dans l'outil (qui a un rôle), pas l'effectif réel de l'entreprise. Une entreprise de 300 personnes qui vient de démarrer l'outil avec 3 comptes sera classée TPE tant qu'elle n'a pas déployé ses rôles : c'est voulu, car l'indication utile est celle qui correspond à ce que l'outil voit.",
+    "indicateurs": [
+      {"id": "P", "libelle": "Personnes actives ayant au moins un rôle", "calcul": "Utilisateurs non suspendus (deletedAt null) ayant au moins une ligne user_roles non révoquée, ou à défaut un rôle dans users.roles. Un humain avec plusieurs rôles compte une fois."},
+      {"id": "RM", "libelle": "Risk Managers actifs", "calcul": "Membres actifs du groupe RISK_MANAGER"},
+      {"id": "COM", "libelle": "Membres actifs du Comité", "calcul": "Membres actifs du groupe RISK_COMMITTEE"},
+      {"id": "AUD", "libelle": "Membres actifs de l'Audit", "calcul": "Membres actifs du groupe AUDIT"},
+      {"id": "PO", "libelle": "Propriétaires de processus distincts", "calcul": "Nombre de valeurs distinctes non vides de processes.owner pour les processus actifs. Texte libre aujourd'hui : un même nom écrit de deux façons compte deux fois. Indicateur secondaire, jamais seul décisif."},
+      {"id": "DEP", "libelle": "Départements actifs", "calcul": "Nombre de départements non archivés"}
+    ],
+    "regles": [
+      {"ordre": 1, "classe": "TPE", "condition": "P <= 10 ET RM <= 1 ET COM = 0 ET AUD = 0", "seuil": "A valider PO"},
+      {"ordre": 2, "classe": "GRANDE_ENTREPRISE", "condition": "P >= 100 OU (RM >= 3 ET COM >= 3 ET AUD >= 2)", "seuil": "A valider PO"},
+      {"ordre": 3, "classe": "PME", "condition": "tous les autres cas", "seuil": "A valider PO"}
+    ],
+    "signauxIncertitude": [
+      {"id": "INC-1", "condition": "Une valeur est à moins de 20 % d'un seuil (ex. P entre 8 et 12, ou entre 80 et 120)", "effet": "Classement affiché comme 'proche de la limite'"},
+      {"id": "INC-2", "condition": "Signaux contradictoires : P <= 10 mais AUD >= 1 ET COM >= 1 ; ou P >= 50 mais RM <= 1 ET COM = 0 ET AUD = 0", "effet": "Classement 'à confirmer'"},
+      {"id": "INC-3", "condition": "Aucune personne active avec rôle (P = 0) ou groupes absents (données non lisibles)", "effet": "Classement 'non évaluable'"},
+      {"id": "INC-4", "condition": "Indicateur PO non fiable (propriétaires non rattachés à un compte)", "effet": "PO n'est jamais utilisé seul ; affiché à titre indicatif"}
+    ],
+    "affichageSiIncertain": {
+      "regle": "Ne pas choisir en silence. Mettre en surbrillance la colonne retenue avec la mention « classement à confirmer » ET entourer la colonne voisine plausible (TPE/PME ou PME/Grande) avec « proche de ce profil ». Afficher les valeurs de P, RM, COM, AUD qui ont conduit au classement, pour que le PO ou le client voie pourquoi. Si non évaluable : aucune surbrillance, les trois colonnes en neutre avec le message « le nombre de personnes ayant un rôle ne permet pas encore de situer votre structure ».",
+      "priseEnCompteParPrincipe": "Pour un principe de gravité élevée non respecté, afficher en cas d'incertitude l'indication la plus stricte des deux colonnes plausibles comme 'à viser', et l'autre comme 'minimum acceptable'.",
+      "surcharge": "Option à décider par le PO : une taille déclarée par l'éditeur à l'ouverture du compte (comme le régime DECISION-059) prime sur le calcul et reste affichée avec la mention « déclarée »."
+    },
+    "exemplesIllustratifs": [
+      {"cas": "P=2, RM=1, COM=0, AUD=0", "classe": "TPE", "note": "Exemple fictif de lecture de la règle, pas une donnée client."},
+      {"cas": "P=25, RM=2, COM=3, AUD=1", "classe": "PME", "note": "Exemple fictif."},
+      {"cas": "P=140, RM=4, COM=5, AUD=2", "classe": "GRANDE_ENTREPRISE", "note": "Exemple fictif."},
+      {"cas": "P=9, RM=1, COM=0, AUD=1", "classe": "PME (INC-2 : à confirmer)", "note": "Exemple fictif : un Audit seul dans une petite structure."}
+    ]
+  },
+
+  "pointRouvert_guardNotLastRiskManager": {
+    "verbatimPO": "Comment gérons-nous le fait qu'il y ait une démission et s'il y avait un seul Risk Manager ? Comment gérons-nous l'intérim ? Je pense que c'est vers ce point que nous devons aller car des situations existent où le groupe peut être vide si on ne veut pas faire utiliser des accès à plusieurs personnes.",
+    "statut": "PROPOSITION, non arbitrée. Lié à GOV-RISK-02 et DECISION-066 (ne jamais bloquer).",
+    "faits": [
+      "Le code interdit de retirer ou suspendre le dernier Risk Manager actif (garde guard:notLastRiskManager).",
+      "Le groupe Risk Manager ne peut pas être cumulé avec Audit (code) ni avec Comité (code, réglable en proposition) : l'intérimaire ne peut donc pas venir de l'Audit.",
+      "Ni intérim, ni suppléant, ni vacance déclarée, ni gérant désigné n'existent dans le modèle."
+    ],
+    "contrainteCentrale": "Le départ d'un salarié doit couper son accès immédiatement. Un garde-fou qui force à garder son compte actif pour que l'outil fonctionne est un risque de sécurité pire que la vacance.",
+    "options": [
+      {
+        "id": "INT-A",
+        "titre": "Intérim désigné à l'avance",
+        "description": "Chaque Risk Manager (ou le gérant) nomme à l'avance une personne intérimaire, sans lui donner de droit tant que le titulaire est en poste. Au départ du titulaire, l'intérimaire reçoit le rôle pour une durée bornée (90 jours proposés, à valider PO), marquée « intérim ». Il ne valide jamais ses propres actes. Le gérant est informé.",
+        "avantages": ["continuité immédiate", "l'accès du partant est coupé le jour même", "responsabilité claire et datée"],
+        "limites": ["exige que l'intérim ait été désigné avant, ce qui n'est pas toujours fait", "l'intérimaire peut être le seul autre administrateur : cumul admin + Risk Manager visible", "ne peut venir de l'Audit"]
+      },
+      {
+        "id": "INT-B",
+        "titre": "Suppléant permanent (deuxième Risk Manager)",
+        "description": "Le client a toujours au moins deux Risk Managers. Le panel signale tout groupe à un seul membre comme point de défaillance unique (GOV-RISK-01 / GOV-RISK-02).",
+        "avantages": ["solution saine", "pas de régime spécial au départ"],
+        "limites": ["contraire à l'objectif du PO de ne pas obliger un petit client à multiplier les accès", "pousse au faux deuxième compte"]
+      },
+      {
+        "id": "INT-C",
+        "titre": "Repli sur le gérant ou l'administrateur",
+        "description": "À défaut d'intérim, le gérant désigné (ou l'administrateur, cumul visible) reprend les actes de la fonction risque, en régime déclaré : motif, seconde confirmation, marquage « fonction risque assurée par défaut », ratification dès qu'un Risk Manager revient.",
+        "avantages": ["ne bloque jamais", "cohérent avec DECISION-066"],
+        "limites": ["l'administrateur technique concentre les pouvoirs", "décisions de méthode sans second regard"]
+      },
+      {
+        "id": "INT-D",
+        "titre": "Vacance déclarée et groupe vide toléré",
+        "description": "Retirer ou suspendre le dernier Risk Manager reste possible avec motif et seconde confirmation. L'outil affiche « fonction risque vacante » dans le panel (GOV-RISK-02), suspend seulement les décisions de méthode qui exigent un Risk Manager, informe le gérant, et fixe une échéance de résorption (60 jours proposés, à valider PO). Aucun compte d'ancien salarié n'est conservé.",
+        "avantages": ["respect strict du principe « ne jamais bloquer »", "aucun faux compte", "vacance visible plutôt que cachée"],
+        "limites": ["pendant la vacance, des actes de gouvernance sont suspendus", "il faut décider quels actes restent possibles (lecture, saisie des risques, exécution de contrôles)"]
+      }
+    ],
+    "recommandation": {
+      "choix": "INT-D comme plancher, INT-A comme voie préférée, INT-C comme dernier repli.",
+      "justification": "Au moment de retirer le dernier Risk Manager, l'outil propose dans l'ordre : (1) nommer un intérimaire parmi les comptes actifs hors Audit, avec fin d'intérim obligatoire ; (2) à défaut, déclarer la vacance, le gérant désigné étant informé ou statuant pour les seuls actes urgents ; (3) dans tous les cas, l'accès de la personne qui part est coupé. Le garde-fou strict actuel devient le défaut ; il se lève seulement par l'une de ces deux issues, avec motif, seconde confirmation, trace. La suppléance permanente (INT-B) devient une indication du panel (GOV-RISK-01 et GOV-RISK-02), jamais une obligation.",
+      "gardeFous": [
+        "L'intérimaire ne valide pas ses propres actes (GOV-SOD-01) et son intérim a une date de fin obligatoire.",
+        "Un intérim sans fin devient une exception permanente (mandat §32) : le panel le signale à l'échéance.",
+        "L'intérimaire ne peut pas être membre de l'Audit (invariant RM + Audit).",
+        "Le choix de l'intérimaire par le titulaire partant est confirmé par le gérant : le partant ne désigne pas seul son remplaçant.",
+        "Pendant la vacance, les décisions de méthode (activation de Dispositif, appétence) restent suspendues, sauf régime déclaré."
+      ],
+      "etat": "Recommandation non arbitrée, soumise au PO en question INTERIM-1."
+    }
+  },
+
+  "questionsCockpit": [
+    {
+      "id": "TAILLE-1",
+      "titre": "Comment classer une entreprise en TPE, PME ou grande entreprise d'après ses rôles ?",
+      "contexte": "Le panel met en surbrillance l'indication qui convient. Proposition : TPE si 10 personnes ou moins ont un rôle, un seul Risk Manager, ni Comité ni Audit ; grande entreprise si 100 personnes ou plus, ou 3 Risk Managers, 3 membres de Comité et 2 d'Audit ; PME dans les autres cas. Seuils à valider.",
+      "options": [
+        {"id": "A", "libelle": "Seuils proposés (10 personnes / 100 personnes / structure complète), classement calculé"},
+        {"id": "B", "libelle": "Seuils plus bas (5 / 50) pour être plus exigeant"},
+        {"id": "C", "libelle": "Taille déclarée à l'ouverture du compte par l'éditeur, le calcul ne sert qu'à signaler un écart"},
+        {"id": "D", "libelle": "Seuils proposés (A), avec taille déclarée facultative qui prime si elle existe"}
+      ],
+      "recommandation": "D : le calcul sert par défaut, une taille déclarée par l'éditeur peut le corriger, et la surbrillance indique toujours quand le classement est incertain."
+    },
+    {
+      "id": "PRINCIPES-1",
+      "titre": "Quels principes le panel affiche-t-il par défaut, et avec quelle exigence ?",
+      "contexte": "19 principes sont proposés. Les 9 invariants non configurables du PO (DECISION-063) ne sont pas négociables. Pour une TPE, afficher 19 points non respectés peut décourager ; pour une grande entreprise, masquer un principe serait grave.",
+      "options": [
+        {"id": "A", "libelle": "Tous les principes affichés pour tous, avec le niveau (exigé, recommandé, informatif) propre à chaque taille"},
+        {"id": "B", "libelle": "Seulement les principes de gravité élevée pour une TPE, tous pour les autres"},
+        {"id": "C", "libelle": "Le client choisit ceux qu'il active, défaut = tous"}
+      ],
+      "recommandation": "A, avec tri par gravité puis par niveau d'exigence : rien n'est caché, mais une TPE voit d'abord ce qui est vraiment exigé pour elle."
+    },
+    {
+      "id": "INTERIM-1",
+      "titre": "Démission du seul Risk Manager : que fait l'outil ?",
+      "contexte": "Aujourd'hui, on ne peut pas retirer le dernier Risk Manager. Votre principe est de ne jamais bloquer le client. Le départ d'un salarié exige de couper son accès sans attendre son remplaçant.",
+      "options": [
+        {"id": "INT-A", "libelle": "Intérim désigné à l'avance, bornée dans le temps"},
+        {"id": "INT-B", "libelle": "Suppléant permanent obligatoire (deuxième Risk Manager)"},
+        {"id": "INT-C", "libelle": "Repli sur le gérant désigné ou l'administrateur, en régime déclaré"},
+        {"id": "INT-D", "libelle": "Vacance déclarée : le groupe peut être vide, signalé dans le panel, avec échéance"}
+      ],
+      "recommandation": "INT-D comme plancher (on ne bloque jamais), INT-A comme voie préférée, INT-C en dernier repli. INT-B reste une indication du panel, pas une obligation."
+    },
+    {
+      "id": "PANEL-1",
+      "titre": "Un principe non respecté peut-il être accepté formellement, avec une date ?",
+      "contexte": "Le panel liste ce qui n'est pas respecté. Sans suite, la liste reste rouge à vie et le client s'y habitue. Une acceptation datée (qui, pourquoi, jusqu'à quand, qui relit) permet de distinguer un manque oublié d'un manque assumé.",
+      "options": [
+        {"id": "A", "libelle": "Affichage seul, aucune acceptation"},
+        {"id": "B", "libelle": "Acceptation datée par le gérant désigné (motif, durée maximale 12 mois, revue à l'échéance)"},
+        {"id": "C", "libelle": "Acceptation datée, avec seconde confirmation si un tiers existe (Audit ou Comité)"}
+      ],
+      "recommandation": "C : jamais d'acceptation implicite ; si aucun tiers n'existe, le gérant désigné accepte avec motif et date de fin ; l'acceptation expirée remet le principe en rouge."
+    },
+    {
+      "id": "DONNEES-1",
+      "titre": "Livre-t-on le panel avec les principes détectables seulement, ou après avoir créé les données manquantes ?",
+      "contexte": "Sur 19 principes, 3 ne sont pas évaluables aujourd'hui (Analyse, gérant désigné, régime une personne) et 3 le sont partiellement (traçabilité sans marqueur, propriétaires de processus en texte libre sans champion, votes du Comité à vérifier). Le champion de risque et le lien processus-compte demandent une donnée nouvelle.",
+      "options": [
+        {"id": "A", "libelle": "Panel V1 avec les principes détectables ; les autres affichent « non évaluable : donnée absente »"},
+        {"id": "B", "libelle": "Créer d'abord le gérant désigné et le marqueur « sans seconde validation », puis livrer"},
+        {"id": "C", "libelle": "Tout créer avant de livrer le panel"}
+      ],
+      "recommandation": "B : ces deux données servent presque tous les principes (traçabilité, régime, intérim) ; le champion de risque et l'Analyse suivent leur chantier propre et restent « non évaluables » en V1."
+    }
+  ],
+
+  "synthese": {
+    "nombrePrincipes": 19,
+    "repartitionGravite": {"elevee": 10, "moyenne": 9, "faible": 0},
+    "evaluablesAujourdhui": ["GOV-SOD-01 (historique)", "GOV-SOD-02", "GOV-SOD-03", "GOV-SOD-04", "GOV-SOD-05", "GOV-RISK-01", "GOV-RISK-02 (effectifs seulement)", "GOV-AUD-01", "GOV-AUD-02", "GOV-COM-01", "GOV-APP-01 (changements)", "GOV-OWN-01", "GOV-ACC-01 (hors comptes dormants)"],
+    "partiellementEvaluables": ["GOV-COM-02 (à vérifier)", "GOV-OWN-02", "GOV-TRC-01"],
+    "nonEvaluables": ["GOV-OWN-03", "GOV-TRC-02", "GOV-REG-01"]
+  }
+}
