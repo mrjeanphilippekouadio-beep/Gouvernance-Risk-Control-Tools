@@ -173,6 +173,7 @@ export interface ConsolidatedReport {
 
 export interface AppetiteVsResidualRow {
   subCategory: string;
+  /** q145: category id of the row (null for legacy free-label evaluations with no matching entry). */
   entity: string | null;
   threshold: number | null;
   maxResidualScore: number | null;
@@ -181,6 +182,8 @@ export interface AppetiteVsResidualRow {
   riskIds: string[];
   /** B-6b: Dispositif version the threshold comes from (present only when the Dispositif is wired; null = none applicable). */
   frameworkVersionId?: string | null;
+  /** q145: category id of the row (Dispositif wired only; null for a legacy free-label evaluation with no matching entry). */
+  subCategoryId?: string | null;
 }
 
 export interface KriConsolidatedReport {
@@ -664,6 +667,7 @@ export class DashboardService {
 
     interface Group {
       subCategory: string;
+      subCategoryId: string | null;
       entity: string | null;
       versionId: string | null;
       threshold: number | null;
@@ -671,13 +675,20 @@ export class DashboardService {
       riskIds: string[];
     }
     const groups = new Map<string, Group>();
-    const keyOf = (versionId: string | null, subCategory: string, entity: string | null) =>
-      `${versionId ?? ""}::${subCategory}::${entity ?? ""}`;
-    const addGroup = (versionId: string | null, subCategory: string, entity: string | null, threshold: number | null) => {
-      const key = keyOf(versionId, subCategory, entity);
+    // q145: a group is keyed by the category id when known (two homonymous sub-categories stay apart), else by label.
+    const keyOf = (versionId: string | null, subCategory: string, subCategoryId: string | null, entity: string | null) =>
+      `${versionId ?? ""}::${subCategoryId?.toLowerCase() ?? subCategory}::${entity ?? ""}`;
+    const addGroup = (
+      versionId: string | null,
+      subCategory: string,
+      subCategoryId: string | null,
+      entity: string | null,
+      threshold: number | null,
+    ) => {
+      const key = keyOf(versionId, subCategory, subCategoryId, entity);
       let group = groups.get(key);
       if (!group) {
-        group = { subCategory, entity, versionId, threshold, scores: [], riskIds: [] };
+        group = { subCategory, subCategoryId, entity, versionId, threshold, scores: [], riskIds: [] };
         groups.set(key, group);
       }
       return group;
@@ -695,21 +706,29 @@ export class DashboardService {
       };
       for (const s of scored) {
         const applicable = await applicableFor(s.risk.processId ?? null);
-        const entry = applicable ? findAppetite(applicable.version.appetiteThresholds, s.evaluation.subCategory, s.evaluation.entity) : null;
-        const group = addGroup(applicable?.version.id ?? null, s.evaluation.subCategory, s.evaluation.entity, entry?.threshold ?? null);
+        const entry = applicable
+          ? findAppetite(applicable.version.appetiteThresholds, s.evaluation.subCategory, s.evaluation.entity, s.evaluation.subCategoryId)
+          : null;
+        const group = addGroup(
+          applicable?.version.id ?? null,
+          s.evaluation.subCategory,
+          s.evaluation.subCategoryId ?? entry?.subCategoryId ?? null,
+          s.evaluation.entity,
+          entry?.threshold ?? null,
+        );
         group.scores.push(s.score);
         group.riskIds.push(s.risk.id);
       }
       // Appetites with no risk yet: those of the default Dispositif (no process).
       const def = await applicableFor(null);
-      for (const a of def?.version.appetiteThresholds ?? []) addGroup(def!.version.id, a.subCategory, a.entity, a.threshold);
+      for (const a of def?.version.appetiteThresholds ?? []) addGroup(def!.version.id, a.subCategory, a.subCategoryId, a.entity, a.threshold);
     } else {
       const appetites = await this.riskAppetites.list(actor.tenantId, { activeOnly: true });
-      for (const a of appetites) addGroup(null, a.subCategory, a.entity, a.threshold);
+      for (const a of appetites) addGroup(null, a.subCategory, null, a.entity, a.threshold);
       for (const s of scored) {
         const entity = s.evaluation.entity;
         const known = appetites.find((a) => a.subCategory === s.evaluation.subCategory && (a.entity ?? null) === entity);
-        const group = addGroup(null, s.evaluation.subCategory, entity, known?.threshold ?? null);
+        const group = addGroup(null, s.evaluation.subCategory, null, entity, known?.threshold ?? null);
         group.scores.push(s.score);
         group.riskIds.push(s.risk.id);
       }
@@ -728,7 +747,7 @@ export class DashboardService {
         exceedanceCount,
         exceeded: threshold !== null && maxResidualScore !== null && maxResidualScore > threshold,
         riskIds: group.riskIds,
-        ...(this.frameworks ? { frameworkVersionId: group.versionId } : {}),
+        ...(this.frameworks ? { frameworkVersionId: group.versionId, subCategoryId: group.subCategoryId } : {}),
       });
     }
 

@@ -20,6 +20,7 @@ interface RiskEvaluationRow {
   status: RiskEvaluation["status"];
   evaluator_id: string;
   sub_category: string;
+  sub_category_id: string | null;
   entity: string | null;
   evaluation_mode: RiskEvaluation["evaluationMode"];
   rating_scale_id: string | null;
@@ -59,6 +60,7 @@ function toDomain(row: RiskEvaluationRow): RiskEvaluation {
     status: row.status,
     evaluatorId: row.evaluator_id,
     subCategory: row.sub_category,
+    subCategoryId: row.sub_category_id,
     entity: row.entity,
     evaluationMode: row.evaluation_mode,
     ratingScaleId: row.rating_scale_id,
@@ -142,8 +144,8 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
       `INSERT INTO risk_evaluations
          (tenant_id, risk_id, evaluation_type, status, evaluator_id, sub_category, entity, evaluation_mode,
           risk_framework_version_id, rating_scale_id, rating_scale_version,
-          committee_evaluation_min_score, committee_evaluation_enforced, committee_treatment_min_score)
-       VALUES ($1, $2, $3, 'BROUILLON', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          committee_evaluation_min_score, committee_evaluation_enforced, committee_treatment_min_score, sub_category_id)
+       VALUES ($1, $2, $3, 'BROUILLON', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       [
         input.tenantId,
@@ -159,6 +161,7 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
         snap?.committeeEvaluationMinScore ?? null,
         snap?.committeeEvaluationEnforced ?? null,
         snap?.committeeTreatmentMinScore ?? null,
+        input.subCategoryId ?? null,
       ],
     ).catch((err: unknown) => {
       // Migration 061: the Dispositif version was archived between its resolution and this insert — a race, not a bug.

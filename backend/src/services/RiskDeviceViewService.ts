@@ -148,6 +148,7 @@ export class RiskDeviceViewService {
     risk: Risk,
     subCategory: string,
     entity: string | null,
+    subCategoryId: string | null,
   ): Promise<RiskAppetite | null> {
     if (!this.frameworks || !this.ratingScales) return null;
     const applicable = await resolveApplicableVersion(
@@ -155,7 +156,7 @@ export class RiskDeviceViewService {
       tenantId,
       risk.processId ?? null,
     );
-    const entry = applicable ? findAppetite(applicable.version.appetiteThresholds, subCategory, entity) : null;
+    const entry = applicable ? findAppetite(applicable.version.appetiteThresholds, subCategory, entity, subCategoryId) : null;
     if (!applicable || !entry) return null;
     const at = applicable.version.activatedAt ?? applicable.version.createdAt;
     return {
@@ -219,6 +220,7 @@ export class RiskDeviceViewService {
             risk,
             latestAuthoritativeEvaluation.subCategory,
             latestAuthoritativeEvaluation.entity,
+            latestAuthoritativeEvaluation.subCategoryId,
           )
         : await this.riskAppetites.getApplicable(
             actor,
