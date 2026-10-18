@@ -36,11 +36,15 @@ describe("q133 withResolvedAppetite (service, fake category repository scoped by
 
   // QA-064-01 (MINOR): the activation-time check (assertSubCategories) only tests EXISTENCE, not active/sub-category, so a category
   // deactivated or made top-level between the draft save and the activation request is accepted, as is a legacy free-text entry.
-  it.fails("QA-064-01: activation request re-checks that the category is still active (F-FW-01 'catégorie désactivée entre le choix et l'activation')", async () => {
+  it("QA-064-01: activation request re-checks that the category is still active (F-FW-01 'catégorie désactivée entre le choix et l'activation')", async () => {
     const check = (svc as unknown as { assertSubCategories(t: string, e: unknown[]): Promise<void> }).assertSubCategories.bind(svc);
     await expect(check("T1", [{ subCategoryId: "off" }])).rejects.toThrow();
   });
-  it.fails("QA-064-01b: activation request refuses a legacy entry without subCategoryId", async () => {
+  it("F-FW-01-R: activation request refuses a stored label that differs from the category's current name", async () => {
+    const check = (svc as unknown as { assertSubCategories(t: string, e: unknown[]): Promise<void> }).assertSubCategories.bind(svc);
+    await expect(check("T1", [{ subCategory: "Libellé périmé", subCategoryId: "sub" }])).rejects.toThrow(/réenregistrez/);
+  });
+  it("QA-064-01b: activation request refuses a legacy entry without subCategoryId", async () => {
     const check = (svc as unknown as { assertSubCategories(t: string, e: unknown[]): Promise<void> }).assertSubCategories.bind(svc);
     await expect(check("T1", [{ subCategory: "texte libre", subCategoryId: null }])).rejects.toThrow();
   });

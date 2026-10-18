@@ -796,16 +796,12 @@ export class RiskFrameworkService {
     return { ...p, appetiteThresholds: p.appetiteThresholds.map((e) => ({ ...e, subCategory: names.get(e.subCategoryId!)! })) };
   }
 
-  /** Activation request: legacy drafts may still carry a free-text entry (no id); only the ids that exist are checked. */
+  /** Activation request / bootstrap (q133): same rule as on write; a legacy free-text draft must be fixed before activation. */
   private async assertSubCategories(tenantId: string, entries: AppetiteThresholdEntry[]): Promise<void> {
-    for (const e of entries) {
-      if (!e.subCategoryId) continue;
-      if (!this.riskCategories) {
-        throw new ValidationError("Risk category validation is not available: RiskCategoryRepository is not configured");
-      }
-      if (!(await this.riskCategories.getById(tenantId, e.subCategoryId))) {
-        throw new ValidationError(`Risk category ${e.subCategoryId} does not exist in this tenant`);
-      }
+    const resolved = (await this.withResolvedAppetite(tenantId, { appetiteThresholds: entries })).appetiteThresholds!;
+    // F-FW-01-R: a stored label that differs from the category's current name is refused, not silently rewritten.
+    if (resolved.some((r, i) => r.subCategory !== entries[i]!.subCategory)) {
+      throw new ValidationError("Un libellé de seuil d'appétence ne correspond plus à sa catégorie : rouvrez l'onglet « Seuils d'appétence » du brouillon et réenregistrez");
     }
   }
 
