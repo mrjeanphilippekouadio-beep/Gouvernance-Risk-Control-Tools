@@ -14,6 +14,7 @@ import { GovernanceDesignationService } from "../src/services/GovernanceDesignat
 import { OrganizationProfileService } from "../src/services/OrganizationProfileService.js";
 import { ProcessService } from "../src/services/ProcessService.js";
 import { ConfigService } from "../src/services/ConfigService.js";
+import { PostgresSelfValidationPolicyRequestRepository } from "../src/infrastructure/database/postgres/PostgresSelfValidationPolicyRequestRepository.js";
 import { createLastSeenRecorder } from "../src/infrastructure/identity/lastSeen.js";
 import type { GovernanceDesignation } from "../src/domain/entities/GovernanceDesignation.js";
 import type { GovernanceDesignationRepository } from "../src/domain/repositories/GovernanceDesignationRepository.js";
@@ -575,8 +576,8 @@ describe.skipIf(!enabled)("QA-panel real PostgreSQL", () => {
     const a = await tenantWorld();
     const b = await tenantWorld();
     const adminA = await a.user("admin");
-    const svc = new ConfigService(new PostgresConfigRepository(pool), new PostgresAuditRepository(pool), undefined, undefined, new PostgresGovernanceQueries(pool));
-    const after = await svc.setSelfValidationPolicy(asUser(a.tenant, adminA, ["config.read", "config.selfvalidation.set"]), "DOUBLE_CONFIRMATION", "structure à une personne", "r");
+    const svc = new ConfigService(new PostgresConfigRepository(pool), new PostgresAuditRepository(pool), undefined, undefined, new PostgresGovernanceQueries(pool), new PostgresSelfValidationPolicyRequestRepository(pool));
+    const { config: after } = await svc.setSelfValidationPolicy(asUser(a.tenant, adminA, ["config.read", "config.selfvalidation.set"]), "DOUBLE_CONFIRMATION", "structure à une personne", "r");
     expect(after.selfValidationPolicy).toBe("DOUBLE_CONFIRMATION");
     expect(await rows(`SELECT 1 FROM configs WHERE tenant_id=$1 AND self_validation_policy='DOUBLE_CONFIRMATION'`, [b.tenant])).toEqual([]);
     const a1 = await rows<{ governance_exception: string | null }>(`SELECT governance_exception FROM audit_log WHERE tenant_id=$1 AND entity_type='Config'`, [a.tenant]);

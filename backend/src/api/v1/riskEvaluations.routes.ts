@@ -216,7 +216,6 @@ export function riskEvaluationsRouter(
         req.params["id"] as string,
         body.comment ?? null,
         req.requestId,
-        body.governanceConfirmation,
       );
       res.json({ data: await indep(req.user.tenantId, evaluation) });
     } catch (err) {

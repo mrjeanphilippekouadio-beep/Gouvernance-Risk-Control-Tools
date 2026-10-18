@@ -588,7 +588,7 @@ export class RiskEvaluationService {
    * above the same threshold when committeeEvaluationEnforced is true,
    * so this is no longer "purely additive" with no effect on validate().
    */
-  async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string, confirmation?: GovernanceConfirmation): Promise<RiskEvaluation> {
+  async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string): Promise<RiskEvaluation> {
     requirePermission(actor, "riskevaluation.validate.committee");
     const before = await this.get(actor, id);
 
@@ -607,13 +607,11 @@ export class RiskEvaluationService {
         `Committee validation only applies to residual scores at or above the committee threshold (${minScore}) (this evaluation scored ${before.residualScore})`,
       );
     }
-    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
-      isSelf: before.evaluatorId === actor.userId,
-      permission: "riskevaluation.validate.committee",
-      makerIds: [before.evaluatorId],
-      refusal: "An evaluator cannot validate their own risk evaluation, including committee validation",
-      confirmation,
-    });
+    // q159 (DECISION-078): committee validations are always collegial, outside the self-validation policy
+    // (no DOUBLE_CONFIRMATION): the evaluator never validates their own evaluation here.
+    if (before.evaluatorId === actor.userId) {
+      throw new ForbiddenError("An evaluator cannot validate their own risk evaluation, including committee validation");
+    }
 
     const after = await this.evaluations.recordCommitteeValidation(actor.tenantId, id, actor.userId, comment);
 
@@ -624,10 +622,9 @@ export class RiskEvaluationService {
       entityId: id,
       action: "VALIDATE",
       oldValue: before,
-      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
+      newValue: after,
       reason: comment,
       requestId,
-      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
     });
 
     return after;

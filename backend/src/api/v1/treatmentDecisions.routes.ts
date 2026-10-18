@@ -88,7 +88,6 @@ export function treatmentDecisionsRouter(treatmentDecisionService: TreatmentDeci
         req.params["id"] as string,
         body.comment ?? null,
         req.requestId,
-        body.governanceConfirmation,
       );
       res.json({ data: await indep(req.user.tenantId, decision) });
     } catch (err) {

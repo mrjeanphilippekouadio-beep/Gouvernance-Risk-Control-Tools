@@ -4,8 +4,9 @@ import cors from "cors";
 import { env, getLocalAuthUsers } from "./config/env.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { pool } from "./infrastructure/database/pool.js";
-import { createLastSeenRecorder, withLastSeen } from "./infrastructure/identity/lastSeen.js";
+import { createLastSeenRecorder } from "./infrastructure/identity/lastSeen.js";
 import { assertProductionDatabaseRole } from "./infrastructure/database/postgres/databaseRoleSecurity.js";
+import { PostgresSelfValidationPolicyRequestRepository } from "./infrastructure/database/postgres/PostgresSelfValidationPolicyRequestRepository.js";
 import { PostgresRiskRepository } from "./infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresAuditRepository } from "./infrastructure/database/postgres/PostgresAuditRepository.js";
 import { PostgresEvidenceRepository } from "./infrastructure/database/postgres/PostgresEvidenceRepository.js";
@@ -418,7 +419,14 @@ const dashboardService = new DashboardService(
   riskFrameworkRepository,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
-const configService = new ConfigService(configRepository, auditRepository, ratingScaleRepository, riskFrameworkRepository, governanceQueries);
+const configService = new ConfigService(
+  configRepository,
+  auditRepository,
+  ratingScaleRepository,
+  riskFrameworkRepository,
+  governanceQueries,
+  new PostgresSelfValidationPolicyRequestRepository(pool),
+);
 const moduleToggleService = new ModuleToggleService(moduleToggleRepository, auditRepository);
 const tenantService = new TenantService(tenantRepository, auditRepository);
 const regulatoryFrameworkService = new RegulatoryFrameworkService(regulatoryFrameworkRepository, auditRepository);
@@ -482,16 +490,18 @@ const lookupMembership = async (email: string) => {
   };
 };
 
-const lookupMembershipSeen = withLastSeen(lookupMembership, createLastSeenRecorder(pool));
+// q155 (DECISION-077) : last_seen_at = dernière CONNEXION, écrite à l'identification seulement.
+const recordLastSeen = createLastSeenRecorder(pool);
 
 const identityProvider =
   env.AUTH_PROVIDER === "google"
-    ? new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID!, lookupMembershipSeen)
+    ? new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID!, lookupMembership, recordLastSeen)
     : new LocalIdentityProvider(
         getLocalAuthUsers(),
         env.LOCAL_AUTH_TOKEN_SECRET!,
         env.LOCAL_AUTH_TOKEN_TTL_SECONDS,
-        lookupMembershipSeen,
+        lookupMembership,
+        recordLastSeen,
       );
 
 if (env.AUTH_PROVIDER === "local") {

@@ -30,6 +30,8 @@ const UpdateSelfValidationPolicyBody = z.object({
   reason: reasonText(),
 });
 
+const RejectSelfValidationPolicyBody = z.object({ reason: reasonText() });
+
 /** PUT /config and PUT /config/appetite-mode answer 410 (DECISION-054); DIV-06 evaluation-mode and Lot A committee settings stay. */
 export function configRouter(configService: ConfigService): Router {
   const router = Router();
@@ -100,8 +102,35 @@ export function configRouter(configService: ConfigService): Router {
   router.put("/self-validation-policy", async (req, res, next) => {
     try {
       const body = UpdateSelfValidationPolicyBody.parse(req.body);
-      const config = await configService.setSelfValidationPolicy(req.user, body.policy, body.reason, req.requestId);
-      res.json({ data: config });
+      const { config, pendingRequest } = await configService.setSelfValidationPolicy(req.user, body.policy, body.reason, req.requestId);
+      // 202: the relaxation waits for a second person; `data` is the unchanged config.
+      if (pendingRequest) res.status(202).json({ data: config, pendingRequest });
+      else res.json({ data: config });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/self-validation-policy/request", async (req, res, next) => {
+    try {
+      res.json({ data: await configService.getPendingSelfValidationPolicyRequest(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/self-validation-policy/requests/:id/approve", async (req, res, next) => {
+    try {
+      res.json({ data: await configService.approveSelfValidationPolicy(req.user, req.params["id"] as string, req.requestId) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/self-validation-policy/requests/:id/reject", async (req, res, next) => {
+    try {
+      const body = RejectSelfValidationPolicyBody.parse(req.body);
+      res.json({ data: await configService.rejectSelfValidationPolicy(req.user, req.params["id"] as string, body.reason, req.requestId) });
     } catch (err) {
       next(err);
     }

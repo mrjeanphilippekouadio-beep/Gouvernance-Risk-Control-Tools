@@ -39,6 +39,10 @@ describe.skipIf(!HOST.startsWith("/") || !DB)("organization_profiles (migration 
     expect(await repo.observe(tenant)).toEqual({ activeAccounts: 3, riskManagers: 1, committeeMembers: 0, auditMembers: 0 });
     expect(await repo.countOtherGovernanceMembers(tenant, author)).toBe(1);
     expect(await repo.countOtherGovernanceMembers(tenant, rm2)).toBe(0);
+    // q157: an Audit member is observed but is not a possible approver
+    const auditRole = (await pool.query(`INSERT INTO roles (tenant_id, name, system_group, permissions) VALUES ($1, 'AU', 'AUDIT', '{}') RETURNING id`, [tenant])).rows[0].id;
+    await pool.query(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $4)`, [tenant, auditRole, checker, author]);
+    expect(await repo.countOtherGovernanceMembers(tenant, author)).toBe(1);
   });
 
   it("numbers versions, keeps one ACTIVE and writes the audit in the same transaction", async () => {

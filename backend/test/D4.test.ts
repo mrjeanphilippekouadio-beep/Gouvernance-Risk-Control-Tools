@@ -110,9 +110,19 @@ describe("self-validation guard (ControlExecutionService.validate)", () => {
 });
 
 describe("ConfigService.setSelfValidationPolicy", () => {
-  function configWorld(thirdParty: boolean | "unwired") {
+  type Req = import("../src/domain/repositories/SelfValidationPolicyRequestRepository.js").SelfValidationPolicyRequest;
+  function configWorld(approver: boolean | "unwired", initial: "REFUSE" | "DOUBLE_CONFIRMATION" = "REFUSE") {
     const events: Omit<AuditEvent, "id" | "timestamp">[] = [];
-    let row: Config | null = null;
+    let row: Config | null = { id: "cfg", tenantId: "t1", version: 1, selfValidationPolicy: initial } as Config;
+    let request: Req | null = null;
+    const requests = {
+      getPending: async () => (request?.status === "PENDING" ? request : null),
+      getById: async (_t: string, id: string) => (request?.id === id ? request : null),
+      create: async (t: string, policy: never, reason: string, by: string) => (request = { id: "req1", tenantId: t, requestedPolicy: policy, reason, status: "PENDING", requestedBy: by, requestedAt: new Date(), decidedBy: null, decidedAt: null, decisionReason: null }),
+      decide: async (_t: string, id: string, status: never, by: string, why: string | null) =>
+        request?.id === id && request.status === "PENDING" ? (request = { ...request, status, decidedBy: by, decisionReason: why }) : null,
+      reopen: async () => { if (request) request = { ...request, status: "PENDING", decidedBy: null }; },
+    };
     const service = new ConfigService(
       {
         getByTenant: async () => row,
@@ -121,11 +131,13 @@ describe("ConfigService.setSelfValidationPolicy", () => {
       { record: async (e: Omit<AuditEvent, "id" | "timestamp">) => { events.push(e); } } as never,
       undefined,
       undefined,
-      thirdParty === "unwired" ? undefined : { existsGovernanceThirdParty: async () => thirdParty },
+      approver === "unwired" ? undefined : { existsOther: async () => approver },
+      requests,
     );
-    return { service, events };
+    return { service, events, policy: () => row!.selfValidationPolicy, request: () => request };
   }
   const admin = actor("u-admin", ["config.read", "config.selfvalidation.set"]);
+  const approverActor = actor("u-rm", ["config.read", "config.selfvalidation.approve"]);
 
   it("needs its dedicated permission", async () => {
     await expect(configWorld(false).service.setSelfValidationPolicy(actor("u", ["config.read", "config.update"]), "DOUBLE_CONFIRMATION", "r", "q")).rejects.toThrow(ForbiddenError);
@@ -137,23 +149,72 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     await expect(service.setSelfValidationPolicy(admin, "ALLOW" as never, "r", "q")).rejects.toThrow(ValidationError);
   });
 
-  it("administrator alone: applied, audited with before/after, reason and adminAlone marker", async () => {
-    const { service, events } = configWorld(false);
-    const after = await service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "Structure à une personne", "q");
-    expect(after.selfValidationPolicy).toBe("DOUBLE_CONFIRMATION");
-    expect(events[0]).toMatchObject({
+  it("q158 no approver exists: the administrator applies alone, audited with before/after, reason and adminAlone marker", async () => {
+    const w = configWorld(false);
+    const { config, pendingRequest } = await w.service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "Structure à une personne", "q");
+    expect(pendingRequest).toBeNull();
+    expect(config.selfValidationPolicy).toBe("DOUBLE_CONFIRMATION");
+    expect(w.events[0]).toMatchObject({
       entityType: "Config", action: "UPDATE", reason: "Structure à une personne", userId: "u-admin",
       governanceException: "config.selfvalidation.adminAlone",
     });
-    expect((events[0]!.oldValue as Config).selfValidationPolicy).toBe("REFUSE");
+    expect((w.events[0]!.oldValue as Config).selfValidationPolicy).toBe("REFUSE");
   });
 
-  it("a third party exists (or cannot be told): applied with the distinct 'direct' marker, the two-person circuit being not built", async () => {
-    for (const tp of [true, "unwired"] as const) {
-      const { service, events } = configWorld(tp);
-      await service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "r", "q");
-      expect(events[0]!.governanceException).toBe("config.selfvalidation.direct");
-    }
+  it("q158 an approver exists: relaxing is only requested (policy unchanged), no adminAlone marker", async () => {
+    const w = configWorld(true);
+    const { config, pendingRequest } = await w.service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "r", "q");
+    expect(config.selfValidationPolicy).toBe("REFUSE");
+    expect(pendingRequest).toMatchObject({ status: "PENDING", requestedBy: "u-admin", requestedPolicy: "DOUBLE_CONFIRMATION" });
+    expect(w.policy()).toBe("REFUSE");
+    expect(w.events).toHaveLength(1);
+    expect(w.events[0]).toMatchObject({ entityType: "SelfValidationPolicyRequest", action: "SUBMIT" });
+    expect(w.events[0]!.governanceException).toBeUndefined();
+  });
+
+  it("q158 relaxing fails closed when the approver query or the request store is not wired", async () => {
+    await expect(configWorld("unwired").service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "r", "q")).rejects.toThrow(ValidationError);
+  });
+
+  it("q158 tightening and a no-op change stay direct and unmarked, even with an approver", async () => {
+    const tighten = configWorld(true, "DOUBLE_CONFIRMATION");
+    await tighten.service.setSelfValidationPolicy(admin, "REFUSE", "durcir", "q");
+    expect(tighten.policy()).toBe("REFUSE");
+    expect(tighten.events[0]!.governanceException).toBeUndefined();
+    const noop = configWorld(true, "REFUSE");
+    await noop.service.setSelfValidationPolicy(admin, "REFUSE", "rien", "q");
+    expect(noop.events[0]!.governanceException).toBeUndefined();
+    expect(noop.request()).toBeNull();
+  });
+
+  it("q158 another person approves: policy applied, audited APPROVE; the author never can", async () => {
+    const w = configWorld(true);
+    await w.service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "r", "q");
+    await expect(w.service.approveSelfValidationPolicy(actor("u-admin", ["config.selfvalidation.set", "config.selfvalidation.approve"]), "req1", "q")).rejects.toThrow(ForbiddenError);
+    await expect(w.service.approveSelfValidationPolicy(admin, "req1", "q")).rejects.toThrow(ForbiddenError); // no approve permission
+    expect(w.policy()).toBe("REFUSE");
+    const after = await w.service.approveSelfValidationPolicy(approverActor, "req1", "q");
+    expect(after.selfValidationPolicy).toBe("DOUBLE_CONFIRMATION");
+    expect(w.events.at(-1)).toMatchObject({ entityType: "Config", action: "APPROVE", userId: "u-rm" });
+    await expect(w.service.approveSelfValidationPolicy(approverActor, "req1", "q")).rejects.toThrow(ValidationError); // already decided
+  });
+
+  it("q158 a rejection needs a reason, leaves the policy unchanged, and never comes from the author", async () => {
+    const w = configWorld(true);
+    await w.service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "r", "q");
+    await expect(w.service.rejectSelfValidationPolicy(approverActor, "req1", " ", "q")).rejects.toThrow(ValidationError);
+    await expect(w.service.rejectSelfValidationPolicy(actor("u-admin", ["config.selfvalidation.approve"]), "req1", "non", "q")).rejects.toThrow(ForbiddenError);
+    const rejected = await w.service.rejectSelfValidationPolicy(approverActor, "req1", "non", "q");
+    expect(rejected.status).toBe("REJECTED");
+    expect(w.policy()).toBe("REFUSE");
+  });
+
+  it("q158 a new change replaces a pending request (WITHDRAWN)", async () => {
+    const w = configWorld(true);
+    await w.service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "r", "q");
+    await w.service.setSelfValidationPolicy(admin, "REFUSE", "annule", "q");
+    expect(w.request()!.status).toBe("WITHDRAWN");
+    expect(w.events.some((e) => e.entityType === "SelfValidationPolicyRequest" && e.action === "CLOSE")).toBe(true);
   });
 });
 

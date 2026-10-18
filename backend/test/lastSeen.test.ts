@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { createLastSeenRecorder, withLastSeen } from "../src/infrastructure/identity/lastSeen.js";
+import { createLastSeenRecorder } from "../src/infrastructure/identity/lastSeen.js";
+import { GoogleIdentityProvider } from "../src/infrastructure/identity/GoogleIdentityProvider.js";
+import { LocalIdentityProvider, hashLocalPassword } from "../src/infrastructure/identity/LocalIdentityProvider.js";
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -26,15 +28,35 @@ describe("last_seen_at recorder", () => {
     expect(query).toHaveBeenCalledTimes(2);
   });
 
-  it("withLastSeen returns the membership unchanged and tolerates a throwing recorder", async () => {
-    const m = { userId: "u1", tenantId: "t1", roles: [] };
+  it("q155 local: recorded at login (authenticate) only, not on verifyToken; a throwing recorder does not block", async () => {
+    const m = { userId: "u1", tenantId: "t1", email: "a@b.c", displayName: "A", roles: [], dashboardScopeMode: "ALL" } as never;
     const record = vi.fn(() => {
       throw new Error("boom");
     });
-    const lookup = withLastSeen(async (_e: string) => m, record);
-    await expect(lookup("a@b.c")).resolves.toBe(m);
+    const p = new LocalIdentityProvider([{ email: "a@b.c", passwordHash: hashLocalPassword("pw") }], "s".repeat(32), 3600, async () => m, record);
+    const token = await p.authenticate("a@b.c", "pw");
+    expect(record).toHaveBeenCalledTimes(1);
     expect(record).toHaveBeenCalledWith("t1", "u1");
-    const none = withLastSeen(async (_e: string) => null, record);
-    await expect(none("x")).resolves.toBeNull();
+    await p.verifyToken(token);
+    await p.verifyToken(token);
+    expect(record).toHaveBeenCalledTimes(1);
+    await expect(p.authenticate("a@b.c", "bad")).rejects.toThrow();
+    expect(record).toHaveBeenCalledTimes(1);
+  });
+
+  it("q155 google: recorded on the first verification of a new token (iat), not on every request", async () => {
+    let iat = 100;
+    const m = { userId: "u1", tenantId: "t1", roles: [], dashboardScopeMode: "ALL" } as never;
+    const record = vi.fn();
+    const p = new GoogleIdentityProvider("cid", async () => m, record);
+    (p as unknown as { client: unknown }).client = {
+      verifyIdToken: async () => ({ getPayload: () => ({ email: "a@b.c", email_verified: true, iat }) }),
+    };
+    await p.verifyToken("x");
+    await p.verifyToken("x");
+    expect(record).toHaveBeenCalledTimes(1);
+    iat = 200; // nouvelle connexion
+    await p.verifyToken("y");
+    expect(record).toHaveBeenCalledTimes(2);
   });
 });
