@@ -168,7 +168,7 @@ function world(o: { facts?: Partial<BootstrapFacts>; audit?: string[]; committee
   };
   const sent: Array<{ recipientUserId: string; eventType: string; message: string }> = [];
   const notifications = { async record(i: { recipientUserId: string; eventType: string; message: string }) { sent.push(i); } };
-  const roleAudit: Array<{ entityId: string; userId: string; action: string }> = [];
+  const roleAudit: Array<{ entityId: string; userId: string; action: string; oldValue: unknown; newValue: unknown }> = [];
   const audit = { async record() {}, async listForEntity(_t: string, type: string, id: string) { return type === "Role" ? roleAudit.filter((e) => e.entityId === id) : []; } };
   const scales = { async getById() { return scale(); } };
   const service = new RiskFrameworkService(repo as never, scales as never, roleRepo as never, users as never, audit as never, undefined, notifications as never);
@@ -250,14 +250,18 @@ describe("B-6d bootstrapApprove (q83, q98, q99, I-D8, I-D9)", () => {
   });
 
   it("F-B6d-01 retest 2 (A10): an old third-party grant of a role the requester created or widened is refused, even with askedOn = today", async () => {
-    for (const action of ["PERMISSION_CHANGE", "CREATE"]) {
+    const widened = { action: "PERMISSION_CHANGE", oldValue: { permissions: ["risk.read"] }, newValue: { permissions: ["risk.read", "role.assign"] } };
+    const created = { action: "CREATE", oldValue: null, newValue: { permissions: ["role.assign"] } };
+    for (const ev of [widened, created]) {
       const w = world();
-      w.roleAudit.push({ entityId: "adm", userId: "u1", action });
+      w.roleAudit.push({ entityId: "adm", userId: "u1", ...ev });
       await expect(w.service.bootstrapApprove(U1, "r1", GOOD({ askedOn: ISO(0) }), "req")).rejects.toThrow(/créé ou modifié par vous/);
       expect(w.stored.calls).toBe(0);
     }
-    const other = world(); // widened by someone else, or merely renamed by the requester: accepted
-    other.roleAudit.push({ entityId: "adm", userId: "someone", action: "PERMISSION_CHANGE" }, { entityId: "adm", userId: "u1", action: "UPDATE" });
+    // widened by someone else, or merely renamed by the requester (RoleService.update logs it as PERMISSION_CHANGE): accepted
+    const other = world();
+    other.roleAudit.push({ entityId: "adm", userId: "someone", ...widened },
+      { entityId: "adm", userId: "u1", action: "PERMISSION_CHANGE", oldValue: { name: "a", permissions: ["role.assign"] }, newValue: { name: "b", permissions: ["role.assign"] } });
     await expect(other.service.bootstrapApprove(U1, "r1", GOOD({ askedOn: ISO(0) }), "req")).resolves.toBeDefined();
   });
 

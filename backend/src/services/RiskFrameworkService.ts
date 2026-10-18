@@ -708,8 +708,11 @@ export class RiskFrameworkService {
     // Also the lower bound of askedOn: it cannot precede the grant, hence not the creation of the tenant.
     // F-B6d-01 retest 2 (A10): nor may the requester have created the role or changed its permissions (an admin
     // permission added to an old ordinary role would pass the grant checks; a date check is beaten by askedOn = today).
+    // RoleService.update logs every edit (rename included) as PERMISSION_CHANGE: count only an admin permission brought in.
+    const perms = (v: unknown): string[] => (v as { permissions?: string[] } | null)?.permissions ?? [];
     const authoredByMe = async (roleId: string) => (await this.audit.listForEntity(actor.tenantId, "Role", roleId))
-      .some((e) => e.userId === actor.userId && (e.action === "CREATE" || e.action === "PERMISSION_CHANGE"));
+      .some((e) => e.userId === actor.userId && (e.action === "CREATE" || e.action === "PERMISSION_CHANGE")
+        && perms(e.newValue).some((p) => (ADMIN_PERMISSIONS as readonly string[]).includes(p) && !perms(e.oldValue).includes(p)));
     let preExisting = false;
     for (const g of adminGrants) {
       if (g.grantedBy === actor.userId || g.grantedAt.toISOString().slice(0, 10) > askedOn) continue;
