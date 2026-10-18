@@ -85,6 +85,10 @@ export class ControlEffectivenessService {
     requirePermission(actor, "effectiveness.validate");
     const before = await this.get(actor, id);
 
+    if (before.validatedAt) {
+      throw new ValidationError("This assessment has already been validated");
+    }
+
     const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
       isSelf: before.evaluatedBy === actor.userId,
       permission: "effectiveness.validate",
@@ -92,9 +96,6 @@ export class ControlEffectivenessService {
       refusal: "An evaluator cannot validate their own assessment",
       confirmation,
     });
-    if (before.validatedAt) {
-      throw new ValidationError("This assessment has already been validated");
-    }
 
     const after = await this.assessments.recordValidation(actor.tenantId, id, actor.userId, comment);
 

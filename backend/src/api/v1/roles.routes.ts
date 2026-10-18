@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { boundedArray } from "../validation.js";
+import { boundedArray, reasonText } from "../validation.js";
 import type { RoleService } from "../../services/RoleService.js";
 import { ALL_PERMISSIONS, type Permission } from "../../domain/permissions.js";
 import { grantorsRateLimiter } from "../middleware/rateLimit.js";
@@ -27,17 +27,17 @@ const UpdateRoleBody = z.object({
   dashboardScopeMode: DashboardScopeModeEnum.optional(),
   departmentId: z.guid().nullish(),
   /** F-B8t-01: required only when widening the role creates an administrator + Risk Manager cumul. */
-  reason: z.string().trim().min(1).max(500).optional(),
+  reason: reasonText().optional(),
 });
 
 // B-8 bis (q44): validated and bounded here, required by the service for the 3 fixed groups.
-const AssignmentBody = z.object({ userId: z.string().min(1), reason: z.string().trim().min(1).max(500).optional() });
+const AssignmentBody = z.object({ userId: z.string().min(1), reason: reasonText().optional() });
 // q149: second confirmation to remove the last Risk Manager when no interim can take over.
 const RevokeBody = AssignmentBody.extend({ confirmEmptyGroup: z.boolean().optional() });
 // F-B8b-02 (q56): the reason is mandatory.
 const AuditGroupPermissionsBody = z.object({
   permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1),
-  reason: z.string().trim().min(1).max(500),
+  reason: reasonText(),
 });
 const PermissionChangesQuery = z.object({ status: z.enum(["PENDING", "APPROVED", "REJECTED"]).default("PENDING") });
 const GrantorsQuery = z.object({ permission: PermissionEnum });

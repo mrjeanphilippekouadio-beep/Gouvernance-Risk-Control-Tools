@@ -153,13 +153,6 @@ export class TreatmentDecisionService {
     // through the committee path either — same maker-checker invariant
     // as G4 on the ordinary path, closed after dev-backend flagged the
     // asymmetry rather than silently deciding either way.
-    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
-      isSelf: actor.userId === before.decidedBy,
-      permission: "treatmentdecision.validate.committee",
-      makerIds: [before.decidedBy],
-      refusal: "The proposer of a treatment decision cannot validate it through the committee path either",
-      confirmation,
-    });
 
     const evaluation = await this.evaluations.getById(actor.tenantId, before.riskEvaluationId);
     // B-6b (F-8): the threshold frozen on the parent evaluation (from its Dispositif version). An evaluation
@@ -183,6 +176,14 @@ export class TreatmentDecisionService {
         `Committee validation only applies to treatment decisions whose parent evaluation scored at or above the committee threshold (${minScore}) (this evaluation scored ${evaluation.residualScore})`,
       );
     }
+
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: actor.userId === before.decidedBy,
+      permission: "treatmentdecision.validate.committee",
+      makerIds: [before.decidedBy],
+      refusal: "The proposer of a treatment decision cannot validate it through the committee path either",
+      confirmation,
+    });
 
     const after = await this.treatmentDecisions.recordCommitteeValidation(actor.tenantId, id, actor.userId, comment);
     await this.recordAudit(actor, id, before, after, "VALIDATE", comment, requestId, selfValidated);

@@ -509,13 +509,6 @@ export class RiskEvaluationService {
     if (before.residualScore === null) {
       throw new ValidationError("Cannot validate an evaluation before residual scoring is completed");
     }
-    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
-      isSelf: before.evaluatorId === actor.userId,
-      permission: "riskevaluation.validate",
-      makerIds: [before.evaluatorId],
-      refusal: "An evaluator cannot validate their own risk evaluation",
-      confirmation,
-    });
 
     const { minScore, enforced } = await this.committeeSettingsOf(actor.tenantId, before);
     if (enforced && before.residualScore >= minScore) {
@@ -524,6 +517,14 @@ export class RiskEvaluationService {
           `it must be validated through POST /risk-evaluations/:id/validate-committee, not this endpoint`,
       );
     }
+
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: before.evaluatorId === actor.userId,
+      permission: "riskevaluation.validate",
+      makerIds: [before.evaluatorId],
+      refusal: "An evaluator cannot validate their own risk evaluation",
+      confirmation,
+    });
 
     const after = await this.evaluations.recordValidation(actor.tenantId, id, actor.userId, comment);
 

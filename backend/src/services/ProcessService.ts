@@ -16,6 +16,7 @@ import {
 } from "../domain/entities/Process.js";
 import type { EvaluationMode } from "../domain/entities/Config.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { canonicalId } from "../domain/ids.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
@@ -214,6 +215,13 @@ export class ProcessService {
     requirePermission(actor, "process.responsibility.assign");
     const before = await this.get(actor, id);
 
+    // F-PNL-06 (SEC-ID-01 class): compare canonical ids, an upper-case uuid is the same account in Postgres.
+    const canon = (v: string | null | undefined) => (typeof v === "string" ? canonicalId(v) : v);
+    input = {
+      ...(input.ownerUserId !== undefined ? { ownerUserId: canon(input.ownerUserId) } : {}),
+      ...(input.riskChampionUserId !== undefined ? { riskChampionUserId: canon(input.riskChampionUserId) } : {}),
+      ...(input.deputyUserId !== undefined ? { deputyUserId: canon(input.deputyUserId) } : {}),
+    } as ProcessResponsibilitiesInput;
     const changes: ProcessResponsibilitiesInput = {};
     if (input.ownerUserId !== undefined && input.ownerUserId !== before.ownerUserId) changes.ownerUserId = input.ownerUserId;
     if (input.riskChampionUserId !== undefined && input.riskChampionUserId !== before.riskChampionUserId) {
@@ -224,7 +232,7 @@ export class ProcessService {
 
     for (const userId of Object.values(changes)) {
       if (!userId) continue;
-      if (userId === actor.userId) throw new ValidationError("Nobody can designate themselves as owner, risk champion or N-1 of a process");
+      if (userId === canonicalId(actor.userId)) throw new ValidationError("Nobody can designate themselves as owner, risk champion or N-1 of a process");
       if (!this.users) throw new Error("ProcessService requires a UserRepository to set process responsibilities");
       const user = await this.users.getById(actor.tenantId, userId);
       if (!user || user.deletedAt) throw new ValidationError(`User ${userId} is not an active account of this tenant`);

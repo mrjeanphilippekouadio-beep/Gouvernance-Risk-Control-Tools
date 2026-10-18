@@ -1,6 +1,7 @@
 import { Router, type RequestHandler } from "express";
 import { z } from "zod";
 import { ABSOLUTE_MAX_SCORE } from "../../domain/scoring.js";
+import { reasonText } from "../validation.js";
 import type { ConfigService } from "../../services/ConfigService.js";
 
 const UpdateEvaluationModeBody = z.object({
@@ -26,7 +27,7 @@ const UpdateCommitteeAuditCumulBody = z.object({
 
 const UpdateSelfValidationPolicyBody = z.object({
   policy: z.enum(["REFUSE", "DOUBLE_CONFIRMATION"]),
-  reason: z.string().min(1).max(500),
+  reason: reasonText(),
 });
 
 /** PUT /config and PUT /config/appetite-mode answer 410 (DECISION-054); DIV-06 evaluation-mode and Lot A committee settings stay. */

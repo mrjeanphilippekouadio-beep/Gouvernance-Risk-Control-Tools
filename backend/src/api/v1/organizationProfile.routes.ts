@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { MAX_HEADCOUNT, MAX_RISK_PEOPLE } from "../../domain/governance/organizationQuestionnaire.js";
 import { MAX_REASON_LENGTH, type OrganizationProfileService } from "../../services/OrganizationProfileService.js";
+import { reasonText } from "../validation.js";
 import { perUserRateLimiter } from "../middleware/rateLimit.js";
 
 const YesNoUnknown = z.enum(["NO", "YES", "UNKNOWN"]);
@@ -23,10 +24,10 @@ const SubmitBody = z
         Q11: YesNoUnknown,
       })
       .strict(),
-    reason: z.string().trim().min(1).max(MAX_REASON_LENGTH),
+    reason: reasonText(MAX_REASON_LENGTH),
   })
   .strict();
-const RejectBody = z.object({ reason: z.string().trim().min(1).max(MAX_REASON_LENGTH) }).strict();
+const RejectBody = z.object({ reason: reasonText(MAX_REASON_LENGTH) }).strict();
 const IdParam = z.guid();
 
 /**

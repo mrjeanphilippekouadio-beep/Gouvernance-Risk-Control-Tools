@@ -25,6 +25,15 @@ export interface GovernanceConfirmation {
   reason: string;
 }
 
+/**
+ * A reason (q141 and every governance reason) must hold at least one visible character and no control character
+ * (SEC-PNL-01: a NUL makes PostgreSQL refuse the audit row; F-PNL-11: a zero-width space is not a reason).
+ * Single definition, shared by the zod helper (`api/validation.ts`) and the service-level checks.
+ */
+export function isAcceptableReason(reason: string): boolean {
+  return !/\p{Cc}/u.test(reason) && /[\p{L}\p{N}\p{P}\p{S}\p{M}]/u.test(reason);
+}
+
 export function selfValidationOutcome(
   policy: SelfValidationPolicy,
   isSelf: boolean,
@@ -34,7 +43,7 @@ export function selfValidationOutcome(
   if (!isSelf) return "ALLOW";
   if (policy !== "DOUBLE_CONFIRMATION") return "REFUSE";
   if (otherValidatorExists) return "OTHER_VALIDATOR_EXISTS";
-  if (confirmation?.rule === SELF_VALIDATION_RULE && confirmation.reason.trim()) return "ALLOW";
+  if (confirmation?.rule === SELF_VALIDATION_RULE && isAcceptableReason(confirmation.reason)) return "ALLOW";
   return "CONFIRMATION_REQUIRED";
 }
 

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { reasonText } from "../validation.js";
 import type { GovernanceDesignationService } from "../../services/GovernanceDesignationService.js";
 import { DESIGNATION_KINDS, type DesignationKind } from "../../domain/entities/GovernanceDesignation.js";
 
@@ -7,10 +8,10 @@ import { DESIGNATION_KINDS, type DesignationKind } from "../../domain/entities/G
 const DesignateBody = z.object({
   kind: z.enum(DESIGNATION_KINDS as [DesignationKind, ...DesignationKind[]]),
   userId: z.guid(),
-  reason: z.string().trim().min(1).max(500),
+  reason: reasonText(),
   validUntil: z.coerce.date().nullish(),
 });
-const EndBody = z.object({ reason: z.string().trim().min(1).max(500) });
+const EndBody = z.object({ reason: reasonText() });
 const ListQuery = z.object({ includeEnded: z.enum(["true", "false"]).default("false") });
 const IdParam = z.guid();
 

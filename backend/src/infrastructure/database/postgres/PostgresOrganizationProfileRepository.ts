@@ -150,6 +150,9 @@ export class PostgresOrganizationProfileRepository implements OrganizationProfil
       return await this.inTransaction(async (client) => {
         await this.lockTenant(client, input.tenantId);
         const superseded = input.status === "ACTIVE" ? await this.supersedeActive(client, input.tenantId) : null;
+        if (input.status === "ACTIVE" && input.expectedActiveId !== undefined && (superseded?.id ?? null) !== input.expectedActiveId) {
+          throw new ConflictError("The active profile changed while this version was prepared — reload and retry");
+        }
         const { rows } = await client.query<Row>(
           `INSERT INTO organization_profiles
              (tenant_id, version, questionnaire_version, answers, reason, status, regime, submitted_by)

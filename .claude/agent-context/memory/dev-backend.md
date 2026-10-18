@@ -388,3 +388,11 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Tests existants adaptés : B8ter (addedBy071), QA-B6a (regex sur B8ter). Test PG `D3-pg.test.ts` gaté par `D3_PGDB` explicite (jamais de défaut : la table est append-only, on ne nettoie pas).
 - Non fait : notification du tiers à la baisse (type de notification, lot D5) ; repli "profil observé" sans questionnaire (le plan dit value null).
 - Leçon : le serveur PG local s'arrête en cours de session ; relancer `startpg.sh` et refaire la suite complète si des échecs ENOENT apparaissent.
+
+## 2026-10-18 Correctifs panel D1-D4 (SEC-PNL-01/03, CMP-PNL-01, F-PNL-01..06, base f042f75)
+
+- Motif de gouvernance : un seul helper `reasonText(max)` (`api/validation.ts`) = trim, 1..max, aucun `\p{Cc}`, au moins un caractère visible ; prédicat `isAcceptableReason` dans `domain/governance/selfValidation.ts` (aussi dans `selfValidationOutcome` : une confirmation à motif invalide = CONFIRMATION_REQUIRED, et dans `ConfigService.setSelfValidationPolicy` avant l'écriture). Appliqué : confirmation D4, politique, désignations, profil, rôles/utilisateurs. Les autres `z.string().min(1)` de motif (archive, etc.) ne sont PAS migrés.
+- Atomicité effet+audit des 9 méthodes D4 : NON refaite (dépôts séparés, pas de client transactionnel partagé = refonte). Le seul vecteur connu (motif non stockable par PG) est fermé en amont ; le reste reste F-D044-03.
+- Revalidation sous verrou : `InsertOrganizationProfileInput.expectedActiveId?` optionnel, comparé à la version remplacée sous `lockTenant`, sinon ConflictError.
+- Un test « pinned » qui documente un défaut qu'on ferme doit être inversé (l'auto-mode a d'abord refusé un sed, l'Edit a passé).
+- La base partagée `grc_qa_a08` reçoit les migrations d'A07 en parallèle : des échecs PG de tests QA peuvent venir de là, pas du code.
