@@ -1,3 +1,4 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Pilotage GRC Tools</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <style>
@@ -125,12 +126,29 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
 .field input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font:13px var(--font-mono)}
 .log-row{display:grid;grid-template-columns:110px 160px 1fr;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13.5px}
 .stamp{margin-top:4px;font:500 12px var(--font-mono);color:var(--fg-3)}
+.sev-élevée{color:var(--bad);background:var(--bad-bg)}
+.sev-moyenne{color:var(--warn);background:var(--warn-bg)}
+.sev-faible{color:var(--neutral);background:var(--neutral-bg)}
+.row-item.c-élevée{border-left-color:var(--bad)}.row-item.c-moyenne{border-left-color:var(--warn)}.row-item.c-faible{border-left-color:var(--neutral)}
+.conflict{border:1px solid var(--bad);background:var(--bad-bg);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.conflict.moyenne{border-color:var(--warn);background:var(--warn-bg)}
+.conflict.faible{border-color:var(--border);background:var(--surface-2)}
+.conflict h3{font-size:13px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.06em}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:6px 14px;font-size:14px}
+.kv dt{color:var(--fg-3);font-weight:600;font-size:12.5px}
+.kv dd{margin:0}
+.matrix-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+table.matrix{border-collapse:collapse;font-size:13px;min-width:100%}
+table.matrix th,table.matrix td{padding:7px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+table.matrix th{font:600 11.5px var(--font-mono);color:var(--fg-3);text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;background:var(--surface)}
+.principles{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:14.5px;max-width:86ch}
+@media (max-width:768px){.kv{grid-template-columns:1fr}}
 .tabbar{display:none}
 @media (max-width:768px){
   .app{grid-template-columns:1fr}
   .nav{display:none}
   main{padding-inline:16px;padding-block:16px calc(84px + env(safe-area-inset-bottom,0px))}
-  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--surface);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,0px)}
+  .tabbar{display:grid;grid-template-columns:repeat(6,1fr);position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--surface);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,0px)}
   .tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:56px;color:var(--fg-2);text-decoration:none;font-size:11.5px;font-weight:600;position:relative}
   .tabbar a[aria-current="page"]{color:var(--accent)}
   .tabbar .badge{position:absolute;top:6px;right:calc(50% - 30px);font-size:10px;line-height:16px;min-width:18px}
@@ -152,6 +170,7 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
     <a href="#accueil" data-view="accueil">Accueil</a>
     <a href="#arbitrages" data-view="arbitrages">Arbitrages <span class="badge" data-badge="open"></span></a>
     <a href="#roadmap" data-view="roadmap">Roadmap</a>
+    <a href="#droits" data-view="droits">Droits et accès <span class="badge" data-badge="droits"></span></a>
     <a href="#agents" data-view="agents">Agents <span class="badge" data-badge="agents"></span></a>
     <a href="#configuration" data-view="configuration">Configuration <span class="badge" data-badge="conf"></span></a>
     <a href="#journal" data-view="journal">Journal</a>
@@ -161,7 +180,7 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
   <nav class="tabbar" aria-label="Sections du pilotage">
     <a href="#accueil" data-view="accueil">Accueil</a>
     <a href="#arbitrages" data-view="arbitrages">Arbitrages<span class="badge" data-badge="open"></span></a>
-    <a href="#roadmap" data-view="roadmap">Roadmap</a>
+    <a href="#droits" data-view="droits">Droits<span class="badge" data-badge="droits"></span></a>
     <a href="#agents" data-view="agents">Agents</a>
     <a href="#configuration" data-view="configuration">Plus</a>
   </nav>
@@ -173,9 +192,9 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
     ready:"Prêt", reserves:"Prêt avec réserves", open:"À trancher", answered:"Tranché", refused:"Refusé" };
   const PRIO = { start:"Bloque le démarrage", release:"Bloque une release", later:"Peut attendre" };
   const PRIO_ORDER = { start:0, release:1, later:2 };
-  const VIEWS = ["accueil","arbitrages","roadmap","agents","configuration","journal"];
+  const VIEWS = ["accueil","arbitrages","droits","roadmap","agents","configuration","journal"];
   const S = { project:null, releases:[], agents:[], questions:[], deliveries:[], variables:[], secrets:[],
-    db:null, user:null, canWrite:null, names:{}, view:"accueil", sel:{ arbitrages:null, agents:null }, qFilter:"open", qSearch:"", aSearch:"", confMissing:false };
+    db:null, user:null, canWrite:null, names:{}, view:"accueil", sel:{ arbitrages:null, agents:null, droits:null }, rights:[], rightsDomains:[], rightDecisions:[], roles:[], rightsMeta:null, rTab:"arbitrer", rSearch:"", qFilter:"open", qSearch:"", aSearch:"", confMissing:false };
   const $ = s => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const pill = s => el("span","pill s-" + s, STATUS[s] || s);
@@ -184,6 +203,7 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
   const lastUpdate = () => { const ds = [S.project && S.project.updatedAt];
     ["agents","releases","deliveries","variables","secrets"].forEach(n => S[n].forEach(d => ds.push(d.updatedAt, d.date)));
     S.questions.forEach(q => ds.push(q.answeredAt, q.createdAt));
+    S.rights.forEach(r => ds.push(r.decision && r.decision.answeredAt)); ds.push(S.rightsMeta && S.rightsMeta.updatedAt);
     const t = ds.map(x => Date.parse(x || "")).filter(x => !isNaN(x) && x <= Date.now() + 5*60000);
     return t.length ? new Date(Math.max(...t)).toISOString() : null; };
   const fmt = iso => { try { return new Date(iso).toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"numeric"}); } catch(e){ return iso || ""; } };
@@ -200,12 +220,12 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
     if (!h) { try { h = localStorage.getItem("pilotage.view") || ""; } catch(e){} }
     const parts = h.split("/"); const v = parts[0], id = parts[1];
     S.view = VIEWS.includes(v) ? v : "accueil";
-    if (S.view === "arbitrages" || S.view === "agents") S.sel[S.view] = id || null;
+    if (S.view in S.sel) S.sel[S.view] = id || null;
   }
   function go(view, id, focus){
     S.view = view;
-    if (view === "arbitrages" || view === "agents") S.sel[view] = id || null;
-    const h = view + ((view === "arbitrages" || view === "agents") && S.sel[view] ? "/" + S.sel[view] : "");
+    if (view in S.sel) S.sel[view] = id || null;
+    const h = view + ((view in S.sel) && S.sel[view] ? "/" + S.sel[view] : "");
     try { history.replaceState(null,"","#" + h); } catch(e){}
     try { localStorage.setItem("pilotage.view", h); } catch(e){}
     render(focus !== false);
@@ -270,6 +290,9 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
     if (att.length > 6) ul3.append(el("li","muted","et " + (att.length - 6) + " autres"));
     if (!att.length) ul3.append(el("li","muted","Aucun agent en attente."));
     c3.append(ul3, el("span","go","Voir les agents →")); cards.append(c3);
+    { const open = toArbitrate(); const c6 = viewLink("card","droits","");
+      c6.append(el("h2",null,"Droits et accès"), el("p", open.length ? null : "muted", S.rights.length ? (open.length ? open.length + " conflit" + (open.length>1?"s":"") + " de gouvernance à arbitrer sur " + S.rights.length + " droits recensés." : "Aucun conflit en attente sur " + S.rights.length + " droits.") : "Inventaire en cours de constitution."));
+      c6.append(el("span","go","Ouvrir →")); cards.append(c6); }
     const missV = S.variables.filter(x => !x.value).length, missS = S.secrets.filter(x => x.status !== "created").length;
     const c4 = viewLink("card","configuration","");
     c4.append(el("h2",null,"Configuration"), el("p", missV + missS ? null : "muted", missV + missS ? missV + " valeur" + (missV>1?"s":"") + " à saisir · " + missS + " secret" + (missS>1?"s":"") + " à créer" : "Tout est renseigné."));
@@ -374,6 +397,111 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
     v.append(split);
   }
 
+  /* ---------- Droits et accès (DECISION-068) ---------- */
+  const SEV = { "élevée":0, "moyenne":1, "faible":2 };
+  const toArbitrate = () => S.rights.filter(r => r.conflict && !(r.decision && r.decision.status === "answered"));
+  const rSort = l => l.slice().sort((a,b) => (SEV[a.conflict && a.conflict.severity] ?? 3) - (SEV[b.conflict && b.conflict.severity] ?? 3) || (a.order||0)-(b.order||0));
+  function rRow(r){
+    const done = r.decision && r.decision.status === "answered";
+    const b = el("button","row-item " + (r.conflict && !done ? "c-" + r.conflict.severity : "p-done")); b.type = "button";
+    b.setAttribute("aria-current", String(r.id === S.sel.droits));
+    b.append(el("span","t", r.label || r.id));
+    const m = el("span","m"); m.append(el("span","mono", r.id));
+    if (r.conflict) m.append(el("span","pill " + (done ? "s-answered" : "sev-" + r.conflict.severity), done ? "Arbitré" : "Conflit " + r.conflict.severity));
+    b.append(m); b.onclick = () => go("droits", r.id); return b;
+  }
+  function kv(pairs){ const dl = el("dl","kv"); pairs.forEach(([k,v]) => { if (Array.isArray(v)) v = v.join(" ; "); if (!v) return; dl.append(el("dt",null,k), el("dd",null,v)); }); return dl; }
+  function rightDetail(r){
+    const d = el("section","detail"); d.setAttribute("aria-label","Détail du droit");
+    const h = el("div","detail-head");
+    const back = el("button","ghost back","← Tous les droits"); back.onclick = () => go("droits", null); h.append(back);
+    const top = el("div","actions"); top.append(el("span","mono muted", r.id)); if (r.domain) top.append(el("span","pill s-todo", r.domain));
+    if (r.terminal) top.append(el("span","pill s-open","Action terminale"));
+    h.append(top, el("h2",null, r.label || r.id));
+    if (r.what) h.append(el("p","muted", r.what));
+    const body = el("div","detail-body");
+    const facts = kv([["Qui l'a aujourd'hui", r.heldBy], ["Pourquoi (Architecte)", r.why], ["Objectif", r.objective], ["Principe (Risk Manager)", r.principle], ["Configurable", r.configurable], ["Granularité", r.granularity], ["Contrôlé dans le code", r.enforcedAt], ["Remarque (Dev Backend)", r.notes]]);
+    const c = r.conflict;
+    if (c){
+      const box = el("div","conflict " + (c.severity || "")); box.append(el("h3",null,"Met à mal un principe · " + (c.severity || "")));
+      box.append(kv([["Principe", c.principle], ["Pourquoi", c.reason], ["Ne jamais bloquer", c.neverBlock], ["Décisions liées", (c.relatedDecisions||[]).join(", ")]]));
+      body.append(box);
+      const dec = r.decision;
+      if (dec && dec.status === "answered"){
+        const a = el("div","answer"); a.append(el("b",null,"Arbitrage : "), document.createTextNode(dec.answer || ""));
+        if (dec.answeredAt) a.append(el("div","notice","Arbitré le " + fmt(dec.answeredAt) + (dec.answeredBy && S.names[dec.answeredBy] ? " par " + S.names[dec.answeredBy] : "")));
+        body.append(a);
+        if (S.canWrite){ const b = el("button","ghost","Rouvrir"); b.onclick = async () => { b.disabled = true; try { await S.db.doc("rightDecisions/" + r.id).set({ status:"open", updatedAt:new Date().toISOString() }); } catch(e){ b.disabled = false; } }; h.append(b); }
+      } else {
+        if (c.recommendation){ const rr = el("div","opt rec"); const t = el("span"); t.append(el("span","tag","Recommandation"), document.createElement("br"), document.createTextNode(c.recommendation)); rr.append(t); body.append(rr); }
+        let chosen = null; const form = el("div","stack");
+        (c.options||[]).filter(o => o !== c.recommendation).forEach((o,i) => { const lab = el("label","opt"); const ra = document.createElement("input"); ra.type = "radio"; ra.name = "r-" + r.id; ra.onchange = () => { chosen = o; }; lab.append(ra, el("span",null,o)); form.append(lab); });
+        const ta = document.createElement("textarea"); ta.setAttribute("aria-label","Commentaire"); ta.placeholder = "Votre arbitrage, ou un complément"; form.append(ta); body.append(form);
+        const msg = el("span","notice"); const acts = el("div","actions");
+        const save = async (text) => { msg.textContent = "Enregistrement…";
+          try { const uid = S.user ? await S.user.id() : null;
+            await S.db.doc("rightDecisions/" + r.id).set({ status:"answered", answer:text, answeredBy:uid, answeredAt:new Date().toISOString() });
+            const next = rSort(toArbitrate()).find(x => x.id !== r.id); go("droits", next && !narrow() ? next.id : null, false);
+          } catch(e){ msg.textContent = "Enregistrement refusé : vous n'avez peut-être pas le droit d'écrire sur cette page."; } };
+        const bOk = el("button",null,"Valider la recommandation"); bOk.disabled = !c.recommendation;
+        bOk.onclick = () => save(c.recommendation + (ta.value.trim() ? " — " + ta.value.trim() : ""));
+        const bSend = el("button","ghost","Enregistrer mon choix");
+        bSend.onclick = () => { const core = [chosen, ta.value.trim()].filter(Boolean).join(" — "); if (!core){ msg.textContent = "Choisissez une option ou écrivez votre arbitrage."; return; } save(core); };
+        if (!S.canWrite){ bOk.disabled = true; bSend.disabled = true; }
+        acts.append(bOk, bSend, msg); h.append(acts);
+      }
+    }
+    body.append(facts);
+    d.append(h, body); return d;
+  }
+  function viewDroits(v){
+    const meta = S.rightsMeta || {};
+    v.append(head("Droits et accès", "Tous les droits, accès et habilitations du produit : ce qu'ils permettent, qui les a, pourquoi ils existent. Les droits qui mettent à mal un principe de gouvernance ou de risque sont surlignés : vous les arbitrez ici, une fois pour toutes."));
+    const conflicts = S.rights.filter(r => r.conflict); const open = toArbitrate();
+    const k = el("div","kpis");
+    [[String(S.rights.length),"Droits recensés"],[String(open.filter(r => r.conflict.severity === "élevée").length),"Conflits élevés à arbitrer"],[String(open.length),"Conflits à arbitrer"],[(conflicts.length - open.length) + " / " + conflicts.length,"Conflits arbitrés"]].forEach(([val,l]) => { const t = el("div","kpi"); t.append(el("span","v",val), el("span","l",l)); k.append(t); });
+    v.append(k);
+    const tabs = el("div","tools");
+    [["arbitrer","À arbitrer"],["domaines","Par domaine"],["roles","Par rôle"],["principes","Principes"]].forEach(([key,l]) => { const c = el("button","chip",l); c.type = "button"; c.setAttribute("aria-pressed", String(S.rTab === key)); c.onclick = () => { S.rTab = key; render(false); }; tabs.append(c); });
+    v.append(tabs);
+    if (!S.rights.length){ v.append(el("div","empty","L'inventaire des droits est en cours de constitution par l'Architecte, le Risk Manager et le Dev Backend. Il apparaîtra ici.")); return; }
+    if (S.rTab === "roles"){
+      const wrap = el("div","matrix-wrap"); const t = el("table","matrix"); const tr = el("tr"); ["Rôle","Mission","Droits typiques","Ne doit jamais avoir"].forEach(x => tr.append(el("th",null,x))); const th = el("thead"); th.append(tr); t.append(th);
+      const tb = el("tbody"); S.roles.slice().sort((a,b)=>(a.order||0)-(b.order||0)).forEach(r => { const row = el("tr"); row.append(el("td",null,r.name), el("td",null,r.mission||""));
+        [r.rights||[], r.never||[]].forEach(list => { const td = el("td"); list.forEach((id,i) => { const right = S.rights.find(x => x.id === id);
+          if (right){ const a = viewLink(null,"droits", right.label || id, id); a.onclick = () => { S.rTab = "domaines"; }; td.append(a); } else td.append(el("span",null,id));
+          if (i < list.length - 1) td.append(document.createTextNode(" · ")); }); row.append(td); });
+        tb.append(row); }); t.append(tb); wrap.append(t); v.append(wrap); return;
+    }
+    if (S.rTab === "principes"){
+      const cols = el("div","cols");
+      [["Structure recommandée (Architecte)", meta.structure], ["Invariants jamais configurables", meta.invariants], ["Principe « ne jamais bloquer » (DECISION-066)", meta.neverBlock], ["Questions absorbées par cette section", meta.replaced]].forEach(([title,list]) => { if (!list || !list.length) return; const bx = el("div","box detail"); const inner = el("div","detail-body"); inner.append(el("h3",null,title)); const ul = el("ul","principles"); list.forEach(x => ul.append(el("li",null,x))); inner.append(ul); bx.append(inner); cols.append(bx); });
+      v.append(cols); return;
+    }
+    const split = el("div","split"); const list = el("div","list");
+    const s = document.createElement("input"); s.type = "search"; s.className = "search"; s.id = "r-search"; s.placeholder = "Rechercher un droit"; s.value = S.rSearch; s.setAttribute("aria-label","Rechercher un droit");
+    const lb = el("div","stack");
+    const fill = () => { lb.replaceChildren(); const term = S.rSearch.trim().toLowerCase();
+      const match = r => !term || [r.id, r.label, r.what, r.domain].join(" ").toLowerCase().includes(term);
+      if (S.rTab === "arbitrer"){
+        const pend = rSort(open.filter(match)); const done = conflicts.filter(r => !open.includes(r)).filter(match);
+        if (!pend.length) lb.append(el("div","empty","Aucun conflit en attente d'arbitrage."));
+        pend.forEach(r => lb.append(rRow(r)));
+        if (done.length){ lb.append(el("div","group-label","Arbitrés (" + done.length + ")")); done.forEach(r => lb.append(rRow(r))); }
+      } else {
+        const doms = meta.domains && meta.domains.length ? meta.domains : [...new Set(S.rights.map(r => r.domain || "Autres"))].map(n => ({ name:n }));
+        doms.forEach(dm => { const rs = S.rights.filter(r => (r.domain || "Autres") === dm.name && match(r)).sort((a,b)=>(a.order||0)-(b.order||0)); if (!rs.length) return;
+          lb.append(el("div","group-label", dm.name + " (" + rs.length + ")")); if (dm.purpose) lb.append(el("p","notice", dm.purpose)); rs.forEach(r => lb.append(rRow(r))); });
+      } };
+    s.oninput = () => { S.rSearch = s.value; fill(); };
+    list.append(s, lb); fill(); split.append(list);
+    let r = S.rights.find(x => x.id === S.sel.droits);
+    if (!r && !narrow()) r = S.rTab === "arbitrer" ? (rSort(open)[0] || conflicts[0]) : S.rights.slice().sort((a,b)=>(a.order||0)-(b.order||0))[0];
+    if (r){ split.classList.toggle("has-detail", !!S.sel.droits); split.append(rightDetail(r)); }
+    else split.append(el("div","detail empty","Choisissez un droit dans la liste."));
+    v.append(split);
+  }
+
   /* ---------- Roadmap ---------- */
   function viewRoadmap(v){
     v.append(head("Roadmap V1","V2 : WebSocket et retours du client."));
@@ -474,6 +602,7 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
     const n = openQs().length; const blocked = S.agents.filter(a => a.status === "blocked").length;
     const conf = S.variables.filter(x => !x.value).length + S.secrets.filter(x => x.status !== "created").length;
     document.querySelectorAll('[data-badge="open"]').forEach(b => b.textContent = n ? String(n) : "");
+    { const nr = toArbitrate().length; document.querySelectorAll('[data-badge="droits"]').forEach(b => b.textContent = nr ? String(nr) : ""); }
     document.querySelectorAll('[data-badge="agents"]').forEach(b => b.textContent = blocked ? String(blocked) : "");
     document.querySelectorAll('[data-badge="conf"]').forEach(b => b.textContent = conf ? String(conf) : "");
     document.querySelectorAll(".nav a[data-view], .tabbar a[data-view]").forEach(a => {
@@ -487,7 +616,7 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
     if (typing()) { pending = true; return; }
     pending = false;
     const v = el("div","view");
-    ({accueil:viewAccueil, arbitrages:viewArbitrages, roadmap:viewRoadmap, agents:viewAgents, configuration:viewConfiguration, journal:viewJournal})[S.view](v);
+    ({accueil:viewAccueil, arbitrages:viewArbitrages, droits:viewDroits, roadmap:viewRoadmap, agents:viewAgents, configuration:viewConfiguration, journal:viewJournal})[S.view](v);
     const active = document.activeElement; const keep = active && active.type === "search" ? active.id : null;
     $("#main").replaceChildren(v);
     if (keep){ const s = document.getElementById(keep); if (s){ s.focus(); s.setSelectionRange(s.value.length, s.value.length); } }
@@ -497,7 +626,7 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
 
   async function resolveNames(){
     if (!S.user) return;
-    const ids = [...new Set(S.questions.map(q => q.answeredBy).filter(Boolean))]; if (!ids.length) return;
+    const ids = [...new Set(S.questions.map(q => q.answeredBy).concat(S.rights.map(r => r.decision && r.decision.answeredBy)).filter(Boolean))]; if (!ids.length) return;
     try { const ps = await S.user.profiles(ids); ids.forEach(id => { S.names[id] = (ps[id] && ps[id].name) || "un membre"; }); } catch(e){}
   }
 
@@ -516,8 +645,15 @@ textarea{width:100%;min-height:72px;resize:vertical;padding:8px 10px;border:1px 
       S[name] = snap.docs.map(d => Object.assign({ id:d.id }, d.data()));
       (after ? after() : Promise.resolve()).then(() => render(false));
     });
-    ["releases","agents","deliveries","variables","secrets"].forEach(n => sub(n));
+    ["releases","agents","deliveries","variables","secrets","roles"].forEach(n => sub(n));
+    const rebuild = () => { const dec = {}; S.rightDecisions.forEach(d => { dec[d.id] = d; });
+      S.rights = S.rightsDomains.slice().sort((a,b)=>(a.order||0)-(b.order||0)).flatMap(dm => (dm.rights||[]).map(r => Object.assign({}, r, { domain: dm.name, decision: dec[r.id] || null })));
+      return resolveNames(); };
+    sub("rightsDomains", rebuild); sub("rightDecisions", rebuild);
+    db.doc("rightsMeta/summary").onSnapshot(s => { S.rightsMeta = s.exists ? s.data() : null; render(false); });
     sub("questions", resolveNames);
   })();
 })();
 </script>
+
+</body></html>
