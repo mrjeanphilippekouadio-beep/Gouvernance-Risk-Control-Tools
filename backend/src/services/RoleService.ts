@@ -229,7 +229,8 @@ export class RoleService {
 
     if (input.permissions !== undefined) {
       const held = await this.roles.listForUser(actor.tenantId, actor.userId);
-      if (held.some((r) => r.id === id)) {
+      // SEC-ID-01: compare the id read from the database, never the client spelling of it.
+      if (held.some((r) => r.id === before.id)) {
         throw new ForbiddenError(
           "You cannot change the permissions of a role you hold yourself — ask another admin",
         );

@@ -135,6 +135,7 @@ import { notificationSubscriptionsRouter } from "./api/v1/notificationSubscripti
 import { reviewCyclesRouter } from "./api/v1/reviewCycles.routes.js";
 import { permissionsRouter } from "./api/v1/permissions.routes.js";
 import { requestIdMiddleware } from "./api/middleware/requestId.js";
+import { canonicalIdsMiddleware } from "./api/middleware/canonicalIds.js";
 import { authMiddleware } from "./api/middleware/auth.js";
 import { moduleGuard } from "./api/middleware/moduleGuard.js";
 import { errorHandler } from "./api/middleware/errorHandler.js";
@@ -168,6 +169,7 @@ app.use(securityHeadersMiddleware());
 app.use(cors({ origin: env.CORS_ALLOWED_ORIGINS, allowedHeaders: ["Authorization", "Content-Type"] }));
 app.use(express.json({ limit: "1mb" }));
 app.use(requestIdMiddleware);
+app.use(canonicalIdsMiddleware);
 // See rateLimit.ts doc comment: there is no dedicated /login route, so this
 // throttles failed-auth traffic (401s and other errors) across the whole
 // authenticated API surface instead. /health and /ready are intentionally
