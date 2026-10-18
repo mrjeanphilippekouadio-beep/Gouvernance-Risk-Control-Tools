@@ -1,14 +1,15 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { Config, AppetiteMode, EvaluationMode, UpdateMethodologyInput } from "../domain/entities/Config.js";
-import { ValidationError } from "../domain/errors/DomainErrors.js";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
-import { isAcceptableReason, SELF_VALIDATION_POLICIES, type GovernanceThirdPartyQuery, type SelfValidationPolicy } from "../domain/governance/selfValidation.js";
+import { isAcceptableReason, SELF_VALIDATION_POLICIES, type EligibleValidatorQuery, type SelfValidationPolicy } from "../domain/governance/selfValidation.js";
 import { MIN_APPETITE_THRESHOLD } from "./RiskEvaluationService.js";
 import { defaultCommitteeThreshold } from "../domain/scoring.js";
 import { resolveMaxScore } from "./scoreCeiling.js";
+import type { SelfValidationPolicyRequest, SelfValidationPolicyRequestRepository } from "../domain/repositories/SelfValidationPolicyRequestRepository.js";
 import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
 import { FRAMEWORK_OWNS_SETTING_MESSAGE } from "./riskFrameworkResolution.js";
 
@@ -86,8 +87,10 @@ export class ConfigService {
      * Absent: the pre-B-6b behaviour (tests). GET /config stays available as obsolete history.
      */
     private readonly frameworks?: Pick<RiskFrameworkRepository, "listFrameworks">,
-    /** DECISION-074 D4: tells whether a Risk Manager / Audit / Committee member exists besides the actor. Optional. */
-    private readonly thirdParties?: GovernanceThirdPartyQuery,
+    /** q158: tells whether another person holds config.selfvalidation.approve. Optional; softening fails closed without it. */
+    private readonly eligible?: EligibleValidatorQuery,
+    /** q158: pending relaxations awaiting a second person. Optional; softening fails closed without it. */
+    private readonly policyRequests?: SelfValidationPolicyRequestRepository,
   ) {}
 
   private assertNotOwnedByFramework(): void {
@@ -351,22 +354,48 @@ export class ConfigService {
   }
 
   /**
-   * PUT /config/self-validation-policy — DECISION-074 q141. Chooses what happens when someone validates their own
-   * input: REFUSE (default) or DOUBLE_CONFIRMATION (only offered when nobody else can validate). Relaxes a control:
-   * dedicated administrator permission, mandatory reason, audited in both directions.
-   * DECISION-072 hybrid rule, partly built: the administrator decides alone. The audit entry carries
-   * `governance_exception`: `config.selfvalidation.adminAlone` while no Risk Manager / Audit / Committee member
-   * exists, `config.selfvalidation.direct` when one exists (the two-person circuit is NOT built yet: the entry is
-   * the trace a reviewer will find).
+   * PUT /config/self-validation-policy — DECISION-074 q141, DECISION-078 q158. Chooses what happens when someone
+   * validates their own input: REFUSE (default) or DOUBLE_CONFIRMATION. Dedicated administrator permission, mandatory
+   * reason, audited. Relaxing (REFUSE -> DOUBLE_CONFIRMATION) needs a second person holding
+   * config.selfvalidation.approve when one exists: a PENDING request, applied by `approveSelfValidationPolicy`
+   * (never by its author). With nobody else able to approve, the administrator applies it alone, marked
+   * `config.selfvalidation.adminAlone`. Tightening or a no-op change stays direct, unmarked.
+   * A new call replaces (WITHDRAWN) a request still pending.
    */
-  async setSelfValidationPolicy(actor: AuthenticatedUser, policy: SelfValidationPolicy, reason: string, requestId: string): Promise<Config> {
+  async setSelfValidationPolicy(actor: AuthenticatedUser, policy: SelfValidationPolicy, reason: string, requestId: string): Promise<SelfValidationPolicyOutcome> {
     requirePermission(actor, "config.selfvalidation.set");
     if (!SELF_VALIDATION_POLICIES.includes(policy)) throw new ValidationError(`Unknown self-validation policy: ${policy}`);
     // SEC-PNL-01: the effect is written before the (non-transactional) audit row, so a reason the audit cannot store must stop here.
     if (!reason || !isAcceptableReason(reason)) throw new ValidationError("A valid reason is required to change the self-validation policy");
+    const why = reason.trim();
 
-    const thirdPartyExists = this.thirdParties ? await this.thirdParties.existsGovernanceThirdParty(actor.tenantId, actor.userId) : true;
     const before = await this.get(actor);
+    const relaxing = before.selfValidationPolicy === "REFUSE" && policy === "DOUBLE_CONFIRMATION";
+    let approverExists = false;
+    if (relaxing) {
+      // Fail closed: without the means to tell whether a second person exists, never relax.
+      if (!this.eligible || !this.policyRequests) throw new ValidationError("Relaxing the self-validation policy is not available");
+      approverExists = await this.eligible.existsOther(actor.tenantId, actor.userId, "config.selfvalidation.approve");
+    }
+
+    const pending = this.policyRequests ? await this.policyRequests.getPending(actor.tenantId) : null;
+    if (pending && this.policyRequests) {
+      await this.policyRequests.decide(actor.tenantId, pending.id, "WITHDRAWN", actor.userId, "Replaced by a newer change");
+      await this.audit.record({
+        tenantId: actor.tenantId, userId: actor.userId, entityType: "SelfValidationPolicyRequest", entityId: pending.id,
+        action: "CLOSE", oldValue: pending, newValue: null, reason: "Replaced by a newer change", requestId,
+      });
+    }
+
+    if (relaxing && approverExists && this.policyRequests) {
+      const request = await this.policyRequests.create(actor.tenantId, policy, why, actor.userId);
+      await this.audit.record({
+        tenantId: actor.tenantId, userId: actor.userId, entityType: "SelfValidationPolicyRequest", entityId: request.id,
+        action: "SUBMIT", oldValue: null, newValue: request, reason: why, requestId,
+      });
+      return { config: before, pendingRequest: request };
+    }
+
     const after = await this.upsertConfig(actor.tenantId, { selfValidationPolicy: policy }, actor.userId);
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -376,10 +405,77 @@ export class ConfigService {
       action: "UPDATE",
       oldValue: before,
       newValue: after,
-      reason: reason.trim(),
+      reason: why,
       requestId,
-      governanceException: thirdPartyExists ? "config.selfvalidation.direct" : "config.selfvalidation.adminAlone",
+      ...(relaxing ? { governanceException: "config.selfvalidation.adminAlone" } : {}),
+    });
+    return { config: after, pendingRequest: null };
+  }
+
+  /** The pending relaxation, if any; visible to the administrator who asks and to the people who can approve. */
+  async getPendingSelfValidationPolicyRequest(actor: AuthenticatedUser): Promise<SelfValidationPolicyRequest | null> {
+    if (!actor.roles.includes("config.selfvalidation.set")) requirePermission(actor, "config.selfvalidation.approve");
+    return this.policyRequests ? this.policyRequests.getPending(actor.tenantId) : null;
+  }
+
+  /** Second confirmation: never the author (maker-checker). Applies the requested policy. */
+  async approveSelfValidationPolicy(actor: AuthenticatedUser, id: string, requestId: string): Promise<Config> {
+    requirePermission(actor, "config.selfvalidation.approve");
+    const request = await this.getPendingRequestOrThrow(actor, id);
+    const policyRequests = this.policyRequests!;
+    const before = await this.get(actor);
+    if (!(await policyRequests.decide(actor.tenantId, id, "APPLIED", actor.userId, null))) {
+      throw new ConflictError("This request has already been decided");
+    }
+    let after: Config;
+    try {
+      after = await this.upsertConfig(actor.tenantId, { selfValidationPolicy: request.requestedPolicy }, request.requestedBy);
+    } catch (err) {
+      await policyRequests.reopen(actor.tenantId, id).catch(() => undefined);
+      throw err;
+    }
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Config",
+      entityId: after.id,
+      action: "APPROVE",
+      oldValue: before,
+      newValue: { ...after, approvedRequestId: id, requestedBy: request.requestedBy },
+      reason: request.reason,
+      requestId,
     });
     return after;
   }
+
+  async rejectSelfValidationPolicy(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<SelfValidationPolicyRequest> {
+    requirePermission(actor, "config.selfvalidation.approve");
+    if (!reason || !isAcceptableReason(reason)) throw new ValidationError("A valid reason is required to reject a request");
+    const request = await this.getPendingRequestOrThrow(actor, id);
+    const rejected = await this.policyRequests!.decide(actor.tenantId, id, "REJECTED", actor.userId, reason.trim());
+    if (!rejected) throw new ConflictError("This request has already been decided");
+    await this.audit.record({
+      tenantId: actor.tenantId, userId: actor.userId, entityType: "SelfValidationPolicyRequest", entityId: id,
+      action: "REJECT", oldValue: request, newValue: rejected, reason: reason.trim(), requestId,
+    });
+    return rejected;
+  }
+
+  /** Tenant-scoped lookup, still PENDING, and never the author's own request. */
+  private async getPendingRequestOrThrow(actor: AuthenticatedUser, id: string): Promise<SelfValidationPolicyRequest> {
+    if (!this.policyRequests) throw new NotFoundError("SelfValidationPolicyRequest", id);
+    const request = await this.policyRequests.getById(actor.tenantId, id);
+    if (!request) throw new NotFoundError("SelfValidationPolicyRequest", id);
+    if (request.status !== "PENDING") throw new ValidationError(`This request has already been decided (${request.status})`);
+    if (request.requestedBy === actor.userId) {
+      throw new ForbiddenError("The author of a request cannot confirm or reject it (maker-checker)");
+    }
+    return request;
+  }
+}
+
+export interface SelfValidationPolicyOutcome {
+  config: Config;
+  /** Set when the relaxation waits for a second person; `config` is then unchanged. */
+  pendingRequest: SelfValidationPolicyRequest | null;
 }

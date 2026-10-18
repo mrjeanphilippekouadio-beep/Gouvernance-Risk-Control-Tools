@@ -148,6 +148,8 @@ export type Permission =
   | "config.cumul.set"
   /** DECISION-074 R-0: client's choice for noSelfValidation (REFUSE / DOUBLE_CONFIRMATION) — relaxes a control, administrator only. */
   | "config.selfvalidation.set"
+  /** q158 (DECISION-078): second confirmation of a relaxed self-validation policy (Risk Manager, Committee; never Audit). */
+  | "config.selfvalidation.approve"
   /** DECISION-074: governance health panel; distinct prefix from governance.* (review cycles). */
   | "governancehealth.read"
   /** DECISION-074/075 (D2c): designate / end the designated manager and the Risk Manager interim (opens Risk Manager rights; administrator only). */
@@ -311,6 +313,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "config.committeeenforcement.set",
   "config.cumul.set",
   "config.selfvalidation.set",
+  "config.selfvalidation.approve",
   "governancehealth.read",
   "designation.manage",
   "orgprofile.read",

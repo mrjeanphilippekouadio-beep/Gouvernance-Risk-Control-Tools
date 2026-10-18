@@ -55,8 +55,8 @@ function requireReason(reason: unknown, what: string): string {
 /**
  * DECISION-074 R-2 / DECISION-075 q147: the organization profile questionnaire.
  *  - The administrator (orgprofile.submit) submits a new version with a reason; every version is kept.
- *  - Lowering the size (new class < current class) with a third party present (another active Risk Manager, Committee or
- *    Audit member) stays PENDING until someone else holding orgprofile.approve confirms it. With no third party it applies
+ *  - Lowering the size (new class < current class) with a third party present (another active Risk Manager or Committee
+ *    member, i.e. a possible approver; Audit never confirms) stays PENDING until someone else holding orgprofile.approve confirms it. With no third party it applies
  *    at once, marked "adminAlone" in the journal. Any other change applies at once.
  *  - Author and approver always come from the authenticated actor, never from the request; nobody decides their own submission.
  *  - The size is computed here on every read (classifyOrganization), the most demanding of declared and observed.

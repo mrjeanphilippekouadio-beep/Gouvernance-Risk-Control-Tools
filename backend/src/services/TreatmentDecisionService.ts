@@ -9,7 +9,6 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import { checkSelfValidation, type AcceptedSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
-import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 export interface CreateTreatmentDecisionRequest {
   riskEvaluationId: string;
@@ -145,7 +144,7 @@ export class TreatmentDecisionService {
    * (treatmentdecision.validate.committee — never treatmentdecision.validate).
    * OD-5: fail-closed if no committee threshold is configured yet.
    */
-  async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string, confirmation?: GovernanceConfirmation): Promise<TreatmentDecision> {
+  async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string): Promise<TreatmentDecision> {
     requirePermission(actor, "treatmentdecision.validate.committee");
     const before = await this.getOrThrow(actor.tenantId, id);
     this.assertProposed(before);
@@ -177,16 +176,13 @@ export class TreatmentDecisionService {
       );
     }
 
-    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
-      isSelf: actor.userId === before.decidedBy,
-      permission: "treatmentdecision.validate.committee",
-      makerIds: [before.decidedBy],
-      refusal: "The proposer of a treatment decision cannot validate it through the committee path either",
-      confirmation,
-    });
+    // q159 (DECISION-078): always collegial, outside the self-validation policy (no DOUBLE_CONFIRMATION).
+    if (actor.userId === before.decidedBy) {
+      throw new ForbiddenError("The proposer of a treatment decision cannot validate it through the committee path either");
+    }
 
     const after = await this.treatmentDecisions.recordCommitteeValidation(actor.tenantId, id, actor.userId, comment);
-    await this.recordAudit(actor, id, before, after, "VALIDATE", comment, requestId, selfValidated);
+    await this.recordAudit(actor, id, before, after, "VALIDATE", comment, requestId);
     return after;
   }
 

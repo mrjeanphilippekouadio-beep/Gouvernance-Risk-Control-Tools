@@ -157,31 +157,7 @@ const paths: PathCase[] = [
       return { events, writes, run: (who, conf) => svc.validate(who, "r1", null, "r", conf) };
     },
   },
-  {
-    name: "RiskEvaluation.validateByCommittee", entityType: "RiskEvaluation", routeEntityType: "RiskEvaluation",
-    permission: "riskevaluation.validate.committee", roles: ["riskevaluation.read", "riskevaluation.validate.committee"], makers: [ME],
-    build: (gate, maker = ME) => {
-      const events: Ev[] = []; const writes: string[] = [];
-      const row = { id: "r1", tenantId: "t1", status: "BROUILLON", residualScore: 20, evaluatorId: maker, committeeEvaluationMinScore: 15, committeeEvaluationEnforced: true };
-      const svc = new RiskEvaluationService(
-        { getById: async () => row, recordCommitteeValidation: async () => { writes.push("committee"); return { ...row, status: "VALIDEE_COMITE" }; } } as never,
-        audit(events), undefined, undefined, undefined, undefined, undefined, undefined, undefined, gate);
-      return { events, writes, run: (who, conf) => svc.validateByCommittee(who, "r1", null, "r", conf) };
-    },
-  },
-  {
-    name: "TreatmentDecision.validateByCommittee", entityType: "TreatmentDecision", routeEntityType: "TreatmentDecision",
-    permission: "treatmentdecision.validate.committee", roles: ["treatmentdecision.validate.committee"], makers: [ME],
-    build: (gate, maker = ME) => {
-      const events: Ev[] = []; const writes: string[] = [];
-      const row = { id: "d1", tenantId: "t1", status: "PROPOSEE", decidedBy: maker, validatorId: "u-sup", riskEvaluationId: "r1" };
-      const svc = new TreatmentDecisionService(
-        { getById: async () => row, recordCommitteeValidation: async () => { writes.push("committee"); return { ...row, status: "VALIDEE_COMITE" }; } } as never,
-        { getById: async () => ({ residualScore: 20, committeeTreatmentMinScore: 15, riskFrameworkVersionId: "v1" }) } as never,
-        {} as never, audit(events), undefined, gate);
-      return { events, writes, run: (who, conf) => svc.validateByCommittee(who, "d1", null, "r", conf) };
-    },
-  },
+  // q159 (DECISION-078): the two committee paths left the double confirmation; see test/q159-committee.test.ts.
 ];
 
 describe.each(paths)("QA-panel D4 / $name", (p) => {
@@ -340,8 +316,6 @@ describe("QA-panel D4 / routes forward the confirmation (a route that drops it w
     { name: "actionPlans", method: "PATCH", path: `/x/${ID}/close`, body: { evidenceId: "e" }, mount: (s) => (a) => a.use("/x", actionPlansRouter({ close: s.fn } as never, {} as never)) },
     { name: "evaluationmode requests", method: "POST", path: `/x/${ID}/validate`, body: {}, mount: (s) => (a) => a.use("/x", processEvaluationModeRequestsRouter({ validate: s.fn } as never)) },
     { name: "risk evaluations validate", method: "PATCH", path: `/x/${ID}/validate`, body: {}, mount: (s) => (a) => a.use("/x", riskEvaluationsRouter({ validate: s.fn } as never, {} as never, {} as never)) },
-    { name: "risk evaluations validate-committee", method: "PATCH", path: `/x/${ID}/validate-committee`, body: {}, mount: (s) => (a) => a.use("/x", riskEvaluationsRouter({ validateByCommittee: s.fn } as never, {} as never, {} as never)) },
-    { name: "treatment decisions validate-committee", method: "PATCH", path: `/x/${ID}/validate-committee`, body: {}, mount: (s) => (a) => a.use("/x", treatmentDecisionsRouter({ validateByCommittee: s.fn } as never)) },
   ];
 
   it.each(routeCases)("$name: the confirmation reaches the service as the last argument; absent stays undefined", async (c) => {
@@ -402,6 +376,7 @@ describe("QA-panel D4 / no self-validation guard outside the gate (static)", () 
     "UserService.ts": "no self-suspension",
     "RoleService.ts": "no self-assignment, hand-over interim rules, permission-change decisions (out of D4 scope)",
     "GovernanceDesignationService.ts": "no self-designation",
+    "ConfigService.ts": "own maker-checker (q158 policy requests: requestedBy)",
     "DashboardScopeResolver.ts": "comment only",
     "ControlEffectivenessService.ts": "gate", "ControlExecutionService.ts": "gate", "FindingService.ts": "gate", "GovernanceService.ts": "gate", "ActionPlanService.ts": "gate",
   };

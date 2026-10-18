@@ -180,10 +180,12 @@ describe("permissions", () => {
   it("orgprofile.* are known; the Audit group only reads and confirms; submit is not a group right but the Risk Manager's", () => {
     for (const p of ["orgprofile.read", "orgprofile.submit", "orgprofile.approve"] as const) expect(ALL_PERMISSIONS).toContain(p);
     expect(FIXED_GROUP_PERMISSIONS.RISK_MANAGER).toEqual(expect.arrayContaining(["orgprofile.read", "orgprofile.submit", "orgprofile.approve"]));
-    for (const g of ["RISK_COMMITTEE", "AUDIT"] as const) {
-      expect(FIXED_GROUP_PERMISSIONS[g]).toEqual(expect.arrayContaining(["orgprofile.read", "orgprofile.approve"]));
-      expect(FIXED_GROUP_PERMISSIONS[g]).not.toContain("orgprofile.submit");
-    }
+    expect(FIXED_GROUP_PERMISSIONS.RISK_COMMITTEE).toEqual(expect.arrayContaining(["orgprofile.read", "orgprofile.approve"]));
+    expect(FIXED_GROUP_PERMISSIONS.RISK_COMMITTEE).not.toContain("orgprofile.submit");
+    // q157: Audit reads only, never confirms
+    expect(FIXED_GROUP_PERMISSIONS.AUDIT).toContain("orgprofile.read");
+    expect(FIXED_GROUP_PERMISSIONS.AUDIT).not.toContain("orgprofile.approve");
+    expect(isAuditGroupPermission("orgprofile.approve")).toBe(false);
     expect(FIXED_GROUP_PERMISSIONS.AUDIT.filter((p) => !isAuditGroupPermission(p))).toEqual([]);
     expect(isAuditGroupPermission("orgprofile.submit")).toBe(false);
     // holding the new rights does not make someone an administrator (q63 cumul rules)

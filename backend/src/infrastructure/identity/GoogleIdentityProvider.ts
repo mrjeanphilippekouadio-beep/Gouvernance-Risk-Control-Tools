@@ -17,10 +17,14 @@ export interface TenantMembershipLookup {
  */
 export class GoogleIdentityProvider implements IdentityProvider {
   private readonly client: OAuth2Client;
+  // Dernier `iat` vu par utilisateur : un nouveau jeton (nouvelle connexion Google) a un nouvel `iat`.
+  private readonly lastIat = new Map<string, number>();
 
   constructor(
     private readonly googleClientId: string,
     private readonly lookupMembership: TenantMembershipLookup,
+    /** q155 : appelé uniquement à la première vérification d'un nouveau jeton, pas à chaque requête. */
+    private readonly onIdentified?: (tenantId: string, userId: string) => void,
   ) {
     this.client = new OAuth2Client(googleClientId);
   }
@@ -38,6 +42,15 @@ export class GoogleIdentityProvider implements IdentityProvider {
     const membership = await this.lookupMembership(payload.email);
     if (!membership) {
       throw new ForbiddenError(`No tenant membership found for ${payload.email}`);
+    }
+
+    if (this.onIdentified && this.lastIat.get(membership.userId) !== payload.iat) {
+      this.lastIat.set(membership.userId, payload.iat);
+      try {
+        this.onIdentified(membership.tenantId, membership.userId);
+      } catch {
+        // jamais bloquant
+      }
     }
 
     return {

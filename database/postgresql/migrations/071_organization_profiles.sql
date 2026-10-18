@@ -132,14 +132,19 @@ CREATE TRIGGER organization_profiles_truncate_guard
 GRANT SELECT, INSERT, UPDATE ON organization_profiles TO grc_app_runtime;
 REVOKE DELETE, TRUNCATE ON organization_profiles FROM grc_app_runtime;
 
--- Rattrapage des droits (RM-V1 R-7). Groupes fixes : RM lit, soumet et confirme ; Comité et Audit lisent et confirment.
+-- Rattrapage des droits (RM-V1 R-7). Groupes fixes : RM lit, soumet et confirme ; Comité lit et confirme ; Audit lit seulement (q157).
 UPDATE roles
 SET permissions = ARRAY(SELECT DISTINCT unnest(permissions || ARRAY['orgprofile.read', 'orgprofile.submit', 'orgprofile.approve']::text[]))
 WHERE system_group = 'RISK_MANAGER' AND deleted_at IS NULL;
 
 UPDATE roles
 SET permissions = ARRAY(SELECT DISTINCT unnest(permissions || ARRAY['orgprofile.read', 'orgprofile.approve']::text[]))
-WHERE system_group IN ('RISK_COMMITTEE', 'AUDIT') AND deleted_at IS NULL;
+WHERE system_group = 'RISK_COMMITTEE' AND deleted_at IS NULL;
+
+-- Audit : lecture seule (q157, DECISION-078) ; prévenu des baisses de taille, jamais confirmateur.
+UPDATE roles
+SET permissions = ARRAY(SELECT DISTINCT unnest(permissions || ARRAY['orgprofile.read']::text[]))
+WHERE system_group = 'AUDIT' AND deleted_at IS NULL;
 
 -- Administrateurs (rôles hors groupes fixes portant une permission de ADMIN_PERMISSIONS) : lecture + soumission.
 UPDATE roles

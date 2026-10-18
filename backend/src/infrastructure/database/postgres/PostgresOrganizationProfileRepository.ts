@@ -106,9 +106,10 @@ export class PostgresOrganizationProfileRepository implements OrganizationProfil
     };
   }
 
+  /** q157: the possible approvers (Risk Manager, Committee) other than the author; Audit is informed, never a confirmer. */
   async countOtherGovernanceMembers(tenantId: string, excludeUserId: string): Promise<number> {
     const { rows } = await this.pool.query<{ n: string }>(
-      `SELECT count(DISTINCT user_id) AS n FROM (${GROUP_MEMBERS_SQL}) m WHERE user_id <> $2`,
+      `SELECT count(DISTINCT user_id) AS n FROM (${GROUP_MEMBERS_SQL}) m WHERE user_id <> $2 AND system_group IN ('RISK_MANAGER', 'RISK_COMMITTEE')`,
       [tenantId, excludeUserId],
     );
     return Number(rows[0]?.n ?? 0);

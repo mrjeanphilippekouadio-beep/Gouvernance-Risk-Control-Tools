@@ -5,7 +5,7 @@ const log = pino({ name: "identity.lastSeen" });
 const ONE_HOUR_MS = 3_600_000;
 
 /**
- * Lot D2a : enregistre `users.last_seen_at` au plus une fois par heure et par utilisateur.
+ * Lot D2a / q155 : enregistre `users.last_seen_at` au plus une fois par heure et par utilisateur.
  * Télémétrie technique : pas d'audit_log, aucune donnée au-delà de la date. Ne lève jamais et n'est
  * jamais attendue par l'appelant : un échec est journalisé et la requête continue.
  */
@@ -31,23 +31,5 @@ export function createLastSeenRecorder(pool: Pick<Pool, "query">) {
         lastWrite.delete(key);
         log.warn({ tenantId, errorType: err instanceof Error ? err.name : "unknown" }, "last_seen_at update failed");
       });
-  };
-}
-
-/** Enveloppe un résolveur d'identité : la résolution réussie déclenche l'enregistrement, sans changer son résultat. */
-export function withLastSeen<A extends unknown[], M extends { userId: string; tenantId: string }>(
-  lookup: (...args: A) => Promise<M | null>,
-  record: (tenantId: string, userId: string) => void,
-): (...args: A) => Promise<M | null> {
-  return async (...args: A) => {
-    const membership = await lookup(...args);
-    if (membership) {
-      try {
-        record(membership.tenantId, membership.userId);
-      } catch {
-        // jamais bloquant
-      }
-    }
-    return membership;
   };
 }

@@ -184,7 +184,7 @@ describe("QA-panel routes / server wiring (static)", () => {
     expect(server.match(/new SelfValidationGate\(/g)).toHaveLength(1);
     const uses = server.match(/\bselfValidationGate\b/g) ?? [];
     expect(uses.length).toBeGreaterThanOrEqual(9); // declaration + 8 services
-    expect(server).toMatch(/new ConfigService\([^)]*governanceQueries\)/);
+    expect(server).toMatch(/new ConfigService\([^;]*governanceQueries/);
     expect(server).toMatch(/new RoleService\([^;]*governanceDesignationRepository\);/);
   });
   it("services with a tenant-scoped permission gate call requirePermission first in every public method of the new services", () => {
