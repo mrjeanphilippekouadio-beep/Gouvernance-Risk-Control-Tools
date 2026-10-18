@@ -47,7 +47,7 @@ function role(id: string, systemGroup: SystemGroup): Role {
   };
 }
 
-interface Opts { rm?: string[]; audit?: string[]; committee?: string[]; scales?: RatingScale[]; suspended?: string[] }
+interface Opts { rm?: string[]; audit?: string[]; committee?: string[]; scales?: RatingScale[]; suspended?: string[]; categories?: boolean }
 
 function setup(opts: Opts = {}) {
   const groups: Record<SystemGroup, string[]> = {
@@ -161,7 +161,10 @@ function setup(opts: Opts = {}) {
   const sent: Array<{ recipientUserId: string; eventType: string }> = [];
   const notifications = { async record(i: { recipientUserId: string; eventType: string }) { sent.push(i); } };
   const ratingScales = { async getById(_t: string, id: string) { return scales.find((s) => s.id === id) ?? null; } };
-  const service = new RiskFrameworkService(repo as never, ratingScales as never, roleRepo as never, users as never, audit as never, undefined, notifications as never);
+  const service = new RiskFrameworkService(repo as never, ratingScales as never, roleRepo as never, users as never, audit as never,
+    // q133: every id exists; its name is "Fraude" (the label is derived server-side from the id).
+    opts.categories ? { async getById(_t: string, id: string) { return { id, name: "Fraude", active: true, parentId: "root" }; } } as never : undefined,
+    notifications as never);
   return { service, repo, frameworks, versions, requests, events, sent, calls, groups, scales };
 }
 
@@ -232,13 +235,17 @@ describe("B-6a drafts", () => {
   });
 
   it("validates values: score range, mode, duplicates and size of the appetite list", async () => {
-    const s = setup();
+    const s = setup({ categories: true });
     const { fw, v } = await created(s);
     await expect(s.service.updateDraft(u1, fw, v, { committeeEvaluationMinScore: 37 }, R)).rejects.toThrow(ValidationError);
     await expect(s.service.updateDraft(u1, fw, v, { defaultEvaluationMode: "X" as never }, R)).rejects.toThrow(ValidationError);
-    const e = { subCategory: "Fraude", subCategoryId: null, entity: null, threshold: 5, description: null };
+    const e = { subCategory: "Fraude", subCategoryId: "c1", entity: null, threshold: 5, description: null };
     await expect(s.service.updateDraft(u1, fw, v, { appetiteThresholds: [e, e] }, R)).rejects.toThrow(/Duplicate/);
-    await expect(s.service.updateDraft(u1, fw, v, { appetiteThresholds: Array.from({ length: 201 }, (_, i) => ({ ...e, subCategory: `c${i}` })) }, R)).rejects.toThrow(/200/);
+    await expect(s.service.updateDraft(u1, fw, v, { appetiteThresholds: Array.from({ length: 201 }, (_, i) => ({ ...e, subCategoryId: `c${i}` })) }, R)).rejects.toThrow(/200/);
+    // q133 / F-FW-01: the id is mandatory, and the stored label comes from the category, not from the client.
+    await expect(s.service.updateDraft(u1, fw, v, { appetiteThresholds: [{ ...e, subCategoryId: null }] }, R)).rejects.toThrow(/catégorie de risque/);
+    const saved = await s.service.updateDraft(u1, fw, v, { appetiteThresholds: [{ ...e, subCategory: "Libellé forgé" }] }, R);
+    expect(saved.appetiteThresholds[0]).toMatchObject({ subCategory: "Fraude", subCategoryId: "c1" });
   });
 
   it("createDraft copies the active version and refuses while one draft is open", async () => {
@@ -270,14 +277,14 @@ describe("B-6a activation request validation", () => {
   }
 
   it("refuses a non-square scale, a missing descriptor, a Committee threshold or an appetite above n^2, and duplicate appetites", async () => {
-    const e = { subCategory: "Fraude", subCategoryId: null, entity: null, threshold: 5, description: null };
+    const e = { subCategory: "Fraude", subCategoryId: "c1", entity: null, threshold: 5, description: null };
     const s1 = setup({ scales: [scale("s1", 5, { impactLevels: 4, impactLabels: level(4) })] });
     await expect(await request(s1)).rejects.toThrow(/square/);
     const s2 = setup({ scales: [scale("s1", 5, { probabilityLabels: null })] });
     await expect(await request(s2)).rejects.toThrow(/probabilityLabels/);
     const s3 = setup({ scales: [scale("s1", 3)] });
     await expect(await request(s3, { committeeEvaluationMinScore: 12 })).rejects.toThrow(/exceed/);
-    const s4 = setup({ scales: [scale("s1", 3)] });
+    const s4 = setup({ scales: [scale("s1", 3)], categories: true });
     await expect(await request(s4, { appetiteThresholds: [{ ...e, threshold: 10 }] })).rejects.toThrow(/appétence/);
     const s5 = setup();
     const { fw, v } = await created(s5);

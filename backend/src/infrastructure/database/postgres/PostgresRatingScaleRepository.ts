@@ -95,7 +95,10 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
 
   async isReferencedByFrameworkVersion(tenantId: string, id: string): Promise<boolean> {
     const { rows } = await this.pool.query(
-      `SELECT 1 FROM risk_framework_versions WHERE tenant_id = $1 AND rating_scale_id = $2 LIMIT 1`,
+      `SELECT 1 FROM risk_framework_versions
+       WHERE tenant_id = $1 AND rating_scale_id = $2
+         AND NOT (status = 'ARCHIVED' AND activated_at IS NULL)
+       LIMIT 1`,
       [tenantId, id],
     );
     return rows.length > 0;

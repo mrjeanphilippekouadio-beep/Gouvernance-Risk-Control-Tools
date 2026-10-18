@@ -265,7 +265,7 @@ export class RiskFrameworkService {
     const scale = await this.ratingScales.getById(actor.tenantId, input.ratingScaleId);
     if (!scale) throw new ValidationError(`Rating scale ${input.ratingScaleId} does not exist in this tenant`);
 
-    const given = checkParams(input.params ?? {});
+    const given = checkParams(await this.withResolvedAppetite(actor.tenantId, input.params ?? {}));
     const params: FrameworkParams = {
       ratingScaleId: scale.id,
       defaultEvaluationMode: given.defaultEvaluationMode ?? "CLASSIQUE",
@@ -284,7 +284,6 @@ export class RiskFrameworkService {
       committeeVoteRule: given.committeeVoteRule ?? DEFAULT_CONTRACT_PARAMS.committeeVoteRule,
       committeeVoteCustom: null,
     };
-    await this.assertSubCategories(actor.tenantId, params.appetiteThresholds);
 
     return this.audited<{ framework: RiskFramework; version: RiskFrameworkVersion }>(
       (created) => [
@@ -350,13 +349,12 @@ export class RiskFrameworkService {
     await this.assertRiskManager(actor);
     const before = await this.getVersionOrThrow(actor.tenantId, frameworkId, versionId);
     this.assertDraft(before);
-    const clean = checkParams(patch);
+    const clean = checkParams(await this.withResolvedAppetite(actor.tenantId, patch));
     if (Object.values(clean).every((v) => v === undefined)) throw new ValidationError("Nothing to update");
     if (clean.ratingScaleId !== undefined) {
       const scale = await this.ratingScales.getById(actor.tenantId, clean.ratingScaleId);
       if (!scale) throw new ValidationError(`Rating scale ${clean.ratingScaleId} does not exist in this tenant`);
     }
-    if (clean.appetiteThresholds) await this.assertSubCategories(actor.tenantId, clean.appetiteThresholds);
 
     // q90: with a transactional repository the edit and its audit line are one operation. Otherwise (B6a-QA-01)
     // the audit line, which feeds the author exclusion, is written BEFORE the edit is stored: worst case an
@@ -777,6 +775,28 @@ export class RiskFrameworkService {
     if (v.status !== "DRAFT") throw new ValidationError(`Only a draft version can be changed (this one is ${v.status})`);
   }
 
+  /**
+   * q133 / F-FW-01: on every write, each appetite entry must name an existing, active SUB-category (parentId set) of THIS tenant
+   * (subCategoryId mandatory); the stored `subCategory` label is the category's name, never the client's text.
+   */
+  private async withResolvedAppetite<T extends UpdateDraftParams>(tenantId: string, p: T): Promise<T> {
+    if (p.appetiteThresholds === undefined) return p;
+    if (p.appetiteThresholds.length > 0 && !this.riskCategories) {
+      throw new ValidationError("Risk category validation is not available: RiskCategoryRepository is not configured");
+    }
+    const names = new Map<string, string>();
+    for (const e of p.appetiteThresholds) {
+      if (!e.subCategoryId) throw new ValidationError("Chaque seuil d'appétence doit désigner une catégorie de risque (subCategoryId)");
+      if (names.has(e.subCategoryId)) continue;
+      const cat = await this.riskCategories!.getById(tenantId, e.subCategoryId);
+      if (!cat || !cat.active) throw new ValidationError(`Risk category ${e.subCategoryId} does not exist in this tenant`);
+      if (!cat.parentId) throw new ValidationError(`Risk category ${e.subCategoryId} is a top-level category: pick a sub-category`);
+      names.set(e.subCategoryId, cat.name);
+    }
+    return { ...p, appetiteThresholds: p.appetiteThresholds.map((e) => ({ ...e, subCategory: names.get(e.subCategoryId!)! })) };
+  }
+
+  /** Activation request: legacy drafts may still carry a free-text entry (no id); only the ids that exist are checked. */
   private async assertSubCategories(tenantId: string, entries: AppetiteThresholdEntry[]): Promise<void> {
     for (const e of entries) {
       if (!e.subCategoryId) continue;
