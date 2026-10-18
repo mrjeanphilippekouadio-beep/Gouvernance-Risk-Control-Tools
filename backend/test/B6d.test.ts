@@ -117,7 +117,7 @@ function world(o: { facts?: Partial<BootstrapFacts>; audit?: string[]; committee
   const version = {
     id: "v1", tenantId: "t1", frameworkId: "fw1", versionNumber: 1, status: "PENDING_APPROVAL", ratingScaleId: "s1",
     defaultEvaluationMode: "CLASSIQUE", committeeEvaluationMinScore: 15, committeeEvaluationEnforced: true, committeeTreatmentMinScore: 20,
-    appetiteThresholds: [{ subCategory: "Fraude", subCategoryId: null, entity: null, threshold: 8, description: null }],
+    appetiteThresholds: [{ subCategory: "Fraude", subCategoryId: "c1", entity: null, threshold: 8, description: null }],
     changeApprover: "RISK_MANAGER", selfProposalAllowed: false, lowCriticalityThreshold: 6, riskOwnerExecutorCumulAllowed: true,
     delegateExecutorCumulAllowed: true, delegationMaxDays: 30, hybridPolicyEnabled: false, masteryAuthoritativeSource: "RISK_TEAM",
     committeeVoteRule: "DEFAULT", committeeVoteCustom: null, createdBy: "u1", lastEditedBy: "u1", createdAt: new Date(), updatedAt: new Date(),
@@ -171,7 +171,8 @@ function world(o: { facts?: Partial<BootstrapFacts>; audit?: string[]; committee
   const roleAudit: Array<{ entityId: string; userId: string; action: string; oldValue: unknown; newValue: unknown }> = [];
   const audit = { async record() {}, async listForEntity(_t: string, type: string, id: string) { return type === "Role" ? roleAudit.filter((e) => e.entityId === id) : []; } };
   const scales = { async getById() { return scale(); } };
-  const service = new RiskFrameworkService(repo as never, scales as never, roleRepo as never, users as never, audit as never, undefined, notifications as never);
+  const service = new RiskFrameworkService(repo as never, scales as never, roleRepo as never, users as never, audit as never,
+    { async getById(_t: string, id: string) { return { id, name: "Fraude", active: true, parentId: "root" }; } } as never, notifications as never);
   return { service, request, version, written, sent, stored, grantMeta, held, roleAudit };
 }
 

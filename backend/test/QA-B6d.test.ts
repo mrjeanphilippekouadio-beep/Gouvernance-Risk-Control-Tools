@@ -201,8 +201,8 @@ function world(o: Opts = {}) {
   const sent: Array<{ tenantId: string; recipientUserId: string; eventType: string }> = [];
   const notifications = { async record(i: { tenantId: string; recipientUserId: string; eventType: string }) { if (hooks.notifyDown) throw new Error("notif down"); sent.push(i); } };
   const ratingScales = { async getById(t: string, id: string) { return scales.find((s) => s.tenantId === t && s.id === id) ?? null; } };
-  const cats = new Set(o.categories ?? []);
-  const categories = { async getById(t: string, id: string) { return cats.has(`${t}:${id}`) ? { id } : null; } };
+  const cats = new Set(o.categories ?? ["t1:c1"]); // q133: the fixture appetite entry names c1
+  const categories = { async getById(t: string, id: string) { return cats.has(`${t}:${id}`) ? { id, name: "Fraude", active: true, parentId: "root" } : null; } };
   const service = new RiskFrameworkService(repo as never, ratingScales as never, roleRepo as never, users as never, audit as never, categories as never, notifications as never);
   const snapshot = (t = T1) => JSON.stringify([frameworks.filter((f) => f.tenantId === t), versions.filter((v) => v.tenantId === t), requests.filter((r) => r.tenantId === t), events.filter((e) => e.tenantId === t).length, sent.length]);
   return { service, frameworks, versions, requests, events, sent, calls, groups, scales, hooks, snapshot };
@@ -364,7 +364,7 @@ function bworld(o: { facts?: Partial<BootstrapFacts>; audit?: string[]; committe
   const version = {
     id: "v1", tenantId: "t1", frameworkId: "fw1", versionNumber: 1, status: "PENDING_APPROVAL", ratingScaleId: "s1",
     defaultEvaluationMode: "CLASSIQUE", committeeEvaluationMinScore: 15, committeeEvaluationEnforced: true, committeeTreatmentMinScore: 20,
-    appetiteThresholds: [{ subCategory: "Fraude", subCategoryId: null, entity: null, threshold: 8, description: null }],
+    appetiteThresholds: [{ subCategory: "Fraude", subCategoryId: "c1", entity: null, threshold: 8, description: null }],
     changeApprover: "RISK_MANAGER", selfProposalAllowed: false, lowCriticalityThreshold: 6, riskOwnerExecutorCumulAllowed: true,
     delegateExecutorCumulAllowed: true, delegationMaxDays: 30, hybridPolicyEnabled: false, masteryAuthoritativeSource: "RISK_TEAM",
     committeeVoteRule: "DEFAULT", committeeVoteCustom: null, createdBy: "u1", lastEditedBy: "u1", createdAt: new Date(), updatedAt: new Date(),
@@ -415,7 +415,8 @@ function bworld(o: { facts?: Partial<BootstrapFacts>; audit?: string[]; committe
   const notifications = { async record(i: { recipientUserId: string; eventType: string; message: string }) { sent.push(i); } };
   const audit = { async record() {}, async listForEntity() { return []; } };
   const scales = { async getById() { return bscale(); } };
-  const service = new Svc(repo as never, scales as never, roleRepo as never, users as never, audit as never, undefined, notifications as never);
+  const service = new Svc(repo as never, scales as never, roleRepo as never, users as never, audit as never,
+    { async getById(_t: string, id: string) { return { id, name: "Fraude", active: true, parentId: "root" }; } } as never, notifications as never);
   return { service, request, version, written, sent, stored, held };
 }
 
