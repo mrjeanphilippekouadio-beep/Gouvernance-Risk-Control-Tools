@@ -23,6 +23,7 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "riskframework.process.assign",
     "governancehealth.read",
     "process.responsibility.assign",
+    "orgprofile.read", "orgprofile.submit", "orgprofile.approve",
   ],
   RISK_COMMITTEE: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",
@@ -31,6 +32,7 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "cartography.read", "dashboard.read", "dashboard.executive", "governance.read", "notification.read",
     "riskevaluation.validate.committee", "treatmentdecision.validate.committee", "governance.validate",
     "rolegroup.audit.validate", "riskframework.read", "governancehealth.read",
+    "orgprofile.read", "orgprofile.approve",
   ],
   AUDIT: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",
@@ -39,6 +41,7 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "cartography.read", "dashboard.read", "dashboard.executive", "governance.read", "notification.read",
     "audit.read", "audit.mission.read", "audit.finding.read", "rolegroup.audit.validate", "riskframework.read",
     "governancehealth.read",
+    "orgprofile.read", "orgprofile.approve",
   ],
 };
 
@@ -48,7 +51,8 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
  * a change of the Audit rights.
  */
 export function isAuditGroupPermission(p: Permission): boolean {
-  return p.endsWith(".read") || p.endsWith(".download") || p === "dashboard.executive" || p === "rolegroup.audit.validate";
+  // orgprofile.approve (D3): like rolegroup.audit.validate, a second confirmation of a governance setting, not a business write.
+  return p.endsWith(".read") || p.endsWith(".download") || p === "dashboard.executive" || p === "rolegroup.audit.validate" || p === "orgprofile.approve";
 }
 
 /** F-B8b-01: rolegroup.audit.update is held by no role at all; .validate only by Audit and the Committee. */

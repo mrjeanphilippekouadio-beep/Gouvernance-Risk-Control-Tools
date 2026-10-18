@@ -43,6 +43,7 @@ import { PostgresNotificationRepository } from "./infrastructure/database/postgr
 import { PostgresNotificationSubscriptionRepository } from "./infrastructure/database/postgres/PostgresNotificationSubscriptionRepository.js";
 import { PostgresReviewCycleRepository } from "./infrastructure/database/postgres/PostgresReviewCycleRepository.js";
 import { PostgresProcessEvaluationModeRequestRepository } from "./infrastructure/database/postgres/PostgresProcessEvaluationModeRequestRepository.js";
+import { PostgresOrganizationProfileRepository } from "./infrastructure/database/postgres/PostgresOrganizationProfileRepository.js";
 import { TelegramNotifier } from "./infrastructure/notifications/TelegramNotifier.js";
 import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
@@ -61,6 +62,8 @@ import { FindingService } from "./services/FindingService.js";
 import { DepartmentService } from "./services/DepartmentService.js";
 import { ProcessService } from "./services/ProcessService.js";
 import { ProcessEvaluationModeRequestService } from "./services/ProcessEvaluationModeRequestService.js";
+import { OrganizationProfileService } from "./services/OrganizationProfileService.js";
+import { organizationProfileRouter } from "./api/v1/organizationProfile.routes.js";
 import { AuditLogService } from "./services/AuditLogService.js";
 import { RoleService } from "./services/RoleService.js";
 import { FeedbackService } from "./services/FeedbackService.js";
@@ -252,6 +255,10 @@ const processEvaluationModeRequestService = new ProcessEvaluationModeRequestServ
   riskRepository,
   auditRepository,
   selfValidationGate,
+);
+const organizationProfileService = new OrganizationProfileService(
+  new PostgresOrganizationProfileRepository(pool),
+  auditRepository,
 );
 const auditLogService = new AuditLogService(auditRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository);
@@ -553,6 +560,7 @@ app.use(
   authMiddleware(identityProvider),
   processEvaluationModeRequestsRouter(processEvaluationModeRequestService, governanceQueries),
 );
+app.use("/api/v1/organization-profile", authMiddleware(identityProvider), organizationProfileRouter(organizationProfileService));
 app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(auditLogService));
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
 app.use("/api/v1/governance-designations", authMiddleware(identityProvider), governanceDesignationsRouter(governanceDesignationService));

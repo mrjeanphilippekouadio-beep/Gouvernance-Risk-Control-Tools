@@ -107,11 +107,17 @@ describe("B8bis-02 single source of truth for the fixed groups' rights", () => {
   };
 
   const addedBy069 = (g: string) => (g === "RISK_MANAGER" ? ["process.responsibility.assign"] : []);
+  // D3 (DECISION-074 R-2): migration 071 adds the orgprofile.* rights to the three groups.
+  const addedBy071: Record<string, string[]> = {
+    RISK_MANAGER: ["orgprofile.read", "orgprofile.submit", "orgprofile.approve"],
+    RISK_COMMITTEE: ["orgprofile.read", "orgprofile.approve"],
+    AUDIT: ["orgprofile.read", "orgprofile.approve"],
+  };
 
   // D1 (DECISION-074): migration 066 adds governancehealth.read to the three groups.
   // D2b: migration 069 adds process.responsibility.assign to the Risk Manager group only.
-  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055, 066 and 069", (g) => {
-    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g), "governancehealth.read", ...addedBy069(g)]);
+  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055, 066, 069 and 071", (g) => {
+    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g), "governancehealth.read", ...addedBy069(g), ...addedBy071[g]!]);
     expect(FIXED_GROUP_PERMISSIONS[g].every((p) => ALL_PERMISSIONS.includes(p))).toBe(true);
   });
 
