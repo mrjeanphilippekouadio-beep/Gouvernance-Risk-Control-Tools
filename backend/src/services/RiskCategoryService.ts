@@ -13,8 +13,12 @@ export class RiskCategoryService {
   ) {}
 
   async list(actor: AuthenticatedUser, includeInactive = false): Promise<RiskCategory[]> {
-    requirePermission(actor, "config.read");
-    return this.categories.list(actor.tenantId, { activeOnly: !includeInactive });
+    // q145: the evaluation / appetite screens read the taxonomy without config.read. Those readers only see active categories.
+    const canReadAll = actor.roles.includes("config.read");
+    if (!canReadAll && !actor.roles.includes("riskevaluation.create") && !actor.roles.includes("riskframework.read")) {
+      requirePermission(actor, "config.read");
+    }
+    return this.categories.list(actor.tenantId, { activeOnly: !(canReadAll && includeInactive) });
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<RiskCategory> {

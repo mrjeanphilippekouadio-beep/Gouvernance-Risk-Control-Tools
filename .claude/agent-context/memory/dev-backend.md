@@ -332,3 +332,8 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Service : 9e paramètre optionnel `riskCategories` (câblé dans server.ts). Non câblé (tests) : ancien chemin libellé libre ; `subCategoryId` sans dépôt = refus (fail closed). Obligatoire dès que câblé.
 - Test source-regex de QA-B6b (colonnes de l'INSERT) adapté d'une colonne + `$14` : seul test existant touché.
 - Piège : les suites PG partagent la base `grc_qa` ; en parallèle, `QA-D044-pg` échoue (compte les connexions « idle in transaction » d'autres fichiers). Lancer avec `--no-file-parallelism` et `PGPORT=5531` (les suites D044/FB6B02 ignorent `QA_SWP_PGPORT`).
+
+## 2026-10-18 q145 regression : lecture des categories
+
+- `RiskCategoryService.list` : config.read OU riskevaluation.create OU riskframework.read ; sans config.read, liste forcee aux actives (includeInactive ignore). Les permissions se lisent dans `actor.roles` (requirePermission fait `actor.roles.includes`), donc un test local suffit, pas de helper. Cause : un garde passe de lecture de reference a config.read sans verifier que les groupes fixes la detiennent ; verifier le groupe porteur avant de brancher un ecran sur un endpoint existant.
+- Piege outil : une commande composee (python + heredoc + cd) refusee en bloc par le garde du worktree, rien d execute ; utiliser Write/Edit.
