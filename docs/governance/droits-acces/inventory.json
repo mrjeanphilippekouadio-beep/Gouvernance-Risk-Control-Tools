@@ -1,0 +1,3273 @@
+{
+  "generatedAt": "2026-10-18",
+  "author": "A06 Dev Backend (inventaire factuel du code, aucun jugement de gouvernance ; DECISION-068)",
+  "legend": "id : permission = chaîne exacte ; group:<CODE>, guard:<nom>, data:<entité>.<relation>, config:<nom>. enforcedAt = fichier:ligne du contrôle. heldBy = qui la détient aujourd'hui d'après le code, les migrations et le seed ; les rôles personnalisés et la colonne users.roles en base n'ont pas pu être vérifiés (aucun accès à la base).",
+  "rights": [
+    {
+      "id": "risk.read",
+      "kind": "permission",
+      "domain": "Risques",
+      "label_fr": "Voir les risques",
+      "what": "Consulter la liste et la fiche des risques du client. Exigé aussi pour la lecture du Dispositif applicable à un risque.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskDeviceViewService.ts:185",
+        "backend/src/services/RiskEvaluationViewService.ts:63",
+        "backend/src/services/RiskFrameworkService.ts:201",
+        "backend/src/services/RiskOwnershipService.ts:60",
+        "backend/src/services/RiskService.ts:90",
+        "backend/src/services/RiskService.ts:98"
+      ],
+      "terminal": false,
+      "notes": "Exigé en plus par GET /risk-frameworks/applicable?riskId (RiskFrameworkService, F-B6b-03)."
+    },
+    {
+      "id": "risk.create",
+      "kind": "permission",
+      "domain": "Risques",
+      "label_fr": "Déclarer un risque",
+      "what": "Créer un risque dans le registre.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskService.ts:49"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "risk.update",
+      "kind": "permission",
+      "domain": "Risques",
+      "label_fr": "Modifier la fiche d'un risque",
+      "what": "Modifier les champs d'un risque. Le service refuse le passage à ARCHIVED par cette voie et le changement de propriétaire.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskService.ts:103"
+      ],
+      "terminal": false,
+      "notes": "Aucun contrôle de propriété : tout détenteur modifie n'importe quel risque, qu'il en soit le propriétaire ou non."
+    },
+    {
+      "id": "risk.delete",
+      "kind": "permission",
+      "domain": "Risques",
+      "label_fr": "Archiver un risque",
+      "what": "Archiver un risque (suppression logique) avec un motif obligatoire.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskService.ts:135"
+      ],
+      "terminal": true,
+      "notes": "Seule voie vers le statut ARCHIVED (RiskService.update le refuse)."
+    },
+    {
+      "id": "evidence.read",
+      "kind": "permission",
+      "domain": "Preuves",
+      "label_fr": "Voir les preuves",
+      "what": "Lister et consulter les métadonnées des preuves.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/EvidenceService.ts:159"
+      ],
+      "terminal": false,
+      "notes": "Sert aussi de condition non bloquante : lors d'un doublon de fichier, seul un détenteur de evidence.read apprend l'identifiant de la preuve existante (EvidenceService.upload)."
+    },
+    {
+      "id": "evidence.download",
+      "kind": "permission",
+      "domain": "Preuves",
+      "label_fr": "Télécharger une preuve",
+      "what": "Télécharger le contenu d'une preuve (lookup tenant-scopé avant tout appel au stockage).",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/EvidenceService.ts:165"
+      ],
+      "terminal": false,
+      "notes": "Conditionne aussi l'affichage des exemples de lignes dans l'analyse xlsx (EvidenceService.analyze)."
+    },
+    {
+      "id": "evidence.upload",
+      "kind": "permission",
+      "domain": "Preuves",
+      "label_fr": "Déposer une preuve",
+      "what": "Téléverser un fichier de preuve (taille, type et empreinte vérifiés côté serveur).",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/EvidenceService.ts:55"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "evidence.delete",
+      "kind": "permission",
+      "domain": "Preuves",
+      "label_fr": "Supprimer une preuve",
+      "what": "Supprimer logiquement une preuve (le fichier du stockage est ensuite retiré).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/EvidenceService.ts:233"
+      ],
+      "terminal": true,
+      "notes": "Pas de restriction à l'auteur du dépôt : tout détenteur supprime n'importe quelle preuve du client. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "evidence.import",
+      "kind": "permission",
+      "domain": "Preuves",
+      "label_fr": "Analyser un classeur Excel déposé",
+      "what": "Lancer l'analyse d'un fichier xlsx déjà déposé (feuilles, colonnes, exemples). Aucune écriture.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/EvidenceService.ts:196"
+      ],
+      "terminal": false,
+      "notes": "Le nom dit « import » mais l'usage est l'analyse en lecture ; ajouté à aucun groupe fixe (HUMAN l'accorde par SQL selon la mémoire dev-backend). Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "control.read",
+      "kind": "permission",
+      "domain": "Contrôles",
+      "label_fr": "Voir les contrôles",
+      "what": "Consulter les contrôles et leurs liens avec les risques.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlService.ts:60",
+        "backend/src/services/ControlService.ts:67",
+        "backend/src/services/ControlService.ts:72",
+        "backend/src/services/RiskDeviceViewService.ts:187",
+        "backend/src/services/RiskEvaluationViewService.ts:64"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "control.create",
+      "kind": "permission",
+      "domain": "Contrôles",
+      "label_fr": "Créer un contrôle",
+      "what": "Créer un contrôle et ses risques couverts.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlService.ts:38"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "control.update",
+      "kind": "permission",
+      "domain": "Contrôles",
+      "label_fr": "Modifier un contrôle",
+      "what": "Modifier un contrôle ; le passage à ARCHIVED est refusé par cette voie.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlService.ts:82"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "control.delete",
+      "kind": "permission",
+      "domain": "Contrôles",
+      "label_fr": "Archiver un contrôle",
+      "what": "Archiver un contrôle (suppression logique) avec un motif.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlService.ts:121"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "execution.read",
+      "kind": "permission",
+      "domain": "Contrôles",
+      "label_fr": "Voir les exécutions de contrôle",
+      "what": "Consulter les exécutions d'un contrôle.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlExecutionService.ts:65",
+        "backend/src/services/ControlExecutionService.ts:72"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "execution.create",
+      "kind": "permission",
+      "domain": "Contrôles",
+      "label_fr": "Enregistrer l'exécution d'un contrôle",
+      "what": "Saisir une exécution de contrôle ; l'exécutant est forcé à l'utilisateur connecté.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlExecutionService.ts:28"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "execution.validate",
+      "kind": "permission",
+      "domain": "Contrôles",
+      "label_fr": "Valider l'exécution d'un contrôle",
+      "what": "Valider l'exécution saisie par un autre (double regard).",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlExecutionService.ts:82"
+      ],
+      "terminal": true,
+      "notes": "Refusé si le validateur est l'exécutant."
+    },
+    {
+      "id": "effectiveness.read",
+      "kind": "permission",
+      "domain": "Contrôles",
+      "label_fr": "Voir les évaluations d'efficacité",
+      "what": "Consulter les évaluations d'efficacité d'un contrôle.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlEffectivenessService.ts:63",
+        "backend/src/services/ControlEffectivenessService.ts:70"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "effectiveness.create",
+      "kind": "permission",
+      "domain": "Contrôles",
+      "label_fr": "Évaluer l'efficacité d'un contrôle",
+      "what": "Saisir une évaluation d'efficacité ; l'évaluateur est forcé à l'utilisateur connecté.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlEffectivenessService.ts:32"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "effectiveness.validate",
+      "kind": "permission",
+      "domain": "Contrôles",
+      "label_fr": "Valider une évaluation d'efficacité",
+      "what": "Valider l'évaluation d'efficacité saisie par un autre.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlEffectivenessService.ts:80"
+      ],
+      "terminal": true,
+      "notes": "Refusé si le validateur est l'évaluateur."
+    },
+    {
+      "id": "anomaly.read",
+      "kind": "permission",
+      "domain": "Anomalies",
+      "label_fr": "Voir les anomalies",
+      "what": "Consulter les anomalies.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/AnomalyService.ts:83",
+        "backend/src/services/AnomalyService.ts:90"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "anomaly.create",
+      "kind": "permission",
+      "domain": "Anomalies",
+      "label_fr": "Déclarer une anomalie",
+      "what": "Créer une anomalie ; le déclarant est forcé à l'utilisateur connecté.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/AnomalyService.ts:38"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "anomaly.update",
+      "kind": "permission",
+      "domain": "Anomalies",
+      "label_fr": "Faire avancer ou clôturer une anomalie",
+      "what": "Changer le statut d'une anomalie selon le cycle prévu, y compris la clôture (commentaire obligatoire).",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/AnomalyService.ts:101"
+      ],
+      "terminal": true,
+      "notes": "La clôture (état terminal CLOSED) passe par cette permission générale : il n'existe pas de permission de clôture dédiée."
+    },
+    {
+      "id": "department.read",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Voir les départements",
+      "what": "Consulter les départements.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DepartmentService.ts:63",
+        "backend/src/services/DepartmentService.ts:70"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "department.create",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Créer un département",
+      "what": "Créer un département.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DepartmentService.ts:27"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "department.update",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Modifier un département",
+      "what": "Modifier un département, y compris désigner son « propriétaire de risque » (texte libre).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DepartmentService.ts:111",
+        "backend/src/services/DepartmentService.ts:80"
+      ],
+      "terminal": false,
+      "notes": "Le « riskOwner » du département est un texte libre : il ne rattache aucun utilisateur et n'ouvre aucun droit. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "department.delete",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Supprimer un département",
+      "what": "Supprimer logiquement un département avec un motif.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DepartmentService.ts:133"
+      ],
+      "terminal": true,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "process.read",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Voir les processus",
+      "what": "Consulter les processus et leur historique de demandes de mode d'évaluation.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:138",
+        "backend/src/services/ProcessService.ts:106",
+        "backend/src/services/ProcessService.ts:252",
+        "backend/src/services/ProcessService.ts:99"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "process.create",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Créer un processus",
+      "what": "Créer un processus (le département est obligatoire).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ProcessService.ts:74"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "process.update",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Modifier un processus",
+      "what": "Modifier un processus (nom, rattachement…). Ne permet pas de changer le mode d'évaluation.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ProcessService.ts:125"
+      ],
+      "terminal": false,
+      "notes": "Le champ « propriétaire » du processus est un texte libre sans effet sur les droits. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "process.delete",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Supprimer un processus",
+      "what": "Supprimer logiquement un processus avec un motif.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ProcessService.ts:216"
+      ],
+      "terminal": true,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "process.evaluationmode.set",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Fixer directement le mode d'évaluation d'un processus",
+      "what": "Poser Classique ou Participatif sur un processus sans passer par une demande.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:243",
+        "backend/src/services/ProcessService.ts:180"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code (ProcessService.setEvaluationMode, ProcessEvaluationModeRequestService.setMode) mais aucune route HTTP ne l'appelle : PUT /processes/:id/evaluation-mode répond 410. Atteignable seulement par du code interne. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "process.evaluationmode.propose",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Proposer un changement de mode d'évaluation",
+      "what": "Ouvrir une demande Classique/Participatif sur un processus ; la demande ne change rien tant qu'un tiers ne l'a pas validée.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:99"
+      ],
+      "terminal": false,
+      "notes": "Aucune vérification que l'auteur est le propriétaire du processus (le propriétaire est un texte libre). Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "evaluationmode.validate",
+      "kind": "permission",
+      "domain": "Organisation",
+      "label_fr": "Valider ou refuser une demande de mode d'évaluation",
+      "what": "Appliquer ou refuser une demande de mode d'évaluation d'un processus.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:129",
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:149",
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:17",
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:209"
+      ],
+      "terminal": true,
+      "notes": "Le demandeur ne peut jamais décider sa propre demande (assertNotSelfValidated), même Risk Manager. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "audit.read",
+      "kind": "permission",
+      "domain": "Audit",
+      "label_fr": "Consulter le journal d'audit",
+      "what": "Lire le journal technique (qui a fait quoi, quand) avec ses filtres.",
+      "heldBy": [
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/AuditLogService.ts:20",
+        "backend/src/services/AuditLogService.ts:25",
+        "backend/src/services/AuditLogService.ts:31"
+      ],
+      "terminal": false,
+      "notes": "Sert aussi de repère « membre d'Audit » : les règles de cumul traitent toute permission audit.* comme celle d'un auditeur ; les titulaires sont notifiés des entrées au Comité."
+    },
+    {
+      "id": "role.read",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Voir les rôles et groupes",
+      "what": "Consulter les rôles, leurs droits, leurs membres et les droits effectifs d'un utilisateur.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:208",
+        "backend/src/services/RoleService.ts:215",
+        "backend/src/services/RoleService.ts:548",
+        "backend/src/services/RoleService.ts:561"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "role.create",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Créer un rôle",
+      "what": "Créer un rôle personnalisé avec les permissions de son choix (hors rolegroup.audit.*).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:180"
+      ],
+      "terminal": false,
+      "notes": "Compte dans la définition d'administrateur (ADMIN_PERMISSIONS). Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "role.update",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Modifier un rôle",
+      "what": "Modifier nom, description, périmètre du tableau de bord et permissions d'un rôle.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:227"
+      ],
+      "terminal": false,
+      "notes": "Interdit de changer les permissions d'un rôle qu'on porte soi-même ; le périmètre du tableau de bord d'un rôle porté n'est pas couvert par ce refus. Compte dans ADMIN_PERMISSIONS. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "role.delete",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Désactiver un rôle",
+      "what": "Désactiver un rôle personnalisé (jamais un groupe fixe).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:313"
+      ],
+      "terminal": true,
+      "notes": "Compte dans ADMIN_PERMISSIONS. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "role.assign",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Attribuer ou retirer un rôle à un utilisateur",
+      "what": "Donner ou retirer un rôle ou un groupe à un autre utilisateur ; motif obligatoire pour un groupe fixe.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:415",
+        "backend/src/services/RoleService.ts:492",
+        "backend/src/services/UserService.ts:104"
+      ],
+      "terminal": false,
+      "notes": "Refus de s'attribuer ou de se retirer un rôle à soi-même. Requise aussi par la création d'un utilisateur. Compte dans ADMIN_PERMISSIONS. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "feedback.create",
+      "kind": "permission",
+      "domain": "Retours utilisateurs",
+      "label_fr": "Envoyer un retour",
+      "what": "Envoyer un retour ou une suggestion sur l'outil.",
+      "heldBy": [
+        "Tout utilisateur authentifié (BASE_PERMISSIONS)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/FeedbackService.ts:30"
+      ],
+      "terminal": false,
+      "notes": "Accordée à tout utilisateur authentifié (BASE_PERMISSIONS)."
+    },
+    {
+      "id": "feedback.read",
+      "kind": "permission",
+      "domain": "Retours utilisateurs",
+      "label_fr": "Lire les retours",
+      "what": "Lire les retours envoyés par les utilisateurs.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/FeedbackService.ts:63"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "feedback.update",
+      "kind": "permission",
+      "domain": "Retours utilisateurs",
+      "label_fr": "Traiter un retour",
+      "what": "Changer le traitement d'un retour utilisateur.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/FeedbackService.ts:73"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "kpi.read",
+      "kind": "permission",
+      "domain": "Indicateurs",
+      "label_fr": "Voir les KPI",
+      "what": "Consulter les KPI et leurs mesures.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/KpiMeasureService.ts:60",
+        "backend/src/services/KpiService.ts:74",
+        "backend/src/services/KpiService.ts:86"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "kpi.create",
+      "kind": "permission",
+      "domain": "Indicateurs",
+      "label_fr": "Créer un KPI / saisir une mesure",
+      "what": "Créer un KPI et enregistrer ses mesures (auteur forcé à l'utilisateur connecté).",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/KpiMeasureService.ts:26",
+        "backend/src/services/KpiService.ts:47"
+      ],
+      "terminal": false,
+      "notes": "Sert à deux usages : KpiService.create et KpiMeasureService.create."
+    },
+    {
+      "id": "kpi.update",
+      "kind": "permission",
+      "domain": "Indicateurs",
+      "label_fr": "Modifier un KPI",
+      "what": "Modifier un KPI (rattachement département ou processus compris).",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/KpiService.ts:142",
+        "backend/src/services/KpiService.ts:97"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "kpi.delete",
+      "kind": "permission",
+      "domain": "Indicateurs",
+      "label_fr": "Supprimer un KPI",
+      "what": "Supprimer logiquement un KPI avec un motif.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/KpiService.ts:177"
+      ],
+      "terminal": true,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "riskappetite.read",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Voir les appétences au risque",
+      "what": "Consulter les seuils d'appétence hérités.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskAppetiteService.ts:125",
+        "backend/src/services/RiskAppetiteService.ts:131",
+        "backend/src/services/RiskAppetiteService.ts:139",
+        "backend/src/services/RiskDeviceViewService.ts:189"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "riskappetite.update",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Modifier une appétence",
+      "what": "Poser un seuil d'appétence ; retirer un seuil (active=false) exige en plus riskappetite.delete.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskAppetiteService.ts:60"
+      ],
+      "terminal": false,
+      "notes": "Inopérant en production : RiskAppetiteService refuse toute écriture dès que le Dispositif est câblé (server.ts le câble). Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "riskappetite.delete",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Retirer ou supprimer une appétence",
+      "what": "Désactiver ou supprimer un seuil d'appétence avec un motif.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskAppetiteService.ts:154",
+        "backend/src/services/RiskAppetiteService.ts:65"
+      ],
+      "terminal": true,
+      "notes": "Inopérant en production pour la même raison que riskappetite.update. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "ratingscale.read",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Voir les échelles de cotation",
+      "what": "Consulter les échelles de cotation et leurs versions.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RatingScaleService.ts:144",
+        "backend/src/services/RatingScaleService.ts:151"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "ratingscale.create",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Créer une échelle de cotation",
+      "what": "Créer un brouillon d'échelle de cotation.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RatingScaleService.ts:121"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "ratingscale.update",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Modifier une échelle en brouillon",
+      "what": "Modifier un brouillon d'échelle (niveaux, axes d'impact, seuils). Une échelle active ou archivée est immuable.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RatingScaleService.ts:161",
+        "backend/src/services/RatingScaleService.ts:183",
+        "backend/src/services/RatingScaleService.ts:221",
+        "backend/src/services/RatingScaleService.ts:238",
+        "backend/src/services/RatingScaleService.ts:255"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "ratingscale.delete",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Activer ou désactiver une échelle",
+      "what": "Désactiver une échelle ; sert aussi à ACTIVER une version (ce qui archive l'ancienne).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RatingScaleService.ts:314",
+        "backend/src/services/RatingScaleService.ts:347"
+      ],
+      "terminal": true,
+      "notes": "Le nom dit « supprimer » mais gate aussi l'activation (RatingScaleService.activateVersion). L'activation est refusée en production (le Dispositif porte l'échelle). Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "user.read",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Voir les utilisateurs",
+      "what": "Consulter les comptes utilisateurs et leur fiche (groupes, cumuls signalés).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/UserService.ts:154",
+        "backend/src/services/UserService.ts:176"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "user.create",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Créer un compte utilisateur",
+      "what": "Créer un compte avec un rôle initial obligatoire.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/UserService.ts:95"
+      ],
+      "terminal": false,
+      "notes": "Exige aussi role.assign. Compte dans ADMIN_PERMISSIONS. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "user.update",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Modifier un compte",
+      "what": "Modifier le nom d'affichage et le département d'un compte.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/UserService.ts:186"
+      ],
+      "terminal": false,
+      "notes": "Compte dans ADMIN_PERMISSIONS. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "user.delete",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Suspendre un compte",
+      "what": "Suspendre un compte (suppression logique). On ne peut pas suspendre son propre compte ni le dernier Risk Manager.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/UserService.ts:219"
+      ],
+      "terminal": true,
+      "notes": "Compte dans ADMIN_PERMISSIONS. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "user.reactivate",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Réactiver un compte suspendu",
+      "what": "Réactiver un compte suspendu ; refusé si le compte porterait un cumul interdit de groupes.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/UserService.ts:258"
+      ],
+      "terminal": false,
+      "notes": "Compte dans ADMIN_PERMISSIONS. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "riskevaluation.read",
+      "kind": "permission",
+      "domain": "Évaluations",
+      "label_fr": "Voir les évaluations de risque",
+      "what": "Consulter les évaluations de risque.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskDeviceViewService.ts:186",
+        "backend/src/services/RiskEvaluationService.ts:252",
+        "backend/src/services/RiskEvaluationService.ts:264",
+        "backend/src/services/RiskEvaluationViewService.ts:62"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "riskevaluation.create",
+      "kind": "permission",
+      "domain": "Évaluations",
+      "label_fr": "Ouvrir une évaluation de risque",
+      "what": "Créer une évaluation ; son auteur en devient l'évaluateur (jamais fourni par le client). Fige le Dispositif applicable.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:180"
+      ],
+      "terminal": false,
+      "notes": "Aucun mécanisme de « désignation » d'un autre évaluateur : l'évaluateur est toujours le créateur."
+    },
+    {
+      "id": "riskevaluation.update",
+      "kind": "permission",
+      "domain": "Évaluations",
+      "label_fr": "Saisir la cotation",
+      "what": "Saisir cotation brute, maîtrise et résiduelle d'une évaluation en brouillon.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:279",
+        "backend/src/services/RiskEvaluationService.ts:314",
+        "backend/src/services/RiskEvaluationService.ts:371"
+      ],
+      "terminal": false,
+      "notes": "Ne suffit pas : seul l'évaluateur (créateur) peut saisir (assertIsEvaluator)."
+    },
+    {
+      "id": "riskevaluation.validate",
+      "kind": "permission",
+      "domain": "Évaluations",
+      "label_fr": "Valider ou refuser une évaluation",
+      "what": "Valider ou refuser l'évaluation d'un autre (le refus exige un commentaire).",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:468",
+        "backend/src/services/RiskEvaluationService.ts:508"
+      ],
+      "terminal": true,
+      "notes": "Refusé si le validateur est l'évaluateur. Si le Comité est imposé, refusé pour les scores au-dessus du seuil."
+    },
+    {
+      "id": "kri.read",
+      "kind": "permission",
+      "domain": "Indicateurs",
+      "label_fr": "Voir les KRI",
+      "what": "Consulter les KRI et leurs mesures.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/KriMeasureService.ts:126",
+        "backend/src/services/KriService.ts:101",
+        "backend/src/services/KriService.ts:84",
+        "backend/src/services/KriService.ts:90"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "kri.create",
+      "kind": "permission",
+      "domain": "Indicateurs",
+      "label_fr": "Créer un KRI / saisir une mesure",
+      "what": "Créer un KRI et enregistrer ses mesures (auteur forcé) ; un dépassement notifie propriétaire et N+1 du risque.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/KriMeasureService.ts:48",
+        "backend/src/services/KriService.ts:57"
+      ],
+      "terminal": false,
+      "notes": "Deux usages : KriService.create et KriMeasureService.create."
+    },
+    {
+      "id": "kri.update",
+      "kind": "permission",
+      "domain": "Indicateurs",
+      "label_fr": "Modifier un KRI",
+      "what": "Modifier un KRI.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/KriService.ts:130",
+        "backend/src/services/KriService.ts:173"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "kri.delete",
+      "kind": "permission",
+      "domain": "Indicateurs",
+      "label_fr": "Supprimer un KRI",
+      "what": "Supprimer logiquement un KRI avec un motif.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/KriService.ts:207"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "risk.escalate",
+      "kind": "permission",
+      "domain": "Risques",
+      "label_fr": "Remonter un risque à son N+1",
+      "what": "Escalader un risque vers son propriétaire supérieur (N+1) avec un motif ; écrit une ligne d'historique et notifie.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskService.ts:265"
+      ],
+      "terminal": false,
+      "notes": "Exige qu'un N+1 soit déjà désigné sur le risque."
+    },
+    {
+      "id": "risk.owner.assign",
+      "kind": "permission",
+      "domain": "Risques",
+      "label_fr": "Désigner le propriétaire du risque et son N+1",
+      "what": "Désigner ou retirer le propriétaire d'un risque et son supérieur (N+1). Le service refuse de se désigner soi-même et d'avoir le même utilisateur aux deux postes.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Rôles actifs détenant role.assign lors de la migration 047 (niveau administrateur) et rôles nommés « Risk Manager » à cette date (données réelles non vérifiées)",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskService.ts:166",
+        "backend/src/services/RiskService.ts:222"
+      ],
+      "terminal": false,
+      "notes": "La migration 047 l'a aussi ajoutée à tout rôle actif détenant role.assign (niveau administrateur), en plus des rôles nommés « Risk Manager »."
+    },
+    {
+      "id": "actionplan.read",
+      "kind": "permission",
+      "domain": "Plans d'action",
+      "label_fr": "Voir les plans d'action",
+      "what": "Consulter les plans d'action et leurs liens.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ActionPlanService.ts:221",
+        "backend/src/services/ActionPlanService.ts:226",
+        "backend/src/services/ActionPlanService.ts:238",
+        "backend/src/services/ActionPlanService.ts:249",
+        "backend/src/services/ActionPlanService.ts:424",
+        "backend/src/services/RiskDeviceViewService.ts:188"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "actionplan.create",
+      "kind": "permission",
+      "domain": "Plans d'action",
+      "label_fr": "Créer un plan d'action",
+      "what": "Créer un plan d'action (créateur forcé).",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ActionPlanService.ts:167"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "actionplan.update",
+      "kind": "permission",
+      "domain": "Plans d'action",
+      "label_fr": "Faire avancer un plan d'action",
+      "what": "Mettre à jour l'avancement, démarrer, escalader un retard, modifier les liens.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ActionPlanService.ts:269",
+        "backend/src/services/ActionPlanService.ts:312",
+        "backend/src/services/ActionPlanService.ts:357",
+        "backend/src/services/ActionPlanService.ts:392"
+      ],
+      "terminal": false,
+      "notes": "Aucun contrôle sur le responsable de l'action : tout détenteur met à jour toute action."
+    },
+    {
+      "id": "actionplan.validate",
+      "kind": "permission",
+      "domain": "Plans d'action",
+      "label_fr": "Clôturer un plan d'action",
+      "what": "Terminer une action avec une preuve valide du client.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ActionPlanService.ts:444"
+      ],
+      "terminal": true,
+      "notes": "Refusé au créateur de l'action et à son responsable."
+    },
+    {
+      "id": "cartography.read",
+      "kind": "permission",
+      "domain": "Tableaux de bord",
+      "label_fr": "Voir la cartographie des risques",
+      "what": "Consulter la cartographie (matrice, échelle active).",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/CartographyService.ts:216",
+        "backend/src/services/CartographyService.ts:223",
+        "backend/src/services/CartographyService.ts:249"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "dashboard.read",
+      "kind": "permission",
+      "domain": "Tableaux de bord",
+      "label_fr": "Voir les tableaux de bord de son périmètre",
+      "what": "Voir sa vue de propriétaire de risque et les rapports par département ou appétence.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DashboardService.ts:307",
+        "backend/src/services/DashboardService.ts:324",
+        "backend/src/services/DashboardService.ts:343",
+        "backend/src/services/DashboardService.ts:398",
+        "backend/src/services/DashboardService.ts:464"
+      ],
+      "terminal": false,
+      "notes": "La vue « propriétaire » est calculée sur les risques dont l'utilisateur est propriétaire et les actions dont il est responsable."
+    },
+    {
+      "id": "dashboard.executive",
+      "kind": "permission",
+      "domain": "Tableaux de bord",
+      "label_fr": "Voir le tableau de bord exécutif",
+      "what": "Voir l'agrégation transversale (direction, comité, consolidé). Le périmètre dépend du réglage du rôle (global ou département).",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DashboardService.ts:507",
+        "backend/src/services/DashboardService.ts:550",
+        "backend/src/services/DashboardService.ts:603",
+        "backend/src/services/DashboardService.ts:658",
+        "backend/src/services/DashboardService.ts:760",
+        "backend/src/services/DashboardService.ts:807"
+      ],
+      "terminal": false,
+      "notes": "Périmètre résolu par DashboardScopeResolver : GLOBAL, ou départements/processus issus de la propriété de risque et du RACI."
+    },
+    {
+      "id": "branding.read",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Voir le logo du client",
+      "what": "Afficher l'image de marque du client.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/BrandingService.ts:34"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "branding.update",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Changer le logo du client",
+      "what": "Téléverser le logo du client.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/BrandingService.ts:43"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "config.read",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Voir la méthodologie héritée",
+      "what": "Lire les réglages de méthodologie (historique).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ConfigService.ts:106",
+        "backend/src/services/ModuleToggleService.ts:27",
+        "backend/src/services/RegulatoryFrameworkService.ts:20",
+        "backend/src/services/RegulatoryFrameworkService.ts:25",
+        "backend/src/services/RiskCategoryService.ts:16",
+        "backend/src/services/RiskCategoryService.ts:21"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "config.update",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Modifier la méthodologie héritée",
+      "what": "Gate des trois écritures de méthodologie / mode d'appétence / mode d'évaluation.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ConfigService.ts:126",
+        "backend/src/services/ConfigService.ts:163",
+        "backend/src/services/ConfigService.ts:194"
+      ],
+      "terminal": false,
+      "notes": "Inopérant en production : PUT /config et /config/appetite-mode répondent 410 et PUT /config/evaluation-mode est refusé dès que le Dispositif est câblé. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "config.manage",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Gérer le client (modules, référentiels, catégories, import)",
+      "what": "Activer ou couper des modules, gérer les clients (tenants), référentiels réglementaires, catégories de risque, import Excel de risques.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ModuleToggleService.ts:46",
+        "backend/src/services/RegulatoryFrameworkService.ts:36",
+        "backend/src/services/RegulatoryFrameworkService.ts:65",
+        "backend/src/services/RiskCategoryService.ts:32",
+        "backend/src/services/RiskCategoryService.ts:60",
+        "backend/src/services/RiskImportService.ts:114",
+        "backend/src/services/RiskImportService.ts:128",
+        "backend/src/services/TenantService.ts:24",
+        "backend/src/services/TenantService.ts:29",
+        "backend/src/services/TenantService.ts:36",
+        "backend/src/services/TenantService.ts:57"
+      ],
+      "terminal": false,
+      "notes": "Ajoutée à ADMIN_PERMISSIONS par la décision q79. Seule permission de la gestion de plateforme. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "config.committeethreshold.set",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Régler les seuils du Comité",
+      "what": "Modifier les seuils de score à partir desquels le Comité intervient.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ConfigService.ts:234"
+      ],
+      "terminal": false,
+      "notes": "Inopérant en production : ConfigService refuse dès que le Dispositif est câblé (le seuil vit dans la version du Dispositif). Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "config.committeeenforcement.set",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Rendre le passage Comité obligatoire ou non",
+      "what": "Activer ou désactiver l'obligation de faire valider par le Comité les scores élevés (motif obligatoire).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ConfigService.ts:298"
+      ],
+      "terminal": false,
+      "notes": "Compte dans ADMIN_PERMISSIONS. Inopérant en production : refusé dès que le Dispositif est câblé. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "config.cumul.set",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Autoriser ou interdire le cumul Comité + Audit",
+      "what": "Régler si une même personne peut être membre du Comité et d'Audit (motif obligatoire). Agit sur les attributions futures seulement.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ConfigService.ts:329"
+      ],
+      "terminal": false,
+      "notes": "Compte dans ADMIN_PERMISSIONS. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "notification.read",
+      "kind": "permission",
+      "domain": "Notifications",
+      "label_fr": "Lire ses notifications",
+      "what": "Voir ses propres notifications, le catalogue et gérer ses abonnements.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit",
+        "Tout utilisateur authentifié (BASE_PERMISSIONS)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/NotificationService.ts:129",
+        "backend/src/services/NotificationService.ts:134",
+        "backend/src/services/NotificationService.ts:220",
+        "backend/src/services/NotificationService.ts:228",
+        "backend/src/services/NotificationService.ts:234",
+        "backend/src/services/NotificationService.ts:254",
+        "backend/src/services/NotificationService.ts:86"
+      ],
+      "terminal": false,
+      "notes": "Accordée à tout utilisateur authentifié (BASE_PERMISSIONS)."
+    },
+    {
+      "id": "governance.read",
+      "kind": "permission",
+      "domain": "Gouvernance",
+      "label_fr": "Voir les cycles de revue",
+      "what": "Consulter les cycles de revue de gouvernance.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/GovernanceService.ts:80",
+        "backend/src/services/GovernanceService.ts:87"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "governance.create",
+      "kind": "permission",
+      "domain": "Gouvernance",
+      "label_fr": "Ouvrir un cycle de revue / proposer sa clôture",
+      "what": "Créer un cycle de revue et proposer sa clôture.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/GovernanceService.ts:37",
+        "backend/src/services/GovernanceService.ts:98"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "governance.validate",
+      "kind": "permission",
+      "domain": "Gouvernance",
+      "label_fr": "Clôturer un cycle de revue",
+      "what": "Valider la clôture proposée par un autre.",
+      "heldBy": [
+        "Groupe Comité des risques"
+      ],
+      "enforcedAt": [
+        "backend/src/services/GovernanceService.ts:129"
+      ],
+      "terminal": true,
+      "notes": "Refusé à celui qui a proposé la clôture. Compte comme « membre du Comité » dans les règles de cumul."
+    },
+    {
+      "id": "riskevaluation.validate.committee",
+      "kind": "permission",
+      "domain": "Évaluations",
+      "label_fr": "Valider une évaluation au titre du Comité",
+      "what": "Valider une évaluation dont le score atteint le seuil Comité.",
+      "heldBy": [
+        "Groupe Comité des risques"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:551"
+      ],
+      "terminal": true,
+      "notes": "Refusé si le validateur est l'évaluateur. Compte comme « membre du Comité » dans les règles de cumul."
+    },
+    {
+      "id": "raci.assign",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Attribuer un rôle RACI",
+      "what": "Attribuer R, A, C ou I à un utilisateur actif sur un risque, un contrôle ou un plan d'action.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RaciAssignmentService.ts:55"
+      ],
+      "terminal": false,
+      "notes": "On ne peut pas s'attribuer à la fois R et A sur la même entité."
+    },
+    {
+      "id": "raci.revoke",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Retirer un rôle RACI",
+      "what": "Retirer une attribution RACI.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RaciAssignmentService.ts:118"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "raci.read",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Voir les attributions RACI",
+      "what": "Consulter les attributions RACI.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RaciAssignmentService.ts:156"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "audit.mission.read",
+      "kind": "permission",
+      "domain": "Audit",
+      "label_fr": "Voir les missions d'audit",
+      "what": "Consulter les missions d'audit.",
+      "heldBy": [
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/AuditMissionService.ts:106",
+        "backend/src/services/AuditMissionService.ts:111"
+      ],
+      "terminal": false,
+      "notes": "Compte comme « permission d'auditeur » (préfixe audit.) dans les règles de cumul."
+    },
+    {
+      "id": "audit.mission.create",
+      "kind": "permission",
+      "domain": "Audit",
+      "label_fr": "Créer une mission d'audit",
+      "what": "Créer une mission d'audit.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/AuditMissionService.ts:54"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "audit.mission.update",
+      "kind": "permission",
+      "domain": "Audit",
+      "label_fr": "Modifier une mission d'audit",
+      "what": "Modifier une mission et la faire passer en cours.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/AuditMissionService.ts:117"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "audit.mission.close",
+      "kind": "permission",
+      "domain": "Audit",
+      "label_fr": "Clôturer une mission d'audit",
+      "what": "Clôturer une mission (état terminal).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/AuditMissionService.ts:154"
+      ],
+      "terminal": true,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "audit.finding.read",
+      "kind": "permission",
+      "domain": "Audit",
+      "label_fr": "Voir les constats d'audit",
+      "what": "Consulter les constats.",
+      "heldBy": [
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/FindingService.ts:126",
+        "backend/src/services/FindingService.ts:131"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "audit.finding.create",
+      "kind": "permission",
+      "domain": "Audit",
+      "label_fr": "Émettre un constat",
+      "what": "Créer un constat (auteur forcé).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/FindingService.ts:66"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "audit.finding.update",
+      "kind": "permission",
+      "domain": "Audit",
+      "label_fr": "Faire avancer un constat",
+      "what": "Faire évoluer un constat avant clôture.",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/FindingService.ts:137"
+      ],
+      "terminal": false,
+      "notes": "Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "audit.finding.close",
+      "kind": "permission",
+      "domain": "Audit",
+      "label_fr": "Clore un constat",
+      "what": "Clore un constat traité (commentaire obligatoire).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/FindingService.ts:170"
+      ],
+      "terminal": true,
+      "notes": "Refusé à l'auditeur qui a émis le constat. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "treatmentdecision.read",
+      "kind": "permission",
+      "domain": "Traitement",
+      "label_fr": "Voir les décisions de traitement",
+      "what": "Consulter les décisions de traitement.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/TreatmentDecisionService.ts:102",
+        "backend/src/services/TreatmentDecisionService.ts:109",
+        "backend/src/services/TreatmentDecisionService.ts:97"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "treatmentdecision.create",
+      "kind": "permission",
+      "domain": "Traitement",
+      "label_fr": "Proposer une décision de traitement",
+      "what": "Proposer une option de traitement sur une évaluation validée ; réservé à l'évaluateur de cette évaluation.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/TreatmentDecisionService.ts:35"
+      ],
+      "terminal": false,
+      "notes": "Exige un N+1 sur le risque ; l'évaluateur ne peut pas être ce N+1."
+    },
+    {
+      "id": "treatmentdecision.validate",
+      "kind": "permission",
+      "domain": "Traitement",
+      "label_fr": "Confirmer ou refuser une décision de traitement",
+      "what": "Confirmer ou invalider la décision proposée.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/TreatmentDecisionService.ts:115",
+        "backend/src/services/TreatmentDecisionService.ts:127"
+      ],
+      "terminal": true,
+      "notes": "Seul le N+1 enregistré au moment de la proposition peut le faire, en plus de la permission."
+    },
+    {
+      "id": "treatmentdecision.validate.committee",
+      "kind": "permission",
+      "domain": "Traitement",
+      "label_fr": "Valider une décision de traitement au titre du Comité",
+      "what": "Valider une décision dont l'évaluation dépasse le seuil Comité de traitement.",
+      "heldBy": [
+        "Groupe Comité des risques"
+      ],
+      "enforcedAt": [
+        "backend/src/services/TreatmentDecisionService.ts:145"
+      ],
+      "terminal": true,
+      "notes": "Refusé à celui qui a proposé. Compte comme « membre du Comité » dans les règles de cumul."
+    },
+    {
+      "id": "rolegroup.audit.update",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Changer les droits du groupe Audit",
+      "what": "Proposer ou appliquer un changement des droits du groupe Audit (liste blanche en lecture seule, motif obligatoire).",
+      "heldBy": [
+        "Aucun groupe fixe",
+        "Seulement via un rôle personnalisé créé par un administrateur (détenteurs réels en base non vérifiés : pas d'accès à la base)",
+        "Compte de dev dev@example.com (colonne héritée users.roles du seed dev, jamais en production)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:634"
+      ],
+      "terminal": false,
+      "notes": "Aucun rôle ne peut la porter (règle de RoleService) ; seule la colonne héritée users.roles (posée en SQL) peut la donner. Si l'auteur est Risk Manager ou Comité, le changement attend la validation d'un tiers. Compte dans ADMIN_PERMISSIONS. Contrôlée dans le code mais accordée à aucun groupe fixe."
+    },
+    {
+      "id": "rolegroup.audit.validate",
+      "kind": "permission",
+      "domain": "Administration",
+      "label_fr": "Valider un changement des droits d'Audit",
+      "what": "Approuver ou refuser un changement des droits du groupe Audit.",
+      "heldBy": [
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:754",
+        "backend/src/services/RoleService.ts:784"
+      ],
+      "terminal": true,
+      "notes": "Réservée aux groupes Audit et Comité ; refusée à l'auteur du changement et à un Risk Manager."
+    },
+    {
+      "id": "riskframework.read",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Voir le Dispositif",
+      "what": "Consulter les Dispositifs, versions et demandes de changement.",
+      "heldBy": [
+        "Groupe Risk Manager",
+        "Groupe Comité des risques",
+        "Groupe Audit"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:198",
+        "backend/src/services/RiskFrameworkService.ts:220",
+        "backend/src/services/RiskFrameworkService.ts:242",
+        "backend/src/services/RiskFrameworkService.ts:248",
+        "backend/src/services/RiskFrameworkService.ts:254"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "riskframework.create",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Créer un Dispositif ou un brouillon",
+      "what": "Créer un Dispositif et un brouillon de version.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:261"
+      ],
+      "terminal": false,
+      "notes": "Exige aussi l'appartenance au groupe Risk Manager (assertRiskManager)."
+    },
+    {
+      "id": "riskframework.update",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Modifier un brouillon / demander l'activation / retirer sa demande",
+      "what": "Éditer un brouillon de version, demander son activation, retirer sa demande.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:304",
+        "backend/src/services/RiskFrameworkService.ts:320",
+        "backend/src/services/RiskFrameworkService.ts:349",
+        "backend/src/services/RiskFrameworkService.ts:400",
+        "backend/src/services/RiskFrameworkService.ts:457"
+      ],
+      "terminal": false,
+      "notes": "Exige aussi l'appartenance au groupe Risk Manager."
+    },
+    {
+      "id": "riskframework.activate",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Approuver ou refuser l'activation d'une version",
+      "what": "Décider d'une demande d'activation (y compris l'amorçage en structure à une personne).",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:480",
+        "backend/src/services/RiskFrameworkService.ts:582"
+      ],
+      "terminal": true,
+      "notes": "Exige aussi l'appartenance au groupe Risk Manager ; jamais le demandeur ni un auteur de la version (sauf amorçage, voir guard:bootstrap)."
+    },
+    {
+      "id": "riskframework.archive",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Abandonner un brouillon de version",
+      "what": "Abandonner (archiver) un brouillon avec un motif.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:380"
+      ],
+      "terminal": true,
+      "notes": "Exige aussi l'appartenance au groupe Risk Manager ; l'administrateur seul ne peut donc pas abandonner un brouillon (voir DECISION-067)."
+    },
+    {
+      "id": "riskframework.process.assign",
+      "kind": "permission",
+      "domain": "Dispositif",
+      "label_fr": "Rattacher un processus à un Dispositif",
+      "what": "Prévue pour rattacher un processus à un Dispositif.",
+      "heldBy": [
+        "Groupe Risk Manager"
+      ],
+      "enforcedAt": [],
+      "terminal": false,
+      "notes": "Déclarée mais vérifiée par aucun requirePermission. Déclarée et accordée au Risk Manager (groupe fixe, seed, migration 055) mais vérifiée par aucun code."
+    },
+    {
+      "id": "group:RISK_MANAGER",
+      "kind": "group",
+      "domain": "Groupes",
+      "label_fr": "Groupe Risk Manager",
+      "what": "Groupe fixe de l'équipe risque : 59 permissions de gestion du registre, des évaluations, des contrôles, des plans d'action et du Dispositif. Le Dispositif exige en plus l'appartenance à ce groupe.",
+      "heldBy": [
+        "Attribué par un détenteur de role.assign (motif obligatoire) ; jamais vide ; jamais cumulable avec Audit ni avec le Comité"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/fixedGroupPermissions.ts:11",
+        "backend/src/services/RiskFrameworkService.ts:795"
+      ],
+      "terminal": false,
+      "notes": "Droits : source unique FIXED_GROUP_PERMISSIONS. N'a ni role.*, ni user.*, ni config.*, ni process.create/update, ni écriture sur les départements : ces droits ne viennent d'aucun groupe fixe. Le groupe ne peut pas être supprimé ni renommé ; retirer ou suspendre son dernier membre est refusé (assertNotLastRiskManager)."
+    },
+    {
+      "id": "group:RISK_COMMITTEE",
+      "kind": "group",
+      "domain": "Groupes",
+      "label_fr": "Groupe Comité des risques",
+      "what": "Groupe fixe du Comité : lecture élargie plus la validation des évaluations et décisions de traitement au-dessus du seuil, la clôture des cycles de revue et la validation d'un changement des droits d'Audit (27 permissions).",
+      "heldBy": [
+        "Attribué par un détenteur de role.assign (motif obligatoire) ; peut être vide ; cumul avec Risk Manager interdit ; cumul avec Audit selon réglage"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/fixedGroupPermissions.ts:25"
+      ],
+      "terminal": false,
+      "notes": "Est reconnu « Comité » aussi tout rôle portant riskevaluation.validate.committee, treatmentdecision.validate.committee ou governance.validate (COMMITTEE_VALIDATION_PERMISSIONS). Le vote Comité sur les demandes de Dispositif n'est pas construit (B-12) : une demande qui devrait être votée est repliée sur un Risk Manager tiers."
+    },
+    {
+      "id": "group:AUDIT",
+      "kind": "group",
+      "domain": "Groupes",
+      "label_fr": "Groupe Audit",
+      "what": "Groupe fixe de la 3e ligne, en lecture seule : lecture élargie, journal d'audit, missions et constats en lecture, validation d'un changement des droits d'Audit (27 permissions).",
+      "heldBy": [
+        "Attribué par un détenteur de role.assign (motif obligatoire) ; peut être vide ; cumul avec Risk Manager interdit"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/fixedGroupPermissions.ts:33",
+        "backend/src/domain/fixedGroupPermissions.ts:47"
+      ],
+      "terminal": false,
+      "notes": "Ses droits ne peuvent être changés que par la voie dédiée (rolegroup.audit.update), restreints à une liste blanche de lectures, motif obligatoire. Le groupe Audit a remplacé l'ancien rôle « Auditeur » (migration 051)."
+    },
+    {
+      "id": "group:DEPARTMENT",
+      "kind": "group",
+      "domain": "Groupes",
+      "label_fr": "Groupe de département",
+      "what": "Un département peut avoir un groupe (un rôle lié à un département, un seul par département). C'est un rôle ordinaire : appartenir au groupe n'accorde que les permissions du rôle.",
+      "heldBy": [
+        "Créé par un détenteur de role.create / role.update avec un département ; membres attribués par role.assign"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:165",
+        "backend/src/services/RoleService.ts:185"
+      ],
+      "terminal": false,
+      "notes": "Aucune règle de code ne donne un droit selon le département du groupe ; le département sert de rattachement (processus, filtres). Un groupe fixe ne peut pas être lié à un département (contrainte base)."
+    },
+    {
+      "id": "group:ADMINISTRATOR",
+      "kind": "group",
+      "domain": "Groupes",
+      "label_fr": "Administrateur de l'application (notion dérivée)",
+      "what": "Pas un groupe stocké : est administrateur quiconque détient, par un rôle actif, au moins une permission de la liste ADMIN_PERMISSIONS (role.create/update/delete/assign, user.create/update/delete/reactivate, rolegroup.audit.update, config.cumul.set, config.committeeenforcement.set, config.manage).",
+      "heldBy": [
+        "Aucun groupe fixe ne la donne ; détenteurs = titulaires de rôles personnalisés (non vérifiables ici) et compte de dev du seed"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/fixedGroupPermissions.ts:67",
+        "backend/src/services/RoleService.ts:34"
+      ],
+      "terminal": false,
+      "notes": "Sert aux règles de cumul administrateur + Risk Manager / Comité / Audit (autorisé avec motif et notification) et à l'amorçage du Dispositif. Les permissions .read de role et user ne comptent pas."
+    },
+    {
+      "id": "group:CUSTOM_ROLE",
+      "kind": "group",
+      "domain": "Groupes",
+      "label_fr": "Rôle personnalisé",
+      "what": "Un rôle créé par un administrateur avec la liste de permissions de son choix et un périmètre de tableau de bord (global ou département). Attribuable à tout utilisateur actif par un autre administrateur.",
+      "heldBy": [
+        "Créé par role.create, modifié par role.update, attribué par role.assign"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:180",
+        "backend/src/services/RoleService.ts:58"
+      ],
+      "terminal": false,
+      "notes": "Peut porter toute permission sauf rolegroup.audit.update (aucun rôle) et rolegroup.audit.validate (réservée aux groupes Audit et Comité). Un rôle ne peut pas porter à la fois des droits Risk Manager et Comité ou Audit (règles de cumul)."
+    },
+    {
+      "id": "group:AUTHENTICATED",
+      "kind": "group",
+      "domain": "Groupes",
+      "label_fr": "Tout utilisateur authentifié",
+      "what": "Chaque utilisateur reconnu reçoit automatiquement feedback.create et notification.read, quel que soit son rôle.",
+      "heldBy": [
+        "Tout compte connecté et non suspendu"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/permissions.ts:335",
+        "backend/src/server.ts:448"
+      ],
+      "terminal": false,
+      "notes": "Quelques lectures n'exigent aucune permission : GET /users/me, GET /permissions (catalogue) et GET /roles/grantors (voir guard:authenticatedOnly)."
+    },
+    {
+      "id": "guard:requirePermission",
+      "kind": "guard",
+      "domain": "Socle",
+      "label_fr": "Refus par défaut sans permission",
+      "what": "Chaque méthode de service commence par vérifier que l'utilisateur détient la permission ; sinon 403. Les droits effectifs sont l'union de BASE_PERMISSIONS, des droits des rôles actifs et de la liste hérité users.roles filtrée.",
+      "heldBy": [
+        "Appliqué à tous les utilisateurs"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/permissions.ts:337",
+        "backend/src/server.ts:448"
+      ],
+      "terminal": false,
+      "notes": "Les services prennent toujours actor.tenantId : aucun identifiant de client ne vient de la requête."
+    },
+    {
+      "id": "guard:legacyUsersRoles",
+      "kind": "guard",
+      "domain": "Socle",
+      "label_fr": "Droits hérités posés directement sur le compte",
+      "what": "La colonne users.roles contient des permissions saisies à la main (SQL). Elles sont ajoutées aux droits des rôles si la chaîne est une permission connue ; les autres sont ignorées avec un avertissement.",
+      "heldBy": [
+        "Modifiable seulement en base (aucune route ne l'édite)"
+      ],
+      "enforcedAt": [
+        "backend/src/server.ts:428",
+        "backend/src/domain/permissions.ts:352"
+      ],
+      "terminal": false,
+      "notes": "Contourne les règles de RoleService (cumul, rolegroup.audit.update « aucun rôle », refus d'auto-attribution) puisque ces règles ne s'exécutent qu'à l'attribution d'un rôle. Le seed dev l'utilise pour donner role.* et rolegroup.audit.update. Détenteurs réels en base non vérifiés."
+    },
+    {
+      "id": "guard:identityMembership",
+      "kind": "guard",
+      "domain": "Socle",
+      "label_fr": "Compte connu et non suspendu",
+      "what": "Après la vérification de l'identité Google, l'accès exige un compte existant, non supprimé, dans la table users ; sinon refus. L'identité Google n'accorde aucun rôle.",
+      "heldBy": [
+        "Appliqué à la connexion de tous"
+      ],
+      "enforcedAt": [
+        "backend/src/infrastructure/identity/GoogleIdentityProvider.ts:40",
+        "backend/src/server.ts:406"
+      ],
+      "terminal": false,
+      "notes": "Un mode de connexion local existe aussi (AUTH_PROVIDER=local) avec la même recherche d'appartenance."
+    },
+    {
+      "id": "guard:authenticatedOnly",
+      "kind": "guard",
+      "domain": "Socle",
+      "label_fr": "Lectures sans permission",
+      "what": "Quelques lectures n'exigent que d'être connecté : sa propre fiche (GET /users/me), le catalogue des permissions (GET /permissions) et la question « qui peut me redonner ce droit » (GET /roles/grantors, limitée en débit et tracée).",
+      "heldBy": [
+        "Tout utilisateur authentifié"
+      ],
+      "enforcedAt": [
+        "backend/src/services/UserService.ts:147",
+        "backend/src/api/v1/permissions.routes.ts:13",
+        "backend/src/services/RoleService.ts:885"
+      ],
+      "terminal": false,
+      "notes": "listGrantors ne répond jamais pour role, rolegroup, user, audit ni pour une permission déjà détenue, et n'expose que des noms d'affichage."
+    },
+    {
+      "id": "guard:moduleGuard",
+      "kind": "guard",
+      "domain": "Socle",
+      "label_fr": "Module coupé pour le client",
+      "what": "Une route d'un module désactivé répond 403 pour tout le client. Un module jamais réglé est actif.",
+      "heldBy": [
+        "Appliqué à tous ; réglé par config.manage"
+      ],
+      "enforcedAt": [
+        "backend/src/api/middleware/moduleGuard.ts:16",
+        "backend/src/services/ModuleToggleService.ts:80"
+      ],
+      "terminal": false,
+      "notes": "Modules gardés dans server.ts : RISK, EVIDENCE, CONTROL, ANOMALY, AUDIT, KPI, KRI, ACTION_PLAN, DASHBOARD, CARTOGRAPHY. Les routes du Dispositif, des rôles, utilisateurs et évaluations ne passent pas par ce garde."
+    },
+    {
+      "id": "guard:attributionForced",
+      "kind": "guard",
+      "domain": "Séparation des tâches",
+      "label_fr": "L'auteur d'un acte est toujours l'utilisateur connecté",
+      "what": "Les champs « qui a fait » (exécutant, évaluateur, déclarant, auteur de mesure, escaladeur…) sont forcés côté serveur à l'utilisateur connecté et ne peuvent pas être fournis par le client.",
+      "heldBy": [
+        "Appliqué à tous"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlExecutionService.ts:39",
+        "backend/src/services/RiskEvaluationService.ts:229",
+        "backend/src/services/ControlEffectivenessService.ts:44"
+      ],
+      "terminal": false,
+      "notes": "C'est ce qui rend vérifiables les contrôles « pas son propre validateur »."
+    },
+    {
+      "id": "guard:evaluatorOnlyScoring",
+      "kind": "guard",
+      "domain": "Évaluations",
+      "label_fr": "Seul l'évaluateur cote son évaluation",
+      "what": "Seul l'évaluateur de l'évaluation (son créateur) peut saisir cotation brute, maîtrise et cotation résiduelle, en plus de riskevaluation.update.",
+      "heldBy": [
+        "L'évaluateur de l'évaluation en cours"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:92",
+        "backend/src/services/RiskEvaluationService.ts:282"
+      ],
+      "terminal": false,
+      "notes": "Un Risk Manager qui n'a pas créé l'évaluation ne peut pas la coter."
+    },
+    {
+      "id": "guard:evaluatorNotValidator",
+      "kind": "guard",
+      "domain": "Évaluations",
+      "label_fr": "On ne valide pas sa propre évaluation",
+      "what": "L'évaluateur ne peut ni valider, ni refuser, ni valider au titre du Comité l'évaluation qu'il a créée, même s'il détient la permission.",
+      "heldBy": [
+        "Appliqué aux détenteurs de riskevaluation.validate et .validate.committee"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:478",
+        "backend/src/services/RiskEvaluationService.ts:518",
+        "backend/src/services/RiskEvaluationService.ts:570"
+      ],
+      "terminal": true,
+      "notes": "Comparaison par identifiant utilisateur uniquement."
+    },
+    {
+      "id": "guard:committeeGate",
+      "kind": "guard",
+      "domain": "Évaluations",
+      "label_fr": "Seuil Comité sur la validation ordinaire",
+      "what": "Si le passage Comité est imposé, la validation ordinaire est refusée pour une évaluation dont le score atteint le seuil ; seule la voie Comité reste ouverte. La voie Comité vérifie toujours le seuil, qu'il soit imposé ou non.",
+      "heldBy": [
+        "Appliqué aux détenteurs de riskevaluation.validate"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:482",
+        "backend/src/services/RiskEvaluationService.ts:564"
+      ],
+      "terminal": true,
+      "notes": "Le seuil et l'obligation sont lus sur l'évaluation (copie figée du Dispositif) ; sans Dispositif sur l'évaluation, sur le réglage hérité du client. Si l'obligation est désactivée, un Risk Manager valide aussi les scores au-dessus du seuil."
+    },
+    {
+      "id": "guard:treatmentDecisionCircuit",
+      "kind": "guard",
+      "domain": "Traitement",
+      "label_fr": "Circuit de la décision de traitement",
+      "what": "Seul l'évaluateur de l'évaluation propose ; un N+1 doit exister ; l'évaluateur ne peut être ce N+1 ; seul le N+1 enregistré à la proposition confirme ou invalide ; le proposant ne valide pas non plus par la voie Comité.",
+      "heldBy": [
+        "Évaluateur (proposition), N+1 enregistré (validation), détenteurs de la permission Comité"
+      ],
+      "enforcedAt": [
+        "backend/src/services/TreatmentDecisionService.ts:54",
+        "backend/src/services/TreatmentDecisionService.ts:66",
+        "backend/src/services/TreatmentDecisionService.ts:193",
+        "backend/src/services/TreatmentDecisionService.ts:149"
+      ],
+      "terminal": true,
+      "notes": "Le N+1 validateur est copié au moment de la proposition : changer le N+1 du risque ensuite ne change pas le validateur."
+    },
+    {
+      "id": "guard:executorNotValidator",
+      "kind": "guard",
+      "domain": "Contrôles",
+      "label_fr": "On ne valide pas sa propre exécution ou évaluation de contrôle",
+      "what": "L'exécutant d'un contrôle ne peut pas valider son exécution ; l'évaluateur d'efficacité ne peut pas valider sa propre évaluation.",
+      "heldBy": [
+        "Appliqué aux détenteurs de execution.validate et effectiveness.validate"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlExecutionService.ts:86",
+        "backend/src/services/ControlEffectivenessService.ts:84"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "guard:actionCloserNotMaker",
+      "kind": "guard",
+      "domain": "Plans d'action",
+      "label_fr": "On ne clôture pas sa propre action",
+      "what": "Le créateur d'une action et son responsable ne peuvent pas la clôturer ; la clôture exige aussi une preuve existante et non supprimée.",
+      "heldBy": [
+        "Appliqué aux détenteurs de actionplan.validate"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ActionPlanService.ts:454",
+        "backend/src/services/ActionPlanService.ts:458"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "guard:findingCloserNotRaiser",
+      "kind": "guard",
+      "domain": "Audit",
+      "label_fr": "On ne clôt pas son propre constat",
+      "what": "L'auditeur qui a émis un constat ne peut pas le clore.",
+      "heldBy": [
+        "Appliqué aux détenteurs de audit.finding.close"
+      ],
+      "enforcedAt": [
+        "backend/src/services/FindingService.ts:182"
+      ],
+      "terminal": true,
+      "notes": "audit.finding.close et audit.mission.close ne sont donnés à aucun groupe fixe : ce contrôle n'est exerçable qu'avec un rôle personnalisé."
+    },
+    {
+      "id": "guard:reviewCycleCloserNotProposer",
+      "kind": "guard",
+      "domain": "Gouvernance",
+      "label_fr": "On ne clôt pas un cycle qu'on a proposé de clore",
+      "what": "Celui qui a proposé la clôture d'un cycle de revue ne peut pas la valider.",
+      "heldBy": [
+        "Appliqué aux détenteurs de governance.validate"
+      ],
+      "enforcedAt": [
+        "backend/src/services/GovernanceService.ts:136"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "guard:evaluationModeNotSelfValidated",
+      "kind": "guard",
+      "domain": "Organisation",
+      "label_fr": "On ne décide pas sa propre demande de mode d'évaluation",
+      "what": "Celui qui a proposé un changement de mode d'évaluation ne peut ni le valider ni le refuser, sans exception ; le mode ne se pose que sur un processus de niveau PROCESS.",
+      "heldBy": [
+        "Appliqué aux détenteurs de evaluationmode.validate"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:32",
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:57"
+      ],
+      "terminal": true,
+      "notes": "evaluationmode.validate et process.evaluationmode.propose ne sont donnés à aucun groupe fixe : le circuit n'a pas de détenteur par défaut."
+    },
+    {
+      "id": "guard:riskOwnerAssignment",
+      "kind": "guard",
+      "domain": "Risques",
+      "label_fr": "Règles de désignation du propriétaire et du N+1",
+      "what": "On ne peut pas se désigner soi-même comme propriétaire ou comme N+1 ; propriétaire et N+1 ne peuvent pas être la même personne ; la cible doit être un utilisateur actif du client.",
+      "heldBy": [
+        "Appliqué aux détenteurs de risk.owner.assign"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskService.ts:171",
+        "backend/src/services/RiskService.ts:227",
+        "backend/src/services/RiskService.ts:175"
+      ],
+      "terminal": false,
+      "notes": "Aucun second regard sur la désignation : celui qui désigne l'autre est seul décideur."
+    },
+    {
+      "id": "guard:raciNoSelfRA",
+      "kind": "guard",
+      "domain": "Dispositif",
+      "label_fr": "Pas de R et A sur la même personne par auto-attribution",
+      "what": "Un utilisateur ne peut pas s'attribuer lui-même à la fois R et A sur la même entité ; la cible doit être un utilisateur actif du client.",
+      "heldBy": [
+        "Appliqué aux détenteurs de raci.assign"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RaciAssignmentService.ts:205"
+      ],
+      "terminal": false,
+      "notes": "Un tiers peut attribuer R et A à la même personne. Entités RACI : risque, contrôle, plan d'action."
+    },
+    {
+      "id": "guard:terminalViaDedicatedMethod",
+      "kind": "guard",
+      "domain": "Séparation des tâches",
+      "label_fr": "L'état terminal passe par sa méthode dédiée",
+      "what": "La mise à jour générale d'un risque ou d'un contrôle refuse le statut ARCHIVED ; l'activation d'une version, le retrait d'un seuil d'appétence ou la clôture suivent des permissions dédiées.",
+      "heldBy": [
+        "Appliqué à tous"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskService.ts:107",
+        "backend/src/services/ControlService.ts:86",
+        "backend/src/services/RiskAppetiteService.ts:64"
+      ],
+      "terminal": true,
+      "notes": "Exception connue : la clôture d'une anomalie reste portée par anomaly.update."
+    },
+    {
+      "id": "guard:noSelfRoleChange",
+      "kind": "guard",
+      "domain": "Administration",
+      "label_fr": "Pas d'auto-attribution, d'auto-retrait, d'auto-suspension",
+      "what": "Un administrateur ne peut pas s'attribuer un rôle, s'en retirer un, suspendre son propre compte, modifier les permissions d'un rôle qu'il porte, ni changer les droits d'un groupe Audit dont il est membre.",
+      "heldBy": [
+        "Appliqué aux détenteurs de role.assign, role.update, user.delete, rolegroup.audit.update"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:418",
+        "backend/src/services/RoleService.ts:495",
+        "backend/src/services/RoleService.ts:235",
+        "backend/src/services/UserService.ts:222",
+        "backend/src/services/RoleService.ts:649"
+      ],
+      "terminal": false,
+      "notes": "Comparaison par identifiant utilisateur. Le refus sur role.update ne couvre que le champ permissions : nom, description et périmètre du tableau de bord d'un rôle porté restent modifiables. Un administrateur peut créer un compte (user.create + role.assign) et lui donner un rôle ; rien ne relie ce compte à son créateur."
+    },
+    {
+      "id": "guard:cumulRules",
+      "kind": "guard",
+      "domain": "Administration",
+      "label_fr": "Règles de cumul de groupes",
+      "what": "Risk Manager + Audit et Risk Manager + Comité sont refusés en dur (groupes et permissions équivalentes) ; Comité + Audit selon le réglage du client ; administrateur + Risk Manager, + Comité ou + Audit autorisés avec un motif obligatoire et une notification aux membres d'Audit et du Comité. Rejoué à l'attribution, à l'élargissement d'un rôle et à la réactivation.",
+      "heldBy": [
+        "Appliqué à l'attribution de tout rôle"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:81",
+        "backend/src/services/RoleService.ts:363",
+        "backend/src/services/RoleService.ts:611"
+      ],
+      "terminal": false,
+      "notes": "« Comité » se reconnaît au groupe OU à une permission de validation Comité ; « Audit » au groupe OU à une permission audit.* pour le cumul avec Risk Manager, mais au groupe seul pour le cumul avec l'administrateur (F-D044-08 ouvert)."
+    },
+    {
+      "id": "guard:rolePermissionRules",
+      "kind": "guard",
+      "domain": "Administration",
+      "label_fr": "Ce qu'un rôle peut porter",
+      "what": "Une permission inconnue est refusée ; rolegroup.audit.update n'est portée par aucun rôle ; rolegroup.audit.validate seulement par les groupes Audit et Comité ; Risk Manager et Comité ne portent pas de permission audit.* ; Risk Manager ne porte pas de permission de validation Comité ; le périmètre PROCESS du tableau de bord est refusé.",
+      "heldBy": [
+        "Appliqué à role.create et role.update"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:58",
+        "backend/src/services/RoleService.ts:98",
+        "backend/src/services/RoleService.ts:115"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "guard:fixedGroupProtection",
+      "kind": "guard",
+      "domain": "Administration",
+      "label_fr": "Protection des groupes fixes",
+      "what": "Un groupe fixe ne peut être ni supprimé ni renommé ni lié à un département ; entrer ou sortir d'un groupe fixe exige un motif ; le dernier Risk Manager ne peut être ni retiré ni suspendu.",
+      "heldBy": [
+        "Appliqué à tous"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:152",
+        "backend/src/services/RoleService.ts:539",
+        "backend/src/services/RoleService.ts:242"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "guard:auditGroupChange",
+      "kind": "guard",
+      "domain": "Administration",
+      "label_fr": "Changement des droits du groupe Audit",
+      "what": "Seul le détenteur de rolegroup.audit.update propose ; la liste est limitée à des lectures ; motif obligatoire ; un seul changement en attente ; si l'auteur est Risk Manager ou Comité, un tiers membre d'Audit ou du Comité (jamais Risk Manager, jamais l'auteur) doit valider.",
+      "heldBy": [
+        "Administrateur (proposition) ; membres d'Audit ou du Comité (validation)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:643",
+        "backend/src/services/RoleService.ts:790",
+        "backend/src/services/RoleService.ts:794",
+        "backend/src/services/RoleService.ts:798"
+      ],
+      "terminal": false,
+      "notes": "Un administrateur qui n'est ni Risk Manager ni Comité applique le changement seul, sans validation (le motif est tracé, les membres d'Audit et du Comité sont notifiés)."
+    },
+    {
+      "id": "guard:assertRiskManager",
+      "kind": "guard",
+      "domain": "Dispositif",
+      "label_fr": "Le Dispositif est réservé aux membres du groupe Risk Manager",
+      "what": "En plus de la permission riskframework.*, l'utilisateur doit appartenir au groupe Risk Manager pour créer, éditer, demander, retirer, décider ou abandonner. Un administrateur seul ne suffit pas.",
+      "heldBy": [
+        "Membres du groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:795",
+        "backend/src/services/RiskFrameworkService.ts:480"
+      ],
+      "terminal": false,
+      "notes": "Un rôle personnalisé portant riskframework.activate ne suffit donc pas."
+    },
+    {
+      "id": "guard:frameworkMakerChecker",
+      "kind": "guard",
+      "domain": "Dispositif",
+      "label_fr": "Circuit d'approbation du Dispositif",
+      "what": "Le demandeur ne décide pas sa propre demande ; quiconque a contribué à la version (créateur, derniers éditeurs, auteurs de l'historique, auteurs d'un brouillon d'échelle) ne la décide pas ; seul le demandeur peut retirer sa demande ; l'approbateur est limité au Risk Manager ; un vote Comité/Audit n'existe pas encore et se replie sur un Risk Manager tiers avec commentaire obligatoire.",
+      "heldBy": [
+        "Membres du groupe Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:485",
+        "backend/src/services/RiskFrameworkService.ts:492",
+        "backend/src/services/RiskFrameworkService.ts:460",
+        "backend/src/services/RiskFrameworkService.ts:129",
+        "backend/src/domain/frameworkApproval.ts:45"
+      ],
+      "terminal": true,
+      "notes": "Si aucun Risk Manager éligible n'existe, personne ne décide : jamais de validation tacite, jamais par l'administrateur (notification d'absence de décideur)."
+    },
+    {
+      "id": "guard:bootstrap",
+      "kind": "guard",
+      "domain": "Dispositif",
+      "label_fr": "Amorçage : l'unique Risk Manager décide sa propre première activation",
+      "what": "Quand un seul membre actif existe dans Risk Manager et qu'aucun circuit à 2 membres n'existe (Risk Manager, Comité ou Audit), cet unique Risk Manager peut approuver lui-même l'activation du tout premier Dispositif, aux valeurs par défaut du contrat, avec une justification structurée (un administrateur préexistant sollicité). Fin définitive dès qu'un circuit fonctionne.",
+      "heldBy": [
+        "L'unique Risk Manager actif, demandeur de la demande"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/frameworkApproval.ts:94",
+        "backend/src/services/RiskFrameworkService.ts:576",
+        "backend/src/services/RiskFrameworkService.ts:589",
+        "backend/src/services/RiskFrameworkService.ts:684"
+      ],
+      "terminal": true,
+      "notes": "Seule levée du « personne ne valide sa propre demande », limitée au premier Dispositif. Audit et Comité sont notifiés. L'administrateur sollicité ne peut pas être le demandeur et doit être un administrateur préexistant qu'il n'a pas créé. Aucun autre régime « une personne » n'existe (processus, défaut)."
+    },
+    {
+      "id": "guard:frameworkOwnsSettings",
+      "kind": "guard",
+      "domain": "Dispositif",
+      "label_fr": "Le Dispositif a fermé les anciens réglages",
+      "what": "Dès que le Dispositif est câblé (c'est le cas dans server.ts), les écritures de seuils Comité, d'obligation Comité, de mode d'évaluation par défaut, d'appétences et d'activation d'échelle sont refusées ; les permissions correspondantes n'ont plus d'effet.",
+      "heldBy": [
+        "Appliqué à tous"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ConfigService.ts:89",
+        "backend/src/services/RiskAppetiteService.ts:67",
+        "backend/src/services/RatingScaleService.ts:317",
+        "backend/src/api/v1/config.routes.ts:45"
+      ],
+      "terminal": false,
+      "notes": "Concerne config.update, config.committeethreshold.set, config.committeeenforcement.set, riskappetite.update/.delete, ratingscale.delete (activation)."
+    },
+    {
+      "id": "guard:evidenceTenantLookup",
+      "kind": "guard",
+      "domain": "Preuves",
+      "label_fr": "Contrôle d'appartenance avant tout accès au stockage",
+      "what": "Avant de toucher au fichier, la preuve est lue par identifiant dans le client de l'utilisateur ; un identifiant étranger est traité comme introuvable.",
+      "heldBy": [
+        "Appliqué à evidence.download, evidence.delete, evidence.import"
+      ],
+      "enforcedAt": [
+        "backend/src/services/EvidenceService.ts:277"
+      ],
+      "terminal": false,
+      "notes": "Pas de restriction à l'auteur du dépôt."
+    },
+    {
+      "id": "guard:notificationRecipientOnly",
+      "kind": "guard",
+      "domain": "Notifications",
+      "label_fr": "On ne lit que ses propres notifications",
+      "what": "Une notification ne se lit et ne se marque lue que par son destinataire ; user_id=me est la seule valeur acceptée.",
+      "heldBy": [
+        "Le destinataire"
+      ],
+      "enforcedAt": [
+        "backend/src/services/NotificationService.ts:222",
+        "backend/src/services/NotificationService.ts:257"
+      ],
+      "terminal": false,
+      "notes": "Les 11 types du catalogue de notifications sont tous obligatoires : le désabonnement est refusé."
+    },
+    {
+      "id": "guard:dashboardScope",
+      "kind": "guard",
+      "domain": "Tableaux de bord",
+      "label_fr": "Périmètre du tableau de bord exécutif",
+      "what": "Le périmètre de dashboard.executive est lu sur le rôle (GLOBAL ou DEPARTMENT) et, en mode DEPARTMENT, calculé à partir des risques dont l'utilisateur est propriétaire et du RACI.",
+      "heldBy": [
+        "Détenteurs de dashboard.executive"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DashboardScopeResolver.ts:35",
+        "backend/src/server.ts:85"
+      ],
+      "terminal": false,
+      "notes": "Voir config:role.dashboardScopeMode et data:risk.owner / data:raci."
+    },
+    {
+      "id": "data:risk.owner",
+      "kind": "data",
+      "domain": "Risques",
+      "label_fr": "Propriétaire du risque",
+      "what": "Être propriétaire d'un risque ne donne aucun droit d'écriture sur lui. Cela place le risque dans sa vue personnelle, le notifie en cas de dépassement KRI, et élargit son périmètre de tableau de bord exécutif (compte comme R/A implicite).",
+      "heldBy": [
+        "Utilisateur désigné dans Risk.ownerId par un détenteur de risk.owner.assign"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DashboardScopeResolver.ts:38",
+        "backend/src/services/DashboardService.ts:400",
+        "backend/src/api/v1/risks.routes.ts:58"
+      ],
+      "terminal": false,
+      "notes": "risk.update, risk.escalate, risk.delete ne vérifient pas le propriétaire. Aucune étape d'« Analyse » ni de droit attaché au propriétaire n'existe dans le code."
+    },
+    {
+      "id": "data:risk.superiorOwner",
+      "kind": "data",
+      "domain": "Risques",
+      "label_fr": "N+1 (propriétaire supérieur) du risque",
+      "what": "Le N+1 est la cible d'une escalade, reçoit les notifications de dépassement et devient, copié au moment de la proposition, le validateur unique de la décision de traitement.",
+      "heldBy": [
+        "Utilisateur désigné dans Risk.superiorOwnerId par un détenteur de risk.owner.assign"
+      ],
+      "enforcedAt": [
+        "backend/src/services/TreatmentDecisionService.ts:76",
+        "backend/src/services/TreatmentDecisionService.ts:193",
+        "backend/src/services/RiskService.ts:264"
+      ],
+      "terminal": true,
+      "notes": "Il faut aussi détenir treatmentdecision.validate : le N+1 sans la permission ne peut pas valider."
+    },
+    {
+      "id": "data:riskEvaluation.evaluator",
+      "kind": "data",
+      "domain": "Évaluations",
+      "label_fr": "Évaluateur d'une évaluation",
+      "what": "Le créateur d'une évaluation en est l'évaluateur : lui seul saisit les cotations et propose la décision de traitement, et il ne peut pas la valider.",
+      "heldBy": [
+        "Créateur de l'évaluation (evaluatorId forcé à l'utilisateur connecté)"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:92",
+        "backend/src/services/TreatmentDecisionService.ts:53",
+        "backend/src/services/RiskEvaluationService.ts:477"
+      ],
+      "terminal": false,
+      "notes": "Aucun transfert ni désignation d'un autre évaluateur n'existe."
+    },
+    {
+      "id": "data:treatmentDecision.validator",
+      "kind": "data",
+      "domain": "Traitement",
+      "label_fr": "Validateur d'une décision de traitement",
+      "what": "Le N+1 copié sur la décision est le seul à pouvoir la confirmer ou l'invalider par la voie ordinaire.",
+      "heldBy": [
+        "Copie de Risk.superiorOwnerId au moment de la proposition"
+      ],
+      "enforcedAt": [
+        "backend/src/services/TreatmentDecisionService.ts:191"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "data:controlExecution.executor",
+      "kind": "data",
+      "domain": "Contrôles",
+      "label_fr": "Exécutant d'un contrôle",
+      "what": "L'auteur de la saisie d'exécution ne peut pas la valider. Il n'obtient aucun autre droit.",
+      "heldBy": [
+        "Utilisateur ayant saisi l'exécution"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlExecutionService.ts:85"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "data:controlEffectiveness.evaluator",
+      "kind": "data",
+      "domain": "Contrôles",
+      "label_fr": "Évaluateur d'efficacité d'un contrôle",
+      "what": "L'auteur de l'évaluation d'efficacité ne peut pas la valider.",
+      "heldBy": [
+        "Utilisateur ayant saisi l'évaluation"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ControlEffectivenessService.ts:83"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "data:actionPlan.creator",
+      "kind": "data",
+      "domain": "Plans d'action",
+      "label_fr": "Créateur d'un plan d'action",
+      "what": "Le créateur d'une action ne peut pas la clôturer.",
+      "heldBy": [
+        "Utilisateur ayant créé l'action"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ActionPlanService.ts:453"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "data:actionPlan.responsible",
+      "kind": "data",
+      "domain": "Plans d'action",
+      "label_fr": "Responsable d'un plan d'action",
+      "what": "Le responsable ne peut pas clôturer son action. Il la voit dans sa vue personnelle et reçoit les notifications de retard. Il n'a aucun droit propre de mise à jour : actionplan.update suffit à tout détenteur.",
+      "heldBy": [
+        "Utilisateur désigné dans responsibleUserId à la création de l'action"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ActionPlanService.ts:457",
+        "backend/src/services/DashboardService.ts:417"
+      ],
+      "terminal": true,
+      "notes": "Les notifications d'une action vont au responsable et, par les risques couverts, aux propriétaires et N+1 de ces risques."
+    },
+    {
+      "id": "data:finding.raiser",
+      "kind": "data",
+      "domain": "Audit",
+      "label_fr": "Auteur d'un constat d'audit",
+      "what": "L'auditeur qui a émis un constat ne peut pas le clore.",
+      "heldBy": [
+        "Utilisateur ayant créé le constat"
+      ],
+      "enforcedAt": [
+        "backend/src/services/FindingService.ts:181"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "data:reviewCycle.closureProposer",
+      "kind": "data",
+      "domain": "Gouvernance",
+      "label_fr": "Auteur de la proposition de clôture d'un cycle",
+      "what": "Celui qui a proposé la clôture ne peut pas la valider.",
+      "heldBy": [
+        "Utilisateur ayant proposé la clôture"
+      ],
+      "enforcedAt": [
+        "backend/src/services/GovernanceService.ts:135"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "data:evaluationModeRequest.requester",
+      "kind": "data",
+      "domain": "Organisation",
+      "label_fr": "Demandeur d'un changement de mode d'évaluation",
+      "what": "Le demandeur ne peut ni valider ni refuser sa propre demande.",
+      "heldBy": [
+        "Utilisateur ayant proposé le changement"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:33"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "data:riskFrameworkRequest.requester",
+      "kind": "data",
+      "domain": "Dispositif",
+      "label_fr": "Demandeur d'activation d'un Dispositif",
+      "what": "Le demandeur ne décide pas sa demande (sauf amorçage), est seul à pouvoir la retirer, et est exclu de l'ensemble des décideurs.",
+      "heldBy": [
+        "Utilisateur ayant déposé la demande"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:484",
+        "backend/src/services/RiskFrameworkService.ts:460"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "data:riskFrameworkVersion.author",
+      "kind": "data",
+      "domain": "Dispositif",
+      "label_fr": "Contributeur à une version de Dispositif",
+      "what": "Quiconque a créé ou modifié une version (colonnes created_by, last_edited_by, historique d'audit CREATE/UPDATE, et historique d'une échelle encore en brouillon) ne peut pas en décider l'activation.",
+      "heldBy": [
+        "Utilisateurs trouvés dans l'historique de la version"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:816",
+        "backend/src/services/RiskFrameworkService.ts:492"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "data:rolePermissionChange.requester",
+      "kind": "data",
+      "domain": "Administration",
+      "label_fr": "Auteur d'un changement des droits d'Audit",
+      "what": "L'auteur d'un changement en attente ne peut pas le valider.",
+      "heldBy": [
+        "Utilisateur ayant déposé le changement"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RoleService.ts:790"
+      ],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "data:raci.assignee",
+      "kind": "data",
+      "domain": "Dispositif",
+      "label_fr": "Attribué R, A, C ou I sur une entité",
+      "what": "Une attribution R ou A élargit le périmètre du tableau de bord exécutif au département ou processus du risque ; C ou I l'élargit au seul processus. Cet effet ne joue que pour les rôles configurés en périmètre DEPARTMENT.",
+      "heldBy": [
+        "Utilisateur actif désigné par un détenteur de raci.assign sur un risque, un contrôle ou un plan d'action"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DashboardScopeResolver.ts:39",
+        "backend/src/services/DashboardScopeResolver.ts:40"
+      ],
+      "terminal": false,
+      "notes": "Aucun droit d'écriture n'est attaché à une attribution RACI ; la résolution du périmètre PROCESS est refusée à l'écriture des rôles car risks.process_id n'est pas rempli."
+    },
+    {
+      "id": "data:notification.recipient",
+      "kind": "data",
+      "domain": "Notifications",
+      "label_fr": "Destinataire d'une notification",
+      "what": "Seul le destinataire lit sa notification et la marque lue.",
+      "heldBy": [
+        "Utilisateur visé par la notification"
+      ],
+      "enforcedAt": [
+        "backend/src/services/NotificationService.ts:257"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "data:process.owner",
+      "kind": "data",
+      "domain": "Organisation",
+      "label_fr": "Propriétaire d'un processus (texte libre)",
+      "what": "Le « propriétaire » d'un processus est un nom saisi en texte libre, pas un utilisateur. Il n'ouvre aucun droit : proposer un changement de mode d'évaluation dépend seulement de process.evaluationmode.propose.",
+      "heldBy": [
+        "Aucun utilisateur : champ texte"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/entities/Process.ts:24",
+        "backend/src/services/ProcessEvaluationModeRequestService.ts:99"
+      ],
+      "terminal": false,
+      "notes": "Aucune donnée « N-1 du processus », « délégué » ou « personne à qui le propriétaire attribue le risque sur un processus » n'existe dans le code (voir décision DECISION-064). Les paramètres de délégation du Dispositif sont stockés mais lus par aucune règle."
+    },
+    {
+      "id": "data:department.riskOwner",
+      "kind": "data",
+      "domain": "Organisation",
+      "label_fr": "Responsable des risques d'un département (texte libre)",
+      "what": "Le « riskOwner » d'un département est un texte libre désigné via department.update ; il ne rattache aucun utilisateur et n'ouvre aucun droit.",
+      "heldBy": [
+        "Aucun utilisateur : champ texte"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DepartmentService.ts:105"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "data:user.self",
+      "kind": "data",
+      "domain": "Socle",
+      "label_fr": "Soi-même",
+      "what": "Chacun lit sa propre fiche et ses propres notifications sans permission particulière ; les filtres « me » sont résolus côté serveur à l'utilisateur connecté.",
+      "heldBy": [
+        "Tout utilisateur authentifié"
+      ],
+      "enforcedAt": [
+        "backend/src/services/UserService.ts:147",
+        "backend/src/api/v1/risks.routes.ts:58"
+      ],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "config:committeeEvaluationEnforced",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Passage obligatoire par le Comité (évaluations)",
+      "what": "Quand il est actif, une évaluation dont le score atteint le seuil ne peut être validée que par la voie Comité. Désactivé, un Risk Manager valide aussi les scores élevés.",
+      "heldBy": [
+        "Valeur portée par chaque version du Dispositif et copiée sur chaque évaluation à sa création ; anciennement réglée par config.committeeenforcement.set"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:482",
+        "backend/src/services/ConfigService.ts:297"
+      ],
+      "terminal": false,
+      "notes": "La valeur par défaut du contrat est « imposé ». Le réglage historique est refusé dès que le Dispositif est câblé."
+    },
+    {
+      "id": "config:committeeEvaluationMinScore",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Seuil de score déclenchant le Comité (évaluation)",
+      "what": "Score à partir duquel une évaluation relève du Comité. Fixé par version du Dispositif, figé sur l'évaluation.",
+      "heldBy": [
+        "Version du Dispositif ; ancien réglage config.committeethreshold.set"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:481",
+        "backend/src/services/ConfigService.ts:228"
+      ],
+      "terminal": false,
+      "notes": "Plafonné par la taille de l'échelle ; par défaut n×n×15/25."
+    },
+    {
+      "id": "config:committeeTreatmentMinScore",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Seuil de score déclenchant le Comité (traitement)",
+      "what": "Score résiduel à partir duquel une décision de traitement peut être validée au titre du Comité ; obligatoire pour que la voie Comité traitement fonctionne.",
+      "heldBy": [
+        "Version du Dispositif ; ancien réglage config.committeethreshold.set"
+      ],
+      "enforcedAt": [
+        "backend/src/services/TreatmentDecisionService.ts:159"
+      ],
+      "terminal": false,
+      "notes": "Vide : la voie Comité de traitement est refusée."
+    },
+    {
+      "id": "config:committeeAuditCumulAllowed",
+      "kind": "config",
+      "domain": "Administration",
+      "label_fr": "Cumul Comité + Audit autorisé",
+      "what": "Autorise ou interdit qu'une même personne soit dans le Comité et dans Audit. Ne touche ni Risk Manager + Audit, ni Risk Manager + Comité, toujours interdits.",
+      "heldBy": [
+        "Réglé par config.cumul.set (administrateur) ; défaut : autorisé"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ConfigService.ts:328",
+        "backend/src/services/RoleService.ts:377"
+      ],
+      "terminal": false,
+      "notes": "N'agit que sur les attributions futures ; les doubles membres existants restent."
+    },
+    {
+      "id": "config:moduleToggles",
+      "kind": "config",
+      "domain": "Administration",
+      "label_fr": "Modules activés ou coupés",
+      "what": "Coupe ou active chacun des 10 modules (RISK, CONTROL, KRI, KPI, DASHBOARD, ANOMALY, ACTION_PLAN, EVIDENCE, CARTOGRAPHY, AUDIT) pour tout le client.",
+      "heldBy": [
+        "Réglé par config.manage ; défaut : actif"
+      ],
+      "enforcedAt": [
+        "backend/src/services/ModuleToggleService.ts:46",
+        "backend/src/services/ModuleToggleService.ts:80"
+      ],
+      "terminal": false,
+      "notes": "Un module coupé refuse même les détenteurs de toutes les permissions du module."
+    },
+    {
+      "id": "config:role.dashboardScopeMode",
+      "kind": "config",
+      "domain": "Tableaux de bord",
+      "label_fr": "Périmètre du tableau de bord exécutif d'un rôle",
+      "what": "Chaque rôle porte GLOBAL (tout le client) ou DEPARTMENT (départements issus de la propriété de risque et du RACI) ; le plus large des rôles de l'utilisateur gagne. PROCESS est refusé.",
+      "heldBy": [
+        "Réglé par role.create et role.update ; défaut : GLOBAL"
+      ],
+      "enforcedAt": [
+        "backend/src/services/DashboardScopeResolver.ts:36",
+        "backend/src/services/RoleService.ts:115",
+        "backend/src/server.ts:85"
+      ],
+      "terminal": false,
+      "notes": "Un utilisateur qui n'a que des droits hérités (users.roles) est en GLOBAL. Un administrateur peut modifier ce réglage sur un rôle qu'il porte lui-même."
+    },
+    {
+      "id": "config:framework.changeApprover",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Qui approuve un changement du Dispositif",
+      "what": "Prévu : Risk Manager, Comité, Audit ou Audit et Comité. Seul RISK_MANAGER est accepté à l'écriture ; une version héritée avec un autre approbateur est repliée sur un Risk Manager tiers avec commentaire obligatoire.",
+      "heldBy": [
+        "Paramètre de chaque version du Dispositif, édité par le Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:129",
+        "backend/src/domain/frameworkApproval.ts:19"
+      ],
+      "terminal": false,
+      "notes": "Le vote Comité/Audit n'est pas construit (B-12)."
+    },
+    {
+      "id": "config:framework.selfProposalAllowed",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Auto-proposition autorisée",
+      "what": "Paramètre de version destiné à autoriser une personne à proposer et à voir sa proposition acceptée. Son activation est refusée tant que le Comité ne vote pas.",
+      "heldBy": [
+        "Paramètre de version édité par le Risk Manager"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskFrameworkService.ts:561",
+        "backend/src/services/RiskFrameworkService.ts:564"
+      ],
+      "terminal": false,
+      "notes": "Aucune règle ne lit la valeur une fois activée ; elle est de fait toujours fausse."
+    },
+    {
+      "id": "config:framework.riskOwnerExecutorCumulAllowed",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Propriétaire du risque aussi exécutant (cumul)",
+      "what": "Paramètre de version : autoriser le propriétaire du risque à exécuter aussi le contrôle ou l'action.",
+      "heldBy": [
+        "Paramètre de version édité par le Risk Manager ; défaut : autorisé"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/entities/RiskFramework.ts:47"
+      ],
+      "terminal": false,
+      "notes": "Stocké et audité, mais lu par aucune règle (la fonction est prévue pour un lot non construit). Aucun contrôle de cumul propriétaire/exécutant n'existe dans les services."
+    },
+    {
+      "id": "config:framework.delegateExecutorCumulAllowed",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Délégué aussi exécutant (cumul)",
+      "what": "Paramètre de version : autoriser le délégué à être aussi l'exécutant.",
+      "heldBy": [
+        "Paramètre de version édité par le Risk Manager ; défaut : autorisé"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/entities/RiskFramework.ts:49"
+      ],
+      "terminal": false,
+      "notes": "Stocké mais lu par aucune règle ; la notion de délégué n'existe pas dans les données."
+    },
+    {
+      "id": "config:framework.delegationMaxDays",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Durée maximale d'une délégation",
+      "what": "Paramètre de version : plafond en jours d'une délégation.",
+      "heldBy": [
+        "Paramètre de version édité par le Risk Manager ; défaut : aucun plafond"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/entities/RiskFramework.ts:51"
+      ],
+      "terminal": false,
+      "notes": "Stocké mais lu par aucune règle ; aucune délégation n'existe dans le code."
+    },
+    {
+      "id": "config:framework.hybridPolicyEnabled",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Politique hybride",
+      "what": "Paramètre de version prévu pour une politique d'évaluation hybride.",
+      "heldBy": [
+        "Paramètre de version ; défaut : désactivé"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/entities/RiskFramework.ts:53"
+      ],
+      "terminal": false,
+      "notes": "Stocké mais lu par aucune règle."
+    },
+    {
+      "id": "config:framework.masteryAuthoritativeSource",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Source qui fait foi pour la maîtrise",
+      "what": "Paramètre de version : équipe risque (RISK_TEAM) ou première ligne (FIRST_LINE) fait foi pour l'évaluation de la maîtrise.",
+      "heldBy": [
+        "Paramètre de version ; défaut : RISK_TEAM"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/entities/RiskFramework.ts:55"
+      ],
+      "terminal": false,
+      "notes": "Stocké mais lu par aucune règle ; sert seulement à calculer un indicateur d'indépendance en lecture."
+    },
+    {
+      "id": "config:framework.committeeVoteRule",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Règle de vote du Comité",
+      "what": "Paramètre de version : règle par défaut, A, B, C ou personnalisée.",
+      "heldBy": [
+        "Paramètre de version ; défaut : règle par défaut ; CUSTOM refusé"
+      ],
+      "enforcedAt": [
+        "backend/src/domain/entities/RiskFramework.ts:57"
+      ],
+      "terminal": false,
+      "notes": "Stocké mais lu par aucune règle (le vote n'est pas construit)."
+    },
+    {
+      "id": "config:framework.defaultEvaluationMode",
+      "kind": "config",
+      "domain": "Dispositif",
+      "label_fr": "Mode d'évaluation par défaut (Classique ou Participatif)",
+      "what": "Mode copié sur chaque évaluation à sa création, avec héritage depuis les processus ; ne conditionne aucun droit dans le code actuel.",
+      "heldBy": [
+        "Paramètre de version édité par le Risk Manager ; processus : demande validée par un tiers"
+      ],
+      "enforcedAt": [
+        "backend/src/services/RiskEvaluationService.ts:601"
+      ],
+      "terminal": false,
+      "notes": "Le mode est stocké sur l'évaluation et affiché ; aucune règle d'autorisation ne le lit."
+    },
+    {
+      "id": "config:authProvider",
+      "kind": "config",
+      "domain": "Socle",
+      "label_fr": "Mode de connexion (Google ou local)",
+      "what": "Choisit la manière dont l'identité est prouvée : Google Workspace ou connexion locale par comptes de configuration. Dans les deux cas, l'accès exige un compte de la table users.",
+      "heldBy": [
+        "Variable d'environnement AUTH_PROVIDER (défaut google) ; aucune route ne la change"
+      ],
+      "enforcedAt": [
+        "backend/src/server.ts:460",
+        "backend/src/config/env.ts:21"
+      ],
+      "terminal": false,
+      "notes": ""
+    }
+  ],
+  "anomalies": [
+    {
+      "id": "A-001",
+      "type": "déclaré-non-vérifié",
+      "text": "riskframework.process.assign est déclarée, accordée au groupe Risk Manager (groupe fixe, seed, migration 055) mais vérifiée par aucun code ; aucune route de rattachement d'un processus à un Dispositif n'existe. Liste complète des permissions déclarées sans aucune vérification : riskframework.process.assign.",
+      "refs": [
+        "riskframework.process.assign"
+      ]
+    },
+    {
+      "id": "A-002",
+      "type": "vérifié-accordé-à-personne",
+      "text": "Circuit du mode d'évaluation d'un processus : evaluationmode.validate, process.evaluationmode.propose et process.evaluationmode.set ne sont accordées à aucun groupe fixe. La demande ne peut donc être ni ouverte ni décidée par défaut ; process.evaluationmode.set est de plus inatteignable en HTTP (PUT /processes/:id/evaluation-mode répond 410 et setMode n'est branché sur aucune route).",
+      "refs": [
+        "evaluationmode.validate",
+        "process.evaluationmode.propose",
+        "process.evaluationmode.set"
+      ]
+    },
+    {
+      "id": "A-003",
+      "type": "vérifié-inopérant",
+      "text": "Permissions contrôlées mais sans effet en production car le Dispositif, câblé dans server.ts, refuse l'écriture correspondante : config.update (PUT /config et /config/appetite-mode répondent 410, evaluation-mode refusé), config.committeethreshold.set, config.committeeenforcement.set, riskappetite.update, riskappetite.delete, ratingscale.delete pour l'activation d'une version.",
+      "refs": [
+        "config.update",
+        "config.committeethreshold.set",
+        "config.committeeenforcement.set",
+        "riskappetite.update",
+        "riskappetite.delete",
+        "ratingscale.delete"
+      ]
+    },
+    {
+      "id": "A-004",
+      "type": "accordé-à-personne",
+      "text": "44 permissions sur 111 ne sont accordées à aucun groupe fixe ni à tout utilisateur ; elles ne passent que par un rôle personnalisé créé par un administrateur (non vérifiable ici) : evidence.delete, evidence.import, department.create, department.update, department.delete, process.create, process.update, process.delete, process.evaluationmode.set, process.evaluationmode.propose, evaluationmode.validate, role.read, role.create, role.update, role.delete, role.assign, feedback.read, feedback.update, kpi.delete, riskappetite.update, riskappetite.delete, ratingscale.create, ratingscale.update, ratingscale.delete, user.read, user.create, user.update, user.delete, user.reactivate, branding.read, branding.update, config.read, config.update, config.manage, config.committeethreshold.set, config.committeeenforcement.set, config.cumul.set, audit.mission.create, audit.mission.update, audit.mission.close, audit.finding.create, audit.finding.update, audit.finding.close, rolegroup.audit.update.",
+      "refs": [
+        "evidence.delete",
+        "evidence.import",
+        "department.create",
+        "department.update",
+        "department.delete",
+        "process.create",
+        "process.update",
+        "process.delete",
+        "process.evaluationmode.set",
+        "process.evaluationmode.propose",
+        "evaluationmode.validate",
+        "role.read",
+        "role.create",
+        "role.update",
+        "role.delete",
+        "role.assign",
+        "feedback.read",
+        "feedback.update",
+        "kpi.delete",
+        "riskappetite.update",
+        "riskappetite.delete",
+        "ratingscale.create",
+        "ratingscale.update",
+        "ratingscale.delete",
+        "user.read",
+        "user.create",
+        "user.update",
+        "user.delete",
+        "user.reactivate",
+        "branding.read",
+        "branding.update",
+        "config.read",
+        "config.update",
+        "config.manage",
+        "config.committeethreshold.set",
+        "config.committeeenforcement.set",
+        "config.cumul.set",
+        "audit.mission.create",
+        "audit.mission.update",
+        "audit.mission.close",
+        "audit.finding.create",
+        "audit.finding.update",
+        "audit.finding.close",
+        "rolegroup.audit.update"
+      ]
+    },
+    {
+      "id": "A-005",
+      "type": "terminal-sans-permission-dédiée",
+      "text": "La clôture d'une anomalie (état terminal CLOSED) est portée par anomaly.update, la permission générale de modification ; il n'existe pas de permission de clôture dédiée, contrairement à la convention du dépôt pour les actions terminales.",
+      "refs": [
+        "anomaly.update"
+      ]
+    },
+    {
+      "id": "A-006",
+      "type": "administrateur-s'octroie",
+      "text": "Un administrateur ne peut pas s'attribuer un rôle ni modifier les permissions d'un rôle qu'il porte, mais : (i) il peut modifier le périmètre du tableau de bord (GLOBAL/DEPARTMENT) d'un rôle qu'il porte (le refus ne couvre que le champ permissions) ; (ii) avec user.create et role.assign il peut créer un compte et lui attribuer n'importe quel rôle, y compris Risk Manager (motif obligatoire), sans lien tracé entre ce compte et lui ; (iii) avec role.create il peut créer un rôle portant presque toutes les permissions et l'attribuer à un autre compte. Les contrôles comparent des identifiants de comptes uniquement.",
+      "refs": [
+        "role.update",
+        "role.create",
+        "role.assign",
+        "user.create",
+        "guard:noSelfRoleChange",
+        "config:role.dashboardScopeMode"
+      ]
+    },
+    {
+      "id": "A-007",
+      "type": "administrateur-hors-fonction-risque",
+      "text": "La migration 047 a ajouté risk.owner.assign à tous les rôles actifs détenant role.assign (niveau administrateur) en plus des rôles nommés « Risk Manager » ; un administrateur par ce biais peut désigner les propriétaires et N+1 de risques, alors que le Dispositif est réservé aux membres du groupe Risk Manager. Les groupes fixes d'aujourd'hui ne donnent pas ce couplage (le Risk Manager n'a pas role.assign).",
+      "refs": [
+        "risk.owner.assign",
+        "role.assign"
+      ]
+    },
+    {
+      "id": "A-008",
+      "type": "contournement-par-voie-héritée",
+      "text": "La colonne users.roles (droits posés en SQL) s'ajoute aux droits des rôles sans passer par RoleService : elle échappe aux règles de cumul, à la règle « rolegroup.audit.update n'est portée par aucun rôle » et au refus d'auto-attribution. Le seed dev l'utilise (role.*, rolegroup.audit.update). L'état réel de cette colonne en base n'a pas été vérifié.",
+      "refs": [
+        "guard:legacyUsersRoles",
+        "rolegroup.audit.update"
+      ]
+    },
+    {
+      "id": "A-009",
+      "type": "paramètres-stockés-non-lus",
+      "text": "Les paramètres du contrat du Dispositif suivants sont stockés, audités et éditables mais lus par aucune règle : riskOwnerExecutorCumulAllowed, delegateExecutorCumulAllowed, delegationMaxDays, hybridPolicyEnabled, masteryAuthoritativeSource, committeeVoteRule/committeeVoteCustom ; selfProposalAllowed n'est vérifié qu'à l'activation et est de fait toujours faux ; le mode d'évaluation (Classique/Participatif) ne conditionne aucun droit. Un gestionnaire peut donc croire régler un cumul ou une délégation sans effet.",
+      "refs": [
+        "config:framework.riskOwnerExecutorCumulAllowed",
+        "config:framework.delegateExecutorCumulAllowed",
+        "config:framework.delegationMaxDays",
+        "config:framework.hybridPolicyEnabled",
+        "config:framework.masteryAuthoritativeSource",
+        "config:framework.committeeVoteRule",
+        "config:framework.selfProposalAllowed"
+      ]
+    },
+    {
+      "id": "A-010",
+      "type": "donnée-inexistante",
+      "text": "Les décisions DECISION-064 (étape Analyse) s'appuient sur « la personne à qui le propriétaire attribue le risque sur un processus », « le N-1 désigné sur le processus » et un délégué : aucune de ces données n'existe. Process.owner et Department.riskOwner sont du texte libre sans utilisateur lié ; seuls Risk.ownerId, Risk.superiorOwnerId et le RACI (risque, contrôle, plan d'action) relient un utilisateur à un objet. Aucune étape ni droit « Analyse » n'existe dans le code.",
+      "refs": [
+        "data:process.owner",
+        "data:department.riskOwner",
+        "data:risk.owner",
+        "data:raci.assignee"
+      ]
+    },
+    {
+      "id": "A-011",
+      "type": "nom-trompeur",
+      "text": "Deux permissions ont un nom qui ne dit pas leur usage : ratingscale.delete autorise aussi l'activation d'une échelle (qui archive la précédente) ; evidence.import autorise l'analyse en lecture d'un classeur déjà déposé, pas un import.",
+      "refs": [
+        "ratingscale.delete",
+        "evidence.import"
+      ]
+    },
+    {
+      "id": "A-012",
+      "type": "sens-en-double",
+      "text": "Plusieurs notions de « membre du Comité » et de « membre d'Audit » coexistent : le Comité est le groupe OU toute permission de validation Comité (riskevaluation/treatmentdecision .validate.committee, governance.validate) ; Audit est le groupe OU toute permission préfixée audit. pour le cumul avec Risk Manager, mais le groupe seul pour le cumul avec l'administrateur (F-D044-08 ouvert). Le préfixe audit. recouvre à la fois le journal technique (audit.read) et les missions/constats d'audit.",
+      "refs": [
+        "group:RISK_COMMITTEE",
+        "group:AUDIT",
+        "guard:cumulRules"
+      ]
+    },
+    {
+      "id": "A-013",
+      "type": "séparation-des-tâches-partielle",
+      "text": "Les contrôles « on ne valide pas son propre acte » comparent des identifiants utilisateur ; ils couvrent évaluation, exécution, efficacité, action, constat, cycle de revue, mode d'évaluation, décision de traitement, Dispositif, droits d'Audit. Ils ne couvrent pas : la désignation du propriétaire ou du N+1 d'un risque (aucune validation), la création d'un compte (aucun second regard) et les attributions RACI (seule l'auto-attribution R+A est refusée).",
+      "refs": [
+        "guard:riskOwnerAssignment",
+        "guard:raciNoSelfRA",
+        "user.create"
+      ]
+    },
+    {
+      "id": "A-014",
+      "type": "régime-une-personne-limité",
+      "text": "Le seul régime « une personne » du code est l'amorçage du Dispositif (l'unique Risk Manager approuve sa propre demande de premier Dispositif, aux valeurs du contrat). Les autres circuits n'ont pas d'équivalent : sans second Risk Manager éligible, une demande de Dispositif n'a pas de décideur (jamais de validation tacite) ; une demande de mode d'évaluation, une clôture d'action, une validation d'évaluation exigent toujours un tiers. L'abandon d'un brouillon par l'administrateur (DECISION-067) n'est pas possible : riskframework.archive exige l'appartenance au groupe Risk Manager.",
+      "refs": [
+        "guard:bootstrap",
+        "riskframework.archive",
+        "guard:assertRiskManager"
+      ]
+    },
+    {
+      "id": "A-015",
+      "type": "écart-seed-groupes",
+      "text": "Le seed dev crée des groupes fixes avec moins de permissions que la source unique FIXED_GROUP_PERMISSIONS : Risk Manager sans 35 permissions, Comité sans 15, Audit sans 14 (par rapport à la source). Le compte de dev est le seul porteur de role.* et rolegroup.audit.update.",
+      "refs": [
+        "group:RISK_MANAGER",
+        "group:RISK_COMMITTEE",
+        "group:AUDIT"
+      ]
+    },
+    {
+      "id": "A-016",
+      "type": "propriété-sans-droit",
+      "text": "Aucun contrôle de propriété ne limite les écritures : risk.update, risk.escalate, actionplan.update, evidence.delete, kpi/kri update ne vérifient ni le propriétaire, ni le responsable, ni l'auteur du dépôt. Être propriétaire d'un risque ou responsable d'une action ne donne aucun droit d'écriture ; cela sert au périmètre du tableau de bord, aux notifications et aux interdictions de validation.",
+      "refs": [
+        "data:risk.owner",
+        "data:actionPlan.responsible",
+        "evidence.delete",
+        "risk.update"
+      ]
+    },
+    {
+      "id": "A-017",
+      "type": "droit-sans-détenteur-par-défaut",
+      "text": "Aucun groupe fixe ne détient audit.mission.create/update/close ni audit.finding.create/update/close : le module Audit (missions, constats) ne peut être écrit par personne sans rôle personnalisé, et les contrôles de séparation sur la clôture de constat ne sont exerçables qu'avec un tel rôle.",
+      "refs": [
+        "audit.mission.close",
+        "audit.finding.close",
+        "audit.mission.create",
+        "audit.finding.create"
+      ]
+    },
+    {
+      "id": "A-018",
+      "type": "administrateur-seul-sans-validation",
+      "text": "Un administrateur qui n'est ni Risk Manager ni Comité applique seul un changement des droits du groupe Audit (liste blanche de lectures, motif obligatoire, notification) : la validation d'un tiers n'est requise que si l'auteur est aussi Risk Manager ou Comité.",
+      "refs": [
+        "guard:auditGroupChange",
+        "rolegroup.audit.update"
+      ]
+    }
+  ]
+}

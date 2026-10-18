@@ -298,3 +298,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Tests existants adaptés (source de vérité changée) : `ModuleToggleService.test` (oldValue `{enabled:true}`), `QA-SWP.test` (.fails retirés, faux dépôt transactionnel, test PG 01 = événement invalide fait échouer l'upsert, test PG 03 attend un refus). Nouveau : `SWPFixes.test.ts` (+ cas PG gaté `QA_SWP_PGHOST`).
 - Piège : un commentaire de source qui cite `setMode`/`setEvaluationMode` fait échouer un test de garde par regex sur `src/api` ; reformuler le commentaire. Heredoc multi-ligne + `cd` composé refusés par le garde du worktree : utiliser Write et des commandes simples.
 - Non fait (lot dédié) : retrait du code mort et de `process.evaluationmode.set`, q131, DECISION-060, F-SWP-04.
+
+## 2026-10-18 DECISION-068 : inventaire factuel des droits (aucun code produit modifié)
+
+- Livré : `docs/governance/droits-acces/inventory.json` (111 permissions, 7 groupes, 30 gardes, 19 relations de données, 16 réglages ; 18 anomalies). Généré par un script dans le scratchpad qui lit `permissions.ts`, `fixedGroupPermissions.ts`, le seed et les `requirePermission(` du code (lignes `fichier:ligne` calculées, pas écrites à la main).
+- Constats à retenir : `riskframework.process.assign` n'est vérifiée nulle part ; 44 permissions sur 111 n'ont aucun groupe fixe ; evaluationmode.* / process.evaluationmode.* sans détenteur par défaut ; `config.update`, `config.committee*`, `riskappetite.*`, activation d'échelle inopérants en production (Dispositif câblé) ; paramètres du contrat du Dispositif (cumul propriétaire/exécutant, délégation, hybride, maîtrise, vote) stockés mais lus par aucune règle ; `Process.owner` et `Department.riskOwner` sont du texte libre (aucune donnée « N-1 du processus » ni « délégué » : à créer pour DECISION-064).
+- Limite : droits réels des rôles personnalisés et colonne `users.roles` en base non vérifiés (aucun accès Neon).
+- Leçon : pour un inventaire, dériver les listes par script depuis le code plutôt que les recopier ; `python3 -I` sur un script du scratchpad fonctionne, heredoc `python3 -` seul aussi.
