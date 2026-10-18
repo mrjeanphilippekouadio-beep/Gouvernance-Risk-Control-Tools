@@ -222,6 +222,12 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 
 - Retest 3 bis `4e43770` (critère d'ajout effectif) : PASS. jsonb old/new.permissions relus OK (PoC `rt8`) ; retrait puis remise → refusé ; `before` périmé sans gain ; groupe Audit hors sujet (aucune permission admin possible).
 
+## Revue casse des identifiants, classe QA-B6d-01 (2026-10-18, `4e43770`, PoC `rt9` services réels sous runtime) : SEC-ID-01 MEDIUM 6,7, bloquant production, pas d'escalade obligatoire — `docs/security/review-id-case-2026-10-18.md`
+- CONFIRMED : un admin contourne avec un id en MAJUSCULES les 4 gardes maker-checker : auto-attribution (Comité, Audit ; RM même code), modification de son propre rôle (`PATCH /roles/:ID`), auto-révocation, auto-suspension. Gain immédiat (permissions relues en base à chaque requête).
+- SEC-ID-02 : autres comparaisons « id client vs id en base » : RoleService 270/281/511, RiskCategory 62/68, Department 139, Process 270/278 (LOW, intégrité) ; Set/doublons (INFO). Les comparaisons `x === actor.userId` sur colonnes uuid sont sûres.
+- Avis sur le correctif racine (schéma zod `Id` qui passe l'uuid en minuscules) : suffisant SI on couvre les 105 `req.params as string` + 42 `z.string()` sur `*Id` + 8 `z.guid()`, avec un test de garde sur le motif, une défense en profondeur (comparer l'id relu en base) sur les 4 gardes, et des tests de régression.
+- Leçon : `z.guid()`/`z.uuid()` valident sans normaliser ; toute égalité TS entre un id du client et un id relu en base est suspecte. Grep : `=== id`, `=== roleId`, `=== userId`, `new Set(input.*Ids)`.
+
 ## Consultation DECISION-055 « tout modulable, défaut strict » (2026-10-17, analyse seule, aucun code) : aucune escalade
 - Règle proposée « réglage sûr » : par tenant (actor.tenantId), permission dédiée par réglage, une seule écriture (DECISION-054), audit avant/après + motif dans la transaction, fail-closed (absent = strict). Durcir = un acteur, effet immédiat. Assouplir = maker-checker (B ≠ A, B ni bénéficiaire ni concerné), effet après approbation, non rétroactif, valeur du réglage figée sur chaque décision.
 - Écart actuel noté : `setCommitteeEnforcement`/`setCommitteeAuditCumul` assouplissent à un seul admin (motif + audit, sans second approbateur) → à aligner (A06), INFO.

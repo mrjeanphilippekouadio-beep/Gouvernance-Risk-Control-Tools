@@ -295,6 +295,7 @@ describe("UserService", () => {
   it("refuses to let an actor suspend their own account", async () => {
     const { userService } = makeServices();
     await expect(userService.suspend(admin, admin.userId, "REQ-6")).rejects.toThrow(ForbiddenError);
+    await expect(userService.suspend(admin, admin.userId.toUpperCase(), "REQ-6b")).rejects.toThrow(ForbiddenError);
   });
 
   it("suspends a user (soft-delete) and blocks a duplicate suspend", async () => {

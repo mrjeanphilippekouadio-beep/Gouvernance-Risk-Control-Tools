@@ -24,6 +24,7 @@ import {
 import { bootstrapNoticeMessage } from "../domain/frameworkApproval.js";
 import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
 import type { DashboardScopeMode } from "../domain/entities/DashboardScope.js";
+import { canonicalId } from "../domain/ids.js";
 
 const MAX_GROUP_REASON_LENGTH = 500;
 
@@ -411,6 +412,7 @@ export class RoleService {
     reason?: string,
   ): Promise<void> {
     requirePermission(actor, "role.assign");
+    userId = canonicalId(userId);
     if (actor.userId === userId) {
       throw new ForbiddenError("You cannot assign a role to yourself — ask another admin");
     }
@@ -487,6 +489,7 @@ export class RoleService {
     reason?: string,
   ): Promise<void> {
     requirePermission(actor, "role.assign");
+    userId = canonicalId(userId);
     if (actor.userId === userId) {
       throw new ForbiddenError("You cannot revoke your own role — ask another admin");
     }
