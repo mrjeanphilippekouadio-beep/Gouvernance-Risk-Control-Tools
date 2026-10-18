@@ -125,3 +125,18 @@
 ## 2026-10-18 — migration 062 (B-6d), écrite par A06 (A07 non spawné)
 - Rejouée sur PG16 jetable : up x2, down x2, up->down->up OK ; 7 cas SQL dans `backend/test/B6dBootstrap-pg.test.ts` (fin posée par 2e RM/Audit/Comité, un seul membre non, révocation sans effet, UPDATE tenants refusé 42501, réactivation, activation BOOTSTRAP 1re seulement et seulement avant la fin, CHECK de forme).
 - À revoir par A07/A08 : concurrence réelle de deux affectations (verrou `tenants FOR UPDATE` dans le trigger), limite connue (changement de `roles.system_group` / réactivation d'un rôle ne déclenchent pas le marqueur), nom de contrainte <= 63 caractères.
+
+## 2026-10-18 — migration 068 (lot D2d, régime « structure à une personne »)
+- 068 : `tenants.single_person_regime_declared_at` (NULL = non déclaré, set-once), `..._lift_threshold integer NOT NULL DEFAULT 2`
+  (DECISION-066 pt 6, configurable ; CHECK >= 2), `..._lifted_at` + `..._lift_ref` (levée mémorisée, posée par trigger).
+  CHECK de forme (lift => déclaré ; ref => lift). Fonctions DISTINCTES de 062 : `single_person_regime_people(t)` (comptage de
+  personnes distinctes actives avec un rôle, tous rôles), `single_person_regime_lift_mark()` (AFTER, verrou FOR NO KEY UPDATE du tenant,
+  sur user_roles INSERT / revoked_at->NULL, users deleted_at->NULL, roles deleted_at->NULL), `tenants_single_person_regime_guard()` (BEFORE UPDATE :
+  déclaration set-once, levée/ref/seuil figés après levée, déclaration refusée si le seuil est déjà atteint). Tout en SQLSTATE 42501, search_path épinglé.
+- Choix : le seuil compte les personnes avec un rôle (pas le groupe RM) ; q148 (N = max(questionnaire, comptes RM)) relève du panel (lecture), pas du trigger.
+- Reste A06/A09 : mécanisme éditeur de déclaration (UPDATE journalisé hors API) et de réglage du seuil ; lecture dans TenantService/GovernanceHealthService ;
+  aucune route client. Limite : la levée n'est pas déclenchée par un simple changement de seuil (il faut un événement d'affectation) ; le service
+  de lecture peut recalculer si `lifted_at` NULL.
+- Env : l'agent worktree refuse `runuser`/`su` ; `cd <worktree> && setpriv --reuid=postgres --regid=postgres --clear-groups sh /tmp/pgd2d/pg.sh`
+  fonctionne (le script doit être lisible par postgres, hors scratchpad). `cd backend && npm install` nécessaire dans un worktree neuf.
+- Test QA-B8quater « gap-free » échoue tant que 066/067 ne sont pas fusionnés (068 isolé) : attendu.
