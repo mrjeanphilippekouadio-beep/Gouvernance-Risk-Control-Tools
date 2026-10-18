@@ -31,6 +31,13 @@ export interface Process {
   evaluationMode: EvaluationMode | null;
   /** B-8: every Process belongs to a department (nullable only until existing data is backfilled). */
   departmentId: string | null;
+  /**
+   * D2b (DECISION-074/075): real accounts, single-valued per process. `owner` (free text) stays as the
+   * legacy label, never overwritten. Written only through ProcessService.setResponsibilities.
+   */
+  ownerUserId: string | null;
+  riskChampionUserId: string | null;
+  deputyUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -63,6 +70,13 @@ export interface UpdateProcessInput {
   active?: boolean;
   evaluationMode?: EvaluationMode | null;
   departmentId?: string | null;
+}
+
+/** D2b: keys left undefined are untouched, null clears. */
+export interface ProcessResponsibilitiesInput {
+  ownerUserId?: string | null;
+  riskChampionUserId?: string | null;
+  deputyUserId?: string | null;
 }
 
 /** Rank order used to validate parent/child level matching — 1-indexed, matches NIVEAUX_PROCESSUS in the legacy code. */

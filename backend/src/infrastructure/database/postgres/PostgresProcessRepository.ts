@@ -5,6 +5,7 @@ import type {
   Process,
   ProcessDocumentType,
   ProcessLevel,
+  ProcessResponsibilitiesInput,
   UpdateProcessInput,
 } from "../../../domain/entities/Process.js";
 import type { EvaluationMode } from "../../../domain/entities/Config.js";
@@ -24,6 +25,9 @@ export interface ProcessRow {
   active: boolean;
   evaluation_mode: EvaluationMode | null;
   department_id: string | null;
+  owner_user_id: string | null;
+  risk_champion_user_id: string | null;
+  deputy_user_id: string | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -45,6 +49,9 @@ export function toDomain(row: ProcessRow): Process {
     active: row.active,
     evaluationMode: row.evaluation_mode,
     departmentId: row.department_id,
+    ownerUserId: row.owner_user_id,
+    riskChampionUserId: row.risk_champion_user_id,
+    deputyUserId: row.deputy_user_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -122,6 +129,31 @@ export class PostgresProcessRepository implements ProcessRepository {
       return current;
     }
 
+    const { rows } = await this.pool.query<ProcessRow>(
+      `UPDATE processes SET ${setClauses.join(", ")}, updated_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+       RETURNING *`,
+      [tenantId, id, ...values],
+    );
+    const row = rows[0];
+    if (!row) throw new NotFoundError("Process", id);
+    return toDomain(row);
+  }
+
+  async setResponsibilities(tenantId: string, id: string, input: ProcessResponsibilitiesInput): Promise<Process> {
+    const { setClauses, values } = buildUpdateSet(
+      {
+        owner_user_id: input.ownerUserId,
+        risk_champion_user_id: input.riskChampionUserId,
+        deputy_user_id: input.deputyUserId,
+      },
+      3,
+    );
+    if (setClauses.length === 0) {
+      const current = await this.getById(tenantId, id);
+      if (!current) throw new NotFoundError("Process", id);
+      return current;
+    }
     const { rows } = await this.pool.query<ProcessRow>(
       `UPDATE processes SET ${setClauses.join(", ")}, updated_at = now()
        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL

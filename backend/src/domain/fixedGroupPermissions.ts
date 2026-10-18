@@ -22,6 +22,7 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "riskframework.read", "riskframework.create", "riskframework.update", "riskframework.activate", "riskframework.archive",
     "riskframework.process.assign",
     "governancehealth.read",
+    "process.responsibility.assign",
   ],
   RISK_COMMITTEE: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",

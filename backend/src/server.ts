@@ -236,6 +236,7 @@ const processService = new ProcessService(
   controlRepository,
   processEvaluationModeRequestRepository,
   departmentRepository,
+  userRepository,
 );
 const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
   processEvaluationModeRequestRepository,

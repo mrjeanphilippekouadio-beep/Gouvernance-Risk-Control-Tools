@@ -37,6 +37,8 @@ export type Permission =
   | "process.create"
   | "process.update"
   | "process.delete"
+  /** D2b (DECISION-074): owner / risk champion / N-1 of a process. Opens rights, so never behind process.update. */
+  | "process.responsibility.assign"
   /**
    * DECISION-006 governance finding (2026-09-29 architect review, not yet
    * committed): Process.evaluationMode (Classique/Participatif) must never
@@ -248,6 +250,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "process.create",
   "process.update",
   "process.delete",
+  "process.responsibility.assign",
   "process.evaluationmode.set",
   "process.evaluationmode.propose",
   "evaluationmode.validate",
