@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Button, Card, FormField, MessageBanner, StatusBadge, Table, type TableColumn } from "@djamo/design-system";
+import { Button, Card, FormField, MessageBanner, StatusBadge, Table, Tabs, type TableColumn } from "@djamo/design-system";
 import {
   riskFrameworksApi,
-  type AppetiteEntry,
   type ChangeRequest,
   type DraftPatch,
   type EvaluationMode,
@@ -14,6 +13,8 @@ import {
   type VoteRule,
 } from "../../api/riskFrameworks";
 import { ratingScalesApi, type RatingScale } from "../../api/evaluations";
+import { riskCategoriesApi, type RiskCategory } from "../../api/riskCategories";
+import { AppetiteThresholdsTab } from "./AppetiteThresholdsTab";
 import { FormModal, dateOnly, describeError, isForbidden } from "../indicators/shared";
 import "../core/CorePages.css";
 
@@ -31,20 +32,7 @@ interface DraftForm {
   committeeTreatmentMinScore: string; selfProposalAllowed: boolean; lowCriticalityThreshold: string;
   riskOwnerExecutorCumulAllowed: boolean; delegateExecutorCumulAllowed: boolean; delegationMaxDays: string;
   hybridPolicyEnabled: boolean; masteryAuthoritativeSource: MasterySource; committeeVoteRule: VoteRule;
-  appetite: AppetiteRow[];
 }
-
-/** Editable mirror of an AppetiteEntry (numbers as text); subCategoryId is carried through untouched, never typed. */
-interface AppetiteRow { key: number; subCategory: string; subCategoryId: string | null; entity: string; threshold: string; description: string; }
-/** Stable React key per edited row (array indexes shift when a row is removed). */
-let appetiteRowSeq = 0;
-const emptyAppetiteRow = (): AppetiteRow => ({ key: ++appetiteRowSeq, subCategory: "", subCategoryId: null, entity: "", threshold: "", description: "" });
-const toAppetiteEntry = (r: AppetiteRow): AppetiteEntry => ({
-  // Trimmed like the server stores them, so an untouched row compares equal (A10 addendum, PR #186).
-  subCategory: r.subCategory.trim(), subCategoryId: r.subCategoryId,
-  entity: r.entity.trim() === "" ? null : r.entity.trim(), threshold: Number(r.threshold),
-  description: r.description.trim() === "" ? null : r.description.trim(),
-});
 
 const toForm = (v: FrameworkVersion): DraftForm => ({
   ratingScaleId: v.ratingScaleId, defaultEvaluationMode: v.defaultEvaluationMode,
@@ -55,7 +43,6 @@ const toForm = (v: FrameworkVersion): DraftForm => ({
   riskOwnerExecutorCumulAllowed: v.riskOwnerExecutorCumulAllowed, delegateExecutorCumulAllowed: v.delegateExecutorCumulAllowed,
   delegationMaxDays: v.delegationMaxDays === null ? "" : String(v.delegationMaxDays),
   hybridPolicyEnabled: v.hybridPolicyEnabled, masteryAuthoritativeSource: v.masteryAuthoritativeSource, committeeVoteRule: v.committeeVoteRule,
-  appetite: v.appetiteThresholds.map((a) => ({ key: ++appetiteRowSeq, subCategory: a.subCategory, subCategoryId: a.subCategoryId, entity: a.entity ?? "", threshold: String(a.threshold), description: a.description ?? "" })),
 });
 
 const num = (s: string) => Number(s);
@@ -76,13 +63,6 @@ function diffPatch(form: DraftForm, v: FrameworkVersion): DraftPatch {
   for (const key of Object.keys(next) as (keyof typeof next)[]) {
     if (next[key] !== v[key]) patch[key] = next[key];
   }
-  // Field by field: jsonb reorders keys, so comparing serialized strings would always report a change (Gitar, PR #186).
-  const appetite = form.appetite.map(toAppetiteEntry);
-  const stored = v.appetiteThresholds;
-  const sameEntry = (a: AppetiteEntry, b: AppetiteEntry) =>
-    a.subCategory === b.subCategory && (a.subCategoryId ?? null) === (b.subCategoryId ?? null) && (a.entity ?? null) === (b.entity ?? null)
-    && a.threshold === b.threshold && (a.description ?? null) === (b.description ?? null);
-  if (appetite.length !== stored.length || appetite.some((a, i) => !sameEntry(a, stored[i]))) patch["appetiteThresholds"] = appetite;
   return patch as DraftPatch;
 }
 
@@ -113,6 +93,9 @@ export function FrameworksPage({ token }: { token: string }) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [viewVersionId, setViewVersionId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<RiskCategory[]>([]);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<"versions" | "appetite">("versions");
   const [notice, setNotice] = useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -156,6 +139,11 @@ export function FrameworksPage({ token }: { token: string }) {
   useEffect(() => {
     ratingScalesApi.list(token).then((s) => { setScales(s); setScalesUnavailable(false); })
       .catch(() => { setScales([]); setScalesUnavailable(true); });
+  }, [token]);
+
+  useEffect(() => {
+    riskCategoriesApi.list(token).then((c) => { setCategories(c); setCategoriesError(null); })
+      .catch((err) => { setCategories([]); setCategoriesError(describeError(err)); });
   }, [token]);
 
   const scaleLabel = (id: string) => {
@@ -228,7 +216,7 @@ export function FrameworksPage({ token }: { token: string }) {
     { key: "name", header: "Dispositif", render: (r) => <><strong>{r.name}</strong>{r.archivedAt && <div className="muted">Archivé</div>}</> },
     { key: "active", header: "Version active", render: (r) => r.activeVersion ? `v${r.activeVersion.versionNumber} · active depuis le ${dateOnly(r.activeVersion.activatedAt)}` : "Aucune version active" },
     { key: "mastery", header: "Indépendance sur la Maîtrise", render: (r) => r.activeVersion ? (r.activeVersion.reducedMasteryIndependence ? <StatusBadge label="Indépendance réduite" tone="warning" /> : <StatusBadge label="Non réduite" tone="neutral" />) : "—" },
-    { key: "open", header: "", render: (r) => <Button onClick={() => { setSelectedId(r.id); setViewVersionId(null); setNotice(null); }} aria-label={`Voir le détail de ${r.name}`}>Détail</Button> },
+    { key: "open", header: "", render: (r) => <Button onClick={() => { setSelectedId(r.id); setViewVersionId(null); setDetailTab("versions"); setNotice(null); }} aria-label={`Voir le détail de ${r.name}`}>Détail</Button> },
   ];
 
   const versionColumns: TableColumn<FrameworkVersion>[] = [
@@ -248,6 +236,8 @@ export function FrameworksPage({ token }: { token: string }) {
   ];
 
   const viewed = detail?.versions.find((v) => v.id === viewVersionId) ?? null;
+  // Version shown in the appetite tab: the one picked, else the draft, else the active one, else the first.
+  const appetiteVersion = viewed ?? detail?.versions.find((v) => v.status === "DRAFT") ?? detail?.versions.find((v) => v.status === "ACTIVE") ?? detail?.versions[0] ?? null;
   const reasonMeta = reasonAction ? REASON_TEXT[reasonAction.kind] : null;
   const set = <K extends keyof DraftForm>(key: K, value: DraftForm[K]) => setDraftForm((f) => (f ? { ...f, [key]: value } : f));
 
@@ -294,6 +284,8 @@ export function FrameworksPage({ token }: { token: string }) {
         />
         <MessageBanner tone="info">Les boutons sont toujours proposés : le serveur refuse si vous êtes le demandeur, un contributeur de la version, ou n'avez pas le droit de décider. Un vote Comité/Audit n'est pas encore disponible.</MessageBanner>
       </>}
+      <Tabs items={[{ value: "versions", label: "Versions et paramètres" }, { value: "appetite", label: "Seuils d'appétence" }]} active={detailTab} onChange={setDetailTab} />
+      {detailTab === "versions" && <>
       <Table columns={versionColumns} rows={detail?.versions ?? []} rowKey={(v) => v.id} loading={detailLoading} emptyMessage="Aucune version." />
       {viewed && <div className="core-panel__body" aria-live="polite">
         <h2>Version v{viewed.versionNumber} · {STATUS_LABELS[viewed.status]}</h2>
@@ -313,19 +305,18 @@ export function FrameworksPage({ token }: { token: string }) {
           <dt>Source faisant foi pour la Maîtrise</dt><dd>{MASTERY_LABELS[viewed.masteryAuthoritativeSource]}</dd>
           <dt>Règle de vote du Comité</dt><dd>{viewed.committeeVoteRule}</dd>
         </dl>
-        <h3>Seuils d'appétence ({viewed.appetiteThresholds.length})</h3>
-        <Table
-          columns={[
-            { key: "sub", header: "Sous-catégorie", render: (a) => a.subCategory },
-            { key: "entity", header: "Entité", render: (a) => a.entity ?? "—" },
-            { key: "thr", header: "Seuil", render: (a) => a.threshold },
-          ]}
-          rows={viewed.appetiteThresholds}
-          rowKey={(a) => `${a.subCategory}|${a.entity ?? ""}`}
-          loading={false}
-          emptyMessage="Aucun seuil d'appétence dans cette version."
-        />
       </div>}
+      </>}
+      {detailTab === "appetite" && detail && (appetiteVersion
+        ? <div className="core-panel__body">
+          <FormField label="Version affichée" htmlFor="fw-ap-version">
+            <select id="fw-ap-version" value={appetiteVersion.id} onChange={(e) => setViewVersionId(e.target.value)}>
+              {detail.versions.map((v) => <option key={v.id} value={v.id}>v{v.versionNumber} · {STATUS_LABELS[v.status]}</option>)}
+            </select>
+          </FormField>
+          <AppetiteThresholdsTab token={token} frameworkId={detail.id} version={appetiteVersion} categories={categories} categoriesError={categoriesError} onSaved={afterWrite} />
+        </div>
+        : <p>Aucune version.</p>)}
     </Card>}
 
     <FormModal open={createOpen} onClose={() => setCreateOpen(false)} title="Nouveau Dispositif" formId="fw-create" saving={saving} submitLabel="Créer">
@@ -342,7 +333,7 @@ export function FrameworksPage({ token }: { token: string }) {
     <FormModal open={editing !== null} onClose={() => { setEditing(null); setDraftForm(null); }} title={editing ? `Modifier le brouillon v${editing.versionNumber}` : "Modifier le brouillon"} formId="fw-draft" saving={saving} submitLabel="Enregistrer">
       {draftForm && <form id="fw-draft" onSubmit={submitDraft}>
         {formError && <MessageBanner tone="danger">{formError}</MessageBanner>}
-        <MessageBanner tone="info">Les seuils d'appétence ne sont pas modifiables depuis cet écran ; ils restent tels que dans le brouillon.</MessageBanner>
+        <MessageBanner tone="info">Les seuils d'appétence se modifient dans l'onglet « Seuils d'appétence » du Dispositif.</MessageBanner>
         <FormField label="Grille de cotation" htmlFor="fd-scale"><select id="fd-scale" value={draftForm.ratingScaleId} onChange={(e) => set("ratingScaleId", e.target.value)}>{scaleOptions(draftForm.ratingScaleId)}</select></FormField>
         <FormField label="Mode d'évaluation par défaut" htmlFor="fd-mode"><select id="fd-mode" value={draftForm.defaultEvaluationMode} onChange={(e) => set("defaultEvaluationMode", e.target.value as EvaluationMode)}>{Object.entries(MODE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></FormField>
         <FormField label="Seuil Comité (évaluation) *" htmlFor="fd-cemin"><input id="fd-cemin" type="number" min={1} max={36} value={draftForm.committeeEvaluationMinScore} onChange={(e) => set("committeeEvaluationMinScore", e.target.value)} required /></FormField>
@@ -360,23 +351,6 @@ export function FrameworksPage({ token }: { token: string }) {
           {draftForm.committeeVoteRule === "CUSTOM" && <option value="CUSTOM">CUSTOM (non modifiable)</option>}
           {VOTE_RULES.map((r) => <option key={r} value={r}>{r}</option>)}
         </select></FormField>
-        <fieldset>
-          <legend>Seuils d'appétence ({draftForm.appetite.length})</legend>
-          <p>Le serveur valide chaque seuil (bornes, doublons) ; la liste saisie remplace celle du brouillon.</p>
-          {draftForm.appetite.length === 0 && <p>Aucun seuil dans ce brouillon.</p>}
-          {draftForm.appetite.map((row, i) => {
-            const setRow = (patch: Partial<AppetiteRow>) => set("appetite", draftForm.appetite.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-            return <fieldset key={row.key}>
-              <legend>Seuil {i + 1}</legend>
-              <FormField label="Sous-catégorie *" htmlFor={`fd-ap-sub-${i}`}><input id={`fd-ap-sub-${i}`} value={row.subCategory} onChange={(e) => setRow({ subCategory: e.target.value })} required maxLength={200} /></FormField>
-              <FormField label="Entité" htmlFor={`fd-ap-ent-${i}`} help="Vide : toutes les entités."><input id={`fd-ap-ent-${i}`} value={row.entity} onChange={(e) => setRow({ entity: e.target.value })} maxLength={200} /></FormField>
-              <FormField label="Seuil (1 à 36) *" htmlFor={`fd-ap-thr-${i}`}><input id={`fd-ap-thr-${i}`} type="number" min={1} max={36} step={1} value={row.threshold} onChange={(e) => setRow({ threshold: e.target.value })} required /></FormField>
-              <FormField label="Description" htmlFor={`fd-ap-desc-${i}`}><textarea id={`fd-ap-desc-${i}`} value={row.description} onChange={(e) => setRow({ description: e.target.value })} maxLength={1000} /></FormField>
-              <Button type="button" onClick={() => set("appetite", draftForm.appetite.filter((_, j) => j !== i))} aria-label={`Retirer le seuil ${i + 1}`}>Retirer</Button>
-            </fieldset>;
-          })}
-          <Button type="button" onClick={() => set("appetite", [...draftForm.appetite, emptyAppetiteRow()])}>Ajouter un seuil</Button>
-        </fieldset>
       </form>}
     </FormModal>
 
