@@ -15,14 +15,37 @@ export class ApiError extends Error {
    * structured field); null means "unknown", never guessed.
    */
   readonly missingPermission: string | null;
+  /**
+   * Machine-readable code: `payload.error.code` when the backend sends one,
+   * else the leading `UPPER_SNAKE:` token of the message (the double
+   * confirmation 409 is sent that way: "GOVERNANCE_CONFIRMATION_REQUIRED: ..."),
+   * else null. Never guessed from the status.
+   */
+  readonly code: string | null;
 
-  constructor(message: string, status: number, requestId: string | null) {
+  constructor(message: string, status: number, requestId: string | null, code: string | null = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.requestId = requestId;
+    this.code = code ?? /^([A-Z][A-Z0-9_]{2,}):/.exec(message)?.[1] ?? null;
     this.missingPermission = status === 403 ? (/^Missing permission: (\S+)$/.exec(message)?.[1] ?? null) : null;
   }
+}
+
+export const GOVERNANCE_CONFIRMATION_REQUIRED = "GOVERNANCE_CONFIRMATION_REQUIRED";
+
+/** True for the 409 that asks the caller to resend with a governanceConfirmation (dialog: lot F2). */
+export function isGovernanceConfirmationRequired(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409 && err.code === GOVERNANCE_CONFIRMATION_REQUIRED;
+}
+
+/** Success response with the envelope parts `apiRequest` drops. */
+export interface ApiResponse<T> {
+  data: T;
+  status: number;
+  /** Set on a 202: the change waits for a second person (e.g. PUT /config/self-validation-policy). */
+  pendingRequest?: unknown;
 }
 
 type DeniedListener = (permission: string) => void;
@@ -36,15 +59,14 @@ export function onPermissionDenied(listener: DeniedListener): () => void {
   };
 }
 
+type RequestOptions = { method?: string; body?: unknown; token: string; headers?: Record<string, string> };
+
 /**
  * Thin HTTP client. No business logic here — it only shapes requests and
  * unwraps responses. Every business decision (validation, transitions,
  * permissions) happens on the backend (see ADR-001 principle #1).
  */
-export async function apiRequest<T>(
-  path: string,
-  options: { method?: string; body?: unknown; token: string; headers?: Record<string, string> } ,
-): Promise<T> {
+export async function apiRequestFull<T>(path: string, options: RequestOptions): Promise<ApiResponse<T>> {
   const res = await fetch(`${API_BASE_URL ?? ""}${path}`, {
     method: options.method ?? "GET",
     headers: {
@@ -59,14 +81,23 @@ export async function apiRequest<T>(
 
   if (!res.ok) {
     const payload = await res.json().catch(() => ({ error: res.statusText }));
-    const error = new ApiError(payload.error ?? "Request failed", res.status, requestId);
+    const raw: unknown = payload.error;
+    const structured = raw !== null && typeof raw === "object" ? (raw as { code?: unknown; message?: unknown }) : null;
+    const message = structured ? (typeof structured.message === "string" ? structured.message : "Request failed") : typeof raw === "string" ? raw : "Request failed";
+    const code = structured && typeof structured.code === "string" ? structured.code : null;
+    const error = new ApiError(message, res.status, requestId, code);
     // Refused write (F-B8-06): tell the dialog. GETs are excluded because several
     // screens deliberately degrade on a 403 (directory lookups) without alarming the user.
     if (error.missingPermission && (options.method ?? "GET") !== "GET") deniedListener?.(error.missingPermission);
     throw error;
   }
 
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) return { data: undefined as T, status: 204 };
   const payload = await res.json();
-  return payload.data as T;
+  return { data: payload.data as T, status: res.status, ...(payload.pendingRequest !== undefined ? { pendingRequest: payload.pendingRequest } : {}) };
+}
+
+/** Same as `apiRequestFull` but returns only `data` (the common case). */
+export async function apiRequest<T>(path: string, options: RequestOptions): Promise<T> {
+  return (await apiRequestFull<T>(path, options)).data;
 }

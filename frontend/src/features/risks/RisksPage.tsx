@@ -14,14 +14,18 @@ import {
   type StatusTone,
 } from "@djamo/design-system";
 import { RaciPanel } from "../../design-system";
+import { RiskSheet, type RiskSheetShortcuts, type RiskSheetTab } from "./RiskSheet";
 import "../core/CorePages.css";
 import "./RisksPage.css";
 
 interface RisksPageProps {
   /** Google ID token — see AuthContext TODO in App.tsx. */
   token: string;
-  onEvaluate?: (riskId: string) => void;
+  /** Navigation shortcuts to Administration (DECISION-065); optional so the page stays usable alone. */
+  shortcuts?: RiskSheetShortcuts;
 }
+
+const NO_SHORTCUTS: RiskSheetShortcuts = { onOpenFrameworks: () => {}, onOpenAppetite: () => {}, onOpenScales: () => {}, onOpenProcesses: () => {} };
 
 type OwnerFilter = "ALL" | "MINE";
 
@@ -57,7 +61,7 @@ function describeError(err: unknown): string {
  * Pure presentation + API calls. No scoring, no transition rules, no
  * permission checks here — the backend owns all of that (ADR-001).
  */
-export function RisksPage({ token, onEvaluate }: RisksPageProps) {
+export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
   const [risks, setRisks] = useState<Risk[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,6 +84,7 @@ export function RisksPage({ token, onEvaluate }: RisksPageProps) {
   // No detail/edit screen exists yet for a risk — RACI is exposed as a
   // per-row toggle rather than a new route (DESIGN_NOTES.md: don't build
   // a screen ahead of one being needed elsewhere).
+  const [sheet, setSheet] = useState<{ riskId: string; tab: RiskSheetTab } | null>(null);
   const [raciRiskId, setRaciRiskId] = useState<string | null>(null);
 
   // ACT-120/121/122: owner + superior owner (N+1) assignment, one modal
@@ -222,6 +227,21 @@ export function RisksPage({ token, onEvaluate }: RisksPageProps) {
     }
   }
 
+  const sheetRisk = sheet ? risks.find((r) => r.id === sheet.riskId) : undefined;
+  if (sheet && sheetRisk) {
+    return <RiskSheet
+      token={token}
+      risk={sheetRisk}
+      tab={sheet.tab}
+      onTab={(tab) => setSheet({ riskId: sheet.riskId, tab })}
+      onBack={() => setSheet(null)}
+      ownerLabel={ownerLabel(sheetRisk.ownerId)}
+      superiorOwnerLabel={sheetRisk.superiorOwnerId ? ownerLabel(sheetRisk.superiorOwnerId) : null}
+      departmentLabel={departmentLabel(sheetRisk.ownerDepartmentId)}
+      shortcuts={shortcuts}
+    />;
+  }
+
   return (
     <section className="core-page">
       <div className="core-page__heading">
@@ -351,7 +371,8 @@ export function RisksPage({ token, onEvaluate }: RisksPageProps) {
               header: "Actions",
               render: (risk) => (
                 <div className="row-actions">
-                  <Button variant="primary" onClick={() => onEvaluate?.(risk.id)}>Évaluer</Button>
+                  <Button variant="primary" onClick={() => setSheet({ riskId: risk.id, tab: "identification" })}>Ouvrir</Button>
+                  <Button onClick={() => setSheet({ riskId: risk.id, tab: "evaluation" })}>Évaluer</Button>
                   <Button onClick={() => openOwnerModal(risk)}>Risk Owner</Button>
                   <Button onClick={() => setRaciRiskId((current) => (current === risk.id ? null : risk.id))}>
                     {raciRiskId === risk.id ? "Masquer RACI" : "RACI"}

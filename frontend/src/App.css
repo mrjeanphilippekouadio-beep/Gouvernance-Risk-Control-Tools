@@ -33,3 +33,5 @@ main{max-width:none;width:100%;margin:0;padding:0;box-sizing:border-box;text-ali
 .app-shell:has(.app-sidebar.rail) .feedback-widget{left:calc(58px + (100vw - 58px)/2)}
 .app-shell:has(.app-sidebar.rail):has(.context-rail.has-panel) .feedback-widget{left:calc(58px + (100vw - 58px - 344px)/2)}
 .app-shell:has(.context-rail.has-panel):not(:has(.app-sidebar.rail)) .feedback-widget{left:calc(252px + (100vw - 252px - 344px)/2)}
+
+.sidebar-subhead{padding:10px 10px 4px;font:700 9px var(--gs-font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--gs-text-disabled)}.sidebar-subhead-rule{border:0;border-top:1px solid var(--gs-border);margin:4px 8px}
