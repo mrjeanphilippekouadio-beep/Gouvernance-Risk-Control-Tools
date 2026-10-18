@@ -211,6 +211,10 @@ export function mapPgError(err: unknown): unknown {
     }
     return new ConflictError("Conflit avec une donnée existante");
   }
+  // Migration 063: the scale was disabled while this draft was being written (Codex P2, PR #186).
+  if (e?.code === "23514" && /^risk_framework_versions: rating scale/.test(e.message ?? "")) {
+    return new ValidationError("Cette échelle de cotation vient d'être désactivée : choisissez-en une autre pour ce brouillon");
+  }
   // Only the 055 guards' own refusals (F-REF-05): a genuine privilege error is also 42501 and must stay a 500.
   if (e?.code === "42501" && /^risk[ _]framework/.test(e.message ?? "")) {
     return new ValidationError("Cette version est figée : créez une nouvelle version");
