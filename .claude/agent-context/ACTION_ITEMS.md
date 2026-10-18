@@ -303,9 +303,11 @@ pour l'usage.
 | HUMAN | **q126 à q130 (A13, vérification DECISION-060)** : q126 structure à une personne : auto-approbation « sans second regard » après le premier Dispositif ? ; q127 levée du régime à l'arrivée d'un 2e Risk Manager ou de toute 2e personne ? ; q128 l'admin peut-il abandonner un brouillon ? ; q129 l'admin propose-t-il le rattachement processus → Dispositif (B-6c) ? ; q130 DECISION-058 limitée aux réglages hors Dispositif ? Recommandations A13 : oui / 2e Risk Manager / oui / oui / oui. Posées dans le cockpit. Aussi à valider : passage §10 « Gouvernance d'un changement de paramètre » du contrat amendé, marqué « Rédaction A13, à valider par le PO ». | 2026-10-18 | Décidé (DECISION-066/067/068) |
 | HUMAN | **q131 (QA-SWP-05)** Un processus doit-il pouvoir revenir au mode d'évaluation de son Dispositif (« hérité ») ? Le circuit ne sait plus l'exprimer depuis la fermeture de `PUT /processes/:id/evaluation-mode`. Recommandé : oui, demande « revenir au mode du Dispositif » dans le circuit. Lien QA-SWP-07 : en structure à une personne (q126/q127), plus personne ne peut changer le mode d'un processus. Posée dans le cockpit. | 2026-10-18 | Décidé (DECISION-069) |
 | HUMAN | **Revue Codex PR #186, 2 constats non corrigés (choix de l'orchestrateur, à confirmer)** : (a) P2 course « désactivation d'échelle / brouillon de Dispositif qui la référence » : seul effet, un brouillon non activable, corrigé par son auteur ; correction = verrou de ligne sur deux chemins, jugée disproportionnée (déjà résidu INFO de la Sécurité). (b) P1 « plus d'éditeur de seuils d'appétence » : l'ancien formulaire échouait déjà à chaque envoi (refus serveur depuis le Dispositif) ; l'éditeur dans le brouillon relève de l'étape 2 de DECISION-062. Fils laissés ouverts sur la PR. | 2026-10-18 | **Fermé par DECISION-070** (le PO demande de corriger les deux). |
-| HUMAN | **Arbitrage des droits et accès (DECISION-068)** : catalogue fusionné `docs/governance/droits-acces/catalogue.json` (209 droits, 12 rôles), publié dans la section « Droits et accès » du cockpit. 20 conflits de gouvernance signalés par A13, dont 5 élevés : `config.committeeenforcement.set` et `config.cumul.set` (un administrateur seul assouplit, alors que le Dispositif exige deux personnes), `rolegroup.audit.update` (l'Audit réglé par un non-Audit), `guard:noSelfRoleChange` et `guard:noSelfValidation` (structure d'une personne, à concilier avec DECISION-066). L'arbitrage se fait dans le cockpit (collection `rightDecisions`) ; chaque réponse devient une entrée du Decision Log. Bloque : DECISION-060/067, DECISION-064, DECISION-066, DECISION-069. | 2026-10-18 | Ouvert |
-| HUMAN | **q132 / q133 (cockpit) — éditeur des seuils d'appétence dans le brouillon du Dispositif (correctif Codex P1, commit 60f7757)** : q132 placement (fenêtre « Modifier le brouillon » actuelle ou onglet dédié) ; q133 sous-catégorie choisie dans le référentiel ou en texte libre (`subCategoryId` non alimentable depuis l'écran aujourd'hui). Mineur, non soumis : une erreur serveur sur la liste s'affiche en bannière globale, sans pointer la ligne. | 2026-10-18 | Ouvert |
-| HUMAN | **q134 (cockpit) — A10 F-063-03** : un brouillon de Dispositif abandonné (ARCHIVED) bloque pour toujours la désactivation de l'échelle qu'il référençait (règle `isReferencedByFrameworkVersion` + migration 063). Recommandation : seules les versions approuvées (en vigueur ou anciennes) bloquent. | 2026-10-18 | Ouvert |
+| HUMAN | **Arbitrage des droits et accès (DECISION-068)** : catalogue fusionné `docs/governance/droits-acces/catalogue.json` (209 droits, 12 rôles), publié dans la section « Droits et accès » du cockpit. 20 conflits de gouvernance signalés par A13, dont 5 élevés : `config.committeeenforcement.set` et `config.cumul.set` (un administrateur seul assouplit, alors que le Dispositif exige deux personnes), `rolegroup.audit.update` (l'Audit réglé par un non-Audit), `guard:noSelfRoleChange` et `guard:noSelfValidation` (structure d'une personne, à concilier avec DECISION-066). L'arbitrage se fait dans le cockpit (collection `rightDecisions`) ; chaque réponse devient une entrée du Decision Log. Bloque : DECISION-060/067, DECISION-064, DECISION-066, DECISION-069. | 2026-10-18 | Fermé (DECISION-072, sauf `guard:notLastRiskManager` rouvert en question) |
+| HUMAN | **q132 / q133 (cockpit) — éditeur des seuils d'appétence dans le brouillon du Dispositif (correctif Codex P1, commit 60f7757)** : q132 placement (fenêtre « Modifier le brouillon » actuelle ou onglet dédié) ; q133 sous-catégorie choisie dans le référentiel ou en texte libre (`subCategoryId` non alimentable depuis l'écran aujourd'hui). Mineur, non soumis : une erreur serveur sur la liste s'affiche en bannière globale, sans pointer la ligne. | 2026-10-18 | Fermé (DECISION-071) |
+| HUMAN | **q134 (cockpit) — A10 F-063-03** : un brouillon de Dispositif abandonné (ARCHIVED) bloque pour toujours la désactivation de l'échelle qu'il référençait (règle `isReferencedByFrameworkVersion` + migration 063). Recommandation : seules les versions approuvées (en vigueur ou anciennes) bloquent. | 2026-10-18 | Fermé (DECISION-071) |
+| HUMAN | **`guard:notLastRiskManager` — démission ou absence du seul Risk Manager, intérim** : le PO a rouvert ce point dans son arbitrage (« comment gérons-nous une démission s'il n'y avait qu'un seul Risk Manager ? comment gérons-nous l'intérim ? le groupe peut être vide »). Proposition A13 + A05 attendue, puis question cockpit. | 2026-10-18 | Ouvert |
+| HUMAN | **Panel « Principes de gouvernance non respectés » (DECISION-073)** : catalogue des principes et indications TPE / PME / grande entreprise (A13), règle de détection de la taille d'après les rôles assignés (A13), architecture du calcul côté serveur (A05), maquette (A04). Les seuils et le texte des indications passent en question cockpit avant implémentation. | 2026-10-18 | Ouvert |
 | @dev-backend | **A10 F-FW-01 LOW 2.2** (`docs/security/review-codex-fixes-pr186-2026-10-18.md`) : le libellé libre `subCategory` d'un seuil d'appétence n'est pas relié à `subCategoryId` (libellé trompeur possible). Correctif : déduire le libellé de l'id côté serveur — à traiter avec la réponse PO à q133. | 2026-10-18 | Ouvert |
 | @dev-db | **A10 F-063-01 INFO** : la garde de la migration 063 suppose READ COMMITTED (en REPEATABLE READ la course revient ; aucun code applicatif ne change l'isolation). Documenter cette hypothèse dans la migration suivante qui touche ces triggers. | 2026-10-18 | Ouvert (optionnel) |
 | HUMAN @devops | **A08 — vérification staging avant/après migration 063** : une version de Dispositif qui référencerait déjà une échelle supprimée reste lisible, mais cloner une nouvelle version depuis elle sera refusé. Requête de contrôle (lecture seule, à lancer par le PO ou un accès autorisé — l'orchestrateur ne touche pas Neon) : `SELECT v.id FROM risk_framework_versions v JOIN rating_scales s ON s.id = v.rating_scale_id WHERE s.deleted_at IS NOT NULL`. Aussi INFO A08 : rendre `isReferencedByFrameworkVersion` obligatoire sur `RatingScaleRepository` (le trigger 063 reste le filet). | 2026-10-18 | Ouvert |
@@ -1888,4 +1890,67 @@ DECISION (PO) : corriger les deux constats dans la PR #186 ; tout point
 RELATED: PR #186, q132, q133.
 OWNER: @dev-backend (P2) @dev-frontend (P1, commit 60f7757)
 STATUS: DÉCIDÉ — P1 livré, P2 en cours ; q132/q133 ouvertes.
+
+DECISION-071
+DATE: 2026-10-18 (cockpit q132, q133, q134, options recommandées)
+DECISION (PO) :
+  - q132 : un onglet « Seuils d'appétence » dédié dans le détail du
+    Dispositif (l'éditeur sort de la fenêtre « Modifier le brouillon »).
+  - q133 : la sous-catégorie d'un seuil se choisit obligatoirement dans
+    la liste des catégories de risque du référentiel (plus de texte
+    libre) ; absorbe A10 F-FW-01.
+  - q134 : un brouillon abandonné (ARCHIVED) ne bloque plus la
+    désactivation d'une échelle ; les versions approuvées (en vigueur ou
+    anciennes) continuent de bloquer.
+RELATED: q132, q133, q134, DECISION-070, A10 F-063-03, F-FW-01.
+OWNER: @dev-frontend (q132, q133) @dev-backend @dev-db (q133 serveur, q134)
+STATUS: DÉCIDÉ — à implémenter.
+
+DECISION-072
+DATE: 2026-10-18 (cockpit, section « Droits et accès », collection
+  `rightDecisions`, 20 conflits arbitrés)
+CONTEXT: DECISION-068.
+DECISION (PO) : réponses verbatim dans le cockpit (`rightDecisions/<id>`).
+  Principales lignes :
+  - Régime hybride partout où un administrateur seul agissait :
+    administrateur seul tant qu'aucun tiers (Risk Manager, Audit,
+    Comité) n'existe, circuit à deux dès qu'un tiers existe
+    (`config.committeeenforcement.set`, `config.cumul.set`,
+    `rolegroup.audit.update`, `process.evaluationmode.set`).
+  - Cumuls autorisés mais jamais silencieux, toujours visibles ;
+    deux comptes d'un même humain signalés, pas bloqués
+    (`guard:adminRiskManagerCumul`, `group:RISK_MANAGER`).
+  - `guard:noSelfValidation` : invariant paramétrable ; par défaut
+    l'action est refusée, et on recueille si le client veut la double
+    validation ; une vue regroupe les principes de gouvernance non
+    respectés avec leurs conséquences (→ DECISION-073).
+  - `riskappetite.update` : un administrateur seul (petite organisation,
+    qui est aussi le Risk Manager) peut agir, tracé et marqué « sans
+    seconde validation » ; dès qu'un membre d'Audit ou de Comité arrive,
+    il voit cette trace et les principes non respectés.
+  - `risk.owner.assign` : le propriétaire du processus est propriétaire
+    par défaut des risques du processus et les assigne à son équipe ;
+    chaque processus a un champion de risque ; le Risk Manager peut
+    préparer la répartition à sa demande, puis « valider et envoyer » ;
+    le propriétaire confirme en une seule action (double confirmation).
+  - `guard:notLastRiskManager` : non tranché, rouvert (démission, intérim,
+    groupe vide) — ligne HUMAN dans le tableau.
+  - Autres : options citées dans `rightDecisions`.
+RELATED: DECISION-068, DECISION-059, DECISION-061, DECISION-066, q104.
+OWNER: @architect @risk-manager @dev-backend
+STATUS: DÉCIDÉ (19/20) — un point rouvert.
+
+DECISION-073
+DATE: 2026-10-18 (consigne PO en conversation)
+DECISION (PO) : un panel qui reprend tous les principes de gouvernance
+  de la gestion des risques qui ne sont pas respectés, avec les objets
+  qui ne les respectent pas (rôle, permission, nombre de personnes…) et
+  des indications pour les respecter sur trois volets : TPE, entreprise
+  « normale » (PME), grande entreprise. La taille est déduite des rôles
+  assignés et l'indication qui convient le mieux est mise en
+  surbrillance.
+RELATED: DECISION-072 (`guard:noSelfValidation`, `riskappetite.update`).
+OWNER: @risk-manager (contenu) @architect (calcul serveur) @ux-designer
+  (maquette), puis @dev-backend @dev-frontend
+STATUS: DÉCIDÉ — cadrage en cours, contenu à valider en cockpit.
 ```

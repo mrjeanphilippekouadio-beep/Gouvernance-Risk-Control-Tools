@@ -1,0 +1,102 @@
+{
+  "config.committeeenforcement.set": {
+    "status": "answered",
+    "answer": "Hybride : un seul administrateur tant qu'aucun Risk Manager ni Comité n'existe (régime « une personne »), le circuit à deux dès qu'un tiers existe.",
+    "answeredAt": "2026-10-18T09:25:00.377Z"
+  },
+  "config.cumul.set": {
+    "status": "answered",
+    "answer": "Hybride : un administrateur seul s'il n'existe aucun membre d'Audit ni de Comité, deux personnes dès qu'un de ces groupes a un membre.",
+    "answeredAt": "2026-10-18T09:27:38.173Z"
+  },
+  "config:committeeAuditCumulAllowed": {
+    "status": "answered",
+    "answer": "Options 1 et 3 ensemble.",
+    "answeredAt": "2026-10-18T09:53:44.710Z"
+  },
+  "data:risk.analysisWriter": {
+    "status": "answered",
+    "answer": "Option 1 et exclusion de la validation pour l'auteur de l'Analyse (option 2) : ouvrir est voulu par le PO, mais celui qui a écrit l'Analyse ne valide pas l'évaluation qui s'en nourrit. L'Analyse reste une information, jamais une cotation ni une décision.",
+    "answeredAt": "2026-10-18T09:44:15.945Z"
+  },
+  "group:AUDIT": {
+    "status": "answered",
+    "answer": "Option 3 avec option 1 par défaut ; l'Audit informé et jamais décideur est la lecture la plus sûre.",
+    "answeredAt": "2026-10-18T09:51:10.496Z"
+  },
+  "group:RISK_MANAGER": {
+    "status": "answered",
+    "answer": "Option 2 : les droits larges sont voulus pour les petits clients ; le cumul de lignes doit être visible, comme le demande l'invariant « cumul de rôles toujours visible ».",
+    "answeredAt": "2026-10-18T09:52:39.574Z"
+  },
+  "guard:adminRiskManagerCumul": {
+    "status": "answered",
+    "answer": "Option 2, étendue à admin + Audit (q104) : le cumul est autorisé, jamais silencieux. Deux comptes au même humain sont détectés par des signaux (même e-mail ou même appareil) et signalés, pas bloqués.",
+    "answeredAt": "2026-10-18T09:56:45.614Z"
+  },
+  "guard:assertRiskManager": {
+    "status": "answered",
+    "answer": "Options 1 et 2 ensemble : rédiger est ouvert à l'administrateur ; décider reste à la fonction risque, sauf régime déclaré par l'éditeur.",
+    "answeredAt": "2026-10-18T09:48:54.402Z"
+  },
+  "guard:committeeFallbackCircuit": {
+    "status": "answered",
+    "answer": "Options 1 et 2 : la co-signature reste la règle ; faute de co-signataire, le gérant désigné statue ou est informé.",
+    "answeredAt": "2026-10-18T09:50:10.103Z"
+  },
+  "guard:noRiskManagerCommitteeCumul": {
+    "status": "answered",
+    "answer": "Option 2 : c'est la même logique que le cumul Comité + Audit (DECISION-061). Le PO tranche s'il l'ajoute à la liste des invariants.",
+    "answeredAt": "2026-10-18T09:54:29.104Z"
+  },
+  "guard:noSelfRoleChange": {
+    "status": "answered",
+    "answer": "Option 3 pour le démarrage (déjà cohérente avec DECISION-059 : régime déclaré par l'éditeur) et option 2 comme filet si le client n'a pas d'autre administrateur. Dans tous les cas, jamais en silence et jamais sans cumul visible.",
+    "answeredAt": "2026-10-18T09:30:10.072Z"
+  },
+  "guard:noSelfValidation": {
+    "status": "answered",
+    "answer": "Rendre l’invariant paramtrable afficher une vue qui regoupe les principes de gourvernances qui ne sont pas repsectés avec les consequences mais par defaut refuser l’action tout en collectant si le client veux la double validation de sa part",
+    "answeredAt": "2026-10-18T09:35:18.939Z"
+  },
+  "guard:notLastRiskManager": {
+    "status": "answered",
+    "answer": "Comment gerons nous le fait qu’il y est une dmeission et sûil y a avait un seul risque manager ? Comment geront nous l’intetim ? Je oense que c’est vers ce point que nous devons aller car des situations existe ou le groupe peut etr vide si on ne veux pas faire utiliser des acces a plusieurs perosnnes reprends se point",
+    "answeredAt": "2026-10-18T09:41:28.307Z"
+  },
+  "guard:onePersonRegime": {
+    "status": "answered",
+    "answer": "Option 2 : l'éditeur déclare ; le client règle le seuil de levée sans pouvoir ni s'auto-déclarer ni masquer le marquage ; le drapeau n'est pas un paramètre du Dispositif et l'administrateur ne peut pas le modifier.",
+    "answeredAt": "2026-10-18T09:56:06.384Z"
+  },
+  "process.evaluationmode.set": {
+    "status": "answered",
+    "answer": "Option 3 : circuit validé dès qu'un tiers existe, chemin direct tracé et signalé sinon.",
+    "answeredAt": "2026-10-18T09:45:08.480Z"
+  },
+  "risk.owner.assign": {
+    "status": "answered",
+    "answer": "Ici je pars sur le propriétaire du processus qui est lui meme le propriétaire des risques liés aux processus,  ensuite il devra assigner ces risques aux membre de sont equipes chasue processus a un champion de risque par defaut tous les risques appartiennent au propriétaire tant qu’il n’a pas assigner aussi oour l’aider s’il n’est pas trop a alaise avec les nouvelles technologies le risque manager peut le faire il repartira les risques sur sa demande hors systeme grc et une fois les manipulations effectue par le risk manager cliquer sur un bouton valider et envoyer au propriétaire du pricessus qui lui devra faire une seul action sur son postes confirmer deux fois les manipulations",
+    "answeredAt": "2026-10-18T09:39:24.020Z"
+  },
+  "riskappetite.update": {
+    "status": "answered",
+    "answer": "A la base un administrateur ne peut faire de modification sur les paramtres de risques ceoendant compte tenu du fait que de oetit organisations peutvenr avoir un seul administrateur qui sera le risk manager , il faut lui permettre de oouvoir faire certaines actions que nous devons juste traces et marque clairement que c’est sans second validation ou regard et trace la decision des qunun membre de audit ou comite vient il y a acces et mettre a niveau les principes de gourvernances non respecte dans lamise en place du dispositif",
+    "answeredAt": "2026-10-18T09:48:22.002Z"
+  },
+  "riskframework.archive": {
+    "status": "answered",
+    "answer": "Option 1.",
+    "answeredAt": "2026-10-18T09:42:32.694Z"
+  },
+  "rolegroup.audit.update": {
+    "status": "answered",
+    "answer": "Le changement est libre pour un administrateur seul tant qu'aucun membre d'Audit n'existe, mis en attente dès qu'il y en a un.",
+    "answeredAt": "2026-10-18T09:25:56.154Z"
+  },
+  "user.delete": {
+    "status": "answered",
+    "answer": "Option 2 : le repli est déjà marqué et à ratifier ; ajouter la cause « groupe vidé récemment » et informer le gérant.",
+    "answeredAt": "2026-10-18T09:51:42.482Z"
+  }
+}
