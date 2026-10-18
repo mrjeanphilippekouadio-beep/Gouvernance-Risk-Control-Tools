@@ -305,3 +305,9 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Constats à retenir : `riskframework.process.assign` n'est vérifiée nulle part ; 44 permissions sur 111 n'ont aucun groupe fixe ; evaluationmode.* / process.evaluationmode.* sans détenteur par défaut ; `config.update`, `config.committee*`, `riskappetite.*`, activation d'échelle inopérants en production (Dispositif câblé) ; paramètres du contrat du Dispositif (cumul propriétaire/exécutant, délégation, hybride, maîtrise, vote) stockés mais lus par aucune règle ; `Process.owner` et `Department.riskOwner` sont du texte libre (aucune donnée « N-1 du processus » ni « délégué » : à créer pour DECISION-064).
 - Limite : droits réels des rôles personnalisés et colonne `users.roles` en base non vérifiés (aucun accès Neon).
 - Leçon : pour un inventaire, dériver les listes par script depuis le code plutôt que les recopier ; `python3 -I` sur un script du scratchpad fonctionne, heredoc `python3 -` seul aussi.
+
+## 2026-10-18 P2 Codex PR #186 : suppression d échelle vs brouillon de Dispositif (migration 063)
+
+- Course contrôle-puis-écriture entre deux tables : un trigger seul ne suffit pas (MVCC). Il faut un verrou de ligne des DEUX côtés : trigger d insertion de version avec `SELECT ... FOR SHARE` sur l échelle (même tenant, deleted_at IS NULL), et trigger BEFORE UPDATE de la suppression douce qui revérifie les références (instantané frais après l attente du verrou, READ COMMITTED). Test déterministe : `test/ScaleDeleteRace.test.ts` (client en BEGIN non validé + délai 300 ms, motif SWPFixes), échoue avec QA_SKIP_063=1.
+- Le service `disable` garde son contrôle (message clair) ; dans la course seule l erreur SQL 23503 sort (500 générique, non mappée) : acceptable, rare.
+- Worktree dispatché sur un vieux main : `git reset --hard` sur la branche cible d abord ; `npm install` dans backend/ requis.
