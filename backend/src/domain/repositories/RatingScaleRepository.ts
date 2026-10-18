@@ -16,6 +16,8 @@ export interface RatingScaleRepository {
    */
   readonly auditsInTransaction?: boolean;
   getById(tenantId: string, id: string): Promise<RatingScale | null>;
+  /** QA-SWP-03 / F-SWP-06: true when any Dispositif version, whatever its status (DRAFT included), points at this scale. Optional so test fakes keep working. */
+  isReferencedByFrameworkVersion?(tenantId: string, id: string): Promise<boolean>;
   list(tenantId: string, options?: { includeArchived?: boolean }): Promise<RatingScale[]>;
   create(input: CreateRatingScaleInput, audit?: TransactionalAudit<RatingScale>): Promise<RatingScale>;
 

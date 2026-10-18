@@ -356,6 +356,12 @@ export class RatingScaleService {
       );
     }
 
+    if (await this.ratingScales.isReferencedByFrameworkVersion?.(actor.tenantId, id)) {
+      throw new ValidationError(
+        "Cannot disable a rating scale that a Dispositif version references (draft or not) — change the version's scale first",
+      );
+    }
+
     await this.audited(
       () => [this.event(actor, id, "DELETE", before, null, reason, requestId)],
       (audit) => this.ratingScales.softDelete(actor.tenantId, id, actor.userId, reason, audit),

@@ -158,36 +158,48 @@ export class ProcessEvaluationModeRequestService {
 
     const riskOwners = await this.getRiskOwners(actor.tenantId, request.processId);
 
+    // F-SWP-01: the request transition comes FIRST (conditional on PENDING), then the process, then the audit.
+    // A concurrent reject makes the transition match 0 row -> NotFoundError, and processes.evaluation_mode is untouched.
+    const events = (validatedRequest: ProcessEvaluationModeRequest, afterProcess: Process) => [
+      {
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Process",
+        entityId: request.processId,
+        action: "UPDATE" as const,
+        oldValue: beforeProcess,
+        newValue: afterProcess,
+        reason: null,
+        requestId,
+      },
+      {
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "ProcessEvaluationModeRequest",
+        entityId: id,
+        action: "VALIDATE" as const,
+        oldValue: request,
+        // riskOwners embedded here so validation-time risk ownership is
+        // captured in the audit trail (DECISION-006: visible + audited,
+        // never authoritative — not read by any permission check above).
+        newValue: { ...validatedRequest, riskOwners },
+        reason: null,
+        requestId,
+      },
+    ];
+
+    if (this.requests.auditsInTransaction === true && this.requests.validateAndApply) {
+      const { process: applied } = await this.requests.validateAndApply(actor.tenantId, id, actor.userId, (r) =>
+        events(r.request, r.process),
+      );
+      return applied;
+    }
+    // Fallback (test fakes without a transactional repository): same order, not atomic.
+    const validatedRequest = await this.requests.validate(actor.tenantId, id, actor.userId);
     const afterProcess = await this.processes.update(actor.tenantId, request.processId, {
       evaluationMode: request.requestedMode,
     });
-    const validatedRequest = await this.requests.validate(actor.tenantId, id, actor.userId);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Process",
-      entityId: request.processId,
-      action: "UPDATE",
-      oldValue: beforeProcess,
-      newValue: afterProcess,
-      reason: null,
-      requestId,
-    });
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "ProcessEvaluationModeRequest",
-      entityId: id,
-      action: "VALIDATE",
-      oldValue: request,
-      // riskOwners embedded here so validation-time risk ownership is
-      // captured in the audit trail (DECISION-006: visible + audited,
-      // never authoritative — not read by any permission check above).
-      newValue: { ...validatedRequest, riskOwners },
-      reason: null,
-      requestId,
-    });
+    for (const e of events(validatedRequest, afterProcess)) await this.audit.record(e);
 
     return afterProcess;
   }

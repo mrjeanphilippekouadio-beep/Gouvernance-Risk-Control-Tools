@@ -90,7 +90,7 @@ describe("ModuleToggleService", () => {
     await service.toggle(admin, "KRI", false, " maintenance ", "REQ-2");
     await service.toggle(admin, "KRI", true, "fin de maintenance", "REQ-3");
     expect(events).toHaveLength(2);
-    expect(events[0]).toMatchObject({ oldValue: null, newValue: { enabled: false }, reason: "maintenance" });
+    expect(events[0]).toMatchObject({ oldValue: { enabled: true }, newValue: { enabled: false }, reason: "maintenance" });
     expect(events[1]).toMatchObject({ oldValue: { enabled: false }, newValue: { enabled: true } });
   });
 });

@@ -289,3 +289,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - `PATCH /rating-scales/:id/disable` : pas un second chemin (ACTIVE refusée, trigger 055 fige toute échelle référencée par une version non-brouillon).
 - `ModuleToggleService.toggle(actor, name, enabled, reason, requestId)` : motif obligatoire, audit avant/après. `setCommitteeAuditCumul` avait déjà motif+audit. `setCommitteeEnforcement` : NE PAS toucher (fermé par le Dispositif, A13). `assertRiskManager` (DECISION-060) : lot séparé.
 - Test de garde : `test/SingleWritePath.test.ts`.
+
+## 2026-10-18 Correctifs revues QA/Sécurité « un seul chemin » (QA-SWP-01..04, F-SWP-01/02/03/05/06)
+
+- Audit atomique du toggle : `ModuleToggleRepository.upsert(..., audit?)` + `auditsInTransaction` ; le « avant » est lu `FOR UPDATE` dans la transaction ; défaut explicite `{ enabled: true }` si jamais enregistré. Repli (faux dépôts) = ancien flux getByName/upsert/record.
+- F-SWP-01 : `ProcessEvaluationModeRequestRepository.validateAndApply` (optionnel) = UPDATE conditionnel PENDING -> VALIDATED (0 ligne = NotFoundError), PUIS `processes.evaluation_mode`, PUIS audit, une transaction. Repli service : même ordre (demande, processus, audit), non atomique. `toDomain`/`ProcessRow` de PostgresProcessRepository exportés pour la réutilisation.
+- QA-SWP-03 : `RatingScaleRepository.isReferencedByFrameworkVersion?` (toute version, brouillon inclus), appelée par `disable` ; optionnelle pour les faux dépôts (garde `?.`), donc fail-open sans dépôt PG : le câblage server.ts utilise le dépôt PG.
+- Tests existants adaptés (source de vérité changée) : `ModuleToggleService.test` (oldValue `{enabled:true}`), `QA-SWP.test` (.fails retirés, faux dépôt transactionnel, test PG 01 = événement invalide fait échouer l'upsert, test PG 03 attend un refus). Nouveau : `SWPFixes.test.ts` (+ cas PG gaté `QA_SWP_PGHOST`).
+- Piège : un commentaire de source qui cite `setMode`/`setEvaluationMode` fait échouer un test de garde par regex sur `src/api` ; reformuler le commentaire. Heredoc multi-ligne + `cd` composé refusés par le garde du worktree : utiliser Write et des commandes simples.
+- Non fait (lot dédié) : retrait du code mort et de `process.evaluationmode.set`, q131, DECISION-060, F-SWP-04.

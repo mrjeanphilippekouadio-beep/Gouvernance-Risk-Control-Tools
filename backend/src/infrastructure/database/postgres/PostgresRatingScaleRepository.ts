@@ -93,6 +93,14 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
+  async isReferencedByFrameworkVersion(tenantId: string, id: string): Promise<boolean> {
+    const { rows } = await this.pool.query(
+      `SELECT 1 FROM risk_framework_versions WHERE tenant_id = $1 AND rating_scale_id = $2 LIMIT 1`,
+      [tenantId, id],
+    );
+    return rows.length > 0;
+  }
+
   async list(tenantId: string, options?: { includeArchived?: boolean }): Promise<RatingScale[]> {
     const statusFilter = options?.includeArchived ? "" : "AND status != 'ARCHIVED'";
     const { rows } = await this.pool.query<RatingScaleRow>(

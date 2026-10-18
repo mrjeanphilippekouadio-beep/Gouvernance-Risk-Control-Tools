@@ -11,7 +11,7 @@ import type { EvaluationMode } from "../../../domain/entities/Config.js";
 import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 
-interface ProcessRow {
+export interface ProcessRow {
   id: string;
   tenant_id: string;
   parent_id: string | null;
@@ -31,7 +31,7 @@ interface ProcessRow {
   deletion_reason: string | null;
 }
 
-function toDomain(row: ProcessRow): Process {
+export function toDomain(row: ProcessRow): Process {
   return {
     id: row.id,
     tenantId: row.tenant_id,

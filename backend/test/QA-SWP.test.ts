@@ -236,16 +236,25 @@ describe("QA-SWP D. PATCH /modules/:name/toggle", () => {
   function setup(opts: { auditFails?: boolean } = {}) {
     const store = new Map<string, ModuleToggle>();
     const events: Array<{ oldValue: any; newValue: any; reason: string | null }> = [];
+    const audit = { async record(e: any) { if (opts.auditFails) throw new Error("audit down"); events.push(e); }, async listForEntity() { return []; }, async listRecent() { return []; } };
+    // Models the contract of PostgresModuleToggleRepository: state + audit events in one transaction (rolled back if an event cannot be written).
     const repo = {
+      auditsInTransaction: true,
       async list() { return [...store.values()]; },
       async getByName(_t: string, m: string) { return store.get(m) ?? null; },
-      async upsert(t: string, m: string, enabled: boolean, by: string) {
-        const row = { id: store.get(m)?.id ?? randomUUID(), tenantId: t, moduleName: m, enabled, updatedBy: by, createdAt: new Date(), updatedAt: new Date() } as ModuleToggle;
+      async upsert(t: string, m: string, enabled: boolean, by: string, build?: (r: { before: ModuleToggle | null; after: ModuleToggle }) => unknown[]) {
+        const before = store.get(m) ?? null;
+        const row = { id: before?.id ?? randomUUID(), tenantId: t, moduleName: m, enabled, updatedBy: by, createdAt: new Date(), updatedAt: new Date() } as ModuleToggle;
         store.set(m, row);
+        try {
+          for (const e of build?.({ before, after: row }) ?? []) await audit.record(e);
+        } catch (err) {
+          if (before) store.set(m, before); else store.delete(m);
+          throw err;
+        }
         return row;
       },
     };
-    const audit = { async record(e: any) { if (opts.auditFails) throw new Error("audit down"); events.push(e); }, async listForEntity() { return []; }, async listRecent() { return []; } };
     const svc = new ModuleToggleService(repo as never, audit as never);
     const mount = (app: express.Express) => app.use("/modules", moduleTogglesRouter(svc));
     return { store, events, mount };
@@ -290,14 +299,13 @@ describe("QA-SWP D. PATCH /modules/:name/toggle", () => {
     expect(s.events[1]!.reason).toBe("deux");
   });
 
-  it("QA-SWP-02 (MINOR): the FIRST change of a never-persisted module audits oldValue = null although the effective state was 'enabled' (the 'before' of the lot is not explicit)", async () => {
+  it("QA-SWP-02 (MINOR): the FIRST change of a never-persisted module audits the default state oldValue = { enabled: true }, not null", async () => {
     const s = setup();
     await patch(s, "CONTROL", { enabled: false, reason: "r" });
-    // Oracle of DECISION-058 ("avant/après"): before should say enabled=true. Pinned current behaviour:
-    expect(s.events[0]!.oldValue).toBeNull();
+    expect(s.events[0]!.oldValue).toEqual({ enabled: true });
   });
 
-  it.fails("QA-SWP-01 (MAJOR): an audit failure must not leave the toggle changed without a trace (state + audit are not one transaction)", async () => {
+  it("QA-SWP-01 (MAJOR): an audit failure must not leave the toggle changed without a trace (state + audit are not one transaction)", async () => {
     // expected by DECISION-058 / CLAUDE.md ("audit in the same service method"): the module stays enabled when the audit cannot be written
     const s = setup({ auditFails: true });
     await patch(s, "RISK", { enabled: false, reason: "coupure" });
@@ -321,13 +329,12 @@ describe.skipIf(!PGHOST.startsWith("/"))("QA-SWP E. real PostgreSQL 16 (grc_qa_a
   });
   afterAll(async () => { await pool.end(); });
 
-  it("toggle on PG: upsert is committed BEFORE the audit call, so a failing audit leaves the module disabled (QA-SWP-01 confirmed on the real repository)", async () => {
-    const svc = new ModuleToggleService(new PostgresModuleToggleRepository(pool), { async record() { throw new Error("audit down"); } } as never);
-    const a = { userId: user, tenantId: tenant, email: "a@x", roles: ["config.manage"] } as unknown as AuthenticatedUser;
-    await expect(svc.toggle(a, "KPI", false, "coupure", "q")).rejects.toThrow(/audit down/);
-    const rows = await q<{ enabled: boolean }>(`SELECT enabled FROM module_toggles WHERE tenant_id = $1 AND module_name = 'KPI'`, [tenant]);
-    // current (defective) behaviour: the row exists and is disabled, with no audit row
-    expect(rows).toEqual([{ enabled: false }]);
+  it("toggle on PG: a failing audit insert rolls the upsert back (QA-SWP-01 fixed on the real repository)", async () => {
+    const repo = new PostgresModuleToggleRepository(pool);
+    // an event violating NOT NULL on audit_log.entity_type makes the in-transaction insert fail
+    const bad = () => [{ tenantId: tenant, userId: user, entityType: null, entityId: "x", action: "STATUS_CHANGE", oldValue: null, newValue: null, reason: "r", requestId: "q" }] as never;
+    await expect(repo.upsert(tenant, "KPI", false, user, bad)).rejects.toThrow();
+    expect(await q(`SELECT 1 AS id FROM module_toggles WHERE tenant_id = $1 AND module_name = 'KPI'`, [tenant])).toHaveLength(0);
   });
 
   it("toggle on PG: idempotent upsert keeps a single row per (tenant, module) and a CHECK-less enabled flip is visible to isEnabled", async () => {
@@ -348,15 +355,15 @@ describe.skipIf(!PGHOST.startsWith("/"))("QA-SWP E. real PostgreSQL 16 (grc_qa_a
     await expect(q(`INSERT INTO process_evaluation_mode_requests (tenant_id, process_id, requested_mode, requested_by) VALUES ($1,$2,'PARTICIPATIF',$3)`, [tenant, proc, user])).rejects.toThrow();
   });
 
-  it.fails("QA-SWP-03 (MAJOR, cross-module; PATCH /rating-scales/:id/disable, not part of the lot but listed 'a verifier'): a scale referenced by a DRAFT Dispositif version can be soft-deleted, which makes the version unreadable by getById", async () => {
+  it("QA-SWP-03 (MAJOR, cross-module; PATCH /rating-scales/:id/disable, not part of the lot but listed 'a verifier'): a scale referenced by a DRAFT Dispositif version can be soft-deleted, which makes the version unreadable by getById", async () => {
     const scaleRepo = new PostgresRatingScaleRepository(pool);
     const scale = await one(`INSERT INTO rating_scales (tenant_id, name, version, probability_levels, impact_levels) VALUES ($1,'s',$2,5,5) RETURNING id`, [tenant, `v-${Math.random()}`]);
     const fw = await one(`INSERT INTO risk_frameworks (tenant_id, name) VALUES ($1,$2) RETURNING id`, [tenant, `fw-${Math.random()}`]);
     await one(`INSERT INTO risk_framework_versions (tenant_id, framework_id, version_number, rating_scale_id, committee_evaluation_min_score) VALUES ($1,$2,1,$3,15) RETURNING id`, [tenant, fw, scale]);
     const svc = new RatingScaleService(scaleRepo, { async record() {} } as never, { async existsForRatingScale() { return false; } } as never);
     const a = { userId: user, tenantId: tenant, email: "a@x", roles: ["ratingscale.read", "ratingscale.delete"] } as unknown as AuthenticatedUser;
-    // Expected (invariant "a version never points at a scale that no longer exists"): the disable is refused.
-    await svc.disable(a, scale, "nettoyage", "q");
+    // Invariant "a version never points at a scale that no longer exists": the disable is refused.
+    await expect(svc.disable(a, scale, "nettoyage", "q")).rejects.toThrow(/Dispositif/);
     expect(await scaleRepo.getById(tenant, scale)).not.toBeNull();
   });
 });

@@ -1,4 +1,8 @@
 import type { Pool } from "pg";
+import { insertAuditEvent } from "./PostgresAuditRepository.js";
+import { toDomain as processToDomain, type ProcessRow } from "./PostgresProcessRepository.js";
+import type { Process } from "../../../domain/entities/Process.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import type { ProcessEvaluationModeRequestRepository } from "../../../domain/repositories/ProcessEvaluationModeRequestRepository.js";
 import type {
   CreateProcessEvaluationModeRequestInput,
@@ -42,7 +46,51 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 export class PostgresProcessEvaluationModeRequestRepository implements ProcessEvaluationModeRequestRepository {
+  /** F-SWP-01: `validateAndApply` inserts its audit events with the transaction client. */
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
+
+  async validateAndApply(
+    tenantId: string,
+    id: string,
+    validatedBy: string,
+    audit: TransactionalAudit<{ request: ProcessEvaluationModeRequest; process: Process }>,
+  ): Promise<{ request: ProcessEvaluationModeRequest; process: Process }> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      // 1. conditional transition first: it takes the row lock, so a concurrent reject/validate waits then matches 0 row
+      const r = await client.query<ProcessEvaluationModeRequestRow>(
+        `UPDATE process_evaluation_mode_requests
+         SET status = 'VALIDATED', validated_by = $3, validated_at = now()
+         WHERE tenant_id = $1 AND id = $2 AND status = 'PENDING_VALIDATION'
+         RETURNING *`,
+        [tenantId, id, validatedBy],
+      );
+      const reqRow = r.rows[0];
+      if (!reqRow) throw new NotFoundError("ProcessEvaluationModeRequest", id);
+      // 2. only now the process
+      const p = await client.query<ProcessRow>(
+        `UPDATE processes SET evaluation_mode = $3, updated_at = now()
+         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+         RETURNING *`,
+        [tenantId, reqRow.process_id, reqRow.requested_mode],
+      );
+      const procRow = p.rows[0];
+      if (!procRow) throw new NotFoundError("Process", reqRow.process_id);
+      const out = { request: toDomain(reqRow), process: processToDomain(procRow) };
+      // 3. audit, same transaction
+      for (const event of audit(out)) await insertAuditEvent(client, event);
+      await client.query("COMMIT");
+      return out;
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
 
   async getById(tenantId: string, id: string): Promise<ProcessEvaluationModeRequest | null> {
     const { rows } = await this.pool.query<ProcessEvaluationModeRequestRow>(

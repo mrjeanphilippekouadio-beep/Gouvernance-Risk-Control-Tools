@@ -1,9 +1,13 @@
+import type { Process } from "../entities/Process.js";
+import type { TransactionalAudit } from "../entities/RiskFramework.js";
 import type {
   CreateProcessEvaluationModeRequestInput,
   ProcessEvaluationModeRequest,
 } from "../entities/ProcessEvaluationModeRequest.js";
 
 export interface ProcessEvaluationModeRequestRepository {
+  /** F-SWP-01: true when `validateAndApply` exists and runs request transition + process update + audit in ONE transaction. */
+  readonly auditsInTransaction?: boolean;
   getById(tenantId: string, id: string): Promise<ProcessEvaluationModeRequest | null>;
   list(
     tenantId: string,
@@ -19,4 +23,15 @@ export interface ProcessEvaluationModeRequestRepository {
   validate(tenantId: string, id: string, validatedBy: string): Promise<ProcessEvaluationModeRequest>;
   /** Terminal transition 2/2: PENDING_VALIDATION -> REJECTED. Same race guard as validate(). */
   reject(tenantId: string, id: string, validatedBy: string, reason: string): Promise<ProcessEvaluationModeRequest>;
+  /**
+   * F-SWP-01, one transaction, in this order: (1) PENDING_VALIDATION -> VALIDATED, conditional
+   * (0 row = already decided -> NotFoundError, nothing else written); (2) processes.evaluation_mode
+   * = the requested mode; (3) the events built by `audit`.
+   */
+  validateAndApply?(
+    tenantId: string,
+    id: string,
+    validatedBy: string,
+    audit: TransactionalAudit<{ request: ProcessEvaluationModeRequest; process: Process }>,
+  ): Promise<{ request: ProcessEvaluationModeRequest; process: Process }>;
 }
