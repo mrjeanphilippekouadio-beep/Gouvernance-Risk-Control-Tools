@@ -184,6 +184,7 @@ function world(o: Opts = {}) {
       return groups[t]![r.systemGroup!].map((userId) => ({ userId, roleId, revokedAt: null }));
     },
   };
+  // (users.getById returns the canonical lower-case uuid, like PostgreSQL)
   const users = {
     async getById(_t: string, id: string) { return { id, deletedAt: o.suspended?.includes(id) ? new Date() : null }; },
     async listWithPermission(t: string, permission: string, exclude: string) {
@@ -402,10 +403,12 @@ function bworld(o: { facts?: Partial<BootstrapFacts>; audit?: string[]; committe
   const roleRepo = {
     async list() { return roles; },
     async listForUser(_t: string, u: string) { return held[u.toLowerCase()] ?? []; },
+    async listActiveGrants(_t: string, u: string) { return (held[u.toLowerCase()] ?? []).map((r) => ({ role: r, grantedBy: "other", grantedAt: new Date("2020-01-01T00:00:00Z") })); },
     async listAssignments(_t: string, id: string) { return (groups[id] ?? []).map((userId) => ({ userId, roleId: id, revokedAt: null })); },
   };
+  // (users.getById returns the canonical lower-case uuid, like PostgreSQL)
   const users = {
-    async getById(_t: string, id: string) { return id === "ghost" || id === "gone" ? (id === "gone" ? { id, deletedAt: new Date() } : null) : { id, deletedAt: null }; },
+    async getById(_t: string, id: string) { return id === "ghost" || id === "gone" ? (id === "gone" ? { id, deletedAt: new Date() } : null) : { id: id.toLowerCase(), deletedAt: null }; },
     async listWithPermission() { return []; },
   };
   const sent: Array<{ recipientUserId: string; eventType: string; message: string }> = [];
@@ -468,7 +471,7 @@ describe("QA-B6d bootstrap: scope, replay, atomic refusal", () => {
     body.justification["freeParameters"] = { scaleSize: 99, lowCriticalityThreshold: 1 };
     const out = await w.service.bootstrapApprove(BU1, "r1", body as never, "req");
     expect(out.request.bootstrapJustification!.freeParameters).toMatchObject({ scaleSize: 5, lowCriticalityThreshold: 7, delegationMaxDays: 12 });
-    expect(Object.keys(out.request.bootstrapJustification!).sort()).toEqual(["askedOn", "askedUserId", "freeParameters", "outcome"]);
+    expect(Object.keys(out.request.bootstrapJustification!).sort()).toEqual(["askedOn", "askedUserId", "deciderAlsoAdministrator", "freeParameters", "outcome"]);
   });
 });
 
@@ -517,7 +520,7 @@ describe("QA-B6d I-D9: the self-designated asked administrator", () => {
 
   // QA-B6d-01. Id = z.guid() accepts UPPER-CASE hex, PostgreSQL resolves it to the same user and roles, and the
   // service compares `askedUserId === actor.userId` as text. The rule can be sidestepped by upper-casing the id.
-  it.fails("QA-B6d-01: the requester naming themselves with the UPPER-CASE form of their own id is refused like the lower-case form (currently accepted)", async () => {
+  it("QA-B6d-01: the requester naming themselves with the UPPER-CASE form of their own id is refused like the lower-case form (currently accepted)", async () => {
     const w = bworld();
     w.held["u1"]!.push(adminRole());
     await expect(w.service.bootstrapApprove(BU1, "r1", BGOOD({ askedUserId: "U1" }), "req")).rejects.toThrow(/vous désigner vous-même/);

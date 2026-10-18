@@ -25,4 +25,6 @@ export interface RoleRepository {
   /** B-8 bis (F-B8-06): roles DISABLED since the user got them but whose non-revoked assignment remains. */
   listDisabledForUser?(tenantId: string, userId: string): Promise<Role[]>;
   listAssignments(tenantId: string, roleId: string): Promise<RoleAssignment[]>;
+  /** B-6d (F-B6d-01): the user's active roles with who granted each one and when. */
+  listActiveGrants?(tenantId: string, userId: string): Promise<Array<{ role: Role; grantedBy: string; grantedAt: Date }>>;
 }

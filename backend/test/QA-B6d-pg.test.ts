@@ -44,6 +44,7 @@ describe.skipIf(!enabled)("QA-B6d on real PostgreSQL 16", () => {
   }
   const grant = (w: World, g: keyof World["roles"], u: string, c?: PoolClient) =>
     (c ?? pool).query(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $4) RETURNING id`, [w.t, w.roles[g], u, w.admin]);
+  const cause = async (t: string) => (await q<{ c: string; r: string | null }>(`SELECT risk_framework_bootstrap_end_cause AS c, risk_framework_bootstrap_end_ref AS r FROM tenants WHERE id = $1`, [t]))[0]!;
   const ended = async (t: string) => (await q<{ e: Date | null }>(`SELECT risk_framework_bootstrap_ended_at AS e FROM tenants WHERE id = $1`, [t]))[0]!.e;
 
   async function pending(w: World) {
@@ -246,18 +247,19 @@ describe.skipIf(!enabled)("QA-B6d on real PostgreSQL 16", () => {
     expect(await ended(w2.t)).not.toBeNull();
   });
 
-  // -- known limit declared by A06 (unreachable through the API: no endpoint writes roles.system_group or un-deletes a role) --
+  // -- QA-B6d-02 / F-B6d-03: roles.system_group change and role reactivation now set the end marker (with its cause) --
 
-  it.fails("KNOWN LIMIT: reactivating a disabled Audit role that carries 2 members should set the end marker (it does not)", async () => {
+  it("reactivating a disabled Audit role that carries 2 members sets the end marker", async () => {
     const w = await world();
     await q(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [w.roles.AUDIT]);
     await grant(w, "AUDIT", await user(w.t, "a1"));
     await grant(w, "AUDIT", await user(w.t, "a2"));
     await q(`UPDATE roles SET deleted_at = NULL WHERE id = $1`, [w.roles.AUDIT]);
     expect(await ended(w.t)).not.toBeNull();
+    expect(await cause(w.t)).toMatchObject({ c: "ROLE_REACTIVATED", r: w.roles.AUDIT });
   });
 
-  it.fails("KNOWN LIMIT: changing roles.system_group to AUDIT on a role carrying 2 members should set the end marker (it does not)", async () => {
+  it("changing roles.system_group to AUDIT on a role carrying 2 members sets the end marker", async () => {
     const w = await world();
     const plain = await one(`INSERT INTO roles (tenant_id, name, permissions) VALUES ($1, 'plain', '{}') RETURNING id`, [w.t]);
     const wp = { ...w, roles: { ...w.roles, AUDIT: plain } };
@@ -266,9 +268,20 @@ describe.skipIf(!enabled)("QA-B6d on real PostgreSQL 16", () => {
     await q(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [w.roles.AUDIT]);
     await q(`UPDATE roles SET system_group = 'AUDIT' WHERE id = $1`, [plain]);
     expect(await ended(w.t)).not.toBeNull();
+    expect(await cause(w.t)).toMatchObject({ c: "ROLE_GROUP_CHANGED", r: plain });
   });
 
-  it.fails("KNOWN LIMIT consequence: after the unmarked circuit shrinks back, the bootstrap reopens (q102 says never)", async () => {
+  it("C-B6d-01: a second member ends the bootstrap with cause SECOND_ELIGIBLE_MEMBER + the assignment id; cause and ref are immutable", async () => {
+    const w = await world();
+    const a1 = await user(w.t, "a1");
+    await grant(w, "AUDIT", a1);
+    const second = (await grant(w, "AUDIT", await user(w.t, "a2"))).rows[0].id as string;
+    expect(await cause(w.t)).toMatchObject({ c: "SECOND_ELIGIBLE_MEMBER", r: second });
+    await expect(q(`UPDATE tenants SET risk_framework_bootstrap_end_cause = 'ROLE_REACTIVATED' WHERE id = $1`, [w.t])).rejects.toMatchObject({ code: "42501" });
+    await expect(q(`UPDATE tenants SET risk_framework_bootstrap_end_ref = NULL WHERE id = $1`, [w.t])).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("consequence: once marked, a circuit that shrinks back does not reopen the bootstrap (q102: never)", async () => {
     const w = await world();
     const p = await pending(w);
     await q(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [w.roles.AUDIT]);
@@ -276,8 +289,8 @@ describe.skipIf(!enabled)("QA-B6d on real PostgreSQL 16", () => {
     await grant(w, "AUDIT", a1);
     await grant(w, "AUDIT", await user(w.t, "a2"));
     await q(`UPDATE roles SET deleted_at = NULL WHERE id = $1`, [w.roles.AUDIT]);
-    // the live safety net still refuses while the circuit works ...
-    await expect(decide(w, p.r)).rejects.toThrow("REFUSED:CIRCUIT_FUNCTIONAL");
+    // the end is already recorded (cause ROLE_REACTIVATED) while the circuit works ...
+    await expect(decide(w, p.r)).rejects.toThrow("REFUSED:ENDED");
     // ... but once one member leaves, nothing remembers that a circuit existed
     await q(`UPDATE user_roles SET revoked_at = now() WHERE tenant_id = $1 AND user_id = $2`, [w.t, a1]);
     await expect(decide(w, p.r)).rejects.toThrow("REFUSED:ENDED");

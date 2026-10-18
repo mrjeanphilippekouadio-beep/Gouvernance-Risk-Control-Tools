@@ -272,3 +272,11 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - I-D9 : `BOOTSTRAP_ASKED_ADMIN_MAY_BE_SELF` (frameworkApproval.ts:63) est une constante ; la rendre configurable = colonne `configs`/tenant + motif + audit, défaut false.
 - Écritures multiples restantes : `configs.committee_*`/`evaluation_mode` fermées via `assertNotOwnedByFramework` ; `updateMethodology`/`updateAppetiteMode` (scoreFormula, appetiteMode) ne le sont pas (ConfigService.ts:126,163).
 - À proposer au PO comme non configurables : audit append-only, tenant_id, soft-delete, attribution forcée serveur, RM+Audit (q43), auto-approbation.
+
+## 2026-10-18 B-6d correctifs revues (062 corrigée en place, pas de 063)
+
+- QA-B6d-01 : `checkDeclaration` lit d'abord l'utilisateur, compare `asked.id` (uuid canonique renvoyé par PG) à `actor.userId`, stocke `asked.id`. Le faux dépôt utilisateurs des tests doit renvoyer l'id en minuscules comme PG.
+- F-B6d-01 : nouvelle méthode OPTIONNELLE `RoleRepository.listActiveGrants` (rôle actif + `granted_by` + `granted_at`) ; échoue fermé si absente. Refus si aucun rôle admin actif de l'utilisateur sollicité n'est (accordé par un autre que le demandeur ET daté <= askedOn). Borne basse de askedOn = date d'octroi (donc >= création du tenant), sans lire `tenants.created_at`. Limite : granularité jour UTC ; un tiers complice qui promeut reste indétectable.
+- 062 : colonnes `tenants.risk_framework_bootstrap_end_cause` + `_end_ref` (CHECK valeurs + cohérence avec `ended_at`, garde 42501 étendue ; une cause manquante peut être complétée une fois). Causes : SECOND_ELIGIBLE_MEMBER, USER_REACTIVATED, ROLE_REACTIVATED, ROLE_GROUP_CHANGED, PRE_EXISTING_AT_MIGRATION. Trigger `roles_bootstrap_end_mark` (AFTER UPDATE OF system_group, deleted_at). Verrou `FOR NO KEY UPDATE` (trigger + `recordBootstrapDecision`). Piège : un `--` de commentaire dans une ligne de faux dépôt en one-liner avale le `},` suivant.
+- Notice : `BootstrapJustification.deciderAlsoAdministrator` (construit serveur, optionnel) ; message = motif (administrateur cité, date, résultat) + marquage. Aucune notification à l'administrateur cité (q103/q-PO en attente).
+- Tests : B6d.test (F-B6d-01, notice, câblage server.ts C-B6d-08), QA-B6d(-pg) `.fails` retirés + causes. Les revues restent à refaire (A10/A08/A14).

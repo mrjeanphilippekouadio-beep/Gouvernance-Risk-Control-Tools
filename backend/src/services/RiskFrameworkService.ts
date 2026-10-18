@@ -181,7 +181,7 @@ export class RiskFrameworkService {
     private readonly frameworks: RiskFrameworkRepository,
     private readonly ratingScales: Pick<RatingScaleRepository, "getById">,
     /** Fixed groups are roles with a `systemGroup`; members come from role assignments. */
-    private readonly roles: Pick<RoleRepository, "list" | "listForUser" | "listAssignments">,
+    private readonly roles: Pick<RoleRepository, "list" | "listForUser" | "listAssignments" | "listActiveGrants">,
     private readonly users: Pick<UserRepository, "getById" | "listWithPermission">,
     private readonly audit: AuditRepository,
     /** Fail-closed: an appetite entry naming a subCategoryId is refused when this is not wired. */
@@ -598,8 +598,10 @@ export class RiskFrameworkService {
     const scale = (await this.ratingScales.getById(actor.tenantId, version.ratingScaleId))!;
     const lowestBand = Math.min(...(scale.criticalityThresholds ?? []).map((b) => b.max));
     // I-D8 (A13): the values q98 leaves free are frozen with the decision. R2 is a value to examine, never a refusal.
+    const myGrants = (await this.roles.listActiveGrants?.(actor.tenantId, actor.userId)) ?? [];
     const justification: BootstrapJustification = {
       ...declaration,
+      deciderAlsoAdministrator: myGrants.some((g) => g.role.permissions.some((p) => ADMIN_PERMISSIONS.includes(p))),
       freeParameters: {
         scaleSize: scale.impactLevels,
         appetiteThresholds: version.appetiteThresholds,
@@ -687,18 +689,27 @@ export class RiskFrameworkService {
       throw new ValidationError("justification.askedOn must be a date (YYYY-MM-DD)");
     }
     if (askedOn > new Date().toISOString().slice(0, 10)) throw new ValidationError("justification.askedOn cannot be in the future");
-    const askedUserId = d?.askedUserId;
-    if (!askedUserId) throw new ValidationError("justification.askedUserId is required");
+    const rawAskedId = d?.askedUserId;
+    if (!rawAskedId) throw new ValidationError("justification.askedUserId is required");
+    const asked = await this.users.getById(actor.tenantId, rawAskedId);
+    if (!asked || asked.deletedAt) throw new ValidationError("L'administrateur sollicité doit être un utilisateur actif du tenant");
+    // QA-B6d-01: compare the id returned by the database (canonical lower-case uuid), never the client's text.
     // I-D9 (A13, pending PO): the requester cannot be the administrator they claim to have asked.
-    if (askedUserId === actor.userId && !BOOTSTRAP_ASKED_ADMIN_MAY_BE_SELF) {
+    if (asked.id === actor.userId && !BOOTSTRAP_ASKED_ADMIN_MAY_BE_SELF) {
       throw new ValidationError("Vous ne pouvez pas vous désigner vous-même comme administrateur sollicité : sollicitez un autre administrateur du tenant, ou créez vous-même un second membre du groupe Risk Manager.");
     }
-    const asked = await this.users.getById(actor.tenantId, askedUserId);
-    if (!asked || asked.deletedAt) throw new ValidationError("L'administrateur sollicité doit être un utilisateur actif du tenant");
-    const held = await this.roles.listForUser(actor.tenantId, askedUserId);
-    if (!held.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)))) {
+    const listGrants = this.roles.listActiveGrants?.bind(this.roles);
+    if (!listGrants) throw new ValidationError("Bootstrap approval is not available");
+    const adminGrants = (await listGrants(actor.tenantId, asked.id)).filter((g) => g.role.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));
+    if (adminGrants.length === 0) {
       throw new ValidationError("L'utilisateur sollicité n'est pas administrateur : indiquez un administrateur du tenant");
     }
+    // F-B6d-01: the administrator right must predate the request and not come from the requester themselves.
+    // Also the lower bound of askedOn: it cannot precede the grant, hence not the creation of the tenant.
+    if (!adminGrants.some((g) => g.grantedBy !== actor.userId && g.grantedAt.toISOString().slice(0, 10) <= askedOn)) {
+      throw new ValidationError("Le droit d'administrateur de l'utilisateur sollicité a été accordé par vous, ou après la date de sollicitation déclarée : indiquez un administrateur préexistant");
+    }
+    const askedUserId = asked.id;
     return { askedUserId, askedOn, outcome };
   }
 

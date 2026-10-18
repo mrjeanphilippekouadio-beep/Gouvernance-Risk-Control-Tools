@@ -1,7 +1,7 @@
 -- Rollback of 062_risk_framework_bootstrap.sql (B-6d).
 --
 -- !! A ne pas jouer après une décision BOOTSTRAP réelle ou une fin d'amorçage posée, sans export préalable :
--- !! la descente efface la fin mémorisée (donc rouvrirait l'amorçage, q102) et les colonnes fallback_cause /
+-- !! la descente efface la fin mémorisée et sa cause (donc rouvrirait l'amorçage, q102) et les colonnes fallback_cause /
 -- !! bootstrap_justification (preuves d'une décision de repli q100 ou d'amorçage). Une version activée en
 -- !! BOOTSTRAP resterait ACTIVE mais plus aucune garde ne l'expliquerait.
 -- Restaure la garde de 059 AVEC son search_path (piège F-B6a-14) et le CHECK no_bootstrap de 056 (NOT VALID).
@@ -105,12 +105,16 @@ BEGIN
   END IF;
 END $$;
 
+DROP TRIGGER IF EXISTS roles_bootstrap_end_mark ON roles;
 DROP TRIGGER IF EXISTS users_bootstrap_end_mark ON users;
 DROP TRIGGER IF EXISTS user_roles_bootstrap_end_mark_update ON user_roles;
 DROP TRIGGER IF EXISTS user_roles_bootstrap_end_mark_insert ON user_roles;
 DROP TRIGGER IF EXISTS tenants_bootstrap_end_guard ON tenants;
 DROP FUNCTION IF EXISTS risk_framework_bootstrap_end_mark();
 DROP FUNCTION IF EXISTS tenants_bootstrap_end_guard();
+ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_bootstrap_end_cause_check;
+ALTER TABLE tenants DROP COLUMN IF EXISTS risk_framework_bootstrap_end_ref;
+ALTER TABLE tenants DROP COLUMN IF EXISTS risk_framework_bootstrap_end_cause;
 ALTER TABLE tenants DROP COLUMN IF EXISTS risk_framework_bootstrap_ended_at;
 
 DELETE FROM schema_migrations WHERE filename = '062_risk_framework_bootstrap.sql';

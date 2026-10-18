@@ -149,6 +149,8 @@ export interface BootstrapDeclaration {
   outcome: string;
 }
 export interface BootstrapJustification extends BootstrapDeclaration {
+  /** q63 / A13 §7.2: server-built, the deciding Risk Manager also held an administrator permission. */
+  deciderAlsoAdministrator?: boolean;
   /** I-D8 (A13): the values q98 leaves free, frozen so Audit / the Committee can judge them. Server-built. */
   freeParameters: {
     scaleSize: number;

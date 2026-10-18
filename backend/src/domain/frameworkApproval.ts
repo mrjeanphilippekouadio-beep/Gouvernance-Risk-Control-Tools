@@ -141,7 +141,9 @@ export function bootstrapNoticeMessage(j: BootstrapJustification): string {
   const f = j.freeParameters;
   const low = f.lowCriticalityThreshold === null ? "non renseigné" : `${f.lowCriticalityThreshold}${f.lowThresholdToExamine ? " (valeur à examiner)" : ""}`;
   return (
-    "Un Dispositif a été activé en amorçage par un Risk Manager seul, sans ratification. Valeurs fixées librement : "
+    `Un Dispositif a été activé en amorçage par un Risk Manager seul${j.deciderAlsoAdministrator === true ? " (également administrateur du tenant)" : ""}, sans ratification. `
+    + `Motif : l'administrateur ${j.askedUserId} a été sollicité le ${j.askedOn} pour désigner un second membre ; résultat déclaré : « ${j.outcome} ». `
+    + "Valeurs fixées librement : "
     + `échelle ${f.scaleSize}x${f.scaleSize}, seuil « faible » ${low}, ${f.appetiteThresholds.length} appétence(s), `
     + `durée de délégation ${f.delegationMaxDays ?? "non fixée"}, seuil Comité de traitement ${f.committeeTreatmentMinScore ?? "non fixé"}. `
     + "Détail : consultation des décisions BOOTSTRAP."

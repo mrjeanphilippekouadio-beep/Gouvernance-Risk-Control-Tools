@@ -344,6 +344,17 @@ export class PostgresRoleRepository implements RoleRepository {
     return rows.map(toDomain);
   }
 
+  async listActiveGrants(tenantId: string, userId: string): Promise<Array<{ role: Role; grantedBy: string; grantedAt: Date }>> {
+    const { rows } = await this.pool.query<RoleRow & { granted_by: string; granted_at: Date }>(
+      `SELECT r.*, ur.granted_by, ur.granted_at FROM roles r
+       JOIN user_roles ur ON ur.role_id = r.id AND ur.tenant_id = r.tenant_id
+       WHERE ur.tenant_id = $1 AND ur.user_id = $2 AND ur.revoked_at IS NULL AND r.deleted_at IS NULL
+       ORDER BY r.name`,
+      [tenantId, userId],
+    );
+    return rows.map((r) => ({ role: toDomain(r), grantedBy: r.granted_by, grantedAt: r.granted_at }));
+  }
+
   async listAssignments(tenantId: string, roleId: string): Promise<RoleAssignment[]> {
     const { rows } = await this.pool.query<UserRoleRow>(
       `SELECT * FROM user_roles WHERE tenant_id = $1 AND role_id = $2 ORDER BY granted_at DESC`,

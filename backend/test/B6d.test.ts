@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import express from "express";
 import { RiskFrameworkService } from "../src/services/RiskFrameworkService.js";
@@ -144,6 +146,7 @@ function world(o: { facts?: Partial<BootstrapFacts>; audit?: string[]; committee
       return result;
     },
   };
+  const grantMeta: Record<string, { grantedBy?: string; grantedAt?: Date }> = {};
   const held: Record<string, Role[]> = {
     u1: [role("rm", "RISK_MANAGER", ["riskframework.activate"])],
     adm: [role("adm", null, ["role.assign"])],
@@ -154,6 +157,9 @@ function world(o: { facts?: Partial<BootstrapFacts>; audit?: string[]; committee
   const roleRepo = {
     async list() { return roles; },
     async listForUser(_t: string, u: string) { return held[u] ?? []; },
+    async listActiveGrants(_t: string, u: string) {
+      return (held[u] ?? []).map((r) => ({ role: r, grantedBy: grantMeta[u]?.grantedBy ?? "other", grantedAt: grantMeta[u]?.grantedAt ?? new Date("2020-01-01T00:00:00Z") }));
+    },
     async listAssignments(_t: string, id: string) { return (groups[id] ?? []).map((userId) => ({ userId, roleId: id, revokedAt: null })); },
   };
   const users = {
@@ -165,7 +171,7 @@ function world(o: { facts?: Partial<BootstrapFacts>; audit?: string[]; committee
   const audit = { async record() {}, async listForEntity() { return []; } };
   const scales = { async getById() { return scale(); } };
   const service = new RiskFrameworkService(repo as never, scales as never, roleRepo as never, users as never, audit as never, undefined, notifications as never);
-  return { service, request, version, written, sent, stored };
+  return { service, request, version, written, sent, stored, grantMeta, held };
 }
 
 describe("B-6d bootstrapApprove (q83, q98, q99, I-D8, I-D9)", () => {
@@ -223,6 +229,35 @@ describe("B-6d bootstrapApprove (q83, q98, q99, I-D8, I-D9)", () => {
     expect(err).toBeInstanceOf(ValidationError);
     expect(err.message).toMatch(/committeeEvaluationEnforced, hybridPolicyEnabled/);
     await expect(world({ facts: { firstActivationOfTenant: false } }).service.bootstrapApprove(U1, "r1", GOOD(), "req")).rejects.toThrow(/premier Dispositif/);
+  });
+
+  it("F-B6d-01: the asked administrator's right must not come from the requester, nor postdate askedOn; a pre-existing third-party admin is accepted", async () => {
+    const byMe = world();
+    byMe.grantMeta["adm"] = { grantedBy: "u1" };
+    await expect(byMe.service.bootstrapApprove(U1, "r1", GOOD(), "req")).rejects.toThrow(/accordé par vous, ou après/);
+    const late = world();
+    late.grantMeta["adm"] = { grantedAt: new Date() }; // granted today, askedOn = yesterday
+    await expect(late.service.bootstrapApprove(U1, "r1", GOOD(), "req")).rejects.toThrow(/accordé par vous, ou après/);
+    const early = world();
+    early.grantMeta["adm"] = { grantedBy: "someone", grantedAt: new Date(Date.now() - 5 * 86_400_000) };
+    await expect(early.service.bootstrapApprove(U1, "r1", GOOD({ askedOn: ISO(-1) }), "req")).resolves.toBeDefined();
+    // lower bound: askedOn before the grant (hence before the tenant existed) is refused
+    const before = world();
+    before.grantMeta["adm"] = { grantedAt: new Date(Date.now() - 5 * 86_400_000) };
+    await expect(before.service.bootstrapApprove(U1, "r1", GOOD({ askedOn: "1970-01-01" }), "req")).rejects.toThrow(/accordé par vous, ou après/);
+    expect(byMe.stored.calls + late.stored.calls + before.stored.calls).toBe(0);
+  });
+
+  it("C-B6d-03 / INFO-05: the notice carries the motive and flags a deciding Risk Manager who is also an administrator", async () => {
+    const plain = world({ audit: ["a1"] });
+    await plain.service.bootstrapApprove(U1, "r1", GOOD(), "req");
+    expect(plain.sent[0]!.message).toMatch(/Motif : l'administrateur adm a été sollicité le \d{4}-\d{2}-\d{2}.*« L'administrateur n'a pas pu/);
+    expect(plain.sent[0]!.message).not.toMatch(/également administrateur/);
+    const cumul = world({ audit: ["a1"] });
+    cumul.held["u1"]!.push(role("adm2", null, ["user.create"]));
+    await cumul.service.bootstrapApprove(U1, "r1", GOOD(), "req");
+    expect(cumul.sent[0]!.message).toMatch(/Risk Manager seul \(également administrateur du tenant\)/);
+    expect(cumul.request.bootstrapJustification).toMatchObject({ deciderAlsoAdministrator: true });
   });
 
   it("I-D9: the asked administrator cannot be the requester, nor a non-administrator, an unknown or suspended user", async () => {
@@ -311,5 +346,28 @@ describe("B-6d arrival notice (q77) in RoleService", () => {
     const b = roleWorld(false);
     await b.service.assignToUser(admin, "au", "newbie", "r", "motif");
     expect(b.sent).toEqual([]);
+  });
+});
+
+describe("C-B6d-08: server.ts wires the dependencies that trigger the bootstrap notice", () => {
+  const server = readFileSync(join(__dirname, "..", "src", "server.ts"), "utf8");
+  function callArgs(cls: string): string {
+    const start = server.indexOf(`new ${cls}(`);
+    expect(start, `new ${cls}( not found in server.ts`).toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = start + `new ${cls}`.length; i < server.length; i++) {
+      if (server[i] === "(") depth++;
+      if (server[i] === ")" && --depth === 0) return server.slice(start, i);
+    }
+    throw new Error(`unbalanced call for ${cls}`);
+  }
+  it("RoleService receives riskFrameworkRepository (arrival notice on assignment)", () => {
+    expect(callArgs("RoleService")).toContain("riskFrameworkRepository");
+  });
+  it("UserService receives roleService (arrival notice on reactivation)", () => {
+    expect(callArgs("UserService")).toContain("roleService");
+  });
+  it("RiskFrameworkService receives notificationService (notice to Audit and Committee)", () => {
+    expect(callArgs("RiskFrameworkService")).toContain("notificationService");
   });
 });

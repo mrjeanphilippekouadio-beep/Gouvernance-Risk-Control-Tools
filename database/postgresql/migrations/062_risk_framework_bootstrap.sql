@@ -10,22 +10,33 @@
 --   4. risk_framework_versions_guard() redéfinie : garde de 059 en entier + activation BOOTSTRAP du premier
 --      Dispositif tant que la fin n'est pas posée. search_path REPRIS (F-B6a-11, CLAUDE.md).
 --
--- Limites connues : le trigger de fin suit les affectations (user_roles) et les réactivations (users) ; il ne
--- suit pas un changement de roles.system_group ou la réactivation d'un rôle désactivé (intervention HUMAN).
+-- Le trigger de fin suit les affectations (user_roles), les réactivations d'utilisateur (users), la réactivation d'un
+-- rôle désactivé et le changement de roles.system_group (roles). La CAUSE de la fin (et l'id de la ligne déclencheuse)
+-- est mémorisée avec la date : preuve = date + cause + réf. + ROLE_CHANGE correspondant (C-B6d-01).
 -- Les valeurs par défaut du contrat (q98) et « RM unique » restent contrôlées dans le service, sous le même verrou.
 -- Idempotente : IF NOT EXISTS, DO $$ sur pg_constraint, CREATE OR REPLACE, DROP TRIGGER IF EXISTS.
 
 -- 1. Fin mémorisée ----------------------------------------------------------------------------------
 
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS risk_framework_bootstrap_ended_at timestamptz NULL;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS risk_framework_bootstrap_end_cause text NULL;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS risk_framework_bootstrap_end_ref uuid NULL;
 COMMENT ON COLUMN tenants.risk_framework_bootstrap_ended_at IS
   'fin définitive de l''amorçage du Dispositif, q102 ; posée par trigger, jamais remise à NULL';
+COMMENT ON COLUMN tenants.risk_framework_bootstrap_end_cause IS
+  'cause de la fin : SECOND_ELIGIBLE_MEMBER, USER_REACTIVATED, ROLE_REACTIVATED, ROLE_GROUP_CHANGED, PRE_EXISTING_AT_MIGRATION (date = celle de la migration, pas celle de la fin réelle)';
+COMMENT ON COLUMN tenants.risk_framework_bootstrap_end_ref IS
+  'id de la ligne déclencheuse (user_roles, users ou roles selon la cause) ; NULL pour PRE_EXISTING_AT_MIGRATION';
 
+-- Fin, cause et référence sont immuables dès qu'ils sont posés (la cause peut être complétée une fois si elle manque).
 CREATE OR REPLACE FUNCTION tenants_bootstrap_end_guard() RETURNS trigger LANGUAGE plpgsql
   SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
   IF OLD.risk_framework_bootstrap_ended_at IS NOT NULL
-     AND NEW.risk_framework_bootstrap_ended_at IS DISTINCT FROM OLD.risk_framework_bootstrap_ended_at THEN
+     AND (NEW.risk_framework_bootstrap_ended_at IS DISTINCT FROM OLD.risk_framework_bootstrap_ended_at
+          OR (OLD.risk_framework_bootstrap_end_cause IS NOT NULL
+              AND (NEW.risk_framework_bootstrap_end_cause IS DISTINCT FROM OLD.risk_framework_bootstrap_end_cause
+                   OR NEW.risk_framework_bootstrap_end_ref IS DISTINCT FROM OLD.risk_framework_bootstrap_end_ref))) THEN
     RAISE EXCEPTION 'tenants: the end of the Dispositif bootstrap is definitive and cannot be changed' USING ERRCODE = '42501';
   END IF;
   RETURN NEW;
@@ -43,6 +54,7 @@ CREATE OR REPLACE FUNCTION risk_framework_bootstrap_end_mark() RETURNS trigger L
   SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
   t uuid := NEW.tenant_id;
+  cause text;
   n_rm int;
   n_cm int;
   n_au int;
@@ -51,13 +63,21 @@ BEGIN
   IF EXISTS (SELECT 1 FROM tenants WHERE id = t AND risk_framework_bootstrap_ended_at IS NOT NULL) THEN
     RETURN NEW;
   END IF;
-  -- (2) l'événement ne concerne aucun groupe fixe.
+  -- (2) l'événement ne concerne aucun groupe fixe ; la cause suit la table déclencheuse.
   IF TG_TABLE_NAME = 'user_roles' THEN
+    cause := 'SECOND_ELIGIBLE_MEMBER';
     IF NOT EXISTS (SELECT 1 FROM roles r WHERE r.id = NEW.role_id AND r.tenant_id = t AND r.deleted_at IS NULL
                    AND r.system_group IN ('RISK_MANAGER', 'RISK_COMMITTEE', 'AUDIT')) THEN
       RETURN NEW;
     END IF;
+  ELSIF TG_TABLE_NAME = 'roles' THEN
+    cause := CASE WHEN OLD.deleted_at IS NOT NULL THEN 'ROLE_REACTIVATED' ELSE 'ROLE_GROUP_CHANGED' END;
+    IF NEW.deleted_at IS NOT NULL OR NEW.system_group IS NULL
+       OR NEW.system_group NOT IN ('RISK_MANAGER', 'RISK_COMMITTEE', 'AUDIT') THEN
+      RETURN NEW;
+    END IF;
   ELSE
+    cause := 'USER_REACTIVATED';
     IF NOT EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id AND r.tenant_id = ur.tenant_id
                    WHERE ur.tenant_id = t AND ur.user_id = NEW.id AND ur.revoked_at IS NULL AND r.deleted_at IS NULL
                    AND r.system_group IN ('RISK_MANAGER', 'RISK_COMMITTEE', 'AUDIT')) THEN
@@ -65,7 +85,9 @@ BEGIN
     END IF;
   END IF;
   -- (3) verrou du tenant : deux ajouts concurrents sont sérialisés, le second voit le premier (READ COMMITTED).
-  PERFORM 1 FROM tenants WHERE id = t FOR UPDATE;
+  -- NO KEY UPDATE (F-B6d-04) : exclusif entre eux, mais compatible avec le KEY SHARE des FK vers tenants
+  -- (pas d'interblocage par montée de verrou, pas de blocage des insertions voisines).
+  PERFORM 1 FROM tenants WHERE id = t FOR NO KEY UPDATE;
   -- (4) comptage.
   SELECT count(DISTINCT ur.user_id) FILTER (WHERE r.system_group = 'RISK_MANAGER'),
          count(DISTINCT ur.user_id) FILTER (WHERE r.system_group = 'RISK_COMMITTEE'),
@@ -75,9 +97,11 @@ BEGIN
   JOIN roles r ON r.id = ur.role_id AND r.tenant_id = ur.tenant_id AND r.deleted_at IS NULL
   JOIN users u ON u.id = ur.user_id AND u.tenant_id = ur.tenant_id AND u.deleted_at IS NULL
   WHERE ur.tenant_id = t AND ur.revoked_at IS NULL AND r.system_group IS NOT NULL;
-  -- (5) un circuit fonctionne (q101, MIN_VOTERS = 2 de q72).
+  -- (5) un circuit fonctionne (q101, MIN_VOTERS = 2 de q72) : date + cause + ligne déclencheuse (C-B6d-01).
   IF n_rm >= 2 OR n_cm >= 2 OR n_au >= 2 THEN
-    UPDATE tenants SET risk_framework_bootstrap_ended_at = now() WHERE id = t AND risk_framework_bootstrap_ended_at IS NULL;
+    UPDATE tenants SET risk_framework_bootstrap_ended_at = now(), risk_framework_bootstrap_end_cause = cause,
+                       risk_framework_bootstrap_end_ref = NEW.id
+    WHERE id = t AND risk_framework_bootstrap_ended_at IS NULL;
   END IF;
   RETURN NEW;
 END;
@@ -101,8 +125,17 @@ CREATE TRIGGER users_bootstrap_end_mark
   FOR EACH ROW WHEN (OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL)
   EXECUTE FUNCTION risk_framework_bootstrap_end_mark();
 
--- Remplissage : tenants dont un circuit fonctionne déjà. L'historique des suspensions n'est pas reconstitué.
-UPDATE tenants t SET risk_framework_bootstrap_ended_at = now()
+-- Un rôle devient (ou redevient) un groupe fixe actif qui porte peut-être déjà des membres (QA-B6d-02, F-B6d-03).
+DROP TRIGGER IF EXISTS roles_bootstrap_end_mark ON roles;
+CREATE TRIGGER roles_bootstrap_end_mark
+  AFTER UPDATE OF system_group, deleted_at ON roles
+  FOR EACH ROW WHEN (NEW.deleted_at IS NULL AND NEW.system_group IS NOT NULL
+                     AND (OLD.system_group IS DISTINCT FROM NEW.system_group OR OLD.deleted_at IS NOT NULL))
+  EXECUTE FUNCTION risk_framework_bootstrap_end_mark();
+
+-- Remplissage : tenants dont un circuit fonctionne déjà. L'historique des suspensions n'est pas reconstitué : la date
+-- est celle de la REPRISE, ce que dit la cause PRE_EXISTING_AT_MIGRATION (pas de ligne déclencheuse).
+UPDATE tenants t SET risk_framework_bootstrap_ended_at = now(), risk_framework_bootstrap_end_cause = 'PRE_EXISTING_AT_MIGRATION'
 WHERE t.risk_framework_bootstrap_ended_at IS NULL
   AND EXISTS (
     SELECT 1 FROM (
@@ -114,6 +147,20 @@ WHERE t.risk_framework_bootstrap_ended_at IS NULL
       GROUP BY r.system_group
     ) g WHERE g.n >= 2
   );
+-- Rejeu sur une base où une version antérieure de 062 avait posé une fin sans cause.
+UPDATE tenants SET risk_framework_bootstrap_end_cause = 'PRE_EXISTING_AT_MIGRATION'
+WHERE risk_framework_bootstrap_ended_at IS NOT NULL AND risk_framework_bootstrap_end_cause IS NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tenants_bootstrap_end_cause_check'
+                 AND conrelid = 'tenants'::regclass) THEN
+    ALTER TABLE tenants ADD CONSTRAINT tenants_bootstrap_end_cause_check
+      CHECK ((risk_framework_bootstrap_ended_at IS NULL) = (risk_framework_bootstrap_end_cause IS NULL)
+             AND (risk_framework_bootstrap_end_cause IS NULL OR risk_framework_bootstrap_end_cause IN
+                  ('SECOND_ELIGIBLE_MEMBER', 'USER_REACTIVATED', 'ROLE_REACTIVATED', 'ROLE_GROUP_CHANGED', 'PRE_EXISTING_AT_MIGRATION')));
+  END IF;
+END $$;
 
 -- 2. Colonnes des demandes et CHECK de forme ---------------------------------------------------------
 

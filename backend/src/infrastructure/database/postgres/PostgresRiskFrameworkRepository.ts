@@ -710,8 +710,8 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     audit?: TransactionalAudit<DecisionResult>,
   ): Promise<DecisionResult> {
     return this.tx(async (c) => {
-      // Same lock as the 062 end-marker trigger: a concurrent member assignment waits for us, or has already ended it.
-      const tenant = await c.query(`SELECT id FROM tenants WHERE id = $1 FOR UPDATE`, [tenantId]);
+      // Same lock as the 062 end-marker trigger (NO KEY UPDATE, F-B6d-04: compatible with the FK KEY SHARE, no lock upgrade deadlock): a concurrent member assignment waits for us, or has already ended it.
+      const tenant = await c.query(`SELECT id FROM tenants WHERE id = $1 FOR NO KEY UPDATE`, [tenantId]);
       if (tenant.rows.length === 0) throw new NotFoundError("Tenant", tenantId);
       const req = await this.lockPending(c, tenantId, requestId);
       if (req.requested_by !== d.decidedBy) throw new ValidationError("L'amorçage ne peut être décidé que par le demandeur");
