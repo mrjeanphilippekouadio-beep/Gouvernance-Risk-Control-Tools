@@ -106,8 +106,9 @@ describe("B8bis-02 single source of truth for the fixed groups' rights", () => {
     return [...m![1]!.matchAll(/'([^']+)'/g)].map((x) => x[1]);
   };
 
-  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055", (g) => {
-    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g)]);
+  // D1 (DECISION-074): migration 066 adds governancehealth.read to the three groups.
+  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055 and 066", (g) => {
+    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g), "governancehealth.read"]);
     expect(FIXED_GROUP_PERMISSIONS[g].every((p) => ALL_PERMISSIONS.includes(p))).toBe(true);
   });
 

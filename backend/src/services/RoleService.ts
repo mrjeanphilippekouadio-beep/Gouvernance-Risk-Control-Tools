@@ -16,9 +16,14 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { NotificationService } from "./NotificationService.js";
 import {
-  ADMIN_PERMISSIONS,
+  isAdministrator,
+  isAuditGroupMember,
   isAuditGroupPermission,
   isAuditPermission,
+  isCommitteeMember,
+  isCommitteeRole,
+  isCommitteeValidationPermission,
+  isRiskManagerMember,
   rolegroupAuditPermissionAllowedOn,
 } from "../domain/fixedGroupPermissions.js";
 import { bootstrapNoticeMessage } from "../domain/frameworkApproval.js";
@@ -30,19 +35,6 @@ const MAX_GROUP_REASON_LENGTH = 500;
 
 /** B-8 bis (q43): hard-coded for now (configurable part waits for PO q58). Risk Manager and Audit never cumulate. */
 const FORBIDDEN_CUMUL: Partial<Record<SystemGroup, SystemGroup>> = { RISK_MANAGER: "AUDIT", AUDIT: "RISK_MANAGER" };
-
-const isAdministrator = (roles: Role[]): boolean => roles.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));
-/** F-D044-01: holding one of these counts as Committee membership for the q94 rule (RM + Committee). */
-const COMMITTEE_VALIDATION_PERMISSIONS: Permission[] = [
-  "riskevaluation.validate.committee", "treatmentdecision.validate.committee", "governance.validate",
-];
-const isCommitteeValidationPermission = (p: Permission): boolean => COMMITTEE_VALIDATION_PERMISSIONS.includes(p);
-const isRiskManagerMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "RISK_MANAGER");
-/** Committee membership = the group or its validation powers (F-D044-01), for q94 as for q80/G1. */
-const isCommitteeRole = (r: Role): boolean => r.systemGroup === "RISK_COMMITTEE" || r.permissions.some(isCommitteeValidationPermission);
-const isCommitteeMember = (roles: Role[]): boolean => roles.some(isCommitteeRole);
-/** q104 (DECISION-046): Audit membership = the system group only (extension to audit.* permissions is F-D044-08, with A13). */
-const isAuditGroupMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "AUDIT");
 
 /** F-B8b-03: permissions whose "who can give it back" answer is never served (administration / governance). */
 const NOT_REQUESTABLE = /^(role|rolegroup|user|audit)\./;

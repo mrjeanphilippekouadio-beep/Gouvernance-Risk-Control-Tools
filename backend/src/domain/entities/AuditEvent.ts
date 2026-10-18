@@ -29,4 +29,9 @@ export interface AuditEvent {
   newValue: unknown;
   reason: string | null;
   requestId: string;
+  /**
+   * DECISION-074: id of the governance rule bypassed ("executed without a second validation"). Absent/null =
+   * ordinary action. Written at INSERT only. Optional so existing test doubles keep compiling.
+   */
+  governanceException?: string | null;
 }

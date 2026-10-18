@@ -179,9 +179,9 @@ describe("QA-D044 q94: UserService.reactivate / assertReactivable", () => {
 });
 
 describe("QA-D044 q79: config.manage is administrator, config.update is not", () => {
-  const CONFIG_ADMIN = new Set<Permission>(["config.manage", "config.cumul.set", "config.committeeenforcement.set"]);
+  const CONFIG_ADMIN = new Set<Permission>(["config.manage", "config.cumul.set", "config.committeeenforcement.set", "config.selfvalidation.set"]);
 
-  it("every config.* permission: reason required to give it to a Risk Manager only for the three administrator ones", async () => {
+  it("every config.* permission: reason required to give it to a Risk Manager only for the administrator ones", async () => {
     const configPerms = ALL_PERMISSIONS.filter((p) => p.startsWith("config."));
     expect(configPerms).toContain("config.manage");
     for (const p of configPerms) {

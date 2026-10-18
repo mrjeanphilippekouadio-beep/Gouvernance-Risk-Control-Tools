@@ -1,4 +1,4 @@
-import type { SystemGroup } from "./entities/Role.js";
+import type { Role, SystemGroup } from "./entities/Role.js";
 import type { Permission } from "./permissions.js";
 
 /**
@@ -21,6 +21,7 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "governance.read", "governance.create", "notification.read",
     "riskframework.read", "riskframework.create", "riskframework.update", "riskframework.activate", "riskframework.archive",
     "riskframework.process.assign",
+    "governancehealth.read",
   ],
   RISK_COMMITTEE: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",
@@ -28,7 +29,7 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "raci.read", "kpi.read", "riskappetite.read", "ratingscale.read", "process.read", "department.read",
     "cartography.read", "dashboard.read", "dashboard.executive", "governance.read", "notification.read",
     "riskevaluation.validate.committee", "treatmentdecision.validate.committee", "governance.validate",
-    "rolegroup.audit.validate", "riskframework.read",
+    "rolegroup.audit.validate", "riskframework.read", "governancehealth.read",
   ],
   AUDIT: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",
@@ -36,6 +37,7 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "raci.read", "kpi.read", "riskappetite.read", "ratingscale.read", "process.read", "department.read",
     "cartography.read", "dashboard.read", "dashboard.executive", "governance.read", "notification.read",
     "audit.read", "audit.mission.read", "audit.finding.read", "rolegroup.audit.validate", "riskframework.read",
+    "governancehealth.read",
   ],
 };
 
@@ -71,4 +73,20 @@ export const ADMIN_PERMISSIONS: Permission[] = [
   // q79 (DECISION-044): client management (module toggles, tenants, regulatory frameworks, risk categories,
   // Excel import) counts. Methodology (config.update) does not.
   "config.manage",
+  // DECISION-074 R-0 / §1.3: relaxing the no-self-validation control is an administrator act (same nature as config.cumul.set).
+  // governancehealth.read is deliberately NOT here: reading the panel must not make someone an "administrator" (q63 cumul rules).
+  "config.selfvalidation.set",
 ];
+
+export const isAdministrator = (roles: Role[]): boolean => roles.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));
+/** F-D044-01: holding one of these counts as Committee membership for the q94 rule (RM + Committee). */
+const COMMITTEE_VALIDATION_PERMISSIONS: Permission[] = [
+  "riskevaluation.validate.committee", "treatmentdecision.validate.committee", "governance.validate",
+];
+export const isCommitteeValidationPermission = (p: Permission): boolean => COMMITTEE_VALIDATION_PERMISSIONS.includes(p);
+export const isRiskManagerMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "RISK_MANAGER");
+/** Committee membership = the group or its validation powers (F-D044-01), for q94 as for q80/G1. */
+export const isCommitteeRole = (r: Role): boolean => r.systemGroup === "RISK_COMMITTEE" || r.permissions.some(isCommitteeValidationPermission);
+export const isCommitteeMember = (roles: Role[]): boolean => roles.some(isCommitteeRole);
+/** q104 (DECISION-046): Audit membership = the system group only (extension to audit.* permissions is F-D044-08, with A13). */
+export const isAuditGroupMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "AUDIT");

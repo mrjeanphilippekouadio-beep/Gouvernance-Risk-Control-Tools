@@ -337,3 +337,11 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 
 - `RiskCategoryService.list` : config.read OU riskevaluation.create OU riskframework.read ; sans config.read, liste forcee aux actives (includeInactive ignore). Les permissions se lisent dans `actor.roles` (requirePermission fait `actor.roles.includes`), donc un test local suffit, pas de helper. Cause : un garde passe de lecture de reference a config.read sans verifier que les groupes fixes la detiennent ; verifier le groupe porteur avant de brancher un ecran sur un endpoint existant.
 - Piege outil : une commande composee (python + heredoc + cd) refusee en bloc par le garde du worktree, rien d execute ; utiliser Write/Edit.
+
+## 2026-10-18 Lot D1 (DECISION-074/075, migration 066)
+
+- 066 : `audit_log.governance_exception text NULL` + 2 index partiels, `configs.self_validation_policy` (CHECK REFUSE/DOUBLE_CONFIRMATION), rattrapage `governancehealth.read` (3 groupes fixes) et `governancehealth.read` + `config.selfvalidation.set` (rôles non-groupe-fixe et `users.roles` portant une permission de `ADMIN_PERMISSIONS`). Aucune fonction trigger. `config.selfvalidation.set` entre dans `ADMIN_PERMISSIONS`, pas `governancehealth.read`.
+- `AuditEvent.governanceException?` optionnel ; `insertAuditEvent` écrit `$10`, `search` filtre `governanceException` (string = règle exacte, `true` = toute ligne marquée). Déploiement : migrer AVANT le code (l'INSERT référence la colonne) ; tout PG test qui écrit un audit exige 066 sur la base.
+- Prédicats de groupe (`isAdministrator`, `isRiskManagerMember`, `isCommitteeRole/Member`, `isAuditGroupMember`, `isCommitteeValidationPermission`) déplacés dans `domain/fixedGroupPermissions.ts`, sans changement de comportement.
+- Tests existants adaptés (inévitable) : B8ter (constante = 051 + 055 + 066), regex source dans QA-B6a, `CONFIG_ADMIN` de QA-D044.
+- Env : la base partagée `grc_qa_a08` est utilisée par plusieurs agents (068 déjà appliquée par un autre lot, sans 066/067) ; up/down/up fait sur une base jetable `grc_d1`. Serveur PG local : `/tmp/claude-0/-home-user/<session>/scratchpad/startpg.sh` (runuser + pg_ctl, port 5531, socket /tmp/claude-0/pgsock). Heredoc + `&&` dans Bash refusés dans le worktree : passer par un fichier .sh.
