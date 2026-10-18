@@ -39,3 +39,49 @@
 2. Qui peut le déclarer : le titulaire du compte, ou l'éditeur à l'onboarding ?
 3. Le tableau ci-dessus est-il la liste retenue des invariants ?
 Si oui : modifier le contrat (invariants 1 et 5), la spec B-6 §5.6 pt 6 et I-D9.
+
+## A10 — Sécurité
+
+### Règle « réglage sûr » (proposée pour tout réglage futur)
+- (a) Stocké par tenant (`actor.tenantId` côté serveur), jamais global, jamais un tenant fourni par le client.
+- (b) Une permission dédiée par réglage (`config.<x>.set`), jamais `config.update` ; un seul chemin d'écriture (DECISION-054).
+- (c) **Durcir** : une personne suffit, effet immédiat.
+- (d) **Assouplir** : maker-checker — B approuve la demande de A, B ≠ A, B ni bénéficiaire ni visé ; un administrateur n'assouplit jamais seul une règle qui le contraint.
+- (e) Effet après approbation, jamais rétroactif ; la valeur du réglage est figée sur chaque décision qu'il autorise.
+- (f) Audit avant/après avec motif, dans la même transaction ; assouplissement notifié au Risk Manager et à Audit.
+- (g) Réglage absent ou illisible → défaut strict (fail-closed).
+- **Écart actuel (INFO, A06)** : `ConfigService.setCommitteeEnforcement(false)` et `setCommitteeAuditCumul(true)` assouplissent avec un seul administrateur (motif + audit, pas de second approbateur).
+
+### I-D9 configurable
+F-B6d-01 et QA-B6d-01 **restent à corriger** : au défaut strict, le produit affirme qu'un contrôle s'applique ; un réglage strict contournable est pire que pas de réglage, car l'auditeur du client s'y fie.
+
+### Jamais configurable (proposition au PO)
+Isolation tenant ; append-only de `audit_logs` et audit de toute écriture ; attribution `...By` forcée côté serveur ; suppression logique seule ; vérification du jeton SSO (la liste des domaines autorisés peut varier) ; interdiction de s'attribuer ou se retirer ses propres rôles ; maker-checker sur l'assouplissement d'un réglage ; fail-closed, non-rétroactivité, instantanés figés ; gardes en base (search_path, triggers).
+
+### Risques d'un « tout configurable » et mesure
+2^n combinaisons non testées ; administrateur compromis qui assouplit puis agit ; ingénierie sociale ; lecteurs oubliés (F-B6b-01). **Mesure** : un registre unique des réglages (clé, défaut strict, sens de l'assouplissement, permission, bornes) parcouru par un test paramétré (défaut strict, puis chaque assouplissement isolé, maker-checker et audit exigés) ; un écran « écarts au défaut » par tenant, en lecture pour Audit.
+
+## A06 — Dev Backend
+
+### Règles codées en dur qui sont des choix de gouvernance (extrait)
+| Règle | Où | Défaut | Coût | Remarque |
+|---|---|---|---|---|
+| I-D9 admin sollicité = soi-même | `domain/frameworkApproval.ts:63`, `RiskFrameworkService.ts:693` | interdit | M | |
+| Cumul RM + Audit interdit | `RoleService.ts:31,86-94` | interdit | S | indépendance du contrôle |
+| Cumul RM + Comité (q94) | `RoleService.ts:80-85` | règle q94 | S | |
+| Cumul Comité + Audit | `configs.committee_audit_cumul_allowed` (054), `ConfigService.ts:328-347` | **true en base = pas strict** | — | à inverser selon DECISION-055 ? |
+| Cumul admin + groupes fixes | `RoleService`, `fixedGroupPermissions.ts` | autorisé avec motif | M | |
+| Quorum `MIN_VOTERS = 2` | `frameworkApproval.ts:13,89-91` + triggers 062 | 2 | S/M | à 1, plus de quatre-yeux |
+| Clôture de plan d'action refusée au responsable | `ActionPlanService.ts:457` | refusé | S | maker-checker |
+| Seuil KPI « à risque » 0,8 | `domain/entities/Kpi.ts:62` | constante | S | hors gouvernance stricte |
+Déjà des paramètres : auto-proposition, cumuls RO/DEL + EXEC, politique hybride (Dispositif) ; seuil Comité activé (configs/Dispositif).
+
+### Mécanisme recommandé (sans moteur de règles)
+Deux stockages existent : `configs` (une ligne par tenant, un setter + permission + motif + audit par réglage, modèle q58) et paramètres **versionnés** du Dispositif (immuables une fois ACTIVE, changés par demande approuvée). Règles de référentiel → paramètre du Dispositif ; règles d'accès / séparation des tâches et **I-D9** (s'applique pendant l'amorçage, avant tout Dispositif actif) → colonne `configs`, défaut strict, setter dédié. Un booléen ou entier typé par règle, lu en un seul point.
+
+### Chemins d'écriture multiples (DECISION-054)
+- Fermés quand le Dispositif gouverne : seuils Comité / mode / enforcement (`/config/*`), appétence (`/risk-appetite`), activation d'échelle — mais la fermeture de `ConfigService` dépend d'un paramètre optionnel câblé dans `server.ts` (à rendre inconditionnelle).
+- **Encore ouverts / à trancher** : `PATCH /rating-scales/:id/disable` (non vérifié) ; `PUT /config` (formule de score, règle d'impact retenu, seuils de niveaux) et `PUT /config/appetite-mode` : hors Dispositif, une seule route chacun — Dispositif ou `configs`, une des deux.
+
+### Jamais configurable (proposition)
+Append-only de l'audit, tenant_id, suppression logique, attribution serveur, maker-checker de base, cumul RM + Audit (sauf régime « petite structure » tracé et notifié), notifications de gouvernance obligatoires, permissions terminales dédiées, contrôles de pièces jointes et de taille, bornes du modèle (score P×I ≤ 36).
