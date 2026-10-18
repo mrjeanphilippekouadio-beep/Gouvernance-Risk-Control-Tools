@@ -140,3 +140,16 @@
 - Env : l'agent worktree refuse `runuser`/`su` ; `cd <worktree> && setpriv --reuid=postgres --regid=postgres --clear-groups sh /tmp/pgd2d/pg.sh`
   fonctionne (le script doit être lisible par postgres, hors scratchpad). `cd backend && npm install` nécessaire dans un worktree neuf.
 - Test QA-B8quater « gap-free » échoue tant que 066/067 ne sont pas fusionnés (068 isolé) : attendu.
+
+## 2026-10-18 — durcissement en place de 068-071 (SEC-PNL-06, F-PNL-07, CMP-PNL-10)
+- 066-071 non déployées (staging = 065) : corrigées EN PLACE (up + down), pas de 072. Règle déjà notée : fenêtre « jamais enregistrée ».
+- Tenant-binding : `UNIQUE (tenant_id, id)` sur `users` (ajoutée par 069, recréée IF NOT EXISTS par 070/071) + FK composites
+  `(tenant_id, col) -> users (tenant_id, id)` (MATCH SIMPLE : NULL non contrôlé). Down de 069 la supprime (échoue volontairement si 070/071 présents).
+- 070 : trigger `governance_designations_guard` (contenu immuable, activation une fois/les deux colonnes/désignation active non échue,
+  fin set-once), truncate guard, REVOKE DELETE/TRUNCATE. 071 : le trigger couvre aussi l'INSERT (jamais né décidé/CONFIRMED).
+  Chemin applicatif vérifié : insertion = PENDING ou ACTIVE, regime NULL/ALONE ; confirmation = UPDATE PENDING->ACTIVE.
+- 068 : garde `current_user = 'grc_app_runtime'` dans le trigger (INSERT+UPDATE) : le runtime ne déclare pas le régime ni ne change le
+  seuil ; le trigger de levée (même rôle) peut toujours poser lifted_at. Plus simple qu'un REVOKE colonne (fragile aux colonnes futures).
+- Conséquence tests : un test qui forge une expiration par UPDATE valid_until doit `ALTER TABLE ... DISABLE TRIGGER governance_designations_guard`.
+- Piège outillage : le worktree n'avait pas de node_modules (`npm ci`) ; les scripts du scratchpad sont partagés entre agents (ne pas écraser `cycle.sh`, `build.sh` des autres).
+- Reste : CMP-PNL-15 (audit de la déclaration du régime) non faisable en SQL seul, F-PNL-09 (clôturer la désignation utilisée) = code repository (A06).

@@ -79,7 +79,10 @@ describe.skipIf(!PGHOST.startsWith("/") || !PGDB)("D2c: designations and hand-ov
     await expect(w.roles.handOverLastRiskManager!(input)).rejects.toThrow(ConflictError);
     expect((await activeMembers(w.tenant, w.rm)).sort()).toEqual([w.leaving, other].sort());
     await pool.query(`UPDATE user_roles SET revoked_at = now() WHERE tenant_id=$1 AND user_id=$2`, [w.tenant, other]);
-    await pool.query(`UPDATE governance_designations SET valid_until = now() - interval '1 second' WHERE id=$1`, [d.id]);
+    // 070 makes valid_until immutable: forge the expiry with the guard switched off (owner session), then back on.
+    await pool.query(`ALTER TABLE governance_designations DISABLE TRIGGER governance_designations_guard`);
+    try { await pool.query(`UPDATE governance_designations SET valid_until = now() - interval '1 second' WHERE id=$1`, [d.id]); }
+    finally { await pool.query(`ALTER TABLE governance_designations ENABLE TRIGGER governance_designations_guard`); }
     await expect(w.roles.handOverLastRiskManager!(input)).rejects.toThrow(ConflictError);
     expect(await activeMembers(w.tenant, w.rm)).toEqual([w.leaving]);
   });

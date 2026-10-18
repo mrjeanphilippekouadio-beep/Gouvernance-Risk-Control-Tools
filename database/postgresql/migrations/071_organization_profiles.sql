@@ -15,9 +15,21 @@
 --           ALONE       baisse de taille appliquée sans seconde validation (aucun tiers) : audit marqué
 --           CONFIRMED   confirmée par un tiers (decided_by <> submitted_by, garanti par CHECK)
 --
+-- SEC-PNL-06 : une ligne ne naît jamais décidée. Le trigger couvre aussi l'INSERT : statut PENDING ou ACTIVE seulement,
+-- régime NULL ou ALONE (jamais CONFIRMED), aucune colonne de décision ; la confirmation passe par l'UPDATE PENDING -> ACTIVE.
+-- FK COMPOSITES (tenant_id, submitted_by | decided_by) -> users (tenant_id, id) : pas d'auteur ni de confirmateur d'un
+-- autre tenant (UNIQUE (tenant_id, id) sur users, ajoutée par 069 ; recréée ici si absente).
+--
 -- Toutes les fonctions de trigger épinglent search_path = pg_catalog, public, pg_temp (F-B6a-11, migration 058).
 -- Permissions : orgprofile.read / submit / approve (RM-V1 R-7), rattrapage des tenants existants en fin de fichier.
 -- Idempotente : IF NOT EXISTS, CREATE OR REPLACE, DROP TRIGGER IF EXISTS, UPDATE sans doublon.
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_tenant_id_id_key' AND conrelid = 'users'::regclass) THEN
+    ALTER TABLE users ADD CONSTRAINT users_tenant_id_id_key UNIQUE (tenant_id, id);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS organization_profiles (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -28,11 +40,13 @@ CREATE TABLE IF NOT EXISTS organization_profiles (
   reason                text NOT NULL CHECK (char_length(btrim(reason)) BETWEEN 1 AND 500),
   status                text NOT NULL CHECK (status IN ('PENDING', 'ACTIVE', 'SUPERSEDED', 'REJECTED')),
   regime                text NULL CHECK (regime IN ('ALONE', 'CONFIRMED')),
-  submitted_by          uuid NOT NULL REFERENCES users (id),
+  submitted_by          uuid NOT NULL,
   submitted_at          timestamptz NOT NULL DEFAULT now(),
-  decided_by            uuid NULL REFERENCES users (id),
+  decided_by            uuid NULL,
   decided_at            timestamptz NULL,
   decision_reason       text NULL CHECK (decision_reason IS NULL OR char_length(btrim(decision_reason)) BETWEEN 1 AND 500),
+  CONSTRAINT organization_profiles_submitted_by_tenant_fk FOREIGN KEY (tenant_id, submitted_by) REFERENCES users (tenant_id, id),
+  CONSTRAINT organization_profiles_decided_by_tenant_fk FOREIGN KEY (tenant_id, decided_by) REFERENCES users (tenant_id, id),
   CONSTRAINT organization_profiles_version_unique UNIQUE (tenant_id, version),
   -- maker-checker en base : l'auteur d'une soumission ne la décide jamais
   CONSTRAINT organization_profiles_maker_checker_check CHECK (decided_by IS NULL OR decided_by <> submitted_by),
@@ -58,6 +72,13 @@ CREATE OR REPLACE FUNCTION organization_profiles_guard() RETURNS trigger LANGUAG
 BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'organization_profiles: rows are never deleted' USING ERRCODE = '42501';
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status NOT IN ('PENDING', 'ACTIVE') OR (NEW.regime IS NOT NULL AND NEW.regime <> 'ALONE')
+       OR NEW.decided_by IS NOT NULL OR NEW.decided_at IS NOT NULL OR NEW.decision_reason IS NOT NULL THEN
+      RAISE EXCEPTION 'organization_profiles: a version cannot be inserted already decided or confirmed' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
   END IF;
   IF NEW.id IS DISTINCT FROM OLD.id
      OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
@@ -92,7 +113,7 @@ ALTER FUNCTION organization_profiles_guard() SET search_path = pg_catalog, publi
 
 DROP TRIGGER IF EXISTS organization_profiles_guard ON organization_profiles;
 CREATE TRIGGER organization_profiles_guard
-  BEFORE UPDATE OR DELETE ON organization_profiles
+  BEFORE INSERT OR UPDATE OR DELETE ON organization_profiles
   FOR EACH ROW EXECUTE FUNCTION organization_profiles_guard();
 
 CREATE OR REPLACE FUNCTION organization_profiles_truncate_guard() RETURNS trigger LANGUAGE plpgsql

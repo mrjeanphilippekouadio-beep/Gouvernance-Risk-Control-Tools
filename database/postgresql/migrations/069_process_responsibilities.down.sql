@@ -12,6 +12,8 @@ WHERE 'process.responsibility.assign' = ANY(roles);
 ALTER TABLE processes DROP COLUMN IF EXISTS deputy_user_id;
 ALTER TABLE processes DROP COLUMN IF EXISTS risk_champion_user_id;
 ALTER TABLE processes DROP COLUMN IF EXISTS owner_user_id;
+-- Contrainte ajoutée par 069 ; échoue (voulu) si 070/071 sont encore en place : descendre dans l'ordre inverse.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_tenant_id_id_key;
 
 DELETE FROM schema_migrations WHERE filename = '069_process_responsibilities.sql';
 COMMIT;

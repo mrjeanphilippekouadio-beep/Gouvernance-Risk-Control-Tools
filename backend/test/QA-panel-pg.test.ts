@@ -241,7 +241,10 @@ describe.skipIf(!enabled)("QA-panel real PostgreSQL", () => {
   it("D2c: an expired designation is not used; without the confirmation the departure is refused, with it the group is left empty and the designation untouched", async () => {
     const w = await d2cWorld();
     const d = await w.designate(new Date(Date.now() + 86_400_000));
-    await pool.query(`UPDATE governance_designations SET valid_until = now() - interval '1 minute' WHERE id = $1`, [d.id]);
+    // 070 makes valid_until immutable: forge the expiry with the guard switched off (owner session), then switch it back on.
+    await pool.query(`ALTER TABLE governance_designations DISABLE TRIGGER governance_designations_guard`);
+    try { await pool.query(`UPDATE governance_designations SET valid_until = now() - interval '1 minute' WHERE id = $1`, [d.id]); }
+    finally { await pool.query(`ALTER TABLE governance_designations ENABLE TRIGGER governance_designations_guard`); }
     await expect(w.svc.revokeFromUser(w.adminActor(w.adminA), w.rm, w.leaving, "r1", "départ")).rejects.toMatchObject({ name: "ValidationError" });
     expect(await w.members()).toEqual([w.leaving]);
     await w.svc.revokeFromUser(w.adminActor(w.adminA), w.rm, w.leaving, "r2", "départ", true);
@@ -735,9 +738,8 @@ describe.skipIf(!enabled)("QA-panel real PostgreSQL", () => {
     expect(priv["t"]).toBe(false);
   });
 
-  // F-PNL-07 (MINOR): 070 forgets the REVOKE that 055 and 071 do; the default privileges (043) leave DELETE to the
-  // runtime role, and there is no guard trigger, so "soft end only" is a convention, not a rule, on governance_designations.
-  it.fails("F-PNL-07: governance_designations is protected against physical DELETE for the runtime role", async () => {
+  // F-PNL-07 (MINOR, fixed in place in 070 with the guard trigger and the REVOKE, as 055 and 071): see PanelDbGuards-pg.test.ts.
+  it("F-PNL-07: governance_designations is protected against physical DELETE for the runtime role", async () => {
     const priv = await one<boolean>(`SELECT has_table_privilege('grc_app_runtime','governance_designations','DELETE') AS d`);
     expect(priv["d"]).toBe(false);
   });
