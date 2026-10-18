@@ -520,10 +520,24 @@ describe("QA-B6d I-D9: the self-designated asked administrator", () => {
 
   // QA-B6d-01. Id = z.guid() accepts UPPER-CASE hex, PostgreSQL resolves it to the same user and roles, and the
   // service compares `askedUserId === actor.userId` as text. The rule can be sidestepped by upper-casing the id.
-  it("QA-B6d-01: the requester naming themselves with the UPPER-CASE form of their own id is refused like the lower-case form (currently accepted)", async () => {
+  it("QA-B6d-01: the requester naming themselves with the UPPER-CASE form of their own id is refused like the lower-case form", async () => {
     const w = bworld();
     w.held["u1"]!.push(adminRole());
     await expect(w.service.bootstrapApprove(BU1, "r1", BGOOD({ askedUserId: "U1" }), "req")).rejects.toThrow(/vous désigner vous-même/);
+  });
+
+  // Retest B-6d (F-B6d-01): fail-closed when the repository cannot say who granted the administrator right.
+  it("F-B6d-01 retest: without listActiveGrants the declaration is refused (fail-closed), nothing written", async () => {
+    const w = bworld({ audit: ["a1"] });
+    (w.service as unknown as { roles: Record<string, unknown> }).roles["listActiveGrants"] = undefined;
+    await expect(w.service.bootstrapApprove(BU1, "r1", BGOOD(), "req")).rejects.toThrow(/not available/);
+    expect([w.stored.calls, w.written.length, w.sent.length]).toEqual([0, 0, 0]);
+  });
+
+  it("QA-B6d-01 retest: an upper-case id of ANOTHER admin is accepted and stored in canonical lower-case form", async () => {
+    const w = bworld({ audit: ["a1"] });
+    const out = await w.service.bootstrapApprove(BU1, "r1", BGOOD({ askedUserId: "ADM" }), "req");
+    expect(out.request.bootstrapJustification!.askedUserId).toBe("adm");
   });
 
   it("QA-B6d-01 reachability: the HTTP route lets an UPPER-CASE askedUserId through to the service unchanged", async () => {

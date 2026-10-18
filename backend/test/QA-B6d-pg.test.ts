@@ -309,4 +309,68 @@ describe.skipIf(!enabled)("QA-B6d on real PostgreSQL 16", () => {
     const held = await new PostgresRoleRepository(pool).listForUser(w.t, upper);
     expect(held.some((r) => r.permissions.includes("role.assign" as never))).toBe(true);
   });
+
+  // -- Retest B-6d: every sequential path sets the end with the right cause -----------------------------------------
+
+  it("retest: USER_REACTIVATED, ROLE_GROUP_CHANGED to RISK_COMMITTEE; one member alone and a NULL/deleted group never end it", async () => {
+    const w = await world();
+    const c1 = await user(w.t, "c1");
+    const plain = await one(`INSERT INTO roles (tenant_id, name, permissions) VALUES ($1, 'p', '{}') RETURNING id`, [w.t]);
+    await q(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $4)`, [w.t, plain, c1, w.admin]);
+    await q(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [w.roles.RISK_COMMITTEE]); // one active role per group
+    await q(`UPDATE roles SET system_group = 'RISK_COMMITTEE' WHERE id = $1`, [plain]); // 1 member only
+    expect(await ended(w.t)).toBeNull();
+    await q(`UPDATE roles SET system_group = NULL WHERE id = $1`, [plain]);
+    expect(await ended(w.t)).toBeNull();
+    // suspended second member of the RM group, then reactivated
+    const rm2 = await user(w.t, "rm2");
+    await grant(w, "RISK_MANAGER", rm2).catch(() => undefined);
+    expect((await cause(w.t)).c).toBe("SECOND_ELIGIBLE_MEMBER");
+  });
+
+  it("retest: a suspended second member then reactivated ends with USER_REACTIVATED; role disabled+regrouped then enabled gives ROLE_REACTIVATED", async () => {
+    const w = await world();
+    const rm2 = await user(w.t, "rm2");
+    await q(`UPDATE users SET deleted_at = now() WHERE id = $1`, [rm2]);
+    await grant(w, "RISK_MANAGER", rm2);
+    expect(await ended(w.t)).toBeNull();
+    await q(`UPDATE users SET deleted_at = NULL WHERE id = $1`, [rm2]);
+    expect(await cause(w.t)).toMatchObject({ c: "USER_REACTIVATED", r: rm2 });
+    const w2 = await world();
+    const plain = await one(`INSERT INTO roles (tenant_id, name, permissions, deleted_at) VALUES ($1, 'p', '{}', now()) RETURNING id`, [w2.t]);
+    for (const tag of ["x1", "x2"]) await q(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $4)`, [w2.t, plain, await user(w2.t, tag), w2.admin]);
+    await q(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [w2.roles.AUDIT]);
+    await q(`UPDATE roles SET system_group = 'AUDIT' WHERE id = $1`, [plain]); // still disabled: nothing
+    expect(await ended(w2.t)).toBeNull();
+    await q(`UPDATE roles SET deleted_at = NULL WHERE id = $1`, [plain]); // regrouped AND reactivated: cause = reactivation
+    expect(await cause(w2.t)).toMatchObject({ c: "ROLE_REACTIVATED", r: plain });
+  });
+
+  it("retest: the end is definitive: ended_at, cause and ref cannot be changed or cleared (42501), a later trigger does not overwrite", async () => {
+    const w = await world();
+    await grant(w, "RISK_MANAGER", await user(w.t, "rm2"));
+    const before = await cause(w.t);
+    for (const set of ["risk_framework_bootstrap_ended_at = NULL", "risk_framework_bootstrap_ended_at = now() + interval '1 day'",
+      "risk_framework_bootstrap_end_cause = 'ROLE_GROUP_CHANGED'", "risk_framework_bootstrap_end_ref = NULL",
+      "risk_framework_bootstrap_end_cause = NULL"]) {
+      await expect(q(`UPDATE tenants SET ${set} WHERE id = $1`, [w.t])).rejects.toMatchObject({ code: expect.stringMatching(/^(42501|23514)$/) });
+    }
+    await grant(w, "RISK_COMMITTEE", await user(w.t, "c1")); await grant(w, "RISK_COMMITTEE", await user(w.t, "c2"));
+    expect(await cause(w.t)).toEqual(before);
+  });
+
+  it("retest F-B6d-01: listActiveGrants returns grantor/date for the active grants only, case-insensitive on the user id", async () => {
+    const w = await world();
+    const adm = await user(w.t, "adm");
+    const r1 = await one(`INSERT INTO roles (tenant_id, name, permissions) VALUES ($1, 'adm1', ARRAY['role.assign']) RETURNING id`, [w.t]);
+    const r2 = await one(`INSERT INTO roles (tenant_id, name, permissions) VALUES ($1, 'adm2', ARRAY['user.create']) RETURNING id`, [w.t]);
+    const r3 = await one(`INSERT INTO roles (tenant_id, name, permissions, deleted_at) VALUES ($1, 'adm3', ARRAY['role.assign'], now()) RETURNING id`, [w.t]);
+    for (const r of [r1, r2, r3]) await q(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $4)`, [w.t, r, adm, w.rm]);
+    await q(`UPDATE user_roles SET revoked_at = now() WHERE role_id = $1`, [r2]);
+    const g = await new PostgresRoleRepository(pool).listActiveGrants!(w.t, adm.toUpperCase());
+    expect(g.map((x) => x.role.id)).toEqual([r1]);
+    expect(g[0]).toMatchObject({ grantedBy: w.rm });
+    expect(g[0]!.grantedAt).toBeInstanceOf(Date);
+    expect(await new PostgresRoleRepository(pool).listActiveGrants!(w.t, await user(w.t, "nobody"))).toEqual([]);
+  });
 });
