@@ -1,11 +1,19 @@
 {
   "meta": {
     "titre": "Principes de gouvernance de la gestion des risques : catalogue, détection, indications par taille",
-    "version": "0.1-PROPOSITION",
+    "version": "0.2-PROPOSITION",
     "date": "2026-10-18",
     "auteur": "A13 Risk Manager",
-    "statut": "PROPOSITION à valider par le PO (DECISION-073). Rien de ce document n'est décidé. Tous les seuils sont marqués « à valider PO ».",
-    "decisionSource": "DECISION-073 ; arbitrages DECISION-072 (guard:noSelfValidation, riskappetite.update, risk.owner.assign, guard:notLastRiskManager)",
+    "statut": "PROPOSITION à valider par le PO (DECISION-073, mise à jour DECISION-074). Le questionnaire de profil, ses seuils et l'inventaire des données repassent en cockpit avant développement. Tous les seuils sont marqués « à valider PO ».",
+    "decisionSource": "DECISION-073 ; DECISION-074 (q135 à q144) ; arbitrages DECISION-072 (guard:noSelfValidation, riskappetite.update, risk.owner.assign, guard:notLastRiskManager)",
+    "changementsV02": [
+      "q135 : la taille vient d'un questionnaire de profil d'organisation (12 questions) ; le calcul sur les comptes devient le profil observé, comparé au profil déclaré (écarts affichés dans le panel).",
+      "q136 : complétude vérifiée, 19 principes x 3 tailles, tous porteurs d'un niveau exigé / recommandé / informatif (voir controleQ136).",
+      "q137 : règle intérimaire / suppléant dès que la fonction risque compte plus d'une personne ; sens de « nombre de personnes dans risque » défini ; question posée au PO.",
+      "q139 : inventaire définitif des données à créer (section donneesACreer), avec lien aux 19 principes.",
+      "q138, q140 à q144 : intégrés comme données et règles (acceptation datée, visibilité, statut sans validation indépendante, suivi depuis la mise en service, notification).",
+      "Questions cockpit : TAILLE-1, PRINCIPES-1, INTERIM-1, PANEL-1, DONNEES-1 closes par le PO ; 4 nouvelles questions."
+    ],
     "sources": [
       "docs/governance/droits-acces/risk.json",
       "docs/governance/droits-acces/decisions-po.json",
@@ -583,9 +591,163 @@
     }
   ],
 
+  "controleQ136": {
+    "resultat": "COMPLET. Les 19 principes portent chacun une indication pour tpe, pme et grande_entreprise, avec un niveau parmi exige / recommande / informatif et une action (57 indications sur 57).",
+    "reparti": "Voir chaque principe, champ indications. Aucun niveau manquant, aucun principe sans action.",
+    "pointsAttention": [
+      "GOV-RISK-01, PME : « exige » deux Risk Managers. Cela rend la règle q137 (intérimaire ou suppléant) toujours applicable à une PME ; si le PO préfère que la PME à un seul Risk Manager soit seulement « recommandée », il faut abaisser ce niveau.",
+      "GOV-REG-01, PME : « exige » que le régime une personne n'existe pas. Une PME déclarée par le questionnaire avec 1 seule personne dans la fonction risque sera donc signalée comme anomalie : voulu, mais à confirmer.",
+      "GOV-TRC-02 et GOV-TRC-01 sont « exige » dès la TPE : ils dépendent des données D03, D09 et D10 (donneesACreer).",
+      "Le niveau d'un principe est celui de la taille retenue. En cas d'écart entre profil déclaré et profil observé, la règle est donnée dans questionnaireProfil.combinaisonAvecOutil."
+    ]
+  },
+
+  "questionnaireProfil": {
+    "statut": "PROPOSITION. Questions, seuils et règle de déduction à valider par le PO (question PROFIL-1).",
+    "decisionSource": "DECISION-074 q135 : poser des questions sur les postes existants (positions, nombre de personnes) et en déduire le classement.",
+    "objet": "Situer l'organisation en TPE, PME ou grande entreprise d'après ce qu'elle déclare, non d'après le seul nombre de comptes de l'outil. Les réponses déclarées sont comparées à ce que l'outil observe (comptes et rôles) : l'écart est une information du panel, pas une sanction.",
+    "formulation": "Questions courtes, fermées (choix ou nombre), à poser à un dirigeant. Aucune ne cite de texte réglementaire. Une réponse « je ne sais pas » est permise partout sauf à la question 1 ; elle est comptée comme inconnue et rend le classement « à confirmer ».",
+    "questions": [
+      {"id": "Q1", "libelle": "Combien de personnes travaillent dans votre entreprise, tous statuts confondus (salariés, temps partiel, prestataires réguliers) ?", "type": "nombre", "reponse": "entier >= 1", "sert": "effectif"},
+      {"id": "Q2", "libelle": "Combien de personnes s'occupent de la gestion des risques, même à temps partiel ? (0 si personne)", "type": "nombre", "reponse": "entier >= 0", "sert": "nbRisque ; comparé aux comptes du groupe Risk Manager ; règle q137"},
+      {"id": "Q3", "libelle": "Cette fonction risque est-elle :", "type": "choix", "options": ["n'existe pas", "assurée en plus d'un autre métier", "un poste ou un service dédié"], "sert": "dedieRisque ; GOV-RISK-01"},
+      {"id": "Q4", "libelle": "Combien de personnes s'occupent de la conformité (respect des règles et des obligations), même à temps partiel ? (0 si personne)", "type": "nombre", "reponse": "entier >= 0", "sert": "nbConformite ; critère de structuration"},
+      {"id": "Q5", "libelle": "Avez-vous un audit interne (une ou plusieurs personnes qui contrôlent l'entreprise de l'intérieur) ? Combien de personnes ? (0 si non)", "type": "nombre", "reponse": "entier >= 0", "sert": "nbAuditInterne ; comparé aux comptes du groupe Audit"},
+      {"id": "Q6", "libelle": "Un auditeur ou un commissaire aux comptes extérieur examine-t-il votre entreprise ?", "type": "choix", "options": ["non", "oui, de temps en temps", "oui, chaque année"], "sert": "auditExterne ; GOV-AUD-01 et GOV-AUD-02 pour les petites structures (tiers externe)"},
+      {"id": "Q7", "libelle": "Avez-vous un conseil d'administration, un conseil de surveillance ou un organe équivalent qui contrôle la direction ?", "type": "choix", "options": ["non", "oui"], "sert": "organeSurveillance"},
+      {"id": "Q8", "libelle": "Avez-vous un comité des risques ou un comité d'audit ?", "type": "choix", "options": ["non", "oui, informel (se réunit au besoin)", "oui, formel (membres nommés, réunions régulières)"], "sert": "comiteRisque ; comparé aux comptes du groupe Comité"},
+      {"id": "Q9", "libelle": "Combien de processus métier principaux avez-vous (ex. ouverture de compte, paiements, recouvrement, achats) ?", "type": "nombre", "reponse": "entier >= 0", "sert": "nbProcessus ; comparé aux processus saisis dans l'outil (couverture)"},
+      {"id": "Q10", "libelle": "Combien de directions ou de services distincts avez-vous ?", "type": "nombre", "reponse": "entier >= 1", "sert": "nbDepartements ; comparé aux départements de l'outil"},
+      {"id": "Q11", "libelle": "Votre activité est-elle placée sous le contrôle d'une autorité de supervision, avec un agrément ou une licence ?", "type": "choix", "options": ["non", "oui", "je ne sais pas"], "sert": "reglemente ; plancher PME ; avis A14 Compliance pour la portée réglementaire"},
+      {"id": "Q12", "libelle": "Le dirigeant (gérant, directeur général) est-il une personne différente de celle qui administre l'outil ?", "type": "choix", "options": ["oui, une autre personne", "non, c'est la même personne", "il n'y a pas de dirigeant distinct"], "sert": "dirigeantDistinct ; gérant désigné D03 ; GOV-TRC-02"}
+    ],
+    "regleDeduction": {
+      "statut": "À valider PO. Valeurs entre crochets = seuils proposés.",
+      "indiceStructuration": "S = nombre de critères remplis parmi 5 : (Q2 >= 2) ; (Q4 >= 1) ; (Q5 >= 1) ; (Q7 = oui) ; (Q8 = formel). Q6 et Q3 n'entrent pas dans S : un auditeur extérieur ou une fonction dédiée seuls ne font pas une structure.",
+      "regles": [
+        {"ordre": 1, "classe": "GRANDE_ENTREPRISE", "condition": "Q1 >= [250] OU (Q1 >= [100] ET S >= [4])", "seuil": "à valider PO"},
+        {"ordre": 2, "classe": "TPE", "condition": "Q1 <= [20] ET S <= [1] ET Q11 = non", "seuil": "à valider PO"},
+        {"ordre": 3, "classe": "PME", "condition": "tous les autres cas ; une entreprise sous supervision (Q11 = oui) n'est jamais classée TPE", "seuil": "à valider PO"}
+      ],
+      "incertitude": [
+        {"id": "PI-1", "condition": "Q1 à moins de 20 % d'un seuil (16 à 24 ; 80 à 120 ; 200 à 300)", "effet": "classement « proche de la limite », colonne voisine entourée"},
+        {"id": "PI-2", "condition": "Signaux contradictoires : Q1 <= 10 et S >= 3 ; ou Q1 >= 250 et S = 0 ; ou Q11 = oui et Q1 <= 20", "effet": "classement « à confirmer », les réponses concernées sont citées"},
+        {"id": "PI-3", "condition": "Q11 = je ne sais pas, ou une réponse manquante qui change le classement", "effet": "classement « à confirmer » ; affichage des deux colonnes plausibles"},
+        {"id": "PI-4", "condition": "Questionnaire non rempli", "effet": "« non évaluable : profil non rempli » ; repli provisoire sur le profil observé, étiqueté « calculé d'après les comptes »"}
+      ],
+      "exemplesIllustratifs": [
+        {"cas": "Q1=8, Q2=1, Q4=0, Q5=0, Q7=non, Q8=non, Q11=non", "classe": "TPE", "note": "Exemple fictif."},
+        {"cas": "Q1=40, Q2=2, Q4=1, Q5=0, Q7=oui, Q8=informel, Q11=non", "classe": "PME (S=3)", "note": "Exemple fictif."},
+        {"cas": "Q1=15, Q11=oui", "classe": "PME, à confirmer (PI-2)", "note": "Exemple fictif : petite structure sous supervision, plancher PME."},
+        {"cas": "Q1=130, Q2=3, Q4=2, Q5=2, Q7=oui, Q8=formel", "classe": "GRANDE_ENTREPRISE (S=5, Q1 >= 100)", "note": "Exemple fictif."}
+      ]
+    },
+    "quiRemplit": {
+      "repondant": "L'administrateur du client à l'onboarding, avec le dirigeant (Q12 indique si c'est la même personne). Remplissage obligatoire avant l'ouverture du panel ; tant qu'il manque, le panel affiche le profil observé étiqueté « calculé d'après les comptes ».",
+      "modifiable": "Oui, par un administrateur du client, à tout moment. Rappel automatique de revue à 12 mois (délai à valider PO) et à chaque grand changement (arrivée d'un Comité, d'un Audit).",
+      "trace": "Chaque réponse est versionnée : version, date, auteur, motif, ancienne et nouvelle valeur, journal d'audit append-only. Une version n'est jamais réécrite.",
+      "baisseDeClasse": "Un changement qui rend l'entreprise moins exigeante (ex. PME vers TPE) est possible, avec motif ; dès qu'un tiers existe (Risk Manager autre, Audit ou Comité), il exige une seconde confirmation et notifie le tiers (même logique que q138 et q144). Sans tiers : motif, trace, marquage « sans seconde validation ». Jamais en silence.",
+      "attestation": "Option : le gérant désigné (D03) atteste les réponses. Non obligatoire en V1."
+    },
+    "combinaisonAvecOutil": {
+      "principe": "Le questionnaire donne le profil déclaré ; l'outil donne le profil observé (indicateurs P, RM, COM, AUD ci-dessous). Les deux sont affichés. L'écart est un manque du panel, jamais un blocage.",
+      "profilRetenu": "Le profil déclaré fait foi. Si le profil observé est plus exigeant que le déclaré (ex. déclaré TPE mais un Audit et un Comité actifs), c'est le plus exigeant des deux qui s'applique, avec la mention « profil observé plus structuré que déclaré » (cela évite de se classer plus léger que ce qu'on pratique).",
+      "ecarts": [
+        {"id": "E1", "condition": "Q2 > nombre de comptes actifs du groupe Risk Manager", "message": "Vous déclarez N personnes dans la fonction risque, l'outil n'en voit que M : créer les comptes ou corriger la déclaration."},
+        {"id": "E2", "condition": "Q2 < nombre de comptes actifs du groupe Risk Manager", "message": "L'outil voit plus de Risk Managers que déclaré : déclaration périmée ou comptes en trop (cumul, ancien salarié ?)."},
+        {"id": "E3", "condition": "Q5 > comptes actifs du groupe Audit (ou inverse)", "message": "Audit déclaré non présent dans l'outil (ou présent dans l'outil mais non déclaré)."},
+        {"id": "E4", "condition": "Q8 = formel et comptes actifs du Comité < 2 (ou Comité >= 2 et Q8 = non)", "message": "Comité déclaré sans membres suffisants dans l'outil (ou membres sans comité déclaré)."},
+        {"id": "E5", "condition": "Q9 > nombre de processus actifs saisis dans l'outil, avec un écart de plus de 50 % (seuil à valider PO)", "message": "Couverture : processus déclarés non encore saisis."},
+        {"id": "E6", "condition": "Q12 = non (même personne) et plus d'un administrateur déclaré", "message": "Cohérence dirigeant / administrateur à vérifier."}
+      ],
+      "affichage": "Colonne retenue en surbrillance ; chaque écart listé avec les deux valeurs (déclarée, observée) et l'action proposée. Un écart ouvert depuis plus de 90 jours (à valider PO) est remonté au gérant désigné.",
+      "limite": "Il n'y a pas de comparaison entre Q1 et le nombre de comptes : un petit nombre de comptes dans une grande entreprise est normal en début de déploiement. La comparaison porte uniquement sur les rôles de gouvernance (E1 à E6)."
+    }
+  },
+
+  "regleInterimSuppleant": {
+    "decisionSource": "DECISION-074 q137, verbatim : « Intérimaire désigné ou suppléant deuxième risk manager désigné à la création du rôle dès que le nombre de personnes dans risque dépasse 1 ; si c'est pas fait, le garder comme action dans le panel. »",
+    "statut": "PROPOSITION de lecture. Le sens de « nombre de personnes dans risque » est ambigu : question INTERIM-2.",
+    "definitions": {
+      "D": "nombre de personnes déclarées dans la fonction risque (Q2).",
+      "C": "nombre de comptes actifs dans le groupe Risk Manager (outil).",
+      "N": "N = max(D, C) : lecture recommandée, la plus prudente. Si D=3 et C=1, la fonction risque a 3 personnes dans l'entreprise même si deux n'ont pas encore de compte.",
+      "N0": "sont exclus du compte : comptes suspendus, comptes d'intérimaires non encore activés."
+    },
+    "regle": [
+      "Dès que N >= 2, chaque titulaire du rôle Risk Manager doit avoir un remplaçant désigné : soit un suppléant permanent (un autre Risk Manager actif), soit un intérimaire (un compte actif hors Audit, sans droit Risk Manager tant que le titulaire est en poste, intérim borné).",
+      "Le moment : à la création du rôle, c'est-à-dire à l'attribution du rôle Risk Manager qui fait passer N à 2 ou plus, puis à chaque nouvelle attribution. Le formulaire d'attribution demande le remplaçant.",
+      "Ce n'est jamais bloquant (DECISION-066). Si le remplaçant n'est pas désigné, une action « désigner un remplaçant pour <titulaire> » apparaît dans le panel avec son ancienneté, et GOV-RISK-02 est signalé.",
+      "L'intérimaire ne vient pas de l'Audit, ne valide pas ses propres actes, a une date de fin obligatoire (90 jours proposés, à valider PO). Le remplaçant est confirmé par une personne autre que le titulaire (gérant ou autre Risk Manager)."
+    ],
+    "casUneSeulePersonne": {
+      "N=1": "Aucun remplaçant n'est exigé par q137. Le panel affiche « point de défaillance unique » (GOV-RISK-01, GOV-RISK-02) en recommandé ou exigé selon la taille. Le départ de la personne suit INT-D (vacance déclarée, accès coupé le jour même) ou INT-A si un intérimaire a été désigné volontairement.",
+      "N=0": "Fonction risque vacante : vacance déclarée (D05) avec échéance, gérant informé. Le groupe Risk Manager reste « jamais vide » tant que la règle actuelle du code l'impose : tension à traiter avec INTERIM-1 déjà tranchée par le PO, dont la mise en œuvre reste à cadrer par l'Architecte.",
+      "D=1, C=0": "Le poste est déclaré mais pas pourvu dans l'outil : écart E1 (poste non pourvu), pas une vacance.",
+      "D=0, C=1": "Un compte Risk Manager existe sans fonction déclarée : écart E2 (probablement l'administrateur qui tient le rôle par défaut, cumul visible)."
+    },
+    "questionsOuvertes": [
+      "INTERIM-2 : N = max(D, C), ou seulement C, ou seulement D ?",
+      "Quand une seule personne tient la fonction risque et est aussi le gérant, le remplaçant n'a pas de sens ; faut-il alors exiger un tiers externe de relecture (D20) plutôt qu'un intérimaire ?"
+    ]
+  },
+
+  "donneesACreer": {
+    "statut": "PROPOSITION de liste complète et définitive (q139 : créer toutes les données avant de livrer le panel). À valider par le PO avant développement. Aucune donnée n'est inventée : chacune répond à une détection de principe ou à une décision du PO.",
+    "legende": "oblig = obligatoire ; reco = recommandé ; facult = facultatif ; sans objet. Tailles : TPE / PME / GE (grande entreprise). « Système » = posé par l'outil, non saisi.",
+    "donnees": [
+      {"id": "D01", "nom": "Profil d'organisation (réponses Q1 à Q12, versionné)", "definition": "Les 12 réponses du questionnaire, avec version, date, auteur, motif de changement. Historique jamais réécrit.", "renseignePar": "Administrateur du client avec le dirigeant, à l'onboarding", "obligatoire": {"TPE": "oblig", "PME": "oblig", "GE": "oblig"}, "principes": ["tous (classement)", "GOV-RISK-01", "GOV-RISK-02"], "source": "q135"},
+      {"id": "D02", "nom": "Classement retenu et écarts", "definition": "Classe TPE / PME / grande entreprise, indicateurs ayant servi, niveau d'incertitude, liste des écarts E1 à E6, profil observé. Recalculé à chaque changement.", "renseignePar": "Système", "obligatoire": {"TPE": "oblig", "PME": "oblig", "GE": "oblig"}, "principes": ["tous"], "source": "q135, q136"},
+      {"id": "D03", "nom": "Gérant désigné", "definition": "Compte du dirigeant (gérant, directeur général ou, à défaut, personne extérieure de confiance) informé des décisions sans seconde validation, des vacances de rôle et des changements de gouvernance. Option : un second destinataire. Indicateur « même personne que l'administrateur technique ». Une désignation est confirmée par une personne autre que le désigné.", "renseignePar": "Administrateur à l'onboarding ; modifiable avec trace", "obligatoire": {"TPE": "oblig", "PME": "oblig (DG + second destinataire)", "GE": "reco"}, "principes": ["GOV-TRC-02", "GOV-TRC-01", "GOV-SOD-01", "GOV-RISK-02"], "source": "DECISION-066 point 5, q144"},
+      {"id": "D04", "nom": "Remplaçant par titulaire de rôle clé (intérimaire ou suppléant)", "definition": "Pour un titulaire d'un rôle Risk Manager : un remplaçant désigné, de type INTERIM (compte actif hors Audit, sans droit tant que le titulaire est en poste, fin obligatoire) ou SUPPLEANT (autre Risk Manager actif). Champs : titulaire, remplaçant, type, date de désignation, désigné par, confirmé par, date de fin pour un intérim, statut (désigné, activé, expiré).", "renseignePar": "Le titulaire ou le gérant à l'attribution du rôle ; confirmation par un tiers", "obligatoire": {"TPE": "reco (oblig dès N >= 2)", "PME": "oblig", "GE": "oblig"}, "principes": ["GOV-RISK-02", "GOV-RISK-01"], "source": "q137"},
+      {"id": "D05", "nom": "Vacance déclarée d'un rôle clé", "definition": "Rôle concerné (Risk Manager, Comité, Audit), date de début, motif, échéance de résorption (60 jours proposés), déclarée par, confirmée par, date de fin. N'existe que lorsque la vacance existe.", "renseignePar": "Administrateur avec seconde confirmation ; gérant informé", "obligatoire": {"TPE": "facult (utilisée si départ)", "PME": "facult (utilisée si départ)", "GE": "facult (utilisée si départ)"}, "principes": ["GOV-RISK-02", "GOV-RISK-01"], "source": "INTERIM-1 (INT-D), q137"},
+      {"id": "D06", "nom": "Champion de risque par processus", "definition": "Compte utilisateur désigné relais de la gestion des risques dans un processus (une personne au plus par processus, remplaçable). N'a pas de droit de cotation par ce seul titre.", "renseignePar": "Propriétaire du processus ; le Risk Manager peut préparer, le propriétaire confirme", "obligatoire": {"TPE": "sans objet (le gérant tient ce rôle)", "PME": "oblig", "GE": "oblig"}, "principes": ["GOV-OWN-02"], "source": "DECISION-073"},
+      {"id": "D07", "nom": "Propriétaire de processus en tant que compte", "definition": "Lien du processus vers un compte utilisateur actif (processes.ownerUserId). Le texte libre actuel (processes.owner) est conservé en lecture, migré par appariement et à confirmer processus par processus ; les cas non appariés restent signalés.", "renseignePar": "Administrateur ou Risk Manager pour la reprise ; propriétaire pour la confirmation", "obligatoire": {"TPE": "reco", "PME": "oblig", "GE": "oblig"}, "principes": ["GOV-OWN-02", "GOV-OWN-01"], "source": "DECISION-073, constat code"},
+      {"id": "D08", "nom": "N-1 / attributaire par processus", "definition": "Personne désignée sur le processus à qui le propriétaire peut confier l'attribution des risques (DECISION-064).", "renseignePar": "Propriétaire du processus", "obligatoire": {"TPE": "sans objet", "PME": "reco", "GE": "oblig"}, "principes": ["GOV-OWN-02", "GOV-OWN-03"], "source": "DECISION-064"},
+      {"id": "D09", "nom": "Marqueur « sans seconde validation » sur un acte", "definition": "Indicateur posé sur chaque acte fait sans second regard (auto-validation par double confirmation, administrateur seul, repli) avec : motif, seconde confirmation, date, auteur, et statut de revue par un tiers (non revu, revu, ratifié, date, par qui).", "renseignePar": "Système au moment de l'acte ; motif saisi par l'acteur ; revue par le tiers", "obligatoire": {"TPE": "oblig", "PME": "oblig", "GE": "oblig"}, "principes": ["GOV-TRC-01", "GOV-SOD-01", "GOV-APP-01", "GOV-SOD-02", "GOV-SOD-03"], "source": "DECISION-072, q141, q142"},
+      {"id": "D10", "nom": "Statut « Appliqué sans validation indépendante »", "definition": "Valeur de statut distincte de « Validé », portée par les objets validables lorsqu'une seule personne a agi (auto-validation q141). Le statut « Validé » reste réservé à une validation par un tiers. Reprise automatique en « Validé » si un tiers ratifie ensuite.", "renseignePar": "Système", "obligatoire": {"TPE": "oblig", "PME": "oblig", "GE": "oblig"}, "principes": ["GOV-TRC-01", "GOV-SOD-01"], "source": "q141, q142"},
+      {"id": "D11", "nom": "Date de mise en service du suivi", "definition": "Date à partir de laquelle l'outil trace les actes sans seconde validation. Affichée « suivi depuis le <date> ». Aucune reconstitution du passé.", "renseignePar": "Système (posée au déploiement)", "obligatoire": {"TPE": "oblig", "PME": "oblig", "GE": "oblig"}, "principes": ["GOV-TRC-01"], "source": "q143"},
+      {"id": "D12", "nom": "Acceptation formelle d'un principe non respecté", "definition": "Principe concerné, motif, durée (12 mois maximum proposés, à valider PO), personne qui accepte, seconde confirmation dès qu'un tiers (Risk Manager, Audit ou Comité) existe, date d'échéance, statut (active, expirée, retirée). Une acceptation expirée remet le principe en rouge. Jamais implicite.", "renseignePar": "Gérant désigné ou administrateur ; seconde confirmation par le tiers", "obligatoire": {"TPE": "facult (utilisée si acceptation)", "PME": "facult (utilisée si acceptation)", "GE": "facult (utilisée si acceptation)"}, "principes": ["tous"], "source": "q138"},
+      {"id": "D13", "nom": "Dernière connexion d'un utilisateur", "definition": "Date et heure de la dernière authentification réussie (users.lastLoginAt). Un paramètre de durée d'inactivité (90 jours proposés, à valider PO) définit un compte dormant.", "renseignePar": "Système", "obligatoire": {"TPE": "oblig", "PME": "oblig", "GE": "oblig"}, "principes": ["GOV-ACC-01"], "source": "DECISION-073"},
+      {"id": "D14", "nom": "Régime « structure à une personne » (drapeau et dates)", "definition": "Régime déclaré, date de déclaration, date de levée, déclaré par l'éditeur (jamais par le client), affiché sur chaque décision et rapport, levé définitivement dès qu'une deuxième personne arrive.", "renseignePar": "Éditeur ; levée par le système", "obligatoire": {"TPE": "oblig (si applicable)", "PME": "sans objet (anomalie si présent)", "GE": "sans objet (anomalie si présent)"}, "principes": ["GOV-REG-01", "GOV-SOD-01", "GOV-SOD-03"], "source": "DECISION-059"},
+      {"id": "D15", "nom": "Analyse du risque et ses auteurs", "definition": "Entité Analyse (causes, événements, impacts, contexte) avec historique par auteur, et droit risk.analysis.update (DECISION-064). L'auteur est exclu de la validation de l'évaluation qui l'utilise.", "renseignePar": "Propriétaire du risque et profils autorisés par DECISION-064", "obligatoire": {"TPE": "reco", "PME": "oblig", "GE": "oblig"}, "principes": ["GOV-OWN-03"], "source": "DECISION-064"},
+      {"id": "D16", "nom": "Votes nominatifs du Comité", "definition": "Pour chaque décision du Comité, un vote par membre (nom, sens, motif, date), en append-only. À vérifier avec l'Architecte : si le décompte est déjà lisible dans le journal d'audit, aucune création ; sinon à créer.", "renseignePar": "Système, à partir du vote du membre", "obligatoire": {"TPE": "sans objet", "PME": "oblig si Comité", "GE": "oblig"}, "principes": ["GOV-COM-02", "GOV-COM-01"], "source": "DECISION-073 (hypothèse à vérifier)"},
+      {"id": "D17", "nom": "Notification de gouvernance et droit de lecture du panel", "definition": "Événement envoyé à l'attribution du rôle Audit ou Comité s'il existe des actions sans seconde validation, avec lien vers le panel ; droit de lire le panel (administrateur, Risk Manager, Audit, Comité) ; noms visibles seulement pour qui a accès au journal d'audit.", "renseignePar": "Système", "obligatoire": {"TPE": "oblig", "PME": "oblig", "GE": "oblig"}, "principes": ["GOV-TRC-01", "GOV-TRC-02"], "source": "q140, q144"},
+      {"id": "D18", "nom": "Paramètres du panel", "definition": "Délais et seuils utilisés par les détections : durée maximale d'un intérim (90 jours), vacance (60 jours), inactivité d'un compte (90 jours), ancienneté d'un écart avant remontée (90 jours), revue du profil (12 mois), durée maximale d'une acceptation (12 mois). Tous marqués « à valider PO », modifiables avec trace et avec la règle « jamais moins strict sans seconde confirmation ».", "renseignePar": "Éditeur pour les valeurs par défaut ; administrateur pour les réglages dans la plage permise", "obligatoire": {"TPE": "oblig", "PME": "oblig", "GE": "oblig"}, "principes": ["GOV-RISK-02", "GOV-ACC-01", "GOV-TRC-01"], "source": "DECISION-073"},
+      {"id": "D19", "nom": "Tiers externe de relecture", "definition": "Personne ou cabinet extérieur qui relit le journal des décisions sans seconde validation (gérant, expert-comptable, commissaire aux comptes, conseil), avec périodicité et date de dernière relecture. Remplace l'Audit interne dans les petites structures.", "renseignePar": "Administrateur avec le dirigeant ; Q6 donne le point de départ", "obligatoire": {"TPE": "oblig", "PME": "reco", "GE": "sans objet"}, "principes": ["GOV-SOD-01", "GOV-AUD-01", "GOV-AUD-02", "GOV-COM-02"], "source": "DECISION-073 (indications TPE)"}
+    ],
+    "nonCreees": [
+      {"objet": "Détection de deux comptes pour un même humain", "raison": "Aucune donnée d'appareil ni de signal fiable n'est collectée ; créer ce signal exigerait un traitement de données personnelles à soumettre à Privacy. Remplacée par le contrôle déclaratif (attestation du gérant, revue des comptes)."},
+      {"objet": "Effectif réel importé d'un système RH", "raison": "Le questionnaire (Q1) suffit ; une intégration RH serait un autre chantier."},
+      {"objet": "Réunions du Comité tenues et comptes rendus", "raison": "Non vérifié dans le dépôt. À confirmer avec l'Architecte avant d'ouvrir une donnée ; GOV-COM-01 (PME : réunion trimestrielle) reste détectée par les votes (D16) tant qu'il n'y a pas de module de séance."}
+    ],
+    "evaluabilite": "Avec D01 à D19 créées, les 19 principes sont tous évaluables, sous réserve de D16 (votes) et de D15 (Analyse, chantier DECISION-064). Un principe dont la donnée est absente affiche « non évaluable : donnée absente », jamais « respecté ».",
+    "principesVersDonnees": {
+      "GOV-SOD-01": ["D09", "D10", "D19"],
+      "GOV-SOD-02": ["audit_logs", "RiskFramework existant"],
+      "GOV-SOD-03": ["user_roles.grantedBy", "D14"],
+      "GOV-SOD-04": ["user_roles", "config existante"],
+      "GOV-SOD-05": ["control_executions", "audit_logs existants"],
+      "GOV-RISK-01": ["D01", "D04"],
+      "GOV-RISK-02": ["D04", "D05", "D18"],
+      "GOV-AUD-01": ["audit_logs, role_permission_changes existants", "D19"],
+      "GOV-AUD-02": ["D01 (Q5, Q6)", "D19"],
+      "GOV-COM-01": ["config existante", "D01 (Q8)"],
+      "GOV-COM-02": ["D16", "D19"],
+      "GOV-APP-01": ["audit_logs existants", "D09"],
+      "GOV-OWN-01": ["risks.ownerId existant"],
+      "GOV-OWN-02": ["D06", "D07", "D08"],
+      "GOV-OWN-03": ["D15"],
+      "GOV-ACC-01": ["D13", "D18"],
+      "GOV-TRC-01": ["D09", "D10", "D11", "D17"],
+      "GOV-TRC-02": ["D03", "D17"],
+      "GOV-REG-01": ["D14"]
+    }
+  },
+
   "classementTaille": {
-    "statut": "PROPOSITION. Tous les seuils sont à valider PO (question TAILLE-1).",
-    "avertissement": "Ce classement mesure la maturité de gouvernance visible dans l'outil (qui a un rôle), pas l'effectif réel de l'entreprise. Une entreprise de 300 personnes qui vient de démarrer l'outil avec 3 comptes sera classée TPE tant qu'elle n'a pas déployé ses rôles : c'est voulu, car l'indication utile est celle qui correspond à ce que l'outil voit.",
+    "statut": "PROPOSITION. Depuis DECISION-074 (q135), ce calcul sur les comptes n'est plus le classement : il devient le PROFIL OBSERVÉ, comparé au profil déclaré par le questionnaire (voir questionnaireProfil). Il sert à signaler les écarts et de repli tant que le questionnaire n'est pas rempli. Seuils à valider PO.",
+    "avertissement": "Ce classement mesure la maturité de gouvernance visible dans l'outil (qui a un rôle), pas l'effectif réel de l'entreprise. Une entreprise de 300 personnes qui vient de démarrer l'outil avec 3 comptes sera classée TPE par le calcul sur les comptes. C'est pourquoi le profil déclaré (questionnaire) fait foi et que le calcul ne sert qu'à signaler un écart ou, à défaut de questionnaire, de repli provisoire.",
     "indicateurs": [
       {"id": "P", "libelle": "Personnes actives ayant au moins un rôle", "calcul": "Utilisateurs non suspendus (deletedAt null) ayant au moins une ligne user_roles non révoquée, ou à défaut un rôle dans users.roles. Un humain avec plusieurs rôles compte une fois."},
       {"id": "RM", "libelle": "Risk Managers actifs", "calcul": "Membres actifs du groupe RISK_MANAGER"},
@@ -620,7 +782,7 @@
 
   "pointRouvert_guardNotLastRiskManager": {
     "verbatimPO": "Comment gérons-nous le fait qu'il y ait une démission et s'il y avait un seul Risk Manager ? Comment gérons-nous l'intérim ? Je pense que c'est vers ce point que nous devons aller car des situations existent où le groupe peut être vide si on ne veut pas faire utiliser des accès à plusieurs personnes.",
-    "statut": "PROPOSITION, non arbitrée. Lié à GOV-RISK-02 et DECISION-066 (ne jamais bloquer).",
+    "statut": "Réponse du PO du 2026-10-18 (q137) : intérimaire ou suppléant désigné à la création du rôle dès que la fonction risque dépasse 1 personne, sinon action du panel. La règle précise est dans regleInterimSuppleant ; le sens du nombre est rouvert (INTERIM-2). Le reste (personne seule, vacance, accès coupé le jour même) reste la PROPOSITION ci-dessous. Lié à GOV-RISK-02 et DECISION-066 (ne jamais bloquer).",
     "faits": [
       "Le code interdit de retirer ou suspendre le dernier Risk Manager actif (garde guard:notLastRiskManager).",
       "Le groupe Risk Manager ne peut pas être cumulé avec Audit (code) ni avec Comité (code, réglable en proposition) : l'intérimaire ne peut donc pas venir de l'Audit.",
@@ -672,6 +834,56 @@
   },
 
   "questionsCockpit": [
+    {
+      "id": "PROFIL-1",
+      "titre": "Validez-vous le questionnaire de profil d'organisation, sa règle de classement et ses seuils ?",
+      "contexte": "Vous avez demandé de situer l'entreprise par des questions sur les postes et le nombre de personnes. Proposition : 12 questions fermées (effectif, personnes dans le risque, conformité, audit interne, audit externe, conseil, comité, processus, directions, entreprise sous supervision, dirigeant distinct). Règle : grande entreprise si 250 personnes ou plus, ou 100 personnes ou plus avec au moins 4 fonctions structurées sur 5 ; TPE si 20 personnes ou moins, au plus 1 fonction structurée et non supervisée ; PME dans les autres cas ; une entreprise supervisée n'est jamais TPE. Seuils à valider.",
+      "options": [
+        {"id": "A", "libelle": "Questionnaire de 12 questions et seuils proposés (250 / 100 avec 4 sur 5 / 20)"},
+        {"id": "B", "libelle": "Questionnaire de 12 questions, seuils plus bas (100 / 50 avec 3 sur 5 / 10), plus exigeants"},
+        {"id": "C", "libelle": "Questionnaire raccourci à 6 questions (1, 2, 5, 7, 8, 11)"},
+        {"id": "D", "libelle": "Questionnaire de 12 questions, seuils laissés au PO question par question (je les ajuste)"}
+      ],
+      "recommandation": "A. Les seuils restent des paramètres modifiables avec trace ; le classement affiche toujours les réponses qui l'ont produit et se déclare « à confirmer » près d'un seuil."
+    },
+    {
+      "id": "INTERIM-2",
+      "titre": "Que veut dire « nombre de personnes dans la fonction risque » pour exiger un intérimaire ou un suppléant ?",
+      "contexte": "Vous avez décidé qu'un intérimaire ou un suppléant (deuxième Risk Manager) est désigné à la création du rôle dès que ce nombre dépasse 1, sinon c'est une action du panel. Ce nombre peut venir des comptes du groupe Risk Manager, de la réponse au questionnaire, ou des deux. Cas d'une seule personne : aucune règle d'intérimaire (seuil à plus de 1), mais un départ laisse la fonction vacante (vacance déclarée, accès coupé le jour même).",
+      "options": [
+        {"id": "A", "libelle": "Le plus grand des deux (déclaré ou comptes) : la règle s'applique dès que l'un des deux dépasse 1"},
+        {"id": "B", "libelle": "Seulement les comptes actifs du groupe Risk Manager"},
+        {"id": "C", "libelle": "Seulement la réponse au questionnaire"},
+        {"id": "D", "libelle": "Comme A, et pour une personne seule un intérimaire reste simplement recommandé dans le panel"}
+      ],
+      "recommandation": "D. Le plus grand des deux est le plus prudent ; une personne seule n'est pas forcée, mais le panel la signale comme point de défaillance unique."
+    },
+    {
+      "id": "PROFIL-2",
+      "titre": "Qui remplit le questionnaire, qui peut le modifier, et que se passe-t-il si on déclare plus petit que ce que l'outil observe ?",
+      "contexte": "Proposition : l'administrateur du client le remplit à l'onboarding, avec le dirigeant ; obligatoire avant l'ouverture du panel ; modifiable à tout moment, chaque version tracée (auteur, date, motif). Un passage à une taille moins exigeante demande une seconde confirmation dès qu'un tiers existe. Si l'outil observe une structure plus lourde que celle déclarée, c'est la plus exigeante des deux qui s'applique, avec la mention de l'écart. L'administrateur peut être de l'équipe technique plutôt que de la direction.",
+      "options": [
+        {"id": "A", "libelle": "Administrateur remplit, modifiable, tracé, seconde confirmation pour une baisse de taille, le plus exigeant s'applique en cas d'écart"},
+        {"id": "B", "libelle": "Comme A, avec attestation obligatoire par le gérant désigné"},
+        {"id": "C", "libelle": "Comme A, mais le profil déclaré ne se modifie que par l'éditeur"},
+        {"id": "D", "libelle": "Le profil déclaré fait foi sans correction par l'outil (écarts affichés seulement)"}
+      ],
+      "recommandation": "A. L'attestation du gérant (B) reste une option plus tard ; C retire l'autonomie du client ; D permet de se déclarer plus léger que la réalité."
+    },
+    {
+      "id": "DONNEES-2",
+      "titre": "Confirmez-vous la liste des 19 données à créer avant de livrer le panel, et la reprise du propriétaire de processus saisi en texte ?",
+      "contexte": "Vous avez décidé de créer toutes les données manquantes (q139). L'inventaire D01 à D19 est dans le document. Un point demande votre accord : le propriétaire de processus est aujourd'hui un texte libre ; il doit devenir un compte. Les processus existants seront appariés aux comptes par nom, à confirmer processus par processus ; ceux qui ne correspondent à personne restent signalés.",
+      "options": [
+        {"id": "A", "libelle": "Liste D01 à D19 confirmée, reprise assistée du texte vers un compte, confirmation processus par processus"},
+        {"id": "B", "libelle": "Liste confirmée, mais le propriétaire reste du texte en V1 (GOV-OWN-02 non évaluable)"},
+        {"id": "C", "libelle": "Liste à réduire : vous indiquez les données à retirer"}
+      ],
+      "recommandation": "A. Sans compte lié, on ne peut pas vérifier qu'un propriétaire de processus existe, est actif et a les droits ; GOV-OWN-02 resterait vide."
+    }
+  ],
+
+  "questionsCockpitCloses": [
     {
       "id": "TAILLE-1",
       "titre": "Comment classer une entreprise en TPE, PME ou grande entreprise d'après ses rôles ?",
@@ -731,8 +943,17 @@
     }
   ],
 
+  "reponsesPOauxQuestionsCloses": {
+    "TAILLE-1": "Remplacée par DECISION-074 q135 : questionnaire de profil (voir questionnaireProfil). Les seuils sont rouverts en PROFIL-1.",
+    "PRINCIPES-1": "Option A retenue (q136) : tous les principes, niveau propre à chaque taille.",
+    "INTERIM-1": "Réponse libre q137 : intérimaire ou suppléant désigné dès que la fonction risque dépasse 1 personne, sinon action du panel (voir regleInterimSuppleant). Sens du nombre rouvert en INTERIM-2.",
+    "PANEL-1": "Option C retenue (q138) : acceptation avec motif et durée, seconde confirmation dès qu'un tiers existe (donnée D12).",
+    "DONNEES-1": "Option C retenue (q139) : tout créer avant de livrer (donneesACreer)."
+  },
+
   "synthese": {
     "nombrePrincipes": 19,
+    "apresCreationDesDonnees": "Les 19 principes sont évaluables (sous réserve de D15 Analyse et D16 votes). Aujourd'hui : 13 évaluables, 3 partiels, 3 non évaluables, hors effet du questionnaire.",
     "repartitionGravite": {"elevee": 10, "moyenne": 9, "faible": 0},
     "evaluablesAujourdhui": ["GOV-SOD-01 (historique)", "GOV-SOD-02", "GOV-SOD-03", "GOV-SOD-04", "GOV-SOD-05", "GOV-RISK-01", "GOV-RISK-02 (effectifs seulement)", "GOV-AUD-01", "GOV-AUD-02", "GOV-COM-01", "GOV-APP-01 (changements)", "GOV-OWN-01", "GOV-ACC-01 (hors comptes dormants)"],
     "partiellementEvaluables": ["GOV-COM-02 (à vérifier)", "GOV-OWN-02", "GOV-TRC-01"],
