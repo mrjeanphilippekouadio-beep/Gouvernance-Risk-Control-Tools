@@ -1,7 +1,9 @@
 # RM V1 — Panel « Principes de gouvernance non respectés » : architecture du calcul
 
 - Auteur : A05 (Architecte), 2026-10-18
-- Statut : DRAFT, à valider par le PO (questions §7) ; contenu métier par A13 en parallèle
+- Statut : DRAFT, révisé le 2026-10-18 avec DECISION-074 (q135 à q144) — **la section « Révision DECISION-074 »
+  en fin de document prime sur §1 à §8 en cas d'écart** (lots P0-P6 remplacés par D0-D7) ; questions résiduelles R-Q1
+  à R-Q3 ; contenu métier par A13 en parallèle
 - Origine : DECISION-073 (panel), DECISION-072 (`guard:noSelfValidation`, `riskappetite.update`, régimes hybrides),
   DECISION-066 (« ne jamais bloquer »), DECISION-068 (`docs/governance/droits-acces/architecture.json`)
 - Aucun code, aucune migration écrite par ce document.
