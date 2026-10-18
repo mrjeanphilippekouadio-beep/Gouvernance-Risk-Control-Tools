@@ -33,17 +33,15 @@ const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefin
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
 type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks";
-type NavItem = { id: View; label: string; icon: string; available?: boolean };
+type NavItem = { id: View; label: string; icon: string; available?: boolean } | { separator: string };
+const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
   { label: "Risques", items: [
     { id: "cartography", label: "Cartographie", icon: "grid", available: true },
-    { id: "evaluation", label: "Évaluations", icon: "check", available: true },
-    { id: "appetite", label: "Appétence", icon: "scale", available: true },
-    { id: "scales", label: "Grilles de cotation", icon: "table", available: true },
     { id: "risks", label: "Registre", icon: "table", available: true },
-    { id: "frameworks", label: "Dispositif de risque", icon: "shield", available: true },
+    { id: "evaluation", label: "Évaluations", icon: "check", available: true },
   ] },
   { label: "Contrôle interne", items: [
     { id: "controls", label: "Contrôles", icon: "check", available: true },
@@ -67,10 +65,16 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "auditlog", label: "Journal d'audit", icon: "search", available: true },
   ] },
   { label: "Administration", items: [
-    { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
+    { separator: "Méthodologie" },
+    { id: "frameworks", label: "Dispositif de risque", icon: "shield", available: true },
+    { id: "scales", label: "Grilles de cotation", icon: "table", available: true },
+    { id: "appetite", label: "Appétence", icon: "scale", available: true },
+    { separator: "Référentiels" },
     { id: "processes", label: "Processus", icon: "table", available: true },
     { id: "departments", label: "Départements", icon: "table", available: true },
     { id: "riskcategories", label: "Catégories de risque", icon: "table", available: true },
+    { separator: "Plateforme" },
+    { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
   ] },
@@ -104,7 +108,6 @@ function App() {
   const localAuth = useLocalSignIn(LOCAL_AUTH_EMAIL);
   const [devToken, setDevToken] = useState("");
   const [view, setView] = useState<View>("cartography");
-  const [evaluationRiskId, setEvaluationRiskId] = useState<string | undefined>();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const token = AUTH_PROVIDER === "local" ? localAuth.token : (idToken ?? devToken);
@@ -162,6 +165,9 @@ function App() {
     setMobileNavOpen(false);
   };
 
+  // Shortcuts (DECISION-065): navigation only, never a second write path.
+  const openAppetite = () => go("appetite");
+
   return (
     <div className="app-shell">
       <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} />
@@ -199,7 +205,7 @@ function App() {
 
         <div className="workspace-grid">
           <main className="app-content">
-            {view === "cartography" && <CartographyPage token={token} />}
+            {view === "cartography" && <CartographyPage token={token} onOpenAppetite={openAppetite} />}
             {view === "appetite" && <AppetitePage token={token} onOpenFrameworks={() => go("frameworks")} />}
             {view === "scales" && <RatingScalesPage token={token} onOpenFrameworks={() => go("frameworks")} />}
             {view === "controls" && <ControlsPage token={token} />}
@@ -214,8 +220,8 @@ function App() {
             {view === "departments" && <DepartmentsPage token={token} />}
             {view === "riskcategories" && <RiskCategoriesPage token={token} />}
             {view === "frameworks" && <FrameworksPage token={token} />}
-            {view === "evaluation" && <EvaluationPage token={token} initialRiskId={evaluationRiskId} />}
-            {view === "risks" && <RisksPage token={token} onEvaluate={(riskId) => { setEvaluationRiskId(riskId); setView("evaluation"); }} />}
+            {view === "evaluation" && <EvaluationPage token={token} />}
+            {view === "risks" && <RisksPage token={token} shortcuts={{ onOpenFrameworks: () => go("frameworks"), onOpenAppetite: openAppetite, onOpenScales: () => go("scales"), onOpenProcesses: () => go("processes") }} />}
             {view === "roles" && <RolesAdmin token={token} />}
             {view === "feedback" && <FeedbackAdmin token={token} />}
             {view === "placeholder" && (
@@ -323,11 +329,14 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
                 aria-expanded={open}
                 title={collapsed ? group.label : undefined}
               >
-                {!collapsed && <><span>{group.label}</span><span className="group-count">{group.items.length}</span></>}
+                {!collapsed && <><span>{group.label}</span><span className="group-count">{group.items.filter((item) => !isSeparator(item)).length}</span></>}
               </button>
               {(open || collapsed) && (
                 <div className="sidebar-group-items">
                   {group.items.map((item, index) => {
+                    if (isSeparator(item)) {
+                      return collapsed ? <hr className="sidebar-subhead-rule" key={group.label + item.separator} /> : <div className="sidebar-subhead" key={group.label + item.separator}>{item.separator}</div>;
+                    }
                     const active = item.available && item.id === view;
                     return (
                       <button
@@ -342,7 +351,7 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
                             setView(item.id);
                             setMobileNavOpen(false);
                             if (collapsed) setCollapsed(false);
-                            if (item.id !== group.items[0]?.id) setOpenGroup(group.label);
+                            setOpenGroup(group.label);
                           }
                         }}
                       >
