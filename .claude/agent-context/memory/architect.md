@@ -56,6 +56,13 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
   q103 : personne d'autre prévenu (PO contre A13). Ouverts non bloquants : I-D7 (seuil q103, A13), I-D8
   (paramètres sans défaut contractuel), I-D9 (RM admin qui se désigne comme sollicité), I-D10 (info).
 
+- 2026-10-18 : consultation DECISION-054/055 (lecture seule). « Tout vit dans l'Administration » = la page
+  d'édition du Dispositif (mêmes routes `/risk-frameworks`) est montée sous Administration, les autres
+  sections n'ouvrent que ce brouillon ; l'approbation reste dans « À faire » (change-requests). Deux niveaux :
+  réglage tenant (plateforme, effet immédiat, motif + audit) vs paramètre de version (approuvé, cycle suivant).
+  Seconds chemins encore ouverts : `PUT /processes/:id/evaluation-mode` (permission retirée par §10),
+  `PATCH /modules/:name/toggle` sans motif ni tiers (désactive AUDIT), 4 champs inertes `PUT /config`.
+
 ## Pièges rencontrés
 
 - Le worktree fourni peut être sur un ancien commit sans Bash pour le corriger : lire les sources dans le

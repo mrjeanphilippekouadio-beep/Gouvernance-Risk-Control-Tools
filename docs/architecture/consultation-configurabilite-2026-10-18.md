@@ -85,3 +85,45 @@ Deux stockages existent : `configs` (une ligne par tenant, un setter + permissio
 
 ### Jamais configurable (proposition)
 Append-only de l'audit, tenant_id, suppression logique, attribution serveur, maker-checker de base, cumul RM + Audit (sauf régime « petite structure » tracé et notifié), notifications de gouvernance obligatoires, permissions terminales dédiées, contrôles de pièces jointes et de taille, bornes du modèle (score P×I ≤ 36).
+
+## A05 — Architecte
+
+### Réglages à plusieurs chemins d'écriture
+| Réglage | État | Cible |
+|---|---|---|
+| Seuils Comité, obligation Comité, mode par défaut | `ConfigService` fermé (B-6b) ; écrit via le brouillon du Dispositif | Brouillon du Dispositif — **fermé** |
+| Appétence | `RiskAppetiteService` fermé ; **le frontend appelle encore ces routes** (`frontend/src/api/riskAppetite.ts:29,31`) : boutons qui échouent toujours | Brouillon — **fermé**, écran à corriger |
+| Échelle en vigueur | `activateVersion` fermé ; appel frontend mort (`frontend/src/api/evaluations.ts:155`) | Dispositif — **fermé**, écran à corriger |
+| Contenu d'une échelle | `PUT /rating-scales/:id/*`, seulement hors ACTIVE | Acceptable (objet référencé) ; à présenter comme « préparer une échelle pour le prochain brouillon » |
+| Mode d'un processus | `PUT /processes/:id/evaluation-mode` **et** le circuit demande/validation | **Ouvert** : le contrat §10 retire `process.evaluationmode.set` → fermer la route directe |
+| `score_formula`, `level_thresholds`, `impact_retenu_rule`, `appetite_mode` | `PUT /config`, `PUT /config/appetite-mode` | **Ouverts mais inertes** (aucun code ne les lit) : trompeur pour un client → fermer ou marquer « non appliqué » |
+| Cumul Comité + Audit | `PUT /config/committee-audit-cumul` | Chemin unique, conforme |
+| Activation des modules | `PATCH /modules/:name/toggle`, `config.manage`, **sans motif ni tiers** | Insuffisant : un seul admin peut désactiver le module AUDIT |
+
+### Tension DECISION-054 / contrat §10
+Sans problème backend si l'Administration **héberge l'éditeur de brouillon existant** (mêmes routes) et que les autres sections ne font qu'ouvrir ce brouillon ; l'approbation reste dans « À faire » (l'approbateur n'est pas l'admin). **Problème réel** : le contrat §10 réserve l'édition de la méthodologie au groupe Risk Manager ; l'Administration est le domaine de l'admin → il faut des droits par onglet, sinon on suggère que l'admin configure la méthodologie. **À confirmer par le PO.**
+
+### Modèle proposé (à décider par le PO) : deux niveaux seulement
+- **Réglage client (tenant)** : effet immédiat, motif, audit — plateforme (modules, e-mail, stockage, masquage, cumul Comité + Audit, durée de session).
+- **Paramètre de version du Dispositif** : approuvé, effet au cycle suivant — toute la méthodologie du §10.
+Défaut strict = le Dispositif livré par défaut + valeurs client fermées. Pas de troisième niveau.
+
+### Non négociable (proposition)
+Invariants 1 à 10 du contrat §10 ; audit append-only dans la même transaction ; tenant_id ; suppression logique ; attributions côté serveur ; permission dédiée pour toute action terminale ; maker-checker sur les rôles et les paramètres. Désactiver le module AUDIT : au minimum motif + approbation d'un tiers.
+
+### Recommandations ordonnées
+1. Fermer `PUT /processes/:id/evaluation-mode` et retirer la permission (S, backend).
+2. Fermer `PUT /config` et `/appetite-mode`, ou les marquer « non appliqué » (S, backend).
+3. Motif obligatoire sur l'activation des modules, plus un tiers pour AUDIT et RISK (S-M, backend).
+4. Supprimer ou rediriger vers le brouillon les écritures mortes d'Appétence et de Grilles (S, frontend).
+5. Entrée « Dispositif » dans l'Administration montant l'écran Dispositif ; les autres sections deviennent des liens vers le brouillon (M, frontend).
+6. Badge de portée Client / Dispositif et état « défaut actif » sur chaque réglage (M, frontend).
+7. Test de garde : toute écriture vers un réglage migré répond « porté par le Dispositif » (S, backend, A08).
+8. Plus tard : le changement des droits du groupe Audit passe par le même circuit de demandes que le Dispositif (L).
+
+## Questions au PO (consolidées par l'orchestrateur, posées dans le cockpit q115 à q119)
+- **q115** Liste des éléments jamais configurables (convergence A05/A06/A10/A13).
+- **q116** Règle d'assouplissement : deux personnes, jamais celle que la règle contraint (A10, A06).
+- **q117** Régime « structure à une personne » (A13), à la place de l'auto-désignation.
+- **q118** Qui modifie la méthodologie (Dispositif) dans l'Administration : le groupe Risk Manager seulement, ou aussi l'administrateur ? (A05)
+- **q119** Cumul Comité + Audit autorisé par défaut aujourd'hui (DECISION-042 q58) : le passer à « interdit par défaut » sous DECISION-055 ? (A06)
