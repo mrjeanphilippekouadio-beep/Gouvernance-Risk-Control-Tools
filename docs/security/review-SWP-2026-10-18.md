@@ -125,3 +125,60 @@ Recommandations pour le lot de retrait (A06) :
 | F-SWP-03, F-SWP-05 | INFO | A06 | lot de retrait |
 | F-SWP-04 | INFO | PO (option) | — |
 | F-SWP-06 | INFO | A08 | — |
+
+## Retest sur `07055f2` (2026-10-18) : RETEST_PASS
+
+Rejoué sur la base dédiée `grc_qa_a10`, jamais Neon. Le conteneur avait redémarré : Postgres tournait sans `postmaster.pid`. Je l'ai arrêté proprement, puis relancé avec `pg_ctl` sur le même répertoire. Les fixtures `swp` et les scripts du scratchpad étaient intacts.
+
+Les PoC d'origine ne s'appliquent plus tels quels : `validate()` ne passe plus par `processes.update`, et le toggle n'appelle plus `audit.record`. Ils sont donc remplacés par :
+- `swp_race2.mts` : vrais dépôts sous `grc_app_runtime`. La porte met en pause une requête à l'intérieur de la transaction, ou avant elle.
+- `swp_toggle2.mts` : vraie panne en base, par un trigger temporaire sur `audit_log`, supprimé ensuite.
+- `swp_rt_http.sh` : application réelle.
+
+Les fixtures sont dans `swp_rt_fixture.sql`. Vitest : `SWPFixes`, `QA-SWP`, `SingleWritePath`, `ModuleToggleService` donnent 34 verts et 5 ignorés (suites pg sans `QA_SWP_PGHOST`). L'état est restauré : mode du processus à NULL, modules AUDIT, KRI et KPI réactivés.
+
+### F-SWP-01 : RETEST_PASS, CLOSED
+
+| Ordre | Résultat | État final |
+|---|---|---|
+| A. `validate` dans sa transaction (verrou de ligne tenu) puis `reject` | `reject` **bloqué** sur le verrou, puis 0 ligne, donc NotFound | VALIDATED, PARTICIPATIF, `Process/UPDATE` + `VALIDATE` : cohérent |
+| B. `reject` validé pendant que `validate` est après ses pré-contrôles | `validate` : 0 ligne, NotFound | REJECTED, mode NULL, pas de `Process/UPDATE` : cohérent |
+| C. deux valideurs | le second : NotFound | une seule ligne `VALIDATE` : cohérent |
+| D. échec de l'INSERT d'audit dans la transaction | `validate` en échec | demande encore PENDING, puis rejet possible : cohérent |
+
+Aucun état mixte, dans aucun ordre. Résidu INFO (F-SWP-09) : le perdant reçoit un 404 « not found » au lieu de « already decided » (message seulement).
+
+### F-SWP-02 : RETEST_PASS, CLOSED
+
+Désactivation d'AUDIT avec une panne réelle de l'INSERT `audit_log` : erreur renvoyée, **aucune ligne `module_toggles`, 0 ligne d'audit**. Le toggle et l'audit sont bien dans la même transaction.
+
+Deux toggles concurrents sur une ligne existante (`FOR UPDATE`) sont sérialisés et chaînés : `true→false`, puis `false→true`.
+
+### F-SWP-03 : RETEST_PASS, CLOSED
+
+Au premier toggle, `oldValue` vaut `{"enabled":true}`.
+
+Nouveau résidu **F-SWP-07 (INFO, A06)** : deux *premiers* toggles concurrents d'un même module (aucune ligne à verrouiller) enregistrent tous deux `true→false`. L'« avant » du second est périmé, mais il n'y a ni perte de trace ni état faux. Correctif possible : relire sous verrou après l'`INSERT … ON CONFLICT`, ou utiliser `xmax` dans `RETURNING`.
+
+### F-SWP-05 : RETEST_PASS, CLOSED
+
+Le commentaire est réécrit et le test de garde est présent. Résidu INFO : la garde ne cherche pas `setMode` (`ProcessEvaluationModeRequestService.setMode`, mort lui aussi). Il faut l'ajouter au motif dans le lot de retrait.
+
+### F-SWP-06 : RETEST_PASS, CLOSED
+
+| `PATCH /rating-scales/:id/disable` (application réelle) | Résultat |
+|---|---|
+| échelle référencée par un brouillon du tenant : id en minuscules, MAJUSCULES, sans tirets, `{…}`, `%7B…%7D` MAJ, `%2D` | 400 « référencée par une version », échelle non supprimée ×6 |
+| échelle d'un autre tenant | 404 |
+| échelle propre non référencée (témoin) | 200 |
+| échelle propre référencée **seulement** par un brouillon du tenant B, fabriqué en SQL | 200 (contrôle filtré par `tenant_id`) |
+
+Le dernier cas ne contourne pas la protection. L'API refuse déjà qu'un brouillon référence une échelle d'un autre tenant (`RiskFrameworkService` l. 265 et 356). Cet état n'existe donc que par SQL direct.
+
+Résidus INFO :
+- **F-SWP-08 (A07)** : `risk_framework_versions.rating_scale_id` n'a qu'une FK simple, sans FK composite tenant, contrairement à `risk_evaluations` depuis 061.
+- **TOCTOU (A06)** : le contrôle est fait hors transaction. Un `updateDraft` concurrent qui pointe l'échelle pendant sa désactivation pourrait laisser un brouillon sur une échelle supprimée. Non rejoué, et le trigger 055 couvre les versions non DRAFT.
+
+### Bilan
+
+F-SWP-01, -02, -03, -05 et -06 sont fermés côté Security. F-SWP-04 reste une option PO. Nouveaux INFO : F-SWP-07, F-SWP-08, F-SWP-09, ainsi que la garde `setMode` et le TOCTOU de `disable`. Aucune escalade.
