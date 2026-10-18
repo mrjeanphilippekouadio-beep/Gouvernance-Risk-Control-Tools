@@ -38,9 +38,10 @@ interface DraftForm {
 interface AppetiteRow { subCategory: string; subCategoryId: string | null; entity: string; threshold: string; description: string; }
 const emptyAppetiteRow = (): AppetiteRow => ({ subCategory: "", subCategoryId: null, entity: "", threshold: "", description: "" });
 const toAppetiteEntry = (r: AppetiteRow): AppetiteEntry => ({
-  subCategory: r.subCategory, subCategoryId: r.subCategoryId,
-  entity: r.entity.trim() === "" ? null : r.entity, threshold: Number(r.threshold),
-  description: r.description.trim() === "" ? null : r.description,
+  // Trimmed like the server stores them, so an untouched row compares equal (A10 addendum, PR #186).
+  subCategory: r.subCategory.trim(), subCategoryId: r.subCategoryId,
+  entity: r.entity.trim() === "" ? null : r.entity.trim(), threshold: Number(r.threshold),
+  description: r.description.trim() === "" ? null : r.description.trim(),
 });
 
 const toForm = (v: FrameworkVersion): DraftForm => ({
