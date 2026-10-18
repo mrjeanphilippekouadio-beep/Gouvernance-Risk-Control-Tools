@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { ModuleToggleService } from "../../services/ModuleToggleService.js";
 
-const ToggleBody = z.object({ enabled: z.boolean() });
+const ToggleBody = z.object({ enabled: z.boolean(), reason: z.string().min(1).max(500) });
 
 /** ACT-221 — CRUD for the toggle itself; enforcement lives in api/middleware/moduleGuard.ts, wired per-module in server.ts. */
 export function moduleTogglesRouter(moduleToggleService: ModuleToggleService): Router {
@@ -20,7 +20,7 @@ export function moduleTogglesRouter(moduleToggleService: ModuleToggleService): R
   router.patch("/:name/toggle", async (req, res, next) => {
     try {
       const body = ToggleBody.parse(req.body);
-      const toggle = await moduleToggleService.toggle(req.user, req.params["name"] as string, body.enabled, req.requestId);
+      const toggle = await moduleToggleService.toggle(req.user, req.params["name"] as string, body.enabled, body.reason, req.requestId);
       res.json({ data: toggle });
     } catch (err) {
       next(err);

@@ -25,8 +25,4 @@ export interface SetRiskAppetiteInput {
 export const riskAppetiteApi = {
   list: (token: string, includeInactive = false) =>
     apiRequest<RiskAppetite[]>(`/api/v1/appetite${includeInactive ? "?includeInactive=true" : ""}`, { token }),
-  set: (token: string, subCategory: string, input: SetRiskAppetiteInput) =>
-    apiRequest<RiskAppetite>(`/api/v1/appetite/${encodeURIComponent(subCategory)}`, { method: "PUT", body: input, token }),
-  archive: (token: string, id: string, reason: string) =>
-    apiRequest<{ status: string }>(`/api/v1/appetite/${encodeURIComponent(id)}/archive`, { method: "POST", body: { reason }, token }),
 };

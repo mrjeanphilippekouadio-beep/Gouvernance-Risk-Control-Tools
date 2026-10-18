@@ -280,3 +280,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - 062 : colonnes `tenants.risk_framework_bootstrap_end_cause` + `_end_ref` (CHECK valeurs + cohérence avec `ended_at`, garde 42501 étendue ; une cause manquante peut être complétée une fois). Causes : SECOND_ELIGIBLE_MEMBER, USER_REACTIVATED, ROLE_REACTIVATED, ROLE_GROUP_CHANGED, PRE_EXISTING_AT_MIGRATION. Trigger `roles_bootstrap_end_mark` (AFTER UPDATE OF system_group, deleted_at). Verrou `FOR NO KEY UPDATE` (trigger + `recordBootstrapDecision`). Piège : un `--` de commentaire dans une ligne de faux dépôt en one-liner avale le `},` suivant.
 - Notice : `BootstrapJustification.deciderAlsoAdministrator` (construit serveur, optionnel) ; message = motif (administrateur cité, date, résultat) + marquage. Aucune notification à l'administrateur cité (q103/q-PO en attente).
 - Tests : B6d.test (F-B6d-01, notice, câblage server.ts C-B6d-08), QA-B6d(-pg) `.fails` retirés + causes. Les revues restent à refaire (A10/A08/A14).
+
+## 2026-10-18 Correctifs « un seul chemin d'écriture » (DECISION-054/058)
+
+- Le worktree dispatché était sur `main` (388 commits de retard) : `git reset --hard <branche cible>` sur un arbre propre avant tout (principe 1 confirmé). Le frontend exige `npm ci` depuis la RACINE puis `npm run build` dans `packages/design-system` avant `frontend npm run build`.
+- Fermeture par réponse 410 plutôt que suppression de route (message clair au client) : `PUT /processes/:id/evaluation-mode`, `PUT /config`, `PUT /config/appetite-mode`. Les méthodes de service (`ProcessService.setEvaluationMode`, `ConfigService.updateMethodology/updateAppetiteMode`) et la permission `process.evaluationmode.set` restent : des tests QA/SEC les épinglent ; retrait à faire dans un lot dédié.
+- Circuit demande/validation ne gère pas le retour à `null` (hérité) ; l'ancienne route le permettait. Aucun écran ne l'utilisait.
+- `PATCH /rating-scales/:id/disable` : pas un second chemin (ACTIVE refusée, trigger 055 fige toute échelle référencée par une version non-brouillon).
+- `ModuleToggleService.toggle(actor, name, enabled, reason, requestId)` : motif obligatoire, audit avant/après. `setCommitteeAuditCumul` avait déjà motif+audit. `setCommitteeEnforcement` : NE PAS toucher (fermé par le Dispositif, A13). `assertRiskManager` (DECISION-060) : lot séparé.
+- Test de garde : `test/SingleWritePath.test.ts`.

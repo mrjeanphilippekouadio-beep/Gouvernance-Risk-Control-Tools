@@ -40,9 +40,10 @@ export class ModuleToggleService {
     );
   }
 
-  /** PATCH /modules/:name/toggle — ACT-221. */
-  async toggle(actor: AuthenticatedUser, moduleName: string, enabled: boolean, requestId: string): Promise<ModuleToggle> {
+  /** PATCH /modules/:name/toggle — ACT-221. DECISION-058: one administrator suffices, but the reason is mandatory and the audit row carries before/after. */
+  async toggle(actor: AuthenticatedUser, moduleName: string, enabled: boolean, reason: string, requestId: string): Promise<ModuleToggle> {
     requirePermission(actor, "config.manage");
+    if (!reason?.trim()) throw new ValidationError("A reason is required to enable or disable a module");
     if (!isModuleName(moduleName)) {
       throw new ValidationError(`Unknown module "${moduleName}" — expected one of: ${MODULE_NAMES.join(", ")}`);
     }
@@ -58,7 +59,7 @@ export class ModuleToggleService {
       action: "STATUS_CHANGE",
       oldValue: before,
       newValue: after,
-      reason: null,
+      reason: reason.trim(),
       requestId,
     });
 
