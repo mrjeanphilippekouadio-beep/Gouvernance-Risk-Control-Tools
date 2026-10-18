@@ -314,7 +314,7 @@ pour l'usage.
 | HUMAN | **q145 (cockpit) — A10 F-FW-02 (LOW 4,3, antérieur au lot)** : le seuil d'appétence appliqué à une évaluation est retrouvé par égalité exacte du libellé de sous-catégorie, saisi librement dans l'évaluation ; un libellé un peu différent ou un renommage de catégorie fait disparaître le seuil sans message. Recommandation A10 : correspondance par `subCategoryId`. À traiter avant la production. | 2026-10-18 | Fermé (DECISION-074, q145) — mise en œuvre @dev-backend |
 | @risk-manager @architect | **DECISION-074 — mise à jour du cadrage du panel** : questionnaire de profil d'organisation (q135), niveau d'exigence par taille (q136), règle intérimaire / suppléant (q137), inventaire et modèle de toutes les données manquantes (q139), acceptation datée (q138), statut « Appliqué sans validation indépendante » (q142). Le questionnaire et les seuils de classement repasseront en cockpit avant développement. | 2026-10-18 | Fait (A13 v0.2, A05 révision R-0 à R-9, lots D0 à D7) |
 | HUMAN | **q146 à q153 (cockpit) — panel de gouvernance, avant lancement des lots D1 à D7** : questionnaire et seuils (q146), qui remplit / baisse de taille (q147), comptage « plus d'une personne » (q148), départ du dernier Risk Manager sans intérimaire (q149), liste D01-D19 et reprise du propriétaire de processus (q150, A13 et A05 divergent), principes dépendant de fonctions non construites (q151), deux comptes d'une même personne (q152, rappel de l'arbitrage DECISION-072), acte appliqué sans validation indépendante dans les calculs (q153, change la taille du lot D4). Interprétations non bloquantes I-R1 à I-R6 : spec A05 §R. | 2026-10-18 | Fermé (DECISION-075) |
-| HUMAN @risk-manager | **q154 (à poser)** : choix des 6 questions du profil d'organisation et seuils de classement ajustés (suite q146, DECISION-075). Proposition A13 puis validation PO. Bloque D3. | 2026-10-18 | Ouvert |
+| HUMAN @risk-manager | **q154 (à poser)** : choix des 6 questions du profil d'organisation et seuils de classement ajustés (suite q146, DECISION-075). Proposition A13 puis validation PO. Bloque D3. | 2026-10-18 | Fermé (DECISION-076) |
 | @dev-backend | **q145 / A10 F-FW-02** : l'évaluation choisit sa sous-catégorie dans le référentiel ; le seuil d'appétence est retrouvé par `subCategoryId`, plus par libellé (+ F-FW-03). Avant production. | 2026-10-18 | Fermé (backend c44f0e7, frontend 7eb58ca ; retest A10 PASS addendum 2) |
 | @dev-db | **A10 F-064-01 (INFO)** : depuis 064, le contenu d'une échelle référencée seulement par des brouillons abandonnés redevient modifiable (cohérent avec q134 : un brouillon abandonné n'est la preuve d'aucune évaluation). À documenter dans le README des migrations. | 2026-10-18 | Ouvert |
 | @dev-backend | **A10 F-FW-03 (INFO)** : deux sous-catégories de même nom sous des parents différents ne peuvent pas porter chacune un seuil (unicité sur le libellé). À traiter avec q145. | 2026-10-18 | Fermé (backend c44f0e7, frontend 7eb58ca ; retest A10 PASS addendum 2) |
@@ -2043,4 +2043,17 @@ RELATED: DECISION-073, DECISION-074, A05 R-Q1 à R-Q3, A13 PROFIL-1/2,
 OWNER: @risk-manager (6 questions), @architect (plan), @dev-backend
   @dev-db @dev-frontend (lots D1–D7)
 STATUS: DÉCIDÉ — lots D1, D2a–D2d, D4 débloqués ; D3 (profil) attend q154.
+
+DECISION-076
+DATE: 2026-10-18 (cockpit q154, 15:24 UTC, option recommandée)
+DECISION (PO) : questionnaire de profil à 6 questions — effectif (Q1),
+  personnes dans le risque (Q2), audit interne (Q5), conseil
+  d'administration (Q7), comité des risques ou d'audit (Q8), supervision
+  (Q11). Classement : grande entreprise si E ≥ 250, ou E ≥ 100 et 3
+  fonctions de contrôle sur 4 ; TPE si E ≤ 20, au plus 1 fonction, non
+  supervisée ; PME sinon. E = max(réponse Q1, comptes actifs). Détail :
+  docs/governance/principes/principes-gouvernance.md v0.3 (A13).
+RELATED: q146, q154, DECISION-075, A13 PROFIL-3.
+OWNER: @dev-backend @dev-db (lot D3), @risk-manager
+STATUS: DÉCIDÉ — D0 validé ; D3 débloqué (après fusion de D1).
 ```
