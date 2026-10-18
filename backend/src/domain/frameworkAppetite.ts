@@ -14,11 +14,11 @@ export function findAppetite(
   entity: string | null,
   subCategoryId?: string | null,
 ): AppetiteThresholdEntry | null {
-  return (
-    list.find((a) => {
-      if ((a.entity ?? "") !== (entity ?? "")) return false;
-      if (subCategoryId && a.subCategoryId) return sameId(a.subCategoryId, subCategoryId);
-      return a.subCategory === subCategory;
-    }) ?? null
-  );
+  const sameEntity = (a: AppetiteThresholdEntry) => (a.entity ?? "") === (entity ?? "");
+  // Exact id match first, so a legacy label-only entry listed earlier never shadows it.
+  if (subCategoryId) {
+    const byId = list.find((a) => sameEntity(a) && a.subCategoryId && sameId(a.subCategoryId, subCategoryId));
+    if (byId) return byId;
+  }
+  return list.find((a) => sameEntity(a) && !(subCategoryId && a.subCategoryId) && a.subCategory === subCategory) ?? null;
 }

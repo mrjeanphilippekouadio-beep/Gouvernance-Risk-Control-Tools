@@ -77,6 +77,11 @@ describe("q145 findAppetite: match by id", () => {
     expect(findAppetite([entry("sub-a", 5)], "Fraude", null, null)?.threshold).toBe(5);
     expect(findAppetite(list, "Autre libellé", null, null)).toBeNull();
   });
+  it("an exact id match wins over a legacy label-only entry listed first", () => {
+    const mixed = [entry(null, 3), entry("sub-a", 5)];
+    expect(findAppetite(mixed, "Fraude", null, "sub-a")?.threshold).toBe(5);
+    expect(findAppetite(mixed, "Fraude", null, "sub-z")?.threshold).toBe(3);
+  });
 });
 
 describe("F-FW-03 normalizeAppetite: uniqueness on the id", () => {

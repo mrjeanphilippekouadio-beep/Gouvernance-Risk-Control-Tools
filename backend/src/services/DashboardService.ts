@@ -711,8 +711,9 @@ export class DashboardService {
           : null;
         const group = addGroup(
           applicable?.version.id ?? null,
-          s.evaluation.subCategory,
-          s.evaluation.subCategoryId ?? entry?.subCategoryId ?? null,
+          // Grouped under the matched entry's identity, so the default-Dispositif loop below lands on the same group.
+          entry?.subCategory ?? s.evaluation.subCategory,
+          entry ? (entry.subCategoryId ?? null) : (s.evaluation.subCategoryId ?? null),
           s.evaluation.entity,
           entry?.threshold ?? null,
         );
