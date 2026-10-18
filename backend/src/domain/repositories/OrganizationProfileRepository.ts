@@ -13,6 +13,12 @@ export interface InsertOrganizationProfileInput {
   status: "ACTIVE" | "PENDING";
   /** ALONE only with status ACTIVE (size lowered with no third party). */
   regime: Extract<OrganizationProfileRegime, "ALONE"> | null;
+  /**
+   * F-PNL-03: id of the ACTIVE version (null = none) the "lowers the size" decision was based on. When the new row is
+   * ACTIVE, the repository re-checks it under the tenant lock and refuses (ConflictError) if another version won the race.
+   * Omitted = no check.
+   */
+  expectedActiveId?: string | null;
 }
 
 /** The row written and, when it became ACTIVE, the version it replaced (now SUPERSEDED). */

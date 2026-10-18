@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 
 /**
  * Array schema for HTTP input, with the length checked BEFORE the elements
@@ -11,10 +12,15 @@ export function boundedArray<T extends z.ZodType>(element: T, max: number, min =
   return z.array(z.unknown()).min(min).max(max).pipe(z.array(element));
 }
 
+/** SEC-PNL-01 / F-PNL-11: a governance reason: trimmed, 1..max, no control character, at least one visible character. */
+export function reasonText(max = 500) {
+  return z.string().trim().min(1).max(max).refine(isAcceptableReason, "Motif invalide : caractères de contrôle ou aucun caractère visible");
+}
+
 /** DECISION-074: the explicit second confirmation of a self-validation (`governanceConfirmation` in the request body). */
 export const GovernanceConfirmationBody = z.object({
   rule: z.literal("noSelfValidation"),
-  reason: z.string().trim().min(1).max(500),
+  reason: reasonText(),
 });
 
 /** Shared by the scale's `defenseLines` and the mastery assessment's `lines` (one entry per defense line). */

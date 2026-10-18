@@ -506,11 +506,14 @@ export class RoleService {
     let vacancy = false;
     if (isRiskManagerGroup) {
       // F-B8-05: the count excludes suspended users, so a suspended target is not in it.
+      // F-PNL-02: removing someone who is not in the group is a 404, not a "last member" conflict.
+      const targetRoles = await this.roles.listForUser(actor.tenantId, userId);
+      if (!targetRoles.some((r) => r.id === roleId)) throw new NotFoundError("RoleAssignment", `${roleId}/${userId}`);
       const active = await this.roles.countActiveAssignments(actor.tenantId, roleId);
       const target = this.users ? await this.users.getById(actor.tenantId, userId) : null;
       const targetCounted = !target || !target.deletedAt;
       if ((targetCounted ? active - 1 : active) < 1) {
-        interim = targetCounted ? await this.usableInterim(actor, userId) : null;
+        interim = targetCounted ? await this.usableInterim(actor, userId, role, cleanReason ?? undefined) : null;
         if (!interim) {
           if (confirmEmptyGroup !== true) {
             throw new ValidationError(
@@ -576,12 +579,21 @@ export class RoleService {
    * neither the leaving member nor the actor (the activation assigns a role: no self-attribution, DECISION-072).
    * Anything else = no usable interim (the exit then needs the q149 confirmation).
    */
-  private async usableInterim(actor: AuthenticatedUser, leavingUserId: string): Promise<GovernanceDesignation | null> {
+  private async usableInterim(actor: AuthenticatedUser, leavingUserId: string, role: Role, reason: string | undefined): Promise<GovernanceDesignation | null> {
     const d = await this.designations?.getActive(actor.tenantId, "RISK_MANAGER_INTERIM");
     if (!d || d.activatedAt || !d.validUntil || d.validUntil.getTime() <= Date.now()) return null;
     if (d.userId === leavingUserId || d.userId === actor.userId) return null;
     const user = await this.users?.getById(actor.tenantId, d.userId);
-    return user && !user.deletedAt ? d : null;
+    if (!user || user.deletedAt) return null;
+    // F-PNL-01: an interim the cumul rules forbid (e.g. Risk Manager + Audit) is "no usable interim": q149 confirmation path.
+    try {
+      const held = await this.roles.listForUser(actor.tenantId, d.userId);
+      await this.assertCumulRules(actor.tenantId, role, held, held, reason);
+    } catch (e) {
+      if (e instanceof ValidationError) return null;
+      throw e;
+    }
+    return d;
   }
 
   private async handOverToInterim(

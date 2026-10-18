@@ -5,7 +5,7 @@ import { ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
-import { SELF_VALIDATION_POLICIES, type GovernanceThirdPartyQuery, type SelfValidationPolicy } from "../domain/governance/selfValidation.js";
+import { isAcceptableReason, SELF_VALIDATION_POLICIES, type GovernanceThirdPartyQuery, type SelfValidationPolicy } from "../domain/governance/selfValidation.js";
 import { MIN_APPETITE_THRESHOLD } from "./RiskEvaluationService.js";
 import { defaultCommitteeThreshold } from "../domain/scoring.js";
 import { resolveMaxScore } from "./scoreCeiling.js";
@@ -362,7 +362,8 @@ export class ConfigService {
   async setSelfValidationPolicy(actor: AuthenticatedUser, policy: SelfValidationPolicy, reason: string, requestId: string): Promise<Config> {
     requirePermission(actor, "config.selfvalidation.set");
     if (!SELF_VALIDATION_POLICIES.includes(policy)) throw new ValidationError(`Unknown self-validation policy: ${policy}`);
-    if (!reason?.trim()) throw new ValidationError("A reason is required to change the self-validation policy");
+    // SEC-PNL-01: the effect is written before the (non-transactional) audit row, so a reason the audit cannot store must stop here.
+    if (!reason || !isAcceptableReason(reason)) throw new ValidationError("A valid reason is required to change the self-validation policy");
 
     const thirdPartyExists = this.thirdParties ? await this.thirdParties.existsGovernanceThirdParty(actor.tenantId, actor.userId) : true;
     const before = await this.get(actor);

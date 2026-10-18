@@ -21,6 +21,7 @@ import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from ".
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
+const NO_OBSERVED: ObservedOrganization = { activeAccounts: 0, riskManagers: 0, committeeMembers: 0, auditMembers: 0 };
 export const HISTORY_LIMIT = 50;
 export const MAX_REASON_LENGTH = 500;
 /** Journal marker (audit_log.governance_exception): the size was lowered with no second validation. */
@@ -102,7 +103,13 @@ export class OrganizationProfileService {
     const [active, observed] = await Promise.all([this.profiles.getActive(actor.tenantId), this.profiles.observe(actor.tenantId)]);
     const sizeAfter = classifyOrganization(answers, observed, this.rule).value;
     const sizeBefore = active ? classifyOrganization(active.answers, observed, this.rule).value : null;
-    const lowers = sizeBefore !== null && sizeRank(sizeAfter) < sizeRank(sizeBefore);
+    // SEC-PNL-03: a drop of the DECLARED size is a drop even when the observed data still holds the retained size up.
+    const declaredBefore = active ? classifyOrganization(active.answers, NO_OBSERVED, this.rule).value : null;
+    const declaredAfter = classifyOrganization(answers, NO_OBSERVED, this.rule).value;
+    const lowers =
+      sizeBefore !== null &&
+      declaredBefore !== null &&
+      (sizeRank(sizeAfter) < sizeRank(sizeBefore) || sizeRank(declaredAfter) < sizeRank(declaredBefore));
     const thirdParties = lowers ? await this.profiles.countOtherGovernanceMembers(actor.tenantId, actor.userId) : 0;
     const needsConfirmation = lowers && thirdParties > 0;
     const alone = lowers && !needsConfirmation;
@@ -116,6 +123,7 @@ export class OrganizationProfileService {
         submittedBy: actor.userId,
         status: needsConfirmation ? "PENDING" : "ACTIVE",
         regime: alone ? "ALONE" : null,
+        expectedActiveId: active?.id ?? null,
       },
       ({ profile: created, superseded }) => [
         {

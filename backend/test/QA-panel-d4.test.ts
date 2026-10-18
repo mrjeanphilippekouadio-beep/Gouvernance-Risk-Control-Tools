@@ -250,14 +250,14 @@ describe("QA-panel D4 / ordering and edge cases", () => {
 
   // F-PNL-04 (MINOR): the gate runs BEFORE the "already validated" check, so the maker of an already validated
   // execution is first asked for a confirmation (409) about an act that cannot happen at all.
-  it.fails("F-PNL-04: an already validated execution answers 'already validated' (400), not a 409 confirmation request", async () => {
+  it("F-PNL-04: an already validated execution answers 'already validated' (400), not a 409 confirmation request", async () => {
     const row = { id: "e1", tenantId: "t1", executedBy: ME, validatedAt: new Date(), status: "DONE" };
     const svc = new ControlExecutionService({ getById: async () => row } as never, {} as never, audit([]), gateOf("DOUBLE_CONFIRMATION", false).gate);
     await expect(svc.validate(actor(["execution.read", "execution.validate"]), "e1", null, "r")).rejects.toMatchObject({ name: "ValidationError" });
   });
 
   // F-PNL-05 (MINOR): same family for the ordinary RiskEvaluation.validate above the committee threshold.
-  it.fails("F-PNL-05: a self-validation above the committee threshold is told to use the committee path before any confirmation prompt", async () => {
+  it("F-PNL-05: a self-validation above the committee threshold is told to use the committee path before any confirmation prompt", async () => {
     const row = { id: "r1", tenantId: "t1", status: "BROUILLON", residualScore: 20, evaluatorId: ME, committeeEvaluationMinScore: 15, committeeEvaluationEnforced: true };
     const svc = new RiskEvaluationService({ getById: async () => row } as never, audit([]), undefined, undefined, undefined, undefined, undefined, undefined, undefined,
       gateOf("DOUBLE_CONFIRMATION", false).gate);
@@ -283,9 +283,9 @@ describe("QA-panel D4 / ordering and edge cases", () => {
   });
 
   // F-PNL-11 (INFO): "reason mandatory" is satisfied by one invisible character; the same holds for every `trim().min(1)` reason.
-  it("pinned: a zero-width space counts as a non-empty reason (the confirmation is accepted)", async () => {
+  it("F-PNL-11 closed: a zero-width space is not a reason (the confirmation is refused)", async () => {
     const { GovernanceConfirmationBody } = await import("../src/api/validation.js");
-    expect(GovernanceConfirmationBody.safeParse({ rule: "noSelfValidation", reason: "\u200b" }).success).toBe(true);
+    expect(GovernanceConfirmationBody.safeParse({ rule: "noSelfValidation", reason: "\u200b" }).success).toBe(false);
     expect(GovernanceConfirmationBody.safeParse({ rule: "noSelfValidation", reason: "\u00a0 \t" }).success).toBe(false);
   });
 

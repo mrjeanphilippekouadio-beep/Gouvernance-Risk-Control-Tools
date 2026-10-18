@@ -203,7 +203,7 @@ describe.skipIf(!enabled)("QA-panel real PostgreSQL", () => {
 
   // F-PNL-01 (MAJOR): the unusable interim also blocks the confirmed "empty group" exit (q149 says the departure with
   // reason + confirmation is ACCEPTED when no usable interim exists; DECISION-066: never block).
-  it.fails("F-PNL-01: an interim who can no longer receive the role (cumul) must not block the confirmed departure", async () => {
+  it("F-PNL-01: an interim who can no longer receive the role (cumul) must not block the confirmed departure", async () => {
     const w = await d2cWorld();
     await w.designate();
     await w.grant(w.auditRole, w.interim, w.adminA);
@@ -272,7 +272,7 @@ describe.skipIf(!enabled)("QA-panel real PostgreSQL", () => {
 
   // F-PNL-02 (MINOR): wrong diagnosis. Revoking someone who is not a member says "retry" (Conflict) when an interim exists,
   // and "Cannot remove the last member" otherwise, instead of "not a member" (404).
-  it.fails("F-PNL-02: revoking a user who is not in the Risk Manager group answers NotFound, whatever the interim", async () => {
+  it("F-PNL-02: revoking a user who is not in the Risk Manager group answers NotFound, whatever the interim", async () => {
     const w = await d2cWorld();
     await w.designate();
     await w.grant(w.lecteur, w.newcomer, w.adminA);
@@ -429,7 +429,7 @@ describe.skipIf(!enabled)("QA-panel real PostgreSQL", () => {
   // F-PNL-03 (MAJOR): time-of-check/time-of-use on the size comparison. "Lowers the size" is decided from the active
   // version read BEFORE the transaction; a concurrent upgrade makes the second submission look neutral and it replaces the
   // new active version with no second confirmation.
-  it.fails("F-PNL-03: a submission prepared against a stale active version cannot lower the size without the second confirmation", async () => {
+  it("F-PNL-03: a submission prepared against a stale active version cannot lower the size without the second confirmation", async () => {
     const w = await d3World();
     await w.submit(PME); // active: PME
     let reached!: () => void;
@@ -543,13 +543,13 @@ describe.skipIf(!enabled)("QA-panel real PostgreSQL", () => {
   // F-PNL-06 (MAJOR, to confirm with Security): the self-designation guard compares raw text. Postgres reads the upper-case
   // form of the same uuid as the same account (QA-B6d-01 / SEC-ID-01 were the same class; RoleService and
   // GovernanceDesignationService call canonicalId, ProcessService does not).
-  it.fails("F-PNL-06: the upper-case form of one's own id is still a self-designation", async () => {
+  it("F-PNL-06: the upper-case form of one's own id is still a self-designation", async () => {
     const w = await processWorld();
     await expect(w.svc.setResponsibilities(w.actor(), w.processId, { ownerUserId: w.assigner.toUpperCase() }, "r")).rejects.toMatchObject({ name: "ValidationError" });
   });
 
   // Second symptom of F-PNL-06: the same raw comparison sees the upper-case form of the CURRENT owner as a change.
-  it.fails("F-PNL-06b: naming the current owner again (upper-case id) is a no-op: no audit row, no write", async () => {
+  it("F-PNL-06b: naming the current owner again (upper-case id) is a no-op: no audit row, no write", async () => {
     const w = await processWorld();
     await w.svc.setResponsibilities(w.actor(), w.processId, { ownerUserId: w.candidate }, "r1");
     const before = (await w.audits(w.processId)).length;

@@ -87,6 +87,10 @@ export class ControlExecutionService {
     requirePermission(actor, "execution.validate");
     const before = await this.get(actor, id);
 
+    if (before.validatedAt) {
+      throw new ValidationError("This execution has already been validated");
+    }
+
     const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
       isSelf: before.executedBy === actor.userId,
       permission: "execution.validate",
@@ -94,9 +98,6 @@ export class ControlExecutionService {
       refusal: "An executor cannot validate their own execution",
       confirmation,
     });
-    if (before.validatedAt) {
-      throw new ValidationError("This execution has already been validated");
-    }
 
     const after = await this.executions.recordValidation(actor.tenantId, id, actor.userId, comment);
 
