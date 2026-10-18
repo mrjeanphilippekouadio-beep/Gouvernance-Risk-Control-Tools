@@ -2116,4 +2116,20 @@ RELATED: SEC-PNL-02/05, CMP-PNL-03/04/08/09/11, q42, q147, q149,
   DECISION-026, DECISION-055.
 OWNER: @dev-backend (q157, q158, q159), @dev-db (071 en place)
 STATUS: DÉCIDÉ — implémenté (3ed076c, fusion sur la branche ; q158 = migration 072, D5 glisse en 073, D6 en 074).
+
+DECISION-079
+DATE: 2026-10-18 (go verbal du PO dans la session)
+DECISION (PO) : (1) option 1 pour CMP-PNL-01 / SEC-PNL-01 résiduel —
+  l'action et sa trace d'audit sont écrites dans une même transaction
+  (modèle `TransactionalAudit` + `insertAuditEvent` déjà utilisé par 6
+  dépôts) pour les 7 validations restant sous double confirmation, la
+  politique d'auto-validation (et ses demandes) et les désignations ;
+  (2) nouvelle revue QA + Sécurité sur les correctifs et DECISION-077/078,
+  dont les 3 points « lot arbitrages PO » ; (3) lots D5 (073), D6 (074,
+  reste soumis à Privacy R3/R5/R6), D7 ; (4) PR vers staging quand QA et
+  Sécurité sont vertes ; (5) analyse et plan de livraison des vues
+  frontend.
+RELATED: CMP-PNL-01, SEC-PNL-01, DECISION-077, DECISION-078.
+OWNER: @dev-backend @dev-db @qa-engineer @security @ux-designer
+STATUS: DÉCIDÉ — en cours.
 ```
