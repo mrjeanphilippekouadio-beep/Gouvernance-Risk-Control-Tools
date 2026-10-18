@@ -106,6 +106,9 @@ import { processesRouter } from "./api/v1/processes.routes.js";
 import { processEvaluationModeRequestsRouter } from "./api/v1/processEvaluationModeRequests.routes.js";
 import { auditLogRouter } from "./api/v1/auditLog.routes.js";
 import { rolesRouter } from "./api/v1/roles.routes.js";
+import { governanceDesignationsRouter } from "./api/v1/governanceDesignations.routes.js";
+import { GovernanceDesignationService } from "./services/GovernanceDesignationService.js";
+import { PostgresGovernanceDesignationRepository } from "./infrastructure/database/postgres/PostgresGovernanceDesignationRepository.js";
 import { feedbackRouter } from "./api/v1/feedback.routes.js";
 import { kpisRouter } from "./api/v1/kpis.routes.js";
 import { kpiMeasuresRouter } from "./api/v1/kpiMeasures.routes.js";
@@ -269,7 +272,9 @@ const findingService = new FindingService(
 );
 const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
 const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
-const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository);
+const governanceDesignationRepository = new PostgresGovernanceDesignationRepository(pool);
+const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository, governanceDesignationRepository);
+const governanceDesignationService = new GovernanceDesignationService(governanceDesignationRepository, auditRepository, userRepository, roleRepository);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
@@ -538,6 +543,7 @@ app.use(
 );
 app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(auditLogService));
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
+app.use("/api/v1/governance-designations", authMiddleware(identityProvider), governanceDesignationsRouter(governanceDesignationService));
 app.use("/api/v1/feedback", authMiddleware(identityProvider), feedbackRouter(feedbackService));
 app.use("/api/v1/permissions", authMiddleware(identityProvider), permissionsRouter());
 app.use(
