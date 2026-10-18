@@ -27,7 +27,7 @@ export function AppetitePage({ token, onOpenFrameworks }: Props) {
   const criticalCount = useMemo(() => rows.filter((row) => row.threshold <= 8 && row.active).length, [rows]);
 
   return <section className="core-page">
-    <div className="core-page__heading"><div><p className="core-page__eyebrow">RISQUES · GOUVERNANCE</p><h1>Appétence au risque</h1><p className="core-page__subtitle">L'appétence est la référence de décision consultée pendant le cycle d'évaluation (comparaison au score résiduel, page Évaluations) — elle n'est pas une fin en soi isolée. Cette page définit les seuils par sous-catégorie et, si nécessaire, par entité ; elle ne déclenche ni ne recalcule une évaluation.</p></div></div>
+    <div className="core-page__heading"><div><p className="core-page__eyebrow">RISQUES · GOUVERNANCE</p><h1>Appétence au risque</h1><p className="core-page__subtitle">L'appétence est la référence de décision consultée pendant le cycle d'évaluation (comparaison au score résiduel, page Évaluations) — elle n'est pas une fin en soi isolée. Cette page affiche les seuils en lecture seule ; ils se définissent dans un brouillon de version du Dispositif de risque. Elle ne déclenche ni ne recalcule une évaluation.</p></div></div>
     <div className="core-page__stats">
       <div className="core-stat"><span>Seuils affichés</span><strong>{loading ? "—" : rows.length}</strong></div>
       <div className="core-stat"><span>Seuils actifs</span><strong>{loading ? "—" : activeCount}</strong></div>
