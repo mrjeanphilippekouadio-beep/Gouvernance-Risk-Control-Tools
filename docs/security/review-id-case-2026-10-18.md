@@ -55,3 +55,39 @@ Comparaisons vérifiées et sans risque, parce que les deux côtés viennent de 
 Sans les conditions 1 et 2, un schéma `Id` utilisé seulement sur les nouveaux champs ne ferme rien : la quasi-totalité des chemins d'aujourd'hui passent par des paramètres non parsés.
 
 Limites de la revue : les ids stockés dans du jsonb puis relus et comparés (par exemple les justifications) n'ont pas été recensés de façon exhaustive, et le frontend n'a pas été examiné. Les lignes LOW/INFO de SEC-ID-02 n'ont pas été rejouées.
+
+## Retest SEC-ID-01 / SEC-ID-02, cible `76adb55` (2026-10-18) : RETEST_PASS
+
+Méthode : **l'application réelle** (`src/server.ts`), démarrée en `AUTH_PROVIDER=local` sur `grc_qa_a10` avec le rôle `grc_app_runtime` (tag `rt10`). Une connexion `POST /api/v1/auth/local` donne un vrai jeton, puis les requêtes HTTP sont envoyées avec curl. La base de test n'a pas de TLS : un préchargement de PoC (`nossl.cjs`, scratchpad, hors dépôt) retire `ssl` du pool, et c'est le seul écart avec la production. Le serveur a été arrêté ensuite, aucune transaction n'est restée ouverte. `npm run typecheck` OK, `npx vitest run` 2011 passed / 64 skipped.
+
+| Garde (SEC-ID-01) | Écritures testées | Résultat |
+|---|---|---|
+| `POST /roles/:id/assign` à soi (groupe Comité), `userId` dans le corps | minuscules, MAJUSCULES, sans tirets, `{…}`, tirets mal placés, espaces autour, `{HEX MAJ}` | **403 x7** |
+| `POST /roles/:id/revoke` de son propre rôle Audit | idem | **403 x7** |
+| `PATCH /roles/:id` sur son propre rôle (ajout de `riskframework.activate`) | idem dans le chemin, plus `%7B…%7D`, `%3x`/`%4x` (chiffre hexadécimal encodé), `%2D`, `%7b HEX MAJ %7d` | **403 x8** |
+| `PATCH /users/:id/suspend` soi-même | idem, plus `%20` avant ou après | **403 x10** |
+| Double encodage `%25xx`, paramètre matrix `;x=1`, espace encodé sur `/roles/:id` | — | 500 (uuid refusé par Postgres, `22P02`) ; **aucun succès** |
+
+État final en base : rôles inchangés (Admin sans `riskframework.activate`, Audit toujours détenu), utilisateur non suspendu.
+
+**Recherche de contournement du middleware.**
+- Ordre de montage : le middleware est monté après `express.json`, `requestId`, CORS et les en-têtes de sécurité, et avant tout `app.use("/api/v1…")`. Aucune route n'est montée avant lui (test de montage d'A06 compris).
+- Requête : Express 5.2.1 recalcule `req.query` depuis `req.url` à chaque accès, donc la réécriture est bien vue.
+- Paramètres de chemin : Express décode une seule fois (`decodeURIComponent`). Le middleware décode avant lui les `%XX` qui peuvent produire un uuid (chiffres hexadécimaux, `-`, `{}`). Un double encodage laisse un `%` littéral, que Postgres refuse. `;` n'a pas de sens particulier en Express (500, pas de contournement).
+- `__proto__` (PoC direct du middleware) : `JSON.parse` en fait une propriété propre, et l'affectation la remplace sans toucher au prototype (`({}).polluted === undefined`).
+- Clés d'objet et clés non couvertes : `USERID` et `user_id` ne sont pas réécrites. Aucun schéma ne les utilise, sauf la query `user_id` de `/dashboard/risk-owner`, qui n'accepte que `"me"` et échoue fermée.
+- Corps multipart (`multer` : `evidences` `controlExecutionId`, `riskImport`, `branding`) : il est parsé **après** le middleware et n'est donc pas réécrit. **INFO** : `EvidenceService` ne compare pas cet id, il ne sert qu'à des lectures en base.
+
+**Champs id hors de la regex `/^(id|ids)$|Ids?$|By$/`** (grep des clés zod et `req.query` de `api/v1`). Les clés non couvertes sont du texte métier : `owner`, `manager`, `riskOwner`, `executor`, `validator`, `process`, `subCategory`, `entity`, `linkedProcesses`, `compensatingControls` (libellés hérités, aucune comparaison avec un id). Les seuls objets imbriqués, `links[].resourceId`, sont couverts. Je n'ai trouvé **aucun** champ id non couvert qui alimente une comparaison avec `actor.userId` ou avec un id lu en base.
+
+**Ce qui reste de SEC-ID-02.**
+- Toutes les lignes sont fermées pour HTTP : les ids viennent du chemin (canonisé en entier) ou de clés couvertes (`parentId`, `auditorIds`, `riskIds`, `roleId`). `RoleService` l. 271/282 est aussi corrigé côté service (`id = before.id`, b996f31).
+- Reste, en INFO : pour les entrées non HTTP (import Excel, multipart, jobs futurs), seules les 4 gardes maker-checker ont une défense en profondeur ; les gardes d'intégrité (catégorie, département, processus) n'ont que la frontière HTTP.
+- INFO, déjà connu : un id invalide renvoie 500 au lieu de 400.
+
+**Faux positifs.**
+- Corps et query : seules les clés de type id sont réécrites. Un `password` de 32 caractères hexadécimaux ou de forme uuid passe intact : la connexion de `x1` avec le mot de passe `A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11` réussit.
+- Les clés couvertes portent toutes des références uuid en base (`entityId`, `resourceId`, `sourceId` compris). Un faux positif ne surviendrait que si un futur champ `…Id` portait un identifiant externe de 32 caractères hexadécimaux, par exemple un hash ou un id tiers. La règle vaut d'être notée en commentaire du middleware : ne pas nommer `…Id` un identifiant externe.
+- Le chemin est canonisé en entier. Aucune route actuelle ne porte un segment hexadécimal de 32 caractères qui ne soit pas un uuid. La regex `By$` touche aussi des clés comme `sortBy`/`groupBy`, mais uniquement si leur valeur a une forme d'uuid : sans effet.
+
+**SEC-ID-01 et SEC-ID-02 : RETEST_PASS.**
