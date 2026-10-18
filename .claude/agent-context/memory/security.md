@@ -217,8 +217,10 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 ## Retest 3 F-B6d-01 (2026-10-18, `25f81c6`) : RETEST_PASS, F-B6d-01 fermé côté Security
 - Contrôle par provenance (audit `Role` CREATE/PERMISSION_CHANGE par le demandeur → refus) : PoC pg réel (role + audit repos, askedOn = aujourd'hui) refusé si l'élargissement vient du RM, accepté s'il vient d'un tiers.
 - Toutes les voies applicatives d'écriture de roles.permissions auditent `Role` avec l'auteur ; l'approbation du groupe Audit trace l'approbateur, sans effet car le groupe Audit ne peut porter aucune ADMIN_PERMISSIONS. `listForEntity` sans LIMIT (pas de noyade), audit_log sans UPDATE/DELETE runtime.
-- Résidus : audit hors transaction (ACTION_ITEMS), SQL direct, tiers complice.
+- Résidus : audit hors transaction (ACTION_ITEMS), SQL direct, tiers complice. Variante non commitée (ne compter que l’AJOUT d’une ADMIN_PERMISSIONS) rejouée : PASS aussi, supprime le faux refus sur renommage.
 - Leçon : vérifier qu'un contrôle par l'audit ne peut pas être noyé (LIMIT/pagination de la lecture) ni effacé (privilèges runtime), et que l'audit n'échoue pas sur une entrée de l'attaquant.
+
+- Retest 3 bis `4e43770` (critère d'ajout effectif) : PASS. jsonb old/new.permissions relus OK (PoC `rt8`) ; retrait puis remise → refusé ; `before` périmé sans gain ; groupe Audit hors sujet (aucune permission admin possible).
 
 ## Consultation DECISION-055 « tout modulable, défaut strict » (2026-10-17, analyse seule, aucun code) : aucune escalade
 - Règle proposée « réglage sûr » : par tenant (actor.tenantId), permission dédiée par réglage, une seule écriture (DECISION-054), audit avant/après + motif dans la transaction, fail-closed (absent = strict). Durcir = un acteur, effet immédiat. Assouplir = maker-checker (B ≠ A, B ni bénéficiaire ni concerné), effet après approbation, non rétroactif, valeur du réglage figée sur chaque décision.
