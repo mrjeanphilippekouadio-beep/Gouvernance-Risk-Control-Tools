@@ -29,13 +29,13 @@ describe.skipIf(!PGHOST.startsWith("/"))("migration 063 edge cases", () => {
     expect(await code(`UPDATE risk_framework_versions SET rating_scale_id = $1 WHERE tenant_id = $2`, [b.scale, a.t])).toBe("23514");
   });
 
-  it("a scale referenced by a non-DRAFT (ARCHIVED) version cannot be soft-deleted: 23503 (not only drafts)", async () => {
+  it("a scale referenced by a non-DRAFT (activated then ARCHIVED) version cannot be soft-deleted: 23503 (not only drafts)", async () => {
     const w = await world();
     expect(await draft(w, w.scale)).toBe("OK");
     const c = await pool.connect();
     try {
       await c.query("SET session_replication_role = replica"); // test-only shortcut to reach ARCHIVED, session-local
-      await c.query(`UPDATE risk_framework_versions SET status = 'ARCHIVED', archived_at = now() WHERE tenant_id = $1`, [w.t]);
+      await c.query(`UPDATE risk_framework_versions SET status = 'ARCHIVED', archived_at = now(), activated_at = now() WHERE tenant_id = $1`, [w.t]);
     } finally { await c.query("RESET session_replication_role"); c.release(); }
     expect(await code(`UPDATE rating_scales SET deleted_at = now() WHERE id = $1`, [w.scale])).toBe("23503");
   });

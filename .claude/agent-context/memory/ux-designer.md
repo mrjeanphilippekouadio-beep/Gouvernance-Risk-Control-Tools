@@ -11,6 +11,8 @@ Créée le 2026-10-18 (n'existait pas avant). Historique antérieur : voir SHARE
 ## Positions prises
 - 2026-10-18, `docs/ux/RM-V1-Navigation-Risques.md` (DRAFT, DECISION-062) : Administration > Méthodologie (Dispositif, Grilles, Appétence) ; fiche risque en onglets Identification · Analyse · Évaluation · Historique ; Cartographie et « Évaluations » conservées ; 6 raccourcis (S1-S6) ; écritures d'appétence hors Dispositif supprimées. Remplace le §4 et la question 5 de `RM-V1-Experience-Dispositif.md`. Questions PO Q1-Q4 ouvertes.
 
+- 2026-10-18, `docs/ux/RM-V1-Panel-Principes-Gouvernance.md` (DRAFT, DECISION-073) : Administration > séparateur « Gouvernance » > « Principes de gouvernance » (compteur en menu) ; synthèse (taille + pourquoi + décompte par gravité) puis liste puis détail (objets en cause, conséquence, 3 colonnes TPE/PME/GE). Surbrillance = marqueur textuel + icône + `aria-current` + bordure, jamais couleur seule ; colonne choisie par le serveur. Contenu A13 en « Exemple » tant que non validé. Onglet « Seuils d'appétence » ajouté au détail du Dispositif (Checklist · Paramètres · Échelles · Seuils · Versions). Questions PO Q1-Q3 ouvertes (visibilité, taille fausse/indéterminée, acquittement).
+
 ## Constats utiles
 - `AdminPage.tsx` n'est pas branché dans `App.tsx` (code mort).
 - Appétence et grille existent à deux endroits côté API (`/appetite`, `/rating-scales` et dans la version de Dispositif) ; B-6b a fermé les écrivains `ConfigService`/`RiskAppetiteService` quand le Dispositif est branché : l'écran Appétence propose encore des actions refusées.

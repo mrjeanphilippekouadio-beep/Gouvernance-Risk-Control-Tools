@@ -358,7 +358,7 @@ export class RatingScaleService {
 
     if (await this.ratingScales.isReferencedByFrameworkVersion?.(actor.tenantId, id)) {
       throw new ValidationError(
-        "Cannot disable a rating scale that a Dispositif version references (draft or not) — change the version's scale first",
+        "Cannot disable a rating scale that a Dispositif version references (draft in progress or approved) — change the version's scale first",
       );
     }
 
