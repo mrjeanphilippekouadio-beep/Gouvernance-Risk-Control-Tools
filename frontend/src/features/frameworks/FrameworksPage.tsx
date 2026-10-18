@@ -73,8 +73,13 @@ function diffPatch(form: DraftForm, v: FrameworkVersion): DraftPatch {
   for (const key of Object.keys(next) as (keyof typeof next)[]) {
     if (next[key] !== v[key]) patch[key] = next[key];
   }
+  // Field by field: jsonb reorders keys, so comparing serialized strings would always report a change (Gitar, PR #186).
   const appetite = form.appetite.map(toAppetiteEntry);
-  if (JSON.stringify(appetite) !== JSON.stringify(v.appetiteThresholds)) patch["appetiteThresholds"] = appetite;
+  const stored = v.appetiteThresholds;
+  const sameEntry = (a: AppetiteEntry, b: AppetiteEntry) =>
+    a.subCategory === b.subCategory && (a.subCategoryId ?? null) === (b.subCategoryId ?? null) && (a.entity ?? null) === (b.entity ?? null)
+    && a.threshold === b.threshold && (a.description ?? null) === (b.description ?? null);
+  if (appetite.length !== stored.length || appetite.some((a, i) => !sameEntry(a, stored[i]))) patch["appetiteThresholds"] = appetite;
   return patch as DraftPatch;
 }
 
