@@ -334,9 +334,11 @@ pour l'usage.
 | @dev-db | **SEC-PNL2-03 (LOW 2,2) = constat A14 sur 072** : `self_validation_policy_requests` sans trigger de garde (motif, auteur, décideur réécrits ; APPLIED → PENDING). 072 pas encore sur staging : durcir en place. | 2026-10-19 | Ouvert |
 | @devops | **I07 (A10)** : migrations 068–071 modifiées en place — vérifié par l'orchestrateur le 2026-10-19 : `origin/staging` et `origin/main` s'arrêtent à 065, `migrate.yml` ne tourne qu'au merge sur staging, donc 066–073 n'ont jamais été appliquées sur Neon. | 2026-10-19 | Fermé |
 | @dev-backend @dev-db | **Retest QA (A08, 2026-10-19, PARTIAL_PASS, f5a380c fusionné ; 2503 tests + 7 `it.fails`)** — F-PNL-01..07, 11 fermés ; F-PNL-08/09/10/12 ouverts (épinglés). **MAJOR F-PNL2-01** : `GET /dashboard/actions` ne porte pas `validationIndependence` → badge q142 absent après rechargement sur Plans d'action. **MAJOR F-PNL2-06/06b (classe SEC-PNL-01)** : NUL dans le motif de `config.committeeenforcement.set` / `config.cumul.set` → réglage changé sans audit (500) ; `reasonText` ne couvre que les routes du panel, les autres `reason`/`comment` sont des `z.string()` nus. MINOR : F-PNL2-03 (id mal formé → 500 sur approve/reject politique, = I10), F-PNL2-04 (un échec d'émission arrête les destinataires suivants), F-PNL2-05/05b (gate D4 avant la preuve du plan d'action et le niveau de processus), F-PNL2-09 (aucun écran n'exploite le 202 : piège D7), F-PNL2-10 (068–071 durcies en place : sans effet sur un environnement qui les aurait déjà — aucun, cf. I07). INFO F-PNL2-07/08/11. Rapport `docs/qa/qa-panel-retest-2026-10-19.md`. | 2026-10-19 | Ouvert |
+| HUMAN @compliance @security | **Questions cockpit du retest (2026-10-19)** : **q168** délai de revue d'une exception (CMP-PNL2-02) ; **q169** durée maximale d'une acceptation seule (CMP-PNL2-05) ; **q170** révocation par l'Audit gardée + acceptant prévenu (CMP-PNL2-06) ; **q171** q160 inscrit comme risque accepté (CMP-PNL2-11) ; **q172** production avant D6 : liste minimale des exceptions à revoir ou attendre D6 (CMP-BLK-D5-01) ; **q173** 4 droits de décision réservés aux groupes fixes (SEC-PNL2-02) ; **q174** expiration d'une demande d'assouplissement (F-PNL2-02b). Aucune valeur de délai ou de durée inventée : les options « paramétrable » laissent la valeur au PO. | 2026-10-19 | Ouvert |
+| @dev-backend @dev-db | **Lot correctifs retest (DECISION-079 point 2)** : F-PNL2-01, F-PNL2-06/06b, SEC-PNL2-01, F-PNL2-03/I10, F-PNL2-04, F-PNL2-05/05b, I01 (renouvellement du jeton Google ≠ connexion : `last_token_iat` en base, migration 074, D6 glisse en 075), I02, I05, I06, SEC-PNL2-03 (garde 072 en place + motif de l'approbateur), nettoyage `ValidateCommitteeBody`. Puis bascule des `it.fails` et retest QA/Sécurité. | 2026-10-19 | En cours |
 | @dev-backend | **Besoins backend issus de F1** : (1) aucun endpoint « mes permissions » — l'écran ne peut masquer aucune action selon les droits (il réagit au 403) ; (2) type de notification + `resourceType` pour les demandes de Dispositif (raccourci S6) ; (3) exposer le rattachement grille ↔ version de Dispositif et confirmer la règle serveur d'écriture des grilles ; (4) le 409 de double confirmation n'a pas de champ `code` structuré (le front lit un préfixe de message). | 2026-10-19 | Ouvert |
 | @ux-designer | **Spec UX du panel dépassée** (`docs/ux/RM-V1-Panel-Principes-Gouvernance.md`) par DECISION-074/075/077/078 (acceptation q138 décidée, Audit hors confirmation q157…) — à réviser avant F5 ; contenu A13 du panel encore « Exemple » tant que le PO ne l'a pas validé par écrit. | 2026-10-19 | Ouvert |
-| HUMAN | **Questions cockpit du plan frontend** : q162 (tableaux de bord et rapports V1), q163 (cycles de revue), q164 (écran de gestion des comptes), q165 (écrans de mise en service), q166 (auto-désignation champion en structure à une personne, = I-R1), q167 (emplacement acceptation/revue). Bloquent F8 (q162–q165), F4 (q166), F5 (q167). | 2026-10-19 | Ouvert |
+| HUMAN | **Questions cockpit du plan frontend** : q162 (tableaux de bord et rapports V1), q163 (cycles de revue), q164 (écran de gestion des comptes), q165 (écrans de mise en service), q166 (auto-désignation champion en structure à une personne, = I-R1), q167 (emplacement acceptation/revue). Bloquent F8 (q162–q165), F4 (q166), F5 (q167). | 2026-10-19 | Fermé (DECISION-080) |
 | @dev-db | **CMP-PNL-10 / CMP-PNL-15 (A14)** : `governance_designations` (070) sans trigger d'immuabilité ni REVOKE (contrairement à 071) ; le régime une personne (068) n'écrit aucune entrée d'audit à la déclaration ni à la levée. | 2026-10-18 | Ouvert |
 | @dev-backend | **SEC-PNL-03 (LOW 2,7, PoC)** : une baisse de taille déclarée masquée par les faits observés passe ACTIVE sans seconde confirmation ni marqueur ; mesurer la baisse sur les seules réponses déclarées. **SEC-PNL-04 (LOW 2,7)** : un admin seul peut fabriquer « aucun tiers » (retrait Audit/Comité/dernier RM, action, remise en place) — tracé mais sans notification ; à couvrir par les notifications D5. | 2026-10-18 | Ouvert |
 | @dev-db | **SEC-PNL-06 (LOW 2,2, SQL direct uniquement)** : `organization_profiles` sans garde à l'insertion (ligne ACTIVE/CONFIRMED par un tiers d'un autre tenant) ; `governance_designations` accorde DELETE, permet de ré-armer un intérimaire utilisé, accepte un utilisateur d'un autre tenant ; le rôle runtime peut déclarer le régime une personne ; colonnes utilisateur de `processes` sans FK liée au tenant. À regrouper avec CMP-PNL-10/15. | 2026-10-18 | Ouvert |
@@ -2147,4 +2149,28 @@ DECISION (PO) : (1) option 1 pour CMP-PNL-01 / SEC-PNL-01 résiduel —
 RELATED: CMP-PNL-01, SEC-PNL-01, DECISION-077, DECISION-078.
 OWNER: @dev-backend @dev-db @qa-engineer @security @ux-designer
 STATUS: DÉCIDÉ — en cours.
+
+DECISION-080
+DATE: 2026-10-18 (cockpit q162 à q167, 23:07–23:08 UTC)
+DECISION (PO) :
+  - q162 (option NON recommandée) : tous les tableaux de bord et
+    rapports en V1 (six tableaux de bord, six rapports). Qui voit quel
+    widget (DECISION-002 point 5) reste à concevoir en F8.
+  - q163 (option recommandée) : cycles de revue après la V1, sauf si le
+    contrat Djamo les rend obligatoires.
+  - q164 (option recommandée) : écran d'administration des comptes,
+    livré après les écrans de gouvernance (F4).
+  - q165 (option NON recommandée) : tous les écrans de mise en service
+    (image de marque, modules, clients, import Excel). Préalable :
+    motif obligatoire sur l'activation des modules (DECISION-058) avant
+    d'exposer l'écran au client.
+  - q166 (option recommandée) : en structure à une personne, le Risk
+    Manager peut se nommer champion d'un processus avec double
+    confirmation, motif et marqueur « sans validation indépendante ».
+  - q167 (option NON recommandée) : acceptations de principes et revues
+    d'exceptions dans une page séparée « Décisions de gouvernance ».
+RELATED: docs/ux/plan-livraison-vues-front-v1.md, DECISION-058, q138, q142.
+OWNER: @ux-designer @dev-frontend (F4, F5, F8), @dev-backend (q165
+  motif DECISION-058, q166 exception I-R1)
+STATUS: DÉCIDÉ — F4, F5, F8 débloqués côté arbitrage.
 ```
