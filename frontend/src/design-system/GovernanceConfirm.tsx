@@ -69,7 +69,7 @@ export function useGovernanceConfirm(): { run: <T>(call: Call<T>) => Promise<T>;
       <p>Si vous confirmez, l'action sera appliquée et marquée « Appliqué sans validation indépendante », avec votre motif, dans la traçabilité.</p>
       {error && <MessageBanner tone="danger">{error}</MessageBanner>}
       <FormField label="Motif de la confirmation (obligatoire)" htmlFor="gov-confirm-reason">
-        <textarea id="gov-confirm-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={4} required autoFocus />
+        <input id="gov-confirm-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required autoFocus />
       </FormField>
     </>}
   </Modal>;

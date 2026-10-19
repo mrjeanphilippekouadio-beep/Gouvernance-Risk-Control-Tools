@@ -16,7 +16,7 @@ export class ApiError extends Error {
    */
   readonly missingPermission: string | null;
   /**
-   * Machine-readable code: `payload.error.code` when the backend sends one,
+   * Machine-readable code: `payload.code` (root of the body) or `payload.error.code`,
    * else the leading `UPPER_SNAKE:` token of the message (the double
    * confirmation 409 is sent that way: "GOVERNANCE_CONFIRMATION_REQUIRED: ..."),
    * else null. Never guessed from the status.
@@ -90,7 +90,8 @@ export async function apiRequestFull<T>(path: string, options: RequestOptions): 
     const raw: unknown = payload.error;
     const structured = raw !== null && typeof raw === "object" ? (raw as { code?: unknown; message?: unknown }) : null;
     const message = structured ? (typeof structured.message === "string" ? structured.message : "Request failed") : typeof raw === "string" ? raw : "Request failed";
-    const code = structured && typeof structured.code === "string" ? structured.code : null;
+    // The backend sends `code` at the root of the body; `error.code` is kept as a fallback.
+    const code = typeof payload.code === "string" ? payload.code : structured && typeof structured.code === "string" ? structured.code : null;
     const error = new ApiError(message, res.status, requestId, code);
     // Refused write (F-B8-06): tell the dialog. GETs are excluded because several
     // screens deliberately degrade on a 403 (directory lookups) without alarming the user.

@@ -227,7 +227,7 @@ function App() {
             {view === "departments" && <DepartmentsPage token={token} />}
             {view === "riskcategories" && <RiskCategoriesPage token={token} />}
             {view === "frameworks" && <FrameworksPage token={token} />}
-            {view === "govsettings" && <GovernanceSettingsPage token={token} />}
+            {view === "govsettings" && <GovernanceSettingsPage token={token} onOpenFrameworks={() => go("frameworks")} />}
             {view === "modereqs" && <EvaluationModeRequestsPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} />}
             {view === "risks" && <RisksPage token={token} shortcuts={{ onOpenFrameworks: () => go("frameworks"), onOpenAppetite: openAppetite, onOpenScales: () => go("scales"), onOpenProcesses: () => go("processes") }} />}

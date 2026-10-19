@@ -1,21 +1,16 @@
 import { apiRequest, apiRequestFull, type ApiResponse } from "./client";
 
 export type SelfValidationPolicy = "REFUSE" | "DOUBLE_CONFIRMATION";
-export type ConfigEvaluationMode = "CLASSIQUE" | "PARTICIPATIF";
 
 /** Subset of backend `Config` shown by the governance settings screen. */
 export interface GovernanceConfig {
-  evaluationMode: ConfigEvaluationMode;
-  committeeEvaluationMinScore: number;
-  committeeTreatmentMinScore: number | null;
-  committeeEvaluationEnforced: boolean;
   committeeAuditCumulAllowed: boolean;
   selfValidationPolicy: SelfValidationPolicy;
   version: number;
   updatedAt: string;
 }
 
-export type PolicyRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+export type PolicyRequestStatus = "PENDING" | "APPLIED" | "REJECTED" | "WITHDRAWN";
 
 /** Mirrors backend `SelfValidationPolicyRequest` (dates as ISO strings). */
 export interface SelfValidationPolicyRequest {
@@ -35,17 +30,13 @@ const put = <T>(path: string, token: string, body: unknown) => apiRequest<T>(`${
 
 export const configApi = {
   get: (token: string) => apiRequest<GovernanceConfig>(BASE, { token }),
-  setEvaluationMode: (token: string, mode: ConfigEvaluationMode, reason: string) => put<GovernanceConfig>("/evaluation-mode", token, { mode, reason }),
-  setCommitteeThresholds: (token: string, body: { evaluationMinScore?: number; treatmentMinScore?: number | null }, reason: string) =>
-    put<GovernanceConfig>("/committee-thresholds", token, { ...body, reason }),
-  setCommitteeEnforcement: (token: string, enforced: boolean, reason: string) => put<GovernanceConfig>("/committee-enforcement", token, { enforced, reason }),
   setCommitteeAuditCumul: (token: string, allowed: boolean, reason: string) => put<GovernanceConfig>("/committee-audit-cumul", token, { allowed, reason }),
   /** 200 = applied; 202 = `pendingRequest` set, `data` is the UNCHANGED config. Callers must look at `status`. */
   setSelfValidationPolicy: (token: string, policy: SelfValidationPolicy, reason: string): Promise<ApiResponse<GovernanceConfig>> =>
     apiRequestFull<GovernanceConfig>(`${BASE}/self-validation-policy`, { method: "PUT", body: { policy, reason }, token }),
   pendingPolicyRequest: (token: string) => apiRequest<SelfValidationPolicyRequest | null>(`${BASE}/self-validation-policy/request`, { token }),
-  approvePolicyRequest: (token: string, id: string) =>
-    apiRequest<GovernanceConfig>(`${BASE}/self-validation-policy/requests/${encodeURIComponent(id)}/approve`, { method: "POST", body: {}, token }),
+  approvePolicyRequest: (token: string, id: string, reason: string) =>
+    apiRequest<GovernanceConfig>(`${BASE}/self-validation-policy/requests/${encodeURIComponent(id)}/approve`, { method: "POST", body: { reason }, token }),
   rejectPolicyRequest: (token: string, id: string, reason: string) =>
     apiRequest<SelfValidationPolicyRequest>(`${BASE}/self-validation-policy/requests/${encodeURIComponent(id)}/reject`, { method: "POST", body: { reason }, token }),
 };

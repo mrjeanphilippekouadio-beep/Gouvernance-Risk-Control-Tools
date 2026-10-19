@@ -158,7 +158,7 @@ export function EvaluationModeRequestsPage({ token }: { token: string }) {
     >
       {rejectTarget && <form id="emr-reject-form" onSubmit={reject}>
         <FormField label="Motif du rejet (obligatoire)" htmlFor="emr-reject-reason">
-          <textarea id="emr-reject-reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={3} required />
+          <input id="emr-reject-reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} maxLength={2000} required />
         </FormField>
       </form>}
     </Modal>
