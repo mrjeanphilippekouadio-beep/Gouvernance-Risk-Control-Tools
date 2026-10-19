@@ -213,3 +213,19 @@ Détail : `docs/compliance/review-panel-d1-d4-2026-10-18.md` (constats CMP-PNL-0
 25. La 3e ligne ne fixe pas l'étalon qu'elle contrôle : elle est informée et peut contester, elle n'approuve pas (sauf repli marqué et ratifié) ; l'ensemble « tiers requis » doit égaler l'ensemble des approbateurs.
 26. Une règle de livraison vaut blocage en production : une option de gouvernance assouplie (auto-validation) n'est activable qu'avec ses contrôles détectifs livrés.
 27. Un rattrapage de droits par migration se vérifie par une liste nominative des rôles et comptes bénéficiaires, confirmée par HUMAN, avant application hors dev.
+
+## Passage Compliance panel de gouvernance D5 et correctifs DECISION-077/078/079 (2026-10-19, tête 9a86fb8)
+
+Détail : `docs/compliance/review-panel-d5-2026-10-19.md` (constats CMP-PNL2-01 à 13, blocage CMP-BLK-D5-01). Statut : **recommandation, en attente d'arbitrage PO** (délai de revue, plafond de durée d'acceptation, révocation par l'Audit, consignation de q160, activation de la production avant D6). Pas de texte BCEAO consulté ; tests non exécutés ; migrations non appliquées ; tête non vérifiée (pas de Bash), lecture dans le checkout principal.
+- Suivi CMP-PNL-01 à 17 : fermés 01 (atomicité, périmètre DECISION-079), 03 (q158 construit), 04 (q159), 11 (q157) ; partiels 02, 10 ; clos par arbitrage PO avec risque accepté 08, 09 (q160/q161) ; ouverts 05, 06, 07, 12 à 17 (14 aggravé par 073).
+- **COMPLIANCE_BLOCK** : levé pour le code, la recette et le staging. Maintenu pour la production sous une condition unique (CMP-BLK-D5-01) : aucune route ne liste les exceptions à revoir (seul `POST /governance-exceptions/:auditLogId/reviews`), le relecteur dépend d'une notification ; livrer D6 ou un `GET` minimal avant d'activer `DOUBLE_CONFIRMATION` ou l'acceptation `alone` en production.
+- Revue par un tiers + contestation : conforme avec réserve (contrôle détectif de remplacement, pas une séparation) ; manques : délai et relance, substance (un commentaire suffit, un seul relecteur), suite à la contestation, notification sans preuve de lecture.
+- Acceptation `alone` sans durée maximale : arbitrage PO requis (renouvelable sans fin, la durée est choisie par le bénéficiaire) ; le service n'invente aucun plafond, bien.
+- Audit : `acceptance.revoke` sans `confirm` : conforme avec réserve (veto restrictif), notifier l'acceptant.
+- q160 pris acte, non rouvert : consigner comme risque accepté par le PO (la vacance du RM est exclue des notifications et du compte des non-revues ; renforce les voies « sans tiers »).
+- q158 : répond à CMP-PNL-03 ; demande sans expiration acceptable (n'a aucun effet tant qu'elle est en attente) ; table 072 sans trigger de garde ni retrait de `reopen()` (Moyenne).
+- Append-only : `audit_log` conforme, un seul INSERT, aucun UPDATE ni DELETE ; écarts autour listés dans le rapport (repli silencieux de `writeAudited` si `auditsInTransaction` oublié).
+28. Un contrôle détectif n'existe que si le relecteur peut retrouver ce qu'il doit relire sans dépendre d'une notification : une voie de consultation (liste, âge) est une condition de la compensation, pas un confort d'interface.
+29. Une dérogation que le bénéficiaire peut renouveler seul, avec une durée qu'il choisit, est une dérogation sans terme ; tant que le PO n'a pas fixé de plafond, elle reste visible et marquée.
+30. Un second regard sans motif propre (approbation qui reprend le motif de l'auteur, confirmation à `reason: null`) ne prouve pas la relecture.
+31. Une table de décision qui n'est pas la piste d'audit mais en porte l'état (demandes, désignations) reçoit la même garde d'immuabilité que les autres (trigger, `search_path` épinglé, REVOKE) ; une méthode de réouverture d'un état terminal ne vit pas dans le dépôt de production.
