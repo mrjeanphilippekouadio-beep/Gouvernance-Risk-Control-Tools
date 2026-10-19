@@ -10,7 +10,9 @@ import type {
   RecordResidualScoringInput,
   RiskEvaluation,
 } from "../../../domain/entities/RiskEvaluation.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import { runAudited } from "./PostgresAuditRepository.js";
 
 interface RiskEvaluationRow {
   id: string;
@@ -93,6 +95,9 @@ function toDomain(row: RiskEvaluationRow): RiskEvaluation {
 }
 
 export class PostgresRiskEvaluationRepository implements RiskEvaluationRepository {
+  /** DECISION-079: `recordValidation` inserts its audit events with the transaction client. */
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
 
   async getById(tenantId: string, id: string): Promise<RiskEvaluation | null> {
@@ -277,17 +282,29 @@ export class PostgresRiskEvaluationRepository implements RiskEvaluationRepositor
     return toDomain(row);
   }
 
-  async recordValidation(tenantId: string, id: string, validatedBy: string, comment: string | null): Promise<RiskEvaluation> {
-    const { rows } = await this.pool.query<RiskEvaluationRow>(
-      `UPDATE risk_evaluations
-       SET status = 'VALIDATED', validated_by = $3, validated_at = now(), comment = $4, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2
-       RETURNING *`,
-      [tenantId, id, validatedBy, comment],
+  async recordValidation(
+    tenantId: string,
+    id: string,
+    validatedBy: string,
+    comment: string | null,
+    audit?: TransactionalAudit<RiskEvaluation>,
+  ): Promise<RiskEvaluation> {
+    return runAudited(
+      this.pool,
+      async (db) => {
+        const { rows } = await db.query<RiskEvaluationRow>(
+          `UPDATE risk_evaluations
+           SET status = 'VALIDATED', validated_by = $3, validated_at = now(), comment = $4, updated_at = now()
+           WHERE tenant_id = $1 AND id = $2
+           RETURNING *`,
+          [tenantId, id, validatedBy, comment],
+        );
+        const row = rows[0];
+        if (!row) throw new NotFoundError("RiskEvaluation", id);
+        return toDomain(row);
+      },
+      audit,
     );
-    const row = rows[0];
-    if (!row) throw new NotFoundError("RiskEvaluation", id);
-    return toDomain(row);
   }
 
   async recordRejection(tenantId: string, id: string, validatedBy: string, comment: string): Promise<RiskEvaluation> {

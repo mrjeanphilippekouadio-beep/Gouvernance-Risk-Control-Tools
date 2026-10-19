@@ -6,6 +6,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import { writeAudited } from "./auditedWrite.js";
 import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 /**
@@ -99,21 +100,25 @@ export class ControlExecutionService {
       confirmation,
     });
 
-    const after = await this.executions.recordValidation(actor.tenantId, id, actor.userId, comment);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "ControlExecution",
-      entityId: id,
-      action: "VALIDATE",
-      oldValue: before,
-      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
-      reason: comment,
-      requestId,
-      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
-    });
-
-    return after;
+    // DECISION-079: validation + audit row (marked or not) in one transaction.
+    return writeAudited(
+      this.executions.auditsInTransaction,
+      this.audit,
+      (audit) => this.executions.recordValidation(actor.tenantId, id, actor.userId, comment, audit),
+      (after) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "ControlExecution",
+          entityId: id,
+          action: "VALIDATE",
+          oldValue: before,
+          newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
+          reason: comment,
+          requestId,
+          ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
+        },
+      ],
+    );
   }
 }

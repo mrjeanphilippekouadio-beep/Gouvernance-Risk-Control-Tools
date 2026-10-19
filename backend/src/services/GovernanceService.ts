@@ -6,6 +6,7 @@ import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import { writeAudited } from "./auditedWrite.js";
 import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 const CYCLE_TYPES: ReviewCycleType[] = ["ANNUELLE", "ANTICIPEE"];
@@ -144,21 +145,25 @@ export class GovernanceService {
       confirmation,
     });
 
-    const after = await this.cycles.close(actor.tenantId, id, actor.userId, comment?.trim() || null);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "ReviewCycle",
-      entityId: id,
-      action: "CLOSE",
-      oldValue: before,
-      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
-      reason: comment ?? null,
-      requestId,
-      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
-    });
-
-    return after;
+    // DECISION-079: closure + audit row (marked or not) in one transaction.
+    return writeAudited(
+      this.cycles.auditsInTransaction,
+      this.audit,
+      (audit) => this.cycles.close(actor.tenantId, id, actor.userId, comment?.trim() || null, audit),
+      (after) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "ReviewCycle",
+          entityId: id,
+          action: "CLOSE",
+          oldValue: before,
+          newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
+          reason: comment ?? null,
+          requestId,
+          ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
+        },
+      ],
+    );
   }
 }

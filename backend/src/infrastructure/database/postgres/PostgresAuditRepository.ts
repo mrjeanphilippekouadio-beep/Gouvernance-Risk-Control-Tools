@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import type { AuditRepository, AuditSearchFilters } from "../../../domain/repositories/AuditRepository.js";
 import type { AuditEvent } from "../../../domain/entities/AuditEvent.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 
 interface AuditRow {
   id: string;
@@ -53,6 +54,31 @@ export async function insertAuditEvent(db: Pick<Pool, "query">, event: Omit<Audi
       event.governanceException ?? null,
     ],
   );
+}
+
+/**
+ * DECISION-079: the write and its audit rows in ONE transaction (a failing audit insert rolls the write back).
+ * Without `audit`, `write` just runs on the pool (callers that do not audit in the repository, test fakes).
+ */
+export async function runAudited<T>(
+  pool: Pool,
+  write: (db: Pick<Pool, "query">) => Promise<T>,
+  audit?: TransactionalAudit<T>,
+): Promise<T> {
+  if (!audit) return write(pool);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const out = await write(client);
+    for (const event of audit(out)) await insertAuditEvent(client, event);
+    await client.query("COMMIT");
+    return out;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export class PostgresAuditRepository implements AuditRepository {

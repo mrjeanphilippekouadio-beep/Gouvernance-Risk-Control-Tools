@@ -29,6 +29,7 @@ import { NO_APPLICABLE_FRAMEWORK_MESSAGE, resolveApplicableVersion } from "./ris
 export type FrameworkReads = Pick<RiskFrameworkRepository, "getDefaultFramework" | "getProcessFrameworkId" | "getActiveVersion" | "getVersionById">;
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import { writeAudited } from "./auditedWrite.js";
 import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 /** Mirrors ConfigService's own defaultConfig()/030_evaluation_mode.sql's DB default — the tenant-wide fallback when no Config row exists yet and/or no ConfigRepository is wired. */
@@ -526,22 +527,26 @@ export class RiskEvaluationService {
       confirmation,
     });
 
-    const after = await this.evaluations.recordValidation(actor.tenantId, id, actor.userId, comment);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "RiskEvaluation",
-      entityId: id,
-      action: "VALIDATE",
-      oldValue: before,
-      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
-      reason: comment,
-      requestId,
-      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
-    });
-
-    return after;
+    // DECISION-079: validation + audit row (marked or not) in one transaction.
+    return writeAudited(
+      this.evaluations.auditsInTransaction,
+      this.audit,
+      (audit) => this.evaluations.recordValidation(actor.tenantId, id, actor.userId, comment, audit),
+      (after) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "RiskEvaluation",
+          entityId: id,
+          action: "VALIDATE",
+          oldValue: before,
+          newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
+          reason: comment,
+          requestId,
+          ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
+        },
+      ],
+    );
   }
 
   /** ACT-157: same maker-checker circuit as validate, mandatory comment. Terminal, immutable afterwards. */

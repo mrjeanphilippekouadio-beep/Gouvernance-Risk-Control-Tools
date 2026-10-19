@@ -1,7 +1,9 @@
 import type { Pool } from "pg";
 import type { GovernanceDesignationRepository } from "../../../domain/repositories/GovernanceDesignationRepository.js";
 import type { CreateDesignationInput, DesignationKind, GovernanceDesignation } from "../../../domain/entities/GovernanceDesignation.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { ConflictError } from "../../../domain/errors/DomainErrors.js";
+import { runAudited } from "./PostgresAuditRepository.js";
 
 interface DesignationRow {
   id: string;
@@ -38,6 +40,9 @@ function toDomain(row: DesignationRow): GovernanceDesignation {
 }
 
 export class PostgresGovernanceDesignationRepository implements GovernanceDesignationRepository {
+  /** DECISION-079: `create` and `end` insert their audit events with the transaction client. */
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
 
   async getById(tenantId: string, id: string): Promise<GovernanceDesignation | null> {
@@ -66,16 +71,22 @@ export class PostgresGovernanceDesignationRepository implements GovernanceDesign
     return rows.map(toDomain);
   }
 
-  async create(input: CreateDesignationInput): Promise<GovernanceDesignation> {
+  async create(input: CreateDesignationInput, audit?: TransactionalAudit<GovernanceDesignation>): Promise<GovernanceDesignation> {
     try {
-      const { rows } = await this.pool.query<DesignationRow>(
-        `INSERT INTO governance_designations (tenant_id, kind, user_id, reason, valid_until, designated_by)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [input.tenantId, input.kind, input.userId, input.reason, input.validUntil, input.designatedBy],
+      return await runAudited(
+        this.pool,
+        async (db) => {
+          const { rows } = await db.query<DesignationRow>(
+            `INSERT INTO governance_designations (tenant_id, kind, user_id, reason, valid_until, designated_by)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [input.tenantId, input.kind, input.userId, input.reason, input.validUntil, input.designatedBy],
+          );
+          const row = rows[0];
+          if (!row) throw new Error("Insert into governance_designations returned no row");
+          return toDomain(row);
+        },
+        audit,
       );
-      const row = rows[0];
-      if (!row) throw new Error("Insert into governance_designations returned no row");
-      return toDomain(row);
     } catch (err) {
       if (typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505"
           && (err as { constraint?: unknown }).constraint === "governance_designations_active_kind_idx") {
@@ -85,12 +96,25 @@ export class PostgresGovernanceDesignationRepository implements GovernanceDesign
     }
   }
 
-  async end(tenantId: string, id: string, endedBy: string, endReason: string): Promise<GovernanceDesignation | null> {
-    const { rows } = await this.pool.query<DesignationRow>(
-      `UPDATE governance_designations SET ended_at = now(), ended_by = $3, end_reason = $4
-       WHERE tenant_id = $1 AND id = $2 AND ended_at IS NULL RETURNING *`,
-      [tenantId, id, endedBy, endReason],
+  async end(
+    tenantId: string,
+    id: string,
+    endedBy: string,
+    endReason: string,
+    audit?: TransactionalAudit<GovernanceDesignation>,
+  ): Promise<GovernanceDesignation | null> {
+    // Nothing ended -> nothing to audit (the null result skips the builder).
+    return runAudited<GovernanceDesignation | null>(
+      this.pool,
+      async (db) => {
+        const { rows } = await db.query<DesignationRow>(
+          `UPDATE governance_designations SET ended_at = now(), ended_by = $3, end_reason = $4
+           WHERE tenant_id = $1 AND id = $2 AND ended_at IS NULL RETURNING *`,
+          [tenantId, id, endedBy, endReason],
+        );
+        return rows[0] ? toDomain(rows[0]) : null;
+      },
+      audit && ((ended) => (ended ? audit(ended) : [])),
     );
-    return rows[0] ? toDomain(rows[0]) : null;
   }
 }
