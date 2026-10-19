@@ -441,3 +441,8 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Test PG déterministe sans sleep : envelopper `pool.query` pour collecter les promesses d'écriture du recorder (fire-and-forget) puis `await Promise.all`.
 - SEC-PNL3-02 : `updateMethodology` et `updateAppetiteMode` supprimés (aucun appelant en src, routes 410) avec leurs tests. `updateEvaluationMode`, `updateCommitteeThresholds`, `setCommitteeEnforcement` GARDÉS : les routes les appellent (fermés en prod par `assertNotOwnedByFramework`, tests QA-B6b/B9bis) ; `setCommitteeEnforcement` est déjà transactionnel + `isAcceptableReason`; les deux autres écrivent encore l'audit après l'effet (reste à convertir si le Dispositif est retiré du câblage).
 - Les suites PG D3/D5 utilisent des fixtures non nettoyées : reconstruire la base (builddb.sh) avant de les rejouer.
+
+## 2026-10-19 F-PNL3-02/07 (base a9fede8)
+
+- Régression de mon lot : `reasonText` mono-ligne refusait les motifs multi-lignes sur 19 routes. Correctif : `isAcceptableReason` (domaine) laisse passer \n \r \t (autres contrôles, C1, NUL, substitut isolé refusés) ; paramètre `multiline` supprimé (`reasonText(max)`). Leçon : un durcissement de validation doit être confronté aux écrans (textareas) AVANT, pas seulement au contrat d'audit.
+- Tests PG de `lastSeen` : helper `record()` qui enveloppe `pool.query` et attend les écritures ; aucun `wait()` fixe.

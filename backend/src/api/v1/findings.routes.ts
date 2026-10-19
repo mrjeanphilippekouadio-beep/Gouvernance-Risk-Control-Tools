@@ -20,7 +20,7 @@ const CreateFindingBody = z.object({
 });
 
 const CloseFindingBody = z.object({
-  comment: reasonText(2000, true),
+  comment: reasonText(2000),
   governanceConfirmation: GovernanceConfirmationBody.optional(),
 });
 

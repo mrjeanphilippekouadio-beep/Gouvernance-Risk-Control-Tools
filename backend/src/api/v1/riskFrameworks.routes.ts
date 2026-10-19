@@ -5,7 +5,7 @@ import { boundedArray, reasonText } from "../validation.js";
 
 const Id = z.guid();
 const Reason = reasonText(500);
-const Comment = reasonText(1000, true);
+const Comment = reasonText(1000);
 const Score = z.number().int().min(1).max(36);
 
 const AppetiteEntry = z
