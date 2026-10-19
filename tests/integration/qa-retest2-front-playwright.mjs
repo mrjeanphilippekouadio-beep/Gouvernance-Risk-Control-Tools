@@ -78,37 +78,37 @@ try {
   const cfg0 = (await api(tokA, "GET", "/config")).json.data;
   check("F3 lecture : les cinq cartes affichent la configuration du serveur", (await pa.locator(".card, [class*=card]").count()) >= 5 && (await pa.getByText("Refuser l'auto-validation").count()) > 0, `policy=${cfg0.selfValidationPolicy}`);
 
-  // 1. politique, motif sur deux lignes (une zone de texte invite au retour a la ligne)
-  const openPolicy = async () => { await pa.locator("section").filter({ hasText: "Politique d'auto-validation" }).getByRole("button", { name: "Modifier" }).first().click(); await pa.locator("#gov-reason").waitFor(); };
-  await openPolicy();
-  await pa.locator("#gov-policy").selectOption("DOUBLE_CONFIRMATION");
-  await pa.locator("#gov-reason").fill(TWO_LINES);
-  await pa.getByRole("button", { name: "Enregistrer" }).click();
-  await pa.waitForTimeout(600);
-  let put = A.calls.filter((c) => c.method === "PUT" && c.path.endsWith("/self-validation-policy")).at(-1);
-  const dlgText = await pa.locator("#gov-setting-form").innerText().catch(() => "");
-  check("F-PNL3-02 motif sur deux lignes (politique) : accepte (le serveur repond < 400)", put && put.status < 400, `status=${put?.status}; message affiche = ${JSON.stringify(dlgText.split("\n").filter((l) => l.trim() && !/Motif|Politique demandée|Si une seconde/.test(l)).slice(0, 3))}`, "F-PNL3-02");
-  await pa.screenshot({ path: `${SHOTS}/a-policy-two-lines.png` });
+  // 1. le serveur accepte de nouveau un motif sur deux lignes (b45bc94) : controle direct sur l'API
+  const nl = await api(tokA, "PUT", "/config/self-validation-policy", { policy: "DOUBLE_CONFIRMATION", reason: TWO_LINES });
+  check("F-PNL3-02 : l'API accepte un motif sur deux lignes (202)", nl.status === 202, `status=${nl.status}`);
 
-  // 2. politique, motif sur une ligne : 202 (B peut approuver)
-  await pa.locator("#gov-reason").fill("Assouplir pour le test de retest");
+  // 2. ecran : le motif est un champ d'une ligne (maxLength 500) ; politique -> 202
+  await pa.locator("section").filter({ hasText: "Politique d'auto-validation" }).getByRole("button", { name: "Modifier" }).first().click();
+  await pa.locator("#gov-reason").waitFor();
+  check("F-PNL3-02 : le motif de l'ecran est un <input> d'une ligne borne a 500", (await pa.locator("#gov-reason").evaluate((e) => e.tagName + ":" + e.maxLength)) === "INPUT:500");
+  await pa.locator("#gov-policy").selectOption("DOUBLE_CONFIRMATION");
+  await pa.locator("#gov-reason").fill(TWO_LINES); // un <input> supprime les retours a la ligne
   await pa.getByRole("button", { name: "Enregistrer" }).click();
   await pa.getByText("NON appliqué", { exact: false }).first().waitFor({ timeout: 5000 }).catch(() => undefined);
-  put = A.calls.filter((c) => c.method === "PUT" && c.path.endsWith("/self-validation-policy")).at(-1);
+  const put = A.calls.filter((c) => c.method === "PUT" && c.path.endsWith("/self-validation-policy")).at(-1);
   check("F-PNL2-09 : le 202 est affiche « NON appliqué : en attente », la politique reste inchangee", put?.status === 202 && (await pa.getByText("NON appliqué", { exact: false }).count()) > 0, `status=${put?.status}`);
-  const afterA = (await api(tokA, "GET", "/config")).json.data;
-  check("202 : la configuration du serveur est inchangee (REFUSE)", afterA.selfValidationPolicy === "REFUSE");
+  check("202 : la configuration du serveur est inchangee (REFUSE)", (await api(tokA, "GET", "/config")).json.data.selfValidationPolicy === "REFUSE");
   const pending = (await api(tokA, "GET", "/config/self-validation-policy/request")).json.data;
-  check("202 : une demande PENDING existe, auteur = A", pending?.status === "PENDING" && pending.requestedBy === "aaaaaaaa-0000-4000-8000-00000000000a", JSON.stringify(pending?.status));
+  check("202 : une demande PENDING existe, auteur = A", pending?.status === "PENDING" && pending.requestedBy === "aaaaaaaa-0000-4000-8000-00000000000a");
   check("l'ecran montre la demande en attente avec Approuver et Rejeter", (await pa.getByRole("button", { name: "Approuver" }).count()) === 1 && (await pa.getByRole("button", { name: "Rejeter" }).count()) === 1);
   await pa.screenshot({ path: `${SHOTS}/a-policy-pending.png` });
 
-  // 3. A approuve sa propre demande : le serveur doit refuser (maker-checker) avec un message intelligible
+  // 3. A approuve sa propre demande : le formulaire de motif s'ouvre, le serveur refuse (maker-checker) avec SON message
   await pa.getByRole("button", { name: "Approuver" }).click();
-  await pa.waitForTimeout(600);
+  await pa.locator("#gov-decision-reason").fill("Je m'approuve");
+  await pa.getByRole("button", { name: "Approuver" }).last().click();
+  await pa.waitForTimeout(700);
   const selfApprove = A.calls.filter((c) => c.path.endsWith("/approve")).at(-1);
-  const bannerA = await pa.locator("[role=alert], .message-banner, [class*=banner]").allInnerTexts().catch(() => []);
-  check("auteur qui clique Approuver : refuse (>= 400), la demande reste PENDING", selfApprove?.status >= 400 && (await api(tokA, "GET", "/config/self-validation-policy/request")).json.data?.status === "PENDING", `status=${selfApprove?.status}; corps envoye=${JSON.stringify(selfApprove?.body)}; banniere=${JSON.stringify(bannerA.join(" / ").slice(0, 200))}`);
+  const formA = await pa.locator("#gov-decide-form").innerText().catch(() => "");
+  check("auteur qui approuve : refuse (>= 400) avec un message du serveur (pas « Requête invalide »), la demande reste PENDING",
+    selfApprove?.status >= 400 && !/Requête invalide/.test(formA) && (await api(tokA, "GET", "/config/self-validation-policy/request")).json.data?.status === "PENDING",
+    `status=${selfApprove?.status}; corps=${JSON.stringify(selfApprove?.body)}; message=${JSON.stringify(formA.split("\n").filter((l) => l.trim()).slice(0, 3))}`);
+  await pa.keyboard.press("Escape");
 
   // ===================================================================================== B : approbateur
   const B = await open(browser, APP_B, "B");
@@ -117,72 +117,53 @@ try {
   await pb.getByRole("heading", { name: "Réglages de gouvernance" }).waitFor();
   await pb.waitForTimeout(800);
   check("B (droit d'approbation seul) voit la demande en attente de A", (await pb.getByRole("button", { name: "Approuver" }).count()) === 1);
+
+  // 4. B rejette
+  await pb.getByRole("button", { name: "Rejeter" }).click();
+  await pb.locator("#gov-decision-reason").fill(TWO_LINES);
+  await pb.getByRole("button", { name: "Rejeter" }).last().click();
+  await pb.waitForTimeout(900);
+  const rej = B.calls.filter((c) => c.path.endsWith("/reject")).at(-1);
+  check("rejet par l'ecran : 200, corps { reason }, la demande n'est plus en attente, la politique reste REFUSE",
+    rej?.status === 200 && typeof rej.body?.reason === "string" && (await api(tokB, "GET", "/config/self-validation-policy/request")).json.data === null && (await api(tokB, "GET", "/config")).json.data.selfValidationPolicy === "REFUSE", `status=${rej?.status}; corps=${JSON.stringify(rej?.body)}`);
+  check("le rejet est confirme a l'ecran", (await pb.getByText("Demande rejetée").count()) > 0);
+
+  // 5. nouvelle demande, B approuve sur l'ecran
+  const again = await api(tokA, "PUT", "/config/self-validation-policy", { policy: "DOUBLE_CONFIRMATION", reason: "Nouvelle demande" });
+  check("nouvelle demande apres rejet : 202", again.status === 202, `${again.status}`);
+  await pb.reload();
+  await pb.getByLabel("Mot de passe QA").fill("whatever");
+  await pb.getByRole("button", { name: "Se connecter" }).click();
+  await goto(pb, "Réglages de gouvernance");
+  await pb.waitForTimeout(900);
   await pb.getByRole("button", { name: "Approuver" }).click();
-  await pb.waitForTimeout(800);
+  await pb.locator("#gov-decision-reason").fill("Approuvé par B");
+  await pb.getByRole("button", { name: "Approuver" }).last().click();
+  await pb.waitForTimeout(900);
   const bApprove = B.calls.filter((c) => c.path.endsWith("/approve")).at(-1);
-  const stateAfterB = (await api(tokB, "GET", "/config/self-validation-policy/request")).json.data;
-  const bannerB = await pb.locator("[role=alert], .message-banner, [class*=banner]").allInnerTexts().catch(() => []);
-  check("F-PNL3-01 : B clique Approuver sur l'ecran : la demande est approuvee (200) et la politique appliquee",
-    bApprove?.status === 200 && (await api(tokB, "GET", "/config")).json.data.selfValidationPolicy === "DOUBLE_CONFIRMATION",
-    `status=${bApprove?.status}; corps envoye=${JSON.stringify(bApprove?.body)}; demande=${stateAfterB?.status}; banniere=${JSON.stringify(bannerB.join(" / ").slice(0, 160))}`, "F-PNL3-01");
+  check("F-PNL3-01 : B approuve sur l'ecran : 200, corps { reason }, politique appliquee, demande fermee",
+    bApprove?.status === 200 && bApprove.body?.reason === "Approuvé par B" && (await api(tokB, "GET", "/config")).json.data.selfValidationPolicy === "DOUBLE_CONFIRMATION" && (await api(tokB, "GET", "/config/self-validation-policy/request")).json.data === null,
+    `status=${bApprove?.status}; corps=${JSON.stringify(bApprove?.body)}`);
+  check("l'approbation est confirmee a l'ecran", (await pb.getByText("Demande approuvée").count()) > 0);
   await pb.screenshot({ path: `${SHOTS}/b-approve.png` });
 
-  // 4. B rejette avec un motif sur deux lignes puis sur une ligne
-  await pb.getByRole("button", { name: "Rejeter" }).click();
-  await pb.locator("#gov-reject-reason").fill(TWO_LINES);
-  await pb.getByRole("button", { name: "Rejeter" }).last().click();
-  await pb.waitForTimeout(600);
-  let rej = B.calls.filter((c) => c.path.endsWith("/reject")).at(-1);
-  check("F-PNL3-02 rejet avec un motif sur deux lignes : accepte", rej && rej.status < 400, `status=${rej?.status}`, "F-PNL3-02");
-  await pb.locator("#gov-reject-reason").fill("Rejet sur une seule ligne");
-  await pb.getByRole("button", { name: "Rejeter" }).last().click();
-  await pb.waitForTimeout(800);
-  rej = B.calls.filter((c) => c.path.endsWith("/reject")).at(-1);
-  check("rejet avec un motif sur une ligne : 200, la demande n'est plus en attente, la politique reste REFUSE",
-    rej?.status === 200 && (await api(tokB, "GET", "/config/self-validation-policy/request")).json.data === null && (await api(tokB, "GET", "/config")).json.data.selfValidationPolicy === "REFUSE", `status=${rej?.status}`);
-
-  // 5. le serveur accepte l'approbation AVEC motif (contournement hors ecran), pour la suite du parcours
-  const again = await api(tokA, "PUT", "/config/self-validation-policy", { policy: "DOUBLE_CONFIRMATION", reason: "Nouvelle demande" });
-  const reqId = again.json?.pendingRequest?.id;
-  const ok = await api(tokB, "POST", `/config/self-validation-policy/requests/${reqId}/approve`, { reason: "Approuve par B" });
-  check("hors ecran : l'approbation avec { reason } passe (200) et applique la politique", again.status === 202 && ok.status === 200 && ok.json.data.selfValidationPolicy === "DOUBLE_CONFIRMATION", `202=${again.status} approve=${ok.status}`);
-  const empty = await api(tokA, "PUT", "/config/self-validation-policy", { policy: "REFUSE", reason: "retour" }); // tightening applies directly
-  const back = await api(tokA, "PUT", "/config/self-validation-policy", { policy: "DOUBLE_CONFIRMATION", reason: "re-assouplir" });
-  const reqId2 = back.json?.pendingRequest?.id;
-  const noBody = await api(tokB, "POST", `/config/self-validation-policy/requests/${reqId2}/approve`, {});
-  check("hors ecran : l'approbation avec un corps vide est refusee 400 (le contrat du backend exige le motif)", empty.status === 200 && back.status === 202 && noBody.status === 400, `${empty.status}/${back.status}/${noBody.status}`);
-  await api(tokB, "POST", `/config/self-validation-policy/requests/${reqId2}/approve`, { reason: "ok" });
-
-  // 6. autres reglages : 200 avec un motif sur une ligne ; motif sur deux lignes
-  const cardBtn = (title) => pa.locator(".card, [class*=card]").filter({ hasText: title }).getByRole("button", { name: "Modifier" }).first();
-  await cardBtn("Passage obligatoire par le Comité").click();
-  await pa.locator("#gov-reason").fill(TWO_LINES);
-  await pa.getByRole("button", { name: "Enregistrer" }).click();
-  await pa.waitForTimeout(600);
-  let enf = A.calls.filter((c) => c.path.endsWith("/committee-enforcement")).at(-1);
-  check("F-PNL3-02 passage obligatoire par le Comite, motif sur deux lignes : accepte", enf && enf.status < 400, `status=${enf?.status}`, "F-PNL3-02");
-  await pa.locator("#gov-setting-form input[type=checkbox]").click();
-  await pa.locator("#gov-reason").fill("Motif unique");
-  await pa.getByRole("button", { name: "Enregistrer" }).click();
-  await pa.waitForTimeout(800);
-  enf = A.calls.filter((c) => c.path.endsWith("/committee-enforcement")).at(-1);
-  const shown = await pa.locator("#gov-setting-form").innerText().catch(() => "");
-  check("F-PNL3-03 « Passage obligatoire par le Comité » (carte modifiable sur l'ecran) : un motif sur une ligne est accepte", enf?.status === 200,
-    `status=${enf?.status}; message affiche=${JSON.stringify(shown.split("\n").filter((l) => /Dispositif|invalide/.test(l)))}`, "F-PNL3-03");
-  await pa.keyboard.press("Escape");
-  for (const [title, path, tag] of [["Mode d'évaluation par défaut", "/evaluation-mode", "mode"], ["Seuils de passage au Comité", "/committee-thresholds", "seuils"]]) {
-    await cardBtn(title).click();
-    await pa.locator("#gov-reason").fill("Motif unique");
-    if (tag === "seuils") await pa.locator("#gov-eval-min").fill("12");
-    if (tag === "mode") await pa.locator("#gov-mode").selectOption("PARTICIPATIF");
-    await pa.getByRole("button", { name: "Enregistrer" }).click();
-    await pa.waitForTimeout(700);
-    const c = A.calls.filter((x) => x.path.endsWith(path)).at(-1);
-    check(`F-PNL3-03 carte « ${title} » : un motif sur une ligne est accepte`, c?.status === 200, `status=${c?.status}`, "F-PNL3-03");
-    await pa.keyboard.press("Escape");
-  }
+  // 6. cartes « Portes par le Dispositif » : lecture seule
+  await pa.reload();
+  await pa.getByLabel("Mot de passe QA").fill("whatever");
+  await pa.getByRole("button", { name: "Se connecter" }).click();
+  await goto(pa, "Réglages de gouvernance");
+  await pa.getByRole("heading", { name: "Réglages de gouvernance" }).waitFor();
+  const body = await pa.locator("section.core-page").innerText();
+  const nbModifier = await pa.getByRole("button", { name: "Modifier" }).count();
+  check("F-PNL3-03 : plus de carte Mode / Seuils / Obligation Comite modifiable ; carte « Portés par le Dispositif de risque » presente",
+    /Portés par le Dispositif de risque/.test(body) && nbModifier === 2, `boutons Modifier=${nbModifier}`);
+  await pa.getByRole("button", { name: "Ouvrir le Dispositif de risque" }).click();
+  await pa.waitForTimeout(500);
+  const title = await pa.locator(".topbar-title strong").innerText();
+  check("le bouton « Ouvrir le Dispositif de risque » change d'ecran", !/Réglages de gouvernance/.test(title), title);
+  await goto(pa, "Réglages de gouvernance");
   const cumBefore = (await api(tokA, "GET", "/config")).json.data.committeeAuditCumulAllowed;
-  await cardBtn("Cumul Comité et Audit").click();
+  await pa.locator(".card, [class*=card]").filter({ hasText: "Cumul Comité et Audit" }).getByRole("button", { name: "Modifier" }).first().click();
   await pa.locator("#gov-setting-form input[type=checkbox]").click();
   await pa.locator("#gov-reason").fill("Motif unique");
   await pa.getByRole("button", { name: "Enregistrer" }).click();
@@ -206,16 +187,13 @@ try {
   const raw409 = await api(tokA, "POST", `/process-evaluation-mode-requests/${(await api(tokA, "GET", "/process-evaluation-mode-requests?processId=cccccccc-0000-4000-8000-00000000000c")).json.data[0].id}/validate`, {});
   check("I06 : le 409 porte `code: GOVERNANCE_CONFIRMATION_REQUIRED` en plus du prefixe du message", raw409.status === 409 && raw409.json.code === "GOVERNANCE_CONFIRMATION_REQUIRED" && /^GOVERNANCE_CONFIRMATION_REQUIRED:/.test(raw409.json.error), JSON.stringify(raw409.json).slice(0, 120));
   // le client lit `payload.error.code` (objet) ; ici `error` est une chaine : il retombe sur le prefixe du message
-  await pa.locator("[role=dialog] textarea, #gov-confirm-reason").first().fill(TWO_LINES);
+  await pa.locator("#gov-confirm-reason").first().fill(TWO_LINES);
   await pa.getByRole("button", { name: "Confirmer sans validation indépendante" }).click();
   await pa.waitForTimeout(700);
   const second = A.calls.filter((c) => c.path.endsWith("/validate")).at(-1);
   const dlg2 = await pa.locator("[role=dialog]").innerText().catch(() => "");
-  check("F-PNL3-02 double confirmation avec un motif sur deux lignes : acceptee", second && second.status === 200, `status=${second?.status}; dialogue=${JSON.stringify(dlg2.split("\n").filter((l) => /invalide|Requ/i.test(l)))}`, "F-PNL3-02");
-  await pa.locator("[role=dialog] textarea, #gov-confirm-reason").first().fill("Je suis le seul valideur disponible");
-  await pa.getByRole("button", { name: "Confirmer sans validation indépendante" }).click();
-  await pa.waitForTimeout(1000);
-  const last = A.calls.filter((c) => c.path.endsWith("/validate")).at(-1);
+  check("F-PNL3-02 double confirmation avec un motif sur deux lignes : acceptee", second && second.status === 200 && typeof second.body?.governanceConfirmation?.reason === "string", `status=${second?.status}; dialogue=${JSON.stringify(dlg2.split("\n").filter((l) => /invalide|Requ/i.test(l)))}`);
+  const last = second;
   check("renvoi avec la confirmation (motif sur une ligne) : 200, le corps renvoye porte { rule, reason }", last?.status === 200 && last.body?.governanceConfirmation?.rule === "noSelfValidation", `status=${last?.status}`);
   const reqs = (await api(tokA, "GET", "/process-evaluation-mode-requests?processId=cccccccc-0000-4000-8000-00000000000c")).json.data;
   check("la demande est VALIDATED avec validationIndependence WITHOUT_INDEPENDENT_REVIEW (q142)", reqs[0].status === "VALIDATED" && reqs[0].validationIndependence === "WITHOUT_INDEPENDENT_REVIEW", JSON.stringify([reqs[0].status, reqs[0].validationIndependence]));
@@ -232,7 +210,8 @@ try {
   await pa.getByRole("button", { name: "Rejeter" }).last().click();
   await pa.waitForTimeout(700);
   const rej2 = A.calls.filter((c) => c.path.endsWith("/reject")).at(-1);
-  check("F-PNL3-02 rejet d'une demande de mode, motif sur deux lignes : accepte", rej2 && rej2.status < 400, `status=${rej2?.status}`, "F-PNL3-02");
+  const banner = await pa.getByText("Action refusée").count();
+  check("rejet de sa propre demande de mode (champ d'une ligne, corps { reason }) : refuse 403 par le serveur (maker-checker), l'ecran affiche « Action refusée »", rej2?.status === 403 && typeof rej2.body?.reason === "string" && banner > 0, `status=${rej2?.status}; banniere=${banner}`);
 
   const jsErrors = [...A.errors, ...B.errors];
   check("aucune exception JavaScript pendant le parcours", jsErrors.length === 0, jsErrors.join(" | ").slice(0, 200));
