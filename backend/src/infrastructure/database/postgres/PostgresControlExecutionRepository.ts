@@ -5,7 +5,9 @@ import type {
   CreateControlExecutionInput,
   ExecutionStatus,
 } from "../../../domain/entities/ControlExecution.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import { runAudited } from "./PostgresAuditRepository.js";
 
 interface ExecutionRow {
   id: string;
@@ -42,6 +44,9 @@ function toDomain(row: ExecutionRow): ControlExecution {
 }
 
 export class PostgresControlExecutionRepository implements ControlExecutionRepository {
+  /** DECISION-079: `recordValidation` inserts its audit events with the transaction client. */
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
 
   async getById(tenantId: string, id: string): Promise<ControlExecution | null> {
@@ -91,26 +96,33 @@ export class PostgresControlExecutionRepository implements ControlExecutionRepos
     id: string,
     validatedBy: string,
     appendToResult: string | null,
+    audit?: TransactionalAudit<ControlExecution>,
   ): Promise<ControlExecution> {
-    const { rows } = await this.pool.query<ExecutionRow>(
-      `UPDATE control_executions
-       SET validated_by = $3,
-           validated_at = now(),
-           result = CASE WHEN $4::text IS NULL THEN result ELSE COALESCE(result, '') || $4 END
-       WHERE tenant_id = $1 AND id = $2 AND validated_at IS NULL
-       RETURNING *`,
-      [tenantId, id, validatedBy, appendToResult ? `\n[Validation] ${appendToResult}` : null],
+    return runAudited(
+      this.pool,
+      async (db) => {
+        const { rows } = await db.query<ExecutionRow>(
+          `UPDATE control_executions
+           SET validated_by = $3,
+               validated_at = now(),
+               result = CASE WHEN $4::text IS NULL THEN result ELSE COALESCE(result, '') || $4 END
+           WHERE tenant_id = $1 AND id = $2 AND validated_at IS NULL
+           RETURNING *`,
+          [tenantId, id, validatedBy, appendToResult ? `\n[Validation] ${appendToResult}` : null],
+        );
+        const row = rows[0];
+        if (!row) {
+          // Either the execution doesn't exist in this tenant, or it was
+          // already validated (the WHERE clause excludes that case) — the
+          // service checks existence first, so this path means a race with
+          // another validation.
+          const existing = await this.getById(tenantId, id);
+          if (!existing) throw new NotFoundError("ControlExecution", id);
+          throw new ValidationError("This execution has already been validated");
+        }
+        return toDomain(row);
+      },
+      audit,
     );
-    const row = rows[0];
-    if (!row) {
-      // Either the execution doesn't exist in this tenant, or it was
-      // already validated (the WHERE clause excludes that case) — the
-      // service checks existence first, so this path means a race with
-      // another validation.
-      const existing = await this.getById(tenantId, id);
-      if (!existing) throw new NotFoundError("ControlExecution", id);
-      throw new ValidationError("This execution has already been validated");
-    }
-    return toDomain(row);
   }
 }

@@ -8,7 +8,9 @@ import type {
   FindingSeverity,
   FindingStatus,
 } from "../../../domain/entities/Finding.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import { runAudited } from "./PostgresAuditRepository.js";
 
 interface FindingRow {
   id: string;
@@ -51,6 +53,9 @@ function toDomain(row: FindingRow): Finding {
 }
 
 export class PostgresFindingRepository implements FindingRepository {
+  /** DECISION-079: `close` inserts its audit events with the transaction client. */
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
 
   async getById(tenantId: string, id: string): Promise<Finding | null> {
@@ -127,22 +132,28 @@ export class PostgresFindingRepository implements FindingRepository {
     return toDomain(row);
   }
 
-  async close(tenantId: string, id: string, closedBy: string, comment: string): Promise<Finding> {
-    const { rows } = await this.pool.query<FindingRow>(
-      `UPDATE findings
-       SET status = 'CLOS', closed_by = $3, closed_at = now(), closure_comment = $4, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2 AND status = 'EN_TRAITEMENT'
-       RETURNING *`,
-      [tenantId, id, closedBy, comment],
+  async close(tenantId: string, id: string, closedBy: string, comment: string, audit?: TransactionalAudit<Finding>): Promise<Finding> {
+    return runAudited(
+      this.pool,
+      async (db) => {
+        const { rows } = await db.query<FindingRow>(
+          `UPDATE findings
+           SET status = 'CLOS', closed_by = $3, closed_at = now(), closure_comment = $4, updated_at = now()
+           WHERE tenant_id = $1 AND id = $2 AND status = 'EN_TRAITEMENT'
+           RETURNING *`,
+          [tenantId, id, closedBy, comment],
+        );
+        const row = rows[0];
+
+        if (!row) {
+          const existing = await this.getById(tenantId, id);
+          if (!existing) throw new NotFoundError("Finding", id);
+          throw new ValidationError("Finding status must be EN_TRAITEMENT to close");
+        }
+
+        return toDomain(row);
+      },
+      audit,
     );
-    const row = rows[0];
-
-    if (!row) {
-      const existing = await this.getById(tenantId, id);
-      if (!existing) throw new NotFoundError("Finding", id);
-      throw new ValidationError("Finding status must be EN_TRAITEMENT to close");
-    }
-
-    return toDomain(row);
   }
 }

@@ -7,7 +7,9 @@ import type {
   EffectivenessRating,
   EffectivenessResult,
 } from "../../../domain/entities/ControlEffectivenessAssessment.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import { runAudited } from "./PostgresAuditRepository.js";
 
 interface AssessmentRow {
   id: string;
@@ -56,6 +58,9 @@ function toDomain(row: AssessmentRow): ControlEffectivenessAssessment {
 }
 
 export class PostgresControlEffectivenessRepository implements ControlEffectivenessRepository {
+  /** DECISION-079: `recordValidation` inserts its audit events with the transaction client. */
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
 
   async getById(tenantId: string, id: string): Promise<ControlEffectivenessAssessment | null> {
@@ -111,22 +116,29 @@ export class PostgresControlEffectivenessRepository implements ControlEffectiven
     id: string,
     validatedBy: string,
     appendToJustification: string | null,
+    audit?: TransactionalAudit<ControlEffectivenessAssessment>,
   ): Promise<ControlEffectivenessAssessment> {
-    const { rows } = await this.pool.query<AssessmentRow>(
-      `UPDATE control_effectiveness_assessments
-       SET validated_by = $3,
-           validated_at = now(),
-           justification = CASE WHEN $4::text IS NULL THEN justification ELSE justification || $4 END
-       WHERE tenant_id = $1 AND id = $2 AND validated_at IS NULL
-       RETURNING *`,
-      [tenantId, id, validatedBy, appendToJustification ? `\n[Validation] ${appendToJustification}` : null],
+    return runAudited(
+      this.pool,
+      async (db) => {
+        const { rows } = await db.query<AssessmentRow>(
+          `UPDATE control_effectiveness_assessments
+           SET validated_by = $3,
+               validated_at = now(),
+               justification = CASE WHEN $4::text IS NULL THEN justification ELSE justification || $4 END
+           WHERE tenant_id = $1 AND id = $2 AND validated_at IS NULL
+           RETURNING *`,
+          [tenantId, id, validatedBy, appendToJustification ? `\n[Validation] ${appendToJustification}` : null],
+        );
+        const row = rows[0];
+        if (!row) {
+          const existing = await this.getById(tenantId, id);
+          if (!existing) throw new NotFoundError("ControlEffectivenessAssessment", id);
+          throw new ValidationError("This assessment has already been validated");
+        }
+        return toDomain(row);
+      },
+      audit,
     );
-    const row = rows[0];
-    if (!row) {
-      const existing = await this.getById(tenantId, id);
-      if (!existing) throw new NotFoundError("ControlEffectivenessAssessment", id);
-      throw new ValidationError("This assessment has already been validated");
-    }
-    return toDomain(row);
   }
 }

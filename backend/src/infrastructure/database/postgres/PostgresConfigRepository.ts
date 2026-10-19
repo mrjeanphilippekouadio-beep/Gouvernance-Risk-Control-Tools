@@ -52,6 +52,51 @@ function toDomain(row: ConfigRow): Config {
   };
 }
 
+/**
+ * Creates the row with as-shipped defaults on first write for this
+ * tenant (matches ConfigService's defaultConfig()) — ON CONFLICT DO
+ * NOTHING so a concurrent first write never errors, then the UPDATE
+ * below always applies the actual patch on top of whichever row won.
+ * committee_evaluation_min_score/committee_evaluation_enforced rely on the column
+ * DEFAULTs from 045_committee_thresholds.sql (15, true) — not repeated here — and
+ * committee_treatment_min_score defaults to NULL (not configured), same reasoning.
+ * `db` may be a pool or a transaction client (DECISION-079: policy change + audit in one transaction).
+ */
+export async function upsertConfigRow(db: Pick<Pool, "query">, tenantId: string, patch: ConfigPatch, updatedBy: string): Promise<Config> {
+  await db.query(
+    `INSERT INTO configs (tenant_id, score_formula, level_thresholds, impact_retenu_rule, appetite_mode, evaluation_mode, version)
+     VALUES ($1, 'P_X_I', '[]'::jsonb, 'MAX', 'AUTO_AVEC_SURCHARGE_MANUELLE', 'CLASSIQUE', 0)
+     ON CONFLICT (tenant_id) DO NOTHING`,
+    [tenantId],
+  );
+
+  const { setClauses, values } = buildUpdateSet(
+    {
+      score_formula: patch.scoreFormula,
+      level_thresholds: patch.levelThresholds ? JSON.stringify(patch.levelThresholds) : undefined,
+      impact_retenu_rule: patch.impactRetenuRule,
+      appetite_mode: patch.appetiteMode,
+      evaluation_mode: patch.evaluationMode,
+      committee_evaluation_min_score: patch.committeeEvaluationMinScore,
+      committee_treatment_min_score: patch.committeeTreatmentMinScore,
+      committee_evaluation_enforced: patch.committeeEvaluationEnforced,
+      committee_audit_cumul_allowed: patch.committeeAuditCumulAllowed,
+      self_validation_policy: patch.selfValidationPolicy,
+    },
+    3,
+  );
+
+  const { rows } = await db.query<ConfigRow>(
+    `UPDATE configs SET ${[...setClauses, "version = version + 1", "updated_by = $2", "updated_at = now()"].join(", ")}
+     WHERE tenant_id = $1
+     RETURNING *`,
+    [tenantId, updatedBy, ...values],
+  );
+  const row = rows[0];
+  if (!row) throw new Error(`Config upsert for tenant ${tenantId} returned no row`);
+  return toDomain(row);
+}
+
 export class PostgresConfigRepository implements ConfigRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -61,44 +106,6 @@ export class PostgresConfigRepository implements ConfigRepository {
   }
 
   async upsert(tenantId: string, patch: ConfigPatch, updatedBy: string): Promise<Config> {
-    // Creates the row with as-shipped defaults on first write for this
-    // tenant (matches ConfigService's defaultConfig()) — ON CONFLICT DO
-    // NOTHING so a concurrent first write never errors, then the UPDATE
-    // below always applies the actual patch on top of whichever row won.
-    // committee_evaluation_min_score/committee_evaluation_enforced rely on the column
-    // DEFAULTs from 045_committee_thresholds.sql (15, true) — not repeated here — and
-    // committee_treatment_min_score defaults to NULL (not configured), same reasoning.
-    await this.pool.query(
-      `INSERT INTO configs (tenant_id, score_formula, level_thresholds, impact_retenu_rule, appetite_mode, evaluation_mode, version)
-       VALUES ($1, 'P_X_I', '[]'::jsonb, 'MAX', 'AUTO_AVEC_SURCHARGE_MANUELLE', 'CLASSIQUE', 0)
-       ON CONFLICT (tenant_id) DO NOTHING`,
-      [tenantId],
-    );
-
-    const { setClauses, values } = buildUpdateSet(
-      {
-        score_formula: patch.scoreFormula,
-        level_thresholds: patch.levelThresholds ? JSON.stringify(patch.levelThresholds) : undefined,
-        impact_retenu_rule: patch.impactRetenuRule,
-        appetite_mode: patch.appetiteMode,
-        evaluation_mode: patch.evaluationMode,
-        committee_evaluation_min_score: patch.committeeEvaluationMinScore,
-        committee_treatment_min_score: patch.committeeTreatmentMinScore,
-        committee_evaluation_enforced: patch.committeeEvaluationEnforced,
-        committee_audit_cumul_allowed: patch.committeeAuditCumulAllowed,
-        self_validation_policy: patch.selfValidationPolicy,
-      },
-      3,
-    );
-
-    const { rows } = await this.pool.query<ConfigRow>(
-      `UPDATE configs SET ${[...setClauses, "version = version + 1", "updated_by = $2", "updated_at = now()"].join(", ")}
-       WHERE tenant_id = $1
-       RETURNING *`,
-      [tenantId, updatedBy, ...values],
-    );
-    const row = rows[0];
-    if (!row) throw new Error(`Config upsert for tenant ${tenantId} returned no row`);
-    return toDomain(row);
+    return upsertConfigRow(this.pool, tenantId, patch, updatedBy);
   }
 }

@@ -7,6 +7,7 @@ import { requirePermission } from "../domain/permissions.js";
 import { canonicalId } from "../domain/ids.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { writeAudited } from "./auditedWrite.js";
 
 const MAX_REASON_LENGTH = 500;
 
@@ -61,26 +62,36 @@ export class GovernanceDesignationService {
       throw new ConflictError("A designation of this kind is already active; end it first", input.kind);
     }
 
-    const created = await this.designations.create({
-      tenantId: actor.tenantId,
-      kind: input.kind,
-      userId,
-      reason,
-      validUntil,
-      designatedBy: actor.userId, // never client-supplied
-    });
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "GovernanceDesignation",
-      entityId: created.id,
-      action: "CREATE",
-      oldValue: null,
-      newValue: { kind: created.kind, userId: created.userId, validUntil: created.validUntil },
-      reason,
-      requestId,
-    });
-    return created;
+    // DECISION-079: the designation and its audit row in one transaction.
+    return writeAudited(
+      this.designations.auditsInTransaction,
+      this.audit,
+      (audit) =>
+        this.designations.create(
+          {
+            tenantId: actor.tenantId,
+            kind: input.kind,
+            userId,
+            reason,
+            validUntil,
+            designatedBy: actor.userId, // never client-supplied
+          },
+          audit,
+        ),
+      (created) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "GovernanceDesignation",
+          entityId: created.id,
+          action: "CREATE",
+          oldValue: null,
+          newValue: { kind: created.kind, userId: created.userId, validUntil: created.validUntil },
+          reason,
+          requestId,
+        },
+      ],
+    );
   }
 
   /** Ends the designation (soft). An activated interim keeps the role: removing it is the ordinary role revoke. */
@@ -91,19 +102,29 @@ export class GovernanceDesignationService {
     if (reason.length > MAX_REASON_LENGTH) throw new ValidationError(`reason must be at most ${MAX_REASON_LENGTH} characters`);
     const before = await this.designations.getById(actor.tenantId, canonicalId(id));
     if (!before) throw new NotFoundError("GovernanceDesignation", id);
-    const ended = await this.designations.end(actor.tenantId, before.id, actor.userId, reason);
+    // DECISION-079: the end and its audit row in one transaction (already ended -> null, nothing written).
+    const ended = await writeAudited<GovernanceDesignation | null>(
+      this.designations.auditsInTransaction,
+      this.audit,
+      (audit) => this.designations.end(actor.tenantId, before.id, actor.userId, reason, audit),
+      (e) =>
+        e
+          ? [
+              {
+                tenantId: actor.tenantId,
+                userId: actor.userId,
+                entityType: "GovernanceDesignation",
+                entityId: e.id,
+                action: "UPDATE",
+                oldValue: { kind: before.kind, userId: before.userId, activatedAt: before.activatedAt, endedAt: null },
+                newValue: { endedAt: e.endedAt },
+                reason,
+                requestId,
+              },
+            ]
+          : [],
+    );
     if (!ended) throw new ConflictError("This designation is already ended", id);
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "GovernanceDesignation",
-      entityId: ended.id,
-      action: "UPDATE",
-      oldValue: { kind: before.kind, userId: before.userId, activatedAt: before.activatedAt, endedAt: null },
-      newValue: { endedAt: ended.endedAt },
-      reason,
-      requestId,
-    });
     return ended;
   }
 }

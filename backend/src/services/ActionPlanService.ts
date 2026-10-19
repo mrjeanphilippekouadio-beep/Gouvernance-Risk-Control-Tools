@@ -27,6 +27,7 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 import type { NotificationService } from "./NotificationService.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import { writeAudited } from "./auditedWrite.js";
 import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 const SOURCE_TYPES: readonly ActionPlanSourceType[] = ACTION_PLAN_SOURCE_TYPES;
@@ -471,20 +472,26 @@ export class ActionPlanService {
       if (!evidence || evidence.status === "DELETED") throw new ValidationError(`Evidence ${evidenceId} does not exist in this tenant`);
     }
 
-    const after = await this.actions.close(actor.tenantId, id, actor.userId, evidenceId, comment?.trim() || null);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "ActionPlan",
-      entityId: id,
-      action: "CLOSE",
-      oldValue: before,
-      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
-      reason: comment ?? null,
-      requestId,
-      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
-    });
+    // DECISION-079: closure + audit row (marked or not) in one transaction.
+    const after = await writeAudited<ActionPlan>(
+      this.actions.auditsInTransaction,
+      this.audit,
+      (audit) => this.actions.close(actor.tenantId, id, actor.userId, evidenceId, comment?.trim() || null, audit),
+      (closed) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "ActionPlan",
+          entityId: id,
+          action: "CLOSE",
+          oldValue: before,
+          newValue: selfValidated ? { ...closed, ...selfValidated.newValueExtra } : closed,
+          reason: comment ?? null,
+          requestId,
+          ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
+        },
+      ],
+    );
 
     return this.toView(after);
   }

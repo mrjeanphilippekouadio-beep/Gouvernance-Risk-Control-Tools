@@ -15,6 +15,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import { writeAudited } from "./auditedWrite.js";
 import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 const RELATED_OBJECT_TYPES: readonly FindingRelatedObjectType[] = FINDING_RELATED_OBJECT_TYPES;
@@ -190,22 +191,26 @@ export class FindingService {
       confirmation,
     });
 
-    const after = await this.findings.close(actor.tenantId, id, actor.userId, comment.trim());
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Finding",
-      entityId: id,
-      action: "CLOSE",
-      oldValue: before,
-      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
-      reason: comment,
-      requestId,
-      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
-    });
-
-    return after;
+    // DECISION-079: closure + audit row (marked or not) in one transaction.
+    return writeAudited(
+      this.findings.auditsInTransaction,
+      this.audit,
+      (audit) => this.findings.close(actor.tenantId, id, actor.userId, comment.trim(), audit),
+      (after) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Finding",
+          entityId: id,
+          action: "CLOSE",
+          oldValue: before,
+          newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
+          reason: comment,
+          requestId,
+          ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
+        },
+      ],
+    );
   }
 
   private async getRaw(actor: AuthenticatedUser, id: string): Promise<Finding> {
