@@ -33,6 +33,12 @@ export class ApiError extends Error {
   }
 }
 
+/** Second confirmation resent with the same request after a 409 (backend GovernanceConfirmationBody). */
+export interface GovernanceConfirmation { rule: "noSelfValidation"; reason: string }
+
+/** q142, display only: set by the server on validated objects. */
+export type ValidationIndependence = "INDEPENDENT" | "WITHOUT_INDEPENDENT_REVIEW" | "REVIEWED_BY_THIRD_PARTY";
+
 export const GOVERNANCE_CONFIRMATION_REQUIRED = "GOVERNANCE_CONFIRMATION_REQUIRED";
 
 /** True for the 409 that asks the caller to resend with a governanceConfirmation (dialog: lot F2). */

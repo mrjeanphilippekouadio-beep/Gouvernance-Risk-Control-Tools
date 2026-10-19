@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, Card, DatePicker, FormField, Grid, GridItem, MessageBanner, Modal, StatusBadge, Table, Tabs, type TableColumn } from "@djamo/design-system";
+import { useGovernanceConfirm, WithoutReviewBadge } from "../../design-system";
 import { ApiError } from "../../api/client";
 import { controlsApi, type Control } from "../../api/controls";
 import { executionsApi, effectivenessApi, type ControlExecution, type EffectivenessAssessment, type ExecutionStatus, type EffectivenessRating, type EffectivenessResult } from "../../api/controlMonitoring";
@@ -15,6 +16,7 @@ interface Props { token: string; }
 interface PendingValidation { kind: Mode; id: string; label: string; }
 
 export function ControlMonitoringPage({ token }: Props) {
+  const gov = useGovernanceConfirm();
   const [mode, setMode] = useState<Mode>("executions");
   const [controls, setControls] = useState<Control[]>([]);
   const [controlId, setControlId] = useState("");
@@ -74,7 +76,7 @@ export function ControlMonitoringPage({ token }: Props) {
     { key: "status", header: "Statut", render: (row) => <StatusBadge label={executionLabels[row.status]} tone={row.status === "DONE" ? "success" : row.status === "NOT_DONE" ? "danger" : "warning"} /> },
     { key: "result", header: "Résultat / anomalies", render: (row) => row.result || row.observedAnomalies || row.justificationIfNotDone || "—" },
     { key: "actor", header: "Exécutant", render: (row) => row.executedBy },
-    { key: "validation", header: "Validation", render: (row) => row.validatedAt ? <StatusBadge label={`Validée le ${dateLabel(row.validatedAt)}`} tone="success" /> : <StatusBadge label="En attente" tone="warning" /> },
+    { key: "validation", header: "Validation", render: (row) => row.validatedAt ? <div className="workflow-cell-stack"><StatusBadge label={`Validée le ${dateLabel(row.validatedAt)}`} tone="success" /><WithoutReviewBadge value={row.validationIndependence} /></div> : <StatusBadge label="En attente" tone="warning" /> },
     { key: "actions", header: "Action", render: (row) => !row.validatedAt ? <Button disabled={busyId === row.id} onClick={() => { setValidationComment(""); setPendingValidation({ kind: "executions", id: row.id, label: "cette exécution" }); }}>{busyId === row.id ? "Validation…" : "Valider"}</Button> : "—" },
   ], [busyId]);
   const assessmentColumns = useMemo<TableColumn<EffectivenessAssessment>[]>(() => [
@@ -83,7 +85,7 @@ export function ControlMonitoringPage({ token }: Props) {
     { key: "rating", header: "Efficacité", render: (row) => <StatusBadge label={ratingLabels[row.operationalEffectiveness]} tone={row.operationalEffectiveness === "EFFECTIVE" ? "success" : row.operationalEffectiveness === "INEFFECTIVE" ? "danger" : "warning"} /> },
     { key: "result", header: "Résultat", render: (row) => row.result ? resultLabels[row.result] : "—" },
     { key: "actor", header: "Évaluateur", render: (row) => row.evaluatedBy },
-    { key: "status", header: "Statut", render: (row) => row.validatedAt ? <StatusBadge label="Validée" tone="success" /> : <StatusBadge label={row.status === "PROVISIONAL" ? "Provisoire" : "En attente de validation"} tone="warning" /> },
+    { key: "status", header: "Statut", render: (row) => row.validatedAt ? <div className="workflow-cell-stack"><StatusBadge label="Validée" tone="success" /><WithoutReviewBadge value={row.validationIndependence} /></div> : <StatusBadge label={row.status === "PROVISIONAL" ? "Provisoire" : "En attente de validation"} tone="warning" /> },
     { key: "actions", header: "Action", render: (row) => !row.validatedAt ? <Button disabled={busyId === row.id} onClick={() => { setValidationComment(""); setPendingValidation({ kind: "effectiveness", id: row.id, label: "cette évaluation" }); }}>{busyId === row.id ? "Validation…" : "Valider"}</Button> : "—" },
   ], [busyId]);
 
@@ -115,14 +117,15 @@ export function ControlMonitoringPage({ token }: Props) {
     if (!pendingValidation) return;
     setBusyId(pendingValidation.id); setError(null); setNotice(null);
     try {
-      if (pendingValidation.kind === "executions") await executionsApi.validate(token, pendingValidation.id, validationComment.trim());
-      else await effectivenessApi.validate(token, pendingValidation.id, validationComment.trim());
+      if (pendingValidation.kind === "executions") await gov.run((c) => executionsApi.validate(token, pendingValidation.id, validationComment.trim(), c));
+      else await gov.run((c) => effectivenessApi.validate(token, pendingValidation.id, validationComment.trim(), c));
       setNotice("Validation enregistrée."); setPendingValidation(null); await loadRecords();
     } catch (err) { setError(errorMessage(err)); }
     finally { setBusyId(""); }
   }
 
   return <section className="workflow-page">
+    {gov.dialog}
     <header className="workflow-heading">
       <p className="workflow-eyebrow">CONTRÔLE INTERNE · SUIVI</p>
       <h1>Exécutions & efficacité</h1>
