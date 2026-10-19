@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, Card, DatePicker, FileUpload, FormField, Grid, GridItem, MessageBanner, Modal, ProgressBar, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
+import { useGovernanceConfirm, WithoutReviewBadge } from "../../design-system";
 import { ApiError } from "../../api/client";
 import { actionPlansApi, type ActionPlan, type ActionPlanSourceType, type ActionPlanStatus } from "../../api/actionPlans";
 import { evidenceApi } from "../../api/evidence";
@@ -23,6 +24,7 @@ interface Props { token: string; }
 interface ProgressTarget { action: ActionPlan; }
 
 export function ActionPlansPage({ token }: Props) {
+  const gov = useGovernanceConfirm();
   const [actions, setActions] = useState<ActionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -140,7 +142,7 @@ export function ActionPlansPage({ token }: Props) {
     if (!closeTarget || !evidenceId.trim()) return;
     setBusyId(closeTarget.id); setError(null); setNotice(null);
     try {
-      await actionPlansApi.close(token, closeTarget.id, evidenceId.trim(), closureComment.trim());
+      await gov.run((c) => actionPlansApi.close(token, closeTarget.id, evidenceId.trim(), closureComment.trim(), c));
       setNotice("Clôture enregistrée avec sa preuve. Le contrôle maker-checker est appliqué par le serveur.");
       setCloseTarget(null); setClosureFile(null); setEvidenceId(""); setClosureComment("");
       await refresh();
@@ -150,7 +152,7 @@ export function ActionPlansPage({ token }: Props) {
 
   const columns = useMemo<TableColumn<ActionPlan>[]>(() => [
     { key: "title", header: "Plan d'action", render: (action) => <div className="action-plan-cell"><strong>{action.title}</strong>{action.description && <span>{action.description}</span>}<small>Source : {sourceLabels[action.sourceType]}{action.sourceId ? ` · ${action.sourceId}` : ""}</small></div> },
-    { key: "status", header: "Statut", render: (action) => <StatusBadge label={statusLabels[action.computedStatus]} tone={statusTone[action.computedStatus]} /> },
+    { key: "status", header: "Statut", render: (action) => <div className="action-plan-cell"><StatusBadge label={statusLabels[action.computedStatus]} tone={statusTone[action.computedStatus]} /><WithoutReviewBadge value={action.validationIndependence} /></div> },
     { key: "owner", header: "Responsable", render: (action) => <div className="action-plan-cell"><strong>{action.responsibleUserId}</strong>{action.departmentId && <small>Département : {action.departmentId}</small>}</div> },
     { key: "due", header: "Échéance", render: (action) => dateLabel(action.dueDate) },
     { key: "progress", header: "Avancement", render: (action) => <div className="action-plan-progress"><ProgressBar value={action.progressPercent} label={`Avancement de ${action.title}`} /><small>{action.progressComment || "Aucun commentaire récent"}</small></div> },
@@ -164,6 +166,7 @@ export function ActionPlansPage({ token }: Props) {
   ], [busyId]);
 
   return <section className="action-plans-page">
+    {gov.dialog}
     <header className="action-plans-heading">
       <p className="action-plans-eyebrow">GOUVERNANCE · REMÉDIATION</p>
       <h1>Plans d'action</h1>

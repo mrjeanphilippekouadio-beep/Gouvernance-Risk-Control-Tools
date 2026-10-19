@@ -112,3 +112,9 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - L'écriture d'appétence avait déjà été retirée de `AppetitePage` (lecture seule) ; les grilles restent éditables en brouillon, le serveur fige celles rattachées (trigger) : pas d'information « grille rattachée » dans l'API grille côté front.
 - Toujours pas d'endpoint « mes permissions » : aucune action masquée/désactivée par droit, le 403 ouvre `PermissionDeniedDialog`.
 - `AdminPage.tsx` (code mort) supprimé.
+
+## 2026-10-19 — Lot F2 (double confirmation + libellé q142, DECISION-074/078)
+- `frontend/src/design-system/GovernanceConfirm.tsx` : hook `useGovernanceConfirm()` -> `{run, dialog}`. `run((c) => api.x(..., c))` envoie la requête SANS confirmation ; seul un 409 `isGovernanceConfirmationRequired` ouvre le dialogue (Modal md + MessageBanner + motif), qui renvoie la MÊME requête avec `{rule:"noSelfValidation", reason}`. 400 (motif refusé) reste affiché dans le dialogue ; autre erreur/403 renvoyée à l'écran ; Annuler rejette. `WithoutReviewBadge` (StatusBadge warning) affiche « Appliqué sans validation indépendante » si `validationIndependence === "WITHOUT_INDEPENDENT_REVIEW"`.
+- Câblé : exécution, efficacité (ControlMonitoringPage), validation d'évaluation (EvaluationPage), clôture plan d'action, clôture constat. Badge aussi sur la décision de traitement.
+- Non câblé : clôture de cycle de revue et validation de demande de mode d'évaluation (pas d'écran ni de client API) ; Comité (évaluation et traitement) sans double confirmation (q159) : clients inchangés.
+- QA navigateur : Playwright, API mockée (409, dialogue, 400 motif, renvoi, badge) OK, aucune erreur console. Piège harnais : pas de variable shell dans sed/cd composés.
