@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { reasonText } from "../validation.js";
 import type { UserService } from "../../services/UserService.js";
 
 const CreateUserBody = z.object({
@@ -7,7 +8,7 @@ const CreateUserBody = z.object({
   displayName: z.string().min(1),
   roleId: z.string().min(1),
   departmentId: z.string().nullish(),
-  reason: z.string().trim().min(1).max(500).optional(),
+  reason: reasonText().optional(),
 });
 
 const PaginationQuery = z.object({

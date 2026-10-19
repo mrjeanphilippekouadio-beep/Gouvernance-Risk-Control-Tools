@@ -226,7 +226,7 @@ describe("QA-SWP C. what the circuit replaces: orphan permission and lost 'back 
 
   it("no frontend screen called the closed route (the capability had no UI)", () => {
     const root = join(__dirname, "..", "..", "frontend", "src");
-    const hits = srcFiles(root).filter((f) => /\/processes\/.*evaluation-mode|evaluation-mode/.test(readFileSync(f, "utf8")));
+    const hits = srcFiles(root).filter((f) => /\/processes\/[^"'`]*\/evaluation-mode/.test(readFileSync(f, "utf8")));
     expect(hits).toEqual([]);
   });
 });

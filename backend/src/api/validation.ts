@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 
 /**
  * Array schema for HTTP input, with the length checked BEFORE the elements
@@ -10,6 +11,25 @@ import { z } from "zod";
 export function boundedArray<T extends z.ZodType>(element: T, max: number, min = 0) {
   return z.array(z.unknown()).min(min).max(max).pipe(z.array(element));
 }
+
+const REASON_MSG = "Motif invalide : caractères de contrôle ou aucun caractère visible";
+
+/**
+ * SEC-PNL-01 / F-PNL-11 / F-PNL2-06 / F-PNL3-02: a reason or comment: trimmed, 1..max, no control character (NUL, C1, lone
+ * surrogate...) except \n \r \t (textareas), at least one visible character.
+ */
+export function reasonText(max = 500) {
+  return z.string().trim().min(1).max(max).refine(isAcceptableReason, REASON_MSG);
+}
+
+/** An optional free-text comment: same rules as `reasonText(2000)`, but null/undefined/"" stay accepted. */
+export const optionalComment = z.string().trim().max(2000).refine((v) => v === "" || isAcceptableReason(v), REASON_MSG).nullish();
+
+/** DECISION-074: the explicit second confirmation of a self-validation (`governanceConfirmation` in the request body). */
+export const GovernanceConfirmationBody = z.object({
+  rule: z.literal("noSelfValidation"),
+  reason: reasonText(),
+});
 
 /** Shared by the scale's `defenseLines` and the mastery assessment's `lines` (one entry per defense line). */
 export const MAX_DEFENSE_LINES = 50;

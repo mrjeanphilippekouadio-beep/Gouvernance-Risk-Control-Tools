@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, type GovernanceConfirmation, type ValidationIndependence } from "./client";
 
 export type ExecutionStatus = "DONE" | "NOT_DONE" | "NOT_APPLICABLE";
 export interface ControlExecution {
@@ -11,6 +11,7 @@ export interface ControlExecution {
   observedAnomalies: string | null;
   justificationIfNotDone: string | null;
   status: ExecutionStatus;
+  validationIndependence?: ValidationIndependence;
   validatedBy: string | null;
   validatedAt: string | null;
   createdAt: string;
@@ -29,8 +30,8 @@ export const executionsApi = {
     apiRequest<ControlExecution[]>(`/api/v1/executions?controlId=${encodeURIComponent(controlId)}`, { token }),
   create: (token: string, input: CreateExecutionInput) =>
     apiRequest<ControlExecution>("/api/v1/executions", { method: "POST", body: input, token }),
-  validate: (token: string, id: string, comment: string) =>
-    apiRequest<ControlExecution>(`/api/v1/executions/${encodeURIComponent(id)}/validate`, { method: "POST", body: { comment: comment || null }, token }),
+  validate: (token: string, id: string, comment: string, governanceConfirmation?: GovernanceConfirmation) =>
+    apiRequest<ControlExecution>(`/api/v1/executions/${encodeURIComponent(id)}/validate`, { method: "POST", body: { comment: comment || null, governanceConfirmation }, token }),
 };
 
 export type EffectivenessRating = "EFFECTIVE" | "PARTIALLY_EFFECTIVE" | "INEFFECTIVE";
@@ -51,6 +52,7 @@ export interface EffectivenessAssessment {
   conclusion: string | null;
   justification: string;
   status: AssessmentStatus;
+  validationIndependence?: ValidationIndependence;
   validatedBy: string | null;
   validatedAt: string | null;
   createdAt: string;
@@ -73,6 +75,6 @@ export const effectivenessApi = {
     apiRequest<EffectivenessAssessment[]>(`/api/v1/effectiveness?controlId=${encodeURIComponent(controlId)}`, { token }),
   create: (token: string, input: CreateAssessmentInput) =>
     apiRequest<EffectivenessAssessment>("/api/v1/effectiveness", { method: "POST", body: input, token }),
-  validate: (token: string, id: string, comment: string) =>
-    apiRequest<EffectivenessAssessment>(`/api/v1/effectiveness/${encodeURIComponent(id)}/validate`, { method: "POST", body: { comment: comment || null }, token }),
+  validate: (token: string, id: string, comment: string, governanceConfirmation?: GovernanceConfirmation) =>
+    apiRequest<EffectivenessAssessment>(`/api/v1/effectiveness/${encodeURIComponent(id)}/validate`, { method: "POST", body: { comment: comment || null, governanceConfirmation }, token }),
 };

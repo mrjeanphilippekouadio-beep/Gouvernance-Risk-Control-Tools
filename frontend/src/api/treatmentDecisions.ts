@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, type ValidationIndependence } from "./client";
 
 /**
  * Mirrors backend/src/domain/entities/TreatmentDecision.ts (Lot B) and
@@ -20,6 +20,7 @@ export interface TreatmentDecision {
   /** Snapshot of Risk.superiorOwnerId at proposal time — never re-derived. */
   validatorId: string;
   decidedBy: string;
+  validationIndependence?: ValidationIndependence;
   validatedBy: string | null;
   validatedAt: string | null;
   /** Optional on confirm/committee, mandatory on invalidate. */

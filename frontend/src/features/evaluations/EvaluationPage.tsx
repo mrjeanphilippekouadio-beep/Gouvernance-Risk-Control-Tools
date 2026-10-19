@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, StatusBadge, Timeline, type TimelineItem } from "@djamo/design-system";
+import { useGovernanceConfirm, WithoutReviewBadge } from "../../design-system";
 import { ApiError } from "../../api/client";
 import {
   evaluationsApi, ratingScalesApi,
@@ -44,6 +45,7 @@ const describeError = (error: unknown) =>
     : error instanceof Error ? error.message : "Une erreur inattendue est survenue.";
 
 export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
+  const gov = useGovernanceConfirm();
   const [risks, setRisks] = useState<Risk[]>([]);
   const [scales, setScales] = useState<RatingScale[]>([]);
   const [selectedRiskId, setSelectedRiskId] = useState("");
@@ -312,7 +314,7 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
     if (!selectedEvaluation) return;
     setSaving(true); setError(null); setNotice(null); setHighlightCommittee(false);
     try {
-      const updated = await evaluationsApi.validate(token, selectedEvaluation.id, decisionComment.trim());
+      const updated = await gov.run((c) => evaluationsApi.validate(token, selectedEvaluation.id, decisionComment.trim(), c));
       await refreshHistory(updated.id);
       setNotice("Évaluation validée.");
     } catch (err) {
@@ -381,6 +383,7 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
 
   return (
     <section className="eval-page">
+      {gov.dialog}
       <div className="eval-pagehead">
         <div><p className="eval-eyebrow">GOUVERNANCE · RISQUES</p><h1>Évaluation des risques</h1>
           <p className="eval-subtitle">Coter le risque, documenter la maîtrise et suivre le risque résiduel.</p></div>
@@ -508,7 +511,7 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
         <Card className="eval-treatment-card" header={
           <div className="eval-card-heading">
             <div><h2>Décision de traitement</h2><p>Déclenchée par le dépassement du seuil d'appétence sur cette évaluation (§8) — Accepter / Surveiller / Réduire / Transférer / Éviter.</p></div>
-            {activeTreatmentDecision && <StatusBadge label={TREATMENT_STATUS[activeTreatmentDecision.status].label} tone={TREATMENT_STATUS[activeTreatmentDecision.status].tone} />}
+            {activeTreatmentDecision && <><StatusBadge label={TREATMENT_STATUS[activeTreatmentDecision.status].label} tone={TREATMENT_STATUS[activeTreatmentDecision.status].tone} /><WithoutReviewBadge value={activeTreatmentDecision.validationIndependence} /></>}
           </div>
         }>
           {treatmentError && <MessageBanner tone="danger">{treatmentError}</MessageBanner>}
@@ -578,7 +581,7 @@ export function EvaluationPage({ token, initialRiskId }: EvaluationPageProps) {
         </Card>
       )}
 
-      {selectedEvaluation && <Card className="eval-scoring-card" header={<div className="eval-card-heading"><div><h2>Compléter l'évaluation</h2><p>{selectedEvaluation.subCategory} · {TYPE_LABEL[selectedEvaluation.evaluationType]}</p></div><StatusBadge label={STATUS[selectedEvaluation.status].label} tone={STATUS[selectedEvaluation.status].tone} /></div>}>
+      {selectedEvaluation && <Card className="eval-scoring-card" header={<div className="eval-card-heading"><div><h2>Compléter l'évaluation</h2><p>{selectedEvaluation.subCategory} · {TYPE_LABEL[selectedEvaluation.evaluationType]}</p></div><StatusBadge label={STATUS[selectedEvaluation.status].label} tone={STATUS[selectedEvaluation.status].tone} /><WithoutReviewBadge value={selectedEvaluation.validationIndependence} /></div>}>
         {!isDraft ? <div className="eval-finalized"><strong>Cette évaluation est finalisée.</strong><span>Conformément au cycle de vie métier, une nouvelle cotation doit être créée pour modifier le score.</span>
             {selectedEvaluation.comment && <span>Commentaire de décision : {selectedEvaluation.comment}</span>}
           </div>

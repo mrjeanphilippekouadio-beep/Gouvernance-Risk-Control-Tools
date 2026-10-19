@@ -5,9 +5,12 @@ import type {
   ControlEffectivenessAssessment,
   CreateEffectivenessAssessmentInput,
 } from "../domain/entities/ControlEffectivenessAssessment.js";
-import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import { writeAudited } from "./auditedWrite.js";
+import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 /**
  * Rules ported from apps-script-legacy/13_Efficacite.gs: append-only,
@@ -22,6 +25,8 @@ export class ControlEffectivenessService {
     private readonly assessments: ControlEffectivenessRepository,
     private readonly controls: ControlRepository,
     private readonly audit: AuditRepository,
+    /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   async create(
@@ -76,31 +81,42 @@ export class ControlEffectivenessService {
     id: string,
     comment: string | null,
     requestId: string,
+    confirmation?: GovernanceConfirmation,
   ): Promise<ControlEffectivenessAssessment> {
     requirePermission(actor, "effectiveness.validate");
     const before = await this.get(actor, id);
 
-    if (before.evaluatedBy === actor.userId) {
-      throw new ForbiddenError("An evaluator cannot validate their own assessment");
-    }
     if (before.validatedAt) {
       throw new ValidationError("This assessment has already been validated");
     }
 
-    const after = await this.assessments.recordValidation(actor.tenantId, id, actor.userId, comment);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "ControlEffectivenessAssessment",
-      entityId: id,
-      action: "VALIDATE",
-      oldValue: before,
-      newValue: after,
-      reason: comment,
-      requestId,
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: before.evaluatedBy === actor.userId,
+      permission: "effectiveness.validate",
+      makerIds: [before.evaluatedBy],
+      refusal: "An evaluator cannot validate their own assessment",
+      confirmation,
     });
 
-    return after;
+    // DECISION-079: validation + audit row (marked or not) in one transaction.
+    return writeAudited(
+      this.assessments.auditsInTransaction,
+      this.audit,
+      (audit) => this.assessments.recordValidation(actor.tenantId, id, actor.userId, comment, audit),
+      (after) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "ControlEffectivenessAssessment",
+          entityId: id,
+          action: "VALIDATE",
+          oldValue: before,
+          newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
+          reason: comment,
+          requestId,
+          ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
+        },
+      ],
+    );
   }
 }

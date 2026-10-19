@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Card, FormField, MessageBanner, StatusBadge, type StatusTone } from "@djamo/design-system";
+import { Button, Card, FormField, MessageBanner, StatusBadge, type StatusTone } from "@djamo/design-system";
 import { ApiError } from "../../api/client";
 import { risksApi, type Risk } from "../../api/risks";
 import { cartographyApi, type CartographyScale } from "../../api/cartography";
 import { evaluationsApi, type RiskEvaluation, type EvaluationStatus } from "../../api/evaluations";
 import "./CartographyPage.css";
 
-interface CartographyPageProps { token: string; }
+interface CartographyPageProps { token: string; /** S4: navigation shortcut to Administration > Appétence (read-only link, no write). */ onOpenAppetite?: () => void; }
 
 interface RiskPoint {
   risk: Risk;
@@ -38,7 +38,7 @@ function statusTone(status: EvaluationStatus) {
   return STATUS[status];
 }
 
-export function CartographyPage({ token }: CartographyPageProps) {
+export function CartographyPage({ token, onOpenAppetite }: CartographyPageProps) {
   const [risks, setRisks] = useState<Risk[]>([]);
   const [points, setPoints] = useState<RiskPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,6 +187,8 @@ export function CartographyPage({ token }: CartographyPageProps) {
       {scaleLoaded && !scaleError && !scale && (
         <MessageBanner tone="info">Aucune échelle de cotation active : la cartographie s'affichera une fois une échelle activée.</MessageBanner>
       )}
+
+      {scale && onOpenAppetite && <div><Button size="sm" variant="secondary" onClick={onOpenAppetite}>Voir l'appétence</Button></div>}
 
       {scale && <div className="cart-heatmaps">
         <HeatmapCard scale={scale} title="1 — Risque inhérent" subtitle="Avant l'effet des contrôles." points={filtered.map((p) => ({ id: p.evaluation.id, x: p.inherentImpact, y: p.inherentProbability, label: p.evaluation.id, status: p.evaluation.status }))} />

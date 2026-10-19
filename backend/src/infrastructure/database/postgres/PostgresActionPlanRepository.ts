@@ -9,7 +9,9 @@ import type {
   ActionPlanStatus,
   CreateActionPlanInput,
 } from "../../../domain/entities/ActionPlan.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
+import { runAudited } from "./PostgresAuditRepository.js";
 
 interface ActionPlanRow {
   id: string;
@@ -66,6 +68,9 @@ async function listLinksFor(client: Pool | PoolClient, tenantId: string, actionI
 }
 
 export class PostgresActionPlanRepository implements ActionPlanRepository {
+  /** DECISION-079: `close` inserts its audit events with the transaction client. */
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
 
   async getById(tenantId: string, id: string): Promise<ActionPlan | null> {
@@ -165,23 +170,36 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
     return toDomain(row);
   }
 
-  async close(tenantId: string, id: string, closedBy: string, evidenceId: string, comment: string | null): Promise<ActionPlan> {
-    const { rows } = await this.pool.query<ActionPlanRow>(
-      `UPDATE action_plans
-       SET status = 'TERMINEE',
-           progress_percent = 100,
-           evidence_id = $3,
-           closed_by = $4,
-           closed_at = now(),
-           closure_comment = $5,
-           updated_at = now()
-       WHERE tenant_id = $1 AND id = $2 AND status <> 'TERMINEE'
-       RETURNING *`,
-      [tenantId, id, evidenceId, closedBy, comment],
+  async close(
+    tenantId: string,
+    id: string,
+    closedBy: string,
+    evidenceId: string,
+    comment: string | null,
+    audit?: TransactionalAudit<ActionPlan>,
+  ): Promise<ActionPlan> {
+    return runAudited(
+      this.pool,
+      async (db) => {
+        const { rows } = await db.query<ActionPlanRow>(
+          `UPDATE action_plans
+           SET status = 'TERMINEE',
+               progress_percent = 100,
+               evidence_id = $3,
+               closed_by = $4,
+               closed_at = now(),
+               closure_comment = $5,
+               updated_at = now()
+           WHERE tenant_id = $1 AND id = $2 AND status <> 'TERMINEE'
+           RETURNING *`,
+          [tenantId, id, evidenceId, closedBy, comment],
+        );
+        const row = rows[0];
+        if (!row) throw new NotFoundError("ActionPlan", id);
+        return toDomain(row);
+      },
+      audit,
     );
-    const row = rows[0];
-    if (!row) throw new NotFoundError("ActionPlan", id);
-    return toDomain(row);
   }
 
   async listLinks(tenantId: string, actionId: string): Promise<ActionLink[]> {

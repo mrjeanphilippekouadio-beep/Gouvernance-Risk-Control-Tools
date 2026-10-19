@@ -37,6 +37,8 @@ export type Permission =
   | "process.create"
   | "process.update"
   | "process.delete"
+  /** D2b (DECISION-074): owner / risk champion / N-1 of a process. Opens rights, so never behind process.update. */
+  | "process.responsibility.assign"
   /**
    * DECISION-006 governance finding (2026-09-29 architect review, not yet
    * committed): Process.evaluationMode (Classique/Participatif) must never
@@ -144,6 +146,24 @@ export type Permission =
   | "config.committeeenforcement.set"
   /** DECISION-042 q58: allow/forbid the Committee + Audit cumul (sensitive tenant setting, application administrator). */
   | "config.cumul.set"
+  /** DECISION-074 R-0: client's choice for noSelfValidation (REFUSE / DOUBLE_CONFIRMATION) — relaxes a control, administrator only. */
+  | "config.selfvalidation.set"
+  /** q158 (DECISION-078): second confirmation of a relaxed self-validation policy (Risk Manager, Committee; never Audit). */
+  | "config.selfvalidation.approve"
+  /** DECISION-074: governance health panel; distinct prefix from governance.* (review cycles). */
+  | "governancehealth.read"
+  /** DECISION-074/075 (D2c): designate / end the designated manager and the Risk Manager interim (opens Risk Manager rights; administrator only). */
+  | "designation.manage"
+  /** DECISION-074 R-2 (lot D3): organization profile questionnaire. approve = the second confirmation of a size reduction. */
+  | "orgprofile.read"
+  | "orgprofile.submit"
+  | "orgprofile.approve"
+  /** D5 (R-7): review / contest an action applied without a second validation (add-only; RM, Committee, Audit, never the author). */
+  | "governanceexception.review"
+  /** D5 (q138): accept a non-respected principle for a limited time; confirm = second confirmation; revoke = early end (terminal, own gate). */
+  | "governanceprinciple.accept"
+  | "governanceprinciple.acceptance.confirm"
+  | "governanceprinciple.acceptance.revoke"
   | "notification.read"
   | "governance.read"
   | "governance.create"
@@ -244,6 +264,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "process.create",
   "process.update",
   "process.delete",
+  "process.responsibility.assign",
   "process.evaluationmode.set",
   "process.evaluationmode.propose",
   "evaluationmode.validate",
@@ -297,6 +318,17 @@ export const ALL_PERMISSIONS: Permission[] = [
   "config.committeethreshold.set",
   "config.committeeenforcement.set",
   "config.cumul.set",
+  "config.selfvalidation.set",
+  "config.selfvalidation.approve",
+  "governancehealth.read",
+  "designation.manage",
+  "orgprofile.read",
+  "orgprofile.submit",
+  "orgprofile.approve",
+  "governanceexception.review",
+  "governanceprinciple.accept",
+  "governanceprinciple.acceptance.confirm",
+  "governanceprinciple.acceptance.revoke",
   "notification.read",
   "governance.read",
   "governance.create",

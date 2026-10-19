@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { ValidationError } from "../../domain/errors/DomainErrors.js";
 import { z } from "zod";
+import { reasonText } from "../validation.js";
 import type { RiskService } from "../../services/RiskService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
 import type { RiskDeviceViewService } from "../../services/RiskDeviceViewService.js";
@@ -21,7 +22,7 @@ const UpdateRiskBody = z.object({
 });
 
 const ArchiveRiskBody = z.object({
-  reason: z.string().min(1),
+  reason: reasonText(2000),
 });
 
 const AssignOwnerBody = z.object({
@@ -33,7 +34,7 @@ const AssignSuperiorOwnerBody = z.object({
 });
 
 const EscalateRiskBody = z.object({
-  reason: z.string().min(1),
+  reason: reasonText(2000),
 });
 
 /**

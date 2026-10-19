@@ -7,7 +7,11 @@ import type {
   RiskEvaluation,
 } from "../entities/RiskEvaluation.js";
 
+import type { TransactionalAudit } from "../entities/RiskFramework.js";
+
 export interface RiskEvaluationRepository {
+  /** DECISION-079: true when `recordValidation` inserts the events given by `audit` in the SAME transaction. Absent = the service records the audit after (test fakes). */
+  readonly auditsInTransaction?: boolean;
   getById(tenantId: string, id: string): Promise<RiskEvaluation | null>;
   /** ACT-159: full history for a risk, most recent first, paginated, optional status filter. */
   listForRisk(tenantId: string, riskId: string, options?: ListRiskEvaluationsOptions): Promise<RiskEvaluation[]>;
@@ -21,7 +25,7 @@ export interface RiskEvaluationRepository {
   recordResidualScoring(tenantId: string, id: string, input: RecordResidualScoringInput): Promise<RiskEvaluation>;
 
   /** ACT-156: terminal, maker-checker validation. */
-  recordValidation(tenantId: string, id: string, validatedBy: string, comment: string | null): Promise<RiskEvaluation>;
+  recordValidation(tenantId: string, id: string, validatedBy: string, comment: string | null, audit?: TransactionalAudit<RiskEvaluation>): Promise<RiskEvaluation>;
   /** ACT-157: terminal, mandatory comment. */
   recordRejection(tenantId: string, id: string, validatedBy: string, comment: string): Promise<RiskEvaluation>;
   /** ACT-253: terminal, distinct from recordValidation — Comité des Risques / Direction validation for Majeur/Critique residual scores. */

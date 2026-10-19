@@ -11,9 +11,12 @@ import {
   type FindingListFilters,
   type FindingRelatedObjectType,
 } from "../domain/entities/Finding.js";
-import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import { writeAudited } from "./auditedWrite.js";
+import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 const RELATED_OBJECT_TYPES: readonly FindingRelatedObjectType[] = FINDING_RELATED_OBJECT_TYPES;
 /** Same asymmetry as ActionPlan's ENTITY_BACKED_SOURCE_TYPES: INCIDENT has no backing table in this codebase yet, so it's accepted but never existence-checked. */
@@ -60,6 +63,8 @@ export class FindingService {
     private readonly risks?: RiskRepository,
     private readonly controls?: ControlRepository,
     private readonly anomalies?: AnomalyRepository,
+    /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   async create(actor: AuthenticatedUser, input: CreateFindingRequest, requestId: string): Promise<Finding> {
@@ -166,7 +171,7 @@ export class FindingService {
    * RiskEvaluationService's evaluator != validator and
    * ActionPlanService.close's createdBy != closer checks).
    */
-  async close(actor: AuthenticatedUser, id: string, comment: string, requestId: string): Promise<Finding> {
+  async close(actor: AuthenticatedUser, id: string, comment: string, requestId: string, confirmation?: GovernanceConfirmation): Promise<Finding> {
     requirePermission(actor, "audit.finding.close");
     const before = await this.getRaw(actor, id);
 
@@ -178,25 +183,34 @@ export class FindingService {
     if (!comment?.trim()) {
       throw new ValidationError("Closing a Finding requires a closure comment");
     }
-    if (before.raisedBy === actor.userId) {
-      throw new ForbiddenError("The auditor who raised this Finding cannot close it themselves — ask another auditor to close it");
-    }
-
-    const after = await this.findings.close(actor.tenantId, id, actor.userId, comment.trim());
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Finding",
-      entityId: id,
-      action: "CLOSE",
-      oldValue: before,
-      newValue: after,
-      reason: comment,
-      requestId,
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: before.raisedBy === actor.userId,
+      permission: "audit.finding.close",
+      makerIds: [before.raisedBy],
+      refusal: "The auditor who raised this Finding cannot close it themselves — ask another auditor to close it",
+      confirmation,
     });
 
-    return after;
+    // DECISION-079: closure + audit row (marked or not) in one transaction.
+    return writeAudited(
+      this.findings.auditsInTransaction,
+      this.audit,
+      (audit) => this.findings.close(actor.tenantId, id, actor.userId, comment.trim(), audit),
+      (after) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Finding",
+          entityId: id,
+          action: "CLOSE",
+          oldValue: before,
+          newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
+          reason: comment,
+          requestId,
+          ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
+        },
+      ],
+    );
   }
 
   private async getRaw(actor: AuthenticatedUser, id: string): Promise<Finding> {

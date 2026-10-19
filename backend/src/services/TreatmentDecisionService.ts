@@ -8,6 +8,7 @@ import { TREATMENT_OPTIONS, type ListTreatmentDecisionsOptions, type TreatmentDe
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { checkSelfValidation, type AcceptedSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
 
 export interface CreateTreatmentDecisionRequest {
   riskEvaluationId: string;
@@ -29,6 +30,8 @@ export class TreatmentDecisionService {
     private readonly audit: AuditRepository,
     /** OD-5: optional only to keep the constructor pattern consistent with RiskEvaluationService — if absent, validateByCommittee always fails closed (no threshold found). server.ts must wire the real repository for Committee validation to ever succeed. */
     private readonly configs?: ConfigRepository,
+    /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   async create(actor: AuthenticatedUser, input: CreateTreatmentDecisionRequest, requestId: string): Promise<TreatmentDecision> {
@@ -149,9 +152,6 @@ export class TreatmentDecisionService {
     // through the committee path either — same maker-checker invariant
     // as G4 on the ordinary path, closed after dev-backend flagged the
     // asymmetry rather than silently deciding either way.
-    if (actor.userId === before.decidedBy) {
-      throw new ForbiddenError("The proposer of a treatment decision cannot validate it through the committee path either");
-    }
 
     const evaluation = await this.evaluations.getById(actor.tenantId, before.riskEvaluationId);
     // B-6b (F-8): the threshold frozen on the parent evaluation (from its Dispositif version). An evaluation
@@ -174,6 +174,11 @@ export class TreatmentDecisionService {
       throw new ValidationError(
         `Committee validation only applies to treatment decisions whose parent evaluation scored at or above the committee threshold (${minScore}) (this evaluation scored ${evaluation.residualScore})`,
       );
+    }
+
+    // q159 (DECISION-078): always collegial, outside the self-validation policy (no DOUBLE_CONFIRMATION).
+    if (actor.userId === before.decidedBy) {
+      throw new ForbiddenError("The proposer of a treatment decision cannot validate it through the committee path either");
     }
 
     const after = await this.treatmentDecisions.recordCommitteeValidation(actor.tenantId, id, actor.userId, comment);
@@ -216,6 +221,7 @@ export class TreatmentDecisionService {
     action: "VALIDATE" | "REJECT",
     reason: string | null,
     requestId: string,
+    selfValidated?: AcceptedSelfValidation | null,
   ): Promise<void> {
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -224,9 +230,10 @@ export class TreatmentDecisionService {
       entityId: id,
       action,
       oldValue: before,
-      newValue: after,
+      newValue: selfValidated ? { ...after, ...selfValidated.newValueExtra } : after,
       reason,
       requestId,
+      ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
     });
   }
 }

@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, type GovernanceConfirmation, type ValidationIndependence } from "./client";
 import type { Control } from "./controls";
 import type { EffectivenessAssessment } from "./controlMonitoring";
 import type { Risk } from "./risks";
@@ -71,6 +71,7 @@ export interface RiskEvaluation {
   appetiteThresholdOverride: number | null;
   appetiteThresholdApplied: number | null;
   appetiteExceeded: boolean | null;
+  validationIndependence?: ValidationIndependence;
   validatedBy: string | null;
   validatedAt: string | null;
   /** Optional on validate, mandatory on reject (ACT-157). */
@@ -128,9 +129,9 @@ export const evaluationsApi = {
   ) => apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/residual`, {
     method: "PATCH", body: { probability, impacts, justification, appetiteOverride }, token,
   }),
-  validate: (token: string, id: string, comment: string) =>
+  validate: (token: string, id: string, comment: string, governanceConfirmation?: GovernanceConfirmation) =>
     apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/validate`, {
-      method: "PATCH", body: { comment: comment || null }, token,
+      method: "PATCH", body: { comment: comment || null, governanceConfirmation }, token,
     }),
   reject: (token: string, id: string, comment: string) =>
     apiRequest<RiskEvaluation>(`/api/v1/risk-evaluations/${encodeURIComponent(id)}/reject`, {

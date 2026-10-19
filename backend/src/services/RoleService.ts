@@ -16,33 +16,30 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { NotificationService } from "./NotificationService.js";
 import {
-  ADMIN_PERMISSIONS,
+  isAdministrator,
+  isAuditGroupMember,
   isAuditGroupPermission,
   isAuditPermission,
+  isCommitteeMember,
+  isCommitteeRole,
+  isCommitteeValidationPermission,
+  isRiskManagerMember,
   rolegroupAuditPermissionAllowedOn,
 } from "../domain/fixedGroupPermissions.js";
 import { bootstrapNoticeMessage } from "../domain/frameworkApproval.js";
 import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
 import type { DashboardScopeMode } from "../domain/entities/DashboardScope.js";
+import type { GovernanceDesignationRepository } from "../domain/repositories/GovernanceDesignationRepository.js";
+import type { AuditEvent } from "../domain/entities/AuditEvent.js";
+import type { GovernanceDesignation } from "../domain/entities/GovernanceDesignation.js";
 import { canonicalId } from "../domain/ids.js";
 
 const MAX_GROUP_REASON_LENGTH = 500;
+/** q149: value of audit_log.governance_exception when the last Risk Manager leaves with no usable interim. */
+export const RISK_MANAGER_VACANCY_EXCEPTION = "riskManager.vacancy";
 
 /** B-8 bis (q43): hard-coded for now (configurable part waits for PO q58). Risk Manager and Audit never cumulate. */
 const FORBIDDEN_CUMUL: Partial<Record<SystemGroup, SystemGroup>> = { RISK_MANAGER: "AUDIT", AUDIT: "RISK_MANAGER" };
-
-const isAdministrator = (roles: Role[]): boolean => roles.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));
-/** F-D044-01: holding one of these counts as Committee membership for the q94 rule (RM + Committee). */
-const COMMITTEE_VALIDATION_PERMISSIONS: Permission[] = [
-  "riskevaluation.validate.committee", "treatmentdecision.validate.committee", "governance.validate",
-];
-const isCommitteeValidationPermission = (p: Permission): boolean => COMMITTEE_VALIDATION_PERMISSIONS.includes(p);
-const isRiskManagerMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "RISK_MANAGER");
-/** Committee membership = the group or its validation powers (F-D044-01), for q94 as for q80/G1. */
-const isCommitteeRole = (r: Role): boolean => r.systemGroup === "RISK_COMMITTEE" || r.permissions.some(isCommitteeValidationPermission);
-const isCommitteeMember = (roles: Role[]): boolean => roles.some(isCommitteeRole);
-/** q104 (DECISION-046): Audit membership = the system group only (extension to audit.* permissions is F-D044-08, with A13). */
-const isAuditGroupMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "AUDIT");
 
 /** F-B8b-03: permissions whose "who can give it back" answer is never served (administration / governance). */
 const NOT_REQUESTABLE = /^(role|rolegroup|user|audit)\./;
@@ -144,6 +141,8 @@ export class RoleService {
     private readonly configs?: Pick<ConfigRepository, "getByTenant">,
     /** B-6d (q77): to tell a member arriving in Audit/Committee about bootstrap decisions; absent = no notice. */
     private readonly frameworks?: Pick<RiskFrameworkRepository, "latestBootstrapRequest">,
+    /** D2c (q137/q149): the designated Risk Manager interim; absent = no interim, the last-member exit needs the confirmation. */
+    private readonly designations?: Pick<GovernanceDesignationRepository, "getActive">,
   ) {}
 
   private readonly grantorsSeen = new Set<string>();
@@ -488,6 +487,8 @@ export class RoleService {
     userId: string,
     requestId: string,
     reason?: string,
+    /** q149: second confirmation to let the Risk Manager group become empty (no usable interim). */
+    confirmEmptyGroup?: boolean,
   ): Promise<void> {
     requirePermission(actor, "role.assign");
     userId = canonicalId(userId);
@@ -497,23 +498,65 @@ export class RoleService {
     const role = await this.get(actor, roleId);
     const cleanReason = this.groupReason(role, reason);
 
-    // B-8: the Risk Manager group is never left empty (Committee and Audit may be).
-    // Checked here for a clear error, and again atomically in the repository.
+    // B-8 / q149: removing the LAST Risk Manager is handed over to the designated interim, or accepted
+    // (reason + second confirmation) and the group stays empty. Otherwise the group is never left empty.
+    // Checked here, and the "not last" case again atomically in the repository.
     const isRiskManagerGroup = role.systemGroup === "RISK_MANAGER";
+    let interim: GovernanceDesignation | null = null;
+    let vacancy = false;
     if (isRiskManagerGroup) {
       // F-B8-05: the count excludes suspended users, so a suspended target is not in it.
-      // Refuse only if no OTHER active member would remain (fail closed without a UserRepository).
+      // F-PNL-02: removing someone who is not in the group is a 404, not a "last member" conflict.
+      const targetRoles = await this.roles.listForUser(actor.tenantId, userId);
+      if (!targetRoles.some((r) => r.id === roleId)) throw new NotFoundError("RoleAssignment", `${roleId}/${userId}`);
       const active = await this.roles.countActiveAssignments(actor.tenantId, roleId);
       const target = this.users ? await this.users.getById(actor.tenantId, userId) : null;
       const targetCounted = !target || !target.deletedAt;
       if ((targetCounted ? active - 1 : active) < 1) {
-        throw new ValidationError("Cannot remove the last member of the Risk Manager group");
+        interim = targetCounted ? await this.usableInterim(actor, userId, role, cleanReason ?? undefined) : null;
+        if (!interim) {
+          if (confirmEmptyGroup !== true) {
+            throw new ValidationError(
+              "Cannot remove the last member of the Risk Manager group without an interim: designate one, " +
+                "or confirm that the group is left empty (confirmEmptyGroup)",
+            );
+          }
+          vacancy = true;
+        }
       }
     }
 
     const remaining = await this.roles.listForUser(actor.tenantId, userId);
     if (remaining.length <= 1 && remaining.some((r) => r.id === roleId)) {
       throw new ValidationError("Cannot revoke the user's last active role");
+    }
+
+    const revokedEvent = {
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Role",
+      entityId: roleId,
+      action: "ROLE_CHANGE" as const,
+      oldValue: { roleId, userId, roleName: role.name },
+      newValue: null,
+      reason: cleanReason,
+      requestId,
+    };
+
+    if (interim) {
+      await this.handOverToInterim(actor, role, userId, interim, cleanReason, revokedEvent);
+      return;
+    }
+    if (vacancy) {
+      // q149: the exception is written in the same transaction as the removal.
+      await this.roles.revokeFromUser(actor.tenantId, roleId, userId, {
+        auditEvents: [{
+          ...revokedEvent,
+          newValue: { riskManagerGroupEmpty: true, confirmed: true },
+          governanceException: RISK_MANAGER_VACANCY_EXCEPTION,
+        }],
+      });
+      return;
     }
 
     await this.roles.revokeFromUser(actor.tenantId, roleId, userId, isRiskManagerGroup ? { minRemaining: 1 } : undefined);
@@ -529,6 +572,61 @@ export class RoleService {
       reason: cleanReason,
       requestId,
     });
+  }
+
+  /**
+   * R-3: the designated interim, if it can take over now: not yet used, before its end date, an active user, and
+   * neither the leaving member nor the actor (the activation assigns a role: no self-attribution, DECISION-072).
+   * Anything else = no usable interim (the exit then needs the q149 confirmation).
+   */
+  private async usableInterim(actor: AuthenticatedUser, leavingUserId: string, role: Role, reason: string | undefined): Promise<GovernanceDesignation | null> {
+    const d = await this.designations?.getActive(actor.tenantId, "RISK_MANAGER_INTERIM");
+    if (!d || d.activatedAt || !d.validUntil || d.validUntil.getTime() <= Date.now()) return null;
+    if (d.userId === leavingUserId || d.userId === actor.userId) return null;
+    const user = await this.users?.getById(actor.tenantId, d.userId);
+    if (!user || user.deletedAt) return null;
+    // F-PNL-01: an interim the cumul rules forbid (e.g. Risk Manager + Audit) is "no usable interim": q149 confirmation path.
+    try {
+      const held = await this.roles.listForUser(actor.tenantId, d.userId);
+      await this.assertCumulRules(actor.tenantId, role, held, held, reason);
+    } catch (e) {
+      if (e instanceof ValidationError) return null;
+      throw e;
+    }
+    return d;
+  }
+
+  private async handOverToInterim(
+    actor: AuthenticatedUser,
+    role: Role,
+    leavingUserId: string,
+    interim: GovernanceDesignation,
+    reason: string | null,
+    revokedEvent: Omit<AuditEvent, "id" | "timestamp">,
+  ): Promise<void> {
+    if (!this.roles.handOverLastRiskManager) throw new Error("RoleRepository.handOverLastRiskManager is required for an interim hand-over");
+    let adminCumul = false;
+    await this.roles.handOverLastRiskManager({
+      tenantId: actor.tenantId,
+      roleId: role.id,
+      leavingUserId,
+      interimUserId: interim.userId,
+      designationId: interim.id,
+      grantedBy: actor.userId,
+      // Same cumul rules as an ordinary assignment (e.g. Risk Manager + Audit stays forbidden), replayed under the locks.
+      recheck: async (locked, held) => {
+        adminCumul = (await this.assertCumulRules(actor.tenantId, locked, held, held, reason ?? undefined)).createsAdminRiskManagerCumul;
+      },
+      audit: (assignment) => [
+        revokedEvent,
+        {
+          ...revokedEvent,
+          oldValue: null,
+          newValue: { ...assignment, roleName: role.name, designationId: interim.id, handOverFrom: leavingUserId },
+        },
+      ],
+    });
+    if (adminCumul) await this.notifyAdminCumul(actor, interim.userId, "Risk Manager", revokedEvent.requestId);
   }
 
   /**

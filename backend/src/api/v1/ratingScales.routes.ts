@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { boundedArray, MAX_DEFENSE_LINES, MAX_IMPACT_AXES, MAX_SCALE_SIZE } from "../validation.js";
+import { MAX_DEFENSE_LINES, MAX_IMPACT_AXES, MAX_SCALE_SIZE, boundedArray, reasonText } from "../validation.js";
 import type { RatingScaleService } from "../../services/RatingScaleService.js";
 
 const ScaleLevelSchema = z.object({
@@ -49,7 +49,7 @@ const UpdateMasteryBody = z.object({
   thresholds: boundedArray(ScoreThresholdSchema, 50).nullish(),
 });
 
-const DisableRatingScaleBody = z.object({ reason: z.string().min(1) });
+const DisableRatingScaleBody = z.object({ reason: reasonText(2000) });
 
 export function ratingScalesRouter(ratingScaleService: RatingScaleService): Router {
   const router = Router();

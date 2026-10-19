@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { ControlExecutionService } from "../../services/ControlExecutionService.js";
+import { GovernanceConfirmationBody, optionalComment } from "../validation.js";
+import { withIndependence } from "../validationIndependence.js";
+import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
 const ExecutionStatus = z.enum(["DONE", "NOT_DONE", "NOT_APPLICABLE"]);
 
@@ -14,14 +17,15 @@ const CreateExecutionBody = z.object({
   completedDate: z.coerce.date().nullish(),
   result: z.string().nullish(),
   observedAnomalies: z.string().nullish(),
-  justificationIfNotDone: z.string().nullish(),
+  justificationIfNotDone: optionalComment,
   status: ExecutionStatus,
 });
 
-const ValidateExecutionBody = z.object({ comment: z.string().nullish() });
+const ValidateExecutionBody = z.object({ comment: optionalComment, governanceConfirmation: GovernanceConfirmationBody.optional() });
 
-export function executionsRouter(executionService: ControlExecutionService): Router {
+export function executionsRouter(executionService: ControlExecutionService, independence?: GovernanceExceptionLookup): Router {
   const router = Router();
+  const indep = withIndependence(independence, "ControlExecution");
 
   router.get("/", async (req, res, next) => {
     try {
@@ -31,7 +35,7 @@ export function executionsRouter(executionService: ControlExecutionService): Rou
         return;
       }
       const executions = await executionService.listForControl(req.user, controlId);
-      res.json({ data: executions });
+      res.json({ data: await indep(req.user.tenantId, executions) });
     } catch (err) {
       next(err);
     }
@@ -40,7 +44,7 @@ export function executionsRouter(executionService: ControlExecutionService): Rou
   router.get("/:id", async (req, res, next) => {
     try {
       const execution = await executionService.get(req.user, req.params["id"] as string);
-      res.json({ data: execution });
+      res.json({ data: await indep(req.user.tenantId, execution) });
     } catch (err) {
       next(err);
     }
@@ -64,8 +68,9 @@ export function executionsRouter(executionService: ControlExecutionService): Rou
         req.params["id"] as string,
         body.comment ?? null,
         req.requestId,
+        body.governanceConfirmation,
       );
-      res.json({ data: execution });
+      res.json({ data: await indep(req.user.tenantId, execution) });
     } catch (err) {
       next(err);
     }

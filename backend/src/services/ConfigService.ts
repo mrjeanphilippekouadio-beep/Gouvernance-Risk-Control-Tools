@@ -1,19 +1,20 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
-import type { Config, AppetiteMode, EvaluationMode, UpdateMethodologyInput } from "../domain/entities/Config.js";
-import { ValidationError } from "../domain/errors/DomainErrors.js";
+import type { Config, ConfigPatch, EvaluationMode } from "../domain/entities/Config.js";
+import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
+import { isAcceptableReason, SELF_VALIDATION_POLICIES, type EligibleValidatorQuery, type SelfValidationPolicy } from "../domain/governance/selfValidation.js";
 import { MIN_APPETITE_THRESHOLD } from "./RiskEvaluationService.js";
 import { defaultCommitteeThreshold } from "../domain/scoring.js";
 import { resolveMaxScore } from "./scoreCeiling.js";
+import type { PolicyChange, PolicyChangeResult, SelfValidationPolicyRequest, SelfValidationPolicyRequestRepository } from "../domain/repositories/SelfValidationPolicyRequestRepository.js";
 import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
 import { FRAMEWORK_OWNS_SETTING_MESSAGE } from "./riskFrameworkResolution.js";
+import { writeAudited } from "./auditedWrite.js";
 
-const SCORE_FORMULAS = ["P_X_I", "WEIGHTED_SUM"] as const;
-const IMPACT_RETENU_RULES = ["MAX", "AVERAGE", "WEIGHTED_SUM"] as const;
-const APPETITE_MODES = ["AUTO", "MANUEL", "AUTO_AVEC_SURCHARGE_MANUELLE"] as const;
 const EVALUATION_MODES = ["CLASSIQUE", "PARTICIPATIF"] as const;
 
 /**
@@ -39,20 +40,12 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     committeeTreatmentMinScore: null,
     committeeEvaluationEnforced: true,
     committeeAuditCumulAllowed: true,
+    selfValidationPolicy: "REFUSE",
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };
-}
-
-function assertValidThresholds(thresholds: { label: string; min: number; max: number }[]): void {
-  for (const t of thresholds) {
-    if (!t.label.trim()) throw new ValidationError("Each level threshold needs a non-empty label");
-    if (!Number.isInteger(t.min) || !Number.isInteger(t.max) || t.min > t.max) {
-      throw new ValidationError(`Invalid threshold range for "${t.label}": min (${t.min}) must be <= max (${t.max})`);
-    }
-  }
 }
 
 /**
@@ -84,6 +77,10 @@ export class ConfigService {
      * Absent: the pre-B-6b behaviour (tests). GET /config stays available as obsolete history.
      */
     private readonly frameworks?: Pick<RiskFrameworkRepository, "listFrameworks">,
+    /** q158: tells whether another person holds config.selfvalidation.approve. Optional; softening fails closed without it. */
+    private readonly eligible?: EligibleValidatorQuery,
+    /** q158: pending relaxations awaiting a second person. Optional; softening fails closed without it. */
+    private readonly policyRequests?: SelfValidationPolicyRequestRepository,
   ) {}
 
   private assertNotOwnedByFramework(): void {
@@ -95,11 +92,29 @@ export class ConfigService {
    * 15 (migration 045). Write the scale-based default instead, so that saving an unrelated setting
    * never silently changes the threshold `get()` was reporting (5 on a 3×3 scale, 21 on 6×6).
    */
-  private async upsertConfig(tenantId: string, patch: Parameters<ConfigRepository["upsert"]>[1], updatedBy: string): Promise<Config> {
+  private async upsertConfig(tenantId: string, patch: Parameters<ConfigRepository["upsert"]>[1], updatedBy: string, audit?: TransactionalAudit<Config>): Promise<Config> {
+    return this.configs.upsert(tenantId, await this.withFirstWriteDefault(tenantId, patch), updatedBy, audit);
+  }
+
+  private async withFirstWriteDefault(tenantId: string, patch: ConfigPatch): Promise<ConfigPatch> {
     if (patch.committeeEvaluationMinScore === undefined && !(await this.configs.getByTenant(tenantId))) {
-      patch = { ...patch, committeeEvaluationMinScore: defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, tenantId)) };
+      return { ...patch, committeeEvaluationMinScore: defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, tenantId)) };
     }
-    return this.configs.upsert(tenantId, patch, updatedBy);
+    return patch;
+  }
+
+  private configAuditEvent(actor: AuthenticatedUser, before: Config, after: Config, reason: string, requestId: string) {
+    return {
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Config",
+      entityId: after.id,
+      action: "UPDATE" as const,
+      oldValue: before,
+      newValue: after,
+      reason,
+      requestId,
+    };
   }
 
   async get(actor: AuthenticatedUser): Promise<Config> {
@@ -107,84 +122,7 @@ export class ConfigService {
     return (await this.configs.getByTenant(actor.tenantId)) ?? defaultConfig(actor.tenantId, defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, actor.tenantId)));
   }
 
-  /**
-   * PUT /config — ACT-220. Gated on `config.update`, a permission
-   * distinct from `config.read`, and requires a mandatory reason since
-   * this affects every score calculated tenant-wide ("impact immédiat
-   * sur tous les calculs") — the same caution RoleService.update applies
-   * to permission changes, at the "distinct permission + full audit
-   * trail" bar the dispatch brief set as the minimum for this batch. A
-   * full two-person propose/approve workflow was NOT built — flagged in
-   * the handoff summary as an open question for Risk Manager/Architect.
-   */
-  async updateMethodology(
-    actor: AuthenticatedUser,
-    input: UpdateMethodologyInput,
-    reason: string,
-    requestId: string,
-  ): Promise<Config> {
-    requirePermission(actor, "config.update");
-    if (!reason.trim()) {
-      throw new ValidationError("A reason is required to change methodology settings — this affects every score calculated tenant-wide");
-    }
-    if (input.scoreFormula !== undefined && !SCORE_FORMULAS.includes(input.scoreFormula)) {
-      throw new ValidationError(`Unknown scoreFormula: ${input.scoreFormula}`);
-    }
-    if (input.impactRetenuRule !== undefined && !IMPACT_RETENU_RULES.includes(input.impactRetenuRule)) {
-      throw new ValidationError(`Unknown impactRetenuRule: ${input.impactRetenuRule}`);
-    }
-    if (input.levelThresholds !== undefined) assertValidThresholds(input.levelThresholds);
-
-    const before = await this.get(actor);
-    const after = await this.upsertConfig(actor.tenantId, input, actor.userId);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Config",
-      entityId: after.id,
-      action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason,
-      requestId,
-    });
-
-    return after;
-  }
-
-  /** PUT /config/appetite-mode — ACT-226. Same permission/reason bar as updateMethodology; shares the same underlying row. */
-  async updateAppetiteMode(
-    actor: AuthenticatedUser,
-    mode: AppetiteMode,
-    reason: string,
-    requestId: string,
-  ): Promise<Config> {
-    requirePermission(actor, "config.update");
-    if (!reason.trim()) {
-      throw new ValidationError("A reason is required to change the appetite mode — this affects automatic appetite suggestions tenant-wide");
-    }
-    if (!APPETITE_MODES.includes(mode)) throw new ValidationError(`Unknown appetite mode: ${mode}`);
-
-    const before = await this.get(actor);
-    const after = await this.upsertConfig(actor.tenantId, { appetiteMode: mode }, actor.userId);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Config",
-      entityId: after.id,
-      action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason,
-      requestId,
-    });
-
-    return after;
-  }
-
-  /** PUT /config/evaluation-mode — DIV-06. Same permission/reason bar as updateAppetiteMode; shares the same underlying row. */
+  /** PUT /config/evaluation-mode — DIV-06. Same permission/reason bar as the retired updateAppetiteMode; shares the same underlying row. */
   async updateEvaluationMode(
     actor: AuthenticatedUser,
     mode: EvaluationMode,
@@ -297,26 +235,18 @@ export class ConfigService {
   async setCommitteeEnforcement(actor: AuthenticatedUser, enforced: boolean, reason: string, requestId: string): Promise<Config> {
     requirePermission(actor, "config.committeeenforcement.set");
     this.assertNotOwnedByFramework();
-    if (!reason.trim()) {
+    if (!reason.trim() || !isAcceptableReason(reason)) {
       throw new ValidationError("A reason is required to change the committee validation enforcement — disabling it removes a governance control tenant-wide");
     }
 
     const before = await this.get(actor);
-    const after = await this.upsertConfig(actor.tenantId, { committeeEvaluationEnforced: enforced }, actor.userId);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Config",
-      entityId: after.id,
-      action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason,
-      requestId,
-    });
-
-    return after;
+    // F-PNL2-06: the setting and its audit row are one transaction (a failing audit insert rolls the change back).
+    return writeAudited(
+      this.configs.auditsInTransaction,
+      this.audit,
+      (audit) => this.upsertConfig(actor.tenantId, { committeeEvaluationEnforced: enforced }, actor.userId, audit),
+      (after) => [this.configAuditEvent(actor, before, after, reason, requestId)],
+    );
   }
 
   /**
@@ -327,22 +257,193 @@ export class ConfigService {
    */
   async setCommitteeAuditCumul(actor: AuthenticatedUser, allowed: boolean, reason: string, requestId: string): Promise<Config> {
     requirePermission(actor, "config.cumul.set");
-    if (!reason.trim()) {
+    if (!reason.trim() || !isAcceptableReason(reason)) {
       throw new ValidationError("A reason is required to change the Committee + Audit cumul setting");
     }
     const before = await this.get(actor);
-    const after = await this.upsertConfig(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId);
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Config",
-      entityId: after.id,
-      action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason,
-      requestId,
-    });
-    return after;
+    return writeAudited(
+      this.configs.auditsInTransaction,
+      this.audit,
+      (audit) => this.upsertConfig(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId, audit),
+      (after) => [this.configAuditEvent(actor, before, after, reason, requestId)],
+    );
   }
+
+  /**
+   * PUT /config/self-validation-policy — DECISION-074 q141, DECISION-078 q158. Chooses what happens when someone
+   * validates their own input: REFUSE (default) or DOUBLE_CONFIRMATION. Dedicated administrator permission, mandatory
+   * reason, audited. Relaxing (REFUSE -> DOUBLE_CONFIRMATION) needs a second person holding
+   * config.selfvalidation.approve when one exists: a PENDING request, applied by `approveSelfValidationPolicy`
+   * (never by its author). With nobody else able to approve, the administrator applies it alone, marked
+   * `config.selfvalidation.adminAlone`. Tightening or a no-op change stays direct, unmarked.
+   * A new call replaces (WITHDRAWN) a request still pending.
+   */
+  async setSelfValidationPolicy(actor: AuthenticatedUser, policy: SelfValidationPolicy, reason: string, requestId: string): Promise<SelfValidationPolicyOutcome> {
+    requirePermission(actor, "config.selfvalidation.set");
+    if (!SELF_VALIDATION_POLICIES.includes(policy)) throw new ValidationError(`Unknown self-validation policy: ${policy}`);
+    // SEC-PNL-01: the effect is written before the (non-transactional) audit row, so a reason the audit cannot store must stop here.
+    if (!reason || !isAcceptableReason(reason)) throw new ValidationError("A valid reason is required to change the self-validation policy");
+    const why = reason.trim();
+
+    const before = await this.get(actor);
+    const relaxing = before.selfValidationPolicy === "REFUSE" && policy === "DOUBLE_CONFIRMATION";
+    let approverExists = false;
+    if (relaxing) {
+      // Fail closed: without the means to tell whether a second person exists, never relax.
+      if (!this.eligible || !this.policyRequests) throw new ValidationError("Relaxing the self-validation policy is not available");
+      approverExists = await this.eligible.existsOther(actor.tenantId, actor.userId, "config.selfvalidation.approve");
+    }
+
+    // DECISION-079: every step below (withdrawing the pending request, submitting, or writing the policy) is applied
+    // together with its audit rows in ONE transaction.
+    const pending = this.policyRequests ? await this.policyRequests.getPending(actor.tenantId) : null;
+    const submit = relaxing && approverExists && this.policyRequests ? { policy, reason: why, by: actor.userId } : undefined;
+    const result = await this.applyPolicyChange(
+      actor.tenantId,
+      {
+        ...(pending ? { decide: { id: pending.id, status: "WITHDRAWN" as const, by: actor.userId, reason: "Replaced by a newer change" } } : {}),
+        ...(submit ? { submit } : { setPolicy: { patch: { selfValidationPolicy: policy }, updatedBy: actor.userId } }),
+      },
+      (r) => [
+        ...(pending && r.decided
+          ? [{
+              tenantId: actor.tenantId, userId: actor.userId, entityType: "SelfValidationPolicyRequest", entityId: pending.id,
+              action: "CLOSE" as const, oldValue: pending, newValue: null, reason: "Replaced by a newer change", requestId,
+            }]
+          : []),
+        ...(r.submitted
+          ? [{
+              tenantId: actor.tenantId, userId: actor.userId, entityType: "SelfValidationPolicyRequest", entityId: r.submitted.id,
+              action: "SUBMIT" as const, oldValue: null, newValue: r.submitted, reason: why, requestId,
+            }]
+          : []),
+        ...(r.config
+          ? [{
+              tenantId: actor.tenantId,
+              userId: actor.userId,
+              entityType: "Config",
+              entityId: r.config.id,
+              action: "UPDATE" as const,
+              oldValue: before,
+              newValue: r.config,
+              reason: why,
+              requestId,
+              ...(relaxing ? { governanceException: "config.selfvalidation.adminAlone" } : {}),
+            }]
+          : []),
+      ],
+    );
+    if (result.submitted) return { config: before, pendingRequest: result.submitted };
+    return { config: result.config!, pendingRequest: null };
+  }
+
+  /**
+   * DECISION-079 (CMP-PNL-01): claim a request / open one / write the policy, with the audit rows, in one transaction
+   * when the request repository supports it (always in server.ts). Without it (test fakes) the same steps are chained
+   * and the audit is recorded after, as before; a claimed request whose effect fails is reopened.
+   */
+  private async applyPolicyChange(
+    tenantId: string,
+    change: PolicyChange,
+    events: TransactionalAudit<PolicyChangeResult>,
+  ): Promise<PolicyChangeResult> {
+    const repo = this.policyRequests;
+    const setPolicy = change.setPolicy
+      ? { ...change.setPolicy, patch: await this.withFirstWriteDefault(tenantId, change.setPolicy.patch) }
+      : undefined;
+    const resolved: PolicyChange = { ...change, ...(setPolicy ? { setPolicy } : {}) };
+    if (repo?.auditsInTransaction === true && repo.change) return repo.change(tenantId, resolved, events);
+
+    let decided: SelfValidationPolicyRequest | null = null;
+    if (resolved.decide) {
+      decided = await repo!.decide(tenantId, resolved.decide.id, resolved.decide.status, resolved.decide.by, resolved.decide.reason);
+      if (!decided) throw new ConflictError("This request has already been decided");
+    }
+    let submitted: SelfValidationPolicyRequest | null = null;
+    let config: Config | null = null;
+    try {
+      if (resolved.submit) submitted = await repo!.create(tenantId, resolved.submit.policy, resolved.submit.reason, resolved.submit.by);
+      if (resolved.setPolicy) config = await this.configs.upsert(tenantId, resolved.setPolicy.patch, resolved.setPolicy.updatedBy);
+    } catch (err) {
+      if (resolved.decide) await repo!.reopen?.(tenantId, resolved.decide.id)?.catch(() => undefined);
+      throw err;
+    }
+    const result = { decided, submitted, config };
+    for (const event of events(result)) await this.audit.record(event);
+    return result;
+  }
+
+  /** The pending relaxation, if any; visible to the administrator who asks and to the people who can approve. */
+  async getPendingSelfValidationPolicyRequest(actor: AuthenticatedUser): Promise<SelfValidationPolicyRequest | null> {
+    if (!actor.roles.includes("config.selfvalidation.set")) requirePermission(actor, "config.selfvalidation.approve");
+    return this.policyRequests ? this.policyRequests.getPending(actor.tenantId) : null;
+  }
+
+  /** Second confirmation: never the author (maker-checker). Applies the requested policy. */
+  async approveSelfValidationPolicy(actor: AuthenticatedUser, id: string, requestId: string, reason?: string): Promise<Config> {
+    requirePermission(actor, "config.selfvalidation.approve");
+    // The approver's own reason (CMP-PNL2): stored as decision_reason and used as the audit reason, never the requester's.
+    if (reason !== undefined && !isAcceptableReason(reason)) throw new ValidationError("A valid reason is required to approve a request");
+    const why = reason?.trim() ?? null;
+    const request = await this.getPendingRequestOrThrow(actor, id);
+    const before = await this.get(actor);
+    // DECISION-079: claim + policy write + audit row in one transaction (nothing applied if the audit cannot be written).
+    const { config } = await this.applyPolicyChange(
+      actor.tenantId,
+      {
+        decide: { id, status: "APPLIED", by: actor.userId, reason: why },
+        setPolicy: { patch: { selfValidationPolicy: request.requestedPolicy }, updatedBy: request.requestedBy },
+      },
+      (r) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Config",
+          entityId: r.config!.id,
+          action: "APPROVE",
+          oldValue: before,
+          newValue: { ...r.config!, approvedRequestId: id, requestedBy: request.requestedBy, requestReason: request.reason },
+          reason: why ?? request.reason,
+          requestId,
+        },
+      ],
+    );
+    return config!;
+  }
+
+  async rejectSelfValidationPolicy(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<SelfValidationPolicyRequest> {
+    requirePermission(actor, "config.selfvalidation.approve");
+    if (!reason || !isAcceptableReason(reason)) throw new ValidationError("A valid reason is required to reject a request");
+    const request = await this.getPendingRequestOrThrow(actor, id);
+    // DECISION-079: the rejection and its audit row in one transaction.
+    const { decided } = await this.applyPolicyChange(
+      actor.tenantId,
+      { decide: { id, status: "REJECTED", by: actor.userId, reason: reason.trim() } },
+      (r) => [
+        {
+          tenantId: actor.tenantId, userId: actor.userId, entityType: "SelfValidationPolicyRequest", entityId: id,
+          action: "REJECT", oldValue: request, newValue: r.decided, reason: reason.trim(), requestId,
+        },
+      ],
+    );
+    return decided!;
+  }
+
+  /** Tenant-scoped lookup, still PENDING, and never the author's own request. */
+  private async getPendingRequestOrThrow(actor: AuthenticatedUser, id: string): Promise<SelfValidationPolicyRequest> {
+    if (!this.policyRequests) throw new NotFoundError("SelfValidationPolicyRequest", id);
+    const request = await this.policyRequests.getById(actor.tenantId, id);
+    if (!request) throw new NotFoundError("SelfValidationPolicyRequest", id);
+    if (request.status !== "PENDING") throw new ValidationError(`This request has already been decided (${request.status})`);
+    if (request.requestedBy === actor.userId) {
+      throw new ForbiddenError("The author of a request cannot confirm or reject it (maker-checker)");
+    }
+    return request;
+  }
+}
+
+export interface SelfValidationPolicyOutcome {
+  config: Config;
+  /** Set when the relaxation waits for a second person; `config` is then unchanged. */
+  pendingRequest: SelfValidationPolicyRequest | null;
 }
