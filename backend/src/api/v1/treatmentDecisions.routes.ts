@@ -11,11 +11,11 @@ const TreatmentOptionSchema = z.enum(["ACCEPTER", "SURVEILLER", "REDUIRE", "TRAN
 const CreateTreatmentDecisionBody = z.object({
   riskEvaluationId: z.string().min(1),
   option: TreatmentOptionSchema,
-  justification: reasonText(2000, true),
+  justification: reasonText(2000),
 });
 
 const ConfirmBody = z.object({ comment: optionalComment });
-const InvalidateBody = z.object({ comment: reasonText(2000, true) });
+const InvalidateBody = z.object({ comment: reasonText(2000) });
 const ValidateCommitteeBody = z.object({ comment: optionalComment });
 
 export function treatmentDecisionsRouter(treatmentDecisionService: TreatmentDecisionService, independence?: GovernanceExceptionLookup): Router {

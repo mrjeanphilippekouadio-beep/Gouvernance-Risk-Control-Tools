@@ -49,12 +49,12 @@ const MasteryAssessmentBody = z.object({
 const ResidualScoringBody = z.object({
   probability: z.number().int(),
   impacts: boundedArray(ImpactAxisScoreSchema, 20),
-  justification: reasonText(2000, true),
+  justification: reasonText(2000),
   appetiteOverride: z.number().int().nullish(),
 });
 
 const ValidateBody = z.object({ comment: optionalComment, governanceConfirmation: GovernanceConfirmationBody.optional() });
-const RejectBody = z.object({ comment: reasonText(2000, true) });
+const RejectBody = z.object({ comment: reasonText(2000) });
 
 export function riskEvaluationsRouter(
   riskEvaluationService: RiskEvaluationService,

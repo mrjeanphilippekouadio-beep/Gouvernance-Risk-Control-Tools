@@ -19,7 +19,7 @@ const CreateAssessmentBody = z.object({
   limitations: z.string().nullish(),
   compensatingControls: z.string().nullish(),
   conclusion: z.string().nullish(),
-  justification: reasonText(2000, true),
+  justification: reasonText(2000),
   controlVersionSnapshot: z.string().nullish(),
   status: AssessmentStatus.optional(),
 });

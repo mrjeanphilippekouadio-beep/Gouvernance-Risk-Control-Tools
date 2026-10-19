@@ -31,7 +31,8 @@ export interface GovernanceConfirmation {
  * Single definition, shared by the zod helper (`api/validation.ts`) and the service-level checks.
  */
 export function isAcceptableReason(reason: string): boolean {
-  return !/[\p{Cc}\p{Cs}]/u.test(reason) && /[\p{L}\p{N}\p{P}\p{S}\p{M}]/u.test(reason);
+  // \n \r \t are allowed (textareas, F-PNL3-02); every other control character, C1 and lone surrogate is refused.
+  return !/[\p{Cc}\p{Cs}]/u.test(reason.replace(/[\n\r\t]/g, " ")) && /[\p{L}\p{N}\p{P}\p{S}\p{M}]/u.test(reason);
 }
 
 export function selfValidationOutcome(

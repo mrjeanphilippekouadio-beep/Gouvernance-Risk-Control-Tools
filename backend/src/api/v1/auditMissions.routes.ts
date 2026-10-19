@@ -16,7 +16,7 @@ const CreateAuditMissionBody = z.object({
 });
 
 const CloseAuditMissionBody = z.object({
-  comment: reasonText(2000, true),
+  comment: reasonText(2000),
 });
 
 export function auditMissionsRouter(auditMissionService: AuditMissionService): Router {

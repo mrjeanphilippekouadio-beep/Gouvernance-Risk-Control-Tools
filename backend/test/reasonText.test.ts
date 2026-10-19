@@ -9,8 +9,11 @@ describe("reasonText", () => {
     expect(schema.parse("  seul administrateur  ")).toBe("seul administrateur");
     expect(schema.parse("été – décision n°1")).toBe("été – décision n°1");
   });
-  it.each([["NUL", "seul\u0000"], ["control char", "a\u0001b"], ["newline", "a\nb"], ["DEL", "a\u007fb"]])("refuses a %s", (_n, v) => {
+  it.each([["NUL", "seul\u0000"], ["control char", "a\u0001b"], ["vertical tab", "a\u000bb"], ["C1 control", "a\u0085b"], ["DEL", "a\u007fb"]])("refuses a %s", (_n, v) => {
     expect(schema.safeParse(v).success).toBe(false);
+  });
+  it("accepts line breaks and tabs (textareas, F-PNL3-02)", () => {
+    expect(schema.parse("ligne 1\r\nligne 2\tfin")).toBe("ligne 1\r\nligne 2\tfin");
   });
   it.each([["blank", "   "], ["zero-width space", "​"], ["zero-width + spaces", " ​⁠ "]])("refuses %s (no visible character)", (_n, v) => {
     expect(schema.safeParse(v).success).toBe(false);

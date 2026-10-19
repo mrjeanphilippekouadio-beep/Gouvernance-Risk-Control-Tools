@@ -24,10 +24,10 @@ describe("reasonText / optionalComment (F-PNL2-06, I02)", () => {
     expect(isAcceptableReason(LONE_SURROGATE)).toBe(false);
     expect(reasonText().parse("  un motif  ")).toBe("un motif");
   });
-  it("multiline lets newlines through but still refuses NUL; optionalComment keeps null, undefined and \"\"", () => {
-    expect(reasonText(500).safeParse("a\nb").success).toBe(false);
-    expect(reasonText(500, true).safeParse("a\nb").success).toBe(true);
-    expect(reasonText(500, true).safeParse("a\u0000b").success).toBe(false);
+  it("newlines pass (F-PNL3-02) but still refuses NUL; optionalComment keeps null, undefined and \"\"", () => {
+    expect(reasonText(500).safeParse("a\nb").success).toBe(true);
+    expect(reasonText(500).safeParse("a\u000bb").success).toBe(false);
+    expect(reasonText(500).safeParse("a\u0000b").success).toBe(false);
     for (const ok of [null, undefined, "", "bien"]) expect(optionalComment.safeParse(ok).success, String(ok)).toBe(true);
     expect(optionalComment.safeParse(NUL).success).toBe(false);
   });

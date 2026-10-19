@@ -91,8 +91,6 @@ const cases: Case[] = [
   { label: "CONTROL Dispositif: withdraw (Comment, multiline)", mount: mountAt("/c", riskFrameworksRouter(stub)), method: "POST", path: `/c/change-requests/${ID}/withdraw`, body: { reason: NL } },
   { label: "CONTROL Dispositif: reject (Comment, multiline)", mount: mountAt("/c", riskFrameworksRouter(stub)), method: "POST", path: `/c/change-requests/${ID}/reject`, body: { comment: NL } },
 ];
-// Filled after the first run: the routes that answer 400 on a two-line reason are the defect F-PNL3-02.
-const KNOWN_SINGLE_LINE = new Set(cases.filter((c) => !c.label.startsWith("CONTROL")).map((c) => c.label));
 
 describe("R2-1 (F-PNL3-02): a two-line reason typed in a textarea", () => {
   for (const c of cases) {
@@ -100,8 +98,7 @@ describe("R2-1 (F-PNL3-02): a two-line reason typed in a textarea", () => {
       const res = await call(c.mount, c.method, c.path, c.body);
       expect(res.status, JSON.stringify(res.json)).toBeLessThan(400);
     };
-    if (KNOWN_SINGLE_LINE.has(c.label)) it.fails(`KNOWN DEFECT F-PNL3-02 ${c.label}: accepted (answers 400 today)`, run);
-    else it(`${c.label}: accepted`, run);
+    it(`${c.label}: accepted`, run);
   }
 
   it("harness validity: with a single-line reason every one of these routes is mounted and answers < 400 (so the 400 above is the reason rule, not a 404)", async () => {
@@ -112,15 +109,10 @@ describe("R2-1 (F-PNL3-02): a two-line reason typed in a textarea", () => {
     }
   });
 
-  it("each refusal above is a 400 (not a 404 or 500)", async () => {
-    for (const c of cases.filter((x) => KNOWN_SINGLE_LINE.has(x.label))) expect((await call(c.mount, c.method, c.path, c.body)).status, c.label).toBe(400);
-  });
-
-  it("the refusal carries no hint at all: the error handler answers the generic 'Requête invalide.' (the screen cannot tell the user what to fix)", async () => {
-    const res = await call(cases[0]!.mount, cases[0]!.method, cases[0]!.path, cases[0]!.body);
-    expect(res.status).toBe(400);
-    expect(res.json).toMatchObject({ error: "Requête invalide." });
-    expect(JSON.stringify(res.json)).not.toMatch(/Motif|reason|ligne|line/i);
+  it("a NUL or a vertical tab in the same field is still a 400 (only \\n \\r \\t were opened)", async () => {
+    for (const bad of ["a\u0000b", "a\u000bb", "a\u0085b", "a\ud83dz"]) {
+      expect((await call(cases[0]!.mount, cases[0]!.method, cases[0]!.path, { reason: bad })).status, JSON.stringify(bad)).toBe(400);
+    }
   });
 
   it("a single-line reason, and a 2000-character reason, still pass on an archive route; 2001 is refused", async () => {
@@ -132,14 +124,14 @@ describe("R2-1 (F-PNL3-02): a two-line reason typed in a textarea", () => {
 });
 
 describe("R2-1b: reasonText / optionalComment on real-world text", () => {
-  it("accepts accents, emoji (valid surrogate pair), quotes and a CRLF / tab in multiline mode; refuses a lone surrogate, NUL, VT, U+0085", () => {
-    const ml = reasonText(2000, true);
+  it("accepts accents, emoji (valid surrogate pair), quotes and a CRLF / tab ; refuses a lone surrogate, NUL, VT, U+0085", () => {
+    const ml = reasonText(2000);
     for (const ok of ["Éléments reçus à l'équipe « Risques »", "validé 🙂", "a\r\nb\tc", "日本語のモチーフ"]) expect(ml.safeParse(ok).success, ok).toBe(true);
     for (const bad of ["a\ud83dz", "a\u0000b", "a\u000bb", "a\u0085b", "\u200b\u200b"]) expect(ml.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
   });
-  it("the single-line variant refuses a lone CR, LF and TAB (the F-PNL3-02 cause); max is counted after trim", () => {
+  it("a lone CR, LF and TAB are accepted (F-PNL3-02 fixed); max is counted after trim", () => {
     const one = reasonText(10);
-    for (const bad of ["a\nb", "a\rb", "a\tb"]) expect(one.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    for (const ok of ["a\nb", "a\rb", "a\tb"]) expect(one.safeParse(ok).success, JSON.stringify(ok)).toBe(true);
     expect(one.safeParse("  " + "x".repeat(10) + "  ").success).toBe(true);
     expect(one.safeParse("x".repeat(11)).success).toBe(false);
   });
@@ -165,22 +157,22 @@ describe("R2-2 (F-PNL3-01): approve a self-validation policy request as the F3 s
     expect((await call(mount, "POST", approvePath, { reason: "   " })).status).toBe(400);
   });
 
-  it.fails("KNOWN DEFECT F-PNL3-01: the frontend client sends a body carrying the approver's reason", () => {
+  it("F-PNL3-01: the frontend client sends a body carrying the approver's reason", () => {
     const approve = /approvePolicyRequest:[\s\S]*?token\s*\}\)/.exec(frontendConfigApi)?.[0] ?? "";
     expect(approve).toMatch(/approve/);
     expect(approve).toMatch(/body:\s*\{[^}]*reason/);
   });
 
-  it("(observation) the page shows no field for it: GovernanceSettingsPage has a reason textarea only for edit and reject", () => {
+  it("the page passes the approver's reason to the client call", () => {
     const page = readFileSync(join(__dirname, "..", "..", "frontend", "src", "features", "governance", "GovernanceSettingsPage.tsx"), "utf8");
-    expect(page).toMatch(/approvePolicyRequest\(token, pending\.id\)/);
+    expect(page).toMatch(/approvePolicyRequest\(token, pending\.id, \w+\)/); // F3 fix: the reason is now passed
   });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
 // R2-3: other contract changes of the lot against the existing screens.
 // ---------------------------------------------------------------------------------------------------------------------
-describe("R2-3: Dispositif approve / withdraw comments (Comment = reasonText(1000, true), was z.string().trim().max(1000))", () => {
+describe("R2-3: Dispositif approve / withdraw comments (Comment = reasonText(1000), was z.string().trim().max(1000))", () => {
   const mount = mountAt("/c", riskFrameworksRouter(stub));
   const frontend = readFileSync(join(__dirname, "..", "..", "frontend", "src", "api", "riskFrameworks.ts"), "utf8");
 
@@ -305,54 +297,55 @@ describe.skipIf(!HOST.startsWith("/"))("R2-5 PostgreSQL (grc_qa_a08, 001..074)",
   });
   afterAll(async () => { await pool?.end(); });
 
+  // F-PNL3-07: the recorder is fire-and-forget; collect its writes and await them (no fixed sleep).
+  const record = async (tenant: string, user: string, iat?: number) => {
+    const writes: Promise<unknown>[] = [];
+    const rec = createLastSeenRecorder({ query: ((...args: Parameters<Pool["query"]>) => { const p = pool.query(...args); writes.push(p); return p; }) as Pool["query"] });
+    rec(tenant, user, iat);
+    await Promise.resolve();
+    await Promise.all(writes);
+  };
+
   it("074: the column exists (bigint, nullable) and a Google token (iat) is written with its user only, scoped by tenant", async () => {
     const col = await one<{ data_type: string; is_nullable: string }>(`SELECT data_type, is_nullable FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'last_token_iat'`);
     expect(col).toEqual({ data_type: "bigint", is_nullable: "YES" });
     // wrong tenant for the user id: nothing is written
-    createLastSeenRecorder(pool)(t2, a1, 111);
-    await wait(120);
+    await record(t2, a1, 111);
     expect(await row(a1)).toMatchObject({ last_seen_at: null, last_token_iat: null });
     // right tenant: only this user
-    createLastSeenRecorder(pool)(t1, a1, 111);
-    await wait(120);
+    await record(t1, a1, 111);
     expect(Number((await row(a1)).last_token_iat)).toBe(111);
     expect(await row(b1)).toMatchObject({ last_seen_at: null, last_token_iat: null });
   });
 
   it("074: a soft-deleted user is never touched", async () => {
     const d = (await one<{ id: string }>(`INSERT INTO users (tenant_id, email, display_name, deleted_at) VALUES ($1, $2, $2, now()) RETURNING id`, [t1, `d${randomUUID()}@retest2`])).id;
-    createLastSeenRecorder(pool)(t1, d, 5);
-    await wait(120);
+    await record(t1, d, 5);
     expect(await row(d)).toMatchObject({ last_seen_at: null, last_token_iat: null });
   });
 
   it("074: the local provider path (no iat) keeps its one-hour rule and does not touch last_token_iat", async () => {
-    const rec = createLastSeenRecorder(pool);
-    rec(t1, b1);
-    await wait(120);
+    await record(t1, b1);
     const first = await row(b1);
     expect(first.last_seen_at).not.toBeNull();
     expect(first.last_token_iat).toBeNull();
     await pool.query(`UPDATE users SET last_seen_at = now() - interval '30 minutes' WHERE id = $1`, [b1]);
     const before = (await row(b1)).last_seen_at!.getTime();
-    createLastSeenRecorder(pool)(t1, b1); // fresh process, < 1 hour: the SQL condition refuses
-    await wait(120);
+    await record(t1, b1);
     expect((await row(b1)).last_seen_at!.getTime()).toBe(before);
   });
 
   it("074 (q175, known and accepted by the PO as open): a renewed Google token within the hour still counts as a login", async () => {
     await pool.query(`UPDATE users SET last_seen_at = now() - interval '5 minutes', last_token_iat = 100 WHERE id = $1`, [a1]);
     const before = (await row(a1)).last_seen_at!.getTime();
-    createLastSeenRecorder(pool)(t1, a1, 3700); // silent hourly renewal, 5 minutes after the last "login"
-    await wait(120);
+    await record(t1, a1, 3700);
     expect((await row(a1)).last_seen_at!.getTime()).toBeGreaterThan(before);
   });
 
   it("074: two instances racing on the same new iat: one value, no error, the last_seen date set once", async () => {
     await pool.query(`UPDATE users SET last_seen_at = NULL, last_token_iat = NULL WHERE id = $1`, [a2]);
     createLastSeenRecorder(pool)(t2, a2, 9000);
-    createLastSeenRecorder(pool)(t2, a2, 9000);
-    await wait(200);
+    await record(t2, a2, 9000);
     expect(Number((await row(a2)).last_token_iat)).toBe(9000);
   });
 
