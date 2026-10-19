@@ -153,6 +153,10 @@ export class ProcessEvaluationModeRequestService {
     const request = await this.requests.getById(actor.tenantId, id);
     if (!request) throw new NotFoundError("ProcessEvaluationModeRequest", id);
     assertPending(request);
+    const beforeProcess = await this.processes.getById(actor.tenantId, request.processId);
+    if (!beforeProcess) throw new NotFoundError("Process", request.processId);
+    assertProcessLevel(beforeProcess);
+    // F-PNL2-05b: the confirmation prompt comes after every precondition (state, process level).
     const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
       isSelf: request.requestedBy === actor.userId,
       permission: "evaluationmode.validate",
@@ -160,10 +164,6 @@ export class ProcessEvaluationModeRequestService {
       refusal: SELF_VALIDATION_REFUSAL,
       confirmation,
     });
-
-    const beforeProcess = await this.processes.getById(actor.tenantId, request.processId);
-    if (!beforeProcess) throw new NotFoundError("Process", request.processId);
-    assertProcessLevel(beforeProcess);
 
     const riskOwners = await this.getRiskOwners(actor.tenantId, request.processId);
 

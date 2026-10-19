@@ -11,6 +11,8 @@ SET roles = array_remove(roles, 'config.selfvalidation.approve')
 WHERE 'config.selfvalidation.approve' = ANY(roles);
 
 DROP TABLE IF EXISTS self_validation_policy_requests;
+DROP FUNCTION IF EXISTS self_validation_policy_requests_guard();
+DROP FUNCTION IF EXISTS self_validation_policy_requests_truncate_guard();
 
 DELETE FROM schema_migrations WHERE filename = '072_self_validation_policy_requests.sql';
 COMMIT;

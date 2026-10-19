@@ -22,7 +22,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     return;
   }
   if (err instanceof ConflictError) {
-    res.status(409).json({ error: err.message, existingId: err.existingId, requestId: req.requestId });
+    res.status(409).json({ error: err.message, existingId: err.existingId, code: err.code, requestId: req.requestId });
     return;
   }
   if (err instanceof ForbiddenError) {

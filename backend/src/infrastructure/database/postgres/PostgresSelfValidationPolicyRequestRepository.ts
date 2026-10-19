@@ -135,13 +135,4 @@ export class PostgresSelfValidationPolicyRequestRepository implements SelfValida
       audit,
     );
   }
-
-  async reopen(tenantId: string, id: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE self_validation_policy_requests
-       SET status = 'PENDING', decided_by = NULL, decided_at = NULL, decision_reason = NULL
-       WHERE tenant_id = $1 AND id = $2 AND status IN ('APPLIED', 'REJECTED')`,
-      [tenantId, id],
-    );
-  }
 }

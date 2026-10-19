@@ -13,6 +13,7 @@ import { resolveMaxScore } from "./scoreCeiling.js";
 import type { PolicyChange, PolicyChangeResult, SelfValidationPolicyRequest, SelfValidationPolicyRequestRepository } from "../domain/repositories/SelfValidationPolicyRequestRepository.js";
 import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
 import { FRAMEWORK_OWNS_SETTING_MESSAGE } from "./riskFrameworkResolution.js";
+import { writeAudited } from "./auditedWrite.js";
 
 const SCORE_FORMULAS = ["P_X_I", "WEIGHTED_SUM"] as const;
 const IMPACT_RETENU_RULES = ["MAX", "AVERAGE", "WEIGHTED_SUM"] as const;
@@ -103,8 +104,8 @@ export class ConfigService {
    * 15 (migration 045). Write the scale-based default instead, so that saving an unrelated setting
    * never silently changes the threshold `get()` was reporting (5 on a 3×3 scale, 21 on 6×6).
    */
-  private async upsertConfig(tenantId: string, patch: Parameters<ConfigRepository["upsert"]>[1], updatedBy: string): Promise<Config> {
-    return this.configs.upsert(tenantId, await this.withFirstWriteDefault(tenantId, patch), updatedBy);
+  private async upsertConfig(tenantId: string, patch: Parameters<ConfigRepository["upsert"]>[1], updatedBy: string, audit?: TransactionalAudit<Config>): Promise<Config> {
+    return this.configs.upsert(tenantId, await this.withFirstWriteDefault(tenantId, patch), updatedBy, audit);
   }
 
   private async withFirstWriteDefault(tenantId: string, patch: ConfigPatch): Promise<ConfigPatch> {
@@ -112,6 +113,20 @@ export class ConfigService {
       return { ...patch, committeeEvaluationMinScore: defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, tenantId)) };
     }
     return patch;
+  }
+
+  private configAuditEvent(actor: AuthenticatedUser, before: Config, after: Config, reason: string, requestId: string) {
+    return {
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Config",
+      entityId: after.id,
+      action: "UPDATE" as const,
+      oldValue: before,
+      newValue: after,
+      reason,
+      requestId,
+    };
   }
 
   async get(actor: AuthenticatedUser): Promise<Config> {
@@ -309,26 +324,18 @@ export class ConfigService {
   async setCommitteeEnforcement(actor: AuthenticatedUser, enforced: boolean, reason: string, requestId: string): Promise<Config> {
     requirePermission(actor, "config.committeeenforcement.set");
     this.assertNotOwnedByFramework();
-    if (!reason.trim()) {
+    if (!reason.trim() || !isAcceptableReason(reason)) {
       throw new ValidationError("A reason is required to change the committee validation enforcement — disabling it removes a governance control tenant-wide");
     }
 
     const before = await this.get(actor);
-    const after = await this.upsertConfig(actor.tenantId, { committeeEvaluationEnforced: enforced }, actor.userId);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Config",
-      entityId: after.id,
-      action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason,
-      requestId,
-    });
-
-    return after;
+    // F-PNL2-06: the setting and its audit row are one transaction (a failing audit insert rolls the change back).
+    return writeAudited(
+      this.configs.auditsInTransaction,
+      this.audit,
+      (audit) => this.upsertConfig(actor.tenantId, { committeeEvaluationEnforced: enforced }, actor.userId, audit),
+      (after) => [this.configAuditEvent(actor, before, after, reason, requestId)],
+    );
   }
 
   /**
@@ -339,23 +346,16 @@ export class ConfigService {
    */
   async setCommitteeAuditCumul(actor: AuthenticatedUser, allowed: boolean, reason: string, requestId: string): Promise<Config> {
     requirePermission(actor, "config.cumul.set");
-    if (!reason.trim()) {
+    if (!reason.trim() || !isAcceptableReason(reason)) {
       throw new ValidationError("A reason is required to change the Committee + Audit cumul setting");
     }
     const before = await this.get(actor);
-    const after = await this.upsertConfig(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId);
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Config",
-      entityId: after.id,
-      action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason,
-      requestId,
-    });
-    return after;
+    return writeAudited(
+      this.configs.auditsInTransaction,
+      this.audit,
+      (audit) => this.upsertConfig(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId, audit),
+      (after) => [this.configAuditEvent(actor, before, after, reason, requestId)],
+    );
   }
 
   /**
@@ -454,7 +454,7 @@ export class ConfigService {
       if (resolved.submit) submitted = await repo!.create(tenantId, resolved.submit.policy, resolved.submit.reason, resolved.submit.by);
       if (resolved.setPolicy) config = await this.configs.upsert(tenantId, resolved.setPolicy.patch, resolved.setPolicy.updatedBy);
     } catch (err) {
-      if (resolved.decide) await repo!.reopen(tenantId, resolved.decide.id).catch(() => undefined);
+      if (resolved.decide) await repo!.reopen?.(tenantId, resolved.decide.id)?.catch(() => undefined);
       throw err;
     }
     const result = { decided, submitted, config };
@@ -469,15 +469,18 @@ export class ConfigService {
   }
 
   /** Second confirmation: never the author (maker-checker). Applies the requested policy. */
-  async approveSelfValidationPolicy(actor: AuthenticatedUser, id: string, requestId: string): Promise<Config> {
+  async approveSelfValidationPolicy(actor: AuthenticatedUser, id: string, requestId: string, reason?: string): Promise<Config> {
     requirePermission(actor, "config.selfvalidation.approve");
+    // The approver's own reason (CMP-PNL2): stored as decision_reason and used as the audit reason, never the requester's.
+    if (reason !== undefined && !isAcceptableReason(reason)) throw new ValidationError("A valid reason is required to approve a request");
+    const why = reason?.trim() ?? null;
     const request = await this.getPendingRequestOrThrow(actor, id);
     const before = await this.get(actor);
     // DECISION-079: claim + policy write + audit row in one transaction (nothing applied if the audit cannot be written).
     const { config } = await this.applyPolicyChange(
       actor.tenantId,
       {
-        decide: { id, status: "APPLIED", by: actor.userId, reason: null },
+        decide: { id, status: "APPLIED", by: actor.userId, reason: why },
         setPolicy: { patch: { selfValidationPolicy: request.requestedPolicy }, updatedBy: request.requestedBy },
       },
       (r) => [
@@ -488,8 +491,8 @@ export class ConfigService {
           entityId: r.config!.id,
           action: "APPROVE",
           oldValue: before,
-          newValue: { ...r.config!, approvedRequestId: id, requestedBy: request.requestedBy },
-          reason: request.reason,
+          newValue: { ...r.config!, approvedRequestId: id, requestedBy: request.requestedBy, requestReason: request.reason },
+          reason: why ?? request.reason,
           requestId,
         },
       ],

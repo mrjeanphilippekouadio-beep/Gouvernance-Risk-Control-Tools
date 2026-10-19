@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { reasonText } from "../validation.js";
 import type { ProcessService } from "../../services/ProcessService.js";
 
 const Level = z.enum(["PROCESS", "SUBPROCESS", "ACTIVITY"]);
@@ -38,7 +39,7 @@ const ResponsibilitiesBody = z
     deputyUserId: z.guid().nullable().optional(),
   })
   .strict();
-const ArchiveProcessBody = z.object({ reason: z.string().min(1) });
+const ArchiveProcessBody = z.object({ reason: reasonText(2000) });
 
 export function processesRouter(processService: ProcessService): Router {
   const router = Router();

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { reasonText } from "../validation.js";
 import type { KpiService } from "../../services/KpiService.js";
 
 const Frequency = z.enum(["DAILY", "WEEKLY", "MONTHLY", "QUARTERLY", "ANNUAL"]);
@@ -22,7 +23,7 @@ const LinkKpiBody = z.object({
   processId: z.string().nullish(),
 });
 
-const ArchiveKpiBody = z.object({ reason: z.string().min(1) });
+const ArchiveKpiBody = z.object({ reason: reasonText(2000) });
 
 export function kpisRouter(kpiService: KpiService): Router {
   const router = Router();

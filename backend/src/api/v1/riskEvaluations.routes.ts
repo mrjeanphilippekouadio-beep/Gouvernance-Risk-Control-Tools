@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { boundedArray, MAX_DEFENSE_LINES } from "../validation.js";
+import { MAX_DEFENSE_LINES, boundedArray, optionalComment, reasonText } from "../validation.js";
 import type { RiskEvaluationService } from "../../services/RiskEvaluationService.js";
 import type { RiskEvaluationViewService } from "../../services/RiskEvaluationViewService.js";
 import type { TreatmentDecisionService } from "../../services/TreatmentDecisionService.js";
@@ -49,12 +49,12 @@ const MasteryAssessmentBody = z.object({
 const ResidualScoringBody = z.object({
   probability: z.number().int(),
   impacts: boundedArray(ImpactAxisScoreSchema, 20),
-  justification: z.string().min(1),
+  justification: reasonText(2000, true),
   appetiteOverride: z.number().int().nullish(),
 });
 
-const ValidateBody = z.object({ comment: z.string().nullish(), governanceConfirmation: GovernanceConfirmationBody.optional() });
-const RejectBody = z.object({ comment: z.string().min(1) });
+const ValidateBody = z.object({ comment: optionalComment, governanceConfirmation: GovernanceConfirmationBody.optional() });
+const RejectBody = z.object({ comment: reasonText(2000, true) });
 
 export function riskEvaluationsRouter(
   riskEvaluationService: RiskEvaluationService,

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { boundedArray } from "../validation.js";
+import { boundedArray, reasonText } from "../validation.js";
 import type { KriService } from "../../services/KriService.js";
 import type { KriStatus } from "../../domain/entities/Kri.js";
 
@@ -25,7 +25,7 @@ const UpdateKriBody = CreateKriBody.omit({ riskId: true }).partial();
 
 const CoveredRisksBody = z.object({ riskIds: boundedArray(z.string().min(1), 1000) });
 
-const DisableKriBody = z.object({ reason: z.string().min(1) });
+const DisableKriBody = z.object({ reason: reasonText(2000) });
 
 export function krisRouter(kriService: KriService): Router {
   const router = Router();

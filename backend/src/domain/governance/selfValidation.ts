@@ -31,7 +31,7 @@ export interface GovernanceConfirmation {
  * Single definition, shared by the zod helper (`api/validation.ts`) and the service-level checks.
  */
 export function isAcceptableReason(reason: string): boolean {
-  return !/\p{Cc}/u.test(reason) && /[\p{L}\p{N}\p{P}\p{S}\p{M}]/u.test(reason);
+  return !/[\p{Cc}\p{Cs}]/u.test(reason) && /[\p{L}\p{N}\p{P}\p{S}\p{M}]/u.test(reason);
 }
 
 export function selfValidationOutcome(

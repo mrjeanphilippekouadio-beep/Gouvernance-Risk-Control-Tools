@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { ControlEffectivenessService } from "../../services/ControlEffectivenessService.js";
-import { GovernanceConfirmationBody } from "../validation.js";
+import { GovernanceConfirmationBody, optionalComment, reasonText } from "../validation.js";
 import { withIndependence } from "../validationIndependence.js";
 import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
@@ -19,12 +19,12 @@ const CreateAssessmentBody = z.object({
   limitations: z.string().nullish(),
   compensatingControls: z.string().nullish(),
   conclusion: z.string().nullish(),
-  justification: z.string().min(1),
+  justification: reasonText(2000, true),
   controlVersionSnapshot: z.string().nullish(),
   status: AssessmentStatus.optional(),
 });
 
-const ValidateAssessmentBody = z.object({ comment: z.string().nullish(), governanceConfirmation: GovernanceConfirmationBody.optional() });
+const ValidateAssessmentBody = z.object({ comment: optionalComment, governanceConfirmation: GovernanceConfirmationBody.optional() });
 
 export function effectivenessRouter(effectivenessService: ControlEffectivenessService, independence?: GovernanceExceptionLookup): Router {
   const router = Router();

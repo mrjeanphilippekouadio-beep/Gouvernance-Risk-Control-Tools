@@ -41,13 +41,15 @@ describe("q158 routes", () => {
   it("approve / reject reach the service with the actor and the request id; reject needs a reason", async () => {
     const calls: string[] = [];
     const svc = {
-      approveSelfValidationPolicy: async (_u: unknown, id: string) => { calls.push(`approve:${id}`); return { id: "c" }; },
+      approveSelfValidationPolicy: async (_u: unknown, id: string, _r: string, reason?: string) => { calls.push(`approve:${id}:${reason}`); return { id: "c" }; },
       rejectSelfValidationPolicy: async (_u: unknown, id: string, reason: string) => { calls.push(`reject:${id}:${reason}`); return { id: ID }; },
     };
-    expect((await call(svc, "POST", `/self-validation-policy/requests/${ID}/approve`)).status).toBe(200);
+    expect((await call(svc, "POST", `/self-validation-policy/requests/${ID}/approve`, {})).status).toBe(400); // the approver's own reason is required
+    expect((await call(svc, "POST", `/self-validation-policy/requests/${ID}/approve`, { reason: "ok" })).status).toBe(200);
+    expect((await call(svc, "POST", "/self-validation-policy/requests/not-a-uuid/approve", { reason: "ok" })).status).toBe(400);
     expect((await call(svc, "POST", `/self-validation-policy/requests/${ID}/reject`, {})).status).toBe(400);
     expect((await call(svc, "POST", `/self-validation-policy/requests/${ID}/reject`, { reason: "non" })).status).toBe(200);
-    expect(calls).toEqual([`approve:${ID}`, `reject:${ID}:non`]);
+    expect(calls).toEqual([`approve:${ID}:ok`, `reject:${ID}:non`]);
   });
 });
 
@@ -71,7 +73,7 @@ describe.skipIf(!HOST.startsWith("/"))("q158 PostgresSelfValidationPolicyRequest
   });
   afterAll(async () => { await pool?.end(); });
 
-  it("one PENDING per tenant, tenant-scoped reads, decision once, author cannot approve (CHECK), reopen", async () => {
+  it("one PENDING per tenant, tenant-scoped reads, decision once, author cannot approve (CHECK), never reopened", async () => {
     const r = await repo.create(tenant, "DOUBLE_CONFIRMATION", "motif", a);
     await expect(repo.create(tenant, "DOUBLE_CONFIRMATION", "autre", a)).rejects.toMatchObject({ name: "ConflictError" });
     expect((await repo.getPending(tenant))?.id).toBe(r.id);
@@ -79,8 +81,8 @@ describe.skipIf(!HOST.startsWith("/"))("q158 PostgresSelfValidationPolicyRequest
     await expect(repo.decide(tenant, r.id, "APPLIED", a, null)).rejects.toThrow(); // maker-checker in the database
     expect((await repo.decide(tenant, r.id, "APPLIED", b, null))?.status).toBe("APPLIED");
     expect(await repo.decide(tenant, r.id, "REJECTED", b, "x")).toBeNull();
-    await repo.reopen(tenant, r.id);
-    expect((await repo.getPending(tenant))?.id).toBe(r.id);
-    expect((await repo.decide(tenant, r.id, "WITHDRAWN", a, "remplacée"))?.status).toBe("WITHDRAWN");
+    expect((repo as unknown as { reopen?: unknown }).reopen).toBeUndefined(); // SEC-PNL2-03: no reopen on the production repository
+    expect(await repo.getPending(tenant)).toBeNull();
+    expect(await repo.decide(tenant, r.id, "WITHDRAWN", a, "remplacée")).toBeNull();
   });
 });

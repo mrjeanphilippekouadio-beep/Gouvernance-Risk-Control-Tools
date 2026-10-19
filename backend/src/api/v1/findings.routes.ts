@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { FindingService } from "../../services/FindingService.js";
-import { GovernanceConfirmationBody } from "../validation.js";
+import { GovernanceConfirmationBody, reasonText } from "../validation.js";
 import { withIndependence } from "../validationIndependence.js";
 import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
@@ -20,7 +20,7 @@ const CreateFindingBody = z.object({
 });
 
 const CloseFindingBody = z.object({
-  comment: z.string().min(1),
+  comment: reasonText(2000, true),
   governanceConfirmation: GovernanceConfirmationBody.optional(),
 });
 

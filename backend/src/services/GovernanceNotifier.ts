@@ -66,17 +66,22 @@ export class GovernanceNotifier {
       for (const recipient of new Set(recipients)) {
         if (told.has(recipient)) continue;
         told.add(recipient);
-        await this.notifications.emit({
-          tenantId,
-          recipientUserId: recipient,
-          resourceType: "MANAGEMENT",
-          resourceId,
-          eventType,
-          message,
-          triggeredBy: actorId,
-          requestId,
-          skipIfUnread: true,
-        });
+        // F-PNL2-04: one failing recipient (deleted between the lookup and the emit...) must not silence the others.
+        try {
+          await this.notifications.emit({
+            tenantId,
+            recipientUserId: recipient,
+            resourceType: "MANAGEMENT",
+            resourceId,
+            eventType,
+            message,
+            triggeredBy: actorId,
+            requestId,
+            skipIfUnread: true,
+          });
+        } catch (err) {
+          this.logError(`governance notification ${eventType} for audit row ${resourceId} failed for one recipient (requestId ${requestId})`, err instanceof Error ? err.message : err);
+        }
       }
     };
     const nv = asRecord(row.newValue);

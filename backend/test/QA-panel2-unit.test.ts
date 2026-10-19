@@ -91,23 +91,22 @@ describe("U1 / already-decided is answered before any confirmation prompt (F-PNL
   }
 
   // Same family, one step further (QA-panel2 finding F-PNL2-05): a precondition checked AFTER the gate.
-  it.fails("F-PNL2-05: ActionPlan.close with an evidence that does not exist is answered 400 before the confirmation prompt", async () => {
+  it("F-PNL2-05: ActionPlan.close with an evidence that does not exist is answered 400 before the confirmation prompt", async () => {
     const svc = new ActionPlanService(
       { getById: async () => ({ id: "ap1", tenantId: "t1", status: "EN_COURS", createdBy: ME, responsibleUserId: ME }), close: noWrite("close") } as never,
       audit([]), undefined, undefined, undefined, undefined, { getById: async () => null } as never, undefined, undefined, undefined, undefined, undefined, gate(),
     );
     await expect(svc.close(actor(["actionplan.validate"]), "ap1", "ev-unknown", null, "r")).rejects.toMatchObject({ name: "ValidationError" });
   });
-  it("F-PNL2-05 control: the same close WITH a valid confirmation reaches the evidence check and is refused there (so the prompt was useless)", async () => {
+  it("F-PNL2-05 control: the same close WITH a valid confirmation is refused at the same evidence check", async () => {
     const svc = new ActionPlanService(
       { getById: async () => ({ id: "ap1", tenantId: "t1", status: "EN_COURS", createdBy: ME, responsibleUserId: ME }), close: noWrite("close") } as never,
       audit([]), undefined, undefined, undefined, undefined, { getById: async () => null } as never, undefined, undefined, undefined, undefined, undefined, gate(),
     );
     await expect(svc.close(actor(["actionplan.validate"]), "ap1", "ev-unknown", null, "r", { rule: "noSelfValidation", reason: "seul" }))
       .rejects.toMatchObject({ name: "ValidationError", message: expect.stringMatching(/does not exist/) });
-    await expect(svc.close(actor(["actionplan.validate"]), "ap1", "ev-unknown", null, "r")).rejects.toMatchObject({ name: "ConflictError" }); // the 409 prompt that precedes it
   });
-  it.fails("F-PNL2-05b: ProcessEvaluationModeRequest.validate on a process that is not at PROCESS level is answered 400 before the confirmation prompt", async () => {
+  it("F-PNL2-05b: ProcessEvaluationModeRequest.validate on a process that is not at PROCESS level is answered 400 before the confirmation prompt", async () => {
     const svc = new ProcessEvaluationModeRequestService(
       { getById: async () => ({ id: "q1", tenantId: "t1", status: "PENDING_VALIDATION", requestedBy: ME, processId: "p1", requestedMode: "PARTICIPATIF" }) } as never,
       { getById: async () => ({ id: "p1", tenantId: "t1", level: "MACRO", evaluationMode: "CLASSIQUE" }) } as never,
@@ -267,7 +266,7 @@ describe("U5 / notifier: one row handled once per process", () => {
     expect(emit).toHaveBeenCalledTimes(6);
     for (const c of emit.mock.calls) expect((c[0] as { skipIfUnread: boolean }).skipIfUnread).toBe(true);
   });
-  it.fails("F-PNL2-04: a failing emit for one recipient does not stop the other recipients of the same row (it does today: the loop aborts)", async () => {
+  it("F-PNL2-04: a failing emit for one recipient does not stop the other recipients of the same row (it does today: the loop aborts)", async () => {
     let n = 0;
     const emit = vi.fn(async () => { n += 1; if (n === 1) throw new Error("db down"); });
     const logged: string[] = [];
@@ -303,15 +302,18 @@ describe("U6 / fixed groups after q157, q158 and D5", () => {
 });
 
 describe("U7 / q142 label on the lists the screens actually read", () => {
-  it.fails("F-PNL2-01: GET /dashboard/actions (the ONLY list the Plans d'action screen reads) carries validationIndependence like GET /actions does", async () => {
+  it("F-PNL2-01: GET /dashboard/actions (the ONLY list the Plans d'action screen reads) carries validationIndependence like GET /actions does", async () => {
     const app = express();
     app.use((req, _res, next) => { (req as unknown as { user: unknown }).user = { tenantId: "t1", userId: "u1", roles: [] }; next(); });
-    app.use("/api/v1/dashboard", actionPlanDashboardRouter({ dashboard: async () => [{ id: "ap1", status: "TERMINEE", computedStatus: "TERMINEE" }] } as never));
+    app.use("/api/v1/dashboard", actionPlanDashboardRouter(
+      { dashboard: async () => [{ id: "ap1", status: "TERMINEE", computedStatus: "TERMINEE" }] } as never,
+      { forEntities: async () => new Map([["ap1", "WITHOUT_INDEPENDENT_REVIEW"]]) } as never,
+    ));
     const server = app.listen(0);
     try {
       const res = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/v1/dashboard/actions`);
       const body = (await res.json()) as { data: Array<Record<string, unknown>> };
-      expect(body.data[0]).toHaveProperty("validationIndependence");
+      expect(body.data[0]).toMatchObject({ validationIndependence: "WITHOUT_INDEPENDENT_REVIEW" });
     } finally { server.close(); }
   });
   it("control: the other action-plan reads and the Findings / executions / effectiveness / evaluations reads DO carry it (router signature accepts the lookup)", () => {
@@ -319,6 +321,6 @@ describe("U7 / q142 label on the lists the screens actually read", () => {
       const src = readFileSync(join(__dirname, "..", "src", "api", "v1", `${f}.routes.ts`), "utf8");
       expect(src, f).toMatch(/GovernanceExceptionLookup/);
     }
-    expect(readFileSync(join(__dirname, "..", "src", "api", "v1", "actionPlanDashboard.routes.ts"), "utf8")).not.toMatch(/GovernanceExceptionLookup/);
+    expect(readFileSync(join(__dirname, "..", "src", "api", "v1", "actionPlanDashboard.routes.ts"), "utf8")).toMatch(/GovernanceExceptionLookup/);
   });
 });
