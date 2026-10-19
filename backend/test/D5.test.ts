@@ -93,7 +93,7 @@ describe("GovernancePrincipleAcceptanceService", () => {
   it("applies at once with the 'alone' marker when no one else can confirm", async () => {
     const { service, audits } = acceptanceService(false);
     const a = await service.accept(rm, { principleId: "GOV-SOD-01", reason: "temporaire", expiresAt: future() }, "r");
-    expect(a).toMatchObject({ status: "ACTIVE", regime: "ALONE", acceptedBy: "rm" });
+    expect(a).toMatchObject({ status: "ACTIVE", regime: "ALONE", acceptedBy: null, mine: true }); // I05: identities masked without audit.read
     expect(audits.at(-1)).toMatchObject({ action: "CREATE", governanceException: "principle.acceptance.alone" });
   });
   it("waits for a second confirmation when a third party exists; the acceptor cannot confirm", async () => {
@@ -102,7 +102,7 @@ describe("GovernancePrincipleAcceptanceService", () => {
     expect(a.status).toBe("PENDING");
     expect(audits.at(-1)).toMatchObject({ governanceException: null });
     await expect(service.confirm(rm, a.id, "r")).rejects.toThrow(ForbiddenError);
-    expect(await service.confirm(rm2, a.id, "r")).toMatchObject({ status: "ACTIVE", regime: "CONFIRMED", confirmedBy: "rm2" });
+    expect(await service.confirm(rm2, a.id, "r")).toMatchObject({ status: "ACTIVE", regime: "CONFIRMED", confirmedBy: "rm2" }); // rm2 holds audit.read: names shown
     await expect(service.confirm(rm2, a.id, "r")).rejects.toThrow(ConflictError);
   });
   it("validates input and permissions; an expired pending acceptance cannot be confirmed", async () => {
@@ -130,6 +130,17 @@ describe("GovernancePrincipleAcceptanceService", () => {
     await service.accept(rm, { principleId: "GOV-SOD-01", reason: "x", expiresAt: future() }, "r");
     expect((await service.list(rm))[0]).toMatchObject({ acceptedBy: null, mine: true });
     expect((await service.list(rm2))[0]).toMatchObject({ acceptedBy: "rm", mine: false });
+  });
+  it("I05: accept / confirm / reject / revoke answer with the same masking as the list (no identity without audit.read)", async () => {
+    const { service } = acceptanceService(true);
+    const rm3 = user("rm3", ["governanceprinciple.acceptance.confirm", "governancehealth.read"]); // no audit.read
+    const a = await service.accept(rm, { principleId: "GOV-SOD-01", reason: "x", expiresAt: future() }, "r");
+    expect(a).toMatchObject({ acceptedBy: null, mine: true });
+    expect(await service.confirm(rm3, a.id, "r")).toMatchObject({ status: "ACTIVE", acceptedBy: null, confirmedBy: null, mine: false });
+    const b = await service.accept(rm, { principleId: "GOV-SOD-02", reason: "x", expiresAt: future() }, "r");
+    expect(await service.reject(rm3, b.id, "non", "r")).toMatchObject({ status: "REJECTED", acceptedBy: null, endedBy: null });
+    const c = await service.accept(rm, { principleId: "GOV-SOD-03", reason: "x", expiresAt: future() }, "r");
+    expect(await service.revoke(rm, c.id, "fin", "r")).toMatchObject({ status: "REVOKED", endedBy: null });
   });
 });
 
@@ -243,10 +254,10 @@ describe("governanceNotificationsMiddleware", () => {
   function run(method: string, status: number, withUser = true) {
     const calls: unknown[][] = [];
     const mw = governanceNotificationsMiddleware({ processRequest: async (...a: unknown[]) => { calls.push(a); } } as never);
-    const res = Object.assign(new EventEmitter(), { statusCode: status });
+    const res = Object.assign(new EventEmitter(), { statusCode: status, end: () => res });
     const req = { method, requestId: "rid", user: withUser ? { tenantId: T, userId: "u" } : undefined };
     mw(req as never, res as never, () => undefined);
-    res.emit("finish");
+    res.end(); // SEC-PNL2-01: the trigger is res.end, not the "finish" event
     return calls;
   }
   it("notifies after a successful mutation only", () => {

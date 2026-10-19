@@ -12,10 +12,19 @@ export function boundedArray<T extends z.ZodType>(element: T, max: number, min =
   return z.array(z.unknown()).min(min).max(max).pipe(z.array(element));
 }
 
-/** SEC-PNL-01 / F-PNL-11: a governance reason: trimmed, 1..max, no control character, at least one visible character. */
-export function reasonText(max = 500) {
-  return z.string().trim().min(1).max(max).refine(isAcceptableReason, "Motif invalide : caractères de contrôle ou aucun caractère visible");
+const REASON_MSG = "Motif invalide : caractères de contrôle ou aucun caractère visible";
+const acceptable = (multiline: boolean) => (v: string) => isAcceptableReason(multiline ? v.replace(/[\n\r\t]/g, " ") : v);
+
+/**
+ * SEC-PNL-01 / F-PNL-11 / F-PNL2-06: a reason or comment: trimmed, 1..max, no control character (NUL, lone surrogate...),
+ * at least one visible character. `multiline` also lets \n \r \t through (free-text comments).
+ */
+export function reasonText(max = 500, multiline = false) {
+  return z.string().trim().min(1).max(max).refine(acceptable(multiline), REASON_MSG);
 }
+
+/** An optional free-text comment: same rules as `reasonText(…, true)`, but null/undefined/"" stay accepted. */
+export const optionalComment = z.string().trim().max(2000).refine((v) => v === "" || acceptable(true)(v), REASON_MSG).nullish();
 
 /** DECISION-074: the explicit second confirmation of a self-validation (`governanceConfirmation` in the request body). */
 export const GovernanceConfirmationBody = z.object({

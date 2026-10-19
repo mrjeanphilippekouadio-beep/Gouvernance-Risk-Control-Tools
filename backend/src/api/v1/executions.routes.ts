@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { ControlExecutionService } from "../../services/ControlExecutionService.js";
-import { GovernanceConfirmationBody } from "../validation.js";
+import { GovernanceConfirmationBody, optionalComment } from "../validation.js";
 import { withIndependence } from "../validationIndependence.js";
 import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
@@ -17,11 +17,11 @@ const CreateExecutionBody = z.object({
   completedDate: z.coerce.date().nullish(),
   result: z.string().nullish(),
   observedAnomalies: z.string().nullish(),
-  justificationIfNotDone: z.string().nullish(),
+  justificationIfNotDone: optionalComment,
   status: ExecutionStatus,
 });
 
-const ValidateExecutionBody = z.object({ comment: z.string().nullish(), governanceConfirmation: GovernanceConfirmationBody.optional() });
+const ValidateExecutionBody = z.object({ comment: optionalComment, governanceConfirmation: GovernanceConfirmationBody.optional() });
 
 export function executionsRouter(executionService: ControlExecutionService, independence?: GovernanceExceptionLookup): Router {
   const router = Router();

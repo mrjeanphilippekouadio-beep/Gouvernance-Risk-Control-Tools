@@ -62,6 +62,8 @@ export class SelfValidationGate {
       throw new ConflictError(
         `GOVERNANCE_CONFIRMATION_REQUIRED: ${args.refusal} Personne d'autre ne peut valider : renvoyez la demande avec ` +
           `governanceConfirmation { rule: "${SELF_VALIDATION_RULE}", reason } pour l'appliquer sans validation indépendante.`,
+        undefined,
+        "GOVERNANCE_CONFIRMATION_REQUIRED",
       );
     }
     return {

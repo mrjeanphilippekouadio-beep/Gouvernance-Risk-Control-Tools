@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { TreatmentDecisionService } from "../../services/TreatmentDecisionService.js";
-import { GovernanceConfirmationBody } from "../validation.js";
+import { optionalComment, reasonText } from "../validation.js";
 import { withIndependence } from "../validationIndependence.js";
 import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
@@ -11,12 +11,12 @@ const TreatmentOptionSchema = z.enum(["ACCEPTER", "SURVEILLER", "REDUIRE", "TRAN
 const CreateTreatmentDecisionBody = z.object({
   riskEvaluationId: z.string().min(1),
   option: TreatmentOptionSchema,
-  justification: z.string().min(1),
+  justification: reasonText(2000, true),
 });
 
-const ConfirmBody = z.object({ comment: z.string().nullish() });
-const InvalidateBody = z.object({ comment: z.string().min(1) });
-const ValidateCommitteeBody = z.object({ comment: z.string().nullish(), governanceConfirmation: GovernanceConfirmationBody.optional() });
+const ConfirmBody = z.object({ comment: optionalComment });
+const InvalidateBody = z.object({ comment: reasonText(2000, true) });
+const ValidateCommitteeBody = z.object({ comment: optionalComment });
 
 export function treatmentDecisionsRouter(treatmentDecisionService: TreatmentDecisionService, independence?: GovernanceExceptionLookup): Router {
   const router = Router();

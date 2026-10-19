@@ -636,7 +636,7 @@ app.use(
   "/api/v1/dashboard",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "DASHBOARD"),
-  actionPlanDashboardRouter(actionPlanService),
+  actionPlanDashboardRouter(actionPlanService, governanceQueries),
 );
 app.use(
   "/api/v1/cartography",

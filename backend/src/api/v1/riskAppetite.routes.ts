@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { reasonText } from "../validation.js";
 import { ABSOLUTE_MAX_SCORE } from "../../domain/scoring.js";
 import type { RiskAppetiteService } from "../../services/RiskAppetiteService.js";
 
@@ -12,7 +13,7 @@ const SetRiskAppetiteBody = z.object({
   active: z.boolean().optional(),
 });
 
-const ArchiveRiskAppetiteBody = z.object({ reason: z.string().min(1) });
+const ArchiveRiskAppetiteBody = z.object({ reason: reasonText(2000) });
 
 /**
  * ACT-165 (PUT /appetite/:sous_categorie) and ACT-168 (GET /appetite) —

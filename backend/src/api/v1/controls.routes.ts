@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { boundedArray } from "../validation.js";
+import { boundedArray, reasonText } from "../validation.js";
 import type { ControlService } from "../../services/ControlService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
 
@@ -29,7 +29,7 @@ const UpdateControlBody = CreateControlBody.partial().extend({
   status: ControlStatus.optional(),
 });
 
-const ArchiveControlBody = z.object({ reason: z.string().min(1) });
+const ArchiveControlBody = z.object({ reason: reasonText(2000) });
 
 export function controlsRouter(
   controlService: ControlService,

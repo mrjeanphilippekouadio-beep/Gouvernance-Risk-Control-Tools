@@ -456,6 +456,12 @@ export class ActionPlanService {
     if (!evidenceId?.trim()) {
       throw new ValidationError("evidenceId is required to close an action");
     }
+    if (this.evidences) {
+      const evidence = await this.evidences.getById(actor.tenantId, evidenceId);
+      if (!evidence || evidence.status === "DELETED") throw new ValidationError(`Evidence ${evidenceId} does not exist in this tenant`);
+    }
+
+    // F-PNL2-05: the confirmation prompt comes after every precondition (state, evidence).
     // F-B8b-06: neither the creator nor the executor (responsible user) is their own checker.
     const isCreator = before.createdBy === actor.userId;
     const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
@@ -467,10 +473,6 @@ export class ActionPlanService {
         : "The user responsible for this action cannot close it themselves — ask another user to close it",
       confirmation,
     });
-    if (this.evidences) {
-      const evidence = await this.evidences.getById(actor.tenantId, evidenceId);
-      if (!evidence || evidence.status === "DELETED") throw new ValidationError(`Evidence ${evidenceId} does not exist in this tenant`);
-    }
 
     // DECISION-079: closure + audit row (marked or not) in one transaction.
     const after = await writeAudited<ActionPlan>(

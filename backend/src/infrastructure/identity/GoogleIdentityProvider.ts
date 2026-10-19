@@ -24,7 +24,7 @@ export class GoogleIdentityProvider implements IdentityProvider {
     private readonly googleClientId: string,
     private readonly lookupMembership: TenantMembershipLookup,
     /** q155 : appelé uniquement à la première vérification d'un nouveau jeton, pas à chaque requête. */
-    private readonly onIdentified?: (tenantId: string, userId: string) => void,
+    private readonly onIdentified?: (tenantId: string, userId: string, tokenIat: number) => void,
   ) {
     this.client = new OAuth2Client(googleClientId);
   }
@@ -47,7 +47,7 @@ export class GoogleIdentityProvider implements IdentityProvider {
     if (this.onIdentified && this.lastIat.get(membership.userId) !== payload.iat) {
       this.lastIat.set(membership.userId, payload.iat);
       try {
-        this.onIdentified(membership.tenantId, membership.userId);
+        this.onIdentified(membership.tenantId, membership.userId, payload.iat);
       } catch {
         // jamais bloquant
       }

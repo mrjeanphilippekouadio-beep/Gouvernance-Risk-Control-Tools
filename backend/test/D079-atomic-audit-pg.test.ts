@@ -255,14 +255,14 @@ describe.skipIf(!HOST.startsWith("/"))("DECISION-079 audit atomicity on real Pos
 
     it("approveSelfValidationPolicy: a refused audit leaves the request pending and the policy unchanged", async () => {
       const before = await policy();
-      const id = await pending(BLOCK); // the APPROVE audit row carries the request's reason
+      const id = await pending();
       const svc = service();
-      await expect(svc.approveSelfValidationPolicy(approver(), id, "r")).rejects.toThrow(/QA_D079/);
+      // the APPROVE audit row carries the APPROVER's own reason (CMP-PNL2)
+      await expect(svc.approveSelfValidationPolicy(approver(), id, "r", BLOCK)).rejects.toThrow(/QA_D079/);
       expect(await statusOf(id)).toBe("PENDING");
       expect(await policy()).toBe(before);
-      await q(`UPDATE self_validation_policy_requests SET reason = 'motif valable' WHERE id = $1`, [id]);
       await q(`UPDATE configs SET self_validation_policy = 'REFUSE' WHERE tenant_id = $1`, [tenant]);
-      const cfg = await svc.approveSelfValidationPolicy(approver(), id, "r");
+      const cfg = await svc.approveSelfValidationPolicy(approver(), id, "r", "motif valable");
       expect(cfg.selfValidationPolicy).toBe("DOUBLE_CONFIRMATION");
       expect(await statusOf(id)).toBe("APPLIED");
       await q(`UPDATE configs SET self_validation_policy = 'REFUSE' WHERE tenant_id = $1`, [tenant]);

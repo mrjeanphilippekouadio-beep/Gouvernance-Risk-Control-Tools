@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { GovernanceService } from "../../services/GovernanceService.js";
-import { GovernanceConfirmationBody } from "../validation.js";
+import { GovernanceConfirmationBody, optionalComment } from "../validation.js";
 import { withIndependence } from "../validationIndependence.js";
 import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
@@ -12,11 +12,11 @@ const CreateReviewCycleBody = z.object({
   type: CycleType,
   title: z.string().min(1),
   scope: z.string().nullish(),
-  reason: z.string().nullish(),
+  reason: optionalComment,
 });
 
-const CommentBody = z.object({ comment: z.string().nullish() });
-const CloseBody = z.object({ comment: z.string().nullish(), governanceConfirmation: GovernanceConfirmationBody.optional() });
+const CommentBody = z.object({ comment: optionalComment });
+const CloseBody = z.object({ comment: optionalComment, governanceConfirmation: GovernanceConfirmationBody.optional() });
 
 /** ACT-250/251/252: mounted at /api/v1/review-cycles by server.ts. */
 export function reviewCyclesRouter(governanceService: GovernanceService, independence?: GovernanceExceptionLookup): Router {

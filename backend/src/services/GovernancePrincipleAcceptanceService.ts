@@ -44,22 +44,27 @@ export class GovernancePrincipleAcceptanceService {
 
   async list(actor: AuthenticatedUser): Promise<AcceptanceView[]> {
     requirePermission(actor, "governancehealth.read");
-    const showNames = actor.roles.includes("audit.read");
     const rows = await this.acceptances.list(actor.tenantId, ACCEPTANCE_LIST_LIMIT);
-    return rows.map((a) => ({
+    return rows.map((a) => this.view(actor, a));
+  }
+
+  /** R-6.1 (I05): the same masking on the list and on every answer (accept / confirm / reject / revoke). */
+  private view(actor: AuthenticatedUser, a: GovernancePrincipleAcceptance): AcceptanceView {
+    const showNames = actor.roles.includes("audit.read");
+    return {
       ...a,
       acceptedBy: showNames ? a.acceptedBy : null,
       confirmedBy: showNames ? a.confirmedBy : null,
       endedBy: showNames ? a.endedBy : null,
       mine: a.acceptedBy === actor.userId,
-    }));
+    };
   }
 
   async accept(
     actor: AuthenticatedUser,
     input: { principleId: string; reason: string; expiresAt: Date },
     requestId: string,
-  ): Promise<GovernancePrincipleAcceptance> {
+  ): Promise<AcceptanceView> {
     requirePermission(actor, "governanceprinciple.accept");
     if (!PRINCIPLE_ID.test(input.principleId ?? "") || input.principleId.length > 40) throw new ValidationError("Unknown principle id");
     const reason = requireReason(input.reason, "accept a principle");
@@ -111,13 +116,13 @@ export class GovernancePrincipleAcceptanceService {
         },
       ],
     );
-    return acceptance;
+    return this.view(actor, acceptance);
   }
 
-  async confirm(actor: AuthenticatedUser, id: string, requestId: string): Promise<GovernancePrincipleAcceptance> {
+  async confirm(actor: AuthenticatedUser, id: string, requestId: string): Promise<AcceptanceView> {
     requirePermission(actor, "governanceprinciple.acceptance.confirm");
     const pending = await this.getPendingForThirdParty(actor, id, true);
-    return this.acceptances.confirm(actor.tenantId, id, actor.userId, (confirmed) => [
+    const confirmedRow = await this.acceptances.confirm(actor.tenantId, id, actor.userId, (confirmed) => [
       {
         tenantId: actor.tenantId,
         userId: actor.userId,
@@ -130,13 +135,14 @@ export class GovernancePrincipleAcceptanceService {
         requestId,
       },
     ]);
+    return this.view(actor, confirmedRow);
   }
 
-  async reject(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<GovernancePrincipleAcceptance> {
+  async reject(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<AcceptanceView> {
     requirePermission(actor, "governanceprinciple.acceptance.confirm");
     const why = requireReason(reason, "reject an acceptance");
     const pending = await this.getPendingForThirdParty(actor, id, false);
-    return this.acceptances.end(actor.tenantId, id, "REJECTED", actor.userId, why, (rejected) => [
+    const rejectedRow = await this.acceptances.end(actor.tenantId, id, "REJECTED", actor.userId, why, (rejected) => [
       {
         tenantId: actor.tenantId,
         userId: actor.userId,
@@ -149,10 +155,11 @@ export class GovernancePrincipleAcceptanceService {
         requestId,
       },
     ]);
+    return this.view(actor, rejectedRow);
   }
 
   /** Early end. A terminal transition: its own permission, mandatory reason. The acceptor may end their own acceptance. */
-  async revoke(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<GovernancePrincipleAcceptance> {
+  async revoke(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<AcceptanceView> {
     requirePermission(actor, "governanceprinciple.acceptance.revoke");
     const why = requireReason(reason, "end an acceptance");
     const current = await this.acceptances.getById(actor.tenantId, id);
@@ -160,7 +167,7 @@ export class GovernancePrincipleAcceptanceService {
     if (current.status !== "PENDING" && current.status !== "ACTIVE") {
       throw new ConflictError(`This acceptance has already ended (${current.status})`, id);
     }
-    return this.acceptances.end(actor.tenantId, id, "REVOKED", actor.userId, why, (revoked) => [
+    const revokedRow = await this.acceptances.end(actor.tenantId, id, "REVOKED", actor.userId, why, (revoked) => [
       {
         tenantId: actor.tenantId,
         userId: actor.userId,
@@ -173,6 +180,7 @@ export class GovernancePrincipleAcceptanceService {
         requestId,
       },
     ]);
+    return this.view(actor, revokedRow);
   }
 
   /** Tenant-scoped lookup, still PENDING, and never the actor's own acceptance (maker-checker, no exception). */

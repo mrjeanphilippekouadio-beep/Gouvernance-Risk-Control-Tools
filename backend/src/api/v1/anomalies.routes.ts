@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { optionalComment } from "../validation.js";
 import type { AnomalyService } from "../../services/AnomalyService.js";
 
 const Severity = z.enum(["LOW", "MODERATE", "HIGH", "MAJOR", "CRITICAL"]);
@@ -16,7 +17,7 @@ const CreateAnomalyBody = z.object({
 
 const UpdateStatusBody = z.object({
   status: Status,
-  comment: z.string().nullish(),
+  comment: optionalComment,
 });
 
 export function anomaliesRouter(anomalyService: AnomalyService): Router {

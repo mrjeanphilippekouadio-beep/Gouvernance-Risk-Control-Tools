@@ -325,7 +325,10 @@ describe.skipIf(!HOST.startsWith("/"))("QA-panel2 real PostgreSQL", () => {
       const w = await world();
       const svc = configSvc();
       const p = (await svc.setSelfValidationPolicy(w.adminActor(), "DOUBLE_CONFIRMATION", "demande ancienne", "r1")).pendingRequest!;
-      await pool.query(`UPDATE self_validation_policy_requests SET requested_at = now() - interval '400 days' WHERE id = $1`, [p.id]);
+      // 072 makes the content immutable: the age is forged with the guard trigger switched off (superuser connection), then back on.
+      await pool.query(`ALTER TABLE self_validation_policy_requests DISABLE TRIGGER self_validation_policy_requests_guard`);
+      try { await pool.query(`UPDATE self_validation_policy_requests SET requested_at = now() - interval '400 days' WHERE id = $1`, [p.id]); }
+      finally { await pool.query(`ALTER TABLE self_validation_policy_requests ENABLE TRIGGER self_validation_policy_requests_guard`); }
       await w.suspend(w.admin);
       const cfg = await svc.approveSelfValidationPolicy(w.rmActor(), p.id, "r2");
       expect(cfg.selfValidationPolicy).toBe("DOUBLE_CONFIRMATION");
@@ -413,25 +416,25 @@ describe.skipIf(!HOST.startsWith("/"))("QA-panel2 real PostgreSQL", () => {
         const get = await call(srv.base, "rm", "GET", "/api/v1/config/self-validation-policy/request");
         expect(get.json.data.id).toBe(put.json.pendingRequest.id);
         expect((await call(srv.base, "audit", "GET", "/api/v1/config/self-validation-policy/request")).status).toBe(403);
-        expect((await call(srv.base, "admin", "POST", `/api/v1/config/self-validation-policy/requests/${put.json.pendingRequest.id}/approve`)).status).toBe(403);
+        expect((await call(srv.base, "admin", "POST", `/api/v1/config/self-validation-policy/requests/${put.json.pendingRequest.id}/approve`, { reason: "approuve" })).status).toBe(403);
         // unknown extra keys / bad reasons are 400, not 202
         expect((await call(srv.base, "admin", "PUT", "/api/v1/config/self-validation-policy", { policy: "DOUBLE_CONFIRMATION", reason: ZWSP })).status).toBe(400);
         expect((await call(srv.base, "admin", "PUT", "/api/v1/config/self-validation-policy", { policy: "NOPE", reason: "x" })).status).toBe(400);
-        const approve = await call(srv.base, "rm", "POST", `/api/v1/config/self-validation-policy/requests/${put.json.pendingRequest.id}/approve`);
+        const approve = await call(srv.base, "rm", "POST", `/api/v1/config/self-validation-policy/requests/${put.json.pendingRequest.id}/approve`, { reason: "approuve" });
         expect(approve.status).toBe(200);
         expect(approve.json.data.selfValidationPolicy).toBe("DOUBLE_CONFIRMATION");
         // a second approve of the same request: 400 (already decided), not a 500
-        expect((await call(srv.base, "rm", "POST", `/api/v1/config/self-validation-policy/requests/${put.json.pendingRequest.id}/approve`)).status).toBe(400);
+        expect((await call(srv.base, "rm", "POST", `/api/v1/config/self-validation-policy/requests/${put.json.pendingRequest.id}/approve`, { reason: "approuve" })).status).toBe(400);
       } finally { await srv.close(); }
     });
 
-    it.fails("F-PNL2-03: a malformed request id on approve/reject is answered 400/404, not a 500 (the id reaches PostgreSQL unvalidated)", async () => {
+    it("F-PNL2-03: a malformed request id on approve/reject is answered 400/404, not a 500 (the id reaches PostgreSQL unvalidated)", async () => {
       const w = await world();
       const users = new Map<string, AuthenticatedUser>([["rm", w.rmActor()]]);
       const srv = await serve((app) => { app.use(withUser(users)); app.use("/api/v1/config", configRouter(configSvc())); }, () => undefined);
       try {
         for (const verb of ["approve", "reject"]) {
-          const bad = await call(srv.base, "rm", "POST", `/api/v1/config/self-validation-policy/requests/not-a-uuid/${verb}`, verb === "reject" ? { reason: "motif valable" } : undefined);
+          const bad = await call(srv.base, "rm", "POST", `/api/v1/config/self-validation-policy/requests/not-a-uuid/${verb}`, { reason: "motif valable" });
           expect([400, 404], `${verb}: status ${bad.status}`).toContain(bad.status);
         }
       } finally { await srv.close(); }
@@ -549,7 +552,7 @@ describe.skipIf(!HOST.startsWith("/"))("QA-panel2 real PostgreSQL", () => {
       await expect(svc.reject(w.auditActor(), a.id, "non", "r3")).rejects.toMatchObject({ name: "ForbiddenError" });
       await expect(svc.accept(w.rmActor(), { principleId: "GOV-R5", reason: "autre", expiresAt: exp }, "r4")).rejects.toMatchObject({ name: "ConflictError" }); // one open per principle
       const done = await svc.confirm(w.committeeActor(), a.id, "r5");
-      expect(done).toMatchObject({ status: "ACTIVE", regime: "CONFIRMED", confirmedBy: w.committee });
+      expect(done).toMatchObject({ status: "ACTIVE", regime: "CONFIRMED", confirmedBy: null });
       await expect(svc.confirm(w.rmActor(), a.id, "r6")).rejects.toMatchObject({ name: "ConflictError" });
       expect((await w.auditRows("GovernancePrincipleAcceptance", a.id)).map((x) => [x.action, x.governance_exception])).toEqual(expect.arrayContaining([["CREATE", null], ["APPROVE", null]]));
     });
@@ -569,7 +572,7 @@ describe.skipIf(!HOST.startsWith("/"))("QA-panel2 real PostgreSQL", () => {
       const a = await svc.accept(w.adminActor(), { principleId: "GOV-R9", reason: "temp", expiresAt: exp }, "r1");
       await expect(svc.reject(w.committeeActor(), a.id, ZWSP, "r2")).rejects.toMatchObject({ name: "ValidationError" });
       const rej = await svc.reject(w.committeeActor(), a.id, "pas justifié", "r3");
-      expect(rej).toMatchObject({ status: "REJECTED", endedBy: w.committee });
+      expect(rej).toMatchObject({ status: "REJECTED", endedBy: null });
       await expect(svc.revoke(w.auditActor(), a.id, "fin", "r4")).rejects.toMatchObject({ name: "ConflictError" });
       const b = await svc.accept(w.adminActor(), { principleId: "GOV-R9", reason: "temp 2", expiresAt: exp }, "r5");
       expect(await svc.revoke(w.adminActor(), b.id, "j'arrête", "r6")).toMatchObject({ status: "REVOKED", endedBy: w.admin });
@@ -1018,7 +1021,7 @@ describe.skipIf(!HOST.startsWith("/"))("QA-panel2 real PostgreSQL", () => {
       expect((await w.auditRows("Config")).map((a) => a.action)).toEqual(["UPDATE"]);
     });
 
-    it.fails("F-PNL2-06: a NUL in the reason of config.committeeenforcement.set is refused BEFORE the effect (today the setting is turned off, the audit insert fails, the call ends in an error: an untraced change)", async () => {
+    it("F-PNL2-06: a NUL in the reason of config.committeeenforcement.set is refused BEFORE the effect (today the setting is turned off, the audit insert fails, the call ends in an error: an untraced change)", async () => {
       const w = await world();
       const actor = w.as(w.admin, ["config.read", "config.committeeenforcement.set"]);
       await cfgForGovernanceSettings().setCommitteeEnforcement(actor, false, NUL, "r1").catch(() => undefined);
@@ -1026,22 +1029,20 @@ describe.skipIf(!HOST.startsWith("/"))("QA-panel2 real PostgreSQL", () => {
       expect(await w.auditRows("Config")).toEqual([]);
     });
 
-    it.fails("F-PNL2-06b: same for config.cumul.set (Committee + Audit cumul)", async () => {
+    it("F-PNL2-06b: same for config.cumul.set (Committee + Audit cumul)", async () => {
       const w = await world();
       const actor = w.as(w.admin, ["config.read", "config.cumul.set"]);
       await cfgForGovernanceSettings().setCommitteeAuditCumul(actor, false, NUL, "r1").catch(() => undefined);
       expect((await rows<{ a: boolean }>(`SELECT committee_audit_cumul_allowed AS a FROM configs WHERE tenant_id = $1`, [w.tenant]))[0]?.a ?? true).toBe(true);
     });
 
-    it("the HTTP face: PUT /config/committee-enforcement with a NUL reason is answered 400 (oracle) -- today zod accepts it", async () => {
+    it("the HTTP face: PUT /config/committee-enforcement with a NUL reason is answered 400 (reasonText on the body)", async () => {
       const w = await world();
       const users = new Map<string, AuthenticatedUser>([["admin", w.as(w.admin, ["config.read", "config.committeeenforcement.set"])]]);
       const srv = await serve((app) => { app.use(withUser(users)); app.use("/api/v1/config", configRouter(cfgForGovernanceSettings())); }, () => undefined);
       try {
         const res = await call(srv.base, "admin", "PUT", "/api/v1/config/committee-enforcement", { enforced: false, reason: NUL });
-        // pinned: the route lets it through (500 once the audit fails). The fix is `reasonText()` on these four bodies.
-        expect([400, 500], `status ${res.status}`).toContain(res.status);
-        expect(res.status).toBe(500);
+        expect(res.status).toBe(400);
       } finally { await srv.close(); }
     });
   });

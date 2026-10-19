@@ -50,6 +50,9 @@ export interface SelfValidationPolicyRequestRepository {
     decidedBy: string,
     decisionReason: string | null,
   ): Promise<SelfValidationPolicyRequest | null>;
-  /** Undo a claim whose effect could not be applied. */
-  reopen(tenantId: string, id: string): Promise<void>;
+  /**
+   * Test fakes only (non-transactional fallback). The PostgreSQL repository has none: a decided request is never reopened
+   * (SEC-PNL2-03, guarded by a trigger); its transactional `change` rolls the claim back with the rest.
+   */
+  reopen?(tenantId: string, id: string): Promise<void>;
 }

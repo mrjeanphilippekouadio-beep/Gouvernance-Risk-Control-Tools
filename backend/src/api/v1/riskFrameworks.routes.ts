@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { RiskFrameworkService } from "../../services/RiskFrameworkService.js";
-import { boundedArray } from "../validation.js";
+import { boundedArray, reasonText } from "../validation.js";
 
 const Id = z.guid();
-const Reason = z.string().trim().min(1).max(500);
-const Comment = z.string().trim().max(1000);
+const Reason = reasonText(500);
+const Comment = reasonText(1000, true);
 const Score = z.number().int().min(1).max(36);
 
 const AppetiteEntry = z
@@ -70,7 +70,7 @@ const BootstrapBody = z
   .object({
     comment: Comment.min(1),
     justification: z
-      .object({ askedUserId: Id, askedOn: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/), outcome: z.string().trim().min(1).max(500) })
+      .object({ askedUserId: Id, askedOn: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/), outcome: reasonText(500) })
       .strict(),
   })
   .strict();

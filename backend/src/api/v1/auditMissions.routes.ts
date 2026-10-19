@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { boundedArray } from "../validation.js";
+import { boundedArray, reasonText } from "../validation.js";
 import type { AuditMissionService } from "../../services/AuditMissionService.js";
 
 const Status = z.enum(["PLANIFIEE", "EN_COURS", "CLOTUREE"]);
@@ -16,7 +16,7 @@ const CreateAuditMissionBody = z.object({
 });
 
 const CloseAuditMissionBody = z.object({
-  comment: z.string().min(1),
+  comment: reasonText(2000, true),
 });
 
 export function auditMissionsRouter(auditMissionService: AuditMissionService): Router {

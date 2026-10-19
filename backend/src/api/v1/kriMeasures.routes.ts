@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { optionalComment } from "../validation.js";
 import { perUserRateLimiter } from "../middleware/rateLimit.js";
 import type { KriMeasureService } from "../../services/KriMeasureService.js";
 
@@ -8,7 +9,7 @@ const CreateKriMeasureBody = z.object({
   measureDate: z.coerce.date(),
   value: z.number().finite(),
   source: z.string().min(1),
-  comment: z.string().nullish(),
+  comment: optionalComment,
 });
 
 export function kriMeasuresRouter(kriMeasureService: KriMeasureService): Router {

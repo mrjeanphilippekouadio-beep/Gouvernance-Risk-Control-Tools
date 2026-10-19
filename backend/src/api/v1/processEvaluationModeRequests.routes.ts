@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { ProcessEvaluationModeRequestService } from "../../services/ProcessEvaluationModeRequestService.js";
-import { GovernanceConfirmationBody } from "../validation.js";
+import { GovernanceConfirmationBody, reasonText } from "../validation.js";
 import { withIndependence } from "../validationIndependence.js";
 import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
@@ -11,7 +11,7 @@ const ProposeBody = z.object({
   processId: z.string().min(1),
   requestedMode: EvaluationMode,
 });
-const RejectBody = z.object({ reason: z.string().min(1) });
+const RejectBody = z.object({ reason: reasonText(2000) });
 const ValidateBody = z.object({ governanceConfirmation: GovernanceConfirmationBody.optional() });
 
 /**

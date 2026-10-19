@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { boundedArray } from "../validation.js";
+import { boundedArray, optionalComment } from "../validation.js";
 import { perUserRateLimiter } from "../middleware/rateLimit.js";
 import type { ActionPlanService } from "../../services/ActionPlanService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
@@ -31,7 +31,7 @@ const CreateActionPlanBody = z.object({
 
 const ProgressBody = z.object({
   progressPercent: z.number().int().min(0).max(100),
-  comment: z.string().nullish(),
+  comment: optionalComment,
 });
 
 const LinksBody = z.object({
@@ -46,7 +46,7 @@ const LinksBody = z.object({
 
 const CloseBody = z.object({
   evidenceId: z.string().min(1),
-  comment: z.string().nullish(),
+  comment: optionalComment,
   governanceConfirmation: GovernanceConfirmationBody.optional(),
 });
 

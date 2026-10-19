@@ -10,7 +10,9 @@ import type {
   ScoreFormula,
 } from "../../../domain/entities/Config.js";
 import type { SelfValidationPolicy } from "../../../domain/governance/selfValidation.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
+import { runAudited } from "./PostgresAuditRepository.js";
 
 interface ConfigRow {
   id: string;
@@ -98,6 +100,8 @@ export async function upsertConfigRow(db: Pick<Pool, "query">, tenantId: string,
 }
 
 export class PostgresConfigRepository implements ConfigRepository {
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
 
   async getByTenant(tenantId: string): Promise<Config | null> {
@@ -105,7 +109,7 @@ export class PostgresConfigRepository implements ConfigRepository {
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
-  async upsert(tenantId: string, patch: ConfigPatch, updatedBy: string): Promise<Config> {
-    return upsertConfigRow(this.pool, tenantId, patch, updatedBy);
+  async upsert(tenantId: string, patch: ConfigPatch, updatedBy: string, audit?: TransactionalAudit<Config>): Promise<Config> {
+    return runAudited(this.pool, (db) => upsertConfigRow(db, tenantId, patch, updatedBy), audit);
   }
 }
