@@ -9,8 +9,8 @@ const ONE_HOUR_MS = 3_600_000;
  * donnée au-delà de la date (et de l'`iat` du jeton). Ne lève jamais et n'est jamais attendue par l'appelant : un échec
  * est journalisé et la requête continue.
  *  - Sans `tokenIat` (fournisseur local, connexion réelle) : au plus une fois par heure et par utilisateur.
- *  - Avec `tokenIat` (Google, I01 / migration 074) : une connexion n'est comptée que si l'`iat` du jeton diffère de
- *    `users.last_token_iat`. La comparaison est faite en SQL (atomique, indépendante de l'instance) ; la Map mémoire
+ *  - Avec `tokenIat` (Google, I01 / migration 074) : une connexion n'est comptée que si l'`iat` du jeton est STRICTEMENT plus récent que
+ *    `users.last_token_iat` (monotone, SEC-PNL3-01 : deux jetons en alternance ou un jeton plus ancien ne comptent pas). La comparaison est faite en SQL (atomique, indépendante de l'instance) ; la Map mémoire
  *    n'évite que l'UPDATE à chaque requête d'un même jeton.
  */
 export function createLastSeenRecorder(pool: Pick<Pool, "query">) {
@@ -21,7 +21,8 @@ export function createLastSeenRecorder(pool: Pick<Pool, "query">) {
     const now = Date.now();
     const key = `${tenantId}:${userId}`;
     if (tokenIat !== undefined) {
-      if (lastIat.get(key) === tokenIat) return;
+      const seen = lastIat.get(key);
+      if (seen !== undefined && tokenIat <= seen) return; // monotone: an older or equal token is never a new connection
       lastIat.set(key, tokenIat);
     } else {
       const previous = lastWrite.get(key);
@@ -33,7 +34,7 @@ export function createLastSeenRecorder(pool: Pick<Pool, "query">) {
         tokenIat !== undefined
           ? pool.query(
               `UPDATE users SET last_seen_at = now(), last_token_iat = $3
-               WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL AND last_token_iat IS DISTINCT FROM $3`,
+               WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL AND (last_token_iat IS NULL OR last_token_iat < $3)`,
               [tenantId, userId, tokenIat],
             )
           : pool.query(
