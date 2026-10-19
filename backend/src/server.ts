@@ -65,6 +65,14 @@ import { ProcessService } from "./services/ProcessService.js";
 import { ProcessEvaluationModeRequestService } from "./services/ProcessEvaluationModeRequestService.js";
 import { OrganizationProfileService } from "./services/OrganizationProfileService.js";
 import { organizationProfileRouter } from "./api/v1/organizationProfile.routes.js";
+import { GovernanceExceptionService } from "./services/GovernanceExceptionService.js";
+import { GovernancePrincipleAcceptanceService } from "./services/GovernancePrincipleAcceptanceService.js";
+import { GovernanceNotifier } from "./services/GovernanceNotifier.js";
+import { PostgresGovernanceExceptionReviewRepository } from "./infrastructure/database/postgres/PostgresGovernanceExceptionReviewRepository.js";
+import { PostgresGovernancePrincipleAcceptanceRepository } from "./infrastructure/database/postgres/PostgresGovernancePrincipleAcceptanceRepository.js";
+import { governanceExceptionsRouter } from "./api/v1/governanceExceptions.routes.js";
+import { governancePrincipleAcceptancesRouter } from "./api/v1/governancePrincipleAcceptances.routes.js";
+import { governanceNotificationsMiddleware } from "./api/middleware/governanceNotifications.js";
 import { AuditLogService } from "./services/AuditLogService.js";
 import { RoleService } from "./services/RoleService.js";
 import { FeedbackService } from "./services/FeedbackService.js";
@@ -292,6 +300,14 @@ const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
 const governanceDesignationRepository = new PostgresGovernanceDesignationRepository(pool);
 const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository, governanceDesignationRepository);
 const governanceDesignationService = new GovernanceDesignationService(governanceDesignationRepository, auditRepository, userRepository, roleRepository);
+// Lot D5: reviews, principle acceptances, and the mandatory governance notifications (emitted after commit, see the middleware).
+const governanceExceptionService = new GovernanceExceptionService(new PostgresGovernanceExceptionReviewRepository(pool), auditRepository);
+const governancePrincipleAcceptanceService = new GovernancePrincipleAcceptanceService(
+  new PostgresGovernancePrincipleAcceptanceRepository(pool),
+  auditRepository,
+  governanceQueries,
+);
+const governanceNotifier = new GovernanceNotifier(notificationService, governanceQueries);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
@@ -523,6 +539,8 @@ app.get("/ready", async (_req, res) => {
 });
 
 // --- Authenticated API ---
+// Lot D5: governance notifications, after the commit of every successful mutating request.
+app.use("/api/v1", governanceNotificationsMiddleware(governanceNotifier));
 // moduleGuard wired per MODULE_NAMES (ACT-221): each togglable module's main
 // resource route(s) get the same one-line treatment as /risks.
 app.use(
@@ -574,6 +592,12 @@ app.use("/api/v1/organization-profile", authMiddleware(identityProvider), organi
 app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(auditLogService));
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
 app.use("/api/v1/governance-designations", authMiddleware(identityProvider), governanceDesignationsRouter(governanceDesignationService));
+app.use("/api/v1/governance-exceptions", authMiddleware(identityProvider), governanceExceptionsRouter(governanceExceptionService));
+app.use(
+  "/api/v1/governance-principle-acceptances",
+  authMiddleware(identityProvider),
+  governancePrincipleAcceptancesRouter(governancePrincipleAcceptanceService),
+);
 app.use("/api/v1/feedback", authMiddleware(identityProvider), feedbackRouter(feedbackService));
 app.use("/api/v1/permissions", authMiddleware(identityProvider), permissionsRouter());
 app.use(

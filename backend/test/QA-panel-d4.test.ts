@@ -376,6 +376,8 @@ describe("QA-panel D4 / no self-validation guard outside the gate (static)", () 
     "UserService.ts": "no self-suspension",
     "RoleService.ts": "no self-assignment, hand-over interim rules, permission-change decisions (out of D4 scope)",
     "GovernanceDesignationService.ts": "no self-designation",
+    "GovernanceExceptionService.ts": "D5: the author of an action never reviews it (maker-checker, add-only review)",
+    "GovernancePrincipleAcceptanceService.ts": "D5: the acceptor never confirms or rejects their own acceptance",
     "ConfigService.ts": "own maker-checker (q158 policy requests: requestedBy)",
     "DashboardScopeResolver.ts": "comment only",
     "ControlEffectivenessService.ts": "gate", "ControlExecutionService.ts": "gate", "FindingService.ts": "gate", "GovernanceService.ts": "gate", "ActionPlanService.ts": "gate",

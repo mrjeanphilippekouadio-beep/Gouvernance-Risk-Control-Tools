@@ -158,6 +158,12 @@ export type Permission =
   | "orgprofile.read"
   | "orgprofile.submit"
   | "orgprofile.approve"
+  /** D5 (R-7): review / contest an action applied without a second validation (add-only; RM, Committee, Audit, never the author). */
+  | "governanceexception.review"
+  /** D5 (q138): accept a non-respected principle for a limited time; confirm = second confirmation; revoke = early end (terminal, own gate). */
+  | "governanceprinciple.accept"
+  | "governanceprinciple.acceptance.confirm"
+  | "governanceprinciple.acceptance.revoke"
   | "notification.read"
   | "governance.read"
   | "governance.create"
@@ -319,6 +325,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "orgprofile.read",
   "orgprofile.submit",
   "orgprofile.approve",
+  "governanceexception.review",
+  "governanceprinciple.accept",
+  "governanceprinciple.acceptance.confirm",
+  "governanceprinciple.acceptance.revoke",
   "notification.read",
   "governance.read",
   "governance.create",

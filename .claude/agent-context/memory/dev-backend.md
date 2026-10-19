@@ -414,3 +414,11 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Test PG : trigger temporaire `BEFORE INSERT ON audit_log WHEN reason = 'QA_D079_BLOCK'` ; toujours doubler d'un cas non bloqué (preuve que la fixture est bonne). Vérifié : repasser `auditsInTransaction=false` fait échouer 5 tests.
 - Hors périmètre restant : reject/RiskEvaluation.reject/ProcessEvaluationModeRequest.reject, chemins Comité, create/update des mêmes modules, autres services (audit après écriture).
 - Leçon : commandes bash composées (heredoc python, boucles psql) refusées dans le worktree : utiliser Edit/Write.
+
+## 2026-10-19 Lot D5 (DECISION-074/078/079, migration 073, base 5813c9f)
+
+- 073 : `governance_exception_reviews` (ajout seul, `outcome` REVIEWED|CONTESTED, unique `(tenant, audit_log_id, reviewed_by)` : écart au plan pour que l'Audit puisse contester après le RM ; trigger : entrée du même tenant et `reviewed_by <> auteur de l'entrée`) + `governance_principle_acceptances` (PENDING/ACTIVE/REJECTED/REVOKED, contenu immuable, unique partiel ouvert par principe) + 4 permissions et rattrapage. Audit : `review` + `acceptance.revoke`, JAMAIS `acceptance.confirm` (q157, écart au plan R-7). Tiers d'une acceptation = `existsOther(..., "governanceprinciple.acceptance.confirm")` (RM + Comité).
+- Notifications de gouvernance : PAS dans les services. `GovernanceNotifier.processRequest` est appelé par `governanceNotificationsMiddleware` au `finish` d'une mutation en succès ; il relit les lignes d'audit de CETTE requête (même request_id, même acteur : X-Request-Id est fourni par le client) et émet via `NotificationService.emit` (8 types obligatoires). Avantage : aucun conflit avec les lots qui réécrivent les services, vrai « après commit », couvre tout futur marqueur. Exclus : marqueur `riskManager.vacancy` (q160), passation à l'intérimaire. SEC-PNL-04 n'était PAS couvert par R-6.3/R-6.4 : ajout `GOVERNANCE_MEMBER_REMOVED`.
+- `forEntities` (lookup D4) renvoie maintenant REVIEWED_BY_THIRD_PARTY (jointure revues REVIEWED). Migrer AVANT le code.
+- Un test de garde par regex (QA-panel-d4) exige de lister tout service qui compare à `actor.userId`.
+- Harnais : heredoc + commande composée refusés ; scripts python dans le scratchpad. PG local à relancer via startpg.sh.

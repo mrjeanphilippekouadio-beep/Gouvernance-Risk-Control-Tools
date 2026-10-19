@@ -25,6 +25,8 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "process.responsibility.assign",
     "orgprofile.read", "orgprofile.submit", "orgprofile.approve",
     "config.selfvalidation.approve",
+    "governanceexception.review", "governanceprinciple.accept", "governanceprinciple.acceptance.confirm",
+    "governanceprinciple.acceptance.revoke",
   ],
   RISK_COMMITTEE: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",
@@ -35,6 +37,7 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "rolegroup.audit.validate", "riskframework.read", "governancehealth.read",
     "orgprofile.read", "orgprofile.approve",
     "config.selfvalidation.approve",
+    "governanceexception.review", "governanceprinciple.acceptance.confirm", "governanceprinciple.acceptance.revoke",
   ],
   AUDIT: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",
@@ -44,6 +47,8 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "audit.read", "audit.mission.read", "audit.finding.read", "rolegroup.audit.validate", "riskframework.read",
     "governancehealth.read",
     "orgprofile.read",
+    // D5: Audit reviews / contests and can end an acceptance early, but never confirms one (q157: Audit never decides).
+    "governanceexception.review", "governanceprinciple.acceptance.revoke",
   ],
 };
 
@@ -53,7 +58,11 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
  * a change of the Audit rights.
  */
 export function isAuditGroupPermission(p: Permission): boolean {
-  return p.endsWith(".read") || p.endsWith(".download") || p === "dashboard.executive" || p === "rolegroup.audit.validate";
+  return (
+    p.endsWith(".read") || p.endsWith(".download") || p === "dashboard.executive" || p === "rolegroup.audit.validate" ||
+    // D5: add-only review / contestation, and ending an acceptance early (a tightening). Never acceptance.confirm.
+    p === "governanceexception.review" || p === "governanceprinciple.acceptance.revoke"
+  );
 }
 
 /** F-B8b-01: rolegroup.audit.update is held by no role at all; .validate only by Audit and the Committee. */

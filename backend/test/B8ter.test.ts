@@ -117,10 +117,17 @@ describe("B8bis-02 single source of truth for the fixed groups' rights", () => {
   // q158 (DECISION-078): migration 072 adds config.selfvalidation.approve to Risk Manager and Committee (never Audit).
   const addedBy072 = (g: string) => (g === "AUDIT" ? [] : ["config.selfvalidation.approve"]);
 
+  // D5 (DECISION-074 R-7): migration 073 adds the review / acceptance rights. Audit reviews and ends an acceptance early, never confirms (q157).
+  const addedBy073: Record<string, string[]> = {
+    RISK_MANAGER: ["governanceexception.review", "governanceprinciple.accept", "governanceprinciple.acceptance.confirm", "governanceprinciple.acceptance.revoke"],
+    RISK_COMMITTEE: ["governanceexception.review", "governanceprinciple.acceptance.confirm", "governanceprinciple.acceptance.revoke"],
+    AUDIT: ["governanceexception.review", "governanceprinciple.acceptance.revoke"],
+  };
+
   // D1 (DECISION-074): migration 066 adds governancehealth.read to the three groups.
   // D2b: migration 069 adds process.responsibility.assign to the Risk Manager group only.
-  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055, 066, 069, 071 and 072", (g) => {
-    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g), "governancehealth.read", ...addedBy069(g), ...addedBy071[g]!, ...addedBy072(g)]);
+  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055, 066, 069, 071, 072 and 073", (g) => {
+    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g), "governancehealth.read", ...addedBy069(g), ...addedBy071[g]!, ...addedBy072(g), ...addedBy073[g]!]);
     expect(FIXED_GROUP_PERMISSIONS[g].every((p) => ALL_PERMISSIONS.includes(p))).toBe(true);
   });
 
