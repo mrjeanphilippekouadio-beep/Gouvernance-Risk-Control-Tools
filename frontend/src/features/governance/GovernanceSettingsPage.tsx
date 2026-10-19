@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Button, Card, FormField, MessageBanner, Modal, StatusBadge } from "@djamo/design-system";
 import {
   configApi,
-  type ConfigEvaluationMode,
   type GovernanceConfig,
   type SelfValidationPolicy,
   type SelfValidationPolicyRequest,
@@ -15,21 +14,16 @@ const POLICY_LABELS: Record<SelfValidationPolicy, string> = {
   REFUSE: "Refuser l'auto-validation",
   DOUBLE_CONFIRMATION: "Autoriser avec double confirmation",
 };
-const MODE_LABELS: Record<ConfigEvaluationMode, string> = { CLASSIQUE: "Classique", PARTICIPATIF: "Participatif" };
-
-type Setting = "policy" | "mode" | "thresholds" | "enforcement" | "cumul";
+type Setting = "policy" | "cumul";
 const TITLES: Record<Setting, string> = {
   policy: "Politique d'auto-validation",
-  mode: "Mode d'évaluation par défaut",
-  thresholds: "Seuils de passage au Comité",
-  enforcement: "Passage obligatoire par le Comité",
   cumul: "Cumul Comité et Audit",
 };
 
 const fmtDate = (iso: string | null) => (iso ? iso.slice(0, 10) : "—");
 const yesNo = (v: boolean, yes: string, no: string) => <StatusBadge label={v ? yes : no} tone={v ? "success" : "neutral"} />;
 
-export function GovernanceSettingsPage({ token }: { token: string }) {
+export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: string; onOpenFrameworks?: () => void }) {
   const [config, setConfig] = useState<GovernanceConfig | null>(null);
   const [pending, setPending] = useState<SelfValidationPolicyRequest | null>(null);
   const [pendingReadable, setPendingReadable] = useState(true);
@@ -40,15 +34,12 @@ export function GovernanceSettingsPage({ token }: { token: string }) {
   const [editing, setEditing] = useState<Setting | null>(null);
   const [reason, setReason] = useState("");
   const [policy, setPolicy] = useState<SelfValidationPolicy>("REFUSE");
-  const [mode, setMode] = useState<ConfigEvaluationMode>("CLASSIQUE");
-  const [evalMin, setEvalMin] = useState("");
-  const [treatMin, setTreatMin] = useState("");
   const [flag, setFlag] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const [rejecting, setRejecting] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
+  const [deciding_, setDecidingKind] = useState<"approve" | "reject" | null>(null);
+  const [decisionReason, setDecisionReason] = useState("");
   const [deciding, setDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
 
@@ -77,10 +68,7 @@ export function GovernanceSettingsPage({ token }: { token: string }) {
     if (!config) return;
     setReason(""); setFormError(null);
     setPolicy(config.selfValidationPolicy === "REFUSE" ? "DOUBLE_CONFIRMATION" : "REFUSE");
-    setMode(config.evaluationMode);
-    setEvalMin(String(config.committeeEvaluationMinScore));
-    setTreatMin(config.committeeTreatmentMinScore === null ? "" : String(config.committeeTreatmentMinScore));
-    setFlag(setting === "enforcement" ? config.committeeEvaluationEnforced : config.committeeAuditCumulAllowed);
+    setFlag(config.committeeAuditCumulAllowed);
     setEditing(setting);
   }
 
@@ -102,15 +90,7 @@ export function GovernanceSettingsPage({ token }: { token: string }) {
         await refresh();
         return;
       }
-      let next: GovernanceConfig;
-      if (editing === "mode") next = await configApi.setEvaluationMode(token, mode, why);
-      else if (editing === "thresholds") {
-        next = await configApi.setCommitteeThresholds(token, {
-          ...(evalMin.trim() !== "" ? { evaluationMinScore: Number(evalMin) } : {}),
-          treatmentMinScore: treatMin.trim() === "" ? null : Number(treatMin),
-        }, why);
-      } else if (editing === "enforcement") next = await configApi.setCommitteeEnforcement(token, flag, why);
-      else next = await configApi.setCommitteeAuditCumul(token, flag, why);
+      const next = await configApi.setCommitteeAuditCumul(token, flag, why);
       setConfig(next);
       setNotice({ tone: "success", title: "Changement appliqué", text: `${TITLES[editing]} mis à jour.` });
       setEditing(null);
@@ -120,30 +100,25 @@ export function GovernanceSettingsPage({ token }: { token: string }) {
     } finally { setSaving(false); }
   }
 
-  async function approve() {
-    if (!pending) return;
-    setDeciding(true); setDecisionError(null);
-    try {
-      const next = await configApi.approvePolicyRequest(token, pending.id);
-      setConfig(next);
-      setNotice({ tone: "success", title: "Demande approuvée", text: `La politique est maintenant « ${POLICY_LABELS[next.selfValidationPolicy]} ».` });
-      await refresh();
-    } catch (err) { setDecisionError(describeError(err)); await refreshIfConflict(err); }
-    finally { setDeciding(false); }
-  }
-
-  async function reject(event: FormEvent) {
+  async function decide(event: FormEvent) {
     event.preventDefault();
-    if (!pending) return;
+    if (!pending || !deciding_) return;
     setDeciding(true); setDecisionError(null);
+    const why = decisionReason.trim();
     try {
-      await configApi.rejectPolicyRequest(token, pending.id, rejectReason.trim());
-      setNotice({ tone: "success", title: "Demande rejetée", text: "La politique d'auto-validation reste inchangée." });
-      setRejecting(false); setRejectReason("");
+      if (deciding_ === "approve") {
+        const next = await configApi.approvePolicyRequest(token, pending.id, why);
+        setConfig(next);
+        setNotice({ tone: "success", title: "Demande approuvée", text: `La politique est maintenant « ${POLICY_LABELS[next.selfValidationPolicy]} ».` });
+      } else {
+        await configApi.rejectPolicyRequest(token, pending.id, why);
+        setNotice({ tone: "success", title: "Demande rejetée", text: "La politique d'auto-validation reste inchangée." });
+      }
+      setDecidingKind(null); setDecisionReason("");
       await refresh();
     } catch (err) {
       setDecisionError(describeError(err));
-      if (isForbidden(err)) setRejecting(false);
+      if (isForbidden(err)) setDecidingKind(null);
       await refreshIfConflict(err);
     } finally { setDeciding(false); }
   }
@@ -164,8 +139,8 @@ export function GovernanceSettingsPage({ token }: { token: string }) {
       <p className="muted">Demandée le {fmtDate(pending.requestedAt)} par {pending.requestedBy}. L'auteur ne peut pas approuver sa propre demande : le serveur refuse.</p>
       {decisionError && <MessageBanner tone="danger">{decisionError}</MessageBanner>}
       <div>
-        <Button variant="primary" disabled={deciding} onClick={() => void approve()}>{deciding ? "Envoi…" : "Approuver"}</Button>{" "}
-        <Button variant="destructive" disabled={deciding} onClick={() => { setRejectReason(""); setDecisionError(null); setRejecting(true); }}>Rejeter</Button>
+        <Button variant="primary" disabled={deciding} onClick={() => { setDecisionReason(""); setDecisionError(null); setDecidingKind("approve"); }}>Approuver</Button>{" "}
+        <Button variant="destructive" disabled={deciding} onClick={() => { setDecisionReason(""); setDecisionError(null); setDecidingKind("reject"); }}>Rejeter</Button>
       </div>
     </MessageBanner>}
     {!pending && !pendingReadable && <p className="muted">Demande en attente : non consultable avec vos droits.</p>}
@@ -184,15 +159,8 @@ export function GovernanceSettingsPage({ token }: { token: string }) {
     {loading && !config && <p role="status">Chargement…</p>}
     {config && <>
       {policyCard}
-      <Card header={<><strong>{TITLES.mode}</strong> <StatusBadge label={MODE_LABELS[config.evaluationMode]} tone="info" /></>} footer={<Button onClick={() => openEdit("mode")}>Modifier</Button>}>
-        <p className="muted">Mode appliqué aux processus qui n'ont pas de mode propre. Un processus change de mode par une demande (écran « Demandes de mode d'évaluation »).</p>
-      </Card>
-      <Card header={<strong>{TITLES.thresholds}</strong>} footer={<Button onClick={() => openEdit("thresholds")}>Modifier</Button>}>
-        <p>Évaluation : score minimum <strong>{config.committeeEvaluationMinScore}</strong></p>
-        <p>Traitement : {config.committeeTreatmentMinScore === null ? "aucun seuil configuré (aucune décision de traitement n'atteint le Comité)" : <>score minimum <strong>{config.committeeTreatmentMinScore}</strong></>}</p>
-      </Card>
-      <Card header={<><strong>{TITLES.enforcement}</strong> {yesNo(config.committeeEvaluationEnforced, "Obligatoire", "Non obligatoire")}</>} footer={<Button onClick={() => openEdit("enforcement")}>Modifier</Button>}>
-        <p className="muted">Passage par le Comité avant validation d'une évaluation.</p>
+      <Card header={<strong>Portés par le Dispositif de risque</strong>} footer={onOpenFrameworks && <Button onClick={onOpenFrameworks}>Ouvrir le Dispositif de risque</Button>}>
+        <p>Le mode d'évaluation par défaut, les seuils de passage au Comité et le caractère obligatoire de ce passage sont portés par la version active du Dispositif de risque. Ils ne se modifient pas ici et cet écran ne les affiche pas : la valeur en vigueur est celle de la version du Dispositif.</p>
       </Card>
       <Card header={<><strong>{TITLES.cumul}</strong> {yesNo(config.committeeAuditCumulAllowed, "Autorisé", "Interdit")}</>} footer={<Button onClick={() => openEdit("cumul")}>Modifier</Button>}>
         <p className="muted">Une même personne peut-elle appartenir au Comité et à l'Audit ? Le cumul Risk Manager et Audit reste toujours refusé.</p>
@@ -220,40 +188,29 @@ export function GovernanceSettingsPage({ token }: { token: string }) {
           </FormField>
           <MessageBanner tone="info">Si une seconde personne doit confirmer, le serveur répond « demande en attente » : le changement n'est alors pas appliqué.</MessageBanner>
         </>}
-        {editing === "mode" && <FormField label="Mode par défaut" htmlFor="gov-mode">
-          <select id="gov-mode" value={mode} onChange={(e) => setMode(e.target.value as ConfigEvaluationMode)}>
-            {(Object.keys(MODE_LABELS) as ConfigEvaluationMode[]).map((m) => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
-          </select>
-        </FormField>}
-        {editing === "thresholds" && <>
-          <FormField label="Score minimum, évaluation" htmlFor="gov-eval-min"><input id="gov-eval-min" type="number" step={1} value={evalMin} onChange={(e) => setEvalMin(e.target.value)} /></FormField>
-          <FormField label="Score minimum, traitement" htmlFor="gov-treat-min" help="Laisser vide pour n'avoir aucun seuil configuré.">
-            <input id="gov-treat-min" type="number" step={1} value={treatMin} onChange={(e) => setTreatMin(e.target.value)} />
-          </FormField>
-        </>}
-        {(editing === "enforcement" || editing === "cumul") && <label className="core-filter">
-          <input type="checkbox" checked={flag} onChange={(e) => setFlag(e.target.checked)} /> {editing === "enforcement" ? "Passage par le Comité obligatoire" : "Cumul Comité et Audit autorisé"}
+        {editing === "cumul" && <label className="core-filter">
+          <input type="checkbox" checked={flag} onChange={(e) => setFlag(e.target.checked)} /> Cumul Comité et Audit autorisé
         </label>}
         <FormField label="Motif (obligatoire)" htmlFor="gov-reason">
-          <textarea id="gov-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} required />
+          <input id="gov-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required />
         </FormField>
       </form>}
     </Modal>
 
     <Modal
-      open={rejecting}
-      onClose={() => { if (!deciding) setRejecting(false); }}
-      title="Rejeter la demande"
+      open={deciding_ !== null}
+      onClose={() => { if (!deciding) setDecidingKind(null); }}
+      title={deciding_ === "approve" ? "Approuver la demande" : "Rejeter la demande"}
       busy={deciding}
       actions={<>
-        <Button onClick={() => setRejecting(false)} disabled={deciding}>Annuler</Button>
-        <Button type="submit" form="gov-reject-form" variant="destructive" disabled={deciding || !rejectReason.trim()}>{deciding ? "Envoi…" : "Rejeter"}</Button>
+        <Button onClick={() => setDecidingKind(null)} disabled={deciding}>Annuler</Button>
+        <Button type="submit" form="gov-decide-form" variant={deciding_ === "approve" ? "primary" : "destructive"} disabled={deciding || !decisionReason.trim()}>{deciding ? "Envoi…" : deciding_ === "approve" ? "Approuver" : "Rejeter"}</Button>
       </>}
     >
-      {rejecting && <form id="gov-reject-form" onSubmit={reject}>
+      {deciding_ && <form id="gov-decide-form" onSubmit={decide}>
         {decisionError && <MessageBanner tone="danger">{decisionError}</MessageBanner>}
-        <FormField label="Motif du rejet (obligatoire)" htmlFor="gov-reject-reason">
-          <textarea id="gov-reject-reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={3} required />
+        <FormField label={deciding_ === "approve" ? "Motif de l'approbation (obligatoire)" : "Motif du rejet (obligatoire)"} htmlFor="gov-decision-reason">
+          <input id="gov-decision-reason" value={decisionReason} onChange={(e) => setDecisionReason(e.target.value)} maxLength={500} required />
         </FormField>
       </form>}
     </Modal>
