@@ -40,7 +40,7 @@ function normalizeName(name: string): string {
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean)
-    .sort()
+    .sort((a, b) => a.localeCompare(b))
     .join(" ");
 }
 
