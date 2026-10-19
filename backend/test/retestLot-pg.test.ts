@@ -9,7 +9,6 @@ import { PostgresSelfValidationPolicyRequestRepository } from "../src/infrastruc
  * never Neon. Creates its own tenants/users (random e-mails); nothing is cleaned (append-only tables).
  */
 const HOST = process.env.QA_SWP_PGHOST ?? "";
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe.skipIf(!HOST.startsWith("/"))("retest lot, PostgreSQL", () => {
   let pool: Pool;
@@ -50,26 +49,36 @@ describe.skipIf(!HOST.startsWith("/"))("retest lot, PostgreSQL", () => {
     expect(fn.cfg).toContain("search_path=pg_catalog, public, pg_temp");
   });
 
-  it("074 (I01): a connection counts only when the token iat differs from the stored one, whatever the instance", async () => {
+  it("074 (I01 / SEC-PNL3-01): a connection counts only when the token iat is newer than the stored one, whatever the instance", async () => {
     const readRow = () => one<{ last_seen_at: Date | null; last_token_iat: string | null }>(`SELECT last_seen_at, last_token_iat FROM users WHERE id = $1`, [a]);
+    // a fresh recorder (= another instance, empty memory) whose writes can be awaited: no fixed sleep
+    const instance = () => {
+      const writes: Promise<unknown>[] = [];
+      const rec = createLastSeenRecorder({ query: ((...args: Parameters<Pool["query"]>) => { const p = pool.query(...args); writes.push(p); return p; }) as Pool["query"] });
+      return async (iat: number) => { rec(tenant, a, iat); await Promise.resolve(); await Promise.all(writes); };
+    };
     expect(await readRow()).toMatchObject({ last_seen_at: null, last_token_iat: null });
-    createLastSeenRecorder(pool)(tenant, a, 1000);
-    await wait(150);
+    await instance()(1000);
     const first = await readRow();
     expect(first.last_seen_at).not.toBeNull();
     expect(Number(first.last_token_iat)).toBe(1000);
-    // another process (fresh recorder, empty memory) sees the same token: not a new connection
+    // another process sees the same token: not a new connection
     await pool.query(`UPDATE users SET last_seen_at = now() - interval '2 days' WHERE id = $1`, [a]);
     const before = (await readRow()).last_seen_at!;
-    createLastSeenRecorder(pool)(tenant, a, 1000);
-    await wait(150);
+    await instance()(1000);
     expect((await readRow()).last_seen_at!.getTime()).toBe(before.getTime());
-    // a new token: counted
-    createLastSeenRecorder(pool)(tenant, a, 4600);
-    await wait(150);
+    // a newer token: counted
+    await instance()(4600);
     const after = await readRow();
     expect(after.last_seen_at!.getTime()).toBeGreaterThan(before.getTime());
     expect(Number(after.last_token_iat)).toBe(4600);
+    // an OLDER token (alternation between two live tokens): neither the date nor the stored iat move back
+    await pool.query(`UPDATE users SET last_seen_at = now() - interval '2 days' WHERE id = $1`, [a]);
+    const frozen = (await readRow()).last_seen_at!;
+    await instance()(1000);
+    const older = await readRow();
+    expect(older.last_seen_at!.getTime()).toBe(frozen.getTime());
+    expect(Number(older.last_token_iat)).toBe(4600);
   });
 
   it("config upsert with an audit builder is one transaction: an audit the database refuses rolls the setting back", async () => {

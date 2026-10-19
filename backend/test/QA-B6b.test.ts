@@ -348,10 +348,9 @@ describe("QA-B6b closed writers (spec §3)", () => {
     expect(writes).toHaveLength(0);
   });
 
-  it("what the spec keeps in configs stays writable with the Dispositif wired: committee/audit cumul (q58), methodology, appetite mode", async () => {
+  it("what the spec keeps in configs stays writable with the Dispositif wired: committee/audit cumul (q58)", async () => {
     const { service, writes } = cfg(true);
     await expect(service.setCommitteeAuditCumul(actor("a", ["config.cumul.set", "config.read"]), false, "r", "q")).resolves.toBeDefined();
-    await expect(service.updateAppetiteMode(actor("a", ["config.update"]), "MANUAL" as never, "r", "q")).rejects.not.toThrow(msg);
     expect(writes.length).toBeGreaterThan(0);
   });
 

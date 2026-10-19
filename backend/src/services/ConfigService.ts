@@ -1,6 +1,6 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
-import type { Config, ConfigPatch, AppetiteMode, EvaluationMode, UpdateMethodologyInput } from "../domain/entities/Config.js";
+import type { Config, ConfigPatch, EvaluationMode } from "../domain/entities/Config.js";
 import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -15,9 +15,6 @@ import type { RiskFrameworkRepository } from "../domain/repositories/RiskFramewo
 import { FRAMEWORK_OWNS_SETTING_MESSAGE } from "./riskFrameworkResolution.js";
 import { writeAudited } from "./auditedWrite.js";
 
-const SCORE_FORMULAS = ["P_X_I", "WEIGHTED_SUM"] as const;
-const IMPACT_RETENU_RULES = ["MAX", "AVERAGE", "WEIGHTED_SUM"] as const;
-const APPETITE_MODES = ["AUTO", "MANUEL", "AUTO_AVEC_SURCHARGE_MANUELLE"] as const;
 const EVALUATION_MODES = ["CLASSIQUE", "PARTICIPATIF"] as const;
 
 /**
@@ -49,15 +46,6 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };
-}
-
-function assertValidThresholds(thresholds: { label: string; min: number; max: number }[]): void {
-  for (const t of thresholds) {
-    if (!t.label.trim()) throw new ValidationError("Each level threshold needs a non-empty label");
-    if (!Number.isInteger(t.min) || !Number.isInteger(t.max) || t.min > t.max) {
-      throw new ValidationError(`Invalid threshold range for "${t.label}": min (${t.min}) must be <= max (${t.max})`);
-    }
-  }
 }
 
 /**
@@ -134,84 +122,7 @@ export class ConfigService {
     return (await this.configs.getByTenant(actor.tenantId)) ?? defaultConfig(actor.tenantId, defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, actor.tenantId)));
   }
 
-  /**
-   * PUT /config — ACT-220. Gated on `config.update`, a permission
-   * distinct from `config.read`, and requires a mandatory reason since
-   * this affects every score calculated tenant-wide ("impact immédiat
-   * sur tous les calculs") — the same caution RoleService.update applies
-   * to permission changes, at the "distinct permission + full audit
-   * trail" bar the dispatch brief set as the minimum for this batch. A
-   * full two-person propose/approve workflow was NOT built — flagged in
-   * the handoff summary as an open question for Risk Manager/Architect.
-   */
-  async updateMethodology(
-    actor: AuthenticatedUser,
-    input: UpdateMethodologyInput,
-    reason: string,
-    requestId: string,
-  ): Promise<Config> {
-    requirePermission(actor, "config.update");
-    if (!reason.trim()) {
-      throw new ValidationError("A reason is required to change methodology settings — this affects every score calculated tenant-wide");
-    }
-    if (input.scoreFormula !== undefined && !SCORE_FORMULAS.includes(input.scoreFormula)) {
-      throw new ValidationError(`Unknown scoreFormula: ${input.scoreFormula}`);
-    }
-    if (input.impactRetenuRule !== undefined && !IMPACT_RETENU_RULES.includes(input.impactRetenuRule)) {
-      throw new ValidationError(`Unknown impactRetenuRule: ${input.impactRetenuRule}`);
-    }
-    if (input.levelThresholds !== undefined) assertValidThresholds(input.levelThresholds);
-
-    const before = await this.get(actor);
-    const after = await this.upsertConfig(actor.tenantId, input, actor.userId);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Config",
-      entityId: after.id,
-      action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason,
-      requestId,
-    });
-
-    return after;
-  }
-
-  /** PUT /config/appetite-mode — ACT-226. Same permission/reason bar as updateMethodology; shares the same underlying row. */
-  async updateAppetiteMode(
-    actor: AuthenticatedUser,
-    mode: AppetiteMode,
-    reason: string,
-    requestId: string,
-  ): Promise<Config> {
-    requirePermission(actor, "config.update");
-    if (!reason.trim()) {
-      throw new ValidationError("A reason is required to change the appetite mode — this affects automatic appetite suggestions tenant-wide");
-    }
-    if (!APPETITE_MODES.includes(mode)) throw new ValidationError(`Unknown appetite mode: ${mode}`);
-
-    const before = await this.get(actor);
-    const after = await this.upsertConfig(actor.tenantId, { appetiteMode: mode }, actor.userId);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Config",
-      entityId: after.id,
-      action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason,
-      requestId,
-    });
-
-    return after;
-  }
-
-  /** PUT /config/evaluation-mode — DIV-06. Same permission/reason bar as updateAppetiteMode; shares the same underlying row. */
+  /** PUT /config/evaluation-mode — DIV-06. Same permission/reason bar as the retired updateAppetiteMode; shares the same underlying row. */
   async updateEvaluationMode(
     actor: AuthenticatedUser,
     mode: EvaluationMode,

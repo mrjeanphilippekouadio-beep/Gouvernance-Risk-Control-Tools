@@ -88,17 +88,16 @@ describe("I06: structured code on the 409 of the confirmation prompt", () => {
   });
 });
 
-describe("I01: the Google token's iat is compared in SQL, not only in memory", () => {
-  it("a token write carries the iat and a IS DISTINCT FROM guard; the same iat is not rewritten by this process", async () => {
+describe("I01 / SEC-PNL3-01: the Google token's iat is compared in SQL and only ever moves forward", () => {
+  it("a write needs a strictly newer iat (SQL and memory); alternating or older tokens write nothing more", async () => {
     const query = vi.fn(async () => ({ rows: [] }));
     const rec = createLastSeenRecorder({ query } as never);
-    rec("t1", "u1", 1000);
-    rec("t1", "u1", 1000);
-    rec("t1", "u1", 4600);
+    for (const iat of [1000, 1000, 4600, 1000, 4600, 2000, 4600]) rec("t1", "u1", iat);
     await new Promise((r) => setTimeout(r, 10));
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenCalledTimes(2); // 1000 then 4600; the alternation back to 1000 / 2000 is not a connection
     const first = query.mock.calls[0] as unknown as [string, unknown[]];
-    expect(first[0]).toContain("last_token_iat IS DISTINCT FROM $3");
+    expect(first[0]).toContain("(last_token_iat IS NULL OR last_token_iat < $3)");
+    expect(first[0]).not.toContain("DISTINCT");
     expect(first[0]).toContain("tenant_id = $1");
     expect(first[1]).toEqual(["t1", "u1", 1000]);
   });
