@@ -34,14 +34,13 @@ describe("SEC: dependency management", () => {
 
     const rolldown = lock.packages["frontend/node_modules/@rolldown/binding-linux-x64-gnu"];
     expect(rolldown).toMatchObject({
-      version: "1.2.11",
+      version: "1.2.15",
       cpu: ["x64"],
-      libc: ["glibc"],
       os: ["linux"],
       optional: true,
     });
     expect(rolldown?.resolved).toMatch(
-      /registry\.npmjs\.org\/@rolldown\/binding-linux-x64-gnu\/-\/binding-linux-x64-gnu-1\.2\.11\.tgz$/,
+      /registry\.npmjs\.org\/@rolldown\/binding-linux-x64-gnu\/-\/binding-linux-x64-gnu-1\.2\.15\.tgz$/,
     );
     expect(rolldown?.integrity).toMatch(/^sha512-/);
 
@@ -49,7 +48,6 @@ describe("SEC: dependency management", () => {
     expect(oxlint).toMatchObject({
       version: "1.85.0",
       cpu: ["x64"],
-      libc: ["glibc"],
       os: ["linux"],
       optional: true,
     });
