@@ -26,6 +26,7 @@ export function UsersAdmin({ token }: { token: string }) {
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [roleId, setRoleId] = useState("");
+  const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -40,7 +41,7 @@ export function UsersAdmin({ token }: { token: string }) {
 
   function open(next: Dialog) {
     setFormError(null);
-    setEmail(""); setRoleId("");
+    setEmail(""); setRoleId(""); setReason("");
     setDisplayName(next.kind === "edit" ? next.user.displayName : "");
     setDialog(next);
   }
@@ -51,7 +52,7 @@ export function UsersAdmin({ token }: { token: string }) {
     setSaving(true); setFormError(null);
     try {
       if (dialog.kind === "create") {
-        await usersApi.create(token, { email: email.trim(), displayName: displayName.trim(), roleId });
+        await usersApi.create(token, { email: email.trim(), displayName: displayName.trim(), roleId, ...(reason.trim() ? { reason: reason.trim() } : {}) });
         setNotice(`Compte ${email.trim()} créé.`);
       } else if (dialog.kind === "edit") {
         await usersApi.update(token, dialog.user.id, { displayName: displayName.trim() });
@@ -125,11 +126,14 @@ export function UsersAdmin({ token }: { token: string }) {
               {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </FormField>
+          <FormField label="Motif" htmlFor="user-reason" help="Exigé par le serveur pour un rôle de groupe fixe (Risk Manager, Comité, Audit).">
+            <input id="user-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
+          </FormField>
         </>}
         {dialog.kind === "edit" && <FormField label="Nom affiché *" htmlFor="user-name"><input id="user-name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required /></FormField>}
         {dialog.kind === "suspend" && <>
           <p>{dialog.user.displayName} ({dialog.user.email}) ne pourra plus se connecter dès sa prochaine requête.</p>
-          <MessageBanner tone="warning">Si c'est le dernier Risk Manager, le serveur refuse tant qu'un successeur n'est pas en place (voir Désignations).</MessageBanner>
+          <MessageBanner tone="warning">Si ce compte est le dernier membre du groupe Risk Manager, le serveur refuse la suspension.</MessageBanner>
         </>}
         {dialog.kind === "reactivate" && <p>{dialog.user.displayName} ({dialog.user.email}) pourra de nouveau se connecter. Le serveur refuse la réactivation si elle ferait revivre un cumul interdit.</p>}
       </form>}
