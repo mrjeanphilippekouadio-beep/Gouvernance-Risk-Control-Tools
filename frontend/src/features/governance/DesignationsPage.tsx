@@ -13,7 +13,7 @@ const KINDS: { kind: DesignationKind; title: string; text: string }[] = [
 const fmtDate = (iso: string | null) => (iso ? iso.slice(0, 10) : "—");
 
 /** O13 (D2c): the two designation slots. All rules (no self-designation, active account, interim end date) are the server's. */
-export function DesignationsPage({ token }: { token: string }) {
+export function DesignationsPage({ token }: Readonly<{ token: string }>) {
   const [rows, setRows] = useState<GovernanceDesignation[]>([]);
   const [includeEnded, setIncludeEnded] = useState(false);
   const [accounts, setAccounts] = useState<DirectoryEntry[]>([]);

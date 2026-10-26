@@ -28,7 +28,7 @@ function answerLabel(q: Question, answers: OrganizationAnswers): string {
 }
 
 /** O2/O3 (D3): the six-question profile, its versions and the size the SERVER computes. Nothing is recomputed here. */
-export function OrganizationProfilePage({ token }: { token: string }) {
+export function OrganizationProfilePage({ token }: Readonly<{ token: string }>) {
   const { can } = usePermissions(token);
   const [view, setView] = useState<OrganizationProfileView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,7 +128,7 @@ export function OrganizationProfilePage({ token }: { token: string }) {
     </div>
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
     {notice && <MessageBanner tone={notice.tone} title={notice.title}>{notice.text}</MessageBanner>}
-    {loading && !view && <p role="status">Chargement…</p>}
+    {loading && !view && <output>Chargement…</output>}
 
     {view && <>
       {!view.active && <MessageBanner tone="info" title="Profil non renseigné">Aucune version n'a été saisie : aucune taille n'est retenue.</MessageBanner>}
@@ -161,7 +161,7 @@ export function OrganizationProfilePage({ token }: { token: string }) {
       {view.history.length > 0 && <Card header={<strong>Historique des versions</strong>}>
         <Timeline items={view.history.map((p) => ({
           label: `Version ${p.version} · ${STATUS[p.status].label}${p.regime === "ALONE" ? " · appliquée seul" : ""}`,
-          detail: `Soumise le ${fmtDate(p.submittedAt)} · Motif : ${p.reason}${p.decisionReason ? ` · Décision : ${p.decisionReason}` : ""}`,
+          detail: [`Soumise le ${fmtDate(p.submittedAt)}`, `Motif : ${p.reason}`, p.decisionReason && `Décision : ${p.decisionReason}`].filter(Boolean).join(" · "),
           state: p.status === "ACTIVE" ? "current" : "done",
         }))} />
       </Card>}

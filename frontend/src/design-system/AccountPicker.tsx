@@ -5,7 +5,7 @@ import type { DirectoryEntry } from "../api/users";
  * Account selector of the designation screens: lists only the accounts the server returned (GET /users/directory).
  * A current value missing from the list (suspended, other scope) stays shown as such, never invented.
  */
-export function AccountPicker({ id, label, value, onChange, accounts, help, allowEmpty = true }: {
+export function AccountPicker({ id, label, value, onChange, accounts, help, allowEmpty = true }: Readonly<{
   id: string;
   label: string;
   value: string;
@@ -13,7 +13,7 @@ export function AccountPicker({ id, label, value, onChange, accounts, help, allo
   accounts: DirectoryEntry[];
   help?: string;
   allowEmpty?: boolean;
-}) {
+}>) {
   return <FormField label={label} htmlFor={id} help={help}>
     <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="">{allowEmpty ? "Aucun" : "Sélectionner…"}</option>

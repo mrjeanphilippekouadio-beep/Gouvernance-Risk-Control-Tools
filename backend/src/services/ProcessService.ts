@@ -221,19 +221,7 @@ export class ProcessService {
     requirePermission(actor, "process.responsibility.assign");
     const before = await this.get(actor, id);
 
-    // F-PNL-06 (SEC-ID-01 class): compare canonical ids, an upper-case uuid is the same account in Postgres.
-    const canon = (v: string | null | undefined) => (typeof v === "string" ? canonicalId(v) : v);
-    input = {
-      ...(input.ownerUserId !== undefined ? { ownerUserId: canon(input.ownerUserId) } : {}),
-      ...(input.riskChampionUserId !== undefined ? { riskChampionUserId: canon(input.riskChampionUserId) } : {}),
-      ...(input.deputyUserId !== undefined ? { deputyUserId: canon(input.deputyUserId) } : {}),
-    } as ProcessResponsibilitiesInput;
-    const changes: ProcessResponsibilitiesInput = {};
-    if (input.ownerUserId !== undefined && input.ownerUserId !== before.ownerUserId) changes.ownerUserId = input.ownerUserId;
-    if (input.riskChampionUserId !== undefined && input.riskChampionUserId !== before.riskChampionUserId) {
-      changes.riskChampionUserId = input.riskChampionUserId;
-    }
-    if (input.deputyUserId !== undefined && input.deputyUserId !== before.deputyUserId) changes.deputyUserId = input.deputyUserId;
+    const changes = changedResponsibilities(before, input);
     if (Object.keys(changes).length === 0) return before;
 
     const selfId = canonicalId(actor.userId);
@@ -471,4 +459,19 @@ export class ProcessService {
       );
     }
   }
+}
+
+/**
+ * D2b: the responsibility keys the caller actually changes. F-PNL-06 (SEC-ID-01 class): ids are compared in canonical
+ * form, an upper-case uuid is the same account in Postgres. Omitted key = untouched, null = cleared.
+ */
+function changedResponsibilities(before: Process, input: ProcessResponsibilitiesInput): ProcessResponsibilitiesInput {
+  const changes: ProcessResponsibilitiesInput = {};
+  for (const key of ["ownerUserId", "riskChampionUserId", "deputyUserId"] as const) {
+    const raw = input[key];
+    if (raw === undefined) continue;
+    const next = typeof raw === "string" ? canonicalId(raw) : raw;
+    if (next !== before[key]) changes[key] = next;
+  }
+  return changes;
 }

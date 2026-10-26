@@ -13,7 +13,7 @@ const fmtDate = (iso: string | null) => (iso ? iso.slice(0, 10) : "—");
  * q164 (DECISION-080): account administration. Every rule (no self-suspension, the last Risk Manager cannot leave
  * without a successor, a forbidden cumul cannot be revived) is the server's: its refusal is shown as is.
  */
-export function UsersAdmin({ token }: { token: string }) {
+export function UsersAdmin({ token }: Readonly<{ token: string }>) {
   const { can } = usePermissions(token);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);

@@ -163,7 +163,7 @@ export class UserService {
    */
   async getSelfPermissions(actor: AuthenticatedUser): Promise<Permission[]> {
     await this.getSelf(actor);
-    return [...new Set(filterKnownPermissions(actor.roles))].sort();
+    return [...new Set(filterKnownPermissions(actor.roles))].sort((a, b) => a.localeCompare(b));
   }
 
   /**

@@ -16,13 +16,13 @@ const SLOTS: { key: Slot; label: string }[] = [
  * D2b (O14): owner, risk champion and N-1 of a process. The server checks everything (active account, tenant,
  * nobody names themselves, q166 exception for the champion with its double confirmation); this card only sends.
  */
-export function ProcessResponsibilitiesCard({ token, processId, accounts, canAssign, onChanged }: {
+export function ProcessResponsibilitiesCard({ token, processId, accounts, canAssign, onChanged }: Readonly<{
   token: string;
   processId: string;
   accounts: DirectoryEntry[];
   canAssign: boolean;
   onChanged?: () => void;
-}) {
+}>) {
   const [data, setData] = useState<ProcessResponsibilities | null>(null);
   const [form, setForm] = useState<Record<Slot, string>>({ ownerUserId: "", riskChampionUserId: "", deputyUserId: "" });
   const [error, setError] = useState<string | null>(null);
