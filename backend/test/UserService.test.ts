@@ -376,6 +376,22 @@ describe("UserService", () => {
     ).rejects.toThrow(NotFoundError);
   });
 
+  it("directory: id and name of active accounts only, for a designation right, never without one", async () => {
+    const { userService, roleService } = makeServices();
+    const role = await seedRole(roleService, admin);
+    const kept = await userService.create(admin, { email: "kept@djamo.com", displayName: "Kept", roleId: role.id }, "REQ-F4a");
+    const gone = await userService.create(admin, { email: "gone@djamo.com", displayName: "Gone", roleId: role.id }, "REQ-F4b");
+    await userService.suspend(admin, gone.id, "REQ-F4c");
+
+    const assigner: AuthenticatedUser = { ...admin, userId: "assigner", roles: ["process.responsibility.assign"] };
+    const entries = await userService.directory(assigner);
+    expect(entries).toContainEqual({ id: kept.id, displayName: "Kept" });
+    expect(entries.some((e) => e.id === gone.id)).toBe(false);
+    expect(Object.keys(entries[0]!).sort()).toEqual(["displayName", "id"]);
+
+    await expect(userService.directory({ ...admin, roles: ["risk.read"] })).rejects.toThrow(ForbiddenError);
+  });
+
   it("scopes list() and get() to the actor's tenant", async () => {
     // Deliberately shares one UserService/RoleService/repository pair
     // across both tenants so the assertions actually exercise the

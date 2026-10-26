@@ -41,6 +41,10 @@ export interface CreateUserWithRoleInput {
   reason?: string;
 }
 
+/** The rights that name an account to a role: each one opens the account picker (directory). */
+const DIRECTORY_PERMISSIONS: Permission[] = ["user.read", "process.responsibility.assign", "designation.manage"];
+const MAX_DIRECTORY = 500;
+
 export interface ListUsersOptions {
   includeSuspended?: boolean;
   limit?: number;
@@ -160,6 +164,22 @@ export class UserService {
   async getSelfPermissions(actor: AuthenticatedUser): Promise<Permission[]> {
     await this.getSelf(actor);
     return [...new Set(filterKnownPermissions(actor.roles))].sort();
+  }
+
+  /**
+   * Lot F4: the account picker of the designation screens (process responsibilities, designations). Whoever may name
+   * someone needs to see who can be named, without the user.read directory: active accounts only, id and display name
+   * only (no email, no roles), tenant-scoped, bounded.
+   */
+  async directory(actor: AuthenticatedUser): Promise<Array<{ id: string; displayName: string }>> {
+    if (!DIRECTORY_PERMISSIONS.some((p) => actor.roles.includes(p))) {
+      throw new ForbiddenError(`Missing permission: one of ${DIRECTORY_PERMISSIONS.join(", ")}`);
+    }
+    const users = await this.users.list(actor.tenantId, { limit: MAX_DIRECTORY });
+    return users
+      .filter((u) => !u.deletedAt)
+      .map((u) => ({ id: u.id, displayName: u.displayName }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, "fr"));
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<User> {

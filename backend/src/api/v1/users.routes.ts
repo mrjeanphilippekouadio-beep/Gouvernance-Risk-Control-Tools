@@ -44,6 +44,15 @@ export function usersRouter(userService: UserService): Router {
     }
   });
 
+  // Lot F4: account picker for the designation screens (id + name of active accounts).
+  router.get("/directory", async (req, res, next) => {
+    try {
+      res.json({ data: await userService.directory(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // ACT-105: admin-only (user.read), tenant-scoped, paginated.
   router.get("/", async (req, res, next) => {
     try {
