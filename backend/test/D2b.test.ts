@@ -115,6 +115,27 @@ describe("D2b setResponsibilities", () => {
       expect(w.audits[0].newValue.selfValidation).toEqual({ otherValidatorExists: false, reason: confirmation.reason });
     });
 
+    it("writes the change and its marked audit row through the repository's transaction (DECISION-079)", async () => {
+      const w = world("x", [user(99, "Me")], gate(false));
+      const inTx: any[] = [];
+      const processes: any = {
+        auditsInTransaction: true,
+        getById: async () => w.current(),
+        setResponsibilities: async (_t: string, _i: string, input: any, audit?: (p: Process) => unknown[]) => {
+          const after = { ...w.current(), ...input };
+          inTx.push(...(audit ? audit(after) : []));
+          return after;
+        },
+      };
+      const recorded: unknown[] = [];
+      const users: any = { getById: async () => user(99, "Me"), list: async () => [] };
+      const svc = new ProcessService(processes, { record: async (e: unknown) => void recorded.push(e) } as any, undefined, undefined, undefined, undefined, users, gate(false));
+      await svc.setResponsibilities(assigner, id(1), { riskChampionUserId: ACTOR }, "r", confirmation);
+      expect(recorded).toHaveLength(0);
+      expect(inTx).toHaveLength(1);
+      expect(inTx[0]).toMatchObject({ governanceException: "noSelfValidation", reason: confirmation.reason });
+    });
+
     it("is refused when someone else can assign, and never extends to owner or N-1", async () => {
       await expect(
         world("x", [user(99, "Me")], gate(true)).service.setResponsibilities(assigner, id(1), { riskChampionUserId: ACTOR }, "r", confirmation),

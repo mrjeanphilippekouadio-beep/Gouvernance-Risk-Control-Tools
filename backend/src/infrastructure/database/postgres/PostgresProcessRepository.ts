@@ -11,6 +11,8 @@ import type {
 import type { EvaluationMode } from "../../../domain/entities/Config.js";
 import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
+import { runAudited } from "./PostgresAuditRepository.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 
 export interface ProcessRow {
   id: string;
@@ -61,6 +63,8 @@ export function toDomain(row: ProcessRow): Process {
 }
 
 export class PostgresProcessRepository implements ProcessRepository {
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
 
   async getById(tenantId: string, id: string): Promise<Process | null> {
@@ -140,7 +144,12 @@ export class PostgresProcessRepository implements ProcessRepository {
     return toDomain(row);
   }
 
-  async setResponsibilities(tenantId: string, id: string, input: ProcessResponsibilitiesInput): Promise<Process> {
+  async setResponsibilities(
+    tenantId: string,
+    id: string,
+    input: ProcessResponsibilitiesInput,
+    audit?: TransactionalAudit<Process>,
+  ): Promise<Process> {
     const { setClauses, values } = buildUpdateSet(
       {
         owner_user_id: input.ownerUserId,
@@ -154,15 +163,22 @@ export class PostgresProcessRepository implements ProcessRepository {
       if (!current) throw new NotFoundError("Process", id);
       return current;
     }
-    const { rows } = await this.pool.query<ProcessRow>(
-      `UPDATE processes SET ${setClauses.join(", ")}, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
-       RETURNING *`,
-      [tenantId, id, ...values],
+    // DECISION-079 (SEC-F4-01): the responsibilities and their audit row (q166 marker included) commit together.
+    return runAudited(
+      this.pool,
+      async (db) => {
+        const { rows } = await db.query<ProcessRow>(
+          `UPDATE processes SET ${setClauses.join(", ")}, updated_at = now()
+           WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+           RETURNING *`,
+          [tenantId, id, ...values],
+        );
+        const row = rows[0];
+        if (!row) throw new NotFoundError("Process", id);
+        return toDomain(row);
+      },
+      audit,
     );
-    const row = rows[0];
-    if (!row) throw new NotFoundError("Process", id);
-    return toDomain(row);
   }
 
   async softDelete(tenantId: string, id: string, deletedBy: string, reason: string): Promise<void> {

@@ -19,6 +19,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { canonicalId } from "../domain/ids.js";
 import { requirePermission } from "../domain/permissions.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import { writeAudited } from "./auditedWrite.js";
 import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
@@ -263,28 +264,32 @@ export class ProcessService {
       ? (await this.ownerCandidates(actor.tenantId, before.owner)).some((c) => c.id === changes.ownerUserId)
       : undefined;
 
-    const after = await this.processes.setResponsibilities(actor.tenantId, id, changes);
-
     const pick = (p: Process) => ({ ownerUserId: p.ownerUserId, riskChampionUserId: p.riskChampionUserId, deputyUserId: p.deputyUserId });
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Process",
-      entityId: id,
-      action: "UPDATE",
-      oldValue: { ...pick(before), legacyOwner: before.owner },
-      newValue: {
-        ...pick(after),
-        legacyOwner: after.owner,
-        ...(ownerFromProposal !== undefined ? { ownerFromProposal } : {}),
-        ...selfChampion?.newValueExtra,
-      },
-      reason: selfChampion?.newValueExtra.selfValidation.reason ?? null,
-      requestId,
-      ...(selfChampion ? { governanceException: selfChampion.governanceException } : {}),
-    });
-
-    return after;
+    // DECISION-079: the change and its audit row (with the q166 marker) in one transaction.
+    return writeAudited(
+      this.processes.auditsInTransaction,
+      this.audit,
+      (audit) => this.processes.setResponsibilities(actor.tenantId, id, changes, audit),
+      (after) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Process",
+          entityId: id,
+          action: "UPDATE",
+          oldValue: { ...pick(before), legacyOwner: before.owner },
+          newValue: {
+            ...pick(after),
+            legacyOwner: after.owner,
+            ...(ownerFromProposal !== undefined ? { ownerFromProposal } : {}),
+            ...selfChampion?.newValueExtra,
+          },
+          reason: selfChampion?.newValueExtra.selfValidation.reason ?? null,
+          requestId,
+          ...(selfChampion ? { governanceException: selfChampion.governanceException } : {}),
+        },
+      ],
+    );
   }
 
   /** Active accounts of the tenant whose display name equals the legacy owner text (accent/case/word-order insensitive). Id + name only. */
