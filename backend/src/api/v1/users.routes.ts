@@ -34,6 +34,16 @@ export function usersRouter(userService: UserService): Router {
     }
   });
 
+  // Lot F4: the caller's own permissions; also registered before "/:id".
+  router.get("/me/permissions", async (req, res, next) => {
+    try {
+      const permissions = await userService.getSelfPermissions(req.user);
+      res.json({ data: permissions });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // ACT-105: admin-only (user.read), tenant-scoped, paginated.
   router.get("/", async (req, res, next) => {
     try {

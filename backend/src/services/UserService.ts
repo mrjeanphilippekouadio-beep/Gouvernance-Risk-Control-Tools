@@ -3,7 +3,7 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { UpdateUserInput, User } from "../domain/entities/User.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
-import { requirePermission } from "../domain/permissions.js";
+import { filterKnownPermissions, requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { RoleService } from "./RoleService.js";
 import type { NotificationService } from "./NotificationService.js";
@@ -148,6 +148,18 @@ export class UserService {
     const user = await this.users.getById(actor.tenantId, actor.userId);
     if (!user) throw new NotFoundError("User", actor.userId);
     return user;
+  }
+
+  /**
+   * Lot F4: the actor's own effective permissions, so the front can hide
+   * actions it would otherwise only learn about through a 403. Read from the
+   * grants already resolved at identity time (never recomputed client-side),
+   * filtered to current permission strings. No permission needed: it only
+   * ever describes the caller, and the row lookup keeps it tenant-scoped.
+   */
+  async getSelfPermissions(actor: AuthenticatedUser): Promise<Permission[]> {
+    await this.getSelf(actor);
+    return [...new Set(filterKnownPermissions(actor.roles))].sort();
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<User> {

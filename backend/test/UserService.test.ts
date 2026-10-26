@@ -357,6 +357,25 @@ describe("UserService", () => {
     await expect(userService.getSelf(impostor)).rejects.toThrow(NotFoundError);
   });
 
+  it("getSelfPermissions returns only the actor's known permissions, sorted and deduplicated", async () => {
+    const { userService, roleService } = makeServices();
+    const role = await seedRole(roleService, admin);
+    const created = await userService.create(
+      admin,
+      { email: "perms@djamo.com", displayName: "Perms", roleId: role.id },
+      "REQ-F4",
+    );
+    const selfActor: AuthenticatedUser = {
+      ...admin,
+      userId: created.id,
+      roles: ["user.read", "not.a.permission", "audit.read", "user.read"],
+    };
+    expect(await userService.getSelfPermissions(selfActor)).toEqual(["audit.read", "user.read"]);
+    await expect(
+      userService.getSelfPermissions({ ...admin, userId: "does-not-exist" }),
+    ).rejects.toThrow(NotFoundError);
+  });
+
   it("scopes list() and get() to the actor's tenant", async () => {
     // Deliberately shares one UserService/RoleService/repository pair
     // across both tenants so the assertions actually exercise the
