@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { ProcessService } from "../src/services/ProcessService.js";
 import { ADMIN_PERMISSIONS, FIXED_GROUP_PERMISSIONS } from "../src/domain/fixedGroupPermissions.js";
 import { ALL_PERMISSIONS } from "../src/domain/permissions.js";
-import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
+import { SelfValidationGate } from "../src/services/SelfValidationGate.js";
+import { ConflictError, ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 import type { Process } from "../src/domain/entities/Process.js";
 import type { User } from "../src/domain/entities/User.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
@@ -23,7 +24,7 @@ const assigner = actor(["process.read", "process.responsibility.assign"]);
 const user = (n: number, displayName: string, over: Partial<User> = {}): User =>
   ({ id: id(n), tenantId: T, email: `u${n}@x.io`, displayName, roles: [], departmentId: null, createdAt: new Date(), deletedAt: null, ...over }) as User;
 
-function world(owner: string | null = "Jean Dupont", users: User[] = []) {
+function world(owner: string | null = "Jean Dupont", users: User[] = [], gate?: SelfValidationGate) {
   let process = {
     id: id(1), tenantId: T, parentId: null, level: "PROCESS", name: "Achats", description: null, documentType: null,
     documentReference: null, owner, active: true, evaluationMode: null, departmentId: null,
@@ -45,7 +46,7 @@ function world(owner: string | null = "Jean Dupont", users: User[] = []) {
     list: async (t: string) => users.filter((u) => u.tenantId === t && !u.deletedAt),
   };
   const audit: any = { record: async (e: unknown) => void audits.push(e) };
-  const service = new ProcessService(processes, audit, undefined, undefined, undefined, undefined, usersRepo);
+  const service = new ProcessService(processes, audit, undefined, undefined, undefined, undefined, usersRepo, gate);
   return { service, writes, audits, current: () => process };
 }
 
@@ -89,6 +90,41 @@ describe("D2b setResponsibilities", () => {
     const w = world("x", [user(99, "Me")]);
     await expect(w.service.setResponsibilities(assigner, id(1), { deputyUserId: ACTOR }, "r")).rejects.toBeInstanceOf(ValidationError);
     expect(w.writes).toHaveLength(0);
+  });
+
+  describe("q166 (DECISION-080): self as risk champion when nobody else can assign", () => {
+    const gate = (otherExists: boolean) =>
+      new SelfValidationGate(
+        { getByTenant: async () => ({ selfValidationPolicy: "DOUBLE_CONFIRMATION" }) } as any,
+        { existsOther: async () => otherExists } as any,
+      );
+    const confirmation = { rule: "noSelfValidation" as const, reason: "Structure à une personne, pas d'autre Risk Manager" };
+
+    it("is refused without the gate, as before", async () => {
+      const w = world("x", [user(99, "Me")]);
+      await expect(w.service.setResponsibilities(assigner, id(1), { riskChampionUserId: ACTOR }, "r", confirmation)).rejects.toBeInstanceOf(ForbiddenError);
+      expect(w.writes).toHaveLength(0);
+    });
+
+    it("asks for the double confirmation, then applies it with its reason and the governance marker", async () => {
+      const w = world("x", [user(99, "Me")], gate(false));
+      await expect(w.service.setResponsibilities(assigner, id(1), { riskChampionUserId: ACTOR }, "r")).rejects.toBeInstanceOf(ConflictError);
+      const p = await w.service.setResponsibilities(assigner, id(1), { riskChampionUserId: ACTOR }, "r", confirmation);
+      expect(p.riskChampionUserId).toBe(ACTOR);
+      expect(w.audits[0]).toMatchObject({ governanceException: "noSelfValidation", reason: confirmation.reason });
+      expect(w.audits[0].newValue.selfValidation).toEqual({ otherValidatorExists: false, reason: confirmation.reason });
+    });
+
+    it("is refused when someone else can assign, and never extends to owner or N-1", async () => {
+      await expect(
+        world("x", [user(99, "Me")], gate(true)).service.setResponsibilities(assigner, id(1), { riskChampionUserId: ACTOR }, "r", confirmation),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+      for (const input of [{ ownerUserId: ACTOR }, { deputyUserId: ACTOR }]) {
+        const w = world("x", [user(99, "Me")], gate(false));
+        await expect(w.service.setResponsibilities(assigner, id(1), input, "r", confirmation)).rejects.toBeInstanceOf(ValidationError);
+        expect(w.writes).toHaveLength(0);
+      }
+    });
   });
 
   it("fails closed when a user is named but no UserRepository is wired", async () => {

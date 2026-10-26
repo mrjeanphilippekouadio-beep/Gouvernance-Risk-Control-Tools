@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { reasonText } from "../validation.js";
+import { GovernanceConfirmationBody, reasonText } from "../validation.js";
 import type { ProcessService } from "../../services/ProcessService.js";
 
 const Level = z.enum(["PROCESS", "SUBPROCESS", "ACTIVITY"]);
@@ -37,6 +37,7 @@ const ResponsibilitiesBody = z
     ownerUserId: z.guid().nullable().optional(),
     riskChampionUserId: z.guid().nullable().optional(),
     deputyUserId: z.guid().nullable().optional(),
+    governanceConfirmation: GovernanceConfirmationBody.optional(),
   })
   .strict();
 const ArchiveProcessBody = z.object({ reason: reasonText(2000) });
@@ -83,8 +84,14 @@ export function processesRouter(processService: ProcessService): Router {
 
   router.put("/:id/responsibilities", async (req, res, next) => {
     try {
-      const body = ResponsibilitiesBody.parse(req.body);
-      const process = await processService.setResponsibilities(req.user, req.params["id"] as string, body, req.requestId);
+      const { governanceConfirmation, ...body } = ResponsibilitiesBody.parse(req.body);
+      const process = await processService.setResponsibilities(
+        req.user,
+        req.params["id"] as string,
+        body,
+        req.requestId,
+        governanceConfirmation,
+      );
       res.json({ data: process });
     } catch (err) {
       next(err);

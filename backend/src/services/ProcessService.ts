@@ -18,6 +18,8 @@ import type { EvaluationMode } from "../domain/entities/Config.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { canonicalId } from "../domain/ids.js";
 import { requirePermission } from "../domain/permissions.js";
+import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 const MAX_CANDIDATE_SCAN = 1000;
@@ -75,6 +77,8 @@ export class ProcessService {
     private readonly departments?: DepartmentRepository,
     /** D2b: validates the accounts named as owner / champion / N-1; fails closed if one is given without it. */
     private readonly users?: UserRepository,
+    /** q166: the only way past I-R1 (self as risk champion when nobody else can assign); without it, refused as before. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   private async assertDepartmentExists(tenantId: string, departmentId: string): Promise<void> {
@@ -211,6 +215,7 @@ export class ProcessService {
     id: string,
     input: ProcessResponsibilitiesInput,
     requestId: string,
+    confirmation?: GovernanceConfirmation,
   ): Promise<Process> {
     requirePermission(actor, "process.responsibility.assign");
     const before = await this.get(actor, id);
@@ -230,9 +235,24 @@ export class ProcessService {
     if (input.deputyUserId !== undefined && input.deputyUserId !== before.deputyUserId) changes.deputyUserId = input.deputyUserId;
     if (Object.keys(changes).length === 0) return before;
 
+    const selfId = canonicalId(actor.userId);
+    const selfRefusal = "Nobody can designate themselves as owner, risk champion or N-1 of a process";
+    if (changes.ownerUserId === selfId || changes.deputyUserId === selfId) throw new ValidationError(selfRefusal);
+    // q166 (DECISION-080): the one exception to I-R1, risk champion only, when nobody else in the tenant can assign
+    // responsibilities, with the explicit double confirmation and its reason; audited as a governance exception.
+    const selfChampion =
+      changes.riskChampionUserId === selfId
+        ? await checkSelfValidation(this.selfValidation, actor, {
+            isSelf: true,
+            permission: "process.responsibility.assign",
+            makerIds: [actor.userId],
+            refusal: selfRefusal,
+            confirmation,
+          })
+        : null;
+
     for (const userId of Object.values(changes)) {
       if (!userId) continue;
-      if (userId === canonicalId(actor.userId)) throw new ValidationError("Nobody can designate themselves as owner, risk champion or N-1 of a process");
       if (!this.users) throw new Error("ProcessService requires a UserRepository to set process responsibilities");
       const user = await this.users.getById(actor.tenantId, userId);
       if (!user || user.deletedAt) throw new ValidationError(`User ${userId} is not an active account of this tenant`);
@@ -253,9 +273,15 @@ export class ProcessService {
       entityId: id,
       action: "UPDATE",
       oldValue: { ...pick(before), legacyOwner: before.owner },
-      newValue: { ...pick(after), legacyOwner: after.owner, ...(ownerFromProposal !== undefined ? { ownerFromProposal } : {}) },
-      reason: null,
+      newValue: {
+        ...pick(after),
+        legacyOwner: after.owner,
+        ...(ownerFromProposal !== undefined ? { ownerFromProposal } : {}),
+        ...selfChampion?.newValueExtra,
+      },
+      reason: selfChampion?.newValueExtra.selfValidation.reason ?? null,
       requestId,
+      ...(selfChampion ? { governanceException: selfChampion.governanceException } : {}),
     });
 
     return after;
