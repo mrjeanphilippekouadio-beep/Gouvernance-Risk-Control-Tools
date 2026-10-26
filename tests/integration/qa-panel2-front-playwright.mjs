@@ -14,7 +14,7 @@ const { chromium } = require("playwright");
 
 const APP = process.env.QA_APP ?? "http://127.0.0.1:5199";
 const API = "http://api.test";
-const SHOTS = process.env.QA_SHOTS ?? "/tmp/claude-0/qa-panel2-shots";
+const SHOTS = process.env.QA_SHOTS ?? "qa-shots/panel2";
 mkdirSync(SHOTS, { recursive: true });
 
 const results = [];

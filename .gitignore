@@ -38,3 +38,6 @@ secrets/
 
 # graphify generated output (local knowledge-graph analysis, not source)
 graphify-out/
+
+# QA Playwright screenshots (tests/integration/*.mjs, override with QA_SHOTS)
+qa-shots/
