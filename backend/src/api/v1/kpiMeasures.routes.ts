@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
+import { optionalComment } from "../validation.js";
 import type { KpiMeasureService } from "../../services/KpiMeasureService.js";
 
 const CreateKpiMeasureBody = z.object({
   kpiId: z.string().min(1),
   period: z.coerce.date(),
   value: z.number().finite(),
-  comment: z.string().nullish(),
+  comment: optionalComment,
 });
 
 export function kpiMeasuresRouter(kpiMeasureService: KpiMeasureService): Router {

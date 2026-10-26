@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { ActionPlanService } from "../../services/ActionPlanService.js";
+import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
+import { withIndependence } from "../validationIndependence.js";
 import { ACTION_PLAN_SOURCE_TYPES, type ActionPlanSourceType } from "../../domain/entities/ActionPlan.js";
 
 const SourceType = z.enum(ACTION_PLAN_SOURCE_TYPES);
@@ -18,8 +20,9 @@ const DashboardStatus = z.enum(["PLANIFIEE", "EN_COURS", "TERMINEE", "EN_RETARD"
  * orchestrator to wire into server.ts per the task's merge-conflict
  * constraint.
  */
-export function actionPlanDashboardRouter(actionPlanService: ActionPlanService): Router {
+export function actionPlanDashboardRouter(actionPlanService: ActionPlanService, independence?: GovernanceExceptionLookup): Router {
   const router = Router();
+  const indep = withIndependence(independence, "ActionPlan");
 
   router.get("/actions", async (req, res, next) => {
     try {
@@ -39,7 +42,7 @@ export function actionPlanDashboardRouter(actionPlanService: ActionPlanService):
         dueFrom,
         dueTo,
       });
-      res.json({ data: rows });
+      res.json({ data: await indep(req.user.tenantId, rows) });
     } catch (err) {
       next(err);
     }

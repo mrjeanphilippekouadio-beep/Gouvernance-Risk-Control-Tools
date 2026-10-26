@@ -14,7 +14,8 @@ export class ValidationError extends Error {
 
 /** 409: the request is valid but clashes with existing state; `existingId` lets the client reuse it. */
 export class ConflictError extends Error {
-  constructor(message: string, readonly existingId?: string) {
+  /** `code`: optional machine-readable discriminator of the 409 (I06), alongside the human message. */
+  constructor(message: string, readonly existingId?: string, readonly code?: string) {
     super(message);
     this.name = "ConflictError";
   }

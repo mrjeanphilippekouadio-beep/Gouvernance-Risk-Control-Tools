@@ -3,6 +3,7 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
+import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { ProcessEvaluationModeRequestRepository } from "../domain/repositories/ProcessEvaluationModeRequestRepository.js";
 import {
   PROCESS_LEVEL_BY_RANK,
@@ -10,12 +11,38 @@ import {
   resolveInheritedEvaluationMode,
   type CreateProcessInput,
   type Process,
+  type ProcessResponsibilitiesInput,
   type UpdateProcessInput,
 } from "../domain/entities/Process.js";
 import type { EvaluationMode } from "../domain/entities/Config.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { canonicalId } from "../domain/ids.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+
+const MAX_CANDIDATE_SCAN = 1000;
+
+export interface ProcessResponsibilitiesView {
+  ownerUserId: string | null;
+  riskChampionUserId: string | null;
+  deputyUserId: string | null;
+  /** The legacy free-text owner, kept as a label. */
+  legacyOwner: string | null;
+  /** Proposed accounts for the legacy owner (only while ownerUserId is null, only for an assigner). Never applied automatically. */
+  ownerCandidates: Array<{ id: string; displayName: string }>;
+}
+
+/** "Jean-Marc  DUPONT" and "dupont jean marc" give the same key: accents stripped, lower case, words sorted. */
+function normalizeName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b))
+    .join(" ");
+}
 
 /**
  * Rules ported from apps-script-legacy/07_Processus.gs
@@ -46,6 +73,8 @@ export class ProcessService {
     private readonly evaluationModeRequests?: ProcessEvaluationModeRequestRepository,
     /** B-8: validates `departmentId`; fails closed (throws) if a departmentId is given without it. */
     private readonly departments?: DepartmentRepository,
+    /** D2b: validates the accounts named as owner / champion / N-1; fails closed if one is given without it. */
+    private readonly users?: UserRepository,
   ) {}
 
   private async assertDepartmentExists(tenantId: string, departmentId: string): Promise<void> {
@@ -152,6 +181,92 @@ export class ProcessService {
     });
 
     return after;
+  }
+
+  /**
+   * D2b / DECISION-075 (q150): reads the three responsibilities plus, for an assigner only, the proposed match of the
+   * legacy free-text owner against active accounts. A proposal is never applied here: it is confirmed process by
+   * process through setResponsibilities.
+   */
+  async getResponsibilities(actor: AuthenticatedUser, id: string): Promise<ProcessResponsibilitiesView> {
+    requirePermission(actor, "process.read");
+    const process = await this.get(actor, id);
+    const canAssign = actor.roles.includes("process.responsibility.assign");
+    return {
+      ownerUserId: process.ownerUserId,
+      riskChampionUserId: process.riskChampionUserId,
+      deputyUserId: process.deputyUserId,
+      legacyOwner: process.owner,
+      ownerCandidates: canAssign && !process.ownerUserId ? await this.ownerCandidates(actor.tenantId, process.owner) : [],
+    };
+  }
+
+  /**
+   * D2b (DECISION-074): owner / risk champion / N-1 of a process. Dedicated permission (the relation opens rights),
+   * never process.update. Omitted key = untouched, null = cleared. Each named account must be active and of the
+   * actor's tenant; nobody designates themselves (I-R1). The legacy `owner` text is left as is (DECISION-075).
+   */
+  async setResponsibilities(
+    actor: AuthenticatedUser,
+    id: string,
+    input: ProcessResponsibilitiesInput,
+    requestId: string,
+  ): Promise<Process> {
+    requirePermission(actor, "process.responsibility.assign");
+    const before = await this.get(actor, id);
+
+    // F-PNL-06 (SEC-ID-01 class): compare canonical ids, an upper-case uuid is the same account in Postgres.
+    const canon = (v: string | null | undefined) => (typeof v === "string" ? canonicalId(v) : v);
+    input = {
+      ...(input.ownerUserId !== undefined ? { ownerUserId: canon(input.ownerUserId) } : {}),
+      ...(input.riskChampionUserId !== undefined ? { riskChampionUserId: canon(input.riskChampionUserId) } : {}),
+      ...(input.deputyUserId !== undefined ? { deputyUserId: canon(input.deputyUserId) } : {}),
+    } as ProcessResponsibilitiesInput;
+    const changes: ProcessResponsibilitiesInput = {};
+    if (input.ownerUserId !== undefined && input.ownerUserId !== before.ownerUserId) changes.ownerUserId = input.ownerUserId;
+    if (input.riskChampionUserId !== undefined && input.riskChampionUserId !== before.riskChampionUserId) {
+      changes.riskChampionUserId = input.riskChampionUserId;
+    }
+    if (input.deputyUserId !== undefined && input.deputyUserId !== before.deputyUserId) changes.deputyUserId = input.deputyUserId;
+    if (Object.keys(changes).length === 0) return before;
+
+    for (const userId of Object.values(changes)) {
+      if (!userId) continue;
+      if (userId === canonicalId(actor.userId)) throw new ValidationError("Nobody can designate themselves as owner, risk champion or N-1 of a process");
+      if (!this.users) throw new Error("ProcessService requires a UserRepository to set process responsibilities");
+      const user = await this.users.getById(actor.tenantId, userId);
+      if (!user || user.deletedAt) throw new ValidationError(`User ${userId} is not an active account of this tenant`);
+    }
+
+    // DECISION-075 traceability: was the confirmed owner the account proposed from the legacy name?
+    const ownerFromProposal = changes.ownerUserId
+      ? (await this.ownerCandidates(actor.tenantId, before.owner)).some((c) => c.id === changes.ownerUserId)
+      : undefined;
+
+    const after = await this.processes.setResponsibilities(actor.tenantId, id, changes);
+
+    const pick = (p: Process) => ({ ownerUserId: p.ownerUserId, riskChampionUserId: p.riskChampionUserId, deputyUserId: p.deputyUserId });
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Process",
+      entityId: id,
+      action: "UPDATE",
+      oldValue: { ...pick(before), legacyOwner: before.owner },
+      newValue: { ...pick(after), legacyOwner: after.owner, ...(ownerFromProposal !== undefined ? { ownerFromProposal } : {}) },
+      reason: null,
+      requestId,
+    });
+
+    return after;
+  }
+
+  /** Active accounts of the tenant whose display name equals the legacy owner text (accent/case/word-order insensitive). Id + name only. */
+  private async ownerCandidates(tenantId: string, legacyOwner: string | null): Promise<Array<{ id: string; displayName: string }>> {
+    const wanted = legacyOwner ? normalizeName(legacyOwner) : "";
+    if (!wanted || !this.users) return [];
+    const users = await this.users.list(tenantId, { limit: MAX_CANDIDATE_SCAN });
+    return users.filter((u) => normalizeName(u.displayName) === wanted).map((u) => ({ id: u.id, displayName: u.displayName }));
   }
 
   /**

@@ -17,3 +17,5 @@ Créée le 2026-10-18 (n'existait pas avant). Historique antérieur : voir SHARE
 - `AdminPage.tsx` n'est pas branché dans `App.tsx` (code mort).
 - Appétence et grille existent à deux endroits côté API (`/appetite`, `/rating-scales` et dans la version de Dispositif) ; B-6b a fermé les écrivains `ConfigService`/`RiskAppetiteService` quand le Dispositif est branché : l'écran Appétence propose encore des actions refusées.
 - `NotificationCenter` : cibles limitées à `risks | actions | controls | evaluation | roles`.
+
+- 2026-10-18, `docs/ux/plan-livraison-vues-front-v1.md` (DRAFT, DECISION-079 pt 5) : 33 vues manquantes (15 obligatoires, 8 souhaitables, 2 API seule, 8 à trancher) ; lots F0 à F8, F0-F4 sans attendre le serveur, F5 (panel) attend D5/D6. Constat : `apiRequest` ne renvoie que `payload.data` (le 202 `pendingRequest` est perdu) et le 409 `GOVERNANCE_CONFIRMATION_REQUIRED` n'a pas de champ `code`. Spec du panel à réviser (q138 acceptation décidée, alors que la spec la déconseillait). Questions PO Q1-Q6 ouvertes.

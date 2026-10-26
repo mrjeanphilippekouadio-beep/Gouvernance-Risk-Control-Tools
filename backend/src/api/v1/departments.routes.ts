@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { reasonText } from "../validation.js";
 import type { DepartmentService } from "../../services/DepartmentService.js";
 
 const CreateDepartmentBody = z.object({
@@ -19,7 +20,7 @@ const CreateDepartmentBody = z.object({
 const UpdateDepartmentBody = CreateDepartmentBody.omit({ riskOwner: true }).partial();
 
 const DesignateRiskOwnerBody = z.object({ riskOwner: z.string().min(1) });
-const ArchiveDepartmentBody = z.object({ reason: z.string().min(1) });
+const ArchiveDepartmentBody = z.object({ reason: reasonText(2000) });
 
 export function departmentsRouter(departmentService: DepartmentService): Router {
   const router = Router();

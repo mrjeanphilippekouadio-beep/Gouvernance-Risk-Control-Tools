@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, Card, FormField, Grid, GridItem, MessageBanner, Modal, StatusBadge, Table, type TableColumn, type StatusTone } from "@djamo/design-system";
+import { useGovernanceConfirm, WithoutReviewBadge } from "../../design-system";
 import { ApiError } from "../../api/client";
 import { auditMissionsApi, findingsApi, type AuditMission, type Finding, type FindingSeverity, type FindingStatus, type RelatedObjectType } from "../../api/audit";
 import "../core/WorkflowPages.css";
@@ -14,6 +15,7 @@ const toneForStatus = (value: FindingStatus): StatusTone => value === "CLOS" ? "
 interface Props { token: string; }
 
 export function AuditFindingsPage({ token }: Props) {
+  const gov = useGovernanceConfirm();
   const [missions, setMissions] = useState<AuditMission[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +77,7 @@ export function AuditFindingsPage({ token }: Props) {
     if (!closeTarget) return;
     if (!closureComment.trim()) { setError("Le commentaire de clôture est obligatoire."); return; }
     setBusyId(closeTarget.id); setError(null); setNotice(null);
-    try { await findingsApi.close(token, closeTarget.id, closureComment.trim()); setNotice("Constat clôturé. La clôture est soumise au contrôle maker-checker."); setCloseTarget(null); await refresh(); }
+    try { await gov.run((c) => findingsApi.close(token, closeTarget.id, closureComment.trim(), c)); setNotice("Constat clôturé. La clôture est soumise au contrôle maker-checker."); setCloseTarget(null); await refresh(); }
     catch (err) { setError(errorMessage(err)); }
     finally { setBusyId(""); }
   }
@@ -84,7 +86,7 @@ export function AuditFindingsPage({ token }: Props) {
     { key: "finding", header: "Constat", render: (row) => <div className="workflow-cell-stack"><strong>{row.title}</strong><span>{row.description}</span>{row.relatedObjectType && <small>Lié à : {relatedTypeLabels[row.relatedObjectType]} · {row.relatedObjectId}</small>}</div> },
     { key: "mission", header: "Mission", render: (row) => { const mission = missionById.get(row.auditMissionId); return mission ? <div className="workflow-cell-stack"><strong>{mission.reference}</strong><span>{mission.title}</span></div> : row.auditMissionId; } },
     { key: "severity", header: "Gravité", render: (row) => <StatusBadge label={severityLabels[row.severity]} tone={toneForSeverity(row.severity)} /> },
-    { key: "status", header: "Statut", render: (row) => <StatusBadge label={statusLabels[row.status]} tone={toneForStatus(row.status)} /> },
+    { key: "status", header: "Statut", render: (row) => <div className="workflow-cell-stack"><StatusBadge label={statusLabels[row.status]} tone={toneForStatus(row.status)} /><WithoutReviewBadge value={row.validationIndependence} /></div> },
     { key: "recommendation", header: "Recommandation", render: (row) => row.recommendation || "—" },
     { key: "created", header: "Créé le", render: (row) => dateLabel(row.createdAt) },
     { key: "actions", header: "Actions", render: (row) => <div className="workflow-actions workflow-actions--compact">
@@ -94,6 +96,7 @@ export function AuditFindingsPage({ token }: Props) {
   ], [missionById, busyId, startTreatment]);
 
   return <section className="workflow-page">
+    {gov.dialog}
     <header className="workflow-heading">
       <p className="workflow-eyebrow">AUDIT · CONSTATS & RECOMMANDATIONS</p>
       <h1>Constats & recommandations</h1>

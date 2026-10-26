@@ -66,6 +66,8 @@ export class LocalIdentityProvider implements IdentityProvider {
     private readonly tokenSecret: string,
     private readonly tokenTtlSeconds: number,
     private readonly lookupMembership: LocalAuthMembershipLookup,
+    /** q155 : appelé à la connexion (authenticate) seulement, jamais par verifyToken. */
+    private readonly onLogin?: (tenantId: string, userId: string) => void,
   ) {
     this.usersByEmail = new Map();
 
@@ -92,6 +94,11 @@ export class LocalIdentityProvider implements IdentityProvider {
       throw new ForbiddenError(`No tenant membership found for ${configuredUser.email}`);
     }
 
+    try {
+      this.onLogin?.(membership.tenantId, membership.userId);
+    } catch {
+      // jamais bloquant
+    }
     return this.issueToken(membership);
   }
 

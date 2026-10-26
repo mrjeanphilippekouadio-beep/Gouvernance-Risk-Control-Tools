@@ -1,6 +1,6 @@
 # RM V1 — Navigation de la section Risques (A04, UX Designer)
 
-**Statut** : DRAFT pour validation PO. Spécification de navigation uniquement, pas de maquette, pas de code.
+**Statut** : DÉCIDÉE (DECISION-065, cockpit q122 à q125, 2026-10-18). Spécification de navigation uniquement, pas de maquette, pas de code.
 **Base** : DECISION-054, 060, 062 ; contrat `RISK_MANAGEMENT_V1_FINAL_DECISIONS.md` §3 (Cartographie conservée), §4 (Identification, Analyse, contexte cumulatif), §13 (fiche risque portant le cycle, Dispositif en lecture seule dans l'évaluation) ; `App.tsx` actuel ; `docs/ux/RM-V1-Experience-Dispositif.md` §4 (cette note remplace le §4 sur le regroupement et sa question 5).
 **Hors périmètre** : champs de l'étape Analyse (attend q121 / OD-10), file « À faire », contenu des écrans non cités.
 

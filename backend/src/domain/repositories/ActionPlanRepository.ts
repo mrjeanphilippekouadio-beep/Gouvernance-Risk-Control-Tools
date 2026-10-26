@@ -1,6 +1,9 @@
 import type { ActionLink, ActionPlan, ActionPlanListFilters, CreateActionPlanInput } from "../entities/ActionPlan.js";
+import type { TransactionalAudit } from "../entities/RiskFramework.js";
 
 export interface ActionPlanRepository {
+  /** DECISION-079: true when `close` inserts the events given by `audit` in the SAME transaction. Absent = the service records the audit after (test fakes). */
+  readonly auditsInTransaction?: boolean;
   getById(tenantId: string, id: string): Promise<ActionPlan | null>;
   list(tenantId: string, filters?: ActionPlanListFilters): Promise<ActionPlan[]>;
   create(input: CreateActionPlanInput): Promise<ActionPlan>;
@@ -9,7 +12,7 @@ export interface ActionPlanRepository {
   /** ACT-192: the only way status can move PLANIFIEE -> EN_COURS. */
   start(tenantId: string, id: string): Promise<ActionPlan>;
   /** ACT-195: the only way status can move to the terminal TERMINEE state. Evidence + closedBy are mandatory. */
-  close(tenantId: string, id: string, closedBy: string, evidenceId: string, comment: string | null): Promise<ActionPlan>;
+  close(tenantId: string, id: string, closedBy: string, evidenceId: string, comment: string | null, audit?: TransactionalAudit<ActionPlan>): Promise<ActionPlan>;
   /** ACT-194: current links for this action. */
   listLinks(tenantId: string, actionId: string): Promise<ActionLink[]>;
   /** Pure link-table exception (see control_risks in CLAUDE.md): rebuilt by DELETE + INSERT, tenant-scoped. */

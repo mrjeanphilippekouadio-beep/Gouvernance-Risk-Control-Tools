@@ -21,11 +21,14 @@ import {
   type ActionPlanView,
   type CreateActionPlanInput,
 } from "../domain/entities/ActionPlan.js";
-import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 import type { NotificationService } from "./NotificationService.js";
+import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import { writeAudited } from "./auditedWrite.js";
+import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 
 const SOURCE_TYPES: readonly ActionPlanSourceType[] = ACTION_PLAN_SOURCE_TYPES;
 const LINK_RESOURCE_TYPES: readonly ActionLinkResourceType[] = ACTION_LINK_RESOURCE_TYPES;
@@ -110,6 +113,8 @@ export class ActionPlanService {
     private readonly findings?: FindingRepository,
     /** Persisted in-app notification for the action's responsible user; skipped when absent. */
     private readonly notifications?: NotificationService,
+    /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   /** Best effort: recipient = the action's responsible user only (risk owner / superior not wired, see handoff). */
@@ -440,6 +445,7 @@ export class ActionPlanService {
     evidenceId: string,
     comment: string | null,
     requestId: string,
+    confirmation?: GovernanceConfirmation,
   ): Promise<ActionPlanView> {
     requirePermission(actor, "actionplan.validate");
     const before = await this.getRaw(actor, id);
@@ -450,31 +456,44 @@ export class ActionPlanService {
     if (!evidenceId?.trim()) {
       throw new ValidationError("evidenceId is required to close an action");
     }
-    if (before.createdBy === actor.userId) {
-      throw new ForbiddenError("The actor who created this action cannot close it themselves — ask another user to close it");
-    }
-    // F-B8b-06: the executor is not their own checker either.
-    if (before.responsibleUserId === actor.userId) {
-      throw new ForbiddenError("The user responsible for this action cannot close it themselves — ask another user to close it");
-    }
     if (this.evidences) {
       const evidence = await this.evidences.getById(actor.tenantId, evidenceId);
       if (!evidence || evidence.status === "DELETED") throw new ValidationError(`Evidence ${evidenceId} does not exist in this tenant`);
     }
 
-    const after = await this.actions.close(actor.tenantId, id, actor.userId, evidenceId, comment?.trim() || null);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "ActionPlan",
-      entityId: id,
-      action: "CLOSE",
-      oldValue: before,
-      newValue: after,
-      reason: comment ?? null,
-      requestId,
+    // F-PNL2-05: the confirmation prompt comes after every precondition (state, evidence).
+    // F-B8b-06: neither the creator nor the executor (responsible user) is their own checker.
+    const isCreator = before.createdBy === actor.userId;
+    const selfValidated = await checkSelfValidation(this.selfValidation, actor, {
+      isSelf: isCreator || before.responsibleUserId === actor.userId,
+      permission: "actionplan.validate",
+      makerIds: [before.createdBy, before.responsibleUserId],
+      refusal: isCreator
+        ? "The actor who created this action cannot close it themselves — ask another user to close it"
+        : "The user responsible for this action cannot close it themselves — ask another user to close it",
+      confirmation,
     });
+
+    // DECISION-079: closure + audit row (marked or not) in one transaction.
+    const after = await writeAudited<ActionPlan>(
+      this.actions.auditsInTransaction,
+      this.audit,
+      (audit) => this.actions.close(actor.tenantId, id, actor.userId, evidenceId, comment?.trim() || null, audit),
+      (closed) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "ActionPlan",
+          entityId: id,
+          action: "CLOSE",
+          oldValue: before,
+          newValue: selfValidated ? { ...closed, ...selfValidated.newValueExtra } : closed,
+          reason: comment ?? null,
+          requestId,
+          ...(selfValidated ? { governanceException: selfValidated.governanceException } : {}),
+        },
+      ],
+    );
 
     return this.toView(after);
   }

@@ -7,7 +7,9 @@ import type {
   ReviewCycleStatus,
   ReviewCycleType,
 } from "../../../domain/entities/ReviewCycle.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
+import { runAudited } from "./PostgresAuditRepository.js";
 
 interface ReviewCycleRow {
   id: string;
@@ -50,6 +52,9 @@ function toDomain(row: ReviewCycleRow): ReviewCycle {
 }
 
 export class PostgresReviewCycleRepository implements ReviewCycleRepository {
+  /** DECISION-079: `close` inserts its audit events with the transaction client. */
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
 
   async getById(tenantId: string, id: string): Promise<ReviewCycle | null> {
@@ -103,16 +108,22 @@ export class PostgresReviewCycleRepository implements ReviewCycleRepository {
     return toDomain(row);
   }
 
-  async close(tenantId: string, id: string, closedBy: string, comment: string | null): Promise<ReviewCycle> {
-    const { rows } = await this.pool.query<ReviewCycleRow>(
-      `UPDATE review_cycles
-       SET status = 'CLOTUREE', closed_by = $3, closed_at = now(), closure_comment = $4, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2
-       RETURNING *`,
-      [tenantId, id, closedBy, comment],
+  async close(tenantId: string, id: string, closedBy: string, comment: string | null, audit?: TransactionalAudit<ReviewCycle>): Promise<ReviewCycle> {
+    return runAudited(
+      this.pool,
+      async (db) => {
+        const { rows } = await db.query<ReviewCycleRow>(
+          `UPDATE review_cycles
+           SET status = 'CLOTUREE', closed_by = $3, closed_at = now(), closure_comment = $4, updated_at = now()
+           WHERE tenant_id = $1 AND id = $2
+           RETURNING *`,
+          [tenantId, id, closedBy, comment],
+        );
+        const row = rows[0];
+        if (!row) throw new NotFoundError("ReviewCycle", id);
+        return toDomain(row);
+      },
+      audit,
     );
-    const row = rows[0];
-    if (!row) throw new NotFoundError("ReviewCycle", id);
-    return toDomain(row);
   }
 }

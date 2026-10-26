@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, type GovernanceConfirmation, type ValidationIndependence } from "./client";
 
 export type AuditMissionStatus = "PLANIFIEE" | "EN_COURS" | "CLOTUREE";
 export interface AuditMission {
@@ -33,6 +33,7 @@ export interface Finding {
   relatedObjectId: string | null;
   status: FindingStatus;
   raisedBy: string;
+  validationIndependence?: ValidationIndependence;
   closedBy: string | null;
   closedAt: string | null;
   closureComment: string | null;
@@ -67,6 +68,6 @@ export const findingsApi = {
     apiRequest<Finding>("/api/v1/findings", { method: "POST", body: input, token }),
   startTreatment: (token: string, id: string) =>
     apiRequest<Finding>(`/api/v1/findings/${encodeURIComponent(id)}/start-treatment`, { method: "POST", token }),
-  close: (token: string, id: string, comment: string) =>
-    apiRequest<Finding>(`/api/v1/findings/${encodeURIComponent(id)}/close`, { method: "POST", body: { comment }, token }),
+  close: (token: string, id: string, comment: string, governanceConfirmation?: GovernanceConfirmation) =>
+    apiRequest<Finding>(`/api/v1/findings/${encodeURIComponent(id)}/close`, { method: "POST", body: { comment, governanceConfirmation }, token }),
 };

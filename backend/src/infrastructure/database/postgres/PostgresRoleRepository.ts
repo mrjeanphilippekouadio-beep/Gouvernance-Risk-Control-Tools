@@ -1,5 +1,7 @@
 import type { Pool } from "pg";
-import type { RoleRepository } from "../../../domain/repositories/RoleRepository.js";
+import type { HandOverInput, RoleRepository } from "../../../domain/repositories/RoleRepository.js";
+import type { AuditEvent } from "../../../domain/entities/AuditEvent.js";
+import { insertAuditEvent } from "./PostgresAuditRepository.js";
 import type { CreateRoleInput, Role, RoleAssignment, SystemGroup, UpdateRoleInput } from "../../../domain/entities/Role.js";
 import type { Permission } from "../../../domain/permissions.js";
 import type { DashboardScopeMode } from "../../../domain/entities/DashboardScope.js";
@@ -294,7 +296,7 @@ export class PostgresRoleRepository implements RoleRepository {
     tenantId: string,
     roleId: string,
     userId: string,
-    options?: { minRemaining?: number },
+    options?: { minRemaining?: number; auditEvents?: Array<Omit<AuditEvent, "id" | "timestamp">> },
   ): Promise<void> {
     const minRemaining = options?.minRemaining ?? 0;
     const client = await this.pool.connect();
@@ -319,9 +321,93 @@ export class PostgresRoleRepository implements RoleRepository {
         [tenantId, roleId, userId],
       );
       if (!rowCount) throw new NotFoundError("RoleAssignment", `${roleId}:${userId}`);
+      for (const event of options?.auditEvents ?? []) await insertAuditEvent(client, event);
       await client.query("COMMIT");
     } catch (err) {
       await rollbackQuietly(client);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async handOverLastRiskManager(input: HandOverInput): Promise<RoleAssignment> {
+    const { tenantId, roleId, leavingUserId, interimUserId, designationId } = input;
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      // Lock order (same as assignToUser / update): users by id, then the role, then the tenant, then the designation.
+      const users = await client.query<{ id: string; deleted_at: Date | null }>(
+        `SELECT id, deleted_at FROM users WHERE tenant_id = $1 AND id = ANY($2::uuid[]) ORDER BY id FOR UPDATE`,
+        [tenantId, [leavingUserId, interimUserId]],
+      );
+      const interim = users.rows.find((u) => u.id === interimUserId);
+      if (!interim || interim.deleted_at) throw new ValidationError("The designated interim is not an active user");
+      const locked = await client.query<RoleRow>(
+        `SELECT * FROM roles WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+        [tenantId, roleId],
+      );
+      if (!locked.rowCount) throw new NotFoundError("Role", roleId);
+      const role = toDomain(locked.rows[0] as RoleRow);
+      if (role.systemGroup !== "RISK_MANAGER") throw new ValidationError("The hand-over only applies to the Risk Manager group");
+      await client.query(`SELECT 1 FROM tenants WHERE id = $1 FOR NO KEY UPDATE`, [tenantId]);
+      const des = await client.query(
+        `SELECT 1 FROM governance_designations
+         WHERE tenant_id = $1 AND id = $2 AND kind = 'RISK_MANAGER_INTERIM' AND user_id = $3
+           AND ended_at IS NULL AND activated_at IS NULL AND valid_until > now()
+         FOR UPDATE`,
+        [tenantId, designationId, interimUserId],
+      );
+      if (!des.rowCount) throw new ConflictError("The interim designation is no longer usable (ended, used or past its end date)", designationId);
+
+      // The leaving member must still be the last ACTIVE member (a member added meanwhile means: retry the ordinary path).
+      const others = await client.query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM user_roles ur
+         JOIN users u ON u.id = ur.user_id AND u.tenant_id = ur.tenant_id AND u.deleted_at IS NULL
+         WHERE ur.tenant_id = $1 AND ur.role_id = $2 AND ur.revoked_at IS NULL AND ur.user_id <> $3`,
+        [tenantId, roleId, leavingUserId],
+      );
+      if (Number(others.rows[0]?.count ?? 0) > 0) {
+        throw new ConflictError("The Risk Manager group has another active member now; retry", roleId);
+      }
+      if (input.recheck) {
+        const held = await client.query<RoleRow>(ROLES_OF_USER_SQL, [tenantId, interimUserId]);
+        await input.recheck(role, held.rows.map(toDomain));
+      }
+      // Revoke FIRST: 062's AFTER INSERT trigger counts RM members, two at once would end the bootstrap for good.
+      const revoked = await client.query(
+        `UPDATE user_roles SET revoked_at = now()
+         WHERE tenant_id = $1 AND role_id = $2 AND user_id = $3 AND revoked_at IS NULL`,
+        [tenantId, roleId, leavingUserId],
+      );
+      if (!revoked.rowCount) throw new NotFoundError("RoleAssignment", `${roleId}:${leavingUserId}`);
+      const inserted = await client.query<UserRoleRow>(
+        `INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [tenantId, roleId, interimUserId, input.grantedBy],
+      );
+      const row = inserted.rows[0];
+      if (!row) throw new Error("Insert into user_roles returned no row");
+      await client.query(
+        `UPDATE governance_designations SET activated_at = now(), activated_ref = $3 WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, designationId, row.id],
+      );
+      const assignment = assignmentToDomain(row);
+      for (const event of input.audit(assignment)) await insertAuditEvent(client, event);
+      const after = await client.query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM user_roles ur
+         JOIN users u ON u.id = ur.user_id AND u.tenant_id = ur.tenant_id AND u.deleted_at IS NULL
+         WHERE ur.tenant_id = $1 AND ur.role_id = $2 AND ur.revoked_at IS NULL`,
+        [tenantId, roleId],
+      );
+      if (Number(after.rows[0]?.count ?? 0) !== 1) throw new Error("Hand-over would not leave exactly one Risk Manager");
+      await client.query("COMMIT");
+      return assignment;
+    } catch (err) {
+      await rollbackQuietly(client);
+      if (typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505"
+          && (err as { constraint?: unknown }).constraint === "user_roles_active_idx") {
+        throw new ConflictError("The interim already holds this role", roleId);
+      }
       throw err;
     } finally {
       client.release();

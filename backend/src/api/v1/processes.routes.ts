@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { reasonText } from "../validation.js";
 import type { ProcessService } from "../../services/ProcessService.js";
 
 const Level = z.enum(["PROCESS", "SUBPROCESS", "ACTIVITY"]);
@@ -30,7 +31,15 @@ const CreateProcessBody = z.object({
 const UpdateProcessBody = CreateProcessBody.partial();
 // B-8 bis (q46): mandatory on creation only (the update body keeps it optional/nullish).
 const CreateProcessBodyStrict = CreateProcessBody.extend({ departmentId: z.guid() });
-const ArchiveProcessBody = z.object({ reason: z.string().min(1) });
+// D2b: omitted = untouched, null = cleared. Strict: no other field (and no attribution field) is accepted.
+const ResponsibilitiesBody = z
+  .object({
+    ownerUserId: z.guid().nullable().optional(),
+    riskChampionUserId: z.guid().nullable().optional(),
+    deputyUserId: z.guid().nullable().optional(),
+  })
+  .strict();
+const ArchiveProcessBody = z.object({ reason: reasonText(2000) });
 
 export function processesRouter(processService: ProcessService): Router {
   const router = Router();
@@ -59,6 +68,24 @@ export function processesRouter(processService: ProcessService): Router {
       const body = CreateProcessBodyStrict.parse(req.body);
       const process = await processService.create(req.user, body, req.requestId);
       res.status(201).json({ data: process });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/:id/responsibilities", async (req, res, next) => {
+    try {
+      res.json({ data: await processService.getResponsibilities(req.user, req.params["id"] as string) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/:id/responsibilities", async (req, res, next) => {
+    try {
+      const body = ResponsibilitiesBody.parse(req.body);
+      const process = await processService.setResponsibilities(req.user, req.params["id"] as string, body, req.requestId);
+      res.json({ data: process });
     } catch (err) {
       next(err);
     }

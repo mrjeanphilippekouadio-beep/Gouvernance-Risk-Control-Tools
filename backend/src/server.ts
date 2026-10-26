@@ -4,7 +4,9 @@ import cors from "cors";
 import { env, getLocalAuthUsers } from "./config/env.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { pool } from "./infrastructure/database/pool.js";
+import { createLastSeenRecorder } from "./infrastructure/identity/lastSeen.js";
 import { assertProductionDatabaseRole } from "./infrastructure/database/postgres/databaseRoleSecurity.js";
+import { PostgresSelfValidationPolicyRequestRepository } from "./infrastructure/database/postgres/PostgresSelfValidationPolicyRequestRepository.js";
 import { PostgresRiskRepository } from "./infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresAuditRepository } from "./infrastructure/database/postgres/PostgresAuditRepository.js";
 import { PostgresEvidenceRepository } from "./infrastructure/database/postgres/PostgresEvidenceRepository.js";
@@ -42,6 +44,7 @@ import { PostgresNotificationRepository } from "./infrastructure/database/postgr
 import { PostgresNotificationSubscriptionRepository } from "./infrastructure/database/postgres/PostgresNotificationSubscriptionRepository.js";
 import { PostgresReviewCycleRepository } from "./infrastructure/database/postgres/PostgresReviewCycleRepository.js";
 import { PostgresProcessEvaluationModeRequestRepository } from "./infrastructure/database/postgres/PostgresProcessEvaluationModeRequestRepository.js";
+import { PostgresOrganizationProfileRepository } from "./infrastructure/database/postgres/PostgresOrganizationProfileRepository.js";
 import { TelegramNotifier } from "./infrastructure/notifications/TelegramNotifier.js";
 import { NoopNotifier } from "./infrastructure/notifications/NoopNotifier.js";
 import { GoogleIdentityProvider } from "./infrastructure/identity/GoogleIdentityProvider.js";
@@ -60,6 +63,16 @@ import { FindingService } from "./services/FindingService.js";
 import { DepartmentService } from "./services/DepartmentService.js";
 import { ProcessService } from "./services/ProcessService.js";
 import { ProcessEvaluationModeRequestService } from "./services/ProcessEvaluationModeRequestService.js";
+import { OrganizationProfileService } from "./services/OrganizationProfileService.js";
+import { organizationProfileRouter } from "./api/v1/organizationProfile.routes.js";
+import { GovernanceExceptionService } from "./services/GovernanceExceptionService.js";
+import { GovernancePrincipleAcceptanceService } from "./services/GovernancePrincipleAcceptanceService.js";
+import { GovernanceNotifier } from "./services/GovernanceNotifier.js";
+import { PostgresGovernanceExceptionReviewRepository } from "./infrastructure/database/postgres/PostgresGovernanceExceptionReviewRepository.js";
+import { PostgresGovernancePrincipleAcceptanceRepository } from "./infrastructure/database/postgres/PostgresGovernancePrincipleAcceptanceRepository.js";
+import { governanceExceptionsRouter } from "./api/v1/governanceExceptions.routes.js";
+import { governancePrincipleAcceptancesRouter } from "./api/v1/governancePrincipleAcceptances.routes.js";
+import { governanceNotificationsMiddleware } from "./api/middleware/governanceNotifications.js";
 import { AuditLogService } from "./services/AuditLogService.js";
 import { RoleService } from "./services/RoleService.js";
 import { FeedbackService } from "./services/FeedbackService.js";
@@ -85,6 +98,8 @@ import { DashboardScopeResolver } from "./services/DashboardScopeResolver.js";
 import { widestScopeMode, type DashboardScopeMode } from "./domain/entities/DashboardScope.js";
 import { BrandingService } from "./services/BrandingService.js";
 import { ConfigService } from "./services/ConfigService.js";
+import { SelfValidationGate } from "./services/SelfValidationGate.js";
+import { PostgresGovernanceQueries } from "./infrastructure/database/postgres/PostgresGovernanceQueries.js";
 import { ModuleToggleService } from "./services/ModuleToggleService.js";
 import { TenantService } from "./services/TenantService.js";
 import { RegulatoryFrameworkService } from "./services/RegulatoryFrameworkService.js";
@@ -105,6 +120,9 @@ import { processesRouter } from "./api/v1/processes.routes.js";
 import { processEvaluationModeRequestsRouter } from "./api/v1/processEvaluationModeRequests.routes.js";
 import { auditLogRouter } from "./api/v1/auditLog.routes.js";
 import { rolesRouter } from "./api/v1/roles.routes.js";
+import { governanceDesignationsRouter } from "./api/v1/governanceDesignations.routes.js";
+import { GovernanceDesignationService } from "./services/GovernanceDesignationService.js";
+import { PostgresGovernanceDesignationRepository } from "./infrastructure/database/postgres/PostgresGovernanceDesignationRepository.js";
 import { feedbackRouter } from "./api/v1/feedback.routes.js";
 import { kpisRouter } from "./api/v1/kpis.routes.js";
 import { kpiMeasuresRouter } from "./api/v1/kpiMeasures.routes.js";
@@ -235,20 +253,30 @@ const processService = new ProcessService(
   controlRepository,
   processEvaluationModeRequestRepository,
   departmentRepository,
+  userRepository,
 );
+// DECISION-074 D4: one gate for every self-validation guard, one query object for validators / third parties / markers.
+const governanceQueries = new PostgresGovernanceQueries(pool);
+const selfValidationGate = new SelfValidationGate(configRepository, governanceQueries);
 const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
   processEvaluationModeRequestRepository,
   processRepository,
   riskRepository,
   auditRepository,
+  selfValidationGate,
+);
+const organizationProfileService = new OrganizationProfileService(
+  new PostgresOrganizationProfileRepository(pool),
+  auditRepository,
 );
 const auditLogService = new AuditLogService(auditRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository);
-const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository);
+const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository, selfValidationGate);
 const effectivenessService = new ControlEffectivenessService(
   effectivenessRepository,
   controlRepository,
   auditRepository,
+  selfValidationGate,
 );
 const anomalyService = new AnomalyService(
   anomalyRepository,
@@ -265,10 +293,21 @@ const findingService = new FindingService(
   riskRepository,
   controlRepository,
   anomalyRepository,
+  selfValidationGate,
 );
 const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
 const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
-const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository);
+const governanceDesignationRepository = new PostgresGovernanceDesignationRepository(pool);
+const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository, governanceDesignationRepository);
+const governanceDesignationService = new GovernanceDesignationService(governanceDesignationRepository, auditRepository, userRepository, roleRepository);
+// Lot D5: reviews, principle acceptances, and the mandatory governance notifications (emitted after commit, see the middleware).
+const governanceExceptionService = new GovernanceExceptionService(new PostgresGovernanceExceptionReviewRepository(pool), auditRepository);
+const governancePrincipleAcceptanceService = new GovernancePrincipleAcceptanceService(
+  new PostgresGovernancePrincipleAcceptanceRepository(pool),
+  auditRepository,
+  governanceQueries,
+);
+const governanceNotifier = new GovernanceNotifier(notificationService, governanceQueries);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
 const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
@@ -296,6 +335,7 @@ const riskEvaluationService = new RiskEvaluationService(
   configRepository,
   riskFrameworkRepository,
   riskCategoryRepository,
+  selfValidationGate,
 );
 const treatmentDecisionService = new TreatmentDecisionService(
   treatmentDecisionRepository,
@@ -303,6 +343,7 @@ const treatmentDecisionService = new TreatmentDecisionService(
   riskRepository,
   auditRepository,
   configRepository,
+  selfValidationGate,
 );
 // DIV-07: read-only companion of riskEvaluationService — composes only, never scores.
 const riskEvaluationViewService = new RiskEvaluationViewService(
@@ -327,6 +368,7 @@ const actionPlanService = new ActionPlanService(
   departmentRepository,
   findingRepository,
   notificationService,
+  selfValidationGate,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository, riskFrameworkRepository);
 const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository);
@@ -393,14 +435,21 @@ const dashboardService = new DashboardService(
   riskFrameworkRepository,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
-const configService = new ConfigService(configRepository, auditRepository, ratingScaleRepository, riskFrameworkRepository);
+const configService = new ConfigService(
+  configRepository,
+  auditRepository,
+  ratingScaleRepository,
+  riskFrameworkRepository,
+  governanceQueries,
+  new PostgresSelfValidationPolicyRequestRepository(pool),
+);
 const moduleToggleService = new ModuleToggleService(moduleToggleRepository, auditRepository);
 const tenantService = new TenantService(tenantRepository, auditRepository);
 const regulatoryFrameworkService = new RegulatoryFrameworkService(regulatoryFrameworkRepository, auditRepository);
 const riskCategoryService = new RiskCategoryService(riskCategoryRepository, auditRepository);
 const riskImportService = new RiskImportService(riskService);
 const userService = new UserService(userRepository, auditRepository, roleService, departmentRepository, notificationService);
-const governanceService = new GovernanceService(reviewCycleRepository, auditRepository, notifier);
+const governanceService = new GovernanceService(reviewCycleRepository, auditRepository, notifier, selfValidationGate);
 
 const lookupMembership = async (email: string) => {
   const { rows } = await pool.query<{ id: string; tenant_id: string; roles: string[]; email: string; display_name: string | null }>(
@@ -457,14 +506,18 @@ const lookupMembership = async (email: string) => {
   };
 };
 
+// q155 (DECISION-077) : last_seen_at = dernière CONNEXION, écrite à l'identification seulement.
+const recordLastSeen = createLastSeenRecorder(pool);
+
 const identityProvider =
   env.AUTH_PROVIDER === "google"
-    ? new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID!, lookupMembership)
+    ? new GoogleIdentityProvider(env.GOOGLE_OAUTH_CLIENT_ID!, lookupMembership, recordLastSeen)
     : new LocalIdentityProvider(
         getLocalAuthUsers(),
         env.LOCAL_AUTH_TOKEN_SECRET!,
         env.LOCAL_AUTH_TOKEN_TTL_SECONDS,
         lookupMembership,
+        recordLastSeen,
       );
 
 if (env.AUTH_PROVIDER === "local") {
@@ -486,6 +539,8 @@ app.get("/ready", async (_req, res) => {
 });
 
 // --- Authenticated API ---
+// Lot D5: governance notifications, after the commit of every successful mutating request.
+app.use("/api/v1", governanceNotificationsMiddleware(governanceNotifier));
 // moduleGuard wired per MODULE_NAMES (ACT-221): each togglable module's main
 // resource route(s) get the same one-line treatment as /risks.
 app.use(
@@ -506,8 +561,8 @@ app.use(
   moduleGuard(moduleToggleService, "CONTROL"),
   controlsRouter(controlService, raciEnrichmentViewService),
 );
-app.use("/api/v1/executions", authMiddleware(identityProvider), executionsRouter(executionService));
-app.use("/api/v1/effectiveness", authMiddleware(identityProvider), effectivenessRouter(effectivenessService));
+app.use("/api/v1/executions", authMiddleware(identityProvider), executionsRouter(executionService, governanceQueries));
+app.use("/api/v1/effectiveness", authMiddleware(identityProvider), effectivenessRouter(effectivenessService, governanceQueries));
 app.use(
   "/api/v1/anomalies",
   authMiddleware(identityProvider),
@@ -524,17 +579,25 @@ app.use(
   "/api/v1/findings",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "AUDIT"),
-  findingsRouter(findingService),
+  findingsRouter(findingService, governanceQueries),
 );
 app.use("/api/v1/departments", authMiddleware(identityProvider), departmentsRouter(departmentService));
 app.use("/api/v1/processes", authMiddleware(identityProvider), processesRouter(processService));
 app.use(
   "/api/v1/process-evaluation-mode-requests",
   authMiddleware(identityProvider),
-  processEvaluationModeRequestsRouter(processEvaluationModeRequestService),
+  processEvaluationModeRequestsRouter(processEvaluationModeRequestService, governanceQueries),
 );
+app.use("/api/v1/organization-profile", authMiddleware(identityProvider), organizationProfileRouter(organizationProfileService));
 app.use("/api/v1/audit-log", authMiddleware(identityProvider), auditLogRouter(auditLogService));
 app.use("/api/v1/roles", authMiddleware(identityProvider), rolesRouter(roleService));
+app.use("/api/v1/governance-designations", authMiddleware(identityProvider), governanceDesignationsRouter(governanceDesignationService));
+app.use("/api/v1/governance-exceptions", authMiddleware(identityProvider), governanceExceptionsRouter(governanceExceptionService));
+app.use(
+  "/api/v1/governance-principle-acceptances",
+  authMiddleware(identityProvider),
+  governancePrincipleAcceptancesRouter(governancePrincipleAcceptanceService),
+);
 app.use("/api/v1/feedback", authMiddleware(identityProvider), feedbackRouter(feedbackService));
 app.use("/api/v1/permissions", authMiddleware(identityProvider), permissionsRouter());
 app.use(
@@ -550,9 +613,9 @@ app.use("/api/v1/risk-frameworks", authMiddleware(identityProvider), riskFramewo
 app.use(
   "/api/v1/risk-evaluations",
   authMiddleware(identityProvider),
-  riskEvaluationsRouter(riskEvaluationService, riskEvaluationViewService, treatmentDecisionService),
+  riskEvaluationsRouter(riskEvaluationService, riskEvaluationViewService, treatmentDecisionService, governanceQueries),
 );
-app.use("/api/v1/treatment-decisions", authMiddleware(identityProvider), treatmentDecisionsRouter(treatmentDecisionService));
+app.use("/api/v1/treatment-decisions", authMiddleware(identityProvider), treatmentDecisionsRouter(treatmentDecisionService, governanceQueries));
 app.use(
   "/api/v1/kris",
   authMiddleware(identityProvider),
@@ -566,14 +629,14 @@ app.use(
   "/api/v1/actions",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "ACTION_PLAN"),
-  actionPlansRouter(actionPlanService, raciEnrichmentViewService),
+  actionPlansRouter(actionPlanService, raciEnrichmentViewService, governanceQueries),
 );
 app.use("/api/v1/raci", authMiddleware(identityProvider), raciRouter(raciAssignmentService));
 app.use(
   "/api/v1/dashboard",
   authMiddleware(identityProvider),
   moduleGuard(moduleToggleService, "DASHBOARD"),
-  actionPlanDashboardRouter(actionPlanService),
+  actionPlanDashboardRouter(actionPlanService, governanceQueries),
 );
 app.use(
   "/api/v1/cartography",
@@ -605,7 +668,7 @@ app.use(
   authMiddleware(identityProvider),
   notificationSubscriptionsRouter(notificationService),
 );
-app.use("/api/v1/review-cycles", authMiddleware(identityProvider), reviewCyclesRouter(governanceService));
+app.use("/api/v1/review-cycles", authMiddleware(identityProvider), reviewCyclesRouter(governanceService, governanceQueries));
 
 app.use(errorHandler);
 

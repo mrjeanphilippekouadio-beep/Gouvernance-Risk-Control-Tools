@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { TreatmentDecisionService } from "../../services/TreatmentDecisionService.js";
+import { optionalComment, reasonText } from "../validation.js";
+import { withIndependence } from "../validationIndependence.js";
+import type { GovernanceExceptionLookup } from "../../domain/governance/selfValidation.js";
 
 const TreatmentDecisionStatus = z.enum(["PROPOSEE", "CONFIRMEE", "INVALIDEE", "VALIDEE_COMITE"]);
 const TreatmentOptionSchema = z.enum(["ACCEPTER", "SURVEILLER", "REDUIRE", "TRANSFERER", "EVITER"]);
@@ -8,15 +11,16 @@ const TreatmentOptionSchema = z.enum(["ACCEPTER", "SURVEILLER", "REDUIRE", "TRAN
 const CreateTreatmentDecisionBody = z.object({
   riskEvaluationId: z.string().min(1),
   option: TreatmentOptionSchema,
-  justification: z.string().min(1),
+  justification: reasonText(2000),
 });
 
-const ConfirmBody = z.object({ comment: z.string().nullish() });
-const InvalidateBody = z.object({ comment: z.string().min(1) });
-const ValidateCommitteeBody = z.object({ comment: z.string().nullish() });
+const ConfirmBody = z.object({ comment: optionalComment });
+const InvalidateBody = z.object({ comment: reasonText(2000) });
+const ValidateCommitteeBody = z.object({ comment: optionalComment });
 
-export function treatmentDecisionsRouter(treatmentDecisionService: TreatmentDecisionService): Router {
+export function treatmentDecisionsRouter(treatmentDecisionService: TreatmentDecisionService, independence?: GovernanceExceptionLookup): Router {
   const router = Router();
+  const indep = withIndependence(independence, "TreatmentDecision");
 
   // §5: GET /?riskId=&status= — mirrors riskEvaluationsRouter's GET /
   // convention (riskId required, status optional).
@@ -31,7 +35,7 @@ export function treatmentDecisionsRouter(treatmentDecisionService: TreatmentDeci
       const status = typeof statusRaw === "string" ? TreatmentDecisionStatus.parse(statusRaw) : undefined;
 
       const decisions = await treatmentDecisionService.listForRisk(req.user, riskId, { status });
-      res.json({ data: decisions });
+      res.json({ data: await indep(req.user.tenantId, decisions) });
     } catch (err) {
       next(err);
     }
@@ -40,7 +44,7 @@ export function treatmentDecisionsRouter(treatmentDecisionService: TreatmentDeci
   router.get("/:id", async (req, res, next) => {
     try {
       const decision = await treatmentDecisionService.get(req.user, req.params["id"] as string);
-      res.json({ data: decision });
+      res.json({ data: await indep(req.user.tenantId, decision) });
     } catch (err) {
       next(err);
     }
@@ -60,7 +64,7 @@ export function treatmentDecisionsRouter(treatmentDecisionService: TreatmentDeci
     try {
       const body = ConfirmBody.parse(req.body);
       const decision = await treatmentDecisionService.confirm(req.user, req.params["id"] as string, body.comment ?? null, req.requestId);
-      res.json({ data: decision });
+      res.json({ data: await indep(req.user.tenantId, decision) });
     } catch (err) {
       next(err);
     }
@@ -70,7 +74,7 @@ export function treatmentDecisionsRouter(treatmentDecisionService: TreatmentDeci
     try {
       const body = InvalidateBody.parse(req.body);
       const decision = await treatmentDecisionService.invalidate(req.user, req.params["id"] as string, body.comment, req.requestId);
-      res.json({ data: decision });
+      res.json({ data: await indep(req.user.tenantId, decision) });
     } catch (err) {
       next(err);
     }
@@ -85,7 +89,7 @@ export function treatmentDecisionsRouter(treatmentDecisionService: TreatmentDeci
         body.comment ?? null,
         req.requestId,
       );
-      res.json({ data: decision });
+      res.json({ data: await indep(req.user.tenantId, decision) });
     } catch (err) {
       next(err);
     }

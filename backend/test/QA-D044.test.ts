@@ -179,9 +179,9 @@ describe("QA-D044 q94: UserService.reactivate / assertReactivable", () => {
 });
 
 describe("QA-D044 q79: config.manage is administrator, config.update is not", () => {
-  const CONFIG_ADMIN = new Set<Permission>(["config.manage", "config.cumul.set", "config.committeeenforcement.set"]);
+  const CONFIG_ADMIN = new Set<Permission>(["config.manage", "config.cumul.set", "config.committeeenforcement.set", "config.selfvalidation.set"]);
 
-  it("every config.* permission: reason required to give it to a Risk Manager only for the three administrator ones", async () => {
+  it("every config.* permission: reason required to give it to a Risk Manager only for the administrator ones", async () => {
     const configPerms = ALL_PERMISSIONS.filter((p) => p.startsWith("config."));
     expect(configPerms).toContain("config.manage");
     for (const p of configPerms) {
@@ -335,7 +335,7 @@ describe("QA-D044 q84: ActionPlanService.resolveRecipients", () => {
 });
 
 describe("QA-D044 q85/q95: catalog and subscriptions", () => {
-  it("the 12 types are all mandatory: subscribe(enabled:false) refused for each, also space-padded, nothing stored", async () => {
+  it("the 20 types are all mandatory: subscribe(enabled:false) refused for each, also space-padded, nothing stored", async () => {
     for (const t of NOTIFICATION_CATALOG) {
       const upsert = vi.fn();
       const svc = new NotificationService({} as never, { getByKey: async () => null, upsert } as never, { record: async () => undefined } as never);
@@ -344,7 +344,7 @@ describe("QA-D044 q85/q95: catalog and subscriptions", () => {
       await expect(svc.subscribe(u, { resourceType: t.resourceType, eventType: ` ${t.eventType} `, enabled: false }, "r")).rejects.toBeInstanceOf(ValidationError);
       expect(upsert).not.toHaveBeenCalled();
     }
-    expect(NOTIFICATION_CATALOG).toHaveLength(12);
+    expect(NOTIFICATION_CATALOG).toHaveLength(20); // D5: + 8 governance types
   });
 
   it("the Dispositif event types used by RiskFrameworkService exist in the catalog under MANAGEMENT, mandatory (no drift)", async () => {

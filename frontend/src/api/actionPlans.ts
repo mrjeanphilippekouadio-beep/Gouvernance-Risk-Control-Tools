@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, type GovernanceConfirmation, type ValidationIndependence } from "./client";
 
 export type ActionPlanSourceType = "RISK" | "CONTROL" | "KRI" | "AUDIT" | "INCIDENT" | "MANAGEMENT" | "FINDING";
 export type ActionPlanStoredStatus = "PLANIFIEE" | "EN_COURS" | "TERMINEE";
@@ -22,6 +22,7 @@ export interface ActionPlan {
   progressComment: string | null;
   evidenceId: string | null;
   createdBy: string;
+  validationIndependence?: ValidationIndependence;
   closedBy: string | null;
   closedAt: string | null;
   closureComment: string | null;
@@ -56,6 +57,6 @@ export const actionPlansApi = {
     apiRequest<ActionPlan>(`/api/v1/actions/${encodeURIComponent(id)}/progress`, { method: "PATCH", body: { progressPercent, comment }, token }),
   escalate: (token: string, id: string) =>
     apiRequest<{ escalated: boolean; action: ActionPlan }>(`/api/v1/actions/${encodeURIComponent(id)}/escalate`, { method: "POST", token }),
-  close: (token: string, id: string, evidenceId: string, comment: string) =>
-    apiRequest<ActionPlan>(`/api/v1/actions/${encodeURIComponent(id)}/close`, { method: "PATCH", body: { evidenceId, comment }, token }),
+  close: (token: string, id: string, evidenceId: string, comment: string, governanceConfirmation?: GovernanceConfirmation) =>
+    apiRequest<ActionPlan>(`/api/v1/actions/${encodeURIComponent(id)}/close`, { method: "PATCH", body: { evidenceId, comment, governanceConfirmation }, token }),
 };

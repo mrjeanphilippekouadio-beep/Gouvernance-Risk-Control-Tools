@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
+import { reasonText } from "../validation.js";
 import type { ModuleToggleService } from "../../services/ModuleToggleService.js";
 
-const ToggleBody = z.object({ enabled: z.boolean(), reason: z.string().min(1).max(500) });
+const ToggleBody = z.object({ enabled: z.boolean(), reason: reasonText(500) });
 
 /** ACT-221 — CRUD for the toggle itself; enforcement lives in api/middleware/moduleGuard.ts, wired per-module in server.ts. */
 export function moduleTogglesRouter(moduleToggleService: ModuleToggleService): Router {
