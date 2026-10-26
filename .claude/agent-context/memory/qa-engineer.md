@@ -275,3 +275,9 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 
 - Section 7 de `docs/qa/qa-retest2-2026-10-19.md`. F-PNL3-01 à 05 fermés. Playwright vrai backend : 26 PASS, 0 défaut connu ; suite 2558 verts. Instabilité D2c non reproduite (35 runs, dont sous charge) : hypothèse erreur PG brute du perdant de la course.
 - Pratiques : (1) un `<input>` supprime les retours à la ligne : `fill` avec `\n` ne teste pas un 400 multiligne ; (2) réinitialiser la base jetable (`reset.sh`) avant CHAQUE relance d'un parcours qui change l'état, sinon faux échecs en cascade ; (3) un oracle qui fait agir l'auteur sur sa propre demande doit attendre un 403 maker-checker, pas un 200 ; (4) un test anti-régression d'écran doit être rejoué quand un composant partagé change (dialogue de double confirmation).
+
+## 2026-10-26 — QA-F4 (lot F4 : /users/me/permissions, /users/directory, q166 ; 4 commits sur feat/f4-profil-designations-comptes) — PASS (niveau 2 backend)
+
+- `backend/test/QA-F4.test.ts` : 22 tests PASS (routage avant `/:id`, directory cross-tenant/suspendu/fuite de champs, q166 REFUSE/config absente, confirmation vide/mauvaise règle, id MAJUSCULES, champion=soi + owner=autre, owner/N-1=soi, aucune écriture partielle, body strict, `governanceConfirmation` mal formée). Suite 2400 pass + 266 skipped ; typecheck et builds design-system + frontend OK. Pas un avis Security/Privacy/Compliance. Aucun défaut produit.
+- INFO : `getSelfPermissions` (UserService l.~164) ne vérifie pas `deletedAt` de la ligne (compte suspendu) : dépend du résolveur d'identité en amont ; `directory` tronque silencieusement à 500 comptes.
+- Pratique : `ValidationError`/`ForbiddenError` n'ont pas de `statusCode` : asserter par classe ; le faux dépôt utilisateurs de ProcessService doit exposer `list` (ownerCandidates).
