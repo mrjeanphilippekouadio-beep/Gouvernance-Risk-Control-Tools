@@ -393,7 +393,7 @@ pour l'usage.
 | HUMAN | **PR #189 — SonarCloud sécurité D (2026-10-24)** : seul check rouge (CI, QA, A10 verts). Scan local `eslint-plugin-sonarjs` sur les 161 fichiers modifiés : uniquement des hotspots (pseudo-random, /tmp, regex, x-powered-by dans les tests), aucun secret ni TLS désactivé ni SQL dynamique issu de l'entrée → probable constat d'analyse de flux (taint) côté serveur Sonar. Action 1 : sonarcloud.io autorisé par le PO le 2026-10-26 ; cause réelle = 2 × S5443 (`/tmp` codé en dur, sécurité HIGH) dans `tests/integration/qa-{retest2,panel2}-front-playwright.mjs`, corrigé (dossier `qa-shots/` ignoré par git). | 2026-10-24 | **Corrigé — attente Quality Gate** |
 | HUMAN @release-manager | **Action 2 — fusion PR #189 dans staging** dès Sonar vert (ou dérogation PO staging-only, alors inscrite en risque accepté et corrigée avant prod). migrate.yml applique 066–074 ; vérifier ensuite `git diff HEAD origin/staging` vide. | 2026-10-24 | **Ouvert — HUMAN** |
 | HUMAN | **Action 3 — trancher q172 (liste minimale des exceptions à revoir, lève CMP-BLK-D5-01 sans attendre D6) et q173 (4 droits de décision réservés aux groupes fixes)** dans le cockpit ; q168/q169 bloquent aussi la prod. | 2026-10-24 | **Ouvert — HUMAN** |
-| @dev-backend @dev-frontend | **Action 4 — lot F4** (profil, désignations, comptes — q164) : prérequis backend endpoint « mes permissions » (sert aussi F5/F8). Dispatch après feu vert PO. | 2026-10-24 | **Ouvert — attente feu vert HUMAN** |
+| @dev-backend @dev-frontend | **Action 4 — lot F4** (profil, désignations, comptes — q164) : prérequis backend endpoint « mes permissions » (sert aussi F5/F8). Dispatch après feu vert PO. | 2026-10-24 | **En cours** — feu vert PO 2026-10-26 (DECISION-082). Branche `feat/f4-profil-designations-comptes` : backend + écrans livrés, revues QA/Sécurité/Compliance en cours, PR après verts. |
 | @dev-backend @security | **Action 5 — I-RT3-01** : notifications D5 envoyées après `res.end` perdues à l'arrêt Cloud Run → attendre leur envoi au shutdown (petit lot backend + revue A10), avant prod. | 2026-10-24 | **Ouvert — A06** |
 ## Decision Log
 
@@ -2184,4 +2184,15 @@ RELATED: docs/ux/plan-livraison-vues-front-v1.md, DECISION-058, q138, q142.
 OWNER: @ux-designer @dev-frontend (F4, F5, F8), @dev-backend (q165
   motif DECISION-058, q166 exception I-R1)
 STATUS: DÉCIDÉ — F4, F5, F8 débloqués côté arbitrage.
+
+DECISION-082
+DATE: 2026-10-26 (session orchestrateur)
+DECISION (PO) : feu vert du lot F4 (Action 4) sur le découpage proposé :
+  endpoint « mes permissions », exception q166 côté serveur, écrans profil,
+  désignations, responsabilités de processus, puis administration des
+  comptes (q164). Note : DECISION-081 (fusion PR #189) est citée par le PO
+  mais absente de ce journal.
+RELATED: DECISION-080 (q164, q166), Action 4.
+OWNER: @orchestrator @dev-backend @dev-frontend
+STATUS: DÉCIDÉ — en cours.
 ```
