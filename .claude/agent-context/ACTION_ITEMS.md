@@ -390,8 +390,8 @@ pour l'usage.
 | @dev-db | **AUD-D044-14 / F-D044-04** INFO — garde 038 sans `SET search_path` (non exploitable, conformité à la convention) ; requêtes 8/9 ignorent `users.roles` hérité (F-B8t-02). À la prochaine migration. | 2026-10-12 | **Ouvert — A07** |
 | @audit @dev-backend @compliance | **Constats A23 AUD-D044-01..13** (`docs/audit/A23-review-DECISION-044.md`) : refus de cumul/réactivation et refus d'opt-out non tracés, marquage admin + Comité peu exploitable, audit RBAC hors transaction. **AUD-D044-12** (opt-outs historiques neutralisés sans trace) : décision de gouvernance A14/A15 avant correctif. QA-D044-04 (Privacy) : propriétaires/supérieurs reçoivent un id d'action sans `actionplan.read`. | 2026-10-12 | **Ouvert — A06/A14/A24** |
 | @devops @dev-db | **Incident migrate.yml staging (2026-10-11, PR #151)** : 049 appliquée, 050 en échec (`constraint risks_probability_check does not exist`) — les CHECK probability/impact sont sur `risk_assessments`, pas `risks` ; 050 annulée par sa transaction, rien d'enregistré. Corrigée par A07 (bloc `DO` sur `pg_constraint`, table corrigée, vérifiée sur Postgres 16 jetable). **Cause racine du non-détection** : la CI de PR crée une branche Neon mais n'y applique pas les migrations → proposer (A09) un job `npm run migrate` sur la branche Neon éphémère de PR. | 2026-10-11 | **050 appliquée sur staging (PR #152, migrate.yml run 5 vert, 2026-10-11). Ouvert — A09 (job migrations en CI de PR).** |
-| HUMAN | **PR #189 — SonarCloud sécurité D (2026-10-24)** : seul check rouge (CI, QA, A10 verts). Scan local `eslint-plugin-sonarjs` sur les 161 fichiers modifiés : uniquement des hotspots (pseudo-random, /tmp, regex, x-powered-by dans les tests), aucun secret ni TLS désactivé ni SQL dynamique issu de l'entrée → probable constat d'analyse de flux (taint) côté serveur Sonar. Action 1 : sonarcloud.io autorisé par le PO le 2026-10-26 ; cause réelle = 2 × S5443 (`/tmp` codé en dur, sécurité HIGH) dans `tests/integration/qa-{retest2,panel2}-front-playwright.mjs`, corrigé (dossier `qa-shots/` ignoré par git). | 2026-10-24 | **Corrigé — attente Quality Gate** |
-| HUMAN @release-manager | **Action 2 — fusion PR #189 dans staging** dès Sonar vert (ou dérogation PO staging-only, alors inscrite en risque accepté et corrigée avant prod). migrate.yml applique 066–074 ; vérifier ensuite `git diff HEAD origin/staging` vide. | 2026-10-24 | **Ouvert — HUMAN** |
+| HUMAN | **PR #189 — SonarCloud sécurité D (2026-10-24)** : seul check rouge (CI, QA, A10 verts). Scan local `eslint-plugin-sonarjs` sur les 161 fichiers modifiés : uniquement des hotspots (pseudo-random, /tmp, regex, x-powered-by dans les tests), aucun secret ni TLS désactivé ni SQL dynamique issu de l'entrée → probable constat d'analyse de flux (taint) côté serveur Sonar. Action 1 : sonarcloud.io autorisé par le PO le 2026-10-26 ; cause réelle = 2 × S5443 (`/tmp` codé en dur, sécurité HIGH) dans `tests/integration/qa-{retest2,panel2}-front-playwright.mjs`, corrigé (dossier `qa-shots/` ignoré par git). | 2026-10-24 | **Fermé — Quality Gate vert (ffb9e1f), 2026-10-26** |
+| HUMAN @release-manager | **Action 2 — fusion PR #189 dans staging** dès Sonar vert (ou dérogation PO staging-only, alors inscrite en risque accepté et corrigée avant prod). migrate.yml applique 066–074 ; vérifier ensuite `git diff HEAD origin/staging` vide. | 2026-10-24 | **Fait — fusion f58f4b0 le 2026-10-26 sur GO PO ; diff branche/staging vide ; migrate.yml run 17 (066–074) succès** |
 | HUMAN | **Action 3 — trancher q172 (liste minimale des exceptions à revoir, lève CMP-BLK-D5-01 sans attendre D6) et q173 (4 droits de décision réservés aux groupes fixes)** dans le cockpit ; q168/q169 bloquent aussi la prod. | 2026-10-24 | **Ouvert — HUMAN** |
 | @dev-backend @dev-frontend | **Action 4 — lot F4** (profil, désignations, comptes — q164) : prérequis backend endpoint « mes permissions » (sert aussi F5/F8). Dispatch après feu vert PO. | 2026-10-24 | **Ouvert — attente feu vert HUMAN** |
 | @dev-backend @security | **Action 5 — I-RT3-01** : notifications D5 envoyées après `res.end` perdues à l'arrêt Cloud Run → attendre leur envoi au shutdown (petit lot backend + revue A10), avant prod. | 2026-10-24 | **Ouvert — A06** |
@@ -2184,4 +2184,18 @@ RELATED: docs/ux/plan-livraison-vues-front-v1.md, DECISION-058, q138, q142.
 OWNER: @ux-designer @dev-frontend (F4, F5, F8), @dev-backend (q165
   motif DECISION-058, q166 exception I-R1)
 STATUS: DÉCIDÉ — F4, F5, F8 débloqués côté arbitrage.
+```
+
+```
+DECISION-081 — 2026-10-26 — Fusion de la PR #189 dans staging
+CONTEXT: PR #189 (panel D1–D5, audit transactionnel, F0–F3, migrations
+  066–074) verte après correctifs : npm audit (2fc980e) et Sonar S5443
+  (ffb9e1f, /tmp codé en dur dans 2 scripts Playwright). QA et A10 verts
+  pour staging.
+DECISION: « oui » du PO à « Je fusionne ? » → fusion merge commit
+  f58f4b0 ; diff branche/staging vide ; migrate.yml run 17 succès
+  (066–074 appliquées sur Neon staging).
+CLOSES: Action 1 (Sonar) et Action 2 (fusion) du 2026-10-24.
+STATUS: FAIT. Production toujours bloquée : CMP-BLK-D5-01, q168/q169/
+  q172/q173, I-RT3-01.
 ```
