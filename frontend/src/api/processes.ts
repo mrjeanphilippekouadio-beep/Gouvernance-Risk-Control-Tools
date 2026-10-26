@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, type GovernanceConfirmation } from "./client";
 
 export type ProcessLevel = "PROCESS" | "SUBPROCESS" | "ACTIVITY";
 export type ProcessDocumentType = "CHARTER" | "POLICY" | "PROCEDURES_MANUAL" | "PROCEDURE" | "WORK_INSTRUCTION";
@@ -33,7 +33,26 @@ export interface ProcessInput {
   departmentId?: string | null;
 }
 
+/** D2b: the three accounts named on a process (ids only) and, for an assigner, the accounts matching the legacy owner text. */
+export interface ProcessResponsibilities {
+  ownerUserId: string | null;
+  riskChampionUserId: string | null;
+  deputyUserId: string | null;
+  legacyOwner: string | null;
+  ownerCandidates: { id: string; displayName: string }[];
+}
+export type ResponsibilitiesInput = Partial<Record<"ownerUserId" | "riskChampionUserId" | "deputyUserId", string | null>>;
+
 export const processesApi = {
+  responsibilities: (token: string, id: string) =>
+    apiRequest<ProcessResponsibilities>(`/api/v1/processes/${id}/responsibilities`, { token }),
+  /** q166: a 409 GOVERNANCE_CONFIRMATION_REQUIRED is resent with the confirmation by useGovernanceConfirm. */
+  setResponsibilities: (token: string, id: string, body: ResponsibilitiesInput, governanceConfirmation?: GovernanceConfirmation) =>
+    apiRequest<Process>(`/api/v1/processes/${id}/responsibilities`, {
+      method: "PUT",
+      body: governanceConfirmation ? { ...body, governanceConfirmation } : body,
+      token,
+    }),
   list: (token: string, includeInactive = false) =>
     apiRequest<Process[]>(`/api/v1/processes${includeInactive ? "?includeInactive=true" : ""}`, { token }),
   create: (token: string, body: ProcessInput & { departmentId: string }) =>

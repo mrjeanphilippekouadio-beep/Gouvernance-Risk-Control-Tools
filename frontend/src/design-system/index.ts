@@ -2,3 +2,4 @@
 export { RaciPanel } from "./RaciPanel";
 export { useGovernanceConfirm } from "./GovernanceConfirm";
 export { WithoutReviewBadge } from "./WithoutReviewBadge";
+export { AccountPicker, accountName } from "./AccountPicker";
