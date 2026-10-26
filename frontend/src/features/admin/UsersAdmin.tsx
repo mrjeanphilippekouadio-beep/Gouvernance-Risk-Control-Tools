@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, Modal, StatusBadge, Table, type TableColumn } from "@djamo/design-system";
-import { usersApi, type AdminUser } from "../../api/users";
+import { ADMIN_PAGE_SIZE, usersApi, type AdminUser } from "../../api/users";
 import { rolesApi, type Role } from "../../api/roles";
 import { usePermissions } from "../../auth/usePermissions";
-import { describeError, isForbidden } from "../indicators/shared";
+import { describeError, isPermissionDenied } from "../indicators/shared";
 import "../core/CorePages.css";
 
 type Dialog = { kind: "create" } | { kind: "edit"; user: AdminUser } | { kind: "suspend"; user: AdminUser } | { kind: "reactivate"; user: AdminUser };
@@ -18,6 +18,7 @@ export function UsersAdmin({ token }: Readonly<{ token: string }>) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [includeSuspended, setIncludeSuspended] = useState(false);
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -32,10 +33,10 @@ export function UsersAdmin({ token }: Readonly<{ token: string }>) {
 
   const refresh = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setUsers(await usersApi.listAdmin(token, includeSuspended)); }
+    try { setUsers(await usersApi.listAdmin(token, includeSuspended, offset)); }
     catch (err) { setError(describeError(err)); }
     finally { setLoading(false); }
-  }, [token, includeSuspended]);
+  }, [token, includeSuspended, offset]);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { rolesApi.list(token).then(setRoles).catch(() => setRoles([])); }, [token]);
 
@@ -68,7 +69,7 @@ export function UsersAdmin({ token }: Readonly<{ token: string }>) {
       await refresh();
     } catch (err) {
       setFormError(describeError(err));
-      if (isForbidden(err)) setDialog(null);
+      if (isPermissionDenied(err)) setDialog(null);
     } finally { setSaving(false); }
   }
 
@@ -97,9 +98,13 @@ export function UsersAdmin({ token }: Readonly<{ token: string }>) {
     </div>
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
     {notice && <MessageBanner tone="success">{notice}</MessageBanner>}
-    <Card header={<><strong>Comptes du tenant</strong> <label className="core-filter"><input type="checkbox" checked={includeSuspended} onChange={(e) => setIncludeSuspended(e.target.checked)} /> Inclure les comptes suspendus</label></>}>
+    <Card header={<><strong>Comptes du tenant</strong> <label className="core-filter"><input type="checkbox" checked={includeSuspended} onChange={(e) => { setIncludeSuspended(e.target.checked); setOffset(0); }} /> Inclure les comptes suspendus</label></>}>
       <Table columns={columns} rows={users} rowKey={(u) => u.id} loading={loading} emptyMessage="Aucun compte." />
-      {users.length >= 100 && <p className="muted">Seuls les 100 premiers comptes sont affichés.</p>}
+      {(offset > 0 || users.length === ADMIN_PAGE_SIZE) && <div className="core-filter">
+        <Button disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - ADMIN_PAGE_SIZE))}>Précédents</Button>
+        <span className="muted">Comptes {offset + 1} à {offset + users.length}</span>
+        <Button disabled={users.length < ADMIN_PAGE_SIZE || loading} onClick={() => setOffset(offset + ADMIN_PAGE_SIZE)}>Suivants</Button>
+      </div>}
     </Card>
 
     <Modal

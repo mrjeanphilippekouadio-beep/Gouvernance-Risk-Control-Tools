@@ -3,7 +3,7 @@ import { Button, Card, DatePicker, FormField, MessageBanner, Modal, StatusBadge 
 import { governanceDesignationsApi, type DesignationKind, type GovernanceDesignation } from "../../api/governanceDesignations";
 import { usersApi, type DirectoryEntry } from "../../api/users";
 import { AccountPicker, accountName } from "../../design-system";
-import { describeError, isForbidden } from "../indicators/shared";
+import { describeError, isPermissionDenied } from "../indicators/shared";
 import "../core/CorePages.css";
 
 const KINDS: { kind: DesignationKind; title: string; text: string }[] = [
@@ -53,7 +53,7 @@ export function DesignationsPage({ token }: Readonly<{ token: string }>) {
       await refresh();
     } catch (err) {
       setFormError(describeError(err));
-      if (isForbidden(err)) { setDesignating(null); setEnding(null); }
+      if (isPermissionDenied(err)) { setDesignating(null); setEnding(null); }
     } finally { setSaving(false); }
   }
 

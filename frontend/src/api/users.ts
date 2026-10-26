@@ -34,14 +34,16 @@ export interface CreateUserInput {
  * here as "no directory available" and fall back to a raw user id input
  * (see RaciPanel), not as a fatal error.
  */
+export const ADMIN_PAGE_SIZE = 100;
+
 export const usersApi = {
   list: (token: string) => apiRequest<UserSummary[]>("/api/v1/users", { token }),
   /** The caller's own effective permissions (lot F4): used only to hide actions, the server still decides. */
   myPermissions: (token: string) => apiRequest<string[]>("/api/v1/users/me/permissions", { token }),
   /** Active accounts a designation right may name (user.read, process.responsibility.assign or designation.manage). */
   directory: (token: string) => apiRequest<DirectoryEntry[]>("/api/v1/users/directory", { token }),
-  listAdmin: (token: string, includeSuspended: boolean) =>
-    apiRequest<AdminUser[]>(`/api/v1/users?limit=100${includeSuspended ? "&includeSuspended=true" : ""}`, { token }),
+  listAdmin: (token: string, includeSuspended: boolean, offset: number) =>
+    apiRequest<AdminUser[]>(`/api/v1/users?limit=${ADMIN_PAGE_SIZE}&offset=${offset}${includeSuspended ? "&includeSuspended=true" : ""}`, { token }),
   create: (token: string, body: CreateUserInput) => apiRequest<AdminUser>("/api/v1/users", { method: "POST", body, token }),
   update: (token: string, id: string, body: { displayName?: string; departmentId?: string | null }) =>
     apiRequest<AdminUser>(`/api/v1/users/${id}`, { method: "PUT", body, token }),

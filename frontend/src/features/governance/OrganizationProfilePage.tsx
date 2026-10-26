@@ -9,7 +9,7 @@ import {
   type Question,
 } from "../../api/organizationProfile";
 import { usePermissions } from "../../auth/usePermissions";
-import { describeError, isForbidden } from "../indicators/shared";
+import { describeError, isPermissionDenied } from "../indicators/shared";
 import "../core/CorePages.css";
 
 const SIZE_LABELS: Record<Classification["value"], string> = { TPE: "Très petite entreprise", PME: "PME", GRANDE_ENTREPRISE: "Grande entreprise" };
@@ -83,7 +83,7 @@ export function OrganizationProfilePage({ token }: Readonly<{ token: string }>) 
       await refresh();
     } catch (err) {
       setFormError(describeError(err));
-      if (isForbidden(err)) setEditing(false);
+      if (isPermissionDenied(err)) setEditing(false);
     } finally { setSaving(false); }
   }
 

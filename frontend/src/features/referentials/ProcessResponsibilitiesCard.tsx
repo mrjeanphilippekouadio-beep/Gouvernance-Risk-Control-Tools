@@ -3,7 +3,7 @@ import { Button, Card, MessageBanner } from "@djamo/design-system";
 import { processesApi, type ProcessResponsibilities, type ResponsibilitiesInput } from "../../api/processes";
 import type { DirectoryEntry } from "../../api/users";
 import { AccountPicker, accountName, useGovernanceConfirm } from "../../design-system";
-import { describeError, isForbidden } from "../indicators/shared";
+import { describeError, isPermissionDenied } from "../indicators/shared";
 
 type Slot = "ownerUserId" | "riskChampionUserId" | "deputyUserId";
 const SLOTS: { key: Slot; label: string }[] = [
@@ -49,7 +49,7 @@ export function ProcessResponsibilitiesCard({ token, processId, accounts, canAss
       await load();
       onChanged?.();
     } catch (err) {
-      if (!isForbidden(err)) setError(describeError(err));
+      if (!isPermissionDenied(err)) setError(describeError(err));
     } finally { setSaving(false); }
   }
 

@@ -176,7 +176,7 @@ export function ProcessesPage({ token }: { token: string }) {
       <MessageBanner tone="info">Le mode d'évaluation se modifie par une route et un droit dédiés (Risk Manager) : il n'est pas modifiable ici. La valeur héritée effective n'est pas exposée par l'API.</MessageBanner>
     </Card>}
 
-    {selected && <ProcessResponsibilitiesCard token={token} processId={selected.id} accounts={accounts} canAssign={canAssign} />}
+    {selected && <ProcessResponsibilitiesCard key={selected.id} token={token} processId={selected.id} accounts={accounts} canAssign={canAssign} />}
 
     <FormModal open={formOpen !== null} onClose={() => setFormOpen(null)} title={formOpen === "edit" ? "Modifier le processus" : "Nouveau processus"} formId="process-form" saving={saving} submitLabel={formOpen === "edit" ? "Enregistrer" : "Créer"}>
       <form id="process-form" onSubmit={submit}>
