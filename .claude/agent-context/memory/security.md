@@ -313,3 +313,9 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - F4-04 LOW 2,2 (dette existante, hors diff) : `UserService.suspend` sans motif (reason null), désormais exposé en un clic par UsersAdmin. F4-03 INFO : directory tronqué à 500 par e-mail sans signal.
 - Leçon : toute nouvelle exception de gouvernance ajoutée à un service ancien doit adopter `writeAudited` (effet + audit marqué atomiques) ; grep `governanceException` hors `writeAudited` à chaque revue.
 - Tracker (7bis) : F4-01 (A06), F4-04 (A06/PO), F4-02 rattaché à SEC-PNL-04 (HUMAN/A06).
+
+## Revue « suites des arbitrages » (2026-10-27, branche feat/r1-suites-arbitrages, statique + vitest) : VERT avec réserves, aucune escalade (max 2,7)
+- Détail : `docs/security/SEC-suites-arbitrages.md`. Rattrapage 075 = ADMIN_PERMISSIONS à l'identique (aucun nouvel admin) ; q170 notification sans nom, destinataire issu de l'audit serveur ; vue PENDING sans `config.read` : seule une date dérivée, PASS.
+- F-SAD-01 LOW 2,7 (HUMAN) : allonger/effacer un délai = assouplissement par une seule personne, sans marqueur ni notif ; chaîne admin efface `acceptanceMaxDays` puis accepte seul (admins ont `governanceprinciple.accept` depuis 073). Proposé : marqueur `governanceException` (a) ou circuit q158 (b).
+- F-SAD-02 LOW 2,2 (A06/A07) : expiration q174 recalculée avec le réglage courant : allonger le délai ressuscite une demande échue. Figer `expires_at` à la soumission. F-SAD-03..05 INFO (check hors transaction, `config.read` implicite via `this.get`, q169 appliqué à toutes les acceptations / stock non revalidé / q168 non consommé).
+- Leçon : un délai ou une échéance dérivé d'une configuration mutable doit être FIGÉ à la création de l'objet qu'il borne, sinon modifier la config modifie rétroactivement l'état (résurrection). Et un réglage qui desserre un contrôle est lui-même un assouplissement : appliquer la même règle de seconde personne/marqueur que le contrôle qu'il desserre.

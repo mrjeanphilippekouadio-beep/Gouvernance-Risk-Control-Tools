@@ -393,7 +393,7 @@ pour l'usage.
 | HUMAN | **PR #189 — SonarCloud sécurité D (2026-10-24)** : seul check rouge (CI, QA, A10 verts). Scan local `eslint-plugin-sonarjs` sur les 161 fichiers modifiés : uniquement des hotspots (pseudo-random, /tmp, regex, x-powered-by dans les tests), aucun secret ni TLS désactivé ni SQL dynamique issu de l'entrée → probable constat d'analyse de flux (taint) côté serveur Sonar. Action 1 : sonarcloud.io autorisé par le PO le 2026-10-26 ; cause réelle = 2 × S5443 (`/tmp` codé en dur, sécurité HIGH) dans `tests/integration/qa-{retest2,panel2}-front-playwright.mjs`, corrigé (dossier `qa-shots/` ignoré par git). | 2026-10-24 | **Corrigé — attente Quality Gate** |
 | HUMAN @release-manager | **Action 2 — fusion PR #189 dans staging** dès Sonar vert (ou dérogation PO staging-only, alors inscrite en risque accepté et corrigée avant prod). migrate.yml applique 066–074 ; vérifier ensuite `git diff HEAD origin/staging` vide. | 2026-10-24 | **Ouvert — HUMAN** |
 | HUMAN | **Action 3 — trancher q172 (liste minimale des exceptions à revoir, lève CMP-BLK-D5-01 sans attendre D6) et q173 (4 droits de décision réservés aux groupes fixes)** dans le cockpit ; q168/q169 bloquent aussi la prod. | 2026-10-24 | **Fermé — tranché le 2026-10-26 (DECISION-083) : q172 attendre D6 ; q173 à préciser (q179)** |
-| @dev-backend @dev-frontend | **Action 4 — lot F4** (profil, désignations, comptes — q164) : prérequis backend endpoint « mes permissions » (sert aussi F5/F8). Dispatch après feu vert PO. | 2026-10-24 | **En cours** — feu vert PO 2026-10-26 (DECISION-082). Branche `feat/f4-profil-designations-comptes` : backend + écrans livrés, revues QA/Sécurité/Compliance en cours, PR après verts. |
+| @dev-backend @dev-frontend | **Action 4 — lot F4** (profil, désignations, comptes — q164) : prérequis backend endpoint « mes permissions » (sert aussi F5/F8). Dispatch après feu vert PO. | 2026-10-24 | **Fermé — PR #194 fusionnée dans staging le 2026-10-27 (DECISION-085)** |
 | HUMAN @dev-frontend @dev-backend @compliance | **q176 (cockpit, CMP-F4-03)** — afficher « sans validation indépendante » sur l'écran Responsabilités après une auto-désignation q166 (aujourd'hui dans le journal d'audit seulement). Détail : `docs/compliance/CMP-F4.md`. | 2026-10-26 | **Fermé — tranché le 2026-10-27 (DECISION-084) : afficher la mention dès F4** |
 | HUMAN @dev-backend @dev-frontend @security | **q177 (cockpit, SEC-F4-04)** — motif obligatoire pour suspendre / réactiver un compte (audit `reason: null`, `UserService.suspend`/`reactivate`). Détail : `docs/security/SEC-F4.md`. | 2026-10-26 | **Fermé — tranché le 2026-10-27 (DECISION-084) : motif obligatoire** |
 | HUMAN @compliance @risk-manager | **q178 (cockpit)** — q160 rouverte par le PO (q171) : départ du dernier Risk Manager sans intérimaire, qui est prévenu et quel délai maximal de vacance. | 2026-10-27 | **Ouvert — HUMAN** |
@@ -401,6 +401,12 @@ pour l'usage.
 | @devops @qa-engineer | **Couverture absente de SonarCloud (revue Codex PR #194, P2)** — aucun `sonar-project.properties` ni rapport lcov dans la CI : Sonar (analyse automatique) affiche 0 % de couverture sur toutes les PR, alors que ~2400 tests vitest tournent. Générer `coverage/lcov.info` (vitest --coverage) et passer à l'analyse CI pour l'importer. | 2026-10-27 | Ouvert |
 | @security @dev-backend | **SelfValidationGate non atomique (Codex PR #194, P2 ; SEC-F4-02)** — politique et « autre validateur » vérifiés avant la transaction d'écriture, pour tous les usages (exécutions, efficacité, évaluations, constats, q166). Chantier transverse : revérifier dans la transaction (`runAudited`) ou verrouiller. | 2026-10-27 | Ouvert |
 | @dev-backend | **QA-F4-FR-01 (MINOR)** — messages de refus serveur en anglais affichés tels quels dans l'interface française (ex. auto-suspension `UserService.ts:267`, dernier Risk Manager `RoleService.ts:641`). Rapport : `docs/qa/qa-f4-front-2026-10-27.md`. | 2026-10-27 | Ouvert |
+| @dev-backend @dev-db | **Lot « suites des arbitrages » (DECISION-086)** — q170, q174, q175, durée maximale q169, délai q168 (stockage), branche `feat/r1-suites-arbitrages`. Relances q168 et renouvellement q169 attendent q180 / q181. | 2026-10-27 | **En cours** |
+| HUMAN @dev-backend @devops | **q180 (cockpit)** — q168 : déclenchement des relances (aucune tâche planifiée n'existe) et moment de la remontée au gérant. | 2026-10-27 | **Ouvert — HUMAN** |
+| HUMAN @compliance @risk-manager | **q181 (cockpit)** — q169 : qui revoit avant un renouvellement fait seul, et que faire si personne ne peut revoir. | 2026-10-27 | **Ouvert — HUMAN** |
+| HUMAN @security @dev-backend | **q182 (cockpit, F-SAD-01 LOW 2,7)** — allonger ou effacer un délai de gouvernance (durée maximale q169, expiration q174, délai de revue q168) se fait par une seule personne, sans marqueur ni notification : un admin peut effacer la durée maximale puis accepter seul un principe pour 10 ans. Choix : marqueur d'exception, ou circuit q158 (seconde personne). Détail : `docs/security/SEC-suites-arbitrages.md`. | 2026-10-27 | **Ouvert — HUMAN** |
+| @release-manager @orchestrator | **Réserves de production du lot « suites des arbitrages » (revue Codex PR #195)** — (1) F-SAD-01 / q182 : un administrateur peut assouplir seul un délai ; la mesure retenue doit être livrée avant la production. (2) q168 n'est PAS un contrôle opérationnel : le délai est enregistré, sans relance, retard ni escalade, tant que q180 n'est pas tranché et livré. Ne pas présenter q168 comme actif. | 2026-10-27 | Ouvert |
+| @dev-backend | **F-SAD-02 (LOW 2,2)** — expiration q174 recalculée à la lecture : corrigé dans le lot (colonne `expires_at` figée à la soumission, migration 075). | 2026-10-27 | **Fermé — corrigé** |
 | @privacy | **CMP-F4-08** — avis A15 sur `GET /users/directory` (finalité, plafond 500 sans signal, pas de journal de consultation). Sécurité le juge proportionné (SEC-F4 §2). | 2026-10-26 | Ouvert |
 | @security | **SEC-F4-02 (LOW, rattaché à SEC-PNL-04)** — un admin peut fabriquer « personne d'autre ne peut désigner » (suspension / révocation des autres détenteurs) pour ouvrir q166 ; abus visible (audit + notification). | 2026-10-26 | Ouvert |
 | @dev-backend @security | **Action 5 — I-RT3-01** : notifications D5 envoyées après `res.end` perdues à l'arrêt Cloud Run → attendre leur envoi au shutdown (petit lot backend + revue A10), avant prod. | 2026-10-24 | **Ouvert — A06** |
@@ -2237,4 +2243,25 @@ DECISION (PO) :
 RELATED: CMP-F4-03, SEC-F4-04, PR #194.
 OWNER: @dev-backend @dev-frontend
 STATUS: DÉCIDÉ — livré dans la PR #194 (commit q176/q177, 2026-10-27).
+
+DECISION-085
+DATE: 2026-10-27
+DECISION (PO) : fusion de la PR #194 (lot F4 : profil d'organisation,
+  désignations, responsabilités de processus, comptes ; q164, q166, q176,
+  q177) dans staging, après QA (unitaire + parcours navigateur 21/21),
+  Sécurité (VERT avec réserves), Compliance (écarts corrigés), revue Codex
+  (q176/q177 intégrés), CI et Sonar verts. Aucune migration.
+RELATED: DECISION-080, 082, 084 ; PR #194.
+OWNER: @orchestrator
+STATUS: DÉCIDÉ — fusionné.
+
+DECISION-086
+DATE: 2026-10-27
+DECISION (PO) : feu vert du lot backend « suites des arbitrages » q168,
+  q169, q170, q174, q175 (DECISION-083), après fusion de F4. Les points non
+  décidés (relances q168, revue avant renouvellement q169) sont posés en
+  q180 et q181 ; le reste avance.
+RELATED: DECISION-083, 085.
+OWNER: @orchestrator @dev-backend @dev-db
+STATUS: DÉCIDÉ — en cours.
 ```

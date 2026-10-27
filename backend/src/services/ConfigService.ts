@@ -15,6 +15,9 @@ import type { RiskFrameworkRepository } from "../domain/repositories/RiskFramewo
 import { FRAMEWORK_OWNS_SETTING_MESSAGE } from "./riskFrameworkResolution.js";
 import { writeAudited } from "./auditedWrite.js";
 
+/** Upper bound of a governance delay (same CHECK as migration 075). */
+export const MAX_GOVERNANCE_DELAY_DAYS = 3650;
+
 const EVALUATION_MODES = ["CLASSIQUE", "PARTICIPATIF"] as const;
 
 /**
@@ -41,6 +44,9 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     committeeEvaluationEnforced: true,
     committeeAuditCumulAllowed: true,
     selfValidationPolicy: "REFUSE",
+    exceptionReviewDelayDays: null,
+    acceptanceMaxDays: null,
+    policyRequestExpiryDays: null,
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),
@@ -119,7 +125,12 @@ export class ConfigService {
 
   async get(actor: AuthenticatedUser): Promise<Config> {
     requirePermission(actor, "config.read");
-    return (await this.configs.getByTenant(actor.tenantId)) ?? defaultConfig(actor.tenantId, defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, actor.tenantId)));
+    return this.readConfig(actor.tenantId);
+  }
+
+  /** Tenant-scoped read without a permission check: only for a caller that already checked its own permission. */
+  private async readConfig(tenantId: string): Promise<Config> {
+    return (await this.configs.getByTenant(tenantId)) ?? defaultConfig(tenantId, defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, tenantId)));
   }
 
   /** PUT /config/evaluation-mode — DIV-06. Same permission/reason bar as the retired updateAppetiteMode; shares the same underlying row. */
@@ -270,6 +281,39 @@ export class ConfigService {
   }
 
   /**
+   * PUT /config/governance-delays — DECISION-083 (q168, q169, q174): the three governance delays, in days, chosen by
+   * the tenant. Omitted key = untouched, null = back to "not configured". Administrator act with its own permission,
+   * mandatory reason, audited with the setting in the same transaction (DECISION-079).
+   */
+  async setGovernanceDelays(
+    actor: AuthenticatedUser,
+    delays: Pick<ConfigPatch, "exceptionReviewDelayDays" | "acceptanceMaxDays" | "policyRequestExpiryDays">,
+    reason: string,
+    requestId: string,
+  ): Promise<Config> {
+    requirePermission(actor, "config.governancedelays.set");
+    if (!reason.trim() || !isAcceptableReason(reason)) throw new ValidationError("A reason is required to change the governance delays");
+    const patch: ConfigPatch = {};
+    for (const key of ["exceptionReviewDelayDays", "acceptanceMaxDays", "policyRequestExpiryDays"] as const) {
+      const v = delays[key];
+      if (v === undefined) continue;
+      if (v !== null && (!Number.isInteger(v) || v < 1 || v > MAX_GOVERNANCE_DELAY_DAYS)) {
+        throw new ValidationError(`${key} must be a whole number of days between 1 and ${MAX_GOVERNANCE_DELAY_DAYS}, or null`);
+      }
+      patch[key] = v;
+    }
+    if (Object.keys(patch).length === 0) throw new ValidationError("No governance delay to change");
+    // The audit's "before" must not need config.read on top of config.governancedelays.set (revue Codex PR #195).
+    const before = await this.readConfig(actor.tenantId);
+    return writeAudited(
+      this.configs.auditsInTransaction,
+      this.audit,
+      (audit) => this.upsertConfig(actor.tenantId, patch, actor.userId, audit),
+      (after) => [this.configAuditEvent(actor, before, after, reason, requestId)],
+    );
+  }
+
+  /**
    * PUT /config/self-validation-policy — DECISION-074 q141, DECISION-078 q158. Chooses what happens when someone
    * validates their own input: REFUSE (default) or DOUBLE_CONFIRMATION. Dedicated administrator permission, mandatory
    * reason, audited. Relaxing (REFUSE -> DOUBLE_CONFIRMATION) needs a second person holding
@@ -297,7 +341,10 @@ export class ConfigService {
     // DECISION-079: every step below (withdrawing the pending request, submitting, or writing the policy) is applied
     // together with its audit rows in ONE transaction.
     const pending = this.policyRequests ? await this.policyRequests.getPending(actor.tenantId) : null;
-    const submit = relaxing && approverExists && this.policyRequests ? { policy, reason: why, by: actor.userId } : undefined;
+    const expiryDays = before.policyRequestExpiryDays;
+    const submit = relaxing && approverExists && this.policyRequests
+      ? { policy, reason: why, by: actor.userId, expiresAt: expiryDays ? new Date(Date.now() + expiryDays * 86_400_000) : null }
+      : undefined;
     const result = await this.applyPolicyChange(
       actor.tenantId,
       {
@@ -362,7 +409,9 @@ export class ConfigService {
     let submitted: SelfValidationPolicyRequest | null = null;
     let config: Config | null = null;
     try {
-      if (resolved.submit) submitted = await repo!.create(tenantId, resolved.submit.policy, resolved.submit.reason, resolved.submit.by);
+      if (resolved.submit) {
+        submitted = await repo!.create(tenantId, resolved.submit.policy, resolved.submit.reason, resolved.submit.by, resolved.submit.expiresAt ?? null);
+      }
       if (resolved.setPolicy) config = await this.configs.upsert(tenantId, resolved.setPolicy.patch, resolved.setPolicy.updatedBy);
     } catch (err) {
       if (resolved.decide) await repo!.reopen?.(tenantId, resolved.decide.id)?.catch(() => undefined);
@@ -374,9 +423,12 @@ export class ConfigService {
   }
 
   /** The pending relaxation, if any; visible to the administrator who asks and to the people who can approve. */
-  async getPendingSelfValidationPolicyRequest(actor: AuthenticatedUser): Promise<SelfValidationPolicyRequest | null> {
+  async getPendingSelfValidationPolicyRequest(
+    actor: AuthenticatedUser,
+  ): Promise<(SelfValidationPolicyRequest & { expiresAt: Date | null }) | null> {
     if (!actor.roles.includes("config.selfvalidation.set")) requirePermission(actor, "config.selfvalidation.approve");
-    return this.policyRequests ? this.policyRequests.getPending(actor.tenantId) : null;
+    const pending = this.policyRequests ? await this.policyRequests.getPending(actor.tenantId) : null;
+    return pending ? { ...pending, expiresAt: pending.expiresAt ?? null } : null;
   }
 
   /** Second confirmation: never the author (maker-checker). Applies the requested policy. */
@@ -387,6 +439,12 @@ export class ConfigService {
     const why = reason?.trim() ?? null;
     const request = await this.getPendingRequestOrThrow(actor, id);
     const before = await this.get(actor);
+    // q174 (DECISION-083): an expired request can no longer be approved (it can still be rejected or replaced).
+    // Fixed at submission (F-SAD-02): changing the delay later never revives or shortens a pending request.
+    const expiresAt = request.expiresAt ?? null;
+    if (expiresAt && expiresAt.getTime() <= Date.now()) {
+      throw new ConflictError(`This request expired on ${expiresAt.toISOString().slice(0, 10)} and can no longer be approved`, id);
+    }
     // DECISION-079: claim + policy write + audit row in one transaction (nothing applied if the audit cannot be written).
     const { config } = await this.applyPolicyChange(
       actor.tenantId,
