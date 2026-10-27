@@ -29,6 +29,8 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeInfo[] = [
   { resourceType: "MANAGEMENT", eventType: "ORGPROFILE_SIZE_LOWERED", label: "Baisse de taille du profil d’organisation", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "ORGPROFILE_APPROVAL_PENDING", label: "Baisse de taille en attente de confirmation", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "SELF_VALIDATION_POLICY_REQUEST_PENDING", label: "Assouplissement de l’auto-validation en attente", mandatory: true },
+  // q170 (DECISION-083): the acceptor learns that someone else ended their acceptance early.
+  { resourceType: "MANAGEMENT", eventType: "PRINCIPLE_ACCEPTANCE_REVOKED", label: "Acceptation d’un principe retirée", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "PRINCIPLE_ACCEPTANCE_PENDING", label: "Acceptation d’un principe en attente de confirmation", mandatory: true },
   { resourceType: "ACTION_PLAN", eventType: "ACTION_STARTED_LATE", label: "Action démarrée en retard", mandatory: true },
   { resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE", label: "Action en retard", mandatory: true },

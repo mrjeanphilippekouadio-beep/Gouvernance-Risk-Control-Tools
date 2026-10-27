@@ -228,8 +228,8 @@ describe("D2b migration 069 and permissions", () => {
   });
 
   it("catch-up uses every administrator permission of the code; no physical delete, no trigger", () => {
-    // designation.manage arrives with migration 070 (D2c), which carries its own catch-up.
-    for (const p of ADMIN_PERMISSIONS.filter((x) => x !== "designation.manage")) expect(up).toContain(`'${p}'`);
+    // designation.manage (070) and config.governancedelays.set (075) arrive later, each with its own catch-up.
+    for (const p of ADMIN_PERMISSIONS.filter((x) => x !== "designation.manage" && x !== "config.governancedelays.set")) expect(up).toContain(`'${p}'`);
     expect(up).not.toMatch(/\b(DELETE FROM|TRUNCATE|CREATE\s+(OR REPLACE\s+)?FUNCTION)\b/i);
     expect(up).not.toMatch(/owner\s*=/); // the legacy text is never rewritten
     expect(down).toContain("DROP COLUMN IF EXISTS owner_user_id");

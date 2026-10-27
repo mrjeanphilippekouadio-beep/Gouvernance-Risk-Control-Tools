@@ -3,6 +3,7 @@ import { Button, Card, FormField, MessageBanner, Modal, StatusBadge } from "@dja
 import {
   configApi,
   type GovernanceConfig,
+  type GovernanceDelays,
   type SelfValidationPolicy,
   type SelfValidationPolicyRequest,
 } from "../../api/config";
@@ -14,11 +15,31 @@ const POLICY_LABELS: Record<SelfValidationPolicy, string> = {
   REFUSE: "Refuser l'auto-validation",
   DOUBLE_CONFIRMATION: "Autoriser avec double confirmation",
 };
-type Setting = "policy" | "cumul";
+type Setting = "policy" | "cumul" | "delays";
 const TITLES: Record<Setting, string> = {
   policy: "Politique d'auto-validation",
   cumul: "Cumul Comité et Audit",
+  delays: "Délais de gouvernance",
 };
+const DELAYS: { key: keyof GovernanceDelays; label: string; help: string }[] = [
+  { key: "exceptionReviewDelayDays", label: "Délai de revue d'une action sans validation indépendante", help: "q168 : enregistré ; les relances et le signal de retard attendent votre décision q180." },
+  { key: "acceptanceMaxDays", label: "Durée maximale d'une acceptation de principe faite seul", help: "q169 : une acceptation faite sans tiers pour la confirmer ne peut pas durer plus longtemps." },
+  { key: "policyRequestExpiryDays", label: "Expiration d'une demande d'assouplissement", help: "q174 : passé ce délai, la demande ne peut plus être approuvée." },
+];
+function dayLabel(v: number | null | undefined): string {
+  if (v === null || v === undefined) return "Non configuré";
+  return v > 1 ? `${v} jours` : `${v} jour`;
+}
+const toDays = (v: string) => (v.trim() === "" ? null : Number(v));
+/** Only the delays actually changed: never overwrite a concurrent edit of another one. */
+function changedDelays(form: Record<keyof GovernanceDelays, string>, config: GovernanceConfig | null): Partial<GovernanceDelays> {
+  const changed: Partial<GovernanceDelays> = {};
+  for (const d of DELAYS) {
+    const value = toDays(form[d.key]);
+    if (value !== (config?.[d.key] ?? null)) changed[d.key] = value;
+  }
+  return changed;
+}
 
 const fmtDate = (iso: string | null) => (iso ? iso.slice(0, 10) : "—");
 const yesNo = (v: boolean, yes: string, no: string) => <StatusBadge label={v ? yes : no} tone={v ? "success" : "neutral"} />;
@@ -35,6 +56,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
   const [reason, setReason] = useState("");
   const [policy, setPolicy] = useState<SelfValidationPolicy>("REFUSE");
   const [flag, setFlag] = useState(false);
+  const [delays, setDelays] = useState<Record<keyof GovernanceDelays, string>>({ exceptionReviewDelayDays: "", acceptanceMaxDays: "", policyRequestExpiryDays: "" });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -69,6 +91,11 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
     setReason(""); setFormError(null);
     setPolicy(config.selfValidationPolicy === "REFUSE" ? "DOUBLE_CONFIRMATION" : "REFUSE");
     setFlag(config.committeeAuditCumulAllowed);
+    setDelays({
+      exceptionReviewDelayDays: config.exceptionReviewDelayDays?.toString() ?? "",
+      acceptanceMaxDays: config.acceptanceMaxDays?.toString() ?? "",
+      policyRequestExpiryDays: config.policyRequestExpiryDays?.toString() ?? "",
+    });
     setEditing(setting);
   }
 
@@ -88,6 +115,15 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
         setConfig(res.data);
         setEditing(null);
         await refresh();
+        return;
+      }
+      if (editing === "delays") {
+        const changed = changedDelays(delays, config);
+        if (Object.keys(changed).length === 0) { setFormError("Aucun délai modifié."); return; }
+        const next = await configApi.setGovernanceDelays(token, changed, why);
+        setConfig(next);
+        setNotice({ tone: "success", title: "Changement appliqué", text: "Délais de gouvernance mis à jour." });
+        setEditing(null);
         return;
       }
       const next = await configApi.setCommitteeAuditCumul(token, flag, why);
@@ -136,6 +172,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
     {pending && <MessageBanner tone="warning" title="Demande en attente d'approbation : le changement n'est pas appliqué">
       <p>Politique demandée : « {POLICY_LABELS[pending.requestedPolicy]} » (actuellement « {POLICY_LABELS[config.selfValidationPolicy]} », inchangée).</p>
       <p>Motif : {pending.reason}</p>
+      {pending.expiresAt && <p className="muted">Expire le {fmtDate(pending.expiresAt)} : passé cette date, elle ne peut plus être approuvée.</p>}
       <p className="muted">Demandée le {fmtDate(pending.requestedAt)} par {pending.requestedBy}. L'auteur ne peut pas approuver sa propre demande : le serveur refuse.</p>
       {decisionError && <MessageBanner tone="danger">{decisionError}</MessageBanner>}
       <div>
@@ -165,6 +202,10 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       <Card header={<><strong>{TITLES.cumul}</strong> {yesNo(config.committeeAuditCumulAllowed, "Autorisé", "Interdit")}</>} footer={<Button onClick={() => openEdit("cumul")}>Modifier</Button>}>
         <p className="muted">Une même personne peut-elle appartenir au Comité et à l'Audit ? Le cumul Risk Manager et Audit reste toujours refusé.</p>
       </Card>
+      <Card header={<strong>{TITLES.delays}</strong>} footer={<Button onClick={() => openEdit("delays")}>Modifier</Button>}>
+        <p className="muted">Fixés par vous au paramétrage, en jours. « Non configuré » : aucun délai ne s'applique.</p>
+        <ul>{DELAYS.map((d) => <li key={d.key}>{d.label} : <strong>{dayLabel(config[d.key])}</strong></li>)}</ul>
+      </Card>
       <p className="muted">Version de la configuration : {config.version} · Mise à jour le {fmtDate(config.updatedAt)}</p>
     </>}
 
@@ -188,6 +229,9 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
           </FormField>
           <MessageBanner tone="info">Si une seconde personne doit confirmer, le serveur répond « demande en attente » : le changement n'est alors pas appliqué.</MessageBanner>
         </>}
+        {editing === "delays" && DELAYS.map((d) => <FormField key={d.key} label={`${d.label} (jours)`} htmlFor={`gov-${d.key}`} help={`${d.help} Laisser vide : non configuré.`}>
+          <input id={`gov-${d.key}`} type="number" min={1} max={3650} step={1} value={delays[d.key]} onChange={(e) => setDelays({ ...delays, [d.key]: e.target.value })} />
+        </FormField>)}
         {editing === "cumul" && <label className="core-filter">
           <input type="checkbox" checked={flag} onChange={(e) => setFlag(e.target.checked)} /> Cumul Comité et Audit autorisé
         </label>}

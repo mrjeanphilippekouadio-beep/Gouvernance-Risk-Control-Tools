@@ -118,7 +118,7 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     const requests = {
       getPending: async () => (request?.status === "PENDING" ? request : null),
       getById: async (_t: string, id: string) => (request?.id === id ? request : null),
-      create: async (t: string, policy: never, reason: string, by: string) => (request = { id: "req1", tenantId: t, requestedPolicy: policy, reason, status: "PENDING", requestedBy: by, requestedAt: new Date(), decidedBy: null, decidedAt: null, decisionReason: null }),
+      create: async (t: string, policy: never, reason: string, by: string, expiresAt?: Date | null) => (request = { id: "req1", tenantId: t, requestedPolicy: policy, reason, status: "PENDING", requestedBy: by, requestedAt: new Date(), decidedBy: null, decidedAt: null, decisionReason: null, expiresAt: expiresAt ?? null }),
       decide: async (_t: string, id: string, status: never, by: string, why: string | null) =>
         request?.id === id && request.status === "PENDING" ? (request = { ...request, status, decidedBy: by, decisionReason: why }) : null,
       reopen: async () => { if (request) request = { ...request, status: "PENDING", decidedBy: null }; },
@@ -185,6 +185,38 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     await noop.service.setSelfValidationPolicy(admin, "REFUSE", "rien", "q");
     expect(noop.events[0]!.governanceException).toBeUndefined();
     expect(noop.request()).toBeNull();
+  });
+
+  it("DECISION-083 governance delays: own permission, reason, whole days or null, audited", async () => {
+    const w = configWorld(true);
+    const delaysAdmin = actor("u-admin", ["config.read", "config.governancedelays.set"]);
+    await expect(w.service.setGovernanceDelays(admin, { policyRequestExpiryDays: 7 }, "r", "q")).rejects.toThrow(ForbiddenError);
+    await expect(w.service.setGovernanceDelays(delaysAdmin, { policyRequestExpiryDays: 7 }, " ", "q")).rejects.toThrow(ValidationError);
+    for (const bad of [0, -1, 1.5, 3651]) {
+      await expect(w.service.setGovernanceDelays(delaysAdmin, { acceptanceMaxDays: bad }, "r", "q")).rejects.toThrow(ValidationError);
+    }
+    await expect(w.service.setGovernanceDelays(delaysAdmin, {}, "r", "q")).rejects.toThrow(ValidationError);
+    const after = await w.service.setGovernanceDelays(delaysAdmin, { exceptionReviewDelayDays: 30, acceptanceMaxDays: 90, policyRequestExpiryDays: 7 }, "Paramétrage", "q");
+    expect([after.exceptionReviewDelayDays, after.acceptanceMaxDays, after.policyRequestExpiryDays]).toEqual([30, 90, 7]);
+    expect(w.events.at(-1)).toMatchObject({ entityType: "Config", reason: "Paramétrage" });
+    const cleared = await w.service.setGovernanceDelays(delaysAdmin, { acceptanceMaxDays: null }, "r", "q");
+    // The dedicated permission alone is enough: config.read is not required on top.
+    await expect(w.service.setGovernanceDelays(actor("u-only", ["config.governancedelays.set"]), { acceptanceMaxDays: 5 }, "r", "q")).resolves.toMatchObject({ acceptanceMaxDays: 5 });
+    expect([cleared.acceptanceMaxDays, cleared.policyRequestExpiryDays]).toEqual([null, 7]);
+  });
+
+  it("q174: a request past the configured expiry cannot be approved (still rejectable); the pending view shows its expiry", async () => {
+    const w = configWorld(true);
+    await w.service.setGovernanceDelays(actor("u-admin", ["config.read", "config.governancedelays.set"]), { policyRequestExpiryDays: 7 }, "r", "q");
+    await w.service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "r", "q");
+    const pending = await w.service.getPendingSelfValidationPolicyRequest(approverActor);
+    expect(Math.abs(pending!.expiresAt!.getTime() - pending!.requestedAt.getTime() - 7 * 86_400_000)).toBeLessThan(1000);
+    w.request()!.expiresAt = new Date(Date.now() - 1000);
+    // F-SAD-02: clearing the delay afterwards does not revive the expired request.
+    await w.service.setGovernanceDelays(actor("u-admin", ["config.read", "config.governancedelays.set"]), { policyRequestExpiryDays: null }, "r", "q");
+    await expect(w.service.approveSelfValidationPolicy(approverActor, "req1", "q")).rejects.toThrow(/expired/);
+    expect(w.policy()).toBe("REFUSE");
+    await expect(w.service.rejectSelfValidationPolicy(approverActor, "req1", "Échue", "q")).resolves.toMatchObject({ status: "REJECTED" });
   });
 
   it("q158 another person approves: policy applied, audited APPROVE; the author never can", async () => {

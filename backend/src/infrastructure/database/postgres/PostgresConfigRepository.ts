@@ -27,6 +27,9 @@ interface ConfigRow {
   committee_evaluation_enforced: boolean;
   committee_audit_cumul_allowed: boolean;
   self_validation_policy: SelfValidationPolicy;
+  exception_review_delay_days: number | null;
+  acceptance_max_days: number | null;
+  policy_request_expiry_days: number | null;
   version: number;
   updated_by: string | null;
   created_at: Date;
@@ -47,6 +50,9 @@ function toDomain(row: ConfigRow): Config {
     committeeEvaluationEnforced: row.committee_evaluation_enforced,
     committeeAuditCumulAllowed: row.committee_audit_cumul_allowed,
     selfValidationPolicy: row.self_validation_policy,
+    exceptionReviewDelayDays: row.exception_review_delay_days ?? null,
+    acceptanceMaxDays: row.acceptance_max_days ?? null,
+    policyRequestExpiryDays: row.policy_request_expiry_days ?? null,
     version: row.version,
     updatedBy: row.updated_by,
     createdAt: row.created_at,
@@ -84,6 +90,9 @@ export async function upsertConfigRow(db: Pick<Pool, "query">, tenantId: string,
       committee_evaluation_enforced: patch.committeeEvaluationEnforced,
       committee_audit_cumul_allowed: patch.committeeAuditCumulAllowed,
       self_validation_policy: patch.selfValidationPolicy,
+      exception_review_delay_days: patch.exceptionReviewDelayDays,
+      acceptance_max_days: patch.acceptanceMaxDays,
+      policy_request_expiry_days: patch.policyRequestExpiryDays,
     },
     3,
   );

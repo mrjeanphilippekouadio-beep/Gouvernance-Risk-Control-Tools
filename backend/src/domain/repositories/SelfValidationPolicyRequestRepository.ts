@@ -16,6 +16,8 @@ export interface SelfValidationPolicyRequest {
   decidedBy: string | null;
   decidedAt: Date | null;
   decisionReason: string | null;
+  /** q174 (DECISION-083): fixed at submission from the tenant's delay; null = no expiry. Never recomputed (F-SAD-02). */
+  expiresAt?: Date | null;
 }
 
 /** DECISION-079: what one policy action changes. Applied in this order, in ONE transaction, audit rows included. */
@@ -23,7 +25,7 @@ export interface PolicyChange {
   /** 1. Claim a PENDING request (0 row = already decided -> ConflictError, nothing else written). */
   decide?: { id: string; status: Exclude<SelfValidationPolicyRequestStatus, "PENDING">; by: string; reason: string | null };
   /** 2a. Open a new PENDING request. */
-  submit?: { policy: SelfValidationPolicy; reason: string; by: string };
+  submit?: { policy: SelfValidationPolicy; reason: string; by: string; expiresAt?: Date | null };
   /** 2b. Write the policy on the tenant's config row. */
   setPolicy?: { patch: ConfigPatch; updatedBy: string };
 }
@@ -41,7 +43,13 @@ export interface SelfValidationPolicyRequestRepository {
   getPending(tenantId: string): Promise<SelfValidationPolicyRequest | null>;
   getById(tenantId: string, id: string): Promise<SelfValidationPolicyRequest | null>;
   /** One PENDING per tenant (unique index): a second one is a ConflictError. */
-  create(tenantId: string, requestedPolicy: SelfValidationPolicy, reason: string, requestedBy: string): Promise<SelfValidationPolicyRequest>;
+  create(
+    tenantId: string,
+    requestedPolicy: SelfValidationPolicy,
+    reason: string,
+    requestedBy: string,
+    expiresAt?: Date | null,
+  ): Promise<SelfValidationPolicyRequest>;
   /** PENDING -> final status, once (claim). Null when the request is not PENDING any more. */
   decide(
     tenantId: string,
