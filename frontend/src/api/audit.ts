@@ -19,6 +19,16 @@ export interface AuditMission {
   updatedAt: string;
 }
 
+export interface CreateAuditMissionInput {
+  reference: string;
+  title: string;
+  scope: string;
+  leadAuditorId: string;
+  auditorIds?: string[];
+  plannedStartDate: string;
+  plannedEndDate: string;
+}
+
 export type FindingSeverity = "LOW" | "MODERATE" | "HIGH" | "MAJOR" | "CRITICAL";
 export type FindingStatus = "OUVERT" | "EN_TRAITEMENT" | "CLOS";
 export type RelatedObjectType = "RISK" | "CONTROL" | "INCIDENT" | "ANOMALY";
@@ -53,6 +63,12 @@ export interface CreateFindingInput {
 export const auditMissionsApi = {
   list: (token: string, status?: AuditMissionStatus) =>
     apiRequest<AuditMission[]>(`/api/v1/audit-missions${status ? `?status=${encodeURIComponent(status)}` : ""}`, { token }),
+  /** S2: the server validates the auditors (active accounts of the tenant) and the dates; it stamps createdBy. */
+  create: (token: string, input: CreateAuditMissionInput) =>
+    apiRequest<AuditMission>("/api/v1/audit-missions", { method: "POST", body: input, token }),
+  start: (token: string, id: string) => apiRequest<AuditMission>(`/api/v1/audit-missions/${id}/start`, { method: "POST", token }),
+  close: (token: string, id: string, comment: string) =>
+    apiRequest<AuditMission>(`/api/v1/audit-missions/${id}/close`, { method: "POST", body: { comment }, token }),
 };
 
 export const findingsApi = {
