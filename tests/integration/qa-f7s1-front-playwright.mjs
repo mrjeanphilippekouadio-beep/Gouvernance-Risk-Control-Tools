@@ -9,6 +9,7 @@
 //   R « Sans telechargement » : + evidence.import seulement
 //   N « Sans import »        : + evidence.download seulement
 //   C « Auditeur »           : audit.read seul (lit le journal par l'API)
+//   W « Sans preuves »       : control.read + execution.read, SANS evidence.read (relance PR #197, commit 83209e2)
 //   S « Preparateur »        : control.read, execution.create, execution.read, evidence.upload, evidence.read (seed par l'API)
 // SEED (API, comme un utilisateur) : controles CTRL-A et CTRL-B (SQL, actifs) ; S cree une execution par controle ; S depose sur
 //   l'execution de CTRL-A un PDF (preuve-QA.pdf) et un xlsx (releve-QA.xlsx : feuille « Contrôles », en-tete Référence/Montant/Date/Commentaire,
@@ -34,6 +35,10 @@
 //     3.2 (N, sans evidence.import) aucun « Analyser » ; appel direct POST /analysis = 403.
 //     3.3 (R, import sans download) « Analyser » present ; resultat : feuille, lignes, colonnes affichees SANS « (ex. » ; l'API ne renvoie
 //         aucun exemple (examples = [] partout).
+//     2.3 (V, relance) l'onglet ouvert au clic aboutit sur l'URL de la preuve : URL finale = `url` rendue par GET /:id/url (meme preuve),
+//         page non fermee, corps « QA fichier factice » (la route factice a repondu), et pas d'onglet about:blank laisse ouvert.
+//  2bis. Droit evidence.read (relance, commit 83209e2)
+//     2.4 (W, sans evidence.read) la colonne « Preuves » ne montre AUCUN bouton « Voir » (valeur « — » sur chaque execution) ; GET /evidences?controlExecutionId= direct = 403.
 //  4. Changement de controle et console
 //     4.1 (V) panneau ouvert sur CTRL-A, on choisit CTRL-B dans « Contrôle » : le panneau disparait (plus de « Preuves de »), les lignes
 //         de preuve de CTRL-A aussi (4.1) ; revenir sur CTRL-A ne rouvre pas le panneau tout seul (4.1b : etat « ferme » reel, pas seulement masque).
@@ -54,7 +59,7 @@ const ExcelJS = createRequire(new URL("../../backend/node_modules/", import.meta
 const API = process.env.QA_API ?? "http://127.0.0.1:8099";
 const APP = process.env.QA_APP ?? "http://127.0.0.1:5199";
 const SHOTS = process.env.QA_SHOTS ?? "qa-shots/f7s1";
-const EMAIL = Object.fromEntries(["v", "r", "n", "c", "s"].map((k) => [k, `qa-f7s1-${k}@f7s1.test`]));
+const EMAIL = Object.fromEntries(["v", "r", "n", "c", "s", "w"].map((k) => [k, `qa-f7s1-${k}@f7s1.test`]));
 const CTRL_A = "CTRL-A Rapprochement";
 const CTRL_B = "CTRL-B Revue acces";
 const CID_A = "f7510000-0000-4000-8000-0000000000c1";
@@ -135,7 +140,7 @@ async function open(who) {
 }
 
 try {
-  for (const w of ["v", "r", "n", "c", "s"]) await login(w);
+  for (const w of ["v", "r", "n", "c", "s", "w"]) await login(w);
 
   // ---------------------------------------------------------------- seed (API, comme un utilisateur)
   const exA = await api("s", "POST", "/executions", { controlId: CID_A, status: "DONE", plannedDate: "2026-10-01", completedDate: "2026-10-01", result: "Rapprochement OK" });
@@ -198,6 +203,10 @@ try {
   check("2.1 (V) 2 boutons « Ouvrir » (un par preuve) ; le clic appelle GET /:id/url = 200 une fois", openBtns === 2 && urlCall.length === 1 && urlCall[0].status === 200 && urlCall[0].path.includes(evPdf.id), `boutons=${openBtns}; appels=${JSON.stringify(urlCall)}`);
   check("2.1 une fenêtre s'ouvre sur le lien délivré (http://127.0.0.1/qa-evidence/…)", !!popup && /^http:\/\/127\.0\.0\.1\/qa-evidence\/qa-/.test(popup.url()), popup ? popup.url() : "(aucune fenêtre)");
   check("2.1 audit (vue C) : 0 -> exactement 1 ligne pour cette preuve (accès DOWNLOAD|READ|ACCESS), 0 pour l'autre preuve", before.pdf === 0 && newPdf.length === 1 && /^(DOWNLOAD|READ|ACCESS)$/.test(newPdf[0]?.action) && newXlsx === 0, `avant=${before.pdf}; nouvelles=${JSON.stringify(newPdf.map((r) => ({ a: r.action, e: r.entityType, u: r.userId })))}; autre preuve +${newXlsx}`);
+  const relink = (await api("v", "GET", `/evidences/${evPdf.id}/url`)).json?.data?.url;
+  if (popup) await popup.waitForURL(/qa-evidence/, { timeout: 4000 }).catch(() => undefined);
+  const popBody = popup && !popup.isClosed() ? await popup.locator("body").innerText().catch(() => "") : "";
+  check("2.3 l'onglet ouvert aboutit sur l'URL de la preuve (même lien que l'API), reste ouvert, contenu servi", !!popup && !popup.isClosed() && popup.url() === relink && /\/qa-evidence\/qa-/.test(relink ?? "") && popBody.includes("QA fichier factice"), `onglet=${popup?.url()}; api=${relink}; corps=${popBody.slice(0, 40)}`);
   console.log(`INFO  action d'audit observée pour « Ouvrir » : ${newPdf[0]?.action} (le brief annonçait READ/ACCESS)`);
 
   // ================================================================================================ 3.1 Analyser (V)
@@ -268,9 +277,19 @@ try {
   await N.page.screenshot({ path: `${SHOTS}/08-N-sans-import.png`, fullPage: true });
   check("3.2 (N, sans evidence.import) aucun « Analyser », 2 « Ouvrir » ; POST /analysis direct = 403", nAnalyser === 0 && nOuvrir === 2 && nDirect.status === 403, `Analyser=${nAnalyser}; Ouvrir=${nOuvrir}; direct=${nDirect.status} ${JSON.stringify(nDirect.json)?.slice(0, 100)}`);
 
+  // ================================================================================================ 2.4 (W : sans evidence.read)
+  const W = await open("w");
+  await W.goto();
+  await W.pick(CTRL_A);
+  const wVoir = await W.page.getByRole("button", { name: /^Voir les preuves/ }).count();
+  const wCells = (await W.page.locator("table tbody tr td").allInnerTexts()).map((t) => t.trim());
+  const wDirect = await api("w", "GET", `/evidences?controlExecutionId=${exA.json.data.id}`);
+  await W.page.screenshot({ path: `${SHOTS}/09-W-sans-evidence-read.png`, fullPage: true });
+  check("2.4 (W, sans evidence.read) aucun bouton « Voir », aucun panneau ; GET /evidences direct = 403", (await W.page.locator("table tbody tr").count()) >= 1 && wVoir === 0 && (await W.panelTitle.count()) === 0 && wCells.includes("—") && wDirect.status === 403, `Voir=${wVoir}; cellules=${JSON.stringify(wCells).slice(0, 160)}; direct=${wDirect.status}`);
+
   // ================================================================================================ 4.2 console
   console.log(`INFO  erreurs console à l'écran d'arrivée (hors écran testé) : ${JSON.stringify(landing)}`);
-  check("4.2 aucune exception JS et aucun console.error sur tout le parcours de l'écran (V, R, N)", allJs.length === 0 && screenErrors.length === 0, `exceptions=${JSON.stringify(allJs)}; console=${JSON.stringify(screenErrors).slice(0, 300)}`);
+  check("4.2 aucune exception JS et aucun console.error sur tout le parcours de l'écran (V, R, N, W)", allJs.length === 0 && screenErrors.length === 0, `exceptions=${JSON.stringify(allJs)}; console=${JSON.stringify(screenErrors).slice(0, 300)}`);
 } finally {
   await browser.close();
 }
