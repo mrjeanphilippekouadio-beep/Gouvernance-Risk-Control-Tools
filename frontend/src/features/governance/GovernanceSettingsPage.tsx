@@ -26,7 +26,7 @@ const DELAYS: { key: keyof GovernanceDelays; label: string; help: string }[] = [
   { key: "acceptanceMaxDays", label: "Durée maximale de l'acceptation d'un principe", help: "q169 : une acceptation ne peut pas durer plus longtemps." },
   { key: "policyRequestExpiryDays", label: "Expiration d'une demande d'assouplissement", help: "q174 : passé ce délai, la demande ne peut plus être approuvée." },
 ];
-const dayLabel = (v: number | null) => (v === null ? "Non configuré" : `${v} jour${v > 1 ? "s" : ""}`);
+const dayLabel = (v: number | null | undefined) => (v === null || v === undefined ? "Non configuré" : `${v} jour${v > 1 ? "s" : ""}`);
 
 const fmtDate = (iso: string | null) => (iso ? iso.slice(0, 10) : "—");
 const yesNo = (v: boolean, yes: string, no: string) => <StatusBadge label={v ? yes : no} tone={v ? "success" : "neutral"} />;
@@ -106,11 +106,14 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       }
       if (editing === "delays") {
         const toDays = (v: string) => (v.trim() === "" ? null : Number(v));
-        const next = await configApi.setGovernanceDelays(token, {
-          exceptionReviewDelayDays: toDays(delays.exceptionReviewDelayDays),
-          acceptanceMaxDays: toDays(delays.acceptanceMaxDays),
-          policyRequestExpiryDays: toDays(delays.policyRequestExpiryDays),
-        }, why);
+        // Only the delays actually changed: never overwrite a concurrent edit of another one.
+        const changed: Partial<GovernanceDelays> = {};
+        for (const d of DELAYS) {
+          const value = toDays(delays[d.key]);
+          if (value !== (config?.[d.key] ?? null)) changed[d.key] = value;
+        }
+        if (Object.keys(changed).length === 0) { setFormError("Aucun délai modifié."); return; }
+        const next = await configApi.setGovernanceDelays(token, changed, why);
         setConfig(next);
         setNotice({ tone: "success", title: "Changement appliqué", text: "Délais de gouvernance mis à jour." });
         setEditing(null);

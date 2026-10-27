@@ -619,7 +619,7 @@ describe("QA-suites migration 075 (static)", () => {
 
   it("adds requests.expires_at (nullable timestamptz, no default) and the down drops it before the configs columns", () => {
     expect(code(UP)).toMatch(/ALTER TABLE self_validation_policy_requests ADD COLUMN expires_at timestamptz;/);
-    expect(code(DOWN)).toMatch(/ALTER TABLE self_validation_policy_requests DROP COLUMN expires_at;/);
+    expect(code(DOWN)).toMatch(/ALTER TABLE self_validation_policy_requests DROP COLUMN IF EXISTS expires_at;/);
   });
 
   it("no physical DELETE / TRUNCATE / DROP in the up; the down deletes only its own tracker row", () => {
@@ -643,7 +643,7 @@ describe("QA-suites migration 075 (static)", () => {
     expect(sql).toMatch(/COMMIT;/);
     expect(sql).toMatch(/UPDATE users SET roles = array_remove/);
     expect(sql).toMatch(/UPDATE roles SET permissions = array_remove/);
-    for (const c of ["exception_review_delay_days", "acceptance_max_days", "policy_request_expiry_days"]) expect(sql).toContain(`DROP COLUMN ${c}`);
+    for (const c of ["exception_review_delay_days", "acceptance_max_days", "policy_request_expiry_days"]) expect(sql).toContain(`DROP COLUMN IF EXISTS ${c}`);
   });
 });
 
@@ -745,8 +745,8 @@ describe.skipIf(!live)("QA-suites migration 075 on real PostgreSQL (QA_SUITES_PG
     expect(dup[0]!.n).toBe(1);
   });
 
-  // KNOWN GAP QA-SUITES-02 (MINOR): the down is not replayable (plain DROP COLUMN), unlike 066-073. Switch to `it` when fixed.
-  it.fails("replaying the DOWN on an already-down schema changes nothing (no error)", async () => {
+  // QA-SUITES-02 (fixed): the down is replayable (DROP COLUMN IF EXISTS), like 066-073.
+  it("replaying the DOWN on an already-down schema changes nothing (no error)", async () => {
     await runDown();
     try {
       await runDown();
