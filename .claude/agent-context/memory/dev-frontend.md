@@ -130,3 +130,10 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - TOUS les motifs backend sont `reasonText` mono-ligne (aucun `multiline`) : champs `<input maxLength>` (500 ; 2000 pour rejet de mode et réglages config), y compris le dialogue `GovernanceConfirm` (`governanceConfirmation.reason`). Ne plus utiliser de textarea pour un motif sans vérifier `reasonText(…, true)`.
 - `ApiError.code` lit d'abord `payload.code` (racine), puis `payload.error.code`, puis le préfixe du message.
 - SEC-PNL3-04 : cartes mode par défaut / seuils / passage Comité retirées, remplacées par une carte « portés par le Dispositif » + lien. Gap : `GET /config` n'expose pas ces valeurs depuis la version active du Dispositif ni un indicateur « porté par le Dispositif » ; le texte est en dur.
+
+## 2026-10-26 — Lot F4 (profil, désignations, responsabilités, comptes)
+- `auth/usePermissions.ts` : `can(p)` depuis `GET /users/me/permissions`, sert seulement à masquer ; en chargement ou en échec, `can` répond vrai et le 403 serveur reste le filet. Clôt le gap « aucun endpoint mes permissions ».
+- `design-system/AccountPicker.tsx` + `accountName` : ne liste que `GET /users/directory` (id + nom, comptes actifs) ; un id absent s'affiche « Compte non listé », jamais un nom deviné.
+- Radios : champs natifs dans `.core-fieldset` (CorePages.css), pas d'atome créé.
+- `ContextRail` prend `view: string` : il dupliquait l'union `View` d'App.tsx (casse à chaque nouvelle vue).
+- Double confirmation q166 : `useGovernanceConfirm` réutilisé tel quel sur `PUT /processes/:id/responsibilities`.

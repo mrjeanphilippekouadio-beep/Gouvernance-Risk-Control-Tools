@@ -228,4 +228,9 @@ Détail : `docs/compliance/review-panel-d5-2026-10-19.md` (constats CMP-PNL2-01 
 28. Un contrôle détectif n'existe que si le relecteur peut retrouver ce qu'il doit relire sans dépendre d'une notification : une voie de consultation (liste, âge) est une condition de la compensation, pas un confort d'interface.
 29. Une dérogation que le bénéficiaire peut renouveler seul, avec une durée qu'il choisit, est une dérogation sans terme ; tant que le PO n'a pas fixé de plafond, elle reste visible et marquée.
 30. Un second regard sans motif propre (approbation qui reprend le motif de l'auteur, confirmation à `reason: null`) ne prouve pas la relecture.
+## Passage Compliance lot F4 (2026-10-26)
+
+Détail : `docs/compliance/CMP-F4.md` (CMP-F4-01 à 08). Bash indisponible, diff non exécuté ; fichiers lus directement. q166 conforme côté serveur (champion seul, politique DOUBLE_CONFIRMATION + aucun autre détenteur, motif, marqueur `noSelfValidation`), audit hors transaction et marqueur non affiché. Écran Comptes : pas de champ motif pour un rôle de groupe fixe (q44), libellé de suspension du dernier RM trompeur (DECISION-078). Annuaire id+nom conforme. Statut : recommandation, en attente de HUMAN (motif de suspension, affichage du marqueur, avis Privacy).
+32. Un écran qui expose un choix de rôle de gouvernance doit porter le motif que le serveur exige ; vérifier le contrat serveur avant de juger l'écran conforme.
+
 31. Une table de décision qui n'est pas la piste d'audit mais en porte l'état (demandes, désignations) reçoit la même garde d'immuabilité que les autres (trigger, `search_path` épinglé, REVOKE) ; une méthode de réouverture d'un état terminal ne vit pas dans le dépôt de production.

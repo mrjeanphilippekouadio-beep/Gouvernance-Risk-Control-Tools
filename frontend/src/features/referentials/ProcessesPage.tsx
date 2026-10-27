@@ -10,6 +10,9 @@ import {
 import { departmentsApi, type DepartmentSummary } from "../../api/departments";
 import { FormModal, dateOnly, describeError, isForbidden } from "../indicators/shared";
 import { ArchiveModal } from "./ArchiveModal";
+import { ProcessResponsibilitiesCard } from "./ProcessResponsibilitiesCard";
+import { usersApi, type DirectoryEntry } from "../../api/users";
+import { usePermissions } from "../../auth/usePermissions";
 import "../core/CorePages.css";
 
 const LEVEL_LABELS: Record<ProcessLevel, string> = { PROCESS: "Processus", SUBPROCESS: "Sous-processus", ACTIVITY: "Activité" };
@@ -63,6 +66,9 @@ export function ProcessesPage({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<DirectoryEntry[]>([]);
+  const { can } = usePermissions(token);
+  const canAssign = can("process.responsibility.assign");
   const [formOpen, setFormOpen] = useState<"create" | "edit" | null>(null);
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -81,6 +87,11 @@ export function ProcessesPage({ token }: { token: string }) {
   }, [token, includeInactive]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  // Account picker: only for an assigner; without it the names stay "Compte non listé", never guessed.
+  useEffect(() => {
+    if (!canAssign) return;
+    usersApi.directory(token).then(setAccounts).catch(() => setAccounts([]));
+  }, [token, canAssign]);
   useEffect(() => {
     departmentsApi.list(token, true).then((d) => { setDepartments(d); setDepartmentsUnavailable(false); })
       .catch(() => { setDepartments([]); setDepartmentsUnavailable(true); });
@@ -164,6 +175,8 @@ export function ProcessesPage({ token }: { token: string }) {
       <p className="muted">Mode d'évaluation enregistré : {selected.evaluationMode ? MODE_LABELS[selected.evaluationMode] : "hérité (non défini sur ce processus)"} · Mis à jour le {dateOnly(selected.updatedAt)}</p>
       <MessageBanner tone="info">Le mode d'évaluation se modifie par une route et un droit dédiés (Risk Manager) : il n'est pas modifiable ici. La valeur héritée effective n'est pas exposée par l'API.</MessageBanner>
     </Card>}
+
+    {selected && <ProcessResponsibilitiesCard key={selected.id} token={token} processId={selected.id} accounts={accounts} canAssign={canAssign} />}
 
     <FormModal open={formOpen !== null} onClose={() => setFormOpen(null)} title={formOpen === "edit" ? "Modifier le processus" : "Nouveau processus"} formId="process-form" saving={saving} submitLabel={formOpen === "edit" ? "Enregistrer" : "Créer"}>
       <form id="process-form" onSubmit={submit}>

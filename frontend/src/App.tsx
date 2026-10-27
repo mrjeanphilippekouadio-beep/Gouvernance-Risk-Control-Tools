@@ -23,6 +23,9 @@ import { RiskCategoriesPage } from "./features/referentials/RiskCategoriesPage";
 import { FrameworksPage } from "./features/frameworks/FrameworksPage";
 import { GovernanceSettingsPage } from "./features/governance/GovernanceSettingsPage";
 import { EvaluationModeRequestsPage } from "./features/governance/EvaluationModeRequestsPage";
+import { OrganizationProfilePage } from "./features/governance/OrganizationProfilePage";
+import { DesignationsPage } from "./features/governance/DesignationsPage";
+import { UsersAdmin } from "./features/admin/UsersAdmin";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import { useLocalSignIn } from "./auth/useLocalSignIn";
@@ -34,7 +37,7 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users";
 type NavItem = { id: View; label: string; icon: string; available?: boolean } | { separator: string };
 const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
@@ -76,9 +79,12 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "departments", label: "Départements", icon: "table", available: true },
     { id: "riskcategories", label: "Catégories de risque", icon: "table", available: true },
     { separator: "Gouvernance" },
+    { id: "orgprofile", label: "Profil d'organisation", icon: "panel", available: true },
+    { id: "designations", label: "Désignations", icon: "user", available: true },
     { id: "govsettings", label: "Réglages de gouvernance", icon: "settings", available: true },
     { id: "modereqs", label: "Demandes de mode d'évaluation", icon: "check", available: true },
     { separator: "Plateforme" },
+    { id: "users", label: "Comptes", icon: "user", available: true },
     { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
@@ -108,6 +114,9 @@ const PAGE_TITLES: Record<View, string> = {
   frameworks: "Dispositif de risque",
   govsettings: "Réglages de gouvernance",
   modereqs: "Demandes de mode d'évaluation",
+  orgprofile: "Profil d'organisation",
+  designations: "Désignations",
+  users: "Comptes",
 };
 
 function App() {
@@ -229,6 +238,9 @@ function App() {
             {view === "frameworks" && <FrameworksPage token={token} />}
             {view === "govsettings" && <GovernanceSettingsPage token={token} onOpenFrameworks={() => go("frameworks")} />}
             {view === "modereqs" && <EvaluationModeRequestsPage token={token} />}
+            {view === "orgprofile" && <OrganizationProfilePage token={token} />}
+            {view === "designations" && <DesignationsPage token={token} />}
+            {view === "users" && <UsersAdmin token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} />}
             {view === "risks" && <RisksPage token={token} shortcuts={{ onOpenFrameworks: () => go("frameworks"), onOpenAppetite: openAppetite, onOpenScales: () => go("scales"), onOpenProcesses: () => go("processes") }} />}
             {view === "roles" && <RolesAdmin token={token} />}

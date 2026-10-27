@@ -246,6 +246,9 @@ const riskService = new RiskService(
   processRepository,
 );
 const departmentService = new DepartmentService(departmentRepository, auditRepository, processRepository);
+// DECISION-074 D4: one gate for every self-validation guard, one query object for validators / third parties / markers.
+const governanceQueries = new PostgresGovernanceQueries(pool);
+const selfValidationGate = new SelfValidationGate(configRepository, governanceQueries);
 const processService = new ProcessService(
   processRepository,
   auditRepository,
@@ -254,10 +257,8 @@ const processService = new ProcessService(
   processEvaluationModeRequestRepository,
   departmentRepository,
   userRepository,
+  selfValidationGate,
 );
-// DECISION-074 D4: one gate for every self-validation guard, one query object for validators / third parties / markers.
-const governanceQueries = new PostgresGovernanceQueries(pool);
-const selfValidationGate = new SelfValidationGate(configRepository, governanceQueries);
 const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
   processEvaluationModeRequestRepository,
   processRepository,

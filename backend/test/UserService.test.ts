@@ -289,13 +289,13 @@ describe("UserService", () => {
     const user = await withRbac.create(admin, { email: "fc@djamo.com", displayName: "FC", roleId: role.id }, "REQ-fc1");
     const userRepo = (withRbac as unknown as { users: ConstructorParameters<typeof UserService>[0] }).users;
     const bare = new UserService(userRepo, inMemoryAuditRepository());
-    await expect(bare.suspend(admin, user.id, "REQ-fc2")).rejects.toThrow("requires a RoleService");
+    await expect(bare.suspend(admin, user.id, "REQ-fc2", "Motif de test")).rejects.toThrow("requires a RoleService");
   });
 
   it("refuses to let an actor suspend their own account", async () => {
     const { userService } = makeServices();
-    await expect(userService.suspend(admin, admin.userId, "REQ-6")).rejects.toThrow(ForbiddenError);
-    await expect(userService.suspend(admin, admin.userId.toUpperCase(), "REQ-6b")).rejects.toThrow(ForbiddenError);
+    await expect(userService.suspend(admin, admin.userId, "REQ-6", "Motif de test")).rejects.toThrow(ForbiddenError);
+    await expect(userService.suspend(admin, admin.userId.toUpperCase(), "REQ-6b", "Motif de test")).rejects.toThrow(ForbiddenError);
   });
 
   it("suspends a user (soft-delete) and blocks a duplicate suspend", async () => {
@@ -307,9 +307,33 @@ describe("UserService", () => {
       "REQ-7",
     );
 
-    await userService.suspend(admin, user.id, "REQ-8");
+    await userService.suspend(admin, user.id, "REQ-8", "Motif de test");
     await expect(userService.get(admin, user.id)).resolves.toMatchObject({ deletedAt: expect.any(Date) });
-    await expect(userService.suspend(admin, user.id, "REQ-9")).rejects.toThrow(ValidationError);
+    await expect(userService.suspend(admin, user.id, "REQ-9", "Motif de test")).rejects.toThrow(ValidationError);
+  });
+
+  it("q177: suspend and reactivate require a reason, audited with the action; without one nothing changes", async () => {
+    const events: Array<{ action: string; reason: string | null }> = [];
+    const audit: AuditRepository = { ...inMemoryAuditRepository(), record: async (e) => void events.push(e as never) };
+    const roleService = new RoleService(inMemoryRoleRepository(), audit);
+    const userService = new UserService(inMemoryUserRepository(), audit, roleService);
+    const role = await seedRole(roleService, admin);
+    const user = await userService.create(admin, { email: "why@djamo.com", displayName: "Why", roleId: role.id }, "REQ-Q177a");
+    events.length = 0;
+
+    for (const reason of ["", "   ", undefined as unknown as string]) {
+      await expect(userService.suspend(admin, user.id, "REQ-Q177b", reason)).rejects.toThrow(ValidationError);
+    }
+    await expect(userService.get(admin, user.id)).resolves.toMatchObject({ deletedAt: null });
+    expect(events).toHaveLength(0);
+
+    await userService.suspend(admin, user.id, "REQ-Q177c", "  Départ de l'entreprise  ");
+    expect(events.at(-1)).toMatchObject({ action: "DELETE", reason: "Départ de l'entreprise" });
+
+    await expect(userService.reactivate(admin, user.id, "REQ-Q177d", "")).rejects.toThrow(ValidationError);
+    await expect(userService.get(admin, user.id)).resolves.toMatchObject({ deletedAt: expect.any(Date) });
+    await userService.reactivate(admin, user.id, "REQ-Q177e", "Retour de congé");
+    expect(events.at(-1)).toMatchObject({ action: "UPDATE", reason: "Retour de congé" });
   });
 
   it("reactivates a suspended user (maker-checker counterpart to suspend)", async () => {
@@ -320,9 +344,9 @@ describe("UserService", () => {
       { email: "toReactivate@djamo.com", displayName: "To Reactivate", roleId: role.id },
       "REQ-10",
     );
-    await userService.suspend(admin, user.id, "REQ-11");
+    await userService.suspend(admin, user.id, "REQ-11", "Motif de test");
 
-    const reactivated = await userService.reactivate(admin, user.id, "REQ-12");
+    const reactivated = await userService.reactivate(admin, user.id, "REQ-12", "Motif de test");
     expect(reactivated.deletedAt).toBeNull();
   });
 
@@ -334,7 +358,7 @@ describe("UserService", () => {
       { email: "active@djamo.com", displayName: "Active", roleId: role.id },
       "REQ-13",
     );
-    await expect(userService.reactivate(admin, user.id, "REQ-14")).rejects.toThrow(ValidationError);
+    await expect(userService.reactivate(admin, user.id, "REQ-14", "Motif de test")).rejects.toThrow(ValidationError);
   });
 
   it("GET /users/me only ever returns the caller's own row", async () => {
@@ -355,6 +379,41 @@ describe("UserService", () => {
     // actor object gets their own row, never another user's.
     const impostor: AuthenticatedUser = { ...admin, userId: "does-not-exist" };
     await expect(userService.getSelf(impostor)).rejects.toThrow(NotFoundError);
+  });
+
+  it("getSelfPermissions returns only the actor's known permissions, sorted and deduplicated", async () => {
+    const { userService, roleService } = makeServices();
+    const role = await seedRole(roleService, admin);
+    const created = await userService.create(
+      admin,
+      { email: "perms@djamo.com", displayName: "Perms", roleId: role.id },
+      "REQ-F4",
+    );
+    const selfActor: AuthenticatedUser = {
+      ...admin,
+      userId: created.id,
+      roles: ["user.read", "not.a.permission", "audit.read", "user.read"],
+    };
+    expect(await userService.getSelfPermissions(selfActor)).toEqual(["audit.read", "user.read"]);
+    await expect(
+      userService.getSelfPermissions({ ...admin, userId: "does-not-exist" }),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it("directory: id and name of active accounts only, for a designation right, never without one", async () => {
+    const { userService, roleService } = makeServices();
+    const role = await seedRole(roleService, admin);
+    const kept = await userService.create(admin, { email: "kept@djamo.com", displayName: "Kept", roleId: role.id }, "REQ-F4a");
+    const gone = await userService.create(admin, { email: "gone@djamo.com", displayName: "Gone", roleId: role.id }, "REQ-F4b");
+    await userService.suspend(admin, gone.id, "REQ-F4c", "Motif de test");
+
+    const assigner: AuthenticatedUser = { ...admin, userId: "assigner", roles: ["process.responsibility.assign"] };
+    const entries = await userService.directory(assigner);
+    expect(entries).toContainEqual({ id: kept.id, displayName: "Kept" });
+    expect(entries.some((e) => e.id === gone.id)).toBe(false);
+    expect(Object.keys(entries[0]!).sort()).toEqual(["displayName", "id"]);
+
+    await expect(userService.directory({ ...admin, roles: ["risk.read"] })).rejects.toThrow(ForbiddenError);
   });
 
   it("scopes list() and get() to the actor's tenant", async () => {
@@ -393,7 +452,7 @@ describe("UserService", () => {
     );
 
     const updateOnlyActor: AuthenticatedUser = { ...admin, userId: "updater", roles: ["user.update"] };
-    await expect(userService.suspend(updateOnlyActor, user.id, "REQ-19")).rejects.toThrow(ForbiddenError);
+    await expect(userService.suspend(updateOnlyActor, user.id, "REQ-19", "Motif de test")).rejects.toThrow(ForbiddenError);
 
     const deleteOnlyActor: AuthenticatedUser = { ...admin, userId: "deleter", roles: ["user.delete"] };
     await expect(
@@ -401,9 +460,9 @@ describe("UserService", () => {
     ).rejects.toThrow(ForbiddenError);
 
     // The actual, correctly-permissioned actions still work.
-    await userService.suspend(admin, user.id, "REQ-21");
+    await userService.suspend(admin, user.id, "REQ-21", "Motif de test");
     const reactivateOnlyActor: AuthenticatedUser = { ...admin, userId: "reactivator", roles: ["user.reactivate"] };
-    await expect(userService.reactivate(reactivateOnlyActor, user.id, "REQ-22")).resolves.toMatchObject({
+    await expect(userService.reactivate(reactivateOnlyActor, user.id, "REQ-22", "Motif de test")).resolves.toMatchObject({
       deletedAt: null,
     });
   });

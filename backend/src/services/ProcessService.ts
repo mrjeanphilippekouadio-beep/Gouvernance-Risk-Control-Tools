@@ -18,6 +18,9 @@ import type { EvaluationMode } from "../domain/entities/Config.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { canonicalId } from "../domain/ids.js";
 import { requirePermission } from "../domain/permissions.js";
+import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
+import { writeAudited } from "./auditedWrite.js";
+import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 const MAX_CANDIDATE_SCAN = 1000;
@@ -30,6 +33,8 @@ export interface ProcessResponsibilitiesView {
   legacyOwner: string | null;
   /** Proposed accounts for the legacy owner (only while ownerUserId is null, only for an assigner). Never applied automatically. */
   ownerCandidates: Array<{ id: string; displayName: string }>;
+  /** q176 (DECISION-084): the current risk champion named themselves through the q166 exception (no independent validation). */
+  riskChampionWithoutIndependentReview: boolean;
 }
 
 /** "Jean-Marc  DUPONT" and "dupont jean marc" give the same key: accents stripped, lower case, words sorted. */
@@ -75,6 +80,8 @@ export class ProcessService {
     private readonly departments?: DepartmentRepository,
     /** D2b: validates the accounts named as owner / champion / N-1; fails closed if one is given without it. */
     private readonly users?: UserRepository,
+    /** q166: the only way past I-R1 (self as risk champion when nobody else can assign); without it, refused as before. */
+    private readonly selfValidation?: SelfValidationGate,
   ) {}
 
   private async assertDepartmentExists(tenantId: string, departmentId: string): Promise<void> {
@@ -198,7 +205,23 @@ export class ProcessService {
       deputyUserId: process.deputyUserId,
       legacyOwner: process.owner,
       ownerCandidates: canAssign && !process.ownerUserId ? await this.ownerCandidates(actor.tenantId, process.owner) : [],
+      riskChampionWithoutIndependentReview: await this.championSelfDesignated(actor.tenantId, process),
     };
+  }
+
+  /**
+   * q176: read from the audit row that named the CURRENT champion (newest first). Its governance marker is the q166
+   * exception; once the champion changes, the row that named the new one decides, so the mention follows the person.
+   */
+  private async championSelfDesignated(tenantId: string, process: Process): Promise<boolean> {
+    if (!process.riskChampionUserId) return false;
+    const events = await this.audit.listForEntity(tenantId, "Process", process.id);
+    const naming = events.find((e) => {
+      const after = e.newValue as { riskChampionUserId?: unknown } | null;
+      const before = e.oldValue as { riskChampionUserId?: unknown } | null;
+      return after?.riskChampionUserId === process.riskChampionUserId && before?.riskChampionUserId !== process.riskChampionUserId;
+    });
+    return Boolean(naming?.governanceException);
   }
 
   /**
@@ -211,28 +234,32 @@ export class ProcessService {
     id: string,
     input: ProcessResponsibilitiesInput,
     requestId: string,
+    confirmation?: GovernanceConfirmation,
   ): Promise<Process> {
     requirePermission(actor, "process.responsibility.assign");
     const before = await this.get(actor, id);
 
-    // F-PNL-06 (SEC-ID-01 class): compare canonical ids, an upper-case uuid is the same account in Postgres.
-    const canon = (v: string | null | undefined) => (typeof v === "string" ? canonicalId(v) : v);
-    input = {
-      ...(input.ownerUserId !== undefined ? { ownerUserId: canon(input.ownerUserId) } : {}),
-      ...(input.riskChampionUserId !== undefined ? { riskChampionUserId: canon(input.riskChampionUserId) } : {}),
-      ...(input.deputyUserId !== undefined ? { deputyUserId: canon(input.deputyUserId) } : {}),
-    } as ProcessResponsibilitiesInput;
-    const changes: ProcessResponsibilitiesInput = {};
-    if (input.ownerUserId !== undefined && input.ownerUserId !== before.ownerUserId) changes.ownerUserId = input.ownerUserId;
-    if (input.riskChampionUserId !== undefined && input.riskChampionUserId !== before.riskChampionUserId) {
-      changes.riskChampionUserId = input.riskChampionUserId;
-    }
-    if (input.deputyUserId !== undefined && input.deputyUserId !== before.deputyUserId) changes.deputyUserId = input.deputyUserId;
+    const changes = changedResponsibilities(before, input);
     if (Object.keys(changes).length === 0) return before;
+
+    const selfId = canonicalId(actor.userId);
+    const selfRefusal = "Nobody can designate themselves as owner, risk champion or N-1 of a process";
+    if (changes.ownerUserId === selfId || changes.deputyUserId === selfId) throw new ValidationError(selfRefusal);
+    // q166 (DECISION-080): the one exception to I-R1, risk champion only, when nobody else in the tenant can assign
+    // responsibilities, with the explicit double confirmation and its reason; audited as a governance exception.
+    const selfChampion =
+      changes.riskChampionUserId === selfId
+        ? await checkSelfValidation(this.selfValidation, actor, {
+            isSelf: true,
+            permission: "process.responsibility.assign",
+            makerIds: [actor.userId],
+            refusal: selfRefusal,
+            confirmation,
+          })
+        : null;
 
     for (const userId of Object.values(changes)) {
       if (!userId) continue;
-      if (userId === canonicalId(actor.userId)) throw new ValidationError("Nobody can designate themselves as owner, risk champion or N-1 of a process");
       if (!this.users) throw new Error("ProcessService requires a UserRepository to set process responsibilities");
       const user = await this.users.getById(actor.tenantId, userId);
       if (!user || user.deletedAt) throw new ValidationError(`User ${userId} is not an active account of this tenant`);
@@ -243,22 +270,32 @@ export class ProcessService {
       ? (await this.ownerCandidates(actor.tenantId, before.owner)).some((c) => c.id === changes.ownerUserId)
       : undefined;
 
-    const after = await this.processes.setResponsibilities(actor.tenantId, id, changes);
-
     const pick = (p: Process) => ({ ownerUserId: p.ownerUserId, riskChampionUserId: p.riskChampionUserId, deputyUserId: p.deputyUserId });
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Process",
-      entityId: id,
-      action: "UPDATE",
-      oldValue: { ...pick(before), legacyOwner: before.owner },
-      newValue: { ...pick(after), legacyOwner: after.owner, ...(ownerFromProposal !== undefined ? { ownerFromProposal } : {}) },
-      reason: null,
-      requestId,
-    });
-
-    return after;
+    // DECISION-079: the change and its audit row (with the q166 marker) in one transaction.
+    return writeAudited(
+      this.processes.auditsInTransaction,
+      this.audit,
+      (audit) => this.processes.setResponsibilities(actor.tenantId, id, changes, audit),
+      (after) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Process",
+          entityId: id,
+          action: "UPDATE",
+          oldValue: { ...pick(before), legacyOwner: before.owner },
+          newValue: {
+            ...pick(after),
+            legacyOwner: after.owner,
+            ...(ownerFromProposal !== undefined ? { ownerFromProposal } : {}),
+            ...selfChampion?.newValueExtra,
+          },
+          reason: selfChampion?.newValueExtra.selfValidation.reason ?? null,
+          requestId,
+          ...(selfChampion ? { governanceException: selfChampion.governanceException } : {}),
+        },
+      ],
+    );
   }
 
   /** Active accounts of the tenant whose display name equals the legacy owner text (accent/case/word-order insensitive). Id + name only. */
@@ -440,4 +477,19 @@ export class ProcessService {
       );
     }
   }
+}
+
+/**
+ * D2b: the responsibility keys the caller actually changes. F-PNL-06 (SEC-ID-01 class): ids are compared in canonical
+ * form, an upper-case uuid is the same account in Postgres. Omitted key = untouched, null = cleared.
+ */
+function changedResponsibilities(before: Process, input: ProcessResponsibilitiesInput): ProcessResponsibilitiesInput {
+  const changes: ProcessResponsibilitiesInput = {};
+  for (const key of ["ownerUserId", "riskChampionUserId", "deputyUserId"] as const) {
+    const raw = input[key];
+    if (raw === undefined) continue;
+    const next = typeof raw === "string" ? canonicalId(raw) : raw;
+    if (next !== before[key]) changes[key] = next;
+  }
+  return changes;
 }

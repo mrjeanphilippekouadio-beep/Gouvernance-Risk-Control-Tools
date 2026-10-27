@@ -3,13 +3,14 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { UpdateUserInput, User } from "../domain/entities/User.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
-import { requirePermission } from "../domain/permissions.js";
+import { filterKnownPermissions, requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { RoleService } from "./RoleService.js";
 import type { NotificationService } from "./NotificationService.js";
 import type { SystemGroup } from "../domain/entities/Role.js";
 import type { Permission } from "../domain/permissions.js";
 import { canonicalId } from "../domain/ids.js";
+import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 
 /** B-8 bis (q43): user sheet with the fixed groups. riskManagerAndCommittee is now a forbidden cumul (q94): kept only to flag pre-existing ones. */
 export interface UserDetail extends User {
@@ -39,6 +40,21 @@ export interface CreateUserWithRoleInput {
   departmentId?: string | null;
   /** B-8 bis (q44): mandatory when the initial role is one of the fixed groups. */
   reason?: string;
+}
+
+/** The rights that name an account to a role: each one opens the account picker (directory). */
+const DIRECTORY_PERMISSIONS: Permission[] = ["user.read", "process.responsibility.assign", "designation.manage"];
+const MAX_DIRECTORY = 500;
+const MAX_ACCOUNT_REASON_LENGTH = 500;
+
+/** q177 (DECISION-084): suspending or reactivating an account always carries a reason, audited with the action. */
+function requireAccountReason(reason: unknown, what: string): string {
+  const trimmed = typeof reason === "string" ? reason.trim() : "";
+  if (!trimmed || !isAcceptableReason(trimmed)) throw new ValidationError(`A reason is required to ${what}`);
+  if (trimmed.length > MAX_ACCOUNT_REASON_LENGTH) {
+    throw new ValidationError(`The reason must be at most ${MAX_ACCOUNT_REASON_LENGTH} characters`);
+  }
+  return trimmed;
 }
 
 export interface ListUsersOptions {
@@ -150,6 +166,34 @@ export class UserService {
     return user;
   }
 
+  /**
+   * Lot F4: the actor's own effective permissions, so the front can hide
+   * actions it would otherwise only learn about through a 403. Read from the
+   * grants already resolved at identity time (never recomputed client-side),
+   * filtered to current permission strings. No permission needed: it only
+   * ever describes the caller, and the row lookup keeps it tenant-scoped.
+   */
+  async getSelfPermissions(actor: AuthenticatedUser): Promise<Permission[]> {
+    await this.getSelf(actor);
+    return [...new Set(filterKnownPermissions(actor.roles))].sort((a, b) => a.localeCompare(b));
+  }
+
+  /**
+   * Lot F4: the account picker of the designation screens (process responsibilities, designations). Whoever may name
+   * someone needs to see who can be named, without the user.read directory: active accounts only, id and display name
+   * only (no email, no roles), tenant-scoped, bounded.
+   */
+  async directory(actor: AuthenticatedUser): Promise<Array<{ id: string; displayName: string }>> {
+    if (!DIRECTORY_PERMISSIONS.some((p) => actor.roles.includes(p))) {
+      throw new ForbiddenError(`Missing permission: one of ${DIRECTORY_PERMISSIONS.join(", ")}`);
+    }
+    const users = await this.users.list(actor.tenantId, { limit: MAX_DIRECTORY });
+    return users
+      .filter((u) => !u.deletedAt)
+      .map((u) => ({ id: u.id, displayName: u.displayName }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, "fr"));
+  }
+
   async get(actor: AuthenticatedUser, id: string): Promise<User> {
     requirePermission(actor, "user.read");
     const user = await this.users.getById(actor.tenantId, id);
@@ -215,8 +259,9 @@ export class UserService {
    * archive/delete methods. Maker-checker: an actor can never suspend
    * themselves (mirrors RoleService.assignToUser/revokeFromUser).
    */
-  async suspend(actor: AuthenticatedUser, id: string, requestId: string): Promise<void> {
+  async suspend(actor: AuthenticatedUser, id: string, requestId: string, reason: string): Promise<void> {
     requirePermission(actor, "user.delete");
+    const why = requireAccountReason(reason, "suspend an account");
     id = canonicalId(id);
     if (actor.userId === id) {
       throw new ForbiddenError("You cannot suspend your own account — ask another admin");
@@ -238,7 +283,7 @@ export class UserService {
       action: "DELETE",
       oldValue: before,
       newValue: null,
-      reason: null,
+      reason: why,
       requestId,
     });
   }
@@ -254,8 +299,10 @@ export class UserService {
     actor: AuthenticatedUser,
     id: string,
     requestId: string,
+    reason: string,
   ): Promise<User & { lostRoles: LostRole[] }> {
     requirePermission(actor, "user.reactivate");
+    const why = requireAccountReason(reason, "reactivate an account");
     const before = await this.users.getById(actor.tenantId, id);
     if (!before) throw new NotFoundError("User", id);
     if (!before.deletedAt) throw new ValidationError("User is not suspended");
@@ -278,7 +325,7 @@ export class UserService {
       action: "UPDATE",
       oldValue: before,
       newValue: lostRoles.length > 0 ? { ...after, lostRoles: lostRoles.map((r) => r.name) } : after,
-      reason: null,
+      reason: why,
       requestId,
     });
 

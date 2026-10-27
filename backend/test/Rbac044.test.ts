@@ -69,8 +69,8 @@ describe("DECISION-044 q94: Risk Manager + Committee forbidden", () => {
     w.held.set("old", ["rm", "co"]);
     w.held.set("clean", ["rm"]);
     const svc = new UserService(w.users as never, w.audit as never, w.service);
-    await expect(svc.reactivate(assigner, "old", "r")).rejects.toThrow(ValidationError);
-    await expect(svc.reactivate(assigner, "clean", "r")).resolves.toMatchObject({ id: "clean" });
+    await expect(svc.reactivate(assigner, "old", "r", "Motif de test")).rejects.toThrow(ValidationError);
+    await expect(svc.reactivate(assigner, "clean", "r", "Motif de test")).resolves.toMatchObject({ id: "clean" });
   });
 });
 
@@ -129,7 +129,7 @@ describe("F-D044-01: Committee validation permissions count as Committee members
     const w = world();
     w.held.set("old", ["rm", "comval"]);
     const svc = new UserService(w.users as never, w.audit as never, w.service);
-    await expect(svc.reactivate(assigner, "old", "r")).rejects.toThrow(ValidationError);
+    await expect(svc.reactivate(assigner, "old", "r", "Motif de test")).rejects.toThrow(ValidationError);
   });
 
   it("treats an administrator holding Committee validation powers as admin + Committee (q80)", async () => {

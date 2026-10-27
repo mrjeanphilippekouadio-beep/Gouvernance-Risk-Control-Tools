@@ -446,3 +446,8 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 
 - Régression de mon lot : `reasonText` mono-ligne refusait les motifs multi-lignes sur 19 routes. Correctif : `isAcceptableReason` (domaine) laisse passer \n \r \t (autres contrôles, C1, NUL, substitut isolé refusés) ; paramètre `multiline` supprimé (`reasonText(max)`). Leçon : un durcissement de validation doit être confronté aux écrans (textareas) AVANT, pas seulement au contrat d'audit.
 - Tests PG de `lastSeen` : helper `record()` qui enveloppe `pool.query` et attend les écritures ; aucun `wait()` fixe.
+
+## 2026-10-26 — Lot F4
+- `GET /users/me/permissions` : `filterKnownPermissions(actor.roles)` après `getSelf` (tenant-scopé), aucune permission requise.
+- `GET /users/directory` : id + displayName des comptes actifs, ouvert à `user.read` | `process.responsibility.assign` | `designation.manage` (le RM n'a pas `user.read` et ne pouvait pas choisir qui désigner).
+- q166 : `ProcessService.setResponsibilities` réutilise `SelfValidationGate` (paramètre optionnel, fail closed) pour le seul champion ; owner/N-1 restent `ValidationError`. `selfValidationGate` est désormais construit avant `processService` dans server.ts.

@@ -44,3 +44,7 @@
 .core-button--primary{border-color:var(--gs-primary);background:var(--gs-primary);color:var(--gs-on-primary)}
 .core-button:disabled{opacity:.55;cursor:not-allowed}
 .core-tab:focus-visible,.core-button:focus-visible{outline:2px solid var(--gs-primary);outline-offset:2px}
+
+/* F4: native radio group (no design-system atom yet). */
+.core-fieldset{border:0;margin:0 0 14px;padding:0;display:flex;flex-wrap:wrap;gap:8px 16px}
+.core-fieldset legend{width:100%;margin-bottom:6px;font:600 12px var(--gs-font-ui);color:var(--gs-text)}

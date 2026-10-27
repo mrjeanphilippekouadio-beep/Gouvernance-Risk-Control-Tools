@@ -657,7 +657,7 @@ describe("QA-B8bis reactivation and lost rights (F-B8-06)", () => {
 
   it("returns lostRoles, audits the names, notifies the user once (MANAGEMENT / RIGHTS_LOST_ON_REACTIVATION)", async () => {
     const { w, old } = await suspendedWithLostRole();
-    const res = await w.userService.reactivate(admin, "u1", "R1");
+    const res = await w.userService.reactivate(admin, "u1", "R1", "Motif de test");
     expect(res.deletedAt).toBeNull();
     expect(res.lostRoles).toEqual([{ id: old.id, name: "Ancien rôle", permissions: ["kri.read"] }]);
     expect(w.events).toHaveLength(1);
@@ -671,7 +671,7 @@ describe("QA-B8bis reactivation and lost rights (F-B8-06)", () => {
     const w = world();
     await w.put(w.filler, "u1");
     w.users.get("u1")!.deletedAt = new Date(); w.events.length = 0;
-    const res = await w.userService.reactivate(admin, "u1", "R2");
+    const res = await w.userService.reactivate(admin, "u1", "R2", "Motif de test");
     expect(res.lostRoles).toEqual([]);
     expect(w.sent).toHaveLength(0);
     expect(w.events[0]!.newValue).not.toHaveProperty("lostRoles");
@@ -679,17 +679,17 @@ describe("QA-B8bis reactivation and lost rights (F-B8-06)", () => {
 
   it("works without a NotificationService", async () => {
     const { w } = await suspendedWithLostRole({ notifier: "none" });
-    const res = await w.userService.reactivate(admin, "u1", "R3");
+    const res = await w.userService.reactivate(admin, "u1", "R3", "Motif de test");
     expect(res.lostRoles).toHaveLength(1);
   });
 
   it("refusals: not suspended, unknown, other tenant, no permission; no notification, no audit", async () => {
     const { w } = await suspendedWithLostRole();
     w.addUser("active");
-    await expect(w.userService.reactivate(admin, "active", "R4")).rejects.toThrow(ValidationError);
-    await expect(w.userService.reactivate(admin, "ghost", "R4")).rejects.toThrow(NotFoundError);
-    await expect(w.userService.reactivate(actor("t2", ADMIN_PERMS, T2), "u1", "R4")).rejects.toThrow(NotFoundError);
-    await expect(w.userService.reactivate(actor("n", ["user.read"]), "u1", "R4")).rejects.toThrow(ForbiddenError);
+    await expect(w.userService.reactivate(admin, "active", "R4", "Motif de test")).rejects.toThrow(ValidationError);
+    await expect(w.userService.reactivate(admin, "ghost", "R4", "Motif de test")).rejects.toThrow(NotFoundError);
+    await expect(w.userService.reactivate(actor("t2", ADMIN_PERMS, T2), "u1", "R4", "Motif de test")).rejects.toThrow(NotFoundError);
+    await expect(w.userService.reactivate(actor("n", ["user.read"]), "u1", "R4", "Motif de test")).rejects.toThrow(ForbiddenError);
     expect(w.sent).toHaveLength(0);
     expect(w.events).toHaveLength(0);
     expect(w.users.get("u1")!.deletedAt).not.toBeNull();
@@ -703,7 +703,7 @@ describe("QA-B8bis reactivation and lost rights (F-B8-06)", () => {
       w.assignments.push({ id: `a${i}`, tenantId: T1, roleId: r.id, userId: "u1", grantedBy: "x", grantedAt: new Date(), revokedAt: null });
       w.roles.set(r.id, { ...r, deletedAt: new Date() });
     }
-    const res = await w.userService.reactivate(admin, "u1", "R5");
+    const res = await w.userService.reactivate(admin, "u1", "R5", "Motif de test");
     expect(res.lostRoles).toHaveLength(60);
     expect(String(w.sent[0]!["message"]).length).toBeLessThanOrEqual(1500);
   });
@@ -712,7 +712,7 @@ describe("QA-B8bis reactivation and lost rights (F-B8-06)", () => {
   // whole call into a 500 although the user IS reactivated (a retry then answers "User is not suspended" and the lost rights are never shown).
   it("FIXED B-8 ter: a notification failure does not fail an already committed reactivation", async () => {
     const { w } = await suspendedWithLostRole({ notifier: "fail" });
-    const res = await w.userService.reactivate(admin, "u1", "R6");
+    const res = await w.userService.reactivate(admin, "u1", "R6", "Motif de test");
     expect(res.lostRoles).toHaveLength(1);
   });
 });

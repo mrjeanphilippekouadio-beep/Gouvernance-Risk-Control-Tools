@@ -12,6 +12,8 @@ export const FREQUENCY_LABELS: Record<IndicatorFrequency, string> = {
 };
 
 export const isForbidden = (err: unknown) => err instanceof ApiError && err.status === 403;
+/** A 403 "Missing permission": the global PermissionDeniedDialog explains it. Any other 403 is a business refusal to show. */
+export const isPermissionDenied = (err: unknown) => err instanceof ApiError && err.missingPermission !== null;
 export const isUnauthenticated = (err: unknown) => err instanceof ApiError && err.status === 401;
 
 export function describeError(err: unknown): string {

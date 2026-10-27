@@ -2,7 +2,6 @@ import { useState, type ReactNode } from "react";
 import { MessageBanner } from "@djamo/design-system";
 import "./ContextRail.css";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs";
 type RailTab = "comments" | "raci" | "evidence" | "occurrence";
 
 const LABELS: Record<RailTab, string> = { comments: "Commentaires", raci: "RACI", evidence: "Preuves", occurrence: "Occurrence" };
@@ -13,7 +12,8 @@ const ICONS: Record<RailTab, ReactNode> = {
   occurrence: <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="9"/><path d="M12 8v5l4 2"/></svg>,
 };
 
-interface ContextRailProps { view: View; }
+/** The App view id; only "risks" and "evaluation" change the tabs. */
+interface ContextRailProps { view: string; }
 
 export function ContextRail({ view }: ContextRailProps) {
   const objectView = view === "risks" || view === "evaluation";
