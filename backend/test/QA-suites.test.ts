@@ -157,11 +157,11 @@ describe("QA-suites PUT /config/governance-delays", () => {
     expect(w.events).toHaveLength(0);
   });
 
-  it("OBSERVATION: the dedicated permission alone (no config.read) is also 403, the service reads the row first", async () => {
+  it("the dedicated permission alone (no config.read) is enough, and the change is audited", async () => {
     const w = configWorld();
     const r = await put(w, user("u", [NEW_PERM]), { acceptanceMaxDays: 5, reason: "r" });
-    expect(r.status).toBe(403);
-    expect(w.events).toHaveLength(0);
+    expect(r.status).toBe(200);
+    expect(w.events).toHaveLength(1);
   });
 
   it("null clears ONE key only; an omitted key is untouched; the audit carries before / after / reason", async () => {

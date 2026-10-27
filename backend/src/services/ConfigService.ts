@@ -125,7 +125,12 @@ export class ConfigService {
 
   async get(actor: AuthenticatedUser): Promise<Config> {
     requirePermission(actor, "config.read");
-    return (await this.configs.getByTenant(actor.tenantId)) ?? defaultConfig(actor.tenantId, defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, actor.tenantId)));
+    return this.readConfig(actor.tenantId);
+  }
+
+  /** Tenant-scoped read without a permission check: only for a caller that already checked its own permission. */
+  private async readConfig(tenantId: string): Promise<Config> {
+    return (await this.configs.getByTenant(tenantId)) ?? defaultConfig(tenantId, defaultCommitteeThreshold(await resolveMaxScore(this.ratingScales, tenantId)));
   }
 
   /** PUT /config/evaluation-mode — DIV-06. Same permission/reason bar as the retired updateAppetiteMode; shares the same underlying row. */
@@ -298,7 +303,8 @@ export class ConfigService {
       patch[key] = v;
     }
     if (Object.keys(patch).length === 0) throw new ValidationError("No governance delay to change");
-    const before = await this.get(actor);
+    // The audit's "before" must not need config.read on top of config.governancedelays.set (revue Codex PR #195).
+    const before = await this.readConfig(actor.tenantId);
     return writeAudited(
       this.configs.auditsInTransaction,
       this.audit,

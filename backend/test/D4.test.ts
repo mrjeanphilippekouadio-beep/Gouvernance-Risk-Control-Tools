@@ -200,6 +200,8 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     expect([after.exceptionReviewDelayDays, after.acceptanceMaxDays, after.policyRequestExpiryDays]).toEqual([30, 90, 7]);
     expect(w.events.at(-1)).toMatchObject({ entityType: "Config", reason: "Paramétrage" });
     const cleared = await w.service.setGovernanceDelays(delaysAdmin, { acceptanceMaxDays: null }, "r", "q");
+    // The dedicated permission alone is enough: config.read is not required on top.
+    await expect(w.service.setGovernanceDelays(actor("u-only", ["config.governancedelays.set"]), { acceptanceMaxDays: 5 }, "r", "q")).resolves.toMatchObject({ acceptanceMaxDays: 5 });
     expect([cleared.acceptanceMaxDays, cleared.policyRequestExpiryDays]).toEqual([null, 7]);
   });
 
