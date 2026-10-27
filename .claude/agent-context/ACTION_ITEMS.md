@@ -408,9 +408,9 @@ pour l'usage.
 | @release-manager @orchestrator | **Réserves de production du lot « suites des arbitrages » (revue Codex PR #195)** — (1) F-SAD-01 / q182 : un administrateur peut assouplir seul un délai ; la mesure retenue doit être livrée avant la production. (2) q168 n'est PAS un contrôle opérationnel : le délai est enregistré, sans relance, retard ni escalade, tant que q180 n'est pas tranché et livré. Ne pas présenter q168 comme actif. | 2026-10-27 | Ouvert |
 | @dev-frontend | **Lot F5a (DECISION-088)** — page « Décisions de gouvernance » (q167) branchée sur D5 : liste des acceptations, confirmer / rejeter / révoquer. F5b (revue des exceptions, création d'une acceptation, panel) attend D6 (q172, catalogue des principes). Branche `feat/f5-decisions-gouvernance`, QA navigateur PASS (26/26), PR vers staging. Reste : UUID brut dans « Acceptée par » avec `audit.read` (QA-F5A-02, noms à résoudre côté serveur). | 2026-10-27 | **Fermé — PR #196 fusionnée dans staging le 2026-10-27 (DECISION-089) ; F5b attend D6** |
 | @dev-frontend | **Lot F7-S1 (DECISION-090)** — consultation des preuves d'une exécution de contrôle (liste, ouverture auditée, analyse xlsx EVD-2) dans « Exécutions & efficacité ». Frontend seul, routes existantes. Branche `feat/f7-s1-preuves`. | 2026-10-27 | **Fermé — PR #197 fusionnée dans staging le 2026-10-27 (DECISION-091)** |
-| @dev-backend @dev-frontend | **Lot « suites des arbitrages 2 » (DECISION-092), requis avant la production** — q178 (dernier Risk Manager parti : prévenir Audit et Comité, vacance maximale 60 jours modifiable, dépassement signalé dans le panel), q179/q173 (4 droits de décision réservés aux groupes fixes, assistant pas à pas = répartition entre groupes fixes), q180 (q168 : âge et retard affichés à l'ouverture des écrans, aucun passage automatique), q181 (renouvellement fait seul : revue préalable, sinon marqueur « renouvelé sans revue »), q182 (assouplir un délai : circuit q158). | 2026-10-27 | Ouvert |
+| @dev-backend @dev-frontend | **Lot « suites des arbitrages 2 » (DECISION-092), requis avant la production** — q178 (dernier Risk Manager parti : prévenir Audit et Comité, vacance maximale 60 jours modifiable, dépassement signalé dans le panel), q179/q173 (4 droits de décision réservés aux groupes fixes, assistant pas à pas = répartition entre groupes fixes), q180 (q168 : âge et retard affichés à l'ouverture des écrans, aucun passage automatique), q181 (renouvellement fait seul : revue préalable, sinon marqueur « renouvelé sans revue »), q182 (assouplir un délai : circuit q158). | 2026-10-27 | **En cours** (DECISION-095), branche `feat/r1-suites-arbitrages-2` |
 | HUMAN @security @privacy | **q183 (cockpit)** — ouvrir l'annuaire des comptes (id + nom) au droit `audit.mission.create`, pour composer l'équipe d'une mission (observation QA F7-S2). Sinon l'auteur d'une mission ne peut se choisir que lui-même. | 2026-10-27 | **Fermé — tranché le 2026-10-27 (DECISION-094) : annuaire ouvert à audit.mission.create** |
-| @dev-backend @security @privacy | **Lot q183 (DECISION-094)** — ajouter `audit.mission.create` aux droits qui ouvrent `GET /users/directory` (id + nom, comptes actifs) ; puis passages Sécurité et Privacy. | 2026-10-27 | Ouvert |
+| @dev-backend @security @privacy | **Lot q183 (DECISION-094)** — ajouter `audit.mission.create` aux droits qui ouvrent `GET /users/directory` (id + nom, comptes actifs) ; puis passages Sécurité et Privacy. | 2026-10-27 | **En cours** (DECISION-095), branche `feat/r1-suites-arbitrages-2` |
 | @devops @dev-backend @qa-engineer | **Aucun stockage de preuves local (QA F7-S1)** — `DOCUMENT_STORAGE_PROVIDER` n'accepte que `google_drive` : les preuves ne se testent en local qu'avec un préchargement de test en mémoire (`tests/integration/qa-f7s1-test-preload.mjs`). Le vrai `GoogleDriveStorage` reste non couvert hors staging. Option : fournisseur `local` interdit en production (lot EVD-S). | 2026-10-27 | Ouvert |
 | @dev-backend | **F-SAD-02 (LOW 2,2)** — expiration q174 recalculée à la lecture : corrigé dans le lot (colonne `expires_at` figée à la soumission, migration 075). | 2026-10-27 | **Fermé — corrigé** |
 | @privacy | **CMP-F4-08** — avis A15 sur `GET /users/directory` (finalité, plafond 500 sans signal, pas de journal de consultation). Sécurité le juge proportionné (SEC-F4 §2). | 2026-10-26 | Ouvert |
@@ -2365,4 +2365,14 @@ DECISION (PO) :
 RELATED: DECISION-093 ; PR #198 ; GET /users/directory (lot F4).
 OWNER: @orchestrator @dev-backend
 STATUS: DÉCIDÉ — fusion faite ; q183 à construire.
+
+DECISION-095
+DATE: 2026-10-27
+DECISION (PO) : feu vert du lot « suites des arbitrages 2 » (q178, q179, q181,
+  q182, DECISION-092) avec q183 (DECISION-094). q180 n'appelle aucun code
+  avant D6 (affichage de l'âge et du retard à l'ouverture des écrans).
+  Passages QA, Sécurité et Privacy (q183 : données personnelles) avant PR.
+RELATED: DECISION-092, 094.
+OWNER: @orchestrator @dev-backend @dev-db
+STATUS: DÉCIDÉ — en cours.
 ```
