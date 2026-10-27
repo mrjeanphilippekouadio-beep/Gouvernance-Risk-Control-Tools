@@ -32,12 +32,18 @@ export function ExecutionEvidencePanel({ token, executionId, label, onClose }: R
   useEffect(() => { void load(); }, [load]);
 
   async function open(e: Evidence) {
+    // Opened synchronously from the click so popup blockers allow it, then sent to the link once the server releases it.
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
     setBusyId(e.id); setError(null);
     try {
       const { url } = await evidenceApi.url(token, e.id);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (err) { setError(describeError(err)); }
-    finally { setBusyId(null); }
+      if (tab) tab.location.href = url;
+      else window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      tab?.close();
+      setError(describeError(err));
+    } finally { setBusyId(null); }
   }
 
   async function analyze(e: Evidence) {

@@ -6,19 +6,23 @@
 //     (la verification SHA-256 de l'analyse passe). drive() leve : aucune requete vers Google n'est possible.
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+// Paths resolved from this file (tests/integration/), so the reproduction runs from any checkout.
+const BACKEND = fileURLToPath(new URL("../../backend/", import.meta.url));
 
 if (process.env.NODE_ENV === "production" || process.env.APP_ENV === "production") {
   throw new Error("qa-f7s1-test-preload refuse de se charger en production");
 }
 
-const require = createRequire("/home/user/Gouvernance-Risk-Control-Tools/backend/");
+const require = createRequire(BACKEND);
 const pg = require("pg");
 const BasePool = pg.Pool;
 pg.Pool = class NoTlsPool extends BasePool {
   constructor(options = {}) { super({ ...options, ssl: false }); }
 };
 
-const { GoogleDriveStorage } = await import("/home/user/Gouvernance-Risk-Control-Tools/backend/src/infrastructure/storage/GoogleDriveStorage.ts");
+const { GoogleDriveStorage } = await import(pathToFileURL(`${BACKEND}src/infrastructure/storage/GoogleDriveStorage.ts`).href);
 const files = new Map();
 const deleted = new Set();
 const P = GoogleDriveStorage.prototype;

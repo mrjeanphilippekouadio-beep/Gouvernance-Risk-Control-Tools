@@ -48,7 +48,7 @@ import { mkdirSync } from "node:fs";
 
 const require = createRequire("/opt/node-tools/node_modules/");
 const { chromium } = require("playwright");
-const ExcelJS = createRequire("/home/user/Gouvernance-Risk-Control-Tools/backend/node_modules/")("exceljs");
+const ExcelJS = createRequire(new URL("../../backend/node_modules/", import.meta.url))("exceljs");
 
 const API = process.env.QA_API ?? "http://127.0.0.1:8099";
 const APP = process.env.QA_APP ?? "http://127.0.0.1:5199";
