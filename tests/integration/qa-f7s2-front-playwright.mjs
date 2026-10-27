@@ -272,6 +272,7 @@ try {
   await N.page.screenshot({ path: `${SHOTS}/12-mission-N-creee.png`, fullPage: true });
   check("4.2 N crée une mission avec lui-même comme responsable : 201, équipe = son nom", cn?.status === 201 && /Sans Annuaire QA \(responsable\)/.test(teamN), `status=${cn?.status}; equipe=${teamN}`);
   check("4.3 aucune exception JS et aucun console.error sur la page (hors écran d'arrivée)", N.jsErrors.length === 0 && N.consoleErrors.length === 0, `js=${N.jsErrors.length}; console=${JSON.stringify(N.consoleErrors).slice(0, 300)}`);
+  check("4.4 aucun appel à /users/directory pour le compte sans droit d'annuaire (relance QA-F7S2-01)", !calls.slice(callsBefore).some((c) => c.path.includes("/users/directory")), `appels=${JSON.stringify(calls.slice(callsBefore).filter((c) => c.path.includes("/users/directory")).map((c) => c.status))}`);
   console.log("INFO  appels 403 de N après la navigation : " + JSON.stringify(calls.slice(callsBefore).filter((c) => c.who === "n" && c.status === 403).map((c) => c.method + " " + c.path)));
   console.log(`INFO  erreurs console à l'écran d'arrivée (compte N) : ${landing}`);
   check("aucune exception JS sur tout le parcours (4 contextes)", allJs.length === 0, allJs.join(" | ").slice(0, 300));
