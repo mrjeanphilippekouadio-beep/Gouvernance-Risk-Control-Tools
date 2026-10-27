@@ -396,18 +396,19 @@ pour l'usage.
 | @dev-backend @dev-frontend | **Action 4 — lot F4** (profil, désignations, comptes — q164) : prérequis backend endpoint « mes permissions » (sert aussi F5/F8). Dispatch après feu vert PO. | 2026-10-24 | **Fermé — PR #194 fusionnée dans staging le 2026-10-27 (DECISION-085)** |
 | HUMAN @dev-frontend @dev-backend @compliance | **q176 (cockpit, CMP-F4-03)** — afficher « sans validation indépendante » sur l'écran Responsabilités après une auto-désignation q166 (aujourd'hui dans le journal d'audit seulement). Détail : `docs/compliance/CMP-F4.md`. | 2026-10-26 | **Fermé — tranché le 2026-10-27 (DECISION-084) : afficher la mention dès F4** |
 | HUMAN @dev-backend @dev-frontend @security | **q177 (cockpit, SEC-F4-04)** — motif obligatoire pour suspendre / réactiver un compte (audit `reason: null`, `UserService.suspend`/`reactivate`). Détail : `docs/security/SEC-F4.md`. | 2026-10-26 | **Fermé — tranché le 2026-10-27 (DECISION-084) : motif obligatoire** |
-| HUMAN @compliance @risk-manager | **q178 (cockpit)** — q160 rouverte par le PO (q171) : départ du dernier Risk Manager sans intérimaire, qui est prévenu et quel délai maximal de vacance. | 2026-10-27 | **Ouvert — HUMAN** |
-| HUMAN @security @dev-backend | **q179 (cockpit)** — précision de q173 : l'administrateur peut-il recevoir les 4 droits de décision de gouvernance (et donc être le « tiers » qui valide), ou la configuration pas à pas ne fait-elle que répartir ces droits entre les groupes fixes ? | 2026-10-27 | **Ouvert — HUMAN** |
+| HUMAN @compliance @risk-manager | **q178 (cockpit)** — q160 rouverte par le PO (q171) : départ du dernier Risk Manager sans intérimaire, qui est prévenu et quel délai maximal de vacance. | 2026-10-27 | **Fermé — tranché le 2026-10-27 (DECISION-092)** |
+| HUMAN @security @dev-backend | **q179 (cockpit)** — précision de q173 : l'administrateur peut-il recevoir les 4 droits de décision de gouvernance (et donc être le « tiers » qui valide), ou la configuration pas à pas ne fait-elle que répartir ces droits entre les groupes fixes ? | 2026-10-27 | **Fermé — tranché le 2026-10-27 (DECISION-092)** |
 | @devops @qa-engineer | **Couverture absente de SonarCloud (revue Codex PR #194, P2)** — aucun `sonar-project.properties` ni rapport lcov dans la CI : Sonar (analyse automatique) affiche 0 % de couverture sur toutes les PR, alors que ~2400 tests vitest tournent. Générer `coverage/lcov.info` (vitest --coverage) et passer à l'analyse CI pour l'importer. | 2026-10-27 | Ouvert |
 | @security @dev-backend | **SelfValidationGate non atomique (Codex PR #194, P2 ; SEC-F4-02)** — politique et « autre validateur » vérifiés avant la transaction d'écriture, pour tous les usages (exécutions, efficacité, évaluations, constats, q166). Chantier transverse : revérifier dans la transaction (`runAudited`) ou verrouiller. | 2026-10-27 | Ouvert |
 | @dev-backend | **QA-F4-FR-01 (MINOR)** — messages de refus serveur en anglais affichés tels quels dans l'interface française (ex. auto-suspension `UserService.ts:267`, dernier Risk Manager `RoleService.ts:641`). Rapport : `docs/qa/qa-f4-front-2026-10-27.md`. | 2026-10-27 | Ouvert |
 | @dev-backend @dev-db | **Lot « suites des arbitrages » (DECISION-086)** — q170, q174, q175, durée maximale q169, délai q168 (stockage), branche `feat/r1-suites-arbitrages`. Relances q168 et renouvellement q169 attendent q180 / q181. | 2026-10-27 | **Fermé — PR #195 fusionnée dans staging le 2026-10-27 (DECISION-087)** |
-| HUMAN @dev-backend @devops | **q180 (cockpit)** — q168 : déclenchement des relances (aucune tâche planifiée n'existe) et moment de la remontée au gérant. | 2026-10-27 | **Ouvert — HUMAN** |
-| HUMAN @compliance @risk-manager | **q181 (cockpit)** — q169 : qui revoit avant un renouvellement fait seul, et que faire si personne ne peut revoir. | 2026-10-27 | **Ouvert — HUMAN** |
-| HUMAN @security @dev-backend | **q182 (cockpit, F-SAD-01 LOW 2,7)** — allonger ou effacer un délai de gouvernance (durée maximale q169, expiration q174, délai de revue q168) se fait par une seule personne, sans marqueur ni notification : un admin peut effacer la durée maximale puis accepter seul un principe pour 10 ans. Choix : marqueur d'exception, ou circuit q158 (seconde personne). Détail : `docs/security/SEC-suites-arbitrages.md`. | 2026-10-27 | **Ouvert — HUMAN** |
+| HUMAN @dev-backend @devops | **q180 (cockpit)** — q168 : déclenchement des relances (aucune tâche planifiée n'existe) et moment de la remontée au gérant. | 2026-10-27 | **Fermé — tranché le 2026-10-27 (DECISION-092) : pas de passage automatique** |
+| HUMAN @compliance @risk-manager | **q181 (cockpit)** — q169 : qui revoit avant un renouvellement fait seul, et que faire si personne ne peut revoir. | 2026-10-27 | **Fermé — tranché le 2026-10-27 (DECISION-092)** |
+| HUMAN @security @dev-backend | **q182 (cockpit, F-SAD-01 LOW 2,7)** — allonger ou effacer un délai de gouvernance (durée maximale q169, expiration q174, délai de revue q168) se fait par une seule personne, sans marqueur ni notification : un admin peut effacer la durée maximale puis accepter seul un principe pour 10 ans. Choix : marqueur d'exception, ou circuit q158 (seconde personne). Détail : `docs/security/SEC-suites-arbitrages.md`. | 2026-10-27 | **Fermé — tranché le 2026-10-27 (DECISION-092) : circuit q158** |
 | @release-manager @orchestrator | **Réserves de production du lot « suites des arbitrages » (revue Codex PR #195)** — (1) F-SAD-01 / q182 : un administrateur peut assouplir seul un délai ; la mesure retenue doit être livrée avant la production. (2) q168 n'est PAS un contrôle opérationnel : le délai est enregistré, sans relance, retard ni escalade, tant que q180 n'est pas tranché et livré. Ne pas présenter q168 comme actif. | 2026-10-27 | Ouvert |
 | @dev-frontend | **Lot F5a (DECISION-088)** — page « Décisions de gouvernance » (q167) branchée sur D5 : liste des acceptations, confirmer / rejeter / révoquer. F5b (revue des exceptions, création d'une acceptation, panel) attend D6 (q172, catalogue des principes). Branche `feat/f5-decisions-gouvernance`, QA navigateur PASS (26/26), PR vers staging. Reste : UUID brut dans « Acceptée par » avec `audit.read` (QA-F5A-02, noms à résoudre côté serveur). | 2026-10-27 | **Fermé — PR #196 fusionnée dans staging le 2026-10-27 (DECISION-089) ; F5b attend D6** |
 | @dev-frontend | **Lot F7-S1 (DECISION-090)** — consultation des preuves d'une exécution de contrôle (liste, ouverture auditée, analyse xlsx EVD-2) dans « Exécutions & efficacité ». Frontend seul, routes existantes. Branche `feat/f7-s1-preuves`. | 2026-10-27 | **Fermé — PR #197 fusionnée dans staging le 2026-10-27 (DECISION-091)** |
+| @dev-backend @dev-frontend | **Lot « suites des arbitrages 2 » (DECISION-092), requis avant la production** — q178 (dernier Risk Manager parti : prévenir Audit et Comité, vacance maximale 60 jours modifiable, dépassement signalé dans le panel), q179/q173 (4 droits de décision réservés aux groupes fixes, assistant pas à pas = répartition entre groupes fixes), q180 (q168 : âge et retard affichés à l'ouverture des écrans, aucun passage automatique), q181 (renouvellement fait seul : revue préalable, sinon marqueur « renouvelé sans revue »), q182 (assouplir un délai : circuit q158). | 2026-10-27 | Ouvert |
 | @devops @dev-backend @qa-engineer | **Aucun stockage de preuves local (QA F7-S1)** — `DOCUMENT_STORAGE_PROVIDER` n'accepte que `google_drive` : les preuves ne se testent en local qu'avec un préchargement de test en mémoire (`tests/integration/qa-f7s1-test-preload.mjs`). Le vrai `GoogleDriveStorage` reste non couvert hors staging. Option : fournisseur `local` interdit en production (lot EVD-S). | 2026-10-27 | Ouvert |
 | @dev-backend | **F-SAD-02 (LOW 2,2)** — expiration q174 recalculée à la lecture : corrigé dans le lot (colonne `expires_at` figée à la soumission, migration 075). | 2026-10-27 | **Fermé — corrigé** |
 | @privacy | **CMP-F4-08** — avis A15 sur `GET /users/directory` (finalité, plafond 500 sans signal, pas de journal de consultation). Sécurité le juge proportionné (SEC-F4 §2). | 2026-10-26 | Ouvert |
@@ -2321,4 +2322,33 @@ DECISION (PO) : fusion de la PR #197 (F7-S1, consultation des preuves) dans
 RELATED: DECISION-090 ; PR #197.
 OWNER: @orchestrator
 STATUS: DÉCIDÉ — fusionné.
+
+DECISION-092
+DATE: 2026-10-27 (cockpit, 05:51–07:53 UTC ; journalisé à 16:15)
+DECISION (PO) :
+  - q178 (recommandée, rouvre q160) : départ du dernier Risk Manager sans
+    intérimaire : prévenir l'Audit et le Comité ; vacance maximale de 60 jours,
+    modifiable ; dépassement signalé dans le panel.
+  - q179 (recommandée, précise q173) : les 4 droits de décision de gouvernance
+    restent aux groupes fixes ; l'assistant pas à pas sert seulement à choisir
+    quel groupe fixe porte chaque droit.
+  - q180 (NON recommandée) : pas de passage automatique pour q168 ; l'âge et le
+    retard des exceptions s'affichent seulement à l'ouverture des écrans.
+  - q181 (recommandée) : un renouvellement fait seul exige que l'acceptation
+    précédente ait été revue (Risk Manager, Comité ou Audit) ; si personne ne
+    peut la revoir, il passe avec le marqueur « renouvelé sans revue ».
+  - q182 (recommandée) : allonger ou effacer un délai de gouvernance suit le
+    circuit q158 (seconde personne si elle existe, sinon administrateur seul
+    avec le marqueur « sans validation indépendante »).
+RELATED: q160, q168, q169, q173, q158, F-SAD-01, DECISION-083.
+OWNER: @dev-backend @dev-frontend
+STATUS: DÉCIDÉ — à construire (lot « suites des arbitrages 2 »), avant production.
+
+DECISION-093
+DATE: 2026-10-27
+DECISION (PO) : feu vert du lot F7-S2 (missions d'audit : création,
+  démarrage, clôture), aucune décision métier préalable (plan F7).
+RELATED: docs/ux/plan-livraison-vues-front-v1.md (S2).
+OWNER: @orchestrator @dev-frontend
+STATUS: DÉCIDÉ — en cours.
 ```
