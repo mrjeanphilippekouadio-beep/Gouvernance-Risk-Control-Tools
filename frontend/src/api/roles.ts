@@ -21,7 +21,19 @@ export interface Grantors {
   grantors: { displayName: string }[];
 }
 
+export type FixedGroup = "RISK_MANAGER" | "RISK_COMMITTEE" | "AUDIT";
+/** q179 (DECISION-095): the fixed groups carrying one governance decision right. */
+export interface GovernanceRight {
+  permission: string;
+  groups: FixedGroup[];
+}
+
 export const rolesApi = {
+  governanceRights: (token: string) => apiRequest<GovernanceRight[]>("/api/v1/roles/governance-rights", { token }),
+  /** The server refuses contradictions (Audit never confirms nor approves, q157); an Audit change may wait for validation. */
+  setGovernanceRight: (token: string, permission: string, groups: FixedGroup[], reason: string) =>
+    apiRequest<GovernanceRight & { auditChangePending: boolean }>("/api/v1/roles/governance-rights", { method: "PUT", body: { permission, groups, reason }, token }),
+
   grantors: (token: string, permission: string) =>
     apiRequest<Grantors>(`/api/v1/roles/grantors?permission=${encodeURIComponent(permission)}`, { token }),
 
