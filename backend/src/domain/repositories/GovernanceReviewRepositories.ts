@@ -43,6 +43,12 @@ export interface AcceptanceCreated {
 
 export interface GovernancePrincipleAcceptanceRepository {
   list(tenantId: string, limit: number): Promise<GovernancePrincipleAcceptance[]>;
+  /**
+   * q181 (DECISION-095): the latest acceptance of this principle made ALONE, and whether its marked audit row has a REVIEWED
+   * review (D5), and whether it is still open (PENDING / ACTIVE, not expired: `create` then answers a conflict, it is no
+   * renewal). Null when there is none. Optional: without it no renewal check applies (test fakes).
+   */
+  latestAloneReview?(tenantId: string, principleId: string): Promise<{ acceptanceId: string; reviewed: boolean; open: boolean } | null>;
   getById(tenantId: string, id: string): Promise<GovernancePrincipleAcceptance | null>;
   /**
    * One transaction under a tenant+principle lock: an open (PENDING or ACTIVE) acceptance of this principle that has

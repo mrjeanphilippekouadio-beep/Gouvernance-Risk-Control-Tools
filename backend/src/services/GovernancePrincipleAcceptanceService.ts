@@ -2,6 +2,7 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { GovernancePrincipleAcceptanceRepository } from "../domain/repositories/GovernanceReviewRepositories.js";
 import {
   PRINCIPLE_ACCEPTANCE_ALONE_EXCEPTION,
+  PRINCIPLE_ACCEPTANCE_RENEWED_WITHOUT_REVIEW_EXCEPTION,
   type GovernancePrincipleAcceptance,
 } from "../domain/entities/GovernanceReviews.js";
 import { isAcceptableReason, type EligibleValidatorQuery } from "../domain/governance/selfValidation.js";
@@ -32,6 +33,8 @@ export type AcceptanceView = Omit<GovernancePrincipleAcceptance, "acceptedBy" | 
  *  - Confirm / reject: `.acceptance.confirm`, never the acceptor (service + CHECK). Early end: `.acceptance.revoke` (terminal
  *    transition, its own gate); an acceptance whose date passed is closed REVOKED when the principle is accepted again.
  *  - Acceptor / confirmer / ender always come from the authenticated actor.
+ *  - Renewal (q181, DECISION-095): an acceptance made ALONE after a previous one made ALONE needs that one reviewed first,
+ *    unless nobody else can review (then marked `principle.acceptance.renewedWithoutReview`).
  *  - Maximum duration (q169, DECISION-083): for an acceptance made ALONE, the tenant's `acceptanceMaxDays` when
  *    configured; none otherwise (I-R6: never invented). A confirmed one only needs a date in the future.
  */
@@ -84,6 +87,21 @@ export class GovernancePrincipleAcceptanceService {
     if (maxDays !== null && input.expiresAt.getTime() > Date.now() + maxDays * 86_400_000) {
       throw new ValidationError(`An acceptance made alone can last at most ${maxDays} days (tenant setting)`);
     }
+    // q181 (DECISION-095): renewing ALONE an acceptance made ALONE needs that previous one reviewed (D5) first; with nobody
+    // but the actor able to review, it passes, marked « renouvelé sans revue » (notified like every marked action).
+    let renewedWithoutReview = false;
+    if (alone) {
+      const previous = await this.acceptances.latestAloneReview?.(actor.tenantId, input.principleId);
+      // A still-open previous acceptance is no renewal: `create` answers the usual conflict.
+      if (previous && !previous.open && !previous.reviewed) {
+        if (await this.eligible.existsOther(actor.tenantId, actor.userId, "governanceexception.review")) {
+          throw new ValidationError(
+            "The previous acceptance of this principle, made alone, has not been reviewed: have it reviewed first (faites d'abord revoir l'acceptation précédente)",
+          );
+        }
+        renewedWithoutReview = true;
+      }
+    }
 
     const { acceptance } = await this.acceptances.create(
       {
@@ -121,7 +139,9 @@ export class GovernancePrincipleAcceptanceService {
           newValue: { ...created, thirdPartyAvailable: thirdPartyExists },
           reason,
           requestId,
-          governanceException: alone ? PRINCIPLE_ACCEPTANCE_ALONE_EXCEPTION : null,
+          governanceException: renewedWithoutReview
+            ? PRINCIPLE_ACCEPTANCE_RENEWED_WITHOUT_REVIEW_EXCEPTION
+            : alone ? PRINCIPLE_ACCEPTANCE_ALONE_EXCEPTION : null,
         },
       ],
     );
