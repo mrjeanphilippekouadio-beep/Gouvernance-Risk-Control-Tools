@@ -25,6 +25,7 @@ import { GovernanceSettingsPage } from "./features/governance/GovernanceSettings
 import { EvaluationModeRequestsPage } from "./features/governance/EvaluationModeRequestsPage";
 import { OrganizationProfilePage } from "./features/governance/OrganizationProfilePage";
 import { DesignationsPage } from "./features/governance/DesignationsPage";
+import { GovernanceDecisionsPage } from "./features/governance/GovernanceDecisionsPage";
 import { UsersAdmin } from "./features/admin/UsersAdmin";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
@@ -37,7 +38,7 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions";
 type NavItem = { id: View; label: string; icon: string; available?: boolean } | { separator: string };
 const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
@@ -81,6 +82,7 @@ const NAV_GROUPS: NavGroup[] = [
     { separator: "Gouvernance" },
     { id: "orgprofile", label: "Profil d'organisation", icon: "panel", available: true },
     { id: "designations", label: "Désignations", icon: "user", available: true },
+    { id: "govdecisions", label: "Décisions de gouvernance", icon: "check", available: true },
     { id: "govsettings", label: "Réglages de gouvernance", icon: "settings", available: true },
     { id: "modereqs", label: "Demandes de mode d'évaluation", icon: "check", available: true },
     { separator: "Plateforme" },
@@ -117,6 +119,7 @@ const PAGE_TITLES: Record<View, string> = {
   orgprofile: "Profil d'organisation",
   designations: "Désignations",
   users: "Comptes",
+  govdecisions: "Décisions de gouvernance",
 };
 
 function App() {
@@ -241,6 +244,7 @@ function App() {
             {view === "orgprofile" && <OrganizationProfilePage token={token} />}
             {view === "designations" && <DesignationsPage token={token} />}
             {view === "users" && <UsersAdmin token={token} />}
+            {view === "govdecisions" && <GovernanceDecisionsPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} />}
             {view === "risks" && <RisksPage token={token} shortcuts={{ onOpenFrameworks: () => go("frameworks"), onOpenAppetite: openAppetite, onOpenScales: () => go("scales"), onOpenProcesses: () => go("processes") }} />}
             {view === "roles" && <RolesAdmin token={token} />}

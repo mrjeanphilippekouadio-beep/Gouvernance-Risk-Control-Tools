@@ -137,3 +137,8 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - Radios : champs natifs dans `.core-fieldset` (CorePages.css), pas d'atome créé.
 - `ContextRail` prend `view: string` : il dupliquait l'union `View` d'App.tsx (casse à chaque nouvelle vue).
 - Double confirmation q166 : `useGovernanceConfirm` réutilisé tel quel sur `PUT /processes/:id/responsibilities`.
+
+## 2026-10-27 — Lot F5a (DECISION-088)
+- Page `features/governance/GovernanceDecisionsPage.tsx` (q167) sur les routes D5 des acceptations : liste, confirmer, rejeter, retirer (motif). Noms masqués par le serveur sans `audit.read` (`acceptedBy` null) ; `mine` → « Vous ».
+- Pas de création d'acceptation ni de revue d'exceptions avant D6 (catalogue des principes, liste des exceptions, q172) : bannière d'information, aucune donnée inventée.
+- Refus : `isPermissionDenied` (403 « Missing permission ») laissé à la fenêtre globale, tout autre refus affiché dans la page ou le dialogue.
