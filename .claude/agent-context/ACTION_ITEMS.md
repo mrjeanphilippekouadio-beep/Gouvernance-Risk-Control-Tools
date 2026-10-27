@@ -416,6 +416,9 @@ pour l'usage.
 | @privacy | **CMP-F4-08** — avis A15 sur `GET /users/directory` (finalité, plafond 500 sans signal, pas de journal de consultation). Sécurité le juge proportionné (SEC-F4 §2). | 2026-10-26 | Ouvert |
 | @security | **SEC-F4-02 (LOW, rattaché à SEC-PNL-04)** — un admin peut fabriquer « personne d'autre ne peut désigner » (suspension / révocation des autres détenteurs) pour ouvrir q166 ; abus visible (audit + notification). | 2026-10-26 | Ouvert |
 | @dev-backend @security | **Action 5 — I-RT3-01** : notifications D5 envoyées après `res.end` perdues à l'arrêt Cloud Run → attendre leur envoi au shutdown (petit lot backend + revue A10), avant prod. | 2026-10-24 | **Ouvert — A06** |
+| HUMAN @dev-backend | **q184 (cockpit)** — demande de délais mêlant allongements et raccourcissements : recommandation, toute la demande passe en attente de validation (pas d'application partielle des raccourcissements). Implémenté ainsi en attendant (fail-closed). | 2026-10-27 | **Ouvert — HUMAN : q184** |
+| HUMAN @dev-backend @security | **q185 (cockpit)** — droits de décision q179 : chaque droit garde au moins un groupe fixe ; Audit limité à la revue. Recommandation appliquée en attendant. | 2026-10-27 | **Ouvert — HUMAN : q185** |
+| HUMAN @dev-db @security | **q186 (cockpit)** — rôles ordinaires détenant déjà un droit de décision : les nettoyer par migration (recommandé) ou laisser l'admin les retirer. Aucune migration écrite avant réponse. | 2026-10-27 | **Ouvert — HUMAN : q186** |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
