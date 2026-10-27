@@ -315,3 +315,14 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 
 - F7-S1 : 23/23 PASS (script + 2 vérifications : 2.3 onglet « Ouvrir » aboutit sur l'URL de l'API ; 2.4 compte sans `evidence.read` sans « Voir »). F5a : 26/26 PASS, script inchangé. Le refactor `qa-helpers.mjs` n'a rien cassé ; QA-F7S1-01 et QA-F5A-01 sont corrigés dans l'application. Rapports : section 6 de chaque `docs/qa/qa-f7s1-front-…` / `qa-f5a-front-…`.
 - Pratiques : (1) le cluster `/var/tmp/qaf5a` survit à la session mais est arrêté : `pg_ctl … -o "-p 55434 -c listen_addresses=127.0.0.1"` via `setpriv`, le modèle `grc_qa_f5a_tpl` contient déjà les 3 comptes F5a (le seed F7-S1 = 6 users + 2 contrôles à insérer) ; (2) `node -e` : `process.argv.slice(1)`, pas 2 ; hash local = `scrypt$<sel>$<hex scryptSync(pwd,sel,64)>` ; (3) pas de préchargement F5a dans le dépôt : réutiliser celui de F7-S1 ; (4) jamais `pgrep -f` + kill avec un motif présent dans ma propre commande (exit 144) : `ps -eo pid,args | grep` puis kill par PID ; (5) un onglet ouvert par `window.open("")` puis redirigé : attendre `popup.waitForURL`.
+
+## 2026-10-27 — QA-F7S2 navigateur (page « Audit > Missions », base 562dd14) — PASS_WITH_RESERVES
+
+- `tests/integration/qa-f7s2-front-playwright.mjs` : 29 vérifications, 28 PASS, 1 FAIL ; rapport `docs/qa/qa-f7s2-front-2026-10-27.md`. Méthode F5a/F7-S1 (PG16 port 55434 `/var/tmp/qaf5a`, base copiée de `grc_qa_f5a_tpl` + `DELETE FROM users` + 4 comptes, préchargement `qa-f7s1-test-preload.mjs`). Pas un avis Security/Privacy/Compliance.
+- QA-F7S2-01 MINOR : `AuditMissionsPage.tsx:49-52` appelle toujours `/users/directory` (403 pour un compte sans droit d'annuaire, 2 `console.error`) avant de se replier sur `me`. Observation : « Compte non listé » pour les autres comptes, équipe limitée à soi sans annuaire.
+- Pratiques : (1) le libellé du groupe de menu contient le compteur (« Audit3 ») : sélecteur `/^\s*Audit\s*\d*\s*$/` ; (2) DatePicker design-system : cliquer l'input readonly du `.gs-datepicker` puis `.gs-datepicker-day:not(.gs-datepicker-day-outside)` avec le texte du jour ; (3) `pg_ctl -l` : le fichier de log ne doit pas être dans un sous-dossier absent (`/var/tmp/qaf5a/pg.log`).
+
+## 2026-10-27 — Relance navigateur F7-S2 après correctif QA-F7S2-01 (tête 1621305) — PASS
+
+- 30/30 PASS (29 + 4.4 « aucun appel à /users/directory » pour le compte sans annuaire) ; 4.3 console propre. QA-F7S2-01 corrigé. Section 6 de `docs/qa/qa-f7s2-front-2026-10-27.md`.
+- Pratiques : (1) le cluster `/var/tmp/qaf5a` survit mais est arrêté : `pg_ctl … start` via `setpriv`, la base `grc_qa_f7s2` (4 comptes) est réutilisable après `truncate audit_missions cascade` ; (2) backend : `LOCAL_AUTH_USERS_JSON` = hash `scrypt$<sel>$<hex>` du mot de passe quelconque (« whatever »), `LOCAL_AUTH_TOKEN_SECRET` >= 32 car., `DATABASE_URL`, `CORS_ALLOWED_ORIGINS`, tsx `--import` préchargement ; (3) arrêt par PID (`ps -eo pid,args | grep`), jamais `pkill -f`.

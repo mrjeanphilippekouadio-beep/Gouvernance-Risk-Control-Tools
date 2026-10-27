@@ -13,6 +13,7 @@ import { ControlMonitoringPage } from "./features/controls/ControlMonitoringPage
 import { AuditFindingsPage } from "./features/audit/AuditFindingsPage";
 import { ActionPlansPage } from "./features/actions/ActionPlansPage";
 import { AuditLogPage } from "./features/audit/AuditLogPage";
+import { AuditMissionsPage } from "./features/audit/AuditMissionsPage";
 import { AnomaliesPage } from "./features/anomalies/AnomaliesPage";
 import { NotificationCenter } from "./features/notifications/NotificationCenter";
 import { KriPage } from "./features/indicators/KriPage";
@@ -38,7 +39,7 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "auditmissions";
 type NavItem = { id: View; label: string; icon: string; available?: boolean } | { separator: string };
 const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
@@ -66,7 +67,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "placeholder", label: "Cycles de revue", icon: "clock" },
   ] },
   { label: "Audit", items: [
-    { id: "placeholder", label: "Missions", icon: "search" },
+    { id: "auditmissions", label: "Missions", icon: "search", available: true },
     { id: "findings", label: "Constats & recommandations", icon: "message", available: true },
     { id: "auditlog", label: "Journal d'audit", icon: "search", available: true },
   ] },
@@ -120,6 +121,7 @@ const PAGE_TITLES: Record<View, string> = {
   designations: "Désignations",
   users: "Comptes",
   govdecisions: "Décisions de gouvernance",
+  auditmissions: "Missions d'audit",
 };
 
 function App() {
@@ -245,6 +247,7 @@ function App() {
             {view === "designations" && <DesignationsPage token={token} />}
             {view === "users" && <UsersAdmin token={token} />}
             {view === "govdecisions" && <GovernanceDecisionsPage token={token} />}
+            {view === "auditmissions" && <AuditMissionsPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} />}
             {view === "risks" && <RisksPage token={token} shortcuts={{ onOpenFrameworks: () => go("frameworks"), onOpenAppetite: openAppetite, onOpenScales: () => go("scales"), onOpenProcesses: () => go("processes") }} />}
             {view === "roles" && <RolesAdmin token={token} />}
