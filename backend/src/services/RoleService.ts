@@ -25,6 +25,10 @@ import {
   isCommitteeValidationPermission,
   isRiskManagerMember,
   rolegroupAuditPermissionAllowedOn,
+  governanceRightAllowedOn,
+  GOVERNANCE_DECISION_RIGHTS,
+  isGovernanceDecisionRight,
+  type GovernanceDecisionRight,
 } from "../domain/fixedGroupPermissions.js";
 import { bootstrapNoticeMessage } from "../domain/frameworkApproval.js";
 import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
@@ -56,6 +60,15 @@ function assertRolePermissionRules(group: SystemGroup | null, permissions: Permi
   const misplaced = permissions.filter((p) => !rolegroupAuditPermissionAllowedOn(p, group));
   if (misplaced.length > 0) {
     throw new ValidationError(`Permission(s) not grantable to this role: ${misplaced.join(", ")}`);
+  }
+  // q179 (DECISION-095): the governance decision rights live on fixed groups only (Audit: the review alone, q157).
+  const decision = permissions.filter((p) => !governanceRightAllowedOn(p, group));
+  if (decision.length > 0) {
+    throw new ValidationError(
+      group === null
+        ? `Governance decision right(s) are carried by fixed groups only, never by an ordinary role: ${decision.join(", ")}`
+        : `The Audit group never confirms nor approves (q157): ${decision.join(", ")}`,
+    );
   }
   if (group === "RISK_MANAGER") {
     const committee = permissions.filter(isCommitteeValidationPermission);
@@ -723,6 +736,65 @@ export class RoleService {
    * F-B8b-01: read-only whitelist. F-B8b-02: mandatory reason, members notified.
    * F-B8b-04: a single PENDING change per group.
    */
+  /** q179 (DECISION-095): which fixed group(s) carry each of the four governance decision rights. */
+  async governanceRights(actor: AuthenticatedUser): Promise<Array<{ permission: GovernanceDecisionRight; groups: SystemGroup[] }>> {
+    requirePermission(actor, "role.read");
+    const groups = (await this.roles.list(actor.tenantId)).filter((r) => r.systemGroup);
+    return GOVERNANCE_DECISION_RIGHTS.map((permission) => ({
+      permission,
+      groups: groups.filter((r) => r.permissions.includes(permission)).map((r) => r.systemGroup!),
+    }));
+  }
+
+  /**
+   * q179 (DECISION-095): an administrator chooses the fixed group(s) carrying one governance decision right. Mandatory
+   * reason; each group actually changed goes through its usual path (and audit): `update` for Risk Manager / Committee,
+   * the Audit circuit (possibly PENDING) for the Audit. Refused: an ordinary role, the Audit for anything but the review
+   * (q157), no group at all, a group the administrator belongs to.
+   */
+  async setGovernanceRightGroups(
+    actor: AuthenticatedUser,
+    permission: string,
+    groups: SystemGroup[],
+    reason: string,
+    requestId: string,
+  ): Promise<{ permission: GovernanceDecisionRight; groups: SystemGroup[]; auditChangePending: boolean }> {
+    requirePermission(actor, "role.update");
+    if (!isGovernanceDecisionRight(permission)) throw new ValidationError(`Not a governance decision right: ${permission}`);
+    const why = reason?.trim() ?? "";
+    if (!why) throw new ValidationError("A reason is required to change which groups carry a governance decision right");
+    if (why.length > MAX_GROUP_REASON_LENGTH) throw new ValidationError(`reason must be at most ${MAX_GROUP_REASON_LENGTH} characters`);
+    const wanted = [...new Set(groups)];
+    if (wanted.length === 0) throw new ValidationError("At least one fixed group must carry a governance decision right");
+    const refused = wanted.filter((g) => !governanceRightAllowedOn(permission, g));
+    if (refused.length > 0) throw new ValidationError(`The Audit group never confirms nor approves (q157): ${permission}`);
+
+    const fixed = (await this.roles.list(actor.tenantId)).filter((r) => r.systemGroup);
+    const changes = fixed.filter((r) => r.permissions.includes(permission) !== wanted.includes(r.systemGroup!));
+    const missing = wanted.filter((g) => !fixed.some((r) => r.systemGroup === g));
+    if (missing.length > 0) throw new NotFoundError("Role", missing.join(", "));
+    // Checked for every group BEFORE the first write, so that a refusal never leaves the right half moved.
+    const held = await this.roles.listForUser(actor.tenantId, actor.userId);
+    if (changes.some((r) => held.some((h) => h.id === r.id))) {
+      throw new ForbiddenError("You cannot change the permissions of a group you belong to — ask another admin");
+    }
+    if (changes.some((r) => r.systemGroup === "AUDIT")) requirePermission(actor, "rolegroup.audit.update");
+
+    let auditChangePending = false;
+    for (const role of changes) {
+      const permissions = role.permissions.includes(permission)
+        ? role.permissions.filter((p) => p !== permission)
+        : [...role.permissions, permission];
+      if (role.systemGroup === "AUDIT") {
+        auditChangePending = (await this.changeAuditGroupPermissions(actor, permissions, requestId, why)).status === "PENDING";
+      } else {
+        await this.update(actor, role.id, { permissions }, requestId, why);
+      }
+    }
+    const now = (await this.governanceRights(actor)).find((r) => r.permission === permission)!;
+    return { ...now, auditChangePending };
+  }
+
   async changeAuditGroupPermissions(
     actor: AuthenticatedUser,
     permissions: Permission[],
