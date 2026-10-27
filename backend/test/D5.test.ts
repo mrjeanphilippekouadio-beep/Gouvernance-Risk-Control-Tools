@@ -92,12 +92,14 @@ function acceptanceService(thirdParty: boolean, maxDays: number | null = null) {
 const future = () => new Date(Date.now() + 86_400_000);
 
 describe("GovernancePrincipleAcceptanceService", () => {
-  it("q169: the tenant's maximum duration applies when configured, and only then", async () => {
+  it("q169: the tenant's maximum duration applies to an acceptance made alone, when configured, and only then", async () => {
     const accepter = user("rm", ["governanceprinciple.accept"]);
     const in40 = new Date(Date.now() + 40 * 86_400_000);
     await expect(acceptanceService(false, 30).service.accept(accepter, { principleId: "PG-SEP-01", reason: "r", expiresAt: in40 }, "q")).rejects.toThrow(/at most 30 days/);
     await expect(acceptanceService(false, 60).service.accept(accepter, { principleId: "PG-SEP-01", reason: "r", expiresAt: in40 }, "q")).resolves.toMatchObject({ status: "ACTIVE" });
     await expect(acceptanceService(false).service.accept(accepter, { principleId: "PG-SEP-01", reason: "r", expiresAt: in40 }, "q")).resolves.toMatchObject({ status: "ACTIVE" });
+    // Only an acceptance made alone is capped: one awaiting a third party's confirmation is not.
+    await expect(acceptanceService(true, 30).service.accept(accepter, { principleId: "PG-SEP-01", reason: "r", expiresAt: in40 }, "q")).resolves.toMatchObject({ status: "PENDING" });
   });
 
   it("applies at once with the 'alone' marker when no one else can confirm", async () => {

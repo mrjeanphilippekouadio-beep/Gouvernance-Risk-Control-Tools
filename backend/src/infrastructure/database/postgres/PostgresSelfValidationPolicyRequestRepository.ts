@@ -73,6 +73,8 @@ async function decideRequest(
     `UPDATE self_validation_policy_requests
      SET status = $3, decided_by = $4, decided_at = now(), decision_reason = $5
      WHERE tenant_id = $1 AND id = $2 AND status = 'PENDING'
+       -- q174: an approval claim never applies an expired request (rechecked here, not only before the transaction).
+       AND ($3 <> 'APPLIED' OR expires_at IS NULL OR expires_at > now())
      RETURNING *`,
     [tenantId, id, status, decidedBy, decisionReason],
   );

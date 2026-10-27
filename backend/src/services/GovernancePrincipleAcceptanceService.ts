@@ -32,8 +32,8 @@ export type AcceptanceView = Omit<GovernancePrincipleAcceptance, "acceptedBy" | 
  *  - Confirm / reject: `.acceptance.confirm`, never the acceptor (service + CHECK). Early end: `.acceptance.revoke` (terminal
  *    transition, its own gate); an acceptance whose date passed is closed REVOKED when the principle is accepted again.
  *  - Acceptor / confirmer / ender always come from the authenticated actor.
- *  - Maximum duration (q169, DECISION-083): the tenant's `acceptanceMaxDays` when configured; none otherwise (I-R6:
- *    never invented), and only "in the future" is required.
+ *  - Maximum duration (q169, DECISION-083): for an acceptance made ALONE, the tenant's `acceptanceMaxDays` when
+ *    configured; none otherwise (I-R6: never invented). A confirmed one only needs a date in the future.
  */
 export class GovernancePrincipleAcceptanceService {
   constructor(
@@ -75,14 +75,15 @@ export class GovernancePrincipleAcceptanceService {
     if (!(input.expiresAt instanceof Date) || Number.isNaN(input.expiresAt.getTime()) || input.expiresAt.getTime() <= Date.now()) {
       throw new ValidationError("expiresAt must be a date in the future");
     }
-    const maxDays = (await this.configs?.getByTenant(actor.tenantId))?.acceptanceMaxDays ?? null;
-    if (maxDays !== null && input.expiresAt.getTime() > Date.now() + maxDays * 86_400_000) {
-      throw new ValidationError(`An acceptance can last at most ${maxDays} days (tenant setting)`);
-    }
 
     const thirdPartyExists = await this.eligible.existsOther(actor.tenantId, actor.userId, "governanceprinciple.acceptance.confirm");
     const snapshot = (await this.snapshotOffenders?.(actor.tenantId, input.principleId)) ?? [];
     const alone = !thirdPartyExists;
+    // q169 (DECISION-083): the maximum duration frames an acceptance made ALONE; a confirmed one is checked by a third party.
+    const maxDays = alone ? ((await this.configs?.getByTenant(actor.tenantId))?.acceptanceMaxDays ?? null) : null;
+    if (maxDays !== null && input.expiresAt.getTime() > Date.now() + maxDays * 86_400_000) {
+      throw new ValidationError(`An acceptance made alone can last at most ${maxDays} days (tenant setting)`);
+    }
 
     const { acceptance } = await this.acceptances.create(
       {

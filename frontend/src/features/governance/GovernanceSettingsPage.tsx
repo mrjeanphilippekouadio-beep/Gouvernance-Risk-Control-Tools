@@ -22,8 +22,8 @@ const TITLES: Record<Setting, string> = {
   delays: "Délais de gouvernance",
 };
 const DELAYS: { key: keyof GovernanceDelays; label: string; help: string }[] = [
-  { key: "exceptionReviewDelayDays", label: "Délai de revue d'une action sans validation indépendante", help: "q168 : au-delà, l'action est en retard de revue." },
-  { key: "acceptanceMaxDays", label: "Durée maximale de l'acceptation d'un principe", help: "q169 : une acceptation ne peut pas durer plus longtemps." },
+  { key: "exceptionReviewDelayDays", label: "Délai de revue d'une action sans validation indépendante", help: "q168 : enregistré ; les relances et le signal de retard attendent votre décision q180." },
+  { key: "acceptanceMaxDays", label: "Durée maximale d'une acceptation de principe faite seul", help: "q169 : une acceptation faite sans tiers pour la confirmer ne peut pas durer plus longtemps." },
   { key: "policyRequestExpiryDays", label: "Expiration d'une demande d'assouplissement", help: "q174 : passé ce délai, la demande ne peut plus être approuvée." },
 ];
 function dayLabel(v: number | null | undefined): string {
