@@ -30,6 +30,8 @@ export function ControlMonitoringPage({ token }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingValidation, setPendingValidation] = useState<PendingValidation | null>(null);
   const [evidenceFor, setEvidenceFor] = useState<ControlExecution | null>(null);
+  // QA-F7S1-01: the panel belongs to one execution of the selected control; changing control closes it.
+  useEffect(() => { setEvidenceFor(null); }, [controlId]);
   const [validationComment, setValidationComment] = useState("");
   const [status, setStatus] = useState<ExecutionStatus>("DONE");
   const [plannedDate, setPlannedDate] = useState<string | null>(null);
