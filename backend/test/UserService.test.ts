@@ -414,6 +414,8 @@ describe("UserService", () => {
     expect(Object.keys(entries[0]!).sort()).toEqual(["displayName", "id"]);
 
     await expect(userService.directory({ ...admin, roles: ["risk.read"] })).rejects.toThrow(ForbiddenError);
+    // q183: whoever may create an audit mission may compose its team.
+    await expect(userService.directory({ ...admin, userId: "auditor", roles: ["audit.mission.create"] })).resolves.toContainEqual({ id: kept.id, displayName: "Kept" });
   });
 
   it("scopes list() and get() to the actor's tenant", async () => {

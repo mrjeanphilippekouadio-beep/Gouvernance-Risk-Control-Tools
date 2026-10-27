@@ -43,7 +43,13 @@ export interface CreateUserWithRoleInput {
 }
 
 /** The rights that name an account to a role: each one opens the account picker (directory). */
-const DIRECTORY_PERMISSIONS: Permission[] = ["user.read", "process.responsibility.assign", "designation.manage"];
+const DIRECTORY_PERMISSIONS: Permission[] = [
+  "user.read",
+  "process.responsibility.assign",
+  "designation.manage",
+  // q183 (DECISION-094): composing the team of an audit mission.
+  "audit.mission.create",
+];
 const MAX_DIRECTORY = 500;
 const MAX_ACCOUNT_REASON_LENGTH = 500;
 
