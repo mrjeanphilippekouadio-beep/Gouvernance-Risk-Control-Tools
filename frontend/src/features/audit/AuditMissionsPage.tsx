@@ -20,7 +20,7 @@ const EMPTY = { reference: "", title: "", scope: "", leadAuditorId: "", auditorI
  * (PLANIFIEE → EN_COURS → CLOTUREE), dates and auditor accounts are checked by the server; buttons only hide.
  */
 export function AuditMissionsPage({ token }: Readonly<{ token: string }>) {
-  const { can } = usePermissions(token);
+  const { can, loaded } = usePermissions(token);
   const [rows, setRows] = useState<AuditMission[]>([]);
   const [status, setStatus] = useState<AuditMissionStatus | "">("");
   const [loading, setLoading] = useState(true);
@@ -43,14 +43,17 @@ export function AuditMissionsPage({ token }: Readonly<{ token: string }>) {
   }, [token, status]);
   useEffect(() => { void refresh(); }, [refresh]);
 
-  // Account names: the directory when the caller may read it, otherwise at least their own account.
+  // Account names: the directory when the caller may read it (same rights as the server), otherwise their own account.
+  const canDirectory = can("user.read") || can("process.responsibility.assign") || can("designation.manage");
   useEffect(() => {
+    if (!loaded) return;
     let live = true;
-    usersApi.directory(token)
-      .then((list) => { if (live) setAccounts(list); })
-      .catch(() => usersApi.me(token).then((me) => { if (live) setAccounts([{ id: me.id, displayName: me.displayName }]); }).catch(() => undefined));
+    const load = canDirectory
+      ? usersApi.directory(token)
+      : usersApi.me(token).then((me) => [{ id: me.id, displayName: me.displayName }]);
+    load.then((list) => { if (live) setAccounts(list); }).catch(() => undefined);
     return () => { live = false; };
-  }, [token]);
+  }, [token, loaded, canDirectory]);
 
   async function act(call: () => Promise<unknown>, done: string, onDone?: () => void) {
     setBusy(true); setFormError(null); setNotice(null);
