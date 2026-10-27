@@ -12,6 +12,9 @@ ALTER TABLE configs
   ADD COLUMN acceptance_max_days integer CHECK (acceptance_max_days BETWEEN 1 AND 3650),
   ADD COLUMN policy_request_expiry_days integer CHECK (policy_request_expiry_days BETWEEN 1 AND 3650);
 
+-- q174: the expiry is fixed when a request is submitted (F-SAD-02), never recomputed from a delay changed later.
+ALTER TABLE self_validation_policy_requests ADD COLUMN expires_at timestamptz;
+
 UPDATE roles
 SET permissions = ARRAY(SELECT DISTINCT unnest(permissions || ARRAY['config.governancedelays.set']::text[]))
 WHERE system_group IS NULL AND deleted_at IS NULL

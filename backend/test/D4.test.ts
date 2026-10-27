@@ -118,7 +118,7 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     const requests = {
       getPending: async () => (request?.status === "PENDING" ? request : null),
       getById: async (_t: string, id: string) => (request?.id === id ? request : null),
-      create: async (t: string, policy: never, reason: string, by: string) => (request = { id: "req1", tenantId: t, requestedPolicy: policy, reason, status: "PENDING", requestedBy: by, requestedAt: new Date(), decidedBy: null, decidedAt: null, decisionReason: null }),
+      create: async (t: string, policy: never, reason: string, by: string, expiresAt?: Date | null) => (request = { id: "req1", tenantId: t, requestedPolicy: policy, reason, status: "PENDING", requestedBy: by, requestedAt: new Date(), decidedBy: null, decidedAt: null, decisionReason: null, expiresAt: expiresAt ?? null }),
       decide: async (_t: string, id: string, status: never, by: string, why: string | null) =>
         request?.id === id && request.status === "PENDING" ? (request = { ...request, status, decidedBy: by, decisionReason: why }) : null,
       reopen: async () => { if (request) request = { ...request, status: "PENDING", decidedBy: null }; },
@@ -208,8 +208,10 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     await w.service.setGovernanceDelays(actor("u-admin", ["config.read", "config.governancedelays.set"]), { policyRequestExpiryDays: 7 }, "r", "q");
     await w.service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "r", "q");
     const pending = await w.service.getPendingSelfValidationPolicyRequest(approverActor);
-    expect(pending!.expiresAt!.getTime() - pending!.requestedAt.getTime()).toBe(7 * 86_400_000);
-    w.request()!.requestedAt = new Date(Date.now() - 8 * 86_400_000);
+    expect(Math.abs(pending!.expiresAt!.getTime() - pending!.requestedAt.getTime() - 7 * 86_400_000)).toBeLessThan(1000);
+    w.request()!.expiresAt = new Date(Date.now() - 1000);
+    // F-SAD-02: clearing the delay afterwards does not revive the expired request.
+    await w.service.setGovernanceDelays(actor("u-admin", ["config.read", "config.governancedelays.set"]), { policyRequestExpiryDays: null }, "r", "q");
     await expect(w.service.approveSelfValidationPolicy(approverActor, "req1", "q")).rejects.toThrow(/expired/);
     expect(w.policy()).toBe("REFUSE");
     await expect(w.service.rejectSelfValidationPolicy(approverActor, "req1", "Échue", "q")).resolves.toMatchObject({ status: "REJECTED" });

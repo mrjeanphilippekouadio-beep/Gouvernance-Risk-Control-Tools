@@ -5,6 +5,8 @@ BEGIN;
 UPDATE users SET roles = array_remove(roles, 'config.governancedelays.set') WHERE 'config.governancedelays.set' = ANY(roles);
 UPDATE roles SET permissions = array_remove(permissions, 'config.governancedelays.set') WHERE 'config.governancedelays.set' = ANY(permissions);
 
+ALTER TABLE self_validation_policy_requests DROP COLUMN expires_at;
+
 ALTER TABLE configs
   DROP COLUMN exception_review_delay_days,
   DROP COLUMN acceptance_max_days,

@@ -23,6 +23,7 @@ interface Row {
   decided_by: string | null;
   decided_at: Date | null;
   decision_reason: string | null;
+  expires_at: Date | null;
 }
 
 const toDomain = (r: Row): SelfValidationPolicyRequest => ({
@@ -36,6 +37,7 @@ const toDomain = (r: Row): SelfValidationPolicyRequest => ({
   decidedBy: r.decided_by,
   decidedAt: r.decided_at,
   decisionReason: r.decision_reason,
+  expiresAt: r.expires_at ?? null,
 });
 
 async function insertRequest(
@@ -44,12 +46,13 @@ async function insertRequest(
   requestedPolicy: SelfValidationPolicy,
   reason: string,
   requestedBy: string,
+  expiresAt: Date | null = null,
 ): Promise<SelfValidationPolicyRequest> {
   try {
     const { rows } = await db.query<Row>(
-      `INSERT INTO self_validation_policy_requests (tenant_id, requested_policy, reason, requested_by)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [tenantId, requestedPolicy, reason, requestedBy],
+      `INSERT INTO self_validation_policy_requests (tenant_id, requested_policy, reason, requested_by, expires_at)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [tenantId, requestedPolicy, reason, requestedBy, expiresAt],
     );
     return toDomain(rows[0]!);
   } catch (err) {
@@ -98,8 +101,8 @@ export class PostgresSelfValidationPolicyRequestRepository implements SelfValida
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
-  async create(tenantId: string, requestedPolicy: SelfValidationPolicy, reason: string, requestedBy: string): Promise<SelfValidationPolicyRequest> {
-    return insertRequest(this.pool, tenantId, requestedPolicy, reason, requestedBy);
+  async create(tenantId: string, requestedPolicy: SelfValidationPolicy, reason: string, requestedBy: string, expiresAt: Date | null = null): Promise<SelfValidationPolicyRequest> {
+    return insertRequest(this.pool, tenantId, requestedPolicy, reason, requestedBy, expiresAt);
   }
 
   async decide(
@@ -127,7 +130,7 @@ export class PostgresSelfValidationPolicyRequestRepository implements SelfValida
           if (!decided) throw new ConflictError("This request has already been decided");
         }
         const submitted = change.submit
-          ? await insertRequest(db, tenantId, change.submit.policy, change.submit.reason, change.submit.by)
+          ? await insertRequest(db, tenantId, change.submit.policy, change.submit.reason, change.submit.by, change.submit.expiresAt ?? null)
           : null;
         const config = change.setPolicy ? await upsertConfigRow(db, tenantId, change.setPolicy.patch, change.setPolicy.updatedBy) : null;
         return { decided, submitted, config };

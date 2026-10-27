@@ -335,7 +335,10 @@ export class ConfigService {
     // DECISION-079: every step below (withdrawing the pending request, submitting, or writing the policy) is applied
     // together with its audit rows in ONE transaction.
     const pending = this.policyRequests ? await this.policyRequests.getPending(actor.tenantId) : null;
-    const submit = relaxing && approverExists && this.policyRequests ? { policy, reason: why, by: actor.userId } : undefined;
+    const expiryDays = before.policyRequestExpiryDays;
+    const submit = relaxing && approverExists && this.policyRequests
+      ? { policy, reason: why, by: actor.userId, expiresAt: expiryDays ? new Date(Date.now() + expiryDays * 86_400_000) : null }
+      : undefined;
     const result = await this.applyPolicyChange(
       actor.tenantId,
       {
@@ -400,7 +403,9 @@ export class ConfigService {
     let submitted: SelfValidationPolicyRequest | null = null;
     let config: Config | null = null;
     try {
-      if (resolved.submit) submitted = await repo!.create(tenantId, resolved.submit.policy, resolved.submit.reason, resolved.submit.by);
+      if (resolved.submit) {
+        submitted = await repo!.create(tenantId, resolved.submit.policy, resolved.submit.reason, resolved.submit.by, resolved.submit.expiresAt ?? null);
+      }
       if (resolved.setPolicy) config = await this.configs.upsert(tenantId, resolved.setPolicy.patch, resolved.setPolicy.updatedBy);
     } catch (err) {
       if (resolved.decide) await repo!.reopen?.(tenantId, resolved.decide.id)?.catch(() => undefined);
@@ -417,10 +422,7 @@ export class ConfigService {
   ): Promise<(SelfValidationPolicyRequest & { expiresAt: Date | null }) | null> {
     if (!actor.roles.includes("config.selfvalidation.set")) requirePermission(actor, "config.selfvalidation.approve");
     const pending = this.policyRequests ? await this.policyRequests.getPending(actor.tenantId) : null;
-    if (!pending) return null;
-    // Read the setting directly (tenant-scoped): seeing the request must not require config.read on top.
-    const days = (await this.configs.getByTenant(actor.tenantId))?.policyRequestExpiryDays ?? null;
-    return { ...pending, expiresAt: requestExpiry(pending, days) };
+    return pending ? { ...pending, expiresAt: pending.expiresAt ?? null } : null;
   }
 
   /** Second confirmation: never the author (maker-checker). Applies the requested policy. */
@@ -432,7 +434,8 @@ export class ConfigService {
     const request = await this.getPendingRequestOrThrow(actor, id);
     const before = await this.get(actor);
     // q174 (DECISION-083): an expired request can no longer be approved (it can still be rejected or replaced).
-    const expiresAt = requestExpiry(request, before.policyRequestExpiryDays);
+    // Fixed at submission (F-SAD-02): changing the delay later never revives or shortens a pending request.
+    const expiresAt = request.expiresAt ?? null;
     if (expiresAt && expiresAt.getTime() <= Date.now()) {
       throw new ConflictError(`This request expired on ${expiresAt.toISOString().slice(0, 10)} and can no longer be approved`, id);
     }
@@ -495,9 +498,4 @@ export interface SelfValidationPolicyOutcome {
   config: Config;
   /** Set when the relaxation waits for a second person; `config` is then unchanged. */
   pendingRequest: SelfValidationPolicyRequest | null;
-}
-
-/** q174: when a pending relaxation request stops being approvable; null when no expiry delay is configured. */
-function requestExpiry(request: Pick<SelfValidationPolicyRequest, "requestedAt">, days: number | null): Date | null {
-  return days ? new Date(request.requestedAt.getTime() + days * 86_400_000) : null;
 }
