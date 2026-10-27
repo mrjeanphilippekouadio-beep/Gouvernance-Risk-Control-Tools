@@ -2237,4 +2237,15 @@ DECISION (PO) :
 RELATED: CMP-F4-03, SEC-F4-04, PR #194.
 OWNER: @dev-backend @dev-frontend
 STATUS: DÉCIDÉ — livré dans la PR #194 (commit q176/q177, 2026-10-27).
+
+DECISION-087
+DATE: 2026-10-27
+DECISION (PO) : fusion de la PR #195 (suites q169, q170, q174, q175,
+  délais de gouvernance, migration 075) dans staging, après QA (vert),
+  Sécurité (vert avec réserves), revues Codex traitées, CI et Sonar verts.
+  Réserves de production maintenues : q182 (F-SAD-01) et q168 non
+  opérationnel tant que q180 n'est pas livré.
+RELATED: DECISION-083, 086 ; PR #195.
+OWNER: @orchestrator
+STATUS: DÉCIDÉ — fusionné ; migration 075 appliquée par migrate.yml.
 ```
