@@ -20,6 +20,7 @@ import type { Role } from "../src/domain/entities/Role.js";
 import type { GovernancePrincipleAcceptance } from "../src/domain/entities/GovernanceReviews.js";
 import type { GovernanceAuditRow, GovernanceEventSource } from "../src/domain/governance/governanceEvents.js";
 import type { SelfValidationPolicyRequest } from "../src/domain/repositories/SelfValidationPolicyRequestRepository.js";
+import { fakeDelayRequests } from "./fakeDelayRequests.js";
 import type { AcceptanceCreated, GovernancePrincipleAcceptanceRepository } from "../src/domain/repositories/GovernanceReviewRepositories.js";
 
 /**
@@ -76,6 +77,7 @@ function configWorld(opts: { approver?: boolean; wired?: boolean } = {}) {
     undefined,
     opts.wired === false ? undefined : { existsOther: async () => opts.approver ?? true },
     opts.wired === false ? undefined : (requests as never),
+    opts.wired === false ? undefined : fakeDelayRequests(configs.upsert as never, events).repo,
   );
   return { service, events, rows, seenTenants, request: () => request, // moves the request back in time: both its submission date and its (frozen at submission) expiry
     ageRequest: (ms: number) => { request = { ...request!, requestedAt: new Date(request!.requestedAt.getTime() - ms), expiresAt: request!.expiresAt ? new Date(request!.expiresAt.getTime() - ms) : null }; } };
@@ -108,7 +110,8 @@ const put = (w: ReturnType<typeof configWorld>, who: AuthenticatedUser, body: un
 
 describe("QA-suites PUT /config/governance-delays", () => {
   it("200 for a strict body: all three set, then boundaries 1 and 3650", async () => {
-    const w = configWorld();
+    // q182: lengthening 90 -> 3650 is applied at once only when nobody else can approve (otherwise 202, see below).
+    const w = configWorld({ approver: false });
     const r = await put(w, delaysAdmin, { exceptionReviewDelayDays: 30, acceptanceMaxDays: 90, policyRequestExpiryDays: 7, reason: "Paramétrage initial" });
     expect(r.status).toBe(200);
     expect(r.json.data).toMatchObject({ exceptionReviewDelayDays: 30, acceptanceMaxDays: 90, policyRequestExpiryDays: 7 });
@@ -165,13 +168,13 @@ describe("QA-suites PUT /config/governance-delays", () => {
   });
 
   it("null clears ONE key only; an omitted key is untouched; the audit carries before / after / reason", async () => {
-    const w = configWorld();
+    const w = configWorld({ approver: false }); // q182: clearing is a lengthening, applied alone (marked) without an approver
     await put(w, delaysAdmin, { exceptionReviewDelayDays: 30, acceptanceMaxDays: 90, policyRequestExpiryDays: 7, reason: "init" });
     const cleared = await put(w, delaysAdmin, { acceptanceMaxDays: null, reason: "Retrait du plafond" });
     expect(cleared.status).toBe(200);
     expect(cleared.json.data).toMatchObject({ exceptionReviewDelayDays: 30, acceptanceMaxDays: null, policyRequestExpiryDays: 7 });
     const last = w.events.at(-1)!;
-    expect(last).toMatchObject({ entityType: "Config", action: "UPDATE", userId: "adm", reason: "Retrait du plafond", tenantId: T });
+    expect(last).toMatchObject({ entityType: "Config", action: "UPDATE", userId: "adm", reason: "Retrait du plafond", tenantId: T, governanceException: "config.governancedelays.adminAlone" });
     expect((last.oldValue as Config).acceptanceMaxDays).toBe(90);
     expect((last.newValue as Config).acceptanceMaxDays).toBeNull();
     expect(w.events).toHaveLength(2);
@@ -182,7 +185,7 @@ describe("QA-suites PUT /config/governance-delays", () => {
   });
 
   it("the three keys can all be cleared in one call; the row stays and the other settings are untouched", async () => {
-    const w = configWorld();
+    const w = configWorld({ approver: false });
     await w.service.setCommitteeAuditCumul(user("c", ["config.read", "config.cumul.set"]), false, "r", "q");
     await put(w, delaysAdmin, { exceptionReviewDelayDays: 5, acceptanceMaxDays: 6, policyRequestExpiryDays: 7, reason: "init" });
     const r = await put(w, delaysAdmin, { exceptionReviewDelayDays: null, acceptanceMaxDays: null, policyRequestExpiryDays: null, reason: "tout retirer" });
@@ -217,6 +220,26 @@ describe("QA-suites PUT /config/governance-delays", () => {
     expect(w.events).toHaveLength(0);
   });
 
+  it("q182 HTTP: a lengthening answers 202 + pendingRequest (config unchanged); GET shows it; a third party approves; strict bodies", async () => {
+    const w = configWorld();
+    await put(w, delaysAdmin, { riskManagerVacancyMaxDays: 30, reason: "init" });
+    const r = await put(w, delaysAdmin, { riskManagerVacancyMaxDays: 120, reason: "Allonger" });
+    expect(r.status).toBe(202);
+    expect(r.json.data.riskManagerVacancyMaxDays).toBe(30);
+    expect(r.json.pendingRequest).toMatchObject({ status: "PENDING", requestedDelays: { riskManagerVacancyMaxDays: 120 } });
+    const mount = (a: express.Express) => a.use("/config", configRouter(w.service));
+    const rm = user("rm", ["config.selfvalidation.approve"]);
+    const g = await http(mount, rm, "GET", "/config/governance-delays/request");
+    expect(g.json.data.id).toBe(r.json.pendingRequest.id);
+    const id = r.json.pendingRequest.id as string;
+    expect((await http(mount, rm, "POST", "/config/governance-delays/requests/not-a-uuid/approve", { reason: "ok" })).status).toBe(400);
+    expect((await http(mount, rm, "POST", `/config/governance-delays/requests/${id}/approve`, {})).status).toBe(400);
+    expect((await http(mount, delaysAdmin, "POST", `/config/governance-delays/requests/${id}/approve`, { reason: "ok" })).status).toBe(403);
+    const ok = await http(mount, rm, "POST", `/config/governance-delays/requests/${id}/approve`, { reason: "ok" });
+    expect(ok.status).toBe(200);
+    expect(ok.json.data.riskManagerVacancyMaxDays).toBe(120);
+  });
+
   it("permission / ADMIN / fixed groups: the key exists, makes its holder an administrator, no fixed group holds it", () => {
     expect(ALL_PERMISSIONS).toContain(NEW_PERM);
     expect(ADMIN_PERMISSIONS).toContain(NEW_PERM);
@@ -230,7 +253,12 @@ describe("QA-suites PUT /config/governance-delays", () => {
 describe("QA-suites q174 expiry of a self-validation relaxation request", () => {
   const admin = user("u-admin", ["config.read", "config.selfvalidation.set", NEW_PERM]);
   const approver = user("u-rm", ["config.read", "config.selfvalidation.approve"]);
-  const setExpiry = (w: ReturnType<typeof configWorld>, days: number | null) => w.service.setGovernanceDelays(admin, { policyRequestExpiryDays: days }, "r", "q");
+  // q182: a lengthening (or clearing) of the delay waits for a third party: approved here so the delay really changes.
+  const setExpiry = async (w: ReturnType<typeof configWorld>, days: number | null) => {
+    const r = await w.service.setGovernanceDelays(admin, { policyRequestExpiryDays: days }, "r", "q");
+    if (r.pendingRequest) await w.service.approveGovernanceDelays(approver, r.pendingRequest.id, "ok", "q");
+    return r;
+  };
   const submit = (w: ReturnType<typeof configWorld>) => w.service.setSelfValidationPolicy(admin, "DOUBLE_CONFIRMATION", "r", "q");
   afterEach(() => vi.useRealTimers());
 

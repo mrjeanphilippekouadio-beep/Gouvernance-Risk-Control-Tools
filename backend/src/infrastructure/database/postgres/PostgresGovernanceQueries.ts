@@ -143,4 +143,18 @@ export class PostgresGovernanceQueries
     );
     return Number(rows[0]?.n ?? 0);
   }
+
+  /** q178 (DECISION-095): start of the current Risk Manager vacancy (last vacancy trace while the group has no active member). */
+  async riskManagerVacancySince(tenantId: string): Promise<Date | null> {
+    const { rows } = await this.pool.query<{ since: Date | null }>(
+      `SELECT max(a."timestamp") AS since FROM audit_log a
+       WHERE a.tenant_id = $1 AND a.governance_exception = 'riskManager.vacancy'
+         AND NOT EXISTS (SELECT 1 FROM user_roles ur
+                         JOIN roles r ON r.id = ur.role_id AND r.tenant_id = ur.tenant_id AND r.deleted_at IS NULL AND r.system_group = 'RISK_MANAGER'
+                         JOIN users u ON u.id = ur.user_id AND u.tenant_id = ur.tenant_id AND u.deleted_at IS NULL
+                         WHERE ur.tenant_id = $1 AND ur.revoked_at IS NULL)`,
+      [tenantId],
+    );
+    return rows[0]?.since ?? null;
+  }
 }

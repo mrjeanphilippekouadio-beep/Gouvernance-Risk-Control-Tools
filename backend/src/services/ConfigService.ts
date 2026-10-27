@@ -1,6 +1,6 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
-import type { Config, ConfigPatch, EvaluationMode } from "../domain/entities/Config.js";
+import { DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
 import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -14,6 +14,12 @@ import type { PolicyChange, PolicyChangeResult, SelfValidationPolicyRequest, Sel
 import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
 import { FRAMEWORK_OWNS_SETTING_MESSAGE } from "./riskFrameworkResolution.js";
 import { writeAudited } from "./auditedWrite.js";
+import {
+  GOVERNANCE_DELAY_KEYS,
+  type GovernanceDelayRequest,
+  type GovernanceDelayRequestRepository,
+  type GovernanceDelays,
+} from "../domain/repositories/GovernanceDelayRequestRepository.js";
 
 /** Upper bound of a governance delay (same CHECK as migration 075). */
 export const MAX_GOVERNANCE_DELAY_DAYS = 3650;
@@ -47,6 +53,7 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     exceptionReviewDelayDays: null,
     acceptanceMaxDays: null,
     policyRequestExpiryDays: null,
+    riskManagerVacancyMaxDays: DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS,
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),
@@ -87,6 +94,8 @@ export class ConfigService {
     private readonly eligible?: EligibleValidatorQuery,
     /** q158: pending relaxations awaiting a second person. Optional; softening fails closed without it. */
     private readonly policyRequests?: SelfValidationPolicyRequestRepository,
+    /** q182: pending lengthenings of the governance delays awaiting a second person. Optional; lengthening fails closed without it. */
+    private readonly delayRequests?: GovernanceDelayRequestRepository,
   ) {}
 
   private assertNotOwnedByFramework(): void {
@@ -281,20 +290,21 @@ export class ConfigService {
   }
 
   /**
-   * PUT /config/governance-delays — DECISION-083 (q168, q169, q174): the three governance delays, in days, chosen by
-   * the tenant. Omitted key = untouched, null = back to "not configured". Administrator act with its own permission,
-   * mandatory reason, audited with the setting in the same transaction (DECISION-079).
+   * PUT /config/governance-delays — DECISION-083 (q168, q169, q174), DECISION-095 (q178, q182): the governance delays, in
+   * days, chosen by the tenant. Omitted key = untouched, null = back to "not configured". Administrator act with its own
+   * permission, mandatory reason, audited with the setting in the same transaction (DECISION-079).
+   * q182: lengthening a delay or clearing it is a RELAXATION and follows the q158 circuit: a PENDING request applied by
+   * another holder of config.selfvalidation.approve (`approveGovernanceDelays`, never its author, expiry as q174); with
+   * nobody else able to approve, the administrator applies it alone, marked `config.governancedelays.adminAlone`.
+   * Shortening a delay, or configuring one that was not, stays direct. A change mixing both is a relaxation as a whole.
+   * A new call replaces (WITHDRAWN) a request still pending.
    */
-  async setGovernanceDelays(
-    actor: AuthenticatedUser,
-    delays: Pick<ConfigPatch, "exceptionReviewDelayDays" | "acceptanceMaxDays" | "policyRequestExpiryDays">,
-    reason: string,
-    requestId: string,
-  ): Promise<Config> {
+  async setGovernanceDelays(actor: AuthenticatedUser, delays: GovernanceDelays, reason: string, requestId: string): Promise<GovernanceDelaysOutcome> {
     requirePermission(actor, "config.governancedelays.set");
     if (!reason.trim() || !isAcceptableReason(reason)) throw new ValidationError("A reason is required to change the governance delays");
+    const why = reason.trim();
     const patch: ConfigPatch = {};
-    for (const key of ["exceptionReviewDelayDays", "acceptanceMaxDays", "policyRequestExpiryDays"] as const) {
+    for (const key of GOVERNANCE_DELAY_KEYS) {
       const v = delays[key];
       if (v === undefined) continue;
       if (v !== null && (!Number.isInteger(v) || v < 1 || v > MAX_GOVERNANCE_DELAY_DAYS)) {
@@ -305,12 +315,106 @@ export class ConfigService {
     if (Object.keys(patch).length === 0) throw new ValidationError("No governance delay to change");
     // The audit's "before" must not need config.read on top of config.governancedelays.set (revue Codex PR #195).
     const before = await this.readConfig(actor.tenantId);
-    return writeAudited(
-      this.configs.auditsInTransaction,
-      this.audit,
-      (audit) => this.upsertConfig(actor.tenantId, patch, actor.userId, audit),
-      (after) => [this.configAuditEvent(actor, before, after, reason, requestId)],
+    const relaxing = GOVERNANCE_DELAY_KEYS.some((k) => patch[k] !== undefined && isLengthening(before[k], patch[k]!));
+    const configEvent = (after: Config, marked: boolean) => ({
+      ...this.configAuditEvent(actor, before, after, why, requestId),
+      ...(marked ? { governanceException: "config.governancedelays.adminAlone" } : {}),
+    });
+
+    if (!relaxing && !this.delayRequests) {
+      const config = await writeAudited<Config>(
+        this.configs.auditsInTransaction,
+        this.audit,
+        (audit) => this.upsertConfig(actor.tenantId, patch, actor.userId, audit),
+        (after) => [configEvent(after, false)],
+      );
+      return { config, pendingRequest: null };
+    }
+    // Fail closed: without the means to tell whether a second person exists, never lengthen.
+    if (!this.delayRequests || (relaxing && !this.eligible)) throw new ValidationError("Lengthening a governance delay is not available");
+    const approverExists = relaxing && (await this.eligible!.existsOther(actor.tenantId, actor.userId, "config.selfvalidation.approve"));
+    const pending = await this.delayRequests.getPending(actor.tenantId);
+    const expiryDays = before.policyRequestExpiryDays;
+    const result = await this.delayRequests.change(
+      actor.tenantId,
+      {
+        ...(pending ? { decide: { id: pending.id, status: "WITHDRAWN" as const, by: actor.userId, reason: "Replaced by a newer change" } } : {}),
+        ...(approverExists
+          ? { submit: { delays: patch, reason: why, by: actor.userId, expiresAt: expiryDays ? new Date(Date.now() + expiryDays * 86_400_000) : null } }
+          : { setDelays: { patch: await this.withFirstWriteDefault(actor.tenantId, patch), updatedBy: actor.userId } }),
+      },
+      (r) => [
+        ...(pending
+          ? [{
+              tenantId: actor.tenantId, userId: actor.userId, entityType: "GovernanceDelayRequest", entityId: pending.id,
+              action: "CLOSE" as const, oldValue: pending, newValue: null, reason: "Replaced by a newer change", requestId,
+            }]
+          : []),
+        ...(r.submitted
+          ? [{
+              tenantId: actor.tenantId, userId: actor.userId, entityType: "GovernanceDelayRequest", entityId: r.submitted.id,
+              action: "SUBMIT" as const, oldValue: null, newValue: r.submitted, reason: why, requestId,
+            }]
+          : []),
+        ...(r.config ? [configEvent(r.config, relaxing)] : []),
+      ],
     );
+    return result.submitted ? { config: before, pendingRequest: result.submitted } : { config: result.config!, pendingRequest: null };
+  }
+
+  /** The pending lengthening, if any; visible to the administrator who sets the delays and to the people who can approve. */
+  async getPendingGovernanceDelayRequest(actor: AuthenticatedUser): Promise<GovernanceDelayRequest | null> {
+    if (!actor.roles.includes("config.governancedelays.set")) requirePermission(actor, "config.selfvalidation.approve");
+    return this.delayRequests ? this.delayRequests.getPending(actor.tenantId) : null;
+  }
+
+  /** Second confirmation of a lengthening: never its author, never once expired (q174). Applies the requested delays. */
+  async approveGovernanceDelays(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<Config> {
+    requirePermission(actor, "config.selfvalidation.approve");
+    if (!reason || !isAcceptableReason(reason)) throw new ValidationError("A valid reason is required to approve a request");
+    const why = reason.trim();
+    const request = await this.getPendingDelayRequestOrThrow(actor, id);
+    if (request.expiresAt && request.expiresAt.getTime() <= Date.now()) {
+      throw new ConflictError(`This request expired on ${request.expiresAt.toISOString().slice(0, 10)} and can no longer be approved`, id);
+    }
+    const before = await this.readConfig(actor.tenantId);
+    const { config } = await this.delayRequests!.change(
+      actor.tenantId,
+      {
+        decide: { id, status: "APPLIED", by: actor.userId, reason: why },
+        setDelays: { patch: await this.withFirstWriteDefault(actor.tenantId, { ...request.requestedDelays }), updatedBy: request.requestedBy },
+      },
+      (r) => [{
+        tenantId: actor.tenantId, userId: actor.userId, entityType: "Config", entityId: r.config!.id, action: "APPROVE" as const,
+        oldValue: before, newValue: { ...r.config!, approvedRequestId: id, requestedBy: request.requestedBy, requestReason: request.reason },
+        reason: why, requestId,
+      }],
+    );
+    return config!;
+  }
+
+  async rejectGovernanceDelays(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<GovernanceDelayRequest> {
+    requirePermission(actor, "config.selfvalidation.approve");
+    if (!reason || !isAcceptableReason(reason)) throw new ValidationError("A valid reason is required to reject a request");
+    const why = reason.trim();
+    const request = await this.getPendingDelayRequestOrThrow(actor, id);
+    const { decided } = await this.delayRequests!.change(
+      actor.tenantId,
+      { decide: { id, status: "REJECTED", by: actor.userId, reason: why } },
+      (r) => [{
+        tenantId: actor.tenantId, userId: actor.userId, entityType: "GovernanceDelayRequest", entityId: id,
+        action: "REJECT" as const, oldValue: request, newValue: r.decided, reason: why, requestId,
+      }],
+    );
+    return decided!;
+  }
+
+  private async getPendingDelayRequestOrThrow(actor: AuthenticatedUser, id: string): Promise<GovernanceDelayRequest> {
+    const request = this.delayRequests ? await this.delayRequests.getById(actor.tenantId, id) : null;
+    if (!request) throw new NotFoundError("GovernanceDelayRequest", id);
+    if (request.status !== "PENDING") throw new ValidationError(`This request has already been decided (${request.status})`);
+    if (request.requestedBy === actor.userId) throw new ForbiddenError("The author of a request cannot confirm or reject it (maker-checker)");
+    return request;
   }
 
   /**
@@ -498,6 +602,18 @@ export class ConfigService {
     }
     return request;
   }
+}
+
+/** q182: lengthening = clearing a configured delay, or a longer one. Configuring an unset delay or shortening one tightens. */
+function isLengthening(current: number | null, next: number | null): boolean {
+  if (next === null) return current !== null;
+  return current !== null && next > current;
+}
+
+export interface GovernanceDelaysOutcome {
+  config: Config;
+  /** Set when the lengthening waits for a second person; `config` is then unchanged. */
+  pendingRequest: GovernanceDelayRequest | null;
 }
 
 export interface SelfValidationPolicyOutcome {

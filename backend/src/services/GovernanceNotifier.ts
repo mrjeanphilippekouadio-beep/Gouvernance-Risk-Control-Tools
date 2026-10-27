@@ -17,11 +17,12 @@ const asRecord = (v: unknown): Record<string, unknown> => (typeof v === "object"
  *
  * Called by the HTTP layer once a mutating request has been answered with a success status, i.e. AFTER the commit. It
  * reads the audit rows that request wrote (same request id, same actor) and emits through `NotificationService.emit`:
- *  - an action marked `governance_exception` (not the Risk Manager vacancy: q160 = trace only) -> the designated manager
- *    and the holders of `governanceexception.review` (R-6.4), the author excluded;
+ *  - an action marked `governance_exception` (not the Risk Manager vacancy) -> the designated manager and the holders of
+ *    `governanceexception.review` (R-6.4), the author excluded;
+ *  - the Risk Manager vacancy (q178, DECISION-095; was trace only under q160) -> the Audit and the Committee;
  *  - an organization-profile submission that lowers the size -> the Audit is told (q157) and can contest; when it waits
  *    for a second confirmation, the possible approvers are told too;
- *  - a relaxation request of the self-validation policy -> the possible approvers (q158);
+ *  - a relaxation request of the self-validation policy, or of the governance delays -> the possible approvers (q158, q182);
  *  - a principle acceptance waiting for confirmation -> the possible confirmers;
  *  - a contestation -> Risk Manager, Committee and the manager;
  *  - a role assigned in Audit or Committee -> the new member learns how many exceptions are not reviewed (R-6.3, q144);
@@ -119,12 +120,32 @@ export class GovernanceNotifier {
       );
     }
 
+    // q178 (DECISION-095): the last Risk Manager left with no interim -> the Audit and the Committee are told.
+    if (row.governanceException === RISK_MANAGER_VACANCY_EXCEPTION) {
+      await send(
+        await this.source.groupMembers(tenantId, ["AUDIT", "RISK_COMMITTEE"]),
+        "RISK_MANAGER_VACANCY",
+        row.id,
+        "Le groupe Risk Manager est vacant : son dernier membre est parti sans intérim. Un nouveau Risk Manager doit être désigné.",
+      );
+    }
+
     if (row.entityType === "SelfValidationPolicyRequest" && row.action === "SUBMIT") {
       await send(
         await this.source.holdersOf(tenantId, "config.selfvalidation.approve"),
         "SELF_VALIDATION_POLICY_REQUEST_PENDING",
         row.entityId,
         "Une demande d’assouplissement de la politique d’auto-validation attend votre décision.",
+      );
+    }
+
+    // q182 (DECISION-095): a lengthening of the governance delays waits for the same approvers as q158.
+    if (row.entityType === "GovernanceDelayRequest" && row.action === "SUBMIT") {
+      await send(
+        await this.source.holdersOf(tenantId, "config.selfvalidation.approve"),
+        "GOVERNANCE_DELAY_REQUEST_PENDING",
+        row.entityId,
+        "Une demande d’allongement des délais de gouvernance attend votre décision.",
       );
     }
 

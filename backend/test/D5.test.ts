@@ -179,7 +179,7 @@ function notifier(rows: GovernanceAuditRow[], opts: { manager?: string | null; u
   const source: GovernanceEventSource = {
     rowsForRequest: async () => rows,
     holdersOf: async (_t, p) => holders[p] ?? [],
-    groupMembers: async (_t, g) => (g.length === 3 ? ["rmx", "com", "aud", "removed"] : ["rmx", "com"]),
+    groupMembers: async (_t, g) => (g.length === 3 ? ["rmx", "com", "aud", "removed"] : g.includes("AUDIT") ? ["com", "aud"] : ["rmx", "com"]),
     managerId: async () => opts.manager ?? null,
     unreviewedExceptionCount: async () => opts.unreviewed ?? 0,
   };
@@ -211,10 +211,17 @@ describe("GovernanceNotifier (emitted after commit, from the audit rows of the r
     expect(new Set(sent.map((s) => s.type))).toEqual(new Set(["GOVERNANCE_EXCEPTION_RECORDED"]));
     expect(sent.every((s) => !s.message.includes("actor"))).toBe(true);
   });
-  it("Risk Manager vacancy: nothing (q160)", async () => {
+  it("Risk Manager vacancy (q178, was nothing under q160): the Audit and the Committee only, one type, no name", async () => {
     const { run, sent } = notifier([row({ entityType: "Role", action: "ROLE_CHANGE", governanceException: "riskManager.vacancy", oldValue: { userId: "u" }, newValue: { riskManagerGroupEmpty: true }, systemGroup: "RISK_MANAGER" })]);
     await run();
-    expect(sent).toEqual([]);
+    expect(sent.map((s) => s.to).sort()).toEqual(["aud", "com"]);
+    expect(new Set(sent.map((s) => s.type))).toEqual(new Set(["RISK_MANAGER_VACANCY"]));
+    expect(sent.every((s) => !s.message.includes("actor"))).toBe(true);
+  });
+  it("q182: a pending lengthening of the governance delays tells the possible approvers", async () => {
+    const { run, sent } = notifier([row({ entityType: "GovernanceDelayRequest", action: "SUBMIT", entityId: "dr1" })]);
+    await run();
+    expect(sent).toMatchObject([{ to: "rmx", type: "GOVERNANCE_DELAY_REQUEST_PENDING", resourceId: "dr1" }]);
   });
   it("size drop: Audit told (and may contest); pending also warns the approvers; not twice for the same person", async () => {
     const { run, sent } = notifier([row({ entityType: "OrganizationProfile", action: "SUBMIT", newValue: { lowersSize: true, status: "PENDING", id: "p1" } })]);

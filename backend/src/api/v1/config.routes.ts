@@ -17,7 +17,7 @@ const UpdateCommitteeThresholdsBody = z.object({
 
 const Days = z.number().int().min(1).max(3650).nullable().optional();
 const GovernanceDelaysBody = z
-  .object({ exceptionReviewDelayDays: Days, acceptanceMaxDays: Days, policyRequestExpiryDays: Days, reason: reasonText(2000) })
+  .object({ exceptionReviewDelayDays: Days, acceptanceMaxDays: Days, policyRequestExpiryDays: Days, riskManagerVacancyMaxDays: Days, reason: reasonText(2000) })
   .strict();
 
 const UpdateCommitteeEnforcementBody = z.object({
@@ -109,7 +109,38 @@ export function configRouter(configService: ConfigService): Router {
   router.put("/governance-delays", async (req, res, next) => {
     try {
       const { reason, ...delays } = GovernanceDelaysBody.parse(req.body);
-      res.json({ data: await configService.setGovernanceDelays(req.user, delays, reason, req.requestId) });
+      const { config, pendingRequest } = await configService.setGovernanceDelays(req.user, delays, reason, req.requestId);
+      // q182: 202 = the lengthening waits for a second person; `data` is the unchanged config.
+      if (pendingRequest) res.status(202).json({ data: config, pendingRequest });
+      else res.json({ data: config });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/governance-delays/request", async (req, res, next) => {
+    try {
+      res.json({ data: await configService.getPendingGovernanceDelayRequest(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/governance-delays/requests/:id/approve", async (req, res, next) => {
+    try {
+      const id = IdParam.parse(req.params["id"]);
+      const body = ApproveSelfValidationPolicyBody.parse(req.body);
+      res.json({ data: await configService.approveGovernanceDelays(req.user, id, body.reason, req.requestId) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/governance-delays/requests/:id/reject", async (req, res, next) => {
+    try {
+      const id = IdParam.parse(req.params["id"]);
+      const body = RejectSelfValidationPolicyBody.parse(req.body);
+      res.json({ data: await configService.rejectGovernanceDelays(req.user, id, body.reason, req.requestId) });
     } catch (err) {
       next(err);
     }

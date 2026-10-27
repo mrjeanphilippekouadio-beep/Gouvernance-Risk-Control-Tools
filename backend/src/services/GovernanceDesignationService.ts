@@ -8,6 +8,15 @@ import { canonicalId } from "../domain/ids.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import { writeAudited } from "./auditedWrite.js";
+import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
+import { DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS } from "../domain/entities/Config.js";
+
+/** q178 (DECISION-095): the Risk Manager group is empty since `since`; `overdue` once `maxDays` (tenant setting) are past. */
+export interface RiskManagerVacancy {
+  since: Date;
+  maxDays: number | null;
+  overdue: boolean;
+}
 
 const MAX_REASON_LENGTH = 500;
 
@@ -29,7 +38,20 @@ export class GovernanceDesignationService {
     private readonly audit: AuditRepository,
     private readonly users: UserRepository,
     private readonly roles: Pick<RoleRepository, "listForUser">,
+    /** q178: optional; without it no vacancy is reported. */
+    private readonly vacancy?: { riskManagerVacancySince(tenantId: string): Promise<Date | null> },
+    private readonly configs?: Pick<ConfigRepository, "getByTenant">,
   ) {}
+
+  /** q178: shown with the designations (whoever designates the interim); the D6 panel will reuse it. */
+  async riskManagerVacancy(actor: AuthenticatedUser): Promise<RiskManagerVacancy | null> {
+    requirePermission(actor, "designation.manage");
+    const since = await this.vacancy?.riskManagerVacancySince(actor.tenantId);
+    if (!since) return null;
+    const config = await this.configs?.getByTenant(actor.tenantId);
+    const maxDays = config ? config.riskManagerVacancyMaxDays : DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS;
+    return { since, maxDays, overdue: maxDays !== null && Date.now() > since.getTime() + maxDays * 86_400_000 };
+  }
 
   async list(actor: AuthenticatedUser, includeEnded = false): Promise<GovernanceDesignation[]> {
     requirePermission(actor, "designation.manage");
