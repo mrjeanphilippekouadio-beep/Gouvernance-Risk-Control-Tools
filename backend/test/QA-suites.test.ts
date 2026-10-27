@@ -258,7 +258,7 @@ describe("QA-suites q174 expiry of a self-validation relaxation request", () => 
     const reads = w.seenTenants.length;
     const view = await w.service.getPendingSelfValidationPolicyRequest(user("u-rm2", ["config.selfvalidation.approve"]));
     expect(view!.expiresAt!.getTime()).toBe(Date.now() + 7 * DAY);
-    expect(w.seenTenants.length).toBe(reads); // F-SAD-02: no config re-read on the view
+    expect(w.seenTenants).toHaveLength(reads); // F-SAD-02: no config re-read on the view
   });
 
   it("boundary (frozen clock): exactly at expiresAt is expired, 1 ms before is approvable", async () => {
@@ -749,7 +749,7 @@ describe.skipIf(!live)("QA-suites migration 075 on real PostgreSQL (QA_SUITES_PG
   it("replaying the DOWN on an already-down schema changes nothing (no error)", async () => {
     await runDown();
     try {
-      await runDown();
+      await expect(runDown()).resolves.not.toThrow();
     } finally {
       await runUp();
     }
