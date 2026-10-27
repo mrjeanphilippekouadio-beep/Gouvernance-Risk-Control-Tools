@@ -398,6 +398,8 @@ pour l'usage.
 | HUMAN @dev-backend @dev-frontend @security | **q177 (cockpit, SEC-F4-04)** — motif obligatoire pour suspendre / réactiver un compte (audit `reason: null`, `UserService.suspend`/`reactivate`). Détail : `docs/security/SEC-F4.md`. | 2026-10-26 | **Fermé — tranché le 2026-10-27 (DECISION-084) : motif obligatoire** |
 | HUMAN @compliance @risk-manager | **q178 (cockpit)** — q160 rouverte par le PO (q171) : départ du dernier Risk Manager sans intérimaire, qui est prévenu et quel délai maximal de vacance. | 2026-10-27 | **Ouvert — HUMAN** |
 | HUMAN @security @dev-backend | **q179 (cockpit)** — précision de q173 : l'administrateur peut-il recevoir les 4 droits de décision de gouvernance (et donc être le « tiers » qui valide), ou la configuration pas à pas ne fait-elle que répartir ces droits entre les groupes fixes ? | 2026-10-27 | **Ouvert — HUMAN** |
+| @devops @qa-engineer | **Couverture absente de SonarCloud (revue Codex PR #194, P2)** — aucun `sonar-project.properties` ni rapport lcov dans la CI : Sonar (analyse automatique) affiche 0 % de couverture sur toutes les PR, alors que ~2400 tests vitest tournent. Générer `coverage/lcov.info` (vitest --coverage) et passer à l'analyse CI pour l'importer. | 2026-10-27 | Ouvert |
+| @security @dev-backend | **SelfValidationGate non atomique (Codex PR #194, P2 ; SEC-F4-02)** — politique et « autre validateur » vérifiés avant la transaction d'écriture, pour tous les usages (exécutions, efficacité, évaluations, constats, q166). Chantier transverse : revérifier dans la transaction (`runAudited`) ou verrouiller. | 2026-10-27 | Ouvert |
 | @privacy | **CMP-F4-08** — avis A15 sur `GET /users/directory` (finalité, plafond 500 sans signal, pas de journal de consultation). Sécurité le juge proportionné (SEC-F4 §2). | 2026-10-26 | Ouvert |
 | @security | **SEC-F4-02 (LOW, rattaché à SEC-PNL-04)** — un admin peut fabriquer « personne d'autre ne peut désigner » (suspension / révocation des autres détenteurs) pour ouvrir q166 ; abus visible (audit + notification). | 2026-10-26 | Ouvert |
 | @dev-backend @security | **Action 5 — I-RT3-01** : notifications D5 envoyées après `res.end` perdues à l'arrêt Cloud Run → attendre leur envoi au shutdown (petit lot backend + revue A10), avant prod. | 2026-10-24 | **Ouvert — A06** |
@@ -2233,5 +2235,5 @@ DECISION (PO) :
   - q177 (recommandée) : motif obligatoire pour suspendre et réactiver un compte.
 RELATED: CMP-F4-03, SEC-F4-04, PR #194.
 OWNER: @dev-backend @dev-frontend
-STATUS: DÉCIDÉ — à construire (lot F4-bis).
+STATUS: DÉCIDÉ — livré dans la PR #194 (commit q176/q177, 2026-10-27).
 ```
