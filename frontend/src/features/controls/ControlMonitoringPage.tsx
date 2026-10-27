@@ -4,6 +4,8 @@ import { useGovernanceConfirm, WithoutReviewBadge } from "../../design-system";
 import { ApiError } from "../../api/client";
 import { controlsApi, type Control } from "../../api/controls";
 import { executionsApi, effectivenessApi, type ControlExecution, type EffectivenessAssessment, type ExecutionStatus, type EffectivenessRating, type EffectivenessResult } from "../../api/controlMonitoring";
+import { ExecutionEvidencePanel } from "./ExecutionEvidencePanel";
+import { usePermissions } from "../../auth/usePermissions";
 import "../core/WorkflowPages.css";
 
 type Mode = "executions" | "effectiveness";
@@ -17,6 +19,7 @@ interface PendingValidation { kind: Mode; id: string; label: string; }
 
 export function ControlMonitoringPage({ token }: Props) {
   const gov = useGovernanceConfirm();
+  const { can } = usePermissions(token);
   const [mode, setMode] = useState<Mode>("executions");
   const [controls, setControls] = useState<Control[]>([]);
   const [controlId, setControlId] = useState("");
@@ -28,6 +31,9 @@ export function ControlMonitoringPage({ token }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingValidation, setPendingValidation] = useState<PendingValidation | null>(null);
+  const [evidenceFor, setEvidenceFor] = useState<ControlExecution | null>(null);
+  // QA-F7S1-01: the panel belongs to one execution of the selected control; changing control closes it.
+  useEffect(() => { setEvidenceFor(null); }, [controlId]);
   const [validationComment, setValidationComment] = useState("");
   const [status, setStatus] = useState<ExecutionStatus>("DONE");
   const [plannedDate, setPlannedDate] = useState<string | null>(null);
@@ -78,7 +84,8 @@ export function ControlMonitoringPage({ token }: Props) {
     { key: "actor", header: "Exécutant", render: (row) => row.executedBy },
     { key: "validation", header: "Validation", render: (row) => row.validatedAt ? <div className="workflow-cell-stack"><StatusBadge label={`Validée le ${dateLabel(row.validatedAt)}`} tone="success" /><WithoutReviewBadge value={row.validationIndependence} /></div> : <StatusBadge label="En attente" tone="warning" /> },
     { key: "actions", header: "Action", render: (row) => !row.validatedAt ? <Button disabled={busyId === row.id} onClick={() => { setValidationComment(""); setPendingValidation({ kind: "executions", id: row.id, label: "cette exécution" }); }}>{busyId === row.id ? "Validation…" : "Valider"}</Button> : "—" },
-  ], [busyId]);
+    { key: "evidence", header: "Preuves", render: (row) => can("evidence.read") ? <Button onClick={() => setEvidenceFor(row)} aria-label={`Voir les preuves de l'exécution du ${dateLabel(row.plannedDate)}`}>Voir</Button> : "—" },
+  ], [busyId, can]);
   const assessmentColumns = useMemo<TableColumn<EffectivenessAssessment>[]>(() => [
     { key: "date", header: "Date", render: (row) => dateLabel(row.evalDate) },
     { key: "type", header: "Type", render: (row) => row.evalType || "—" },
@@ -161,6 +168,7 @@ export function ControlMonitoringPage({ token }: Props) {
       </Card>
       <Card header={<div><h2>Historique des exécutions</h2><p>{executions.length} occurrence(s) pour ce contrôle · {doneCount} réalisée(s).</p></div>}>
         <Table columns={executionColumns} rows={executions} rowKey={(row) => row.id} loading={loading} emptyMessage="Aucune exécution enregistrée pour ce contrôle." />
+        {evidenceFor && executions.some((e) => e.id === evidenceFor.id) && <ExecutionEvidencePanel key={evidenceFor.id} token={token} executionId={evidenceFor.id} label={`l'exécution du ${dateLabel(evidenceFor.plannedDate)}`} onClose={() => setEvidenceFor(null)} />}
       </Card>
     </> : <>
       <Card header={<div><h2>Évaluer l'efficacité du contrôle</h2><p>Cette évaluation ne remplace pas l'exécution : elle documente la conception et l'efficacité opérationnelle du contrôle.</p></div>}>

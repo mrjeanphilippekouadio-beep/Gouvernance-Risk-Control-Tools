@@ -42,6 +42,7 @@
 // Prerequis : voir docs/qa/qa-f5a-front-2026-10-27.md, section Environnement (PG local grc_qa_f5a migrations 001..075, backend
 // 127.0.0.1:8099 AUTH_PROVIDER=local, vite 127.0.0.1:5199 avec VITE_AUTH_PROVIDER=local). Base neuve avant chaque passage.
 // Chromium : /opt/pw-browsers/chromium ; playwright : /opt/node-tools/node_modules.
+import { localApi, sleep, verdicts } from "./qa-helpers.mjs";
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 
@@ -57,22 +58,8 @@ const EMAIL = { a: "qa-f5a-a@f5a.test", b: "qa-f5a-b@f5a.test", c: "qa-f5a-c@f5a
 const MASKED = "Masqué (droit d'audit requis)";
 mkdirSync(SHOTS, { recursive: true });
 
-let failures = 0;
-const check = (name, ok, detail = "") => {
-  if (!ok) failures++;
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  -> " + detail : ""}`);
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-const TOK = {};
-async function login(who) {
-  const r = await fetch(`${API}/api/v1/auth/local`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: EMAIL[who], password: "whatever" }) });
-  TOK[who] = (await r.json()).accessToken;
-}
-const api = async (who, method, path, body) => {
-  const r = await fetch(`${API}/api/v1${path}`, { method, headers: { "content-type": "application/json", authorization: `Bearer ${TOK[who]}` }, body: body === undefined ? undefined : JSON.stringify(body) });
-  return { status: r.status, json: await r.json().catch(() => null) };
-};
+const { check, failures } = verdicts();
+const { TOK, login, api } = localApi(API, EMAIL);
 const BASE = "/governance-principle-acceptances";
 const list = async (who) => (await api(who, "GET", BASE)).json?.data ?? [];
 const byPrinciple = async (who, pid) => (await list(who)).find((a) => a.principleId === pid);
@@ -277,5 +264,5 @@ try {
 } finally {
   await browser.close();
 }
-console.log(failures === 0 ? "\nTERMINE : aucun echec" : `\nTERMINE : ${failures} echec(s)`);
-process.exit(failures === 0 ? 0 : 1);
+console.log(failures() === 0 ? "\nTERMINE : aucun echec" : `\nTERMINE : ${failures()} echec(s)`);
+process.exit(failures() === 0 ? 0 : 1);

@@ -406,7 +406,9 @@ pour l'usage.
 | HUMAN @compliance @risk-manager | **q181 (cockpit)** — q169 : qui revoit avant un renouvellement fait seul, et que faire si personne ne peut revoir. | 2026-10-27 | **Ouvert — HUMAN** |
 | HUMAN @security @dev-backend | **q182 (cockpit, F-SAD-01 LOW 2,7)** — allonger ou effacer un délai de gouvernance (durée maximale q169, expiration q174, délai de revue q168) se fait par une seule personne, sans marqueur ni notification : un admin peut effacer la durée maximale puis accepter seul un principe pour 10 ans. Choix : marqueur d'exception, ou circuit q158 (seconde personne). Détail : `docs/security/SEC-suites-arbitrages.md`. | 2026-10-27 | **Ouvert — HUMAN** |
 | @release-manager @orchestrator | **Réserves de production du lot « suites des arbitrages » (revue Codex PR #195)** — (1) F-SAD-01 / q182 : un administrateur peut assouplir seul un délai ; la mesure retenue doit être livrée avant la production. (2) q168 n'est PAS un contrôle opérationnel : le délai est enregistré, sans relance, retard ni escalade, tant que q180 n'est pas tranché et livré. Ne pas présenter q168 comme actif. | 2026-10-27 | Ouvert |
-| @dev-frontend | **Lot F5a (DECISION-088)** — page « Décisions de gouvernance » (q167) branchée sur D5 : liste des acceptations, confirmer / rejeter / révoquer. F5b (revue des exceptions, création d'une acceptation, panel) attend D6 (q172, catalogue des principes). Branche `feat/f5-decisions-gouvernance`, QA navigateur PASS (26/26), PR vers staging. Reste : UUID brut dans « Acceptée par » avec `audit.read` (QA-F5A-02, noms à résoudre côté serveur). | 2026-10-27 | **En cours** |
+| @dev-frontend | **Lot F5a (DECISION-088)** — page « Décisions de gouvernance » (q167) branchée sur D5 : liste des acceptations, confirmer / rejeter / révoquer. F5b (revue des exceptions, création d'une acceptation, panel) attend D6 (q172, catalogue des principes). Branche `feat/f5-decisions-gouvernance`, QA navigateur PASS (26/26), PR vers staging. Reste : UUID brut dans « Acceptée par » avec `audit.read` (QA-F5A-02, noms à résoudre côté serveur). | 2026-10-27 | **Fermé — PR #196 fusionnée dans staging le 2026-10-27 (DECISION-089) ; F5b attend D6** |
+| @dev-frontend | **Lot F7-S1 (DECISION-090)** — consultation des preuves d'une exécution de contrôle (liste, ouverture auditée, analyse xlsx EVD-2) dans « Exécutions & efficacité ». Frontend seul, routes existantes. Branche `feat/f7-s1-preuves`. | 2026-10-27 | **En cours** — PR #197, QA navigateur PASS (22 vérifications). |
+| @devops @dev-backend @qa-engineer | **Aucun stockage de preuves local (QA F7-S1)** — `DOCUMENT_STORAGE_PROVIDER` n'accepte que `google_drive` : les preuves ne se testent en local qu'avec un préchargement de test en mémoire (`tests/integration/qa-f7s1-test-preload.mjs`). Le vrai `GoogleDriveStorage` reste non couvert hors staging. Option : fournisseur `local` interdit en production (lot EVD-S). | 2026-10-27 | Ouvert |
 | @dev-backend | **F-SAD-02 (LOW 2,2)** — expiration q174 recalculée à la lecture : corrigé dans le lot (colonne `expires_at` figée à la soumission, migration 075). | 2026-10-27 | **Fermé — corrigé** |
 | @privacy | **CMP-F4-08** — avis A15 sur `GET /users/directory` (finalité, plafond 500 sans signal, pas de journal de consultation). Sécurité le juge proportionné (SEC-F4 §2). | 2026-10-26 | Ouvert |
 | @security | **SEC-F4-02 (LOW, rattaché à SEC-PNL-04)** — un admin peut fabriquer « personne d'autre ne peut désigner » (suspension / révocation des autres détenteurs) pour ouvrir q166 ; abus visible (audit + notification). | 2026-10-26 | Ouvert |
@@ -2285,6 +2287,27 @@ DECISION (PO) : feu vert du lot F5. Découpage orchestrateur, conforme à
   D5 des acceptations ; F5b avec D6 = liste et revue des exceptions,
   création d'une acceptation (catalogue des principes), panel.
 RELATED: DECISION-080 (q167), q172 ; docs/ux/plan-livraison-vues-front-v1.md §F5.
+OWNER: @orchestrator @dev-frontend
+STATUS: DÉCIDÉ — en cours.
+
+DECISION-089
+DATE: 2026-10-27
+DECISION (PO) : fusion de la PR #196 (F5a, page « Décisions de gouvernance »,
+  q167) dans staging, après QA navigateur PASS (26/26), CI verte. Aucune
+  migration. F5b (revue des exceptions, création d'une acceptation, panel)
+  reste lié à D6.
+RELATED: DECISION-088 ; PR #196.
+OWNER: @orchestrator
+STATUS: DÉCIDÉ — fusionné.
+
+DECISION-090
+DATE: 2026-10-27
+DECISION (PO) : feu vert du lot F7-S1 (consultation des preuves). Vérification
+  préalable demandée par le plan (« hors couche API ») : les routes existent
+  déjà (GET /evidences?controlExecutionId, GET /evidences/:id/url audité,
+  POST /evidences/:id/analysis) ; lot frontend seul. L'analyse exige
+  evidence.import, encore à accorder (EVD, HUMAN).
+RELATED: docs/ux/plan-livraison-vues-front-v1.md (S1, F7), EVD-1/EVD-2.
 OWNER: @orchestrator @dev-frontend
 STATUS: DÉCIDÉ — en cours.
 ```
