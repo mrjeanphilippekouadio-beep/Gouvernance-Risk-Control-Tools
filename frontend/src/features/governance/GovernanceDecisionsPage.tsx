@@ -31,6 +31,7 @@ export function GovernanceDecisionsPage({ token }: Readonly<{ token: string }>) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
   const [action, setAction] = useState<Action | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -45,7 +46,7 @@ export function GovernanceDecisionsPage({ token }: Readonly<{ token: string }>) 
   useEffect(() => { void refresh(); }, [refresh]);
 
   async function run(call: () => Promise<unknown>, done: string) {
-    setBusy(true); setActionError(null); setNotice(null);
+    setBusy(true); setActionError(null); setNotice(null); setRefusal(null);
     try {
       await call();
       setNotice(done); setAction(null);
@@ -53,7 +54,7 @@ export function GovernanceDecisionsPage({ token }: Readonly<{ token: string }>) 
     } catch (err) {
       if (isPermissionDenied(err)) setAction(null); // the global permission dialog explains it
       else if (action) setActionError(describeError(err));
-      else setError(describeError(err));
+      else setRefusal(describeError(err));
     } finally { setBusy(false); }
   }
 
@@ -96,6 +97,7 @@ export function GovernanceDecisionsPage({ token }: Readonly<{ token: string }>) 
     </div>
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
     {notice && <MessageBanner tone="success">{notice}</MessageBanner>}
+    {refusal && <MessageBanner tone="danger" title="Action refusée par le serveur">{refusal}</MessageBanner>}
     <Card header={<strong>Acceptations de principes</strong>}>
       <Table columns={columns} rows={rows} rowKey={(a) => a.id} loading={loading} emptyMessage="Aucune acceptation de principe pour l'instant." />
     </Card>
