@@ -7,6 +7,7 @@ import {
 import { isAcceptableReason, type EligibleValidatorQuery } from "../domain/governance/selfValidation.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
+import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 export const MAX_ACCEPTANCE_REASON_LENGTH = 500;
@@ -31,7 +32,8 @@ export type AcceptanceView = Omit<GovernancePrincipleAcceptance, "acceptedBy" | 
  *  - Confirm / reject: `.acceptance.confirm`, never the acceptor (service + CHECK). Early end: `.acceptance.revoke` (terminal
  *    transition, its own gate); an acceptance whose date passed is closed REVOKED when the principle is accepted again.
  *  - Acceptor / confirmer / ender always come from the authenticated actor.
- *  - No maximum duration exists in the contract (I-R6): none is invented; only "in the future" is required.
+ *  - Maximum duration (q169, DECISION-083): the tenant's `acceptanceMaxDays` when configured; none otherwise (I-R6:
+ *    never invented), and only "in the future" is required.
  */
 export class GovernancePrincipleAcceptanceService {
   constructor(
@@ -40,6 +42,8 @@ export class GovernancePrincipleAcceptanceService {
     private readonly eligible: EligibleValidatorQuery,
     /** Offenders at acceptance time (R-5 "portée"). D6 plugs the detectors in; until then the snapshot is empty. */
     private readonly snapshotOffenders?: (tenantId: string, principleId: string) => Promise<unknown[]>,
+    /** q169: reads `acceptanceMaxDays`. Optional: without it no maximum applies, as before. */
+    private readonly configs?: Pick<ConfigRepository, "getByTenant">,
   ) {}
 
   async list(actor: AuthenticatedUser): Promise<AcceptanceView[]> {
@@ -70,6 +74,10 @@ export class GovernancePrincipleAcceptanceService {
     const reason = requireReason(input.reason, "accept a principle");
     if (!(input.expiresAt instanceof Date) || Number.isNaN(input.expiresAt.getTime()) || input.expiresAt.getTime() <= Date.now()) {
       throw new ValidationError("expiresAt must be a date in the future");
+    }
+    const maxDays = (await this.configs?.getByTenant(actor.tenantId))?.acceptanceMaxDays ?? null;
+    if (maxDays !== null && input.expiresAt.getTime() > Date.now() + maxDays * 86_400_000) {
+      throw new ValidationError(`An acceptance can last at most ${maxDays} days (tenant setting)`);
     }
 
     const thirdPartyExists = await this.eligible.existsOther(actor.tenantId, actor.userId, "governanceprinciple.acceptance.confirm");

@@ -53,7 +53,7 @@ describe("GovernanceExceptionService", () => {
   });
 });
 
-function acceptanceService(thirdParty: boolean) {
+function acceptanceService(thirdParty: boolean, maxDays: number | null = null) {
   const rows = new Map<string, GovernancePrincipleAcceptance>();
   const audits: Array<Record<string, unknown>> = [];
   let n = 0;
@@ -84,12 +84,22 @@ function acceptanceService(thirdParty: boolean) {
       return a;
     },
   };
-  const service = new GovernancePrincipleAcceptanceService(repo, { record: async () => undefined } as never, { existsOther: async () => thirdParty });
+  const service = new GovernancePrincipleAcceptanceService(repo, { record: async () => undefined } as never, { existsOther: async () => thirdParty }, undefined, {
+    getByTenant: async () => ({ acceptanceMaxDays: maxDays }) as never,
+  });
   return { service, rows, audits };
 }
 const future = () => new Date(Date.now() + 86_400_000);
 
 describe("GovernancePrincipleAcceptanceService", () => {
+  it("q169: the tenant's maximum duration applies when configured, and only then", async () => {
+    const accepter = user("rm", ["governanceprinciple.accept"]);
+    const in40 = new Date(Date.now() + 40 * 86_400_000);
+    await expect(acceptanceService(false, 30).service.accept(accepter, { principleId: "PG-SEP-01", reason: "r", expiresAt: in40 }, "q")).rejects.toThrow(/at most 30 days/);
+    await expect(acceptanceService(false, 60).service.accept(accepter, { principleId: "PG-SEP-01", reason: "r", expiresAt: in40 }, "q")).resolves.toMatchObject({ status: "ACTIVE" });
+    await expect(acceptanceService(false).service.accept(accepter, { principleId: "PG-SEP-01", reason: "r", expiresAt: in40 }, "q")).resolves.toMatchObject({ status: "ACTIVE" });
+  });
+
   it("applies at once with the 'alone' marker when no one else can confirm", async () => {
     const { service, audits } = acceptanceService(false);
     const a = await service.accept(rm, { principleId: "GOV-SOD-01", reason: "temporaire", expiresAt: future() }, "r");
@@ -180,6 +190,18 @@ function notifier(rows: GovernanceAuditRow[], opts: { manager?: string | null; u
 }
 
 describe("GovernanceNotifier (emitted after commit, from the audit rows of the request)", () => {
+  it("q170: an early end by someone else tells the acceptor; the expiry close of a new acceptance does not", async () => {
+    const revoked = notifier([row({ entityType: "GovernancePrincipleAcceptance", action: "CLOSE", oldValue: { status: "ACTIVE", acceptedBy: "rmx" }, newValue: { status: "REVOKED", acceptedBy: "rmx" } })]);
+    await revoked.run();
+    expect(revoked.sent).toMatchObject([{ to: "rmx", type: "PRINCIPLE_ACCEPTANCE_REVOKED" }]);
+    const own = notifier([row({ entityType: "GovernancePrincipleAcceptance", action: "CLOSE", oldValue: { status: "ACTIVE", acceptedBy: "actor" }, newValue: { status: "REVOKED", acceptedBy: "actor" } })]);
+    await own.run();
+    expect(own.sent).toEqual([]);
+    const expiry = notifier([row({ entityType: "GovernancePrincipleAcceptance", action: "CLOSE", oldValue: { previousStatus: "ACTIVE" }, newValue: { status: "REVOKED", acceptedBy: "rmx" } })]);
+    await expiry.run();
+    expect(expiry.sent).toEqual([]);
+  });
+
   it("marked exception -> reviewers and manager, never the author; no name in the message", async () => {
     const { run, sent } = notifier([row({ governanceException: "noSelfValidation" })], { manager: "mgr" });
     await run();

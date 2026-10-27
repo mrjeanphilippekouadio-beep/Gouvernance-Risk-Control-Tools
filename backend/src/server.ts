@@ -307,6 +307,8 @@ const governancePrincipleAcceptanceService = new GovernancePrincipleAcceptanceSe
   new PostgresGovernancePrincipleAcceptanceRepository(pool),
   auditRepository,
   governanceQueries,
+  undefined, // D6 plugs the offender detectors in
+  configRepository,
 );
 const governanceNotifier = new GovernanceNotifier(notificationService, governanceQueries);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);

@@ -451,3 +451,9 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - `GET /users/me/permissions` : `filterKnownPermissions(actor.roles)` après `getSelf` (tenant-scopé), aucune permission requise.
 - `GET /users/directory` : id + displayName des comptes actifs, ouvert à `user.read` | `process.responsibility.assign` | `designation.manage` (le RM n'a pas `user.read` et ne pouvait pas choisir qui désigner).
 - q166 : `ProcessService.setResponsibilities` réutilise `SelfValidationGate` (paramètre optionnel, fail closed) pour le seul champion ; owner/N-1 restent `ValidationError`. `selfValidationGate` est désormais construit avant `processService` dans server.ts.
+
+## 2026-10-27 — Lot suites des arbitrages (DECISION-083/086)
+- Migration 075 : 3 délais (jours, NULL = non configuré, CHECK 1..3650) sur `configs` + rattrapage `config.governancedelays.set` (admin). Jamais de valeur par défaut inventée.
+- Ajouter une permission admin ou un type de notification casse des tests « de référence » (D1/D2b filtres, QA-D044 CONFIG_ADMIN et compte du catalogue, QA-Notifications, NotificationsCenter, QA-panel*-migrations, B6bFollowups inventaire `configs.getByTenant(`) : les mettre à jour, jamais les affaiblir.
+- Lire un réglage pour une vue sans exiger `config.read` : `configs.getByTenant(actor.tenantId)` directement.
+- q170 : notification après commit dans `GovernanceNotifier` (ligne CLOSE dont l'oldValue porte un `status` = révocation, pas la clôture pour expiration).

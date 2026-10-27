@@ -6,6 +6,10 @@ export type SelfValidationPolicy = "REFUSE" | "DOUBLE_CONFIRMATION";
 export interface GovernanceConfig {
   committeeAuditCumulAllowed: boolean;
   selfValidationPolicy: SelfValidationPolicy;
+  /** DECISION-083 (q168, q169, q174): days, null = not configured (no delay applies). */
+  exceptionReviewDelayDays: number | null;
+  acceptanceMaxDays: number | null;
+  policyRequestExpiryDays: number | null;
   version: number;
   updatedAt: string;
 }
@@ -23,13 +27,18 @@ export interface SelfValidationPolicyRequest {
   decidedBy: string | null;
   decidedAt: string | null;
   decisionReason: string | null;
+  /** q174: when it stops being approvable (null = no expiry configured). Computed by the server. */
+  expiresAt?: string | null;
 }
+
+export type GovernanceDelays = Pick<GovernanceConfig, "exceptionReviewDelayDays" | "acceptanceMaxDays" | "policyRequestExpiryDays">;
 
 const BASE = "/api/v1/config";
 const put = <T>(path: string, token: string, body: unknown) => apiRequest<T>(`${BASE}${path}`, { method: "PUT", body, token });
 
 export const configApi = {
   get: (token: string) => apiRequest<GovernanceConfig>(BASE, { token }),
+  setGovernanceDelays: (token: string, delays: GovernanceDelays, reason: string) => put<GovernanceConfig>("/governance-delays", token, { ...delays, reason }),
   setCommitteeAuditCumul: (token: string, allowed: boolean, reason: string) => put<GovernanceConfig>("/committee-audit-cumul", token, { allowed, reason }),
   /** 200 = applied; 202 = `pendingRequest` set, `data` is the UNCHANGED config. Callers must look at `status`. */
   setSelfValidationPolicy: (token: string, policy: SelfValidationPolicy, reason: string): Promise<ApiResponse<GovernanceConfig>> =>

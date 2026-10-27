@@ -93,6 +93,8 @@ export const ADMIN_PERMISSIONS: Permission[] = [
   "config.selfvalidation.set",
   // DECISION-075 (D2c): designating an interim opens Risk Manager rights; never held by a fixed group.
   "designation.manage",
+  // DECISION-083 (q168, q169, q174): the governance delays are an administrator setting (migration 075 catch-up).
+  "config.governancedelays.set",
 ];
 
 export const isAdministrator = (roles: Role[]): boolean => roles.some((r) => r.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)));

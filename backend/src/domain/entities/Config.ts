@@ -78,6 +78,13 @@ export interface Config {
   committeeAuditCumulAllowed: boolean;
   /** DECISION-074 q141: what happens when someone validates their own input. Default REFUSE. */
   selfValidationPolicy: SelfValidationPolicy;
+  /**
+   * DECISION-083 (q168, q169, q174): governance delays in days, set by the tenant (config.governancedelays.set).
+   * null = not configured: no delay applies. Never given a default value.
+   */
+  exceptionReviewDelayDays: number | null;
+  acceptanceMaxDays: number | null;
+  policyRequestExpiryDays: number | null;
   /** 0 means "default, never explicitly saved" — see DEFAULT_CONFIG in ConfigService. */
   version: number;
   updatedBy: string | null;
@@ -104,4 +111,7 @@ export interface ConfigPatch {
   committeeEvaluationEnforced?: boolean;
   committeeAuditCumulAllowed?: boolean;
   selfValidationPolicy?: SelfValidationPolicy;
+  exceptionReviewDelayDays?: number | null;
+  acceptanceMaxDays?: number | null;
+  policyRequestExpiryDays?: number | null;
 }

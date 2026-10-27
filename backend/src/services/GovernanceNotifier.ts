@@ -137,6 +137,20 @@ export class GovernanceNotifier {
       );
     }
 
+    // q170 (DECISION-083): an early end by someone else (the Audit, typically) is told to the person who accepted.
+    // `revoke` stores the whole previous row as oldValue; the expiry close done by a new acceptance does not (no status).
+    if (
+      row.entityType === "GovernancePrincipleAcceptance" && row.action === "CLOSE" && nv["status"] === "REVOKED" &&
+      (ov["status"] === "ACTIVE" || ov["status"] === "PENDING") && typeof nv["acceptedBy"] === "string"
+    ) {
+      await send(
+        [nv["acceptedBy"]],
+        "PRINCIPLE_ACCEPTANCE_REVOKED",
+        row.entityId,
+        "Votre acceptation d’un principe de gouvernance non respecté a été retirée. Le principe redevient « non respecté ».",
+      );
+    }
+
     if (row.entityType === "GovernanceExceptionReview" && row.action === "CREATE" && nv["outcome"] === "CONTESTED") {
       const manager = await this.source.managerId(tenantId);
       await send(

@@ -5,7 +5,7 @@ const log = pino({ name: "identity.lastSeen" });
 const ONE_HOUR_MS = 3_600_000;
 
 /**
- * Lot D2a / q155 : enregistre `users.last_seen_at` (dernière connexion). Télémétrie technique : pas d'audit_log, aucune
+ * Lot D2a / q155 : enregistre `users.last_seen_at` (affiché « dernière activité », q175 : chaque nouveau jeton compte, un renouvellement silencieux inclus). Télémétrie technique : pas d'audit_log, aucune
  * donnée au-delà de la date (et de l'`iat` du jeton). Ne lève jamais et n'est jamais attendue par l'appelant : un échec
  * est journalisé et la requête continue.
  *  - Sans `tokenIat` (fournisseur local, connexion réelle) : au plus une fois par heure et par utilisateur.

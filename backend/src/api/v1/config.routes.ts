@@ -15,6 +15,11 @@ const UpdateCommitteeThresholdsBody = z.object({
   reason: reasonText(2000),
 });
 
+const Days = z.number().int().min(1).max(3650).nullable().optional();
+const GovernanceDelaysBody = z
+  .object({ exceptionReviewDelayDays: Days, acceptanceMaxDays: Days, policyRequestExpiryDays: Days, reason: reasonText(2000) })
+  .strict();
+
 const UpdateCommitteeEnforcementBody = z.object({
   enforced: z.boolean(),
   reason: reasonText(2000),
@@ -96,6 +101,15 @@ export function configRouter(configService: ConfigService): Router {
       const body = UpdateCommitteeAuditCumulBody.parse(req.body);
       const config = await configService.setCommitteeAuditCumul(req.user, body.allowed, body.reason, req.requestId);
       res.json({ data: config });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/governance-delays", async (req, res, next) => {
+    try {
+      const { reason, ...delays } = GovernanceDelaysBody.parse(req.body);
+      res.json({ data: await configService.setGovernanceDelays(req.user, delays, reason, req.requestId) });
     } catch (err) {
       next(err);
     }

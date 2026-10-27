@@ -50,7 +50,7 @@ describe("D1 permissions and fixed groups", () => {
     expect(sql).not.toMatch(/\b(DELETE FROM|TRUNCATE)\b/i);
     expect(sql).not.toMatch(/UPDATE\s+audit_log/i);
     // every admin permission of the code (except the new one) is a catch-up criterion
-    for (const p of ADMIN_PERMISSIONS.filter((x) => x !== "config.selfvalidation.set" && x !== "designation.manage")) expect(sql).toContain(`'${p}'`);
+    for (const p of ADMIN_PERMISSIONS.filter((x) => x !== "config.selfvalidation.set" && x !== "designation.manage" && x !== "config.governancedelays.set")) expect(sql).toContain(`'${p}'`);
   });
 });
 
