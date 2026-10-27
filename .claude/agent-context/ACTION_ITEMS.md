@@ -393,7 +393,7 @@ pour l'usage.
 | HUMAN | **PR #189 — SonarCloud sécurité D (2026-10-24)** : seul check rouge (CI, QA, A10 verts). Scan local `eslint-plugin-sonarjs` sur les 161 fichiers modifiés : uniquement des hotspots (pseudo-random, /tmp, regex, x-powered-by dans les tests), aucun secret ni TLS désactivé ni SQL dynamique issu de l'entrée → probable constat d'analyse de flux (taint) côté serveur Sonar. Action 1 : sonarcloud.io autorisé par le PO le 2026-10-26 ; cause réelle = 2 × S5443 (`/tmp` codé en dur, sécurité HIGH) dans `tests/integration/qa-{retest2,panel2}-front-playwright.mjs`, corrigé (dossier `qa-shots/` ignoré par git). | 2026-10-24 | **Corrigé — attente Quality Gate** |
 | HUMAN @release-manager | **Action 2 — fusion PR #189 dans staging** dès Sonar vert (ou dérogation PO staging-only, alors inscrite en risque accepté et corrigée avant prod). migrate.yml applique 066–074 ; vérifier ensuite `git diff HEAD origin/staging` vide. | 2026-10-24 | **Ouvert — HUMAN** |
 | HUMAN | **Action 3 — trancher q172 (liste minimale des exceptions à revoir, lève CMP-BLK-D5-01 sans attendre D6) et q173 (4 droits de décision réservés aux groupes fixes)** dans le cockpit ; q168/q169 bloquent aussi la prod. | 2026-10-24 | **Fermé — tranché le 2026-10-26 (DECISION-083) : q172 attendre D6 ; q173 à préciser (q179)** |
-| @dev-backend @dev-frontend | **Action 4 — lot F4** (profil, désignations, comptes — q164) : prérequis backend endpoint « mes permissions » (sert aussi F5/F8). Dispatch après feu vert PO. | 2026-10-24 | **En cours** — feu vert PO 2026-10-26 (DECISION-082). Branche `feat/f4-profil-designations-comptes` : backend + écrans livrés, revues QA/Sécurité/Compliance en cours, PR après verts. |
+| @dev-backend @dev-frontend | **Action 4 — lot F4** (profil, désignations, comptes — q164) : prérequis backend endpoint « mes permissions » (sert aussi F5/F8). Dispatch après feu vert PO. | 2026-10-24 | **Fermé — PR #194 fusionnée dans staging le 2026-10-27 (DECISION-085)** |
 | HUMAN @dev-frontend @dev-backend @compliance | **q176 (cockpit, CMP-F4-03)** — afficher « sans validation indépendante » sur l'écran Responsabilités après une auto-désignation q166 (aujourd'hui dans le journal d'audit seulement). Détail : `docs/compliance/CMP-F4.md`. | 2026-10-26 | **Fermé — tranché le 2026-10-27 (DECISION-084) : afficher la mention dès F4** |
 | HUMAN @dev-backend @dev-frontend @security | **q177 (cockpit, SEC-F4-04)** — motif obligatoire pour suspendre / réactiver un compte (audit `reason: null`, `UserService.suspend`/`reactivate`). Détail : `docs/security/SEC-F4.md`. | 2026-10-26 | **Fermé — tranché le 2026-10-27 (DECISION-084) : motif obligatoire** |
 | HUMAN @compliance @risk-manager | **q178 (cockpit)** — q160 rouverte par le PO (q171) : départ du dernier Risk Manager sans intérimaire, qui est prévenu et quel délai maximal de vacance. | 2026-10-27 | **Ouvert — HUMAN** |
@@ -2237,4 +2237,15 @@ DECISION (PO) :
 RELATED: CMP-F4-03, SEC-F4-04, PR #194.
 OWNER: @dev-backend @dev-frontend
 STATUS: DÉCIDÉ — livré dans la PR #194 (commit q176/q177, 2026-10-27).
+
+DECISION-085
+DATE: 2026-10-27
+DECISION (PO) : fusion de la PR #194 (lot F4 : profil d'organisation,
+  désignations, responsabilités de processus, comptes ; q164, q166, q176,
+  q177) dans staging, après QA (unitaire + parcours navigateur 21/21),
+  Sécurité (VERT avec réserves), Compliance (écarts corrigés), revue Codex
+  (q176/q177 intégrés), CI et Sonar verts. Aucune migration.
+RELATED: DECISION-080, 082, 084 ; PR #194.
+OWNER: @orchestrator
+STATUS: DÉCIDÉ — fusionné.
 ```
