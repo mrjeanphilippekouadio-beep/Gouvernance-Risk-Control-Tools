@@ -35,6 +35,8 @@ export interface CreateUserInput {
  * (see RaciPanel), not as a fatal error.
  */
 export const ADMIN_PAGE_SIZE = 100;
+/** Server cap of GET /users/directory (UserService MAX_DIRECTORY): a full list may be truncated. */
+export const DIRECTORY_LIMIT = 500;
 
 export const usersApi = {
   list: (token: string) => apiRequest<UserSummary[]>("/api/v1/users", { token }),
@@ -47,6 +49,9 @@ export const usersApi = {
   create: (token: string, body: CreateUserInput) => apiRequest<AdminUser>("/api/v1/users", { method: "POST", body, token }),
   update: (token: string, id: string, body: { displayName?: string; departmentId?: string | null }) =>
     apiRequest<AdminUser>(`/api/v1/users/${id}`, { method: "PUT", body, token }),
-  suspend: (token: string, id: string) => apiRequest<{ status: "SUSPENDED" }>(`/api/v1/users/${id}/suspend`, { method: "PATCH", token }),
-  reactivate: (token: string, id: string) => apiRequest<AdminUser>(`/api/v1/users/${id}/reactivate`, { method: "PATCH", token }),
+  /** q177: the reason is mandatory, checked again by the server and kept in the audit trail. */
+  suspend: (token: string, id: string, reason: string) =>
+    apiRequest<{ status: "SUSPENDED" }>(`/api/v1/users/${id}/suspend`, { method: "PATCH", body: { reason }, token }),
+  reactivate: (token: string, id: string, reason: string) =>
+    apiRequest<AdminUser>(`/api/v1/users/${id}/reactivate`, { method: "PATCH", body: { reason }, token }),
 };

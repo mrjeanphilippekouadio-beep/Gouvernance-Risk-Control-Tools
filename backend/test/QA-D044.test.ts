@@ -137,7 +137,7 @@ describe("QA-D044 q94: widening a role (cumul replayed for each holder)", () => 
 });
 
 describe("QA-D044 q94: UserService.reactivate / assertReactivable", () => {
-  const reactivate = (w: ReturnType<typeof rbac>, id: string) => w.userService.reactivate(assigner, id, "r");
+  const reactivate = (w: ReturnType<typeof rbac>, id: string) => w.userService.reactivate(assigner, id, "r", "Motif de test");
 
   it.each([
     ["RM + Committee", ["rm", "co"]],

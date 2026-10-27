@@ -33,6 +33,8 @@ export interface ProcessResponsibilitiesView {
   legacyOwner: string | null;
   /** Proposed accounts for the legacy owner (only while ownerUserId is null, only for an assigner). Never applied automatically. */
   ownerCandidates: Array<{ id: string; displayName: string }>;
+  /** q176 (DECISION-084): the current risk champion named themselves through the q166 exception (no independent validation). */
+  riskChampionWithoutIndependentReview: boolean;
 }
 
 /** "Jean-Marc  DUPONT" and "dupont jean marc" give the same key: accents stripped, lower case, words sorted. */
@@ -203,7 +205,23 @@ export class ProcessService {
       deputyUserId: process.deputyUserId,
       legacyOwner: process.owner,
       ownerCandidates: canAssign && !process.ownerUserId ? await this.ownerCandidates(actor.tenantId, process.owner) : [],
+      riskChampionWithoutIndependentReview: await this.championSelfDesignated(actor.tenantId, process),
     };
+  }
+
+  /**
+   * q176: read from the audit row that named the CURRENT champion (newest first). Its governance marker is the q166
+   * exception; once the champion changes, the row that named the new one decides, so the mention follows the person.
+   */
+  private async championSelfDesignated(tenantId: string, process: Process): Promise<boolean> {
+    if (!process.riskChampionUserId) return false;
+    const events = await this.audit.listForEntity(tenantId, "Process", process.id);
+    const naming = events.find((e) => {
+      const after = e.newValue as { riskChampionUserId?: unknown } | null;
+      const before = e.oldValue as { riskChampionUserId?: unknown } | null;
+      return after?.riskChampionUserId === process.riskChampionUserId && before?.riskChampionUserId !== process.riskChampionUserId;
+    });
+    return Boolean(naming?.governanceException);
   }
 
   /**

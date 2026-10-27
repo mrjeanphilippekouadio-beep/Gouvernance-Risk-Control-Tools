@@ -172,7 +172,7 @@ describe("B-8 bis grantors and lost rights (q48)", () => {
     const notifications = { async record(i: { recipientUserId: string; resourceType: string }) { sent.push(i); } };
     const suspended = { ...users, getById: (() => { let n = 0; return async (_t: string, id: string) => ({ id, tenantId: "t1", email: "e", displayName: "N", roles: [], departmentId: null, createdAt: new Date(), deletedAt: n++ === 0 ? new Date() : null }); })() };
     const userService = new UserService(suspended as never, audit as never, service, undefined, notifications as never);
-    const res = await userService.reactivate(admin, "susp", "r");
+    const res = await userService.reactivate(admin, "susp", "r", "Motif de test");
     expect(res.lostRoles).toEqual([{ id: "old", name: "old", permissions: ["risk.read"] }]);
     expect(sent).toEqual([expect.objectContaining({ recipientUserId: "susp", resourceType: "MANAGEMENT" })]);
   });

@@ -134,6 +134,18 @@ function processWorld(gate?: SelfValidationGate, over: Partial<Process> = {}) {
 const assigner = actor(["process.read", "process.responsibility.assign"]);
 const path = `/p/${id(1)}/responsibilities`;
 
+describe("QA-F4 q177 routes: suspend / reactivate require a reason", () => {
+  const mount = userWorld([user(1, "Target"), user(2, "Gone", { deletedAt: new Date() })]);
+  const admin = actor(["user.delete", "user.reactivate"]);
+
+  it("400 without a reason, a blank one or an unknown key, before the service runs", async () => {
+    for (const body of [undefined, {}, { reason: "  " }, { reason: "ok", by: ME }]) {
+      expect((await http(mount, admin, "PATCH", `/users/${id(1)}/suspend`, body)).status).toBe(400);
+      expect((await http(mount, admin, "PATCH", `/users/${id(2)}/reactivate`, body)).status).toBe(400);
+    }
+  });
+});
+
 describe("QA-F4 q166 service", () => {
   it("policy REFUSE (or no config row): refused even with a valid confirmation, nothing written", async () => {
     for (const policy of ["REFUSE", undefined]) {

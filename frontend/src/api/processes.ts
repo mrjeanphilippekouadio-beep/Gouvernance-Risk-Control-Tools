@@ -40,6 +40,8 @@ export interface ProcessResponsibilities {
   deputyUserId: string | null;
   legacyOwner: string | null;
   ownerCandidates: { id: string; displayName: string }[];
+  /** q176: the current champion named themselves through the q166 exception (computed by the server from the audit). */
+  riskChampionWithoutIndependentReview: boolean;
 }
 export type ResponsibilitiesInput = Partial<Record<"ownerUserId" | "riskChampionUserId" | "deputyUserId", string | null>>;
 

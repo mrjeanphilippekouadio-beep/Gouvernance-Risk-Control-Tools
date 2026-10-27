@@ -11,6 +11,8 @@ const CreateUserBody = z.object({
   reason: reasonText().optional(),
 });
 
+const ReasonBody = z.object({ reason: reasonText() }).strict();
+
 const PaginationQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   offset: z.coerce.number().int().min(0).optional(),
@@ -99,7 +101,8 @@ export function usersRouter(userService: UserService): Router {
   // ACT-102/ACT-107: soft-delete; blocks all future auth on the next request (see UserService doc comment).
   router.patch("/:id/suspend", async (req, res, next) => {
     try {
-      await userService.suspend(req.user, req.params["id"] as string, req.requestId);
+      const { reason } = ReasonBody.parse(req.body);
+      await userService.suspend(req.user, req.params["id"] as string, req.requestId, reason);
       res.json({ data: { status: "SUSPENDED" } });
     } catch (err) {
       next(err);
@@ -109,7 +112,8 @@ export function usersRouter(userService: UserService): Router {
   // ACT-103: maker-checker counterpart to suspend.
   router.patch("/:id/reactivate", async (req, res, next) => {
     try {
-      const user = await userService.reactivate(req.user, req.params["id"] as string, req.requestId);
+      const { reason } = ReasonBody.parse(req.body);
+      const user = await userService.reactivate(req.user, req.params["id"] as string, req.requestId, reason);
       res.json({ data: user });
     } catch (err) {
       next(err);

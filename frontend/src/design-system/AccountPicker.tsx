@@ -1,5 +1,5 @@
 import { FormField } from "@djamo/design-system";
-import type { DirectoryEntry } from "../api/users";
+import { DIRECTORY_LIMIT, type DirectoryEntry } from "../api/users";
 
 /**
  * Account selector of the designation screens: lists only the accounts the server returned (GET /users/directory).
@@ -14,7 +14,10 @@ export function AccountPicker({ id, label, value, onChange, accounts, help, allo
   help?: string;
   allowEmpty?: boolean;
 }>) {
-  return <FormField label={label} htmlFor={id} help={help}>
+  const truncated = accounts.length >= DIRECTORY_LIMIT
+    ? `Annuaire limité aux ${DIRECTORY_LIMIT} premiers comptes actifs : un compte peut manquer.`
+    : undefined;
+  return <FormField label={label} htmlFor={id} help={[help, truncated].filter(Boolean).join(" ") || undefined}>
     <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="">{allowEmpty ? "Aucun" : "Sélectionner…"}</option>
       {value && !accounts.some((a) => a.id === value) && <option value={value}>Compte actuel (non listé : inactif ou hors annuaire)</option>}

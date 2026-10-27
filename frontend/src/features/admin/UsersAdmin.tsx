@@ -59,10 +59,10 @@ export function UsersAdmin({ token }: Readonly<{ token: string }>) {
         await usersApi.update(token, dialog.user.id, { displayName: displayName.trim() });
         setNotice("Nom mis à jour.");
       } else if (dialog.kind === "suspend") {
-        await usersApi.suspend(token, dialog.user.id);
+        await usersApi.suspend(token, dialog.user.id, reason.trim());
         setNotice(`Compte ${dialog.user.email} suspendu : il ne peut plus se connecter.`);
       } else {
-        await usersApi.reactivate(token, dialog.user.id);
+        await usersApi.reactivate(token, dialog.user.id, reason.trim());
         setNotice(`Compte ${dialog.user.email} réactivé.`);
       }
       setDialog(null);
@@ -115,7 +115,7 @@ export function UsersAdmin({ token }: Readonly<{ token: string }>) {
       actions={<>
         <Button onClick={() => setDialog(null)} disabled={saving}>Annuler</Button>
         <Button type="submit" form="user-form" variant={dialog?.kind === "suspend" ? "destructive" : "primary"}
-          disabled={saving || (dialog?.kind === "create" && (!email.trim() || !displayName.trim() || !roleId)) || (dialog?.kind === "edit" && !displayName.trim())}>
+          disabled={saving || (dialog?.kind === "create" && (!email.trim() || !displayName.trim() || !roleId)) || (dialog?.kind === "edit" && !displayName.trim()) || ((dialog?.kind === "suspend" || dialog?.kind === "reactivate") && !reason.trim())}>
           {saving ? "Envoi…" : "Confirmer"}
         </Button>
       </>}
@@ -141,6 +141,9 @@ export function UsersAdmin({ token }: Readonly<{ token: string }>) {
           <MessageBanner tone="warning">Si ce compte est le dernier membre du groupe Risk Manager, le serveur refuse la suspension.</MessageBanner>
         </>}
         {dialog.kind === "reactivate" && <p>{dialog.user.displayName} ({dialog.user.email}) pourra de nouveau se connecter. Le serveur refuse la réactivation si elle ferait revivre un cumul interdit.</p>}
+        {(dialog.kind === "suspend" || dialog.kind === "reactivate") && <FormField label="Motif (obligatoire)" htmlFor="user-status-reason">
+          <input id="user-status-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required />
+        </FormField>}
       </form>}
     </Modal>
   </section>;

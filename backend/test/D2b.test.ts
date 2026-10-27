@@ -136,6 +136,20 @@ describe("D2b setResponsibilities", () => {
       expect(inTx[0]).toMatchObject({ governanceException: "noSelfValidation", reason: confirmation.reason });
     });
 
+    it("q176: the responsibilities view flags a self-designated champion, and the flag follows the person", async () => {
+      const w = world("x", [user(99, "Me"), user(2, "Awa")], gate(false));
+      // The world's audit fake only records: read the recorded rows back, newest first, like PostgresAuditRepository.
+      (w.service as any).audit.listForEntity = async () => [...w.audits].reverse();
+      const reader = actor(["process.read"]);
+      expect((await w.service.getResponsibilities(reader, id(1))).riskChampionWithoutIndependentReview).toBe(false);
+
+      await w.service.setResponsibilities(assigner, id(1), { riskChampionUserId: ACTOR }, "r", confirmation);
+      expect((await w.service.getResponsibilities(reader, id(1))).riskChampionWithoutIndependentReview).toBe(true);
+
+      await w.service.setResponsibilities(assigner, id(1), { riskChampionUserId: id(2) }, "r");
+      expect((await w.service.getResponsibilities(reader, id(1))).riskChampionWithoutIndependentReview).toBe(false);
+    });
+
     it("is refused when someone else can assign, and never extends to owner or N-1", async () => {
       await expect(
         world("x", [user(99, "Me")], gate(true)).service.setResponsibilities(assigner, id(1), { riskChampionUserId: ACTOR }, "r", confirmation),

@@ -435,7 +435,7 @@ describe("QA-B8 known defect DEFECT-B8-01: suspending the last Risk Manager memb
     } as unknown as UserRepository;
     const userService = new UserService(userRepo, audit, roleService);
 
-    await userService.suspend(admin, "rm-1", "S2").catch(() => undefined);
+    await userService.suspend(admin, "rm-1", "S2", "Motif de test").catch(() => undefined);
 
     const members = await repo.listAssignments("tenant-1", rm.id);
     const activeNonSuspended = members.filter((a) => !a.revokedAt && !users.find((u) => u.id === a.userId)?.deletedAt);

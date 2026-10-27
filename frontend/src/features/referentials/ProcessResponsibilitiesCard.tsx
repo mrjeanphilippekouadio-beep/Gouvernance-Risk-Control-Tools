@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Button, Card, MessageBanner } from "@djamo/design-system";
+import { Button, Card, MessageBanner, StatusBadge } from "@djamo/design-system";
 import { processesApi, type ProcessResponsibilities, type ResponsibilitiesInput } from "../../api/processes";
 import type { DirectoryEntry } from "../../api/users";
 import { AccountPicker, accountName, useGovernanceConfirm } from "../../design-system";
@@ -72,6 +72,10 @@ export function ProcessResponsibilitiesCard({ token, processId, accounts, canAss
       <p className="muted">
         {SLOTS.map(({ key, label }) => `${label} : ${accountName(accounts, data[key])}`).join(" · ")}
       </p>
+      {data.riskChampionWithoutIndependentReview && <p>
+        <StatusBadge label="Champion désigné sans validation indépendante" tone="warning" />{" "}
+        <span className="muted">Il s'est nommé lui-même (structure à une personne), avec double confirmation et motif tracés dans le journal d'audit.</span>
+      </p>}
       {data.legacyOwner && <p className="muted">Responsable saisi en texte (historique, inchangé) : {data.legacyOwner}</p>}
       {canAssign && data.ownerCandidates.length > 0 && <MessageBanner tone="info" title="Comptes dont le nom correspond au responsable saisi">
         <p>Proposition de rapprochement par nom : rien n'est appliqué sans votre confirmation, compte par compte.</p>

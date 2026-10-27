@@ -10,6 +10,7 @@ import type { NotificationService } from "./NotificationService.js";
 import type { SystemGroup } from "../domain/entities/Role.js";
 import type { Permission } from "../domain/permissions.js";
 import { canonicalId } from "../domain/ids.js";
+import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 
 /** B-8 bis (q43): user sheet with the fixed groups. riskManagerAndCommittee is now a forbidden cumul (q94): kept only to flag pre-existing ones. */
 export interface UserDetail extends User {
@@ -44,6 +45,17 @@ export interface CreateUserWithRoleInput {
 /** The rights that name an account to a role: each one opens the account picker (directory). */
 const DIRECTORY_PERMISSIONS: Permission[] = ["user.read", "process.responsibility.assign", "designation.manage"];
 const MAX_DIRECTORY = 500;
+const MAX_ACCOUNT_REASON_LENGTH = 500;
+
+/** q177 (DECISION-084): suspending or reactivating an account always carries a reason, audited with the action. */
+function requireAccountReason(reason: unknown, what: string): string {
+  const trimmed = typeof reason === "string" ? reason.trim() : "";
+  if (!trimmed || !isAcceptableReason(trimmed)) throw new ValidationError(`A reason is required to ${what}`);
+  if (trimmed.length > MAX_ACCOUNT_REASON_LENGTH) {
+    throw new ValidationError(`The reason must be at most ${MAX_ACCOUNT_REASON_LENGTH} characters`);
+  }
+  return trimmed;
+}
 
 export interface ListUsersOptions {
   includeSuspended?: boolean;
@@ -247,8 +259,9 @@ export class UserService {
    * archive/delete methods. Maker-checker: an actor can never suspend
    * themselves (mirrors RoleService.assignToUser/revokeFromUser).
    */
-  async suspend(actor: AuthenticatedUser, id: string, requestId: string): Promise<void> {
+  async suspend(actor: AuthenticatedUser, id: string, requestId: string, reason: string): Promise<void> {
     requirePermission(actor, "user.delete");
+    const why = requireAccountReason(reason, "suspend an account");
     id = canonicalId(id);
     if (actor.userId === id) {
       throw new ForbiddenError("You cannot suspend your own account — ask another admin");
@@ -270,7 +283,7 @@ export class UserService {
       action: "DELETE",
       oldValue: before,
       newValue: null,
-      reason: null,
+      reason: why,
       requestId,
     });
   }
@@ -286,8 +299,10 @@ export class UserService {
     actor: AuthenticatedUser,
     id: string,
     requestId: string,
+    reason: string,
   ): Promise<User & { lostRoles: LostRole[] }> {
     requirePermission(actor, "user.reactivate");
+    const why = requireAccountReason(reason, "reactivate an account");
     const before = await this.users.getById(actor.tenantId, id);
     if (!before) throw new NotFoundError("User", id);
     if (!before.deletedAt) throw new ValidationError("User is not suspended");
@@ -310,7 +325,7 @@ export class UserService {
       action: "UPDATE",
       oldValue: before,
       newValue: lostRoles.length > 0 ? { ...after, lostRoles: lostRoles.map((r) => r.name) } : after,
-      reason: null,
+      reason: why,
       requestId,
     });
 
