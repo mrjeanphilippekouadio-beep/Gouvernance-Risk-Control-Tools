@@ -401,6 +401,9 @@ pour l'usage.
 | @devops @qa-engineer | **Couverture absente de SonarCloud (revue Codex PR #194, P2)** — aucun `sonar-project.properties` ni rapport lcov dans la CI : Sonar (analyse automatique) affiche 0 % de couverture sur toutes les PR, alors que ~2400 tests vitest tournent. Générer `coverage/lcov.info` (vitest --coverage) et passer à l'analyse CI pour l'importer. | 2026-10-27 | Ouvert |
 | @security @dev-backend | **SelfValidationGate non atomique (Codex PR #194, P2 ; SEC-F4-02)** — politique et « autre validateur » vérifiés avant la transaction d'écriture, pour tous les usages (exécutions, efficacité, évaluations, constats, q166). Chantier transverse : revérifier dans la transaction (`runAudited`) ou verrouiller. | 2026-10-27 | Ouvert |
 | @dev-backend | **QA-F4-FR-01 (MINOR)** — messages de refus serveur en anglais affichés tels quels dans l'interface française (ex. auto-suspension `UserService.ts:267`, dernier Risk Manager `RoleService.ts:641`). Rapport : `docs/qa/qa-f4-front-2026-10-27.md`. | 2026-10-27 | Ouvert |
+| @dev-backend @dev-db | **Lot « suites des arbitrages » (DECISION-086)** — q170, q174, q175, durée maximale q169, délai q168 (stockage), branche `feat/r1-suites-arbitrages`. Relances q168 et renouvellement q169 attendent q180 / q181. | 2026-10-27 | **En cours** |
+| HUMAN @dev-backend @devops | **q180 (cockpit)** — q168 : déclenchement des relances (aucune tâche planifiée n'existe) et moment de la remontée au gérant. | 2026-10-27 | **Ouvert — HUMAN** |
+| HUMAN @compliance @risk-manager | **q181 (cockpit)** — q169 : qui revoit avant un renouvellement fait seul, et que faire si personne ne peut revoir. | 2026-10-27 | **Ouvert — HUMAN** |
 | @privacy | **CMP-F4-08** — avis A15 sur `GET /users/directory` (finalité, plafond 500 sans signal, pas de journal de consultation). Sécurité le juge proportionné (SEC-F4 §2). | 2026-10-26 | Ouvert |
 | @security | **SEC-F4-02 (LOW, rattaché à SEC-PNL-04)** — un admin peut fabriquer « personne d'autre ne peut désigner » (suspension / révocation des autres détenteurs) pour ouvrir q166 ; abus visible (audit + notification). | 2026-10-26 | Ouvert |
 | @dev-backend @security | **Action 5 — I-RT3-01** : notifications D5 envoyées après `res.end` perdues à l'arrêt Cloud Run → attendre leur envoi au shutdown (petit lot backend + revue A10), avant prod. | 2026-10-24 | **Ouvert — A06** |
@@ -2248,4 +2251,14 @@ DECISION (PO) : fusion de la PR #194 (lot F4 : profil d'organisation,
 RELATED: DECISION-080, 082, 084 ; PR #194.
 OWNER: @orchestrator
 STATUS: DÉCIDÉ — fusionné.
+
+DECISION-086
+DATE: 2026-10-27
+DECISION (PO) : feu vert du lot backend « suites des arbitrages » q168,
+  q169, q170, q174, q175 (DECISION-083), après fusion de F4. Les points non
+  décidés (relances q168, revue avant renouvellement q169) sont posés en
+  q180 et q181 ; le reste avance.
+RELATED: DECISION-083, 085.
+OWNER: @orchestrator @dev-backend @dev-db
+STATUS: DÉCIDÉ — en cours.
 ```
