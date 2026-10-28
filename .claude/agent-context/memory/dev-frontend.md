@@ -146,3 +146,10 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 ## 2026-10-27 — Lot F7-S2 (DECISION-093)
 - `features/audit/AuditMissionsPage.tsx` sur les routes existantes `/api/v1/audit-missions` (liste filtrée par statut, créer, démarrer, clôturer avec commentaire). Entrée « Missions » du menu Audit activée.
 - Choix des auditeurs : `GET /users/directory` si l'appelant y a droit, sinon repli sur son propre compte (`GET /users/me`) ; jamais de nom inventé.
+
+## 2026-10-28 — F7-S3 matrice des droits
+- Écran lecture seule `features/admin/RightsMatrixPage.tsx` : matrice rôles × droits (GET /roles + GET /permissions + GET /roles/governance-rights pour marquer les 4 droits de décision) et droits effectifs d'un compte avec leur origine (`GET /roles/users/:id/permission-sources`, ajouté côté serveur : le front ne déduit jamais l'origine).
+- Pas de libellés de droits côté serveur ni front : identifiants bruts, groupés par préfixe (affichage seul). Ne pas recopier `docs/governance/droits-acces/catalogue.json` à la main.
+- Navigation : `NavItem.requires` masque une entrée sans la permission (usePermissions dans Sidebar). Seule la matrice l'utilise ; les autres entrées restent visibles (403 côté écran).
+- `FIXED_GROUP_LABELS` vit dans `api/roles.ts` (partagé avec GovernanceSettingsPage).
+- Toutes ces routes exigent `role.read`, que le groupe Audit n'a pas : ouverture à l'Audit = décision PO.

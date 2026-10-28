@@ -14,6 +14,8 @@ import { AuditFindingsPage } from "./features/audit/AuditFindingsPage";
 import { ActionPlansPage } from "./features/actions/ActionPlansPage";
 import { AuditLogPage } from "./features/audit/AuditLogPage";
 import { AuditMissionsPage } from "./features/audit/AuditMissionsPage";
+import { RightsMatrixPage } from "./features/admin/RightsMatrixPage";
+import { usePermissions } from "./auth/usePermissions";
 import { AnomaliesPage } from "./features/anomalies/AnomaliesPage";
 import { NotificationCenter } from "./features/notifications/NotificationCenter";
 import { KriPage } from "./features/indicators/KriPage";
@@ -39,8 +41,8 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "auditmissions";
-type NavItem = { id: View; label: string; icon: string; available?: boolean } | { separator: string };
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "auditmissions" | "rightsmatrix";
+type NavItem = { id: View; label: string; icon: string; available?: boolean; /** Hidden without this permission (display only). */ requires?: string } | { separator: string };
 const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -89,6 +91,7 @@ const NAV_GROUPS: NavGroup[] = [
     { separator: "Plateforme" },
     { id: "users", label: "Comptes", icon: "user", available: true },
     { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
+    { id: "rightsmatrix", label: "Matrice des droits", icon: "table", available: true, requires: "role.read" },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
   ] },
@@ -122,6 +125,7 @@ const PAGE_TITLES: Record<View, string> = {
   users: "Comptes",
   govdecisions: "Décisions de gouvernance",
   auditmissions: "Missions d'audit",
+  rightsmatrix: "Matrice des droits",
 };
 
 function App() {
@@ -191,7 +195,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} />
+      <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} token={token} />
       <div className="app-main">
         <header className="app-topbar">
           <button
@@ -248,6 +252,7 @@ function App() {
             {view === "users" && <UsersAdmin token={token} />}
             {view === "govdecisions" && <GovernanceDecisionsPage token={token} />}
             {view === "auditmissions" && <AuditMissionsPage token={token} />}
+            {view === "rightsmatrix" && <RightsMatrixPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} />}
             {view === "risks" && <RisksPage token={token} shortcuts={{ onOpenFrameworks: () => go("frameworks"), onOpenAppetite: openAppetite, onOpenScales: () => go("scales"), onOpenProcesses: () => go("processes") }} />}
             {view === "roles" && <RolesAdmin token={token} />}
@@ -330,9 +335,11 @@ function Icon({ name }: { name: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
+function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen, token }: {
   view: View; setView: (view: View) => void; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void;
+  token: string;
 }) {
+  const { can } = usePermissions(token);
   const [collapsed, setCollapsed] = useState(false);
   const [openGroup, setOpenGroup] = useState("Risques");
 
@@ -346,7 +353,8 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen }: {
       </div>
       {!collapsed && <div className="sidebar-tenant"><span className="tenant-avatar">D</span><div><strong>Workspace</strong><small>Dispositif de gouvernance</small></div><span className="tenant-chevron">⌄</span></div>}
       <nav className="sidebar-nav" aria-label="Navigation principale">
-        {NAV_GROUPS.map((group) => {
+        {NAV_GROUPS.map((navGroup) => {
+          const group = { ...navGroup, items: navGroup.items.filter((item) => isSeparator(item) || !item.requires || can(item.requires)) };
           const open = openGroup === group.label;
           return (
             <div className="sidebar-group" key={group.label}>

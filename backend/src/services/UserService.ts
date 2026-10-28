@@ -50,6 +50,8 @@ const DIRECTORY_PERMISSIONS: Permission[] = [
   "designation.manage",
   // q183 (DECISION-094): composing the team of an audit mission.
   "audit.mission.create",
+  // q187 (DECISION-097): the rights matrix looks up one account's rights (Audit, Risk Manager).
+  "role.read",
 ];
 const MAX_DIRECTORY = 500;
 const MAX_ACCOUNT_REASON_LENGTH = 500;

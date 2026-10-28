@@ -636,7 +636,7 @@ describe("QA-suites2 q183 account directory", () => {
   });
 
   it("without audit.mission.create (and no other directory right) = 403; neighbouring audit / mission rights do not open it", async () => {
-    for (const roles of [[], ["audit.read"], ["audit.mission.read"], ["audit.mission.update"], ["audit.mission.delete"], ["role.read"], ["risk.read", "control.read"]]) {
+    for (const roles of [[], ["audit.read"], ["audit.mission.read"], ["audit.mission.update"], ["audit.mission.delete"], ["risk.read", "control.read"]]) {
       const r = await dir(user("m", roles as string[]));
       expect(r.status, JSON.stringify(roles)).toBe(403);
       expect(JSON.stringify(r.json)).not.toMatch(/Aline|Zoé|@x\.io/);
@@ -644,7 +644,8 @@ describe("QA-suites2 q183 account directory", () => {
   });
 
   it("the other three directory rights still open it; audit.mission.create does NOT give user.read (the full directory stays closed)", async () => {
-    for (const p of ["user.read", "process.responsibility.assign", "designation.manage"]) expect((await dir(user("m", [p]))).status, p).toBe(200);
+    // q187 (DECISION-097): role.read opens it too (rights matrix, one account's rights).
+    for (const p of ["user.read", "process.responsibility.assign", "designation.manage", "role.read"]) expect((await dir(user("m", [p]))).status, p).toBe(200);
     const full = await http((a) => a.use("/users", usersRouter(service())), user("m", ["audit.mission.create"]), "GET", "/users");
     expect(full.status).toBe(403);
     const one = await http((a) => a.use("/users", usersRouter(service())), user("m", ["audit.mission.create"]), "GET", "/users/u1");

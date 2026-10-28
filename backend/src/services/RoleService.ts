@@ -683,12 +683,37 @@ export class RoleService {
 
     const user = await this.users.getById(actor.tenantId, userId);
     if (!user) throw new NotFoundError("User", userId);
+    // F7S3-01: a suspended account is rejected by the identity resolver (deleted_at IS NULL) — it holds nothing.
+    if (user.deletedAt) return [];
 
     const roles = await this.roles.listForUser(actor.tenantId, userId);
     const legacyPermissions = filterKnownPermissions(user.roles);
     const rolePermissions = roles.flatMap((r) => r.permissions);
 
     return Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePermissions]));
+  }
+
+  /**
+   * F7-S3: the same effective set as `getEffectivePermissions`, each permission with where it comes from — every
+   * source, so the screen never has to guess: BASE (every account), DIRECT (legacy `users.roles`) or a held role.
+   * A suspended account holds nothing (F7S3-01): empty list, flagged `suspended`.
+   */
+  async getEffectivePermissionSources(actor: AuthenticatedUser, userId: string): Promise<EffectivePermissionSources> {
+    requirePermission(actor, "role.read");
+    if (!this.users) {
+      throw new Error("RoleService.getEffectivePermissionSources requires a UserRepository");
+    }
+    const user = await this.users.getById(actor.tenantId, userId);
+    if (!user) throw new NotFoundError("User", userId);
+    if (user.deletedAt) return { suspended: true, permissions: [] };
+    const roles = await this.roles.listForUser(actor.tenantId, userId);
+
+    const sources = new Map<Permission, PermissionSource[]>();
+    const add = (p: Permission, src: PermissionSource) => sources.set(p, [...(sources.get(p) ?? []), src]);
+    for (const p of BASE_PERMISSIONS) add(p, { kind: "BASE" });
+    for (const p of filterKnownPermissions(user.roles)) add(p, { kind: "DIRECT" });
+    for (const r of roles) for (const p of r.permissions) add(p, { kind: "ROLE", roleId: r.id, roleName: r.name, systemGroup: r.systemGroup });
+    return { suspended: false, permissions: [...sources].map(([permission, from]) => ({ permission, sources: from })) };
   }
 
   // -- B-8 bis ----------------------------------------------------------
@@ -1132,4 +1157,17 @@ export class RoleService {
 /** G1 (DECISION-044): an administrator who is also a Risk Manager or a Committee member never changes the Audit alone. */
 function auditChangeNeedsValidation(held: Role[]): boolean {
   return held.some((r) => r.systemGroup === "RISK_MANAGER" || isCommitteeRole(r));
+}
+
+export type PermissionSource =
+  | { kind: "BASE" }
+  | { kind: "DIRECT" }
+  | { kind: "ROLE"; roleId: string; roleName: string; systemGroup: SystemGroup | null };
+export interface EffectivePermissionSource {
+  permission: Permission;
+  sources: PermissionSource[];
+}
+export interface EffectivePermissionSources {
+  suspended: boolean;
+  permissions: EffectivePermissionSource[];
 }
