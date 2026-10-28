@@ -426,6 +426,7 @@ pour l'usage.
 | HUMAN @architect @security | **q197 (cockpit)** — visibilité : administrateur hors domaine des risques (A3 recommandé : droit de lecture des contenus distinct, explicite, confirmé). Bloque V4. | 2026-10-28 | **Ouvert — HUMAN : q197** |
 | HUMAN @architect @privacy | **q198 (cockpit)** — « X éléments non visibles » : exclure les dossiers « personnes nommées » du nombre (recommandé). Bloque V3. | 2026-10-28 | **Ouvert — HUMAN : q198** |
 | HUMAN @architect @risk-manager | **q199 (cockpit)** — propriétaire qui élargit une ressource restreinte par le Risk Manager : notifier sans bloquer (recommandé). Bloque V1. | 2026-10-28 | **Ouvert — HUMAN : q199** |
+| HUMAN @security @dev-backend | **q200 (cockpit)** — circuit d'attribution de l'accès élargi `role.read.sensitive` à un membre du Risk Manager : demande admin + motif, confirmée par Comité ou Audit (recommandé ; petite migration). Restriction q188/q189 construite (`feat/r1-rights-lines`, 48f1e00). | 2026-10-28 | **Ouvert — HUMAN : q200** |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
