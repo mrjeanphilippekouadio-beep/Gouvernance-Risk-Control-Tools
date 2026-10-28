@@ -25,7 +25,7 @@
 | `PATCH /roles/:id` sur un rôle ordinaire | PASS. Le refus s'applique à la liste complète, donc un rôle ordinaire déjà porteur ne peut que se voir retirer le droit. |
 | `PATCH /roles/:id` sur Risk Manager / Comité | **FAIL : SEC-SA2-01**. Ni motif ni règle « au moins un groupe ». |
 | Circuit Audit | PASS. Liste blanche lecture (`isAuditGroupPermission`) et q157 appliqué (Audit = revue seule). |
-| Rattrapage SQL / `users.roles` legacy | **RÉSERVE : SEC-SA2-02**. Aucune migration (q186 ouvert). `users.roles` n'est écrit par aucune route, mais il reste compté par `existsOther` et par la résolution d'identité. |
+| Rattrapage SQL / `users.roles` legacy | **SEC-SA2-02 corrigé par 077** (q186, DECISION-096). `users.roles` n'est écrit par aucune route, mais il reste compté par `existsOther` et par la résolution d'identité. |
 | `PUT /roles/governance-rights` | Permission : `role.update` (plus `rolegroup.audit.update` si l'Audit change). Ce n'est pas une permission dédiée. Une permission dédiée n'aurait d'effet qu'avec SEC-SA2-01 fermé, puisque `PATCH /roles/:id` offre le même pouvoir sous `role.update`. Motif obligatoire (`reasonText`), audit par groupe modifié, refus si l'administrateur appartient à un groupe modifié, « l'Audit ne décide jamais » respecté (`governanceRightAllowedOn`). Non atomique : SEC-SA2-03. |
 
 ## 3. q181 : « renouvelé sans revue »
@@ -78,4 +78,4 @@ SEC-SA2-01 (A06, avant production), SEC-SA2-02 (HUMAN q186, puis A07), SEC-SA2-0
 
 - **SEC-SA2-01 : CORRIGÉ.** `RoleService.update` refuse (400) tout ajout ou retrait d'un des 4 droits de décision sur n'importe quel rôle ; seule `PUT /roles/governance-rights` les déplace (motif, au moins un groupe).
 - **SEC-SA2-03 : CORRIGÉ.** Tous les refus avant écriture ; groupes changés directement + lignes d'audit en une transaction.
-- SEC-SA2-02 : ouvert (q186, HUMAN). SEC-SA2-04 à 06 : INFO, inchangés.
+- SEC-SA2-02 : **corrigé** par la migration 077 (q186 tranché, DECISION-096) : les 4 droits de décision quittent les rôles ordinaires actifs et `users.roles` (comptes actifs et suspendus), une ligne `audit_log` `PERMISSION_CHANGE` par rôle/compte, acteur = compte technique suspendu « Système (migration 077) » (`migration-077@system.invalid`, créé seulement si un tenant a quelque chose à retirer). Test `q186-cleanup.test.ts`. SEC-SA2-04 à 06 : INFO, inchangés.

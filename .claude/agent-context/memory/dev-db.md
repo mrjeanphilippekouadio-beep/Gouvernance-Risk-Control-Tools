@@ -153,3 +153,9 @@
 - Conséquence tests : un test qui forge une expiration par UPDATE valid_until doit `ALTER TABLE ... DISABLE TRIGGER governance_designations_guard`.
 - Piège outillage : le worktree n'avait pas de node_modules (`npm ci`) ; les scripts du scratchpad sont partagés entre agents (ne pas écraser `cycle.sh`, `build.sh` des autres).
 - Reste : CMP-PNL-15 (audit de la déclaration du régime) non faisable en SQL seul, F-PNL-09 (clôturer la désignation utilisée) = code repository (A06).
+- 077 (q186, 2026-10-28) : premier rattrapage de données qui écrit lui-même dans `audit_log`. `audit_log.user_id` est NOT NULL
+  REFERENCES users et aucun compte système n'existait : création d'un compte technique déjà suspendu par tenant concerné
+  (`migration-077@system.invalid`), jamais un humain pris comme acteur. UPDATE … FROM la même table (alias `old`) pour avoir
+  avant/après dans RETURNING. Down = no-op (ne restaure pas des droits interdits) : l'avant reste dans audit_log.
+- Les listes de permissions en dur dans une migration doivent être tenues en synchro par un test statique (ici
+  GOVERNANCE_DECISION_RIGHTS ↔ littéraux ARRAY de 077).
