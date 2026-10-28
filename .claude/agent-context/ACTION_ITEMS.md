@@ -427,6 +427,9 @@ pour l'usage.
 | HUMAN @architect @privacy | **q198 (cockpit)** — « X éléments non visibles » : exclure les dossiers « personnes nommées » du nombre (recommandé). Bloque V3. | 2026-10-28 | **Fermé** (DECISION-103) |
 | HUMAN @architect @risk-manager | **q199 (cockpit)** — propriétaire qui élargit une ressource restreinte par le Risk Manager : notifier sans bloquer (recommandé). Bloque V1. | 2026-10-28 | **Fermé** (DECISION-103) |
 | HUMAN @security @dev-backend | **q200 (cockpit)** — circuit d'attribution de l'accès élargi `role.read.sensitive` à un membre du Risk Manager : demande admin + motif, confirmée par Comité ou Audit (recommandé ; petite migration). Restriction q188/q189 construite (`feat/r1-rights-lines`, 48f1e00). | 2026-10-28 | **Fermé** (DECISION-103) |
+| HUMAN @security @dev-backend | **q201 (cockpit)** — SEC-RL-01/03 : cacher aussi les noms des administrateurs et de l'Audit au Risk Manager restreint (annuaire), ou seulement leurs droits (B recommandé). | 2026-10-28 | **Ouvert — HUMAN : q201** |
+| HUMAN @security @dev-backend | **q202 (cockpit)** — SEC-RL-04 : celui qui confirme une vue élargie ne doit pas être administrateur (A recommandé). | 2026-10-28 | **Ouvert — HUMAN : q202** |
+| @dev-backend | **SEC-RL-02/05 + INFO (revue A10 feat/r1-rights-lines)** : 404 cohérent sur `/roles/users/:userId` ; vue élargie invalide après sortie du groupe ou suspension (pas de réactivation au retour) ; demande expirée ne bloque plus ; id canonique (casse). À corriger dans la branche avant PR. | 2026-10-28 | **En cours** |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
