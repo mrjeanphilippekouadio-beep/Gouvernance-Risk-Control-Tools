@@ -68,8 +68,16 @@ export function rolesRouter(roleService: RoleService): Router {
   // Registered before "/:id" so "matrix" isn't parsed as a role id.
   router.get("/matrix", async (req, res, next) => {
     try {
-      const roles = await roleService.list(req.user, false);
-      res.json({ data: roles.map((r) => ({ id: r.id, name: r.name, permissions: r.permissions })) });
+      res.json({ data: await roleService.matrix(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // q188/q189: the accounts the rights matrix can open, each with its line of defense, cut to the reader's lines.
+  router.get("/accounts", async (req, res, next) => {
+    try {
+      res.json({ data: await roleService.accounts(req.user) });
     } catch (err) {
       next(err);
     }

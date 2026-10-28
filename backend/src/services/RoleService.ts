@@ -16,6 +16,11 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { NotificationService } from "./NotificationService.js";
 import {
+  accountLine,
+  ADMIN_PERMISSIONS,
+  isSensitiveLine,
+  roleLine,
+  type DefenseLine,
   isAdministrator,
   isAuditGroupMember,
   isAuditGroupPermission,
@@ -39,6 +44,8 @@ import type { GovernanceDesignation } from "../domain/entities/GovernanceDesigna
 import { canonicalId } from "../domain/ids.js";
 
 const MAX_GROUP_REASON_LENGTH = 500;
+/** q188: same bound as the account directory (UserService MAX_DIRECTORY). */
+const MAX_MATRIX_ACCOUNTS = 500;
 /** q149: value of audit_log.governance_exception when the last Risk Manager leaves with no usable interim. */
 export const RISK_MANAGER_VACANCY_EXCEPTION = "riskManager.vacancy";
 
@@ -57,6 +64,10 @@ const GRANTORS_DEDUPE_MAX = 10_000;
  * Audit and the Committee; the Risk Manager and Committee groups never carry audit.*.
  */
 function assertRolePermissionRules(group: SystemGroup | null, permissions: Permission[]): void {
+  // q188/q189: the widened view of the rights matrix waits for its own maker-checker circuit; no role carries it.
+  if (permissions.includes("role.read.sensitive")) {
+    throw new ValidationError("role.read.sensitive is granted individually through its dedicated circuit only, never on a role");
+  }
   const misplaced = permissions.filter((p) => !rolegroupAuditPermissionAllowedOn(p, group));
   if (misplaced.length > 0) {
     throw new ValidationError(`Permission(s) not grantable to this role: ${misplaced.join(", ")}`);
@@ -219,13 +230,60 @@ export class RoleService {
   async get(actor: AuthenticatedUser, id: string): Promise<Role> {
     requirePermission(actor, "role.read");
     const role = await this.roles.getById(actor.tenantId, id);
-    if (!role) throw new NotFoundError("Role", id);
+    // q188/q189: a role out of a restricted reader's lines answers like an unknown id (no oracle).
+    if (!role || ((await this.restrictedReader(actor)) && isSensitiveLine(roleLine(role)))) throw new NotFoundError("Role", id);
     return role;
   }
 
   async list(actor: AuthenticatedUser, includeDisabled = false): Promise<Role[]> {
     requirePermission(actor, "role.read");
-    return this.roles.list(actor.tenantId, { includeDisabled });
+    const roles = await this.roles.list(actor.tenantId, { includeDisabled });
+    return (await this.restrictedReader(actor)) ? roles.filter((r) => !isSensitiveLine(roleLine(r))) : roles;
+  }
+
+  /**
+   * q188/q189 (DECISION-098, DECISION-101): a role.read holder who is neither administrator, nor in the Audit group,
+   * nor holder of role.read.sensitive (the Risk Manager group, by default) sees the 1st and 2nd lines only.
+   */
+  private async restrictedReader(actor: AuthenticatedUser): Promise<boolean> {
+    if (actor.roles.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p)) || actor.roles.includes("role.read.sensitive")) return false;
+    return !(await this.fixedGroupsOf(actor.tenantId, actor.userId)).includes("AUDIT");
+  }
+
+  /** q188/q189: an account a restricted reader may not see answers like an unknown account (404, no oracle). */
+  private async assertAccountVisible(actor: AuthenticatedUser, userId: string, roles: Role[], directPermissions: string[]): Promise<void> {
+    if ((await this.restrictedReader(actor)) && isSensitiveLine(accountLine(roles, directPermissions))) throw new NotFoundError("User", userId);
+  }
+
+  /** F7-S3 + q188: the matrix rows, each with its line of defense (badge), cut to the reader's lines. */
+  async matrix(actor: AuthenticatedUser): Promise<Array<{ id: string; name: string; systemGroup: SystemGroup | null; permissions: Permission[]; line: DefenseLine }>> {
+    const roles = await this.list(actor, false);
+    return roles.map((r) => ({ id: r.id, name: r.name, systemGroup: r.systemGroup, permissions: r.permissions, line: roleLine(r) }));
+  }
+
+  /**
+   * q188/q189: the accounts the rights matrix can open (active ones), each with its line, cut to the reader's lines.
+   * Same fields as the directory (id, display name) plus the line; the line is derived from data role.read already shows.
+   */
+  async accounts(actor: AuthenticatedUser): Promise<Array<{ id: string; displayName: string; line: DefenseLine }>> {
+    requirePermission(actor, "role.read");
+    if (!this.users) throw new Error("RoleService.accounts requires a UserRepository");
+    const [users, roles, restricted] = await Promise.all([
+      this.users.list(actor.tenantId, { limit: MAX_MATRIX_ACCOUNTS }),
+      this.roles.list(actor.tenantId),
+      this.restrictedReader(actor),
+    ]);
+    const held = new Map<string, Role[]>();
+    for (const r of roles) {
+      for (const a of await this.roles.listAssignments(actor.tenantId, r.id)) {
+        if (!a.revokedAt) held.set(a.userId, [...(held.get(a.userId) ?? []), r]);
+      }
+    }
+    return users
+      .filter((u) => !u.deletedAt)
+      .map((u) => ({ id: u.id, displayName: u.displayName, line: accountLine(held.get(u.id) ?? [], filterKnownPermissions(u.roles)) }))
+      .filter((u) => !restricted || !isSensitiveLine(u.line))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, "fr"));
   }
 
   /**
@@ -664,7 +722,12 @@ export class RoleService {
 
   async listForUser(actor: AuthenticatedUser, userId: string): Promise<Role[]> {
     requirePermission(actor, "role.read");
-    return this.roles.listForUser(actor.tenantId, userId);
+    const roles = await this.roles.listForUser(actor.tenantId, userId);
+    if (await this.restrictedReader(actor)) {
+      const user = await this.users?.getById(actor.tenantId, userId);
+      await this.assertAccountVisible(actor, userId, roles, user ? filterKnownPermissions(user.roles) : []);
+    }
+    return roles;
   }
 
   /**
@@ -683,11 +746,12 @@ export class RoleService {
 
     const user = await this.users.getById(actor.tenantId, userId);
     if (!user) throw new NotFoundError("User", userId);
+    const roles = await this.roles.listForUser(actor.tenantId, userId);
+    const legacyPermissions = filterKnownPermissions(user.roles);
+    await this.assertAccountVisible(actor, userId, roles, legacyPermissions);
     // F7S3-01: a suspended account is rejected by the identity resolver (deleted_at IS NULL) — it holds nothing.
     if (user.deletedAt) return [];
 
-    const roles = await this.roles.listForUser(actor.tenantId, userId);
-    const legacyPermissions = filterKnownPermissions(user.roles);
     const rolePermissions = roles.flatMap((r) => r.permissions);
 
     return Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePermissions]));
@@ -705,13 +769,15 @@ export class RoleService {
     }
     const user = await this.users.getById(actor.tenantId, userId);
     if (!user) throw new NotFoundError("User", userId);
-    if (user.deletedAt) return { suspended: true, permissions: [] };
     const roles = await this.roles.listForUser(actor.tenantId, userId);
+    const direct = filterKnownPermissions(user.roles);
+    await this.assertAccountVisible(actor, userId, roles, direct);
+    if (user.deletedAt) return { suspended: true, permissions: [] };
 
     const sources = new Map<Permission, PermissionSource[]>();
     const add = (p: Permission, src: PermissionSource) => sources.set(p, [...(sources.get(p) ?? []), src]);
     for (const p of BASE_PERMISSIONS) add(p, { kind: "BASE" });
-    for (const p of filterKnownPermissions(user.roles)) add(p, { kind: "DIRECT" });
+    for (const p of direct) add(p, { kind: "DIRECT" });
     for (const r of roles) for (const p of r.permissions) add(p, { kind: "ROLE", roleId: r.id, roleName: r.name, systemGroup: r.systemGroup });
     return { suspended: false, permissions: [...sources].map(([permission, from]) => ({ permission, sources: from })) };
   }
