@@ -8,7 +8,7 @@ import {
   type SelfValidationPolicy,
   type SelfValidationPolicyRequest,
 } from "../../api/config";
-import { rolesApi, type FixedGroup, type GovernanceRight } from "../../api/roles";
+import { FIXED_GROUP_LABELS, rolesApi, type FixedGroup, type GovernanceRight } from "../../api/roles";
 import { ApiError } from "../../api/client";
 import { describeError, isForbidden } from "../indicators/shared";
 import "../core/CorePages.css";
@@ -30,7 +30,7 @@ const DELAYS: { key: keyof GovernanceDelays; label: string; help: string }[] = [
   { key: "policyRequestExpiryDays", label: "Expiration d'une demande d'assouplissement", help: "q174 : passé ce délai, la demande ne peut plus être approuvée." },
   { key: "riskManagerVacancyMaxDays", label: "Durée maximale d'une vacance du groupe Risk Manager", help: "q178 : 60 jours par défaut ; au-delà, la vacance est signalée comme dépassée." },
 ];
-const GROUP_LABELS: Record<FixedGroup, string> = { RISK_MANAGER: "Risk Manager", RISK_COMMITTEE: "Comité des risques", AUDIT: "Audit" };
+const GROUP_LABELS = FIXED_GROUP_LABELS;
 const RIGHT_LABELS: Record<string, string> = {
   "config.selfvalidation.approve": "Approuver un assouplissement (auto-validation, délais)",
   "governanceprinciple.acceptance.confirm": "Confirmer l'acceptation d'un principe",

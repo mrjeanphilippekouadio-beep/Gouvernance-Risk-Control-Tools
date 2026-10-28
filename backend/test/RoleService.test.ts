@@ -294,6 +294,31 @@ describe("RoleService", () => {
       await expect(service.getEffectivePermissions(admin, "missing-user")).rejects.toThrow(NotFoundError);
     });
 
+    it("F7-S3: gives each effective permission its origins (base, direct grant, role)", async () => {
+      const service = new RoleService(
+        inMemoryRoleRepository(),
+        inMemoryAuditRepository(),
+        inMemoryUserRepository([targetUser]),
+      );
+      const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read", "evidence.upload"] }, "REQ-30");
+      await service.assignToUser(admin, role.id, targetUser.id, "REQ-31", "motif de test");
+
+      const sources = await service.getEffectivePermissionSources(admin, targetUser.id);
+      const of = (p: string) => sources.find((s) => s.permission === p)?.sources;
+
+      expect(of("feedback.create")).toEqual([{ kind: "BASE" }]);
+      expect(of("audit.read")).toEqual([{ kind: "ROLE", roleId: role.id, roleName: "Auditeur", systemGroup: null }]);
+      expect(of("evidence.upload")?.map((s) => s.kind)).toEqual(["DIRECT", "ROLE"]);
+      expect(of("not.a.real.permission")).toBeUndefined();
+      expect(sources.map((s) => s.permission).sort()).toEqual((await service.getEffectivePermissions(admin, targetUser.id)).sort());
+    });
+
+    it("F7-S3: origins require role.read", async () => {
+      const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository(), inMemoryUserRepository([targetUser]));
+      const reader: AuthenticatedUser = { ...admin, roles: admin.roles.filter((p) => p !== "role.read") };
+      await expect(service.getEffectivePermissionSources(reader, targetUser.id)).rejects.toThrow(ForbiddenError);
+    });
+
     it("throws when constructed without a UserRepository", async () => {
       const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
       await expect(service.getEffectivePermissions(admin, targetUser.id)).rejects.toThrow(

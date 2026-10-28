@@ -166,6 +166,16 @@ export function rolesRouter(roleService: RoleService): Router {
     }
   });
 
+  // F7-S3: the effective permissions with their origin (base, direct grant, or which role).
+  router.get("/users/:userId/permission-sources", async (req, res, next) => {
+    try {
+      const data = await roleService.getEffectivePermissionSources(req.user, req.params["userId"] as string);
+      res.json({ data });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/:id", async (req, res, next) => {
     try {
       const role = await roleService.get(req.user, req.params["id"] as string);
