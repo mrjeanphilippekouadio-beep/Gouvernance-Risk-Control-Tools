@@ -100,12 +100,23 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
   Questions R-Q1 (dernier RM sans intérimaire), R-Q2 (deux comptes d'un humain), R-Q3 (données de fonctions non
   construites). Interprétations I-R1..I-R6.
 
+- 2026-10-28 : DECISION-100, `docs/architecture/RM-V1-Visibilite-Ressources-spec.md`. Reco option A : `visibility`
+  CLIENT (défaut, données existantes) | PERIMETRE sur les racines (risks, controls, anomalies, action_plans) ; enfants
+  hérités (évaluations, décisions, escalades, KRI par risk_id principal) ; contrôle = réglage propre (N-N). Périmètre =
+  groupe de département (pas `users.department_id`) + propriétaire/N+1/RACI/responsable processus + groupes fixes RM/Comité/
+  Audit voient tout ; admin non ; aucun rôle ordinaire « voit tout ». Hors périmètre = 404. Agrégats filtrés en SQL, sans
+  « N masqués ». `resourcevisibility.set` (RM), motif, audit même transaction. Intersection avec `dashboard_scope_mode`.
+  Lots V0 (résolveur, zéro changement) → V4 (NOMINATIF si Q-1). Questions Q-1..Q-7.
+
 ## Principe ajouté (2026-10-18)
 
 12. **Un statut de gouvernance ne s'ajoute pas aux enums métier** quand ces enums sont lus par des calculs : on le
     porte à côté (marqueur + helper serveur), sinon chaque lecteur filtrant `VALIDATED` casse en silence.
 13. **Un intérim/suppléance ne se désigne pas soi-même** dès que la désignation finit en attribution de rôle
     (`guard:noSelfRoleAssign` sans dérogation) — c'est ce qui rend le cas « admin seul » non soluble sans PO.
+
+14. **Un droit de lecture restreint se pose en deux couches** : ce que j'ai le droit de voir (sur la ressource) ∩ ce que
+    la vue choisit d'agréger (sur le rôle). Ne pas fusionner les deux ; la 2e/3e ligne ne doit jamais être restreignable.
 
 ## Pièges rencontrés
 
