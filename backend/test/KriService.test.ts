@@ -249,6 +249,31 @@ describe("KriService.update (ACT-131)", () => {
     expect(updated.thresholdRed).toBe(20);
   });
 
+  it("F7S6-01: with a transactional repository, every write hands its audit rows to the repository (none recorded after)", async () => {
+    const base = inMemoryKriRepository();
+    const handed: string[] = [];
+    type Builder = ((r: unknown) => Array<{ action: string }>) | undefined;
+    const take = (audit: Builder, result: unknown) => { for (const e of audit?.(result) ?? []) handed.push(e.action); };
+    const kris = {
+      ...base,
+      auditsInTransaction: true,
+      async create(i: Parameters<KriRepository["create"]>[0], a?: Builder) { const k = await base.create(i); take(a, k); return k; },
+      async update(t: string, id: string, i: Parameters<KriRepository["update"]>[2], a?: Builder) { const k = await base.update(t, id, i); take(a, k); return k; },
+      async replaceCoveredRisks(t: string, id: string, ids: string[], a?: Builder) { const old = await base.listCoveredRiskIds(t, id); await base.replaceCoveredRisks(t, id, ids); take(a, old); return old; },
+      async softDelete(t: string, id: string, by: string, r: string, a?: Builder) { await base.softDelete(t, id, by, r); take(a, undefined); },
+    } as unknown as KriRepository;
+    let recorded = 0;
+    const audit = { ...inMemoryAuditRepository(), async record() { recorded++; } } as AuditRepository;
+    const service = new KriService(kris, inMemoryKriMeasureRepository(), fakeRiskRepository(["risk-1", "risk-2"]), audit);
+
+    const kri = await service.create(actor, validInput, "REQ-30");
+    await service.update(actor, kri.id, { label: "Nouveau" }, "REQ-31");
+    await service.addCoveredRisks(actor, kri.id, ["risk-2"], "REQ-32");
+    await service.disable(actor, kri.id, "motif", "REQ-33");
+    expect(handed).toEqual(["CREATE", "UPDATE", "ASSIGN", "DELETE"]);
+    expect(recorded).toBe(0);
+  });
+
   it("never changes `active` (false or true): deactivation goes through disable under kri.delete", async () => {
     const kris = inMemoryKriRepository();
     const service = new KriService(kris, inMemoryKriMeasureRepository(), fakeRiskRepository(["risk-1"]), inMemoryAuditRepository());

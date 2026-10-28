@@ -17,6 +17,7 @@ const T2 = "tenant-2";
 const risks = new Map<string, { tenantId: string; deleted: boolean }>([
   ["r1", { tenantId: T1, deleted: false }],
   ["r2", { tenantId: T1, deleted: false }],
+  ["r3", { tenantId: T1, deleted: false }],
   ["r-other", { tenantId: T2, deleted: false }],
   ["r-deleted", { tenantId: T1, deleted: true }],
 ]);
@@ -176,12 +177,34 @@ describe("QA-f7s6 risques couverts", () => {
   });
 });
 
-describe("QA-f7s6 KRI active=false (créé inactif)", () => {
-  it("CONSTAT : un KRI inactif reste modifiable et mesurable (aucune garde sur active)", async () => {
-    const { svc, measureSvc } = setup();
-    const k = await svc.create(admin, { ...input, active: false }, "q");
-    expect((await svc.update(admin, k.id, { label: "modif" }, "q")).label).toBe("modif");
-    const m = await measureSvc.record(admin, { kriId: k.id, measureDate: new Date(), value: 1, source: "s" }, "q");
-    expect(m).toBeTruthy();
+describe("QA-f7s6 KRI active=false (créé inactif) — F7S6-02 corrigé", () => {
+  it.each([false, true])("la création refuse active=%s : rien n'est créé ni audité", async (active) => {
+    const { svc, events } = setup();
+    await expect(svc.create(admin, { ...input, active }, "q")).rejects.toThrow(ValidationError);
+    expect(events).toHaveLength(0);
+  });
+  it("sans active, le KRI est créé actif", async () => {
+    const { svc } = setup();
+    expect((await svc.create(admin, input, "q")).active).toBe(true);
+  });
+});
+
+describe("QA-F7S6-01 risque couvert archivé après rattachement", () => {
+  it("n'est plus renvoyé par GET, ne bloque pas l'ajout d'un autre risque, et son retrait est audité", async () => {
+    const { svc, events } = setup();
+    const k = await svc.create(admin, input, "q");
+    await svc.addCoveredRisks(admin, k.id, ["r2"], "q");
+    risks.set("r2", { tenantId: T1, deleted: true }); // r2 archived after being linked
+    try {
+      expect((await svc.get(admin, k.id)).coveredRiskIds).toEqual([]);
+      // the screen sends only what GET returned, plus a newly ticked risk
+      const r = await svc.addCoveredRisks(admin, k.id, ["r3"], "q");
+      expect(r.coveredRiskIds).toEqual(["r3"]);
+      expect([events.at(-1)!.oldValue, events.at(-1)!.newValue]).toEqual([{ coveredRiskIds: ["r2"] }, { coveredRiskIds: ["r3"] }]);
+      // keeping an archived risk already linked is not refused either; adding a NEW archived one still is
+      await expect(svc.addCoveredRisks(admin, k.id, ["r3", "r-deleted"], "q")).rejects.toThrow(ValidationError);
+    } finally {
+      risks.set("r2", { tenantId: T1, deleted: false });
+    }
   });
 });

@@ -91,7 +91,8 @@ export function KriPage({ token }: { token: string }) {
   const visibleRows = riskFilter ? rows.filter((row) => row.riskId === riskFilter) : rows;
 
   const selected = useMemo(() => rows.find((row) => row.id === selectedId) ?? null, [rows, selectedId]);
-  const riskLabel = (riskId: string) => risks.find((risk) => risk.id === riskId)?.description ?? riskId;
+  // QA-F7S6-03: never a raw id on screen (risk archived, or no risk.read for this account).
+  const riskLabel = (riskId: string) => risks.find((risk) => risk.id === riskId)?.description ?? "Risque non consultable";
 
   const measuresFor = useRef<string | null>(null);
   const loadMeasures = useCallback(async (kriId: string) => {

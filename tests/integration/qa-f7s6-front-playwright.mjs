@@ -142,7 +142,9 @@ try {
   const banner = stillOpen ? norm(await M.page.locator("[class*=banner], [role=alert]").allInnerTexts().then((t) => t.join(" "))) : "";
   check("3. enregistrer un changement alors qu'un risque couvert est archivé aboutit", !stillOpen,
     stillOpen ? `DEFAUT : modale restée ouverte : ${banner.slice(0, 200)}` : "");
-  check("3. [constat] la fiche K3 affiche l'identifiant brut du risque archivé couvert (au lieu d'un libellé)", /Autres risques couverts : [0-9a-f]{8}-/.test(norm(await M.page.locator("main").innerText())));
+  // QA-F7S6-03 corrigé : plus aucun identifiant brut ; le risque archivé n'est plus listé, B1 l'est.
+  const k3Text = norm(await M.page.locator("main").innerText());
+  check("3. la fiche K3 n'affiche aucun identifiant brut ; B1 listé, risque archivé absent", !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(k3Text) && /Autres risques couverts : [^·]*Risque B1 QA/.test(k3Text) && !k3Text.includes("Risque D archive QA"), k3Text.slice(0, 160));
   await M.page.screenshot({ path: `${SHOTS}/03-couvert-archive.png`, fullPage: true });
   if (stillOpen) await M.page.getByRole("button", { name: "Annuler", exact: true }).click();
 
@@ -185,7 +187,7 @@ try {
   const ud = await api("u", "PATCH", `/kris/${k1}/disable`, { reason: "essai" });
   const ua = await api("u", "PUT", `/kris/${k1}`, { active: false });
   check("5. u : disable = 403", ud.status === 403, `disable=${ud.status}`);
-  check("5. PUT {active:false} refusé en 4xx (et non accepté en silence)", ua.status >= 400 && ua.status < 500, `put=${ua.status} (le schema zod retire la cle, le garde du service n'est pas atteint par HTTP)`);
+  check("5. PUT {active:false} refusé en 4xx (et non accepté en silence)", ua.status >= 400 && ua.status < 500, `put=${ua.status} (schéma strict : clé active refusée)`);
   check("5. K1 toujours actif après PUT {active:false}", D(await api("m", "GET", `/kris/${k1}`)).active === true);
   check("7. l et u : aucune erreur console / JS / 5xx", [...Lk.errors, ...Lk.bad, ...U.errors, ...U.bad].length === 0, [...Lk.errors, ...U.errors].join(" || "));
 

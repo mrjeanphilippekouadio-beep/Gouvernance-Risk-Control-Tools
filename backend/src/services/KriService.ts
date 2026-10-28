@@ -11,6 +11,8 @@ import {
 } from "../domain/entities/Kri.js";
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
+import type { AuditEvent } from "../domain/entities/AuditEvent.js";
+import { writeAudited } from "./auditedWrite.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 
 export interface KriWithStatus extends Kri {
@@ -55,6 +57,8 @@ export class KriService {
     requestId: string,
   ): Promise<Kri> {
     requirePermission(actor, "kri.create");
+    // F7S6-02: a KRI is always created active; the only end of life is disable (kri.delete, with a reason).
+    if (input.active !== undefined) throw new ValidationError("active cannot be set at creation — a KRI is always created active");
     if (!input.label.trim()) throw new ValidationError("label is required");
     if (!input.formula.trim()) throw new ValidationError("formula is required");
     if (!input.riskId?.trim()) {
@@ -63,28 +67,23 @@ export class KriService {
     this.assertThresholdOrder(input.thresholdGreen, input.thresholdOrange, input.thresholdRed);
     await this.assertRiskExists(actor.tenantId, input.riskId);
 
-    const kri = await this.kris.create({ ...input, tenantId: actor.tenantId });
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Kri",
-      entityId: kri.id,
-      action: "CREATE",
-      oldValue: null,
-      newValue: kri,
-      reason: null,
-      requestId,
-    });
-
-    return kri;
+    // F7S6-01 (DECISION-079): the write and its audit row in one transaction.
+    return writeAudited<Kri>(
+      this.kris.auditsInTransaction,
+      this.audit,
+      (audit) => this.kris.create({ ...input, tenantId: actor.tenantId }, audit),
+      (kri) => [this.event(actor, kri.id, "CREATE", null, kri, null, requestId)],
+    );
   }
 
   /** F7-S6: the detail also carries the additional covered risks (ACT-136), so the screen can show and edit them. */
   async get(actor: AuthenticatedUser, id: string): Promise<KriWithStatus & { coveredRiskIds: string[] }> {
     requirePermission(actor, "kri.read");
     const kri = await this.requireKri(actor.tenantId, id);
-    return { ...(await this.withStatus(actor.tenantId, kri)), coveredRiskIds: await this.kris.listCoveredRiskIds(actor.tenantId, id) };
+    // QA-F7S6-01/03: only covered risks that still exist (not archived) — the screen never shows a raw id.
+    const linked = await this.kris.listCoveredRiskIds(actor.tenantId, id);
+    const live = new Set(linked.length > 0 ? (await this.risks.listByIds(actor.tenantId, linked)).map((r) => r.id) : []);
+    return { ...(await this.withStatus(actor.tenantId, kri)), coveredRiskIds: linked.filter((rid) => live.has(rid)) };
   }
 
   async list(actor: AuthenticatedUser, filters?: KriListFilters): Promise<KriWithStatus[]> {
@@ -146,21 +145,12 @@ export class KriService {
       this.assertThresholdOrder(green, orange, red);
     }
 
-    const after = await this.kris.update(actor.tenantId, id, input);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Kri",
-      entityId: id,
-      action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason: null,
-      requestId,
-    });
-
-    return after;
+    return writeAudited<Kri>(
+      this.kris.auditsInTransaction,
+      this.audit,
+      (audit) => this.kris.update(actor.tenantId, id, input, audit),
+      (after) => [this.event(actor, id, "UPDATE", before, after, null, requestId)],
+    );
   }
 
   /**
@@ -180,25 +170,20 @@ export class KriService {
     const before = await this.requireKri(actor.tenantId, id);
 
     const uniqueIds = [...new Set(riskIds)].filter((rid) => rid !== before.riskId);
-    if (uniqueIds.length > 0) {
-      await this.assertRisksExist(actor.tenantId, uniqueIds);
-    }
+    // QA-F7S6-01: only the risks being ADDED must exist (not archived); a risk archived after being linked can stay
+    // or be removed without blocking the change.
+    const linked = new Set(await this.kris.listCoveredRiskIds(actor.tenantId, id));
+    const added = uniqueIds.filter((rid) => !linked.has(rid));
+    if (added.length > 0) await this.assertRisksExist(actor.tenantId, added);
 
-    // Read the previous set before replacing it: the audit's oldValue must not be the new set.
-    const previous = await this.kris.listCoveredRiskIds(actor.tenantId, id);
-    await this.kris.replaceCoveredRisks(actor.tenantId, id, uniqueIds);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Kri",
-      entityId: id,
-      action: "ASSIGN",
-      oldValue: { coveredRiskIds: previous },
-      newValue: { coveredRiskIds: uniqueIds },
-      reason: null,
-      requestId,
-    });
+    // F7S6-01: the repository reads the previous set inside the replacing transaction (KRI row locked, still active)
+    // and returns it, so the audit's oldValue is the set actually overwritten. Fakes return nothing: fall back.
+    await writeAudited<string[]>(
+      this.kris.auditsInTransaction,
+      this.audit,
+      async (audit) => (await this.kris.replaceCoveredRisks(actor.tenantId, id, uniqueIds, audit)) ?? [...linked],
+      (old) => [this.event(actor, id, "ASSIGN", { coveredRiskIds: old }, { coveredRiskIds: uniqueIds }, null, requestId)],
+    );
 
     return { riskId: before.riskId, coveredRiskIds: uniqueIds };
   }
@@ -216,19 +201,24 @@ export class KriService {
     if (!reason.trim()) throw new ValidationError("A reason is required to disable a KRI");
     const before = await this.requireKri(actor.tenantId, id);
 
-    await this.kris.softDelete(actor.tenantId, id, actor.userId, reason);
+    await writeAudited<void>(
+      this.kris.auditsInTransaction,
+      this.audit,
+      (audit) => this.kris.softDelete(actor.tenantId, id, actor.userId, reason, audit),
+      () => [this.event(actor, id, "DELETE", before, null, reason, requestId)],
+    );
+  }
 
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Kri",
-      entityId: id,
-      action: "DELETE",
-      oldValue: before,
-      newValue: null,
-      reason,
-      requestId,
-    });
+  private event(
+    actor: AuthenticatedUser,
+    entityId: string,
+    action: AuditEvent["action"],
+    oldValue: unknown,
+    newValue: unknown,
+    reason: string | null,
+    requestId: string,
+  ): Omit<AuditEvent, "id" | "timestamp"> {
+    return { tenantId: actor.tenantId, userId: actor.userId, entityType: "Kri", entityId, action, oldValue, newValue, reason, requestId };
   }
 
   private async requireKri(tenantId: string, id: string): Promise<Kri> {
