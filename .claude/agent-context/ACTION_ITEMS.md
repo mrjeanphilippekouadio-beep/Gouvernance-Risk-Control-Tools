@@ -420,6 +420,7 @@ pour l'usage.
 | HUMAN @dev-backend @security | **q185 (cockpit)** — droits de décision q179 : chaque droit garde au moins un groupe fixe ; Audit limité à la revue. Recommandation appliquée. | 2026-10-27 | **Fermé** (DECISION-096) |
 | HUMAN @dev-db @security | **q186 (cockpit)** — rôles ordinaires détenant déjà un droit de décision : les nettoyer par migration (recommandé) ou laisser l'admin les retirer. PO : retirer par migration, avec trace d'audit (couvre aussi SEC-SA2-02). | 2026-10-27 | **En cours** (DECISION-096), migration 077 sur `feat/r1-suites-arbitrages-2` |
 | HUMAN @security @dev-frontend | **q187 (cockpit)** — F7-S3 matrice des droits : ouvrir la consultation au groupe Audit en ajoutant `role.read` (lecture seule) par le circuit des droits Audit (recommandé), ou réserver l'écran à l'Administrateur. Aucun code requis. | 2026-10-28 | **Fermé** (DECISION-097) |
+| HUMAN @security @dev-backend @risk-manager | **q188 (cockpit), précision PO sur q187** — le Risk Manager voit par défaut les rôles et droits de la 1re ligne ; 2e ligne et administrateurs seulement si activé sur son rôle. À trancher : découpage 1re/2e ligne/admin (et Audit), forme du droit d'accès élargi. **Requis avant la production** ; PR #202 fusionnable dans staging avant (Risk Manager voit tout en attendant). | 2026-10-28 | **Ouvert — HUMAN : q188** |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
