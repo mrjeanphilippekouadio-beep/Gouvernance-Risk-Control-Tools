@@ -289,6 +289,8 @@ jobs:
                   quote_plus(secret, safe=""),
                   json.dumps(secret, ensure_ascii=True)[1:-1],
                   html.escape(secret, quote=True),
+                  # ZAP HTML reports may use the Thymeleaf &#39; apostrophe entity.
+                  html.escape(secret, quote=True).replace("&#x27;", "&#39;"),
               })
           replacements = {value for value in replacements if value}
 
