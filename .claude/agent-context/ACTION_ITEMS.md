@@ -422,6 +422,7 @@ pour l'usage.
 | HUMAN @security @dev-frontend | **q187 (cockpit)** — F7-S3 matrice des droits : ouvrir la consultation au groupe Audit en ajoutant `role.read` (lecture seule) par le circuit des droits Audit (recommandé), ou réserver l'écran à l'Administrateur. Aucun code requis. | 2026-10-28 | **Fermé** (DECISION-097) |
 | HUMAN @security @dev-backend @risk-manager | **q188 (cockpit), précision PO sur q187** — le Risk Manager voit par défaut les rôles et droits de la 1re ligne ; 2e ligne et administrateurs seulement si activé sur son rôle. À trancher : découpage 1re/2e ligne/admin (et Audit), forme du droit d'accès élargi. **Requis avant la production** ; PR #202 fusionnable dans staging avant (Risk Manager voit tout en attendant). | 2026-10-28 | **Répondu** (DECISION-098) ; reste **q189** |
 | HUMAN @dev-backend @security | **q189 (cockpit)** — suite q188 : tous les membres du groupe Risk Manager voient les lignes 1 et 2 (A, recommandé) ou un « Risk Manager principal » désigné seulement (B, nouvelle désignation). Bloque la restriction de la matrice (avant la production). | 2026-10-28 | **Ouvert — HUMAN : q189** |
+| @architect @risk-manager @security HUMAN | **DECISION-100 — confidentialité configurable des ressources** : risques, KRI et ressources du même type doivent pouvoir être restreints (visibilité) dès leur création ; aujourd'hui toute lecture est globale au client (SEC F7S6 INFO-03). A05 + A13 : proposer le modèle (niveaux de visibilité, qui choisit, héritage risque → KRI/contrôles/plans, effet sur tableaux de bord, audit, comptages du panel) puis questions PO. Pas de code avant validation. | 2026-10-28 | **Ouvert — @architect (proposition)** |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
@@ -2430,4 +2431,16 @@ DECISION (PO, R3 privacy D6) : la date de « dernière activité » est
 RELATED: R3 (review-d2a-last-seen-2026-10-18), D6, q175.
 OWNER: @orchestrator @dev-backend @dev-db @privacy
 STATUS: DÉCIDÉ — durée ; avis juriste/DPO attendu.
+
+DECISION-100
+DATE: 2026-10-28
+DECISION (PO) : pour les risques, les KRI « et toutes les ressources de ce
+  genre », la visibilité doit être configurable, avec la possibilité de la
+  restreindre dans le flux de création de la ressource. Aujourd'hui toute
+  lecture est globale au client (constat SEC-f7s6 INFO-03). Décision
+  d'architecture transverse : proposition A05/A13 puis questions PO avant
+  tout code ; déclenche un balayage complet (CLAUDE.md 8bis).
+RELATED: SEC-f7s6 INFO-03, F7-S6, DECISION-097/098 (lignes de défense).
+OWNER: @orchestrator @architect @risk-manager @security
+STATUS: DÉCIDÉ — principe ; modèle à proposer.
 ```
