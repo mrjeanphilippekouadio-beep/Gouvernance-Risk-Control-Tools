@@ -74,11 +74,14 @@ export function KriPage({ token }: { token: string }) {
     setter(describeError(err));
   }, []);
 
+  // Codex PR #203: a late answer for superseded filters never overwrites the current table.
+  const dashboardSeq = useRef(0);
   const refresh = useCallback(async () => {
+    const seq = ++dashboardSeq.current;
     setLoading(true); setError(null);
-    try { setRows(await krisApi.dashboard(token, filters)); }
-    catch (err) { fail(err, setError); }
-    finally { setLoading(false); }
+    try { const next = await krisApi.dashboard(token, filters); if (seq === dashboardSeq.current) setRows(next); }
+    catch (err) { if (seq === dashboardSeq.current) fail(err, setError); }
+    finally { if (seq === dashboardSeq.current) setLoading(false); }
   }, [token, fail, filters]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -105,11 +108,15 @@ export function KriPage({ token }: { token: string }) {
 
   useEffect(() => { if (selectedId) void loadMeasures(selectedId); else setMeasures([]); }, [selectedId, loadMeasures]);
 
+  // Codex PR #203: late answers are ignored and every use of `detail` checks `detail.id === selected.id`,
+  // so the covered-risk editor can never be seeded with another indicator's risks.
+  const detailFor = useRef<string | null>(null);
   const loadDetail = useCallback(async (kriId: string) => {
-    try { setDetail(await krisApi.get(token, kriId)); }
-    catch { setDetail(null); }
+    detailFor.current = kriId;
+    try { const next = await krisApi.get(token, kriId); if (detailFor.current === kriId) setDetail(next); }
+    catch { if (detailFor.current === kriId) setDetail(null); }
   }, [token]);
-  useEffect(() => { if (selectedId) void loadDetail(selectedId); else setDetail(null); }, [selectedId, loadDetail]);
+  useEffect(() => { if (selectedId) void loadDetail(selectedId); else { detailFor.current = null; setDetail(null); } }, [selectedId, loadDetail]);
 
   async function submitCovered(event: FormEvent) {
     event.preventDefault();
@@ -239,7 +246,7 @@ export function KriPage({ token }: { token: string }) {
       header={<><strong>{selected.label}</strong> <StatusBadge label={STATUS[selected.status].label} tone={STATUS[selected.status].tone} /></>}
       footer={<>
         {can("kri.update") && <Button onClick={() => openEdit(selected)}>Modifier</Button>}
-        {can("kri.update") && detail && <Button onClick={() => { setCovered(detail.coveredRiskIds); setFormError(null); setCoverOpen(true); }}>Risques couverts</Button>}
+        {can("kri.update") && detail && detail.id === selected.id && <Button onClick={() => { setCovered(detail.coveredRiskIds); setFormError(null); setCoverOpen(true); }}>Risques couverts</Button>}
         {can("kri.delete") && <Button variant="destructive" onClick={() => { setDisableReason(""); setFormError(null); setDisableOpen(true); }}>Désactiver</Button>}
         {can("kri.create") && <Button variant="primary" onClick={() => { setMeasureForm(EMPTY_MEASURE); setFormError(null); setMeasureOpen(true); }}>Saisir une mesure</Button>}
       </>}
