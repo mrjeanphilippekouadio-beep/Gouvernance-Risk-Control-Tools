@@ -29,8 +29,11 @@ env:
         method: "browser"
         parameters:
           loginPageUrl: ${ZAP_TARGET_URL}
-          loginPageWait: 10
-          stepDelay: 1
+          # Capture sanitized diagnostics so failed SPA login attempts can be
+          # distinguished from browser/proxy failures in the ZAP auth report.
+          diagnostics: true
+          loginPageWait: 20
+          stepDelay: 2
           browserId: "firefox-headless"
           # Make the helper explicitly run its standard field discovery/fill/submit
           # sequence instead of relying only on implicit defaults.
@@ -65,14 +68,16 @@ jobs:
       context: grc-tools
       user: qa
       url: ${ZAP_TARGET_URL}
-      maxDuration: 12
+      # React needs time to hydrate after the Render cold start and after the
+      # local-login form submits. Keep the scan bounded, but avoid racing the SPA.
+      maxDuration: 15
       maxCrawlDepth: 10
-      maxChildren: 100
+      maxChildren: 150
       browserId: "firefox-headless"
-      initialLoadTime: 5
-      pageLoadTime: 2
-      actionWaitTime: 1
-      shutdownTime: 10
+      initialLoadTime: 10
+      pageLoadTime: 3
+      actionWaitTime: 2
+      shutdownTime: 15
       numberOfBrowsers: 1
       logoutAvoidance: true
       scopeCheck: "Flexible"
