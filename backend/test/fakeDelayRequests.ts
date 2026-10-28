@@ -15,8 +15,8 @@ export function fakeDelayRequests(
   let request: GovernanceDelayRequest | null = null;
   let n = 0;
   const repo: GovernanceDelayRequestRepository = {
-    getPending: async (t) => (request && request.tenantId === t && request.status === "PENDING" ? request : null),
-    getById: async (t, id) => (request && request.tenantId === t && request.id === id ? request : null),
+    getPending: (t) => Promise.resolve(request && request.tenantId === t && request.status === "PENDING" ? request : null),
+    getById: (t, id) => Promise.resolve(request && request.tenantId === t && request.id === id ? request : null),
     change: async (t: string, c: DelayChange, audit: TransactionalAudit<{ decided: GovernanceDelayRequest | null; submitted: GovernanceDelayRequest | null; config: Config | null }>) => {
       let decided: GovernanceDelayRequest | null = null;
       if (c.decide) {

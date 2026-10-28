@@ -90,7 +90,7 @@ async function open(who) {
     await sleep(900);
   };
   state.gotoMissions = async () => {
-    const group = nav.locator("button.sidebar-group-toggle", { hasText: /^\s*Audit\s*\d*\s*$/ });
+    const group = nav.locator("button.sidebar-group-toggle", { hasText: /^\s*Audit[\s\d]*$/ });
     if ((await group.getAttribute("aria-expanded")) !== "true") await group.click();
     await nav.getByRole("button", { name: /^Missions/ }).click();
     await page.getByRole("heading", { name: "Missions d'audit" }).waitFor();
