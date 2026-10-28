@@ -94,6 +94,9 @@ jobs:
       - name: ZAP authenticated full scan
         env:
           ZAP_API_BASE_URL: https://gouvernance-risk-control-tools-staging.onrender.com
+          ZAP_TARGET_URL: ${{ secrets.ZAP_TARGET_URL }}
+          ZAP_TEST_EMAIL: qagrctest@gmail.com
+          ZAP_TEST_PASSWORD: ${{ secrets.ZAP_TEST_PASSWORD }}
         run: |
           set -euo pipefail
           mkdir -p report zap-home
@@ -220,12 +223,72 @@ jobs:
             fi
           fi
 
+          # The Client Spider is the only evidence that the React SPA was explored.
+          # API coverage alone must not allow a green run when the browser stayed on login.
+          if [ ! -s report/client-map.yaml ]; then
+            echo "::error::ZAP Client Map evidence is missing."
+            rc=1
+          elif ! ruby -ryaml -e '
+            tree = YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)
+            visited = []
+            walk = lambda do |node|
+              case node
+              when Hash
+                visited << node if node["visited"] == true
+                node.each_value { |value| walk.call(value) }
+              when Array
+                node.each { |value| walk.call(value) }
+              end
+            end
+            walk.call(tree)
+            if visited.empty?
+              warn "::error::ZAP browser coverage gate failed: Client Map contains no nodes marked visited; authenticated SPA exploration is unproven."
+              exit 1
+            end
+            puts "ZAP browser coverage gate passed (#{visited.length} visited Client Map nodes)."
+          ' report/client-map.yaml; then
+            rc=1
+          fi
+
           for report_file in report_html.html report_md.md report_json.json client-map.yaml; do
             if [ ! -s "report/$report_file" ]; then
               echo "::error::Expected ZAP artifact report/$report_file is missing."
               rc=1
             fi
           done
+
+          # Reports are published as workflow artifacts. Remove raw and URL-encoded
+          # QA credentials before upload so request bodies cannot leak secrets.
+          python3 <<'PY'
+          import os
+          from pathlib import Path
+          from urllib.parse import quote, quote_plus
+
+          report_dir = Path("report")
+          secrets_to_mask = [
+              os.environ.get("ZAP_TEST_EMAIL", ""),
+              os.environ.get("ZAP_TEST_PASSWORD", ""),
+          ]
+          replacements = set()
+          for secret in secrets_to_mask:
+              if not secret:
+                  continue
+              replacements.update({secret, quote(secret, safe=""), quote_plus(secret, safe="")})
+
+          for file_path in report_dir.rglob("*"):
+              if not file_path.is_file():
+                  continue
+              try:
+                  raw = file_path.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              masked = raw
+              for secret in sorted(replacements, key=len, reverse=True):
+                  masked = masked.replace(secret, "[REDACTED_QA_CREDENTIAL]")
+              if masked != raw:
+                  file_path.write_text(masked, encoding="utf-8")
+                  print(f"Redacted QA credentials from {file_path}")
+          PY
 
           rm -f "$RUNNER_TEMP/automation-plan.resolved.yaml"
           echo "ZAP exit code: $rc"
