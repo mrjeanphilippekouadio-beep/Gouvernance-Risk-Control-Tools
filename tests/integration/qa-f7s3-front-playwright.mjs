@@ -49,7 +49,9 @@ const PG = ["-h", "127.0.0.1", "-p", process.env.QA_DB_PORT ?? "55437", "-U", "p
 const EMAIL = { a: "qa-f7s3-a@f7s3.test", n: "qa-f7s3-n@f7s3.test", c: "qa-f7s3-c@f7s3.test", s: "qa-f7s3-s@f7s3.test", o: "qa-f7s3-o@f7s3.test", r: "qa-f7s3-r@f7s3.test" };
 const LABELS = JSON.parse(readFileSync(new URL("../../frontend/src/api/rightLabels.json", import.meta.url), "utf8"));
 mkdirSync(SHOTS, { recursive: true });
-const sql = (q) => execFileSync("psql", [...PG, "-c", q], { encoding: "utf8" }).trim();
+// Absolute path: never resolve psql through PATH (Sonar S4036).
+const PSQL = process.env.QA_PSQL ?? "/usr/bin/psql";
+const sql = (q) => execFileSync(PSQL, [...PG, "-c", q], { encoding: "utf8" }).trim();
 
 const { check, failures } = verdicts();
 const { login, api } = localApi(API, EMAIL);
