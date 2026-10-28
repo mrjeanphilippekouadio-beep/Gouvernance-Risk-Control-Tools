@@ -65,13 +65,14 @@ jobs:
       context: grc-tools
       user: qa
       url: ${ZAP_TARGET_URL}
-      maxDuration: 12
+      maxDuration: 15
       maxCrawlDepth: 10
       maxChildren: 100
       browserId: "firefox-headless"
-      initialLoadTime: 5
-      pageLoadTime: 2
-      actionWaitTime: 1
+      # Allow the hosted SPA and its API requests to settle before discovery.
+      initialLoadTime: 8
+      pageLoadTime: 3
+      actionWaitTime: 2
       shutdownTime: 10
       numberOfBrowsers: 1
       logoutAvoidance: true

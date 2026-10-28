@@ -194,7 +194,11 @@ jobs:
           # Mount the plan below /zap/wrk: the official image has this directory
           # for scan artifacts. /zap/plan is not guaranteed to exist (the prior
           # attempt failed before AF could read its plan).
+          # The Client Spider browser extension calls back through the proxy host "zap".
+          # Run ZAP with the runner's host network namespace so Firefox can reach the
+          # proxy consistently; keep the explicit alias because the extension uses it.
           docker run --rm \
+            --network host \
             -v "${{ github.workspace }}/report:/zap/wrk/report:rw" \
             -v "${{ github.workspace }}/zap-home:/home/zap/.ZAP:rw" \
             --mount "type=bind,src=$plan_path,dst=/zap/wrk/automation-plan.resolved.yaml,readonly" \
