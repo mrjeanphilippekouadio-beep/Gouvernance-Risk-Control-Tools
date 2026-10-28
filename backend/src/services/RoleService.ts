@@ -276,8 +276,15 @@ export class RoleService {
   async requestSensitiveView(actor: AuthenticatedUser, userId: string, reason: string, requestId: string): Promise<SensitiveViewGrant> {
     requirePermission(actor, "role.assign");
     const grants = this.requireSensitiveViews();
-    if (userId === actor.userId) throw new ForbiddenError("You cannot ask a widened view for yourself — ask another administrator");
+    userId = canonicalId(userId); // INFO: the self check never depends on the case of the id
+    if (userId === canonicalId(actor.userId)) throw new ForbiddenError("You cannot ask a widened view for yourself — ask another administrator");
     await this.assertRiskManagerMember(actor.tenantId, userId);
+    // INFO (QA-RL): an expired pending request no longer blocks a new one: it is withdrawn (REVOKED, audited) first.
+    const stale = (await grants.list(actor.tenantId)).find((g) => g.userId === userId && g.status === "PENDING" && g.expiresAt && g.expiresAt.getTime() <= Date.now());
+    if (stale) {
+      await grants.revoke(actor.tenantId, stale.id, { by: actor.userId, reason: "Demande expirée, remplacée par une nouvelle demande" },
+        (g) => [this.grantAuditEvent(actor, g, "UNASSIGN", stale, "Demande expirée, remplacée par une nouvelle demande", requestId)]);
+    }
     const days = (await this.configs?.getByTenant(actor.tenantId))?.policyRequestExpiryDays ?? null;
     const expiresAt = days ? new Date(Date.now() + days * 86_400_000) : null;
     const grant = await grants.create({ tenantId: actor.tenantId, userId, reason, requestedBy: actor.userId, expiresAt },
@@ -300,6 +307,32 @@ export class RoleService {
     if (approve) await this.assertRiskManagerMember(actor.tenantId, before.userId);
     return grants.decide(actor.tenantId, id, { status: approve ? "APPROVED" : "REJECTED", by: actor.userId, reason },
       (g) => [this.grantAuditEvent(actor, g, approve ? "APPROVE" : "REJECT", before, reason, requestId)]);
+  }
+
+  /** QA-RL-04: who can receive a widened view — the active members of the Risk Manager group, chosen by the server. */
+  async sensitiveViewCandidates(actor: AuthenticatedUser): Promise<Array<{ id: string; displayName: string }>> {
+    requirePermission(actor, "role.assign");
+    const rm = (await this.roles.list(actor.tenantId)).find((r) => r.systemGroup === "RISK_MANAGER");
+    if (!rm || !this.users) return [];
+    const out: Array<{ id: string; displayName: string }> = [];
+    for (const a of await this.roles.listAssignments(actor.tenantId, rm.id)) {
+      if (a.revokedAt || a.userId === canonicalId(actor.userId)) continue;
+      const u = await this.users.getById(actor.tenantId, a.userId);
+      if (u && !u.deletedAt) out.push({ id: u.id, displayName: u.displayName });
+    }
+    return out.sort((x, y) => x.displayName.localeCompare(y.displayName, "fr"));
+  }
+
+  /**
+   * SEC-RL-05: a widened view ends for good when its holder leaves the Risk Manager group or is suspended
+   * (REVOKED, audited, by the actor of that change); coming back needs a new request. No-op without a live grant.
+   */
+  async endSensitiveView(actor: AuthenticatedUser, userId: string, reason: string, requestId: string): Promise<void> {
+    if (!this.sensitiveViews) return;
+    const live = (await this.sensitiveViews.list(actor.tenantId)).find((g) => g.userId === userId && (g.status === "PENDING" || g.status === "APPROVED"));
+    if (!live) return;
+    await this.sensitiveViews.revoke(actor.tenantId, live.id, { by: actor.userId, reason },
+      (g) => [this.grantAuditEvent(actor, g, "UNASSIGN", live, reason, requestId)]);
   }
 
   /** Terminal: an administrator withdraws a pending request or ends an active grant, with a reason. */
@@ -638,7 +671,25 @@ export class RoleService {
   }
 
   /** ACT-114: also refuses to leave a user with zero active roles. */
+  /**
+   * SEC-RL-05 (q200): leaving the Risk Manager group ends a widened view for good (REVOKED, audited): coming back
+   * needs a new request and a new confirmation.
+   */
   async revokeFromUser(
+    actor: AuthenticatedUser,
+    roleId: string,
+    userId: string,
+    requestId: string,
+    reason?: string,
+    confirmEmptyGroup?: boolean,
+  ): Promise<void> {
+    const role = await this.revokeAssignment(actor, roleId, userId, requestId, reason, confirmEmptyGroup);
+    if (role.systemGroup === "RISK_MANAGER") {
+      await this.endSensitiveView(actor, canonicalId(userId), "Fin automatique : le compte a quitté le groupe Risk Manager", requestId);
+    }
+  }
+
+  private async revokeAssignment(
     actor: AuthenticatedUser,
     roleId: string,
     userId: string,
@@ -646,7 +697,7 @@ export class RoleService {
     reason?: string,
     /** q149: second confirmation to let the Risk Manager group become empty (no usable interim). */
     confirmEmptyGroup?: boolean,
-  ): Promise<void> {
+  ): Promise<Role> {
     requirePermission(actor, "role.assign");
     userId = canonicalId(userId);
     if (actor.userId === userId) {
@@ -702,7 +753,7 @@ export class RoleService {
 
     if (interim) {
       await this.handOverToInterim(actor, role, userId, interim, cleanReason, revokedEvent);
-      return;
+      return role;
     }
     if (vacancy) {
       // q149: the exception is written in the same transaction as the removal.
@@ -713,7 +764,7 @@ export class RoleService {
           governanceException: RISK_MANAGER_VACANCY_EXCEPTION,
         }],
       });
-      return;
+      return role;
     }
 
     await this.roles.revokeFromUser(actor.tenantId, roleId, userId, isRiskManagerGroup ? { minRemaining: 1 } : undefined);
@@ -729,6 +780,7 @@ export class RoleService {
       reason: cleanReason,
       requestId,
     });
+    return role;
   }
 
   /**
@@ -802,9 +854,11 @@ export class RoleService {
   async listForUser(actor: AuthenticatedUser, userId: string): Promise<Role[]> {
     requirePermission(actor, "role.read");
     const roles = await this.roles.listForUser(actor.tenantId, userId);
-    if (await this.restrictedReader(actor)) {
-      const user = await this.users?.getById(actor.tenantId, userId);
-      await this.assertAccountVisible(actor, userId, roles, user ? filterKnownPermissions(user.roles) : []);
+    if (this.users) {
+      // QA-RL-02 / SEC-RL-02: an unknown account and a hidden one answer the same 404 (no oracle).
+      const user = await this.users.getById(actor.tenantId, userId);
+      if (!user) throw new NotFoundError("User", userId);
+      await this.assertAccountVisible(actor, userId, roles, filterKnownPermissions(user.roles));
     }
     return roles;
   }

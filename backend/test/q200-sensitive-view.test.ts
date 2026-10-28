@@ -115,6 +115,34 @@ describe("q200 (DECISION-103): individual widened view of the rights matrix", ()
   });
 });
 
+describe("q200 review fixes (QA-RL-04, SEC-RL-05, INFO)", () => {
+  it("the beneficiary list is the active Risk Manager members, chosen by the server", async () => {
+    const { service } = world();
+    expect((await service.sensitiveViewCandidates(admin)).map((c) => c.id)).toEqual(["rm", "rm2"]);
+    await expect(service.sensitiveViewCandidates(validator)).rejects.toThrow(ForbiddenError);
+  });
+
+  it("leaving the group or a suspension ends the widened view for good: coming back needs a new request", async () => {
+    const { service, audit } = world();
+    const grant = await service.requestSensitiveView(admin, "rm", "Contrôle", "REQ-1");
+    await service.decideSensitiveView(validator, grant.id, true, null, "REQ-2");
+    await service.endSensitiveView(admin, "rm", "Fin automatique : le compte a quitté le groupe Risk Manager", "REQ-3");
+    expect(await service.accounts(rmReader)).toHaveLength(3);
+    expect(audit.at(-1)).toMatchObject({ action: "UNASSIGN", entityId: grant.id });
+    expect((await service.requestSensitiveView(admin, "rm", "Nouvelle demande", "REQ-4")).status).toBe("PENDING");
+  });
+
+  it("an expired pending request no longer blocks a new one; the self check ignores the case of the id", async () => {
+    const { service } = world();
+    const old = await service.requestSensitiveView(admin, "rm", "Contrôle", "REQ-1");
+    const grants = await service.listSensitiveViewGrants(admin);
+    Object.assign(grants.find((g) => g.id === old.id)!, { expiresAt: new Date(Date.now() - 1000) });
+    expect((await service.requestSensitiveView(admin, "rm", "Relance", "REQ-2")).status).toBe("PENDING");
+    expect((await service.listSensitiveViewGrants(admin)).find((g) => g.id === old.id)?.status).toBe("REVOKED");
+    await expect(service.requestSensitiveView(actor("boss", ["role.assign"]), "BOSS", "Pour moi", "REQ-3")).rejects.toThrow(ForbiddenError);
+  });
+});
+
 describe("migration 079 (static)", () => {
   const sql = readFileSync(join(__dirname, "..", "..", "database", "postgresql", "migrations", "079_sensitive_view_grants.sql"), "utf8");
   it("pins the maker-checker in the database and the search_path on every function", () => {

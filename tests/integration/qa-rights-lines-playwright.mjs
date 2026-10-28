@@ -14,12 +14,13 @@
 //  2. adm, ecran : toutes les colonnes avec badges « Administrateur » et « Audit (3e ligne) » ; tous les comptes dans la liste ; onglet « Vue élargie » present.
 //  3. Demande : adm choisit Manager Un + motif -> ligne « En attente de confirmation » ; audit SUBMIT ; notification SENSITIVE_VIEW_GRANT_PENDING a
 //     com, com0, aud seulement (ni adm, ni rm1) ; rm1 ne voit toujours pas l'Audit ; adm (auteur) et rm1 (beneficiaire) : 403 en confirmation, pas de bouton Confirmer pour adm.
-//  4. com0 (Comite sans role.read) : entree « Matrice des droits » ABSENTE du menu (constat attendu QA-RL-03), mais l'API de confirmation lui est ouverte.
+//  4. com0 (Comite sans role.read) : entree « Matrice des droits » presente (QA-RL-03, corrige) ; seul l'onglet des vues elargies, demande avec Confirmer.
 //  5. com, ecran : onglet « Vue élargie » -> Confirmer -> « Active » ; audit APPROVE par com.
 //  6. rm1 (nouvelle session) voit TOUT : colonnes Audit et Administrateurs QA avec badges, comptes aud/adm/roa dans la liste, droits de aud ouverts, source
 //     « Vue élargie confirmée » sur son propre compte ; rm2 reste restreint (API).
 //  7. Retrait : adm saisit un motif, « Retirer » -> « Retirée » ; audit UNASSIGN avec motif ; rm1 ne voit plus l'Audit (API puis ecran) ; aud -> 404 pour rm1.
-//  8. Sortie du groupe : nouvelle demande pour rm2 confirmee puis rm2 retire du groupe Risk Manager -> plus de vue elargie (API).
+//  8. Sortie du groupe par l'application : la vue elargie de rm2 passe REVOKED (audit UNASSIGN) ; son retour ne la rend pas (SEC-RL-05).
+//  9. com0 (sans role.read) confirme une nouvelle demande a l'ecran : APPROVED, decideur com0, rm1 voit l'Audit.
 //
 // Prerequis : tests/integration/qa-rights-lines-setup.sh up ; backend 127.0.0.1:8099 (AUTH_PROVIDER=local, preload qa-f7s1-test-preload.mjs) ;
 // vite 127.0.0.1:5199 (VITE_AUTH_PROVIDER=local, VITE_API_BASE_URL). Variables : QA_API, QA_APP, QA_SHOTS, QA_DB_PORT.
@@ -214,10 +215,15 @@ try {
   // ================================================================================================ 4. com0 : confirmeur sans role.read
   const C0 = await open("com0");
   const c0Entries = await C0.menuEntries();
-  check("4.1 [QA-RL-03] com0 (groupe Comité seul, droit de confirmer) : l'entrée « Matrice des droits » devrait lui permettre de confirmer",
+  check("4.1 [QA-RL-03] com0 (groupe Comité seul, droit de confirmer) : l'entrée « Matrice des droits » s'affiche",
     c0Entries.some((t) => /^Matrice des droits/.test(t)), `entrées=${c0Entries.filter((t) => /Matrice|Comptes|Rôles/.test(t)).join("|") || "(aucune)"}`);
-  check("4.2 com0 voit pourtant la demande par l'API (liste 200, 1 demande en attente)",
+  check("4.2 com0 voit la demande par l'API (liste 200, 1 demande en attente)",
     (await api("com0", "GET", "/roles/sensitive-view-grants")).json?.data?.some((g) => g.id === grantId && g.status === "PENDING") === true);
+  await C0.goto();
+  const c0Pending = C0.page.locator("table tbody tr", { hasText: "En attente de confirmation" });
+  check("4.3 [QA-RL-03] com0 sans role.read : pas d'onglets matrice/compte, la demande en attente avec Confirmer et Refuser",
+    (await C0.seg().count()) === 0 && (await c0Pending.count()) === 1 && (await c0Pending.getByRole("button", { name: "Confirmer" }).count()) === 1
+      && (await C0.page.getByText("Chargement impossible").count()) === 0);
   await C0.context.close();
 
   // ================================================================================================ 5. com confirme, ecran
@@ -289,10 +295,31 @@ try {
   const g2 = (await api("adm", "POST", "/roles/sensitive-view-grants", { userId: me.rm2, reason: "Contrôle rm2" })).json?.data?.id;
   const ok = (await api("aud", "POST", `/roles/sensitive-view-grants/${g2}/approve`, {})).status === 200;
   check("8.1 une demande pour rm2 confirmée par un membre de l'Audit : rm2 voit l'Audit", ok && (await accountsOf("rm2")).some((a) => a.id === me.aud));
-  sql(`update user_roles set revoked_at=now() where user_id='${me.rm2}' and role_id=(select id from roles where system_group='RISK_MANAGER' and tenant_id=(select tenant_id from users where id='${me.rm2}'))`);
+  // SEC-RL-05: leaving the group through the application ends the widened view for good (REVOKED, audited).
+  await api("adm", "POST", `/roles/${roleId("Analyste QA")}/assign`, { userId: me.rm2 }); // rm2 keeps another role
+  const rmRoleId = sql(`select id from roles where system_group='RISK_MANAGER' and tenant_id=(select tenant_id from users where id='${me.rm2}')`);
+  const leave = await api("adm", "POST", `/roles/${rmRoleId}/revoke`, { userId: me.rm2, reason: "Changement de fonction" });
   const afterLeave = await api("rm2", "GET", "/roles/accounts");
-  check("8.2 rm2 retiré du groupe Risk Manager (confirmation toujours APPROVED en base) : plus de vue élargie (le groupe portait role.read : 403)",
-    sql(`select status from sensitive_view_grants where id='${g2}'`) === "APPROVED" && (afterLeave.status === 403 || !(afterLeave.json?.data ?? []).some((a) => a.id === me.aud)), `status=${afterLeave.status}`);
+  check("8.2 [SEC-RL-05] rm2 retiré du groupe Risk Manager : vue élargie REVOKED (audit UNASSIGN), plus rien de l'Audit",
+    leave.status < 300 && sql(`select status from sensitive_view_grants where id='${g2}'`) === "REVOKED"
+      && sql(`select count(*) from audit_log where entity_id='${g2}' and action='UNASSIGN'`) === "1"
+      && (afterLeave.status === 403 || !(afterLeave.json?.data ?? []).some((a) => a.id === me.aud)), `leave=${leave.status} accounts=${afterLeave.status}`);
+  await api("adm", "POST", `/roles/${rmRoleId}/assign`, { userId: me.rm2, reason: "Retour dans la fonction" });
+  check("8.3 [SEC-RL-05] retour de rm2 dans le groupe : toujours aucune vue élargie (il faut une nouvelle demande)",
+    !(await accountsOf("rm2")).some((a) => a.id === me.aud));
+
+  // ================================================================================================ 9. com0 confirme a l'ecran
+  const g3 = (await api("adm", "POST", "/roles/sensitive-view-grants", { userId: me.rm1, reason: "Nouveau contrôle" })).json?.data?.id;
+  const C9 = await open("com0");
+  await C9.goto();
+  const row9 = C9.page.locator("table tbody tr", { hasText: "En attente de confirmation" });
+  await row9.getByRole("button", { name: "Confirmer" }).click();
+  await sleep(1200);
+  check("9.1 [QA-RL-03] com0 (Comité, sans role.read) confirme à l'écran : demande APPROVED, décideur com0, rm1 voit l'Audit",
+    sql(`select status from sensitive_view_grants where id='${g3}'`) === "APPROVED" && sql(`select decided_by from sensitive_view_grants where id='${g3}'`) === me.com0
+      && (await accountsOf("rm1")).some((a) => a.id === me.aud));
+  check("9.2 aucune erreur console ni exception JS (écran du confirmateur)", C9.consoleErrors.length === 0 && C9.jsErrors.length === 0, [...C9.consoleErrors, ...C9.jsErrors].join(" ; ").slice(0, 200));
+  await C9.context.close();
 } finally {
   await browser.close();
 }

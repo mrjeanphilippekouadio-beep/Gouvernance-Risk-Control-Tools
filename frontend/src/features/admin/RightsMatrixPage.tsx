@@ -40,7 +40,10 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
   const { can, loaded } = usePermissions(token);
   const canRequestView = can("role.assign");
   const canDecideView = can("rolegroup.audit.validate");
-  const [tab, setTab] = useState<Tab>("matrix");
+  // QA-RL-03: a confirmer (Committee / Audit) without role.read sees the widened-view requests only.
+  const canRead = can("role.read");
+  const [chosenTab, setTab] = useState<Tab>("matrix");
+  const tab: Tab = canRead ? chosenTab : "views";
   const [roles, setRoles] = useState<MatrixRole[]>([]);
   const [catalog, setCatalog] = useState<string[]>([]);
   const [decisionRights, setDecisionRights] = useState<Set<string>>(new Set());
@@ -50,6 +53,7 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
+    if (!loaded || !canRead) return;
     let live = true;
     Promise.all([rolesApi.matrix(token), permissionsApi.list(token), rolesApi.governanceRights(token)])
       .then(([r, p, g]) => {
@@ -59,7 +63,7 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
       .catch((err) => { if (live) setError(describeLoadError(err)); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [token]);
+  }, [token, loaded, canRead]);
 
   const domains = useMemo(() => [...new Set(catalog.map(domainOf))].sort((a, b) => a.localeCompare(b)), [catalog]);
   const rows = useMemo(() => {
@@ -89,9 +93,9 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
         <p className="core-page__subtitle">Lecture seule. Les groupes fixes et les quatre droits de décision de gouvernance sont signalés ; pour modifier un rôle, utiliser « IAM · Rôles » ou les réglages de gouvernance.</p>
       </div>
     </div>
-    <SegmentedControl<Tab> ariaLabel="Vue" value={tab} onChange={setTab}
+    {canRead && <SegmentedControl<Tab> ariaLabel="Vue" value={tab} onChange={setTab}
       options={[{ value: "matrix", label: "Matrice des rôles" }, { value: "user", label: "Droits d'un compte" },
-        ...(canRequestView || canDecideView ? [{ value: "views" as Tab, label: "Vue élargie du Risk Manager" }] : [])]} />
+        ...(canRequestView || canDecideView ? [{ value: "views" as Tab, label: "Vue élargie du Risk Manager" }] : [])]} />}
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
     {tab === "matrix" && <Card>
       <p>
@@ -109,7 +113,7 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
         caption="Matrice des droits par rôle" emptyMessage="Aucun droit ne correspond." />
     </Card>}
     {tab === "user" && loaded && <UserRights token={token} decisionRights={decisionRights} />}
-    {tab === "views" && loaded && <SensitiveViewsCard token={token} canRequest={canRequestView} canDecide={canDecideView} />}
+    {tab === "views" && loaded && (canRequestView || canDecideView) && <SensitiveViewsCard token={token} canRequest={canRequestView} canDecide={canDecideView} />}
   </section>;
 }
 

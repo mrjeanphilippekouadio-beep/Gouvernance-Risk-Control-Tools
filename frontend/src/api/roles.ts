@@ -71,6 +71,9 @@ export const rolesApi = {
   matrix: (token: string) => apiRequest<MatrixRole[]>("/api/v1/roles/matrix", { token }),
   accounts: (token: string) => apiRequest<MatrixAccount[]>("/api/v1/roles/accounts", { token }),
   sensitiveViews: (token: string) => apiRequest<SensitiveViewGrant[]>("/api/v1/roles/sensitive-view-grants", { token }),
+  /** QA-RL-04: the active Risk Manager members an administrator may pick (role.assign). */
+  sensitiveViewCandidates: (token: string) =>
+    apiRequest<Array<{ id: string; displayName: string }>>("/api/v1/roles/sensitive-view-grants/candidates", { token }),
   requestSensitiveView: (token: string, userId: string, reason: string) =>
     apiRequest<SensitiveViewGrant>("/api/v1/roles/sensitive-view-grants", { method: "POST", body: { userId, reason }, token }),
   decideSensitiveView: (token: string, id: string, approve: boolean, reason: string) =>

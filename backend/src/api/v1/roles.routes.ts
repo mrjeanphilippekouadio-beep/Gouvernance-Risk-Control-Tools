@@ -86,6 +86,15 @@ export function rolesRouter(roleService: RoleService): Router {
     }
   });
 
+  // QA-RL-04: the beneficiaries an administrator may pick (active Risk Manager members, never themself).
+  router.get("/sensitive-view-grants/candidates", async (req, res, next) => {
+    try {
+      res.json({ data: await roleService.sensitiveViewCandidates(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/sensitive-view-grants", async (req, res, next) => {
     try {
       const body = SensitiveViewRequestBody.parse(req.body);

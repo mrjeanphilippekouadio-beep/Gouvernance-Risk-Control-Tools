@@ -63,3 +63,9 @@
 
 ## Limites
 Pas de PoC HTTP ni de base PostgreSQL pour 079 : la revue de la migration est statique. Les 9 tests `-pg` sont ignorés (aucune base configurée). Le comportement du résolveur d'identité n'a pas été modifié par le diff et n'a pas été revu à nouveau.
+
+## Statut des constats après la passe de corrections (2026-10-28)
+
+- **SEC-RL-02 corrigé** : `GET /roles/users/:id` = 404 pour un id inconnu comme pour un compte masqué.
+- **SEC-RL-05 corrigé** : la vue élargie cesse définitivement quand le bénéficiaire quitte le groupe Risk Manager (`RoleService.revokeFromUser`) ou est suspendu (`UserService.suspend`) : la demande passe REVOKED (audit UNASSIGN, auteur = l'acteur du changement). Au retour, il faut une nouvelle demande et une nouvelle confirmation. En lecture, le droit n'est pris en compte que tant que la personne est dans le groupe. Limite : une sortie du groupe faite hors application (SQL d'exploitation) ne révoque pas la ligne, mais la lecture l'ignore tant que la personne est hors du groupe.
+- q201 (annuaire pour les confirmateurs) et q202 (confirmateur administrateur) : non traités, en attente du PO.

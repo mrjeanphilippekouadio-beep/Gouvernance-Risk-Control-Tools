@@ -251,9 +251,9 @@ describe("QA-rights-lines / L2 a hidden id answers exactly like an unknown id", 
     }
   });
 
-  // QA-RL-02: for `/roles/users/:id` (listForUser) an UNKNOWN id answers 200 [] while a hidden one answers 404, so the 404 itself tells
-  // "this account exists and is Audit / administrator". Expected by the brief: identical to an unknown id.
-  it.fails("QA-RL-02 HTTP /roles/users/:id: hidden account indistinguishable from an unknown id (today: unknown = 200 [], hidden = 404)", async () => {
+  // QA-RL-02 (fixed): `/roles/users/:id` (listForUser) answers 404 for an unknown id as for a hidden one, so a 404 never tells
+  // "this account exists and is Audit / administrator".
+  it("QA-RL-02 HTTP /roles/users/:id: hidden account indistinguishable from an unknown id (both 404)", async () => {
     const w = world();
     const hidden = randomUUID();
     w.mkUser(hidden); w.seat(w.audGroup, hidden);
@@ -910,9 +910,8 @@ describe.skipIf(!live)("QA-rights-lines on real PostgreSQL 16 (QA_RL_PGPORT, db 
     await expect(q("TRUNCATE sensitive_view_grants")).rejects.toMatchObject({ code: "42501" });
   });
 
-  // QA-RL-01 (MINOR, known gap): ids that are not uuids on the role routes that do NOT validate them reach PostgreSQL (22P02) and
-  // answer 500. Same family as QA-F7S3-01 (fixed for /roles/users/:userId...); `GET /roles/:id`, PATCH, disable, assign, revoke were
-  // not covered. Expected: 400/404. `it.fails` keeps the suite green; turn into `it` when roles.routes.ts validates `:id`.
+  // QA-RL-01 (fixed): ids that are not uuids on the role routes reach PostgreSQL (22P02); the error handler answers 400 on
+  // every route, never 500 (same family as QA-F7S3-01).
   const NON_UUID_ROUTES: Array<[string, string, unknown]> = [
     ["GET", "/not-a-uuid", undefined],
     ["PATCH", "/not-a-uuid", { description: "x" }],
@@ -921,7 +920,7 @@ describe.skipIf(!live)("QA-rights-lines on real PostgreSQL 16 (QA_RL_PGPORT, db 
     ["POST", "/not-a-uuid/revoke", { userId: "00000000-0000-4000-8000-000000000000", reason: "r" }],
   ];
   for (const [method, path, body] of NON_UUID_ROUTES) {
-    it.fails(`QA-RL-01 non-uuid role id on ${method} /roles${path} is a 4xx, never a 500`, async () => {
+    it(`QA-RL-01 non-uuid role id on ${method} /roles${path} is a 4xx, never a 500`, async () => {
       const { t, u } = await seedTenant();
       const { service } = services();
       const r = await http(service, as(t, u.adm, ["role.read", "role.update", "role.assign", "role.create", "role.delete"]), method, path, body);

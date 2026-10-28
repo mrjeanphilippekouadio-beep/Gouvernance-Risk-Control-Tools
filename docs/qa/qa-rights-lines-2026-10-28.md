@@ -55,3 +55,12 @@ Security : QA-RL-02 (oracle d'existence), QA-RL-OBS-01/02/03. Privacy : noms de 
 4. `bash tests/integration/qa-rights-lines-setup.sh down`.
 
 STATUS : PARTIAL_PASS. RETEST_REQUIRED : oui pour QA-RL-01/-02/-03/-04 (passer les `it.fails` en `it`, rejouer 0.4, 0.5, 4.1).
+
+## Passe de corrections (2026-10-28, dev-backend / dev-frontend)
+
+- **QA-RL-01 corrigé** : un identifiant mal formé qui atteint PostgreSQL (22P02) répond 400 sur toute route (`errorHandler`), jamais 500. Choix : pas de `z.guid()` sur `/roles/:id…`, qui aurait cassé 8 tests existants bâtis sur des identifiants symboliques ; les `it.fails` QA-RL-01 sont devenus des `it`.
+- **QA-RL-02 corrigé** : `GET /roles/users/:id` répond 404 pour un id inconnu comme pour un compte masqué (`it` normal).
+- **QA-RL-03 corrigé** : l'entrée « Matrice des droits » s'affiche avec `role.read` **ou** `rolegroup.audit.validate` ; sans `role.read`, seul l'onglet « Vue élargie du Risk Manager » (liste + Confirmer/Refuser), API de liste sans `role.read`. `role.read` n'est pas ajouté au Comité ni à l'Audit. Noms des bénéficiaires pour un confirmateur sans `role.read` : « Compte non consultable » (q201 en attente).
+- **QA-RL-04 corrigé** : le sélecteur du bénéficiaire vient du serveur (`GET /roles/sensitive-view-grants/candidates`, membres actifs du groupe Risk Manager, jamais soi-même) ; refus affichés en français.
+- **INFO corrigés** : une demande expirée ne bloque plus (retirée, auditée, avant la nouvelle) ; auto-demande comparée sur l'id canonique (403, jamais 500).
+- **Repassage navigateur** (base neuve, migrations 001..079) : 58/58 PASS, dont 4.3 (com0 sans `role.read` voit la demande et Confirmer), 8.2/8.3 (SEC-RL-05) et 9.1/9.2 (com0 confirme à l'écran, aucune erreur console).
