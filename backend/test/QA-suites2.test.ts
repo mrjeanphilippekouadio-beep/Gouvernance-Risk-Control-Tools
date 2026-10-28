@@ -14,6 +14,7 @@ import { GovernanceNotifier } from "../src/services/GovernanceNotifier.js";
 import { GovernancePrincipleAcceptanceService } from "../src/services/GovernancePrincipleAcceptanceService.js";
 import { FIXED_GROUP_PERMISSIONS, GOVERNANCE_DECISION_RIGHTS } from "../src/domain/fixedGroupPermissions.js";
 import { NOTIFICATION_CATALOG } from "../src/domain/notificationCatalog.js";
+import { PostgresRoleRepository } from "../src/infrastructure/database/postgres/PostgresRoleRepository.js";
 import { PostgresGovernancePrincipleAcceptanceRepository } from "../src/infrastructure/database/postgres/PostgresGovernancePrincipleAcceptanceRepository.js";
 import { ConflictError, ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
@@ -354,16 +355,19 @@ describe("QA-suites2 q179 governance decision rights", () => {
     expect(w.holders(ORG)).toEqual(["RISK_COMMITTEE"]);
   });
 
-  it("PIN (observation): the generic role update CAN still strip the last holder of a right (the dedicated route cannot)", async () => {
+  it("SEC-SA2-01 / QA-SUITES2-01: the generic role update can neither strip nor add a decision right, on any role", async () => {
     const w = roleWorld();
     await w.service.setGovernanceRightGroups(roleAdmin, ORG, ["RISK_COMMITTEE"], "Comité seul", "q");
     const com = w.roles.find((r) => r.id === "com")!;
-    const without = com.permissions.filter((p) => p !== ORG);
-    // Documented gap if it resolves: nobody can then approve an organisation profile. Pinned so a fix is noticed.
-    const outcome = await w.service.update(roleAdmin, "com", { permissions: without }, "q", "retrait").then(() => "ALLOWED", (e) => (e as Error).name);
-    expect(["ALLOWED", "ValidationError", "ForbiddenError"]).toContain(outcome);
-    expect(outcome).toBe("ALLOWED");
-    expect(w.holders(ORG)).toEqual([]);
+    const rm = w.roles.find((r) => r.id === "rm")!;
+    const events = w.events.length;
+    await expect(w.service.update(roleAdmin, "com", { permissions: com.permissions.filter((p) => p !== ORG) }, "q", "retrait")).rejects.toThrow(/governance-rights/);
+    await expect(w.service.update(roleAdmin, "rm", { permissions: [...rm.permissions, ORG] }, "q", "ajout")).rejects.toThrow(/governance-rights/);
+    await expect(w.service.update(roleAdmin, "rm", { permissions: rm.permissions.filter((p) => p !== APPROVE_SV) }, "q", "retrait")).rejects.toThrow(/governance-rights/);
+    expect(w.holders(ORG)).toEqual(["RISK_COMMITTEE"]);
+    expect(w.events).toHaveLength(events);
+    // an unrelated change of the same group still goes through
+    await expect(w.service.update(roleAdmin, "com", { permissions: com.permissions.filter((p) => p !== "kpi.read") }, "q")).resolves.toBeDefined();
   });
 
   it("same groups = no change, no audit row, no write; duplicates in the request are collapsed", async () => {
@@ -421,12 +425,24 @@ describe("QA-suites2 q179 governance decision rights", () => {
   // (the comment says "a refusal never leaves the right half moved") but NOT the "Audit change already PENDING" refusal,
   // which only changeAuditGroupPermissions raises, AFTER the Risk Manager / Committee groups were already updated.
   // Remove `.fails` when the pending-change check is done up front.
-  it.fails("a refusal raised by the Audit circuit (a change already PENDING) leaves no half-moved right", async () => {
+  it("a refusal raised by the Audit circuit (a change already PENDING) leaves no half-moved right", async () => {
     const w = roleWorld({}, true);
     const before = w.snapshot();
     await expect(w.service.setGovernanceRightGroups(roleAdmin, REVIEW, ["RISK_MANAGER"], "Retirer", "q")).rejects.toThrow(/already pending/);
     expect(w.snapshot()).toBe(before);
     expect(w.events).toHaveLength(0);
+  });
+
+  it("a queued Audit change never leaves the right carried by nobody meanwhile (refused before any write)", async () => {
+    const w = roleWorld({ rmadmin: ["rm"] });
+    await w.service.setGovernanceRightGroups(roleAdmin, REVIEW, ["RISK_COMMITTEE"], "Comité seul", "q");
+    const before = w.snapshot();
+    const events = w.events.length;
+    const who = user("rmadmin", roleAdmin.roles);
+    await expect(w.service.setGovernanceRightGroups(who, REVIEW, ["AUDIT"], "Audit seul", "q")).rejects.toThrow(/awaits validation/);
+    expect(w.snapshot()).toBe(before);
+    expect(w.events).toHaveLength(events);
+    expect(w.changes).toHaveLength(0);
   });
 
   it("an administrator who is also a Risk Manager: removing the review from the Audit is PENDING (202), the right stays on the Audit until a third person approves", async () => {
@@ -506,6 +522,24 @@ describe("QA-suites2 q178 Risk Manager vacancy", () => {
     ).processRequest(T, "adm", "r");
     expect(groupsAsked.sort()).toEqual(["AUDIT", "RISK_COMMITTEE"]);
     expect(sent.sort()).toEqual(["aud:RISK_MANAGER_VACANCY", "com:RISK_MANAGER_VACANCY"]);
+  });
+});
+
+describe("QA-suites2 q178 privacy (PRIV-REV-SUITES2-001 §6)", () => {
+  it("the vacancy notification carries neither the removed person's id nor name: resource = the audit row, opened on the roles view", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    const row: GovernanceAuditRow = {
+      id: "v1", userId: "adm", entityType: "Role", entityId: "rm", action: "UPDATE", governanceException: "riskManager.vacancy",
+      oldValue: { roleId: "rm", userId: "gone-user", roleName: "Risk Manager", displayName: "Partie Personne" }, newValue: { riskManagerGroupEmpty: true }, systemGroup: "RISK_MANAGER",
+    };
+    await new GovernanceNotifier(
+      { emit: async (i) => { sent.push(i as unknown as Record<string, unknown>); return null; } },
+      { rowsForRequest: async () => [row], holdersOf: async () => [], groupMembers: async () => ["com"], managerId: async () => null, unreviewedExceptionCount: async () => 0 },
+      () => undefined,
+    ).processRequest(T, "adm", "r");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ recipientUserId: "com", resourceType: "MANAGEMENT", resourceId: "v1" });
+    expect(JSON.stringify(sent[0])).not.toMatch(/gone-user|Partie Personne/);
   });
 });
 
@@ -632,6 +666,33 @@ describe.skipIf(!HOST.startsWith("/"))("QA-suites2 q181 real PostgreSQL", () => 
       expect(await repo.latestAloneReview(tenant, principle)).toMatchObject({ reviewed: true, open: false });
       expect(await repo.latestAloneReview(tenant, "GOV-QS2-02")).toBeNull();
       expect(await repo.latestAloneReview(other, principle)).toBeNull();
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+describe.skipIf(!HOST.startsWith("/"))("QA-suites2 q179 real PostgreSQL (SEC-SA2-03)", () => {
+  it("setGroupPermissions: several groups + audit rows in ONE transaction; a failure on the second group rolls the first back", async () => {
+    const pool = new Pool({ host: HOST, port: Number(process.env.QA_SWP_PGPORT ?? 5531), user: "postgres", database: process.env.QA_SWP_PGDB ?? "grc_qa_a08", max: 3 });
+    try {
+      const one = async (sql: string, p: unknown[] = []) => (await pool.query(sql, p)).rows[0];
+      const tenant = (await one(`INSERT INTO tenants (name) VALUES ($1) RETURNING id`, [`qs2r-${Date.now()}`])).id as string;
+      const actor = (await one(`INSERT INTO users (tenant_id, email, display_name, roles) VALUES ($1, $2, 'adm', '{}') RETURNING id`, [tenant, `adm-${Math.random()}@qs2`])).id as string;
+      const group = async (g: string) => (await one(`INSERT INTO roles (tenant_id, name, permissions, system_group) VALUES ($1, $2, '{risk.read,${ORG}}', $2) RETURNING id`, [tenant, g])).id as string;
+      const [rm, com] = [await group("RISK_MANAGER"), await group("RISK_COMMITTEE")];
+      const repo = new PostgresRoleRepository(pool);
+      const audit = (roles: Role[]) => roles.map((r) => ({ tenantId: tenant, userId: actor, entityType: "Role", entityId: r.id, action: "PERMISSION_CHANGE" as const, oldValue: null, newValue: r, reason: "r", requestId: "qs2-r" }));
+      const perms = async (id: string) => (await one(`SELECT permissions FROM roles WHERE id = $1`, [id])).permissions as string[];
+      const audits = async () => Number((await one(`SELECT count(*) AS n FROM audit_log WHERE tenant_id = $1`, [tenant])).n);
+      await expect(repo.setGroupPermissions(tenant, [{ id: rm, permissions: ["risk.read"] }, { id: "00000000-0000-0000-0000-000000000000", permissions: [] }], audit)).rejects.toThrow();
+      expect(await perms(rm)).toContain(ORG);
+      expect(await audits()).toBe(0);
+      const out = await repo.setGroupPermissions(tenant, [{ id: rm, permissions: ["risk.read"] }, { id: com, permissions: ["risk.read"] }], audit);
+      expect(out.map((r) => r.id)).toEqual([rm, com]);
+      expect(await perms(rm)).toEqual(["risk.read"]);
+      expect(await perms(com)).toEqual(["risk.read"]);
+      expect(await audits()).toBe(2);
     } finally {
       await pool.end();
     }

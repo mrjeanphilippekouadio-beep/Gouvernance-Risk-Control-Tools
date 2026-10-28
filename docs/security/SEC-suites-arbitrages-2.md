@@ -73,3 +73,9 @@ q183 : la lecture de l'annuaire n'est pas auditée, et la liste est tronquée à
 
 ## Traçabilité (7bis)
 SEC-SA2-01 (A06, avant production), SEC-SA2-02 (HUMAN q186, puis A07), SEC-SA2-03/04 (A06, non bloquants), SEC-SA2-05 (PO/D6), SEC-SA2-06 (Privacy). La fabrication de l'absence par suspension reste rattachée à SEC-PNL-04.
+
+## Statut après correctifs (2026-10-27)
+
+- **SEC-SA2-01 : CORRIGÉ.** `RoleService.update` refuse (400) tout ajout ou retrait d'un des 4 droits de décision sur n'importe quel rôle ; seule `PUT /roles/governance-rights` les déplace (motif, au moins un groupe).
+- **SEC-SA2-03 : CORRIGÉ.** Tous les refus avant écriture ; groupes changés directement + lignes d'audit en une transaction.
+- SEC-SA2-02 : ouvert (q186, HUMAN). SEC-SA2-04 à 06 : INFO, inchangés.

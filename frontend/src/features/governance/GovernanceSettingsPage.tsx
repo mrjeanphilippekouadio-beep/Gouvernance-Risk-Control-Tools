@@ -53,6 +53,18 @@ function changedDelays(form: Record<keyof GovernanceDelays, string>, config: Gov
 }
 
 const fmtDate = (iso: string | null) => (iso ? iso.slice(0, 10) : "—");
+
+/** QA-SUITES2-FR-01: the server refusals of PUT /roles/governance-rights, said in French; the server still decides. */
+const RIGHT_REFUSALS: Array<[RegExp, string]> = [
+  [/q157/, "L'Audit ne confirme ni n'approuve jamais (q157) : il ne peut porter que la revue des exceptions."],
+  [/At least one fixed group/, "Au moins un groupe fixe doit porter ce droit, y compris pendant qu'un changement de l'Audit attend sa validation."],
+  [/group you belong to/, "Vous êtes membre d'un des groupes modifiés : un autre administrateur doit faire ce changement."],
+  [/already pending/, "Un changement des droits de l'Audit attend déjà sa validation : il doit être décidé avant tout autre."],
+];
+function describeRightError(err: unknown): string {
+  const known = err instanceof ApiError ? RIGHT_REFUSALS.find(([re]) => re.test(err.message)) : undefined;
+  return known ? `${known[1]}${(err as ApiError).requestId ? ` (réf. ${(err as ApiError).requestId})` : ""}` : describeError(err);
+}
 const yesNo = (v: boolean, yes: string, no: string) => <StatusBadge label={v ? yes : no} tone={v ? "success" : "neutral"} />;
 
 export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: string; onOpenFrameworks?: () => void }) {
@@ -171,7 +183,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       setNotice({ tone: "success", title: "Changement appliqué", text: `${TITLES[editing]} mis à jour.` });
       setEditing(null);
     } catch (err) {
-      setFormError(describeError(err));
+      setFormError(editing === "right" ? describeRightError(err) : describeError(err));
       if (isForbidden(err)) setEditing(null); // the global permission dialog explains it
     } finally { setSaving(false); }
   }
@@ -274,7 +286,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
           <Button onClick={() => openRight(r)}>Modifier</Button>
         </li>)}</ul>
       </Card>}
-      <p className="muted">Version de la configuration : {config.version} · Mise à jour le {fmtDate(config.updatedAt)}</p>
+      <p className="muted">Version de la configuration : {config.version} · {config.version === 0 ? "jamais enregistrée (valeurs par défaut)" : `Mise à jour le ${fmtDate(config.updatedAt)}`}</p>
     </>}
 
     <Modal
@@ -284,7 +296,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       busy={saving}
       actions={<>
         <Button onClick={() => setEditing(null)} disabled={saving}>Annuler</Button>
-        <Button type="submit" form="gov-setting-form" variant="primary" disabled={saving || !reason.trim()}>{saving ? "Envoi…" : "Enregistrer"}</Button>
+        <Button type="submit" form="gov-setting-form" variant="primary" disabled={saving || !reason.trim() || (editing === "right" && right?.groups.length === 0)}>{saving ? "Envoi…" : "Enregistrer"}</Button>
       </>}
     >
       {editing && <form id="gov-setting-form" onSubmit={submit}>
@@ -309,6 +321,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
               onChange={(e) => setRight({ ...right, groups: e.target.checked ? [...right.groups, g] : right.groups.filter((x) => x !== g) })}
             /> {GROUP_LABELS[g]}
           </label>)}
+          {right.groups.length === 0 && <p className="muted">Cochez au moins un groupe : un droit de décision est toujours porté par un groupe fixe.</p>}
         </fieldset>}
         {editing === "cumul" && <label className="core-filter">
           <input type="checkbox" checked={flag} onChange={(e) => setFlag(e.target.checked)} /> Cumul Comité et Audit autorisé

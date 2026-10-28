@@ -261,6 +261,13 @@ export class RoleService {
       assertKnownPermissions(input.permissions);
       assertRolePermissionRules(before.systemGroup, input.permissions);
     }
+    // SEC-SA2-01: the four decision rights move only through PUT /roles/governance-rights (reason, at least one group).
+    if (input.permissions !== undefined) {
+      const moved = GOVERNANCE_DECISION_RIGHTS.filter((p) => before.permissions.includes(p) !== input.permissions!.includes(p));
+      if (moved.length > 0) {
+        throw new ValidationError(`Governance decision rights are changed through PUT /roles/governance-rights only: ${moved.join(", ")}`);
+      }
+    }
     if (before.systemGroup === "AUDIT" && input.permissions !== undefined) {
       throw new ValidationError("The permissions of the Audit group are changed through its dedicated endpoint");
     }
@@ -748,8 +755,9 @@ export class RoleService {
 
   /**
    * q179 (DECISION-095): an administrator chooses the fixed group(s) carrying one governance decision right. Mandatory
-   * reason; each group actually changed goes through its usual path (and audit): `update` for Risk Manager / Committee,
-   * the Audit circuit (possibly PENDING) for the Audit. Refused: an ordinary role, the Audit for anything but the review
+   * reason; every refusal is raised before the first write. The groups changed directly (Risk Manager / Committee, and
+   * the Audit when no validation is needed) and their audit rows are written in one transaction; an Audit change that
+   * needs validation goes through the Audit circuit (PENDING). Refused: an ordinary role, the Audit for anything but the review
    * (q157), no group at all, a group the administrator belongs to.
    */
   async setGovernanceRightGroups(
@@ -778,19 +786,51 @@ export class RoleService {
     if (changes.some((r) => held.some((h) => h.id === r.id))) {
       throw new ForbiddenError("You cannot change the permissions of a group you belong to — ask another admin");
     }
-    if (changes.some((r) => r.systemGroup === "AUDIT")) requirePermission(actor, "rolegroup.audit.update");
-
+    const auditChange = changes.find((r) => r.systemGroup === "AUDIT");
+    // QA-SUITES2-02: every refusal of the Audit circuit is raised here too, before the first write.
     let auditChangePending = false;
-    for (const role of changes) {
-      const permissions = role.permissions.includes(permission)
-        ? role.permissions.filter((p) => p !== permission)
-        : [...role.permissions, permission];
-      if (role.systemGroup === "AUDIT") {
-        auditChangePending = (await this.changeAuditGroupPermissions(actor, permissions, requestId, why)).status === "PENDING";
-      } else {
-        await this.update(actor, role.id, { permissions }, requestId, why);
+    if (auditChange) {
+      requirePermission(actor, "rolegroup.audit.update");
+      const pending = await this.permissionChanges?.list?.(actor.tenantId, { status: "PENDING", roleId: auditChange.id });
+      if (pending && pending.length > 0) {
+        throw new ValidationError("A change of the Audit group permissions is already pending validation");
+      }
+      auditChangePending = auditChangeNeedsValidation(held);
+      // A queued Audit change leaves the Audit as it is: the right must still be carried by a group meanwhile.
+      const carriedNow = wanted.filter((g) => g !== "AUDIT" || !auditChangePending).length
+        + (auditChangePending && auditChange.permissions.includes(permission) ? 1 : 0);
+      if (carriedNow === 0) {
+        throw new ValidationError("At least one fixed group must carry a governance decision right while the Audit change awaits validation");
       }
     }
+    const toggled = (role: Role) => role.permissions.includes(permission)
+      ? role.permissions.filter((p) => p !== permission)
+      : [...role.permissions, permission];
+
+    // SEC-SA2-03: the groups changed directly and their audit rows are written in one transaction.
+    const direct = changes.filter((r) => r.systemGroup !== "AUDIT" || !auditChangePending);
+    if (direct.length > 0) {
+      const rows = (after: Role[]) => after.map((role) => ({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Role",
+        entityId: role.id,
+        action: "PERMISSION_CHANGE" as const,
+        oldValue: direct.find((r) => r.id === role.id)!,
+        newValue: role,
+        reason: why,
+        requestId,
+      }));
+      const list = direct.map((r) => ({ id: r.id, permissions: toggled(r) }));
+      if (this.roles.setGroupPermissions) {
+        await this.roles.setGroupPermissions(actor.tenantId, list, rows);
+      } else {
+        const after: Role[] = [];
+        for (const c of list) after.push(await this.roles.update(actor.tenantId, c.id, { permissions: c.permissions }));
+        for (const e of rows(after)) await this.audit.record(e);
+      }
+    }
+    if (auditChange && auditChangePending) await this.changeAuditGroupPermissions(actor, toggled(auditChange), requestId, why);
     const now = (await this.governanceRights(actor)).find((r) => r.permission === permission)!;
     return { ...now, auditChangePending };
   }
@@ -824,7 +864,7 @@ export class RoleService {
     }
 
     // G1 (DECISION-044): an administrator who is also a Committee member would otherwise apply alone, like a Risk Manager.
-    if (held.some((r) => r.systemGroup === "RISK_MANAGER" || isCommitteeRole(r))) {
+    if (auditChangeNeedsValidation(held)) {
       if (!this.permissionChanges) throw new Error("RoleService requires a RolePermissionChangeRepository");
       const change = await this.permissionChanges.create({
         tenantId: actor.tenantId,
@@ -1082,4 +1122,9 @@ export class RoleService {
     }
     return { permission, grantors: found.map((u) => ({ displayName: u.displayName })) };
   }
+}
+
+/** G1 (DECISION-044): an administrator who is also a Risk Manager or a Committee member never changes the Audit alone. */
+function auditChangeNeedsValidation(held: Role[]): boolean {
+  return held.some((r) => r.systemGroup === "RISK_MANAGER" || isCommitteeRole(r));
 }

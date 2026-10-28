@@ -1,5 +1,6 @@
 import type { CreateRoleInput, Role, RoleAssignment, UpdateRoleInput } from "../entities/Role.js";
 import type { AuditEvent } from "../entities/AuditEvent.js";
+import type { Permission } from "../permissions.js";
 
 type AuditToWrite = Omit<AuditEvent, "id" | "timestamp">;
 
@@ -29,6 +30,11 @@ export interface RoleRepository {
   create(input: CreateRoleInput): Promise<Role>;
   /** `recheck` (widening permissions): locks holders then the role and replays the cumul rules before the UPDATE. */
   update(tenantId: string, id: string, input: UpdateRoleInput, recheck?: RoleUpdateRecheck): Promise<Role>;
+  /**
+   * q179 (QA-SUITES2-02): the permissions of several fixed groups and their audit rows in ONE transaction.
+   * Optional for the existing test doubles; RoleService then writes them one by one.
+   */
+  setGroupPermissions?(tenantId: string, changes: Array<{ id: string; permissions: Permission[] }>, audit: (roles: Role[]) => AuditToWrite[]): Promise<Role[]>;
   disable(tenantId: string, id: string): Promise<void>;
   /** Used by ACT-112: a role can't be disabled while a user is still actively assigned to it. */
   countActiveAssignments(tenantId: string, roleId: string): Promise<number>;

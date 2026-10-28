@@ -147,16 +147,12 @@ try {
   await A.dialog.getByLabel("Audit", { exact: true }).uncheck();
   await A.dialog.getByLabel("Risk Manager", { exact: true }).uncheck();
   await A.dialog.getByLabel("Comité des risques", { exact: true }).uncheck();
-  await save.click();
-  await sleep(900);
-  const p2 = put("a", "/roles/governance-rights").at(-1);
+  // QA-SUITES2-FR-01 corrigé : sans groupe coché, « Enregistrer » est inactif et la fenêtre dit pourquoi (le serveur refuse toujours).
+  const disabledNoGroup = await save.isDisabled();
   const err2 = await A.dialog.innerText().catch(() => "");
-  await A.page.screenshot({ path: `${SHOTS}/03-refus-aucun-groupe.png`, fullPage: true });
-  const banner2 = ((await A.dialog.locator(".message-banner, [role=alert]").allInnerTexts()).join(" ") || "").replace(/\s+/g, " ").trim();
-  check("1.2 tout décoché : PUT 400, un message de refus est affiché dans la fenêtre (non vide), aucun changement", p2?.status === 400 && p2 !== p1 && banner2.length > 0 && JSON.stringify(await rightGroups("a", CONFIRM)) === '["RISK_COMMITTEE","RISK_MANAGER"]', `status=${p2?.status}; bandeau=« ${banner2} »`);
-  // Ecart d'oracle consigne dans le rapport : l'oracle initial exigeait seulement « message affiche » ; ce controle-ci mesure en plus s'il l'explique.
-  console.log(`INFO  1.2 le message affiché explique-t-il le refus (groupe manquant) ? ${/groupe|group|au moins|at least|Too small/i.test(banner2) ? "oui" : "NON"} : « ${banner2} »`);
-
+  await A.page.screenshot({ path: `${SHOTS}/03-aucun-groupe.png`, fullPage: true });
+  check("1.2 tout décoché : « Enregistrer » inactif, explication affichée, aucun PUT, aucun changement", disabledNoGroup && /au moins un groupe/i.test(err2) && put("a", "/roles/governance-rights").length === 1 && JSON.stringify(await rightGroups("a", CONFIRM)) === '["RISK_COMMITTEE","RISK_MANAGER"]', `inactif=${disabledNoGroup}`);
+  check("1.2 refus q157 expliqué en français (pas la clé brute)", /ne confirme ni n'approuve/.test(err1) && !err1.includes(CONFIRM), err1.replace(/\s+/g, " ").slice(0, 200));
   await A.dialog.getByLabel("Comité des risques", { exact: true }).check();
   await save.click();
   await A.dialog.waitFor({ state: "detached", timeout: 6000 }).catch(() => undefined);
