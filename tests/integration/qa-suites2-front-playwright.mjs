@@ -3,9 +3,9 @@
 // Pages : « Réglages de gouvernance » (GovernanceSettingsPage.tsx) et « Audit > Missions » (AuditMissionsPage.tsx).
 // Les oracles ci-dessous sont ecrits AVANT l'execution.
 //
-// COMPTES (mot de passe « whatever », droits poses dans users.roles ; groupes fixes Risk Manager / Comite / Audit sans membre) :
-//   A « Admin Gouv QA »       : config.read, config.governancedelays.set, config.selfvalidation.approve, role.read, role.update, rolegroup.audit.update
-//   B « Approbateur QA »      : config.read, config.selfvalidation.approve
+// COMPTES (mot de passe « whatever », droits ordinaires dans users.roles ; droits de decision UNIQUEMENT par groupe fixe, q186/077) :
+//   A « Admin Gouv QA »       : config.read, config.governancedelays.set, role.read, role.update, rolegroup.audit.update + membre du Comite
+//   B « Approbateur QA »      : config.read + membre du Comite (config.selfvalidation.approve)
 //   E « Lecteur Droits QA »   : config.read, role.read (pas role.update)
 //   C « Missions QA »         : audit.mission.read, audit.mission.create (rien d'autre : ni user.read ni droit de designation)
 //   D « Autre Compte QA »     : audit.mission.read
@@ -38,7 +38,7 @@
 //     3.3 D (audit.mission.read seul) : annuaire = 403 pour D par l'API, et D ne voit que lui-meme dans le choix s'il pouvait creer (non teste
 //         par l'ecran : pas de bouton « Nouvelle mission ») ; D n'a pas le bouton « Nouvelle mission ».
 //
-// Prerequis : docs/qa/qa-suites2-2026-10-27.md, section 1 (PG local grc_qa_s2f migrations 001..076, backend 127.0.0.1:8099
+// Prerequis : docs/qa/qa-suites2-2026-10-27.md, section 1 (PG local grc_qa_s2f migrations 001..077, backend 127.0.0.1:8099
 // AUTH_PROVIDER=local, vite 127.0.0.1:5199 VITE_AUTH_PROVIDER=local). Base neuve avant chaque passage (tests/integration/qa-suites2-front-setup.sh).
 import { localApi, sleep, verdicts } from "./qa-helpers.mjs";
 import { createRequire } from "node:module";
