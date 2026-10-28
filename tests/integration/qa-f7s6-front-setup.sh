@@ -2,7 +2,7 @@
 # OUTILLAGE DE TEST (QA F7-S6). Reutilise le cluster PostgreSQL 16 LOCAL jetable de qa-f7s3-front-setup.sh (jamais Neon)
 # et y ajoute les comptes KRI. Usage : qa-f7s6-front-setup.sh up | down  (down = arret + suppression du cluster).
 D=$(cd "$(dirname "$0")" && pwd)
-[ "$1" = "down" ] && exec bash "$D/qa-f7s3-front-setup.sh" down
+[[ "$1" = "down" ]] && exec bash "$D/qa-f7s3-front-setup.sh" down
 bash "$D/qa-f7s3-front-setup.sh" up >/dev/null || exit 1
 P="/usr/bin/psql -h 127.0.0.1 -p 55437 -U postgres -d grc_qa_f7s3 -Atq -v ON_ERROR_STOP=1"
 T=$($P -c "select id from tenants where name='Tenant principal QA'")

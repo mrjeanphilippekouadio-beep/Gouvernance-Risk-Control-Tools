@@ -31,6 +31,8 @@ mkdirSync(SHOTS, { recursive: true });
 const { check, failures } = verdicts();
 const { TOK, login, api } = localApi(API, EMAIL);
 const norm = (s) => s.replace(/\s+/g, " ").trim();
+// Code-unit order, identical to the default sort of strings, with an explicit compare function (Sonar S2871).
+const byText = (x, y) => Number(x > y) - Number(x < y);
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
 
 async function open(who) {
@@ -51,7 +53,7 @@ async function open(who) {
   await nav.getByRole("button", { name: /^KRI/ }).click();
   await page.getByRole("heading", { name: "Indicateurs de risque (KRI)" }).waitFor();
   await sleep(900);
-  st.labels = async () => (await page.locator("table").first().locator("tbody tr td:first-child strong").allInnerTexts()).map(norm).sort();
+  st.labels = async () => (await page.locator("table").first().locator("tbody tr td:first-child strong").allInnerTexts()).map(norm).sort(byText);
   st.btn = (name) => page.getByRole("button", { name, exact: true });
   st.detail = async (label) => { await page.getByRole("button", { name: `Voir le détail de ${label}` }).click(); await sleep(900); };
   return st;
@@ -80,10 +82,10 @@ try {
   // ---------------- m
   let M = await open("m");
   await M.page.screenshot({ path: `${SHOTS}/01-dashboard-m.png`, fullPage: true });
-  const L = (...a) => a.map((s) => s).sort();
+  const L = (...a) => a.map((s) => s).sort(byText);
   const eq = async (name, expected) => { const got = await M.labels(); check(name, JSON.stringify(got) === JSON.stringify(L(...expected)), `got=${got.join("|")}`); };
   await eq("1. tableau de bord : les 3 KRI", ["KRI Vert QA", "KRI Rouge QA", "KRI Sans mesure QA"]);
-  const apiAll = D(await api("m", "GET", "/kris/dashboard")).map((r) => r.label).sort();
+  const apiAll = D(await api("m", "GET", "/kris/dashboard")).map((r) => r.label).sort(byText);
   check("1. = GET /kris/dashboard", JSON.stringify(apiAll) === JSON.stringify(await M.labels()));
   await M.page.locator("#kri-f-status").selectOption("ROUGE"); await sleep(700);
   await eq("1. filtre Statut Rouge", ["KRI Rouge QA"]);
@@ -109,14 +111,14 @@ try {
   check("2. fiche K1 : formule et « Autres risques couverts : aucun »", /Formule : f/.test(body) && /Autres risques couverts : aucun/.test(body), body.slice(0, 160));
   await M.btn("Risques couverts").click(); await sleep(500);
   const modalOf = () => M.page.locator("dialog[open]"); // M change de page apres l etape 3
-  const boxes = (await modalOf().locator("label.core-filter").allInnerTexts()).map(norm).sort();
+  const boxes = (await modalOf().locator("label.core-filter").allInnerTexts()).map(norm).sort(byText);
   check("2. cases : A2, B1 (ni A1 principal, ni D archivé plus tard n'est encore là mais D oui, ni risque autre tenant)",
     JSON.stringify(boxes) === JSON.stringify(["Risque A2 QA", "Risque B1 QA", "Risque D archive QA"]), boxes.join("|"));
   await modalOf().getByLabel("Risque A2 QA").check(); await modalOf().getByLabel("Risque B1 QA").check();
   await modalOf().getByRole("button", { name: "Enregistrer" }).click(); await sleep(1000);
   check("2. texte mis à jour après enregistrement", /Autres risques couverts : Risque A2 QA · Risque B1 QA|Autres risques couverts : Risque B1 QA · Risque A2 QA/.test(norm(await M.page.locator("main").innerText())));
-  const got = D(await api("m", "GET", `/kris/${k1}`)).coveredRiskIds.sort();
-  check("2. API coveredRiskIds = {A2,B1}", JSON.stringify(got) === JSON.stringify([rA2, rB1].sort()));
+  const got = D(await api("m", "GET", `/kris/${k1}`)).coveredRiskIds.sort(byText);
+  check("2. API coveredRiskIds = {A2,B1}", JSON.stringify(got) === JSON.stringify([rA2, rB1].sort(byText)));
   let au = audits(k1).filter((e) => e.a === "ASSIGN");
   check("2. audit ASSIGN #1 : avant [] / après {A2,B1}", au.length === 1 && au[0].o.coveredRiskIds.length === 0 && au[0].n.coveredRiskIds.length === 2, JSON.stringify(au));
   await M.btn("Risques couverts").click(); await sleep(500);
