@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, MessageBanner, SegmentedControl, StatusBadge, Table, type TableColumn } from "@djamo/design-system";
 import { permissionsApi } from "../../api/permissions";
+import rightLabels from "../../api/rightLabels.json";
 import { FIXED_GROUP_LABELS, rolesApi, type EffectivePermission, type PermissionSource, type Role } from "../../api/roles";
 import { usersApi, type DirectoryEntry } from "../../api/users";
 import { usePermissions } from "../../auth/usePermissions";
@@ -11,6 +12,12 @@ import "../core/CorePages.css";
 type Tab = "matrix" | "user";
 /** Display grouping only: the part of the identifier before the first dot. */
 const domainOf = (permission: string) => permission.split(".")[0] ?? permission;
+/** Label from the PO-validated rights catalogue (DECISION-072); the identifier alone when the catalogue lacks it. */
+const LABELS: Record<string, string> = rightLabels;
+function RightName({ code }: Readonly<{ code: string }>) {
+  const label = LABELS[code];
+  return label ? <>{label}<br /><small><code>{code}</code></small></> : <code>{code}</code>;
+}
 const roleLabel = (r: Role) => (r.systemGroup ? `${r.name} (groupe fixe ${FIXED_GROUP_LABELS[r.systemGroup]})` : r.name);
 
 function sourceLabel(s: PermissionSource): string {
@@ -50,14 +57,14 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return catalog
-      .filter((p) => (!domain || domainOf(p) === domain) && (!q || p.toLowerCase().includes(q)))
+      .filter((p) => (!domain || domainOf(p) === domain) && (!q || p.toLowerCase().includes(q) || (LABELS[p] ?? "").toLowerCase().includes(q)))
       .sort((a, b) => a.localeCompare(b));
   }, [catalog, domain, search]);
 
   const columns: TableColumn<string>[] = [
     {
       key: "permission", header: "Droit", render: (p) => <>
-        <code>{p}</code>{decisionRights.has(p) && <> <StatusBadge label="Droit de décision" tone="warning" /></>}
+        <RightName code={p} />{decisionRights.has(p) && <> <StatusBadge label="Droit de décision" tone="warning" /></>}
       </>,
     },
     ...roles.map((r): TableColumn<string> => ({
@@ -112,9 +119,8 @@ function UserRights({ token, canDirectory, decisionRights }: Readonly<{ token: s
   }, [token, canDirectory]);
 
   useEffect(() => {
-    if (!userId) { setHeld([]); setEffective([]); return; }
+    if (!userId) return;
     let live = true;
-    setLoading(true); setError(null);
     Promise.all([rolesApi.forUser(token, userId), rolesApi.permissionSources(token, userId)])
       .then(([r, e]) => { if (live) { setHeld(r); setEffective([...e].sort((a, b) => a.permission.localeCompare(b.permission))); } })
       .catch((err) => { if (live) setError(describeError(err)); })
@@ -124,14 +130,14 @@ function UserRights({ token, canDirectory, decisionRights }: Readonly<{ token: s
 
   const columns: TableColumn<EffectivePermission>[] = [
     { key: "permission", header: "Droit", render: (e) => <>
-      <code>{e.permission}</code>{decisionRights.has(e.permission) && <> <StatusBadge label="Droit de décision" tone="warning" /></>}
+      <RightName code={e.permission} />{decisionRights.has(e.permission) && <> <StatusBadge label="Droit de décision" tone="warning" /></>}
     </> },
     { key: "sources", header: "Origine", render: (e) => e.sources.map(sourceLabel).join(" · ") },
   ];
 
   return <Card>
     {!canDirectory && <MessageBanner tone="info">Votre compte ne peut pas consulter l'annuaire des comptes : la liste des comptes n'est pas disponible.</MessageBanner>}
-    {canDirectory && <AccountPicker id="rights-user" label="Compte" value={userId} onChange={setUserId} accounts={accounts} allowEmpty={false} />}
+    {canDirectory && <AccountPicker id="rights-user" label="Compte" value={userId} onChange={(id) => { setHeld([]); setEffective([]); setError(null); setLoading(Boolean(id)); setUserId(id); }} accounts={accounts} allowEmpty={false} />}
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
     {userId && !error && <>
       <p><strong>Rôles détenus :</strong> {held.length ? held.map(roleLabel).join(", ") : "aucun"}</p>

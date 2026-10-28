@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/extract-right-labels.mjs --check && tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "labels": "node scripts/extract-right-labels.mjs"
   },
   "dependencies": {
     "@djamo/design-system": "*",
