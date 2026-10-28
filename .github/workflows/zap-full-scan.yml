@@ -177,7 +177,22 @@ jobs:
                       if uri.host == api_host && uri.path && uri.path != "/" && !uri.path.empty?
                         urls << uri.path
                         code = node["statusCode"]
-                        successful_urls << uri.path if code.is_a?(Integer) && (200..299).cover?(code)
+                        method = node["method"].to_s.upcase
+                        path = uri.path
+                        # A successful CORS preflight, login response, or public
+                        # health check does not prove access to the protected API.
+                        protected_api_path =
+                          path.start_with?("/api/v1/") &&
+                          path != "/api/v1/auth" &&
+                          !path.start_with?("/api/v1/auth/") &&
+                          path != "/health" &&
+                          path != "/ready"
+                        if protected_api_path &&
+                           !%w[OPTIONS HEAD].include?(method) &&
+                           code.is_a?(Integer) &&
+                           (200..299).cover?(code)
+                          successful_urls << path
+                        end
                       end
                     rescue URI::InvalidURIError
                       # Ignore malformed/non-URL tree labels.
@@ -196,10 +211,10 @@ jobs:
                 exit 1
               end
               if successful_paths.empty?
-                warn "::error::ZAP coverage gate failed: no successful (2xx) API response was captured; authentication is unproven."
+                warn "::error::ZAP coverage gate failed: no successful (2xx) response from a protected API path was captured; authentication is unproven."
                 exit 1
               end
-              puts "ZAP API coverage gate passed (#{paths.length} distinct non-root paths; #{successful_paths.length} with 2xx responses)."
+              puts "ZAP API coverage gate passed (#{paths.length} distinct non-root API paths; #{successful_paths.length} distinct protected API paths with non-OPTIONS/HEAD 2xx responses)."
             ' report/site-tree.yaml; then
               rc=1
             fi
