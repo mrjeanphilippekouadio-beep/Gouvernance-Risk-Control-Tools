@@ -35,4 +35,6 @@ jobs:
             exit 0
           fi
           git commit -m "fix(deps): update vulnerable dependency lockfiles"
+          git fetch origin fix/zap-authenticated-coverage-gate
+          git rebase origin/fix/zap-authenticated-coverage-gate
           git push origin HEAD:fix/zap-authenticated-coverage-gate
