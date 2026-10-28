@@ -418,13 +418,9 @@ pour l'usage.
 | @dev-backend @security | **Action 5 — I-RT3-01** : notifications D5 envoyées après `res.end` perdues à l'arrêt Cloud Run → attendre leur envoi au shutdown (petit lot backend + revue A10), avant prod. | 2026-10-24 | **Ouvert — A06** |
 | HUMAN @dev-backend | **q184 (cockpit)** — demande de délais mêlant allongements et raccourcissements : recommandation, toute la demande passe en attente de validation (pas d'application partielle des raccourcissements). Implémenté ainsi (fail-closed). | 2026-10-27 | **Fermé** (DECISION-096) |
 | HUMAN @dev-backend @security | **q185 (cockpit)** — droits de décision q179 : chaque droit garde au moins un groupe fixe ; Audit limité à la revue. Recommandation appliquée. | 2026-10-27 | **Fermé** (DECISION-096) |
-<<<<<<< HEAD
-| HUMAN @dev-db @security | **q186 (cockpit)** — rôles ordinaires détenant déjà un droit de décision : les nettoyer par migration (recommandé) ou laisser l'admin les retirer. PO : retirer par migration, avec trace d'audit (couvre aussi SEC-SA2-02). | 2026-10-27 | **En cours** (DECISION-096), migration 077 sur `feat/r1-suites-arbitrages-2` |
+| HUMAN @dev-db @security | **q186 (cockpit)** — rôles ordinaires détenant déjà un droit de décision : les nettoyer par migration (recommandé) ou laisser l'admin les retirer. PO : retirer par migration, avec trace d'audit (couvre aussi SEC-SA2-02). | 2026-10-27 | **Fermé** — 077, PR #199 fusionnée le 2026-10-28 |
 | HUMAN @security @dev-frontend | **q187 (cockpit)** — F7-S3 matrice des droits : ouvrir la consultation au groupe Audit en ajoutant `role.read` (lecture seule) par le circuit des droits Audit (recommandé), ou réserver l'écran à l'Administrateur. Aucun code requis. | 2026-10-28 | **Fermé** (DECISION-097) |
 | HUMAN @security @dev-backend @risk-manager | **q188 (cockpit), précision PO sur q187** — le Risk Manager voit par défaut les rôles et droits de la 1re ligne ; 2e ligne et administrateurs seulement si activé sur son rôle. À trancher : découpage 1re/2e ligne/admin (et Audit), forme du droit d'accès élargi. **Requis avant la production** ; PR #202 fusionnable dans staging avant (Risk Manager voit tout en attendant). | 2026-10-28 | **Répondu** (DECISION-098) ; reste **q189** |
-=======
-| HUMAN @dev-db @security | **q186 (cockpit)** — rôles ordinaires détenant déjà un droit de décision : les nettoyer par migration (recommandé) ou laisser l'admin les retirer. PO : retirer par migration, avec trace d'audit (couvre aussi SEC-SA2-02). | 2026-10-27 | **Fermé** — 077, PR #199 fusionnée le 2026-10-28 |
->>>>>>> origin/chore/suivi-r1-suites2
 | HUMAN @dev-backend @security | **q189 (cockpit)** — suite q188 : tous les membres du groupe Risk Manager voient les lignes 1 et 2 (A, recommandé) ou un « Risk Manager principal » désigné seulement (B, nouvelle désignation). Bloque la restriction de la matrice (avant la production). | 2026-10-28 | **Ouvert — HUMAN : q189** |
 ## Decision Log
 
@@ -2396,8 +2392,7 @@ DECISION (PO, cockpit) : q184 — une modification de délais contenant un
   d'audit (migration 077, avant la production ; ferme SEC-SA2-02).
 RELATED: DECISION-095 ; q179, q182 ; SEC-SA2-02 ; PR #199.
 OWNER: @orchestrator @dev-db @security
-<<<<<<< HEAD
-STATUS: DÉCIDÉ — q184/q185 fermés ; q186 en cours.
+STATUS: DÉCIDÉ — fait (077), PR #199 fusionnée le 2026-10-28.
 
 DECISION-097
 DATE: 2026-10-28
@@ -2411,9 +2406,6 @@ DECISION (PO, cockpit q187) : l'Audit peut consulter la matrice des droits
 RELATED: q187, F7-S3, q183, SEC-f7s3.
 OWNER: @orchestrator @dev-backend @dev-db @security @privacy
 STATUS: DÉCIDÉ — fait, PR #202 fusionnée le 2026-10-28 (078 appliquée).
-=======
-STATUS: DÉCIDÉ — fait (077), PR #199 fusionnée le 2026-10-28.
->>>>>>> origin/chore/suivi-r1-suites2
 
 DECISION-098
 DATE: 2026-10-28
