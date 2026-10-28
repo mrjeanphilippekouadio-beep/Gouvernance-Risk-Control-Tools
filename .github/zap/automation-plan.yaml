@@ -35,11 +35,22 @@ env:
           loginPageWait: 20
           stepDelay: 2
           browserId: "firefox-headless"
-          # Make the helper explicitly run its standard field discovery/fill/submit
-          # sequence instead of relying only on implicit defaults.
+          # Use stable selectors from App.tsx instead of relying on automatic
+          # field discovery for the custom React/design-system login form.
+          # The USERNAME/PASSWORD steps read the context user's credentials.
           steps:
-            - description: "Automatically identify, fill and submit the local QA login form"
-              type: "AUTO_STEPS"
+            - description: "Fill the local QA email field"
+              type: "USERNAME"
+              cssSelector: "#local-email"
+              timeout: 10000
+            - description: "Fill the local QA password field"
+              type: "PASSWORD"
+              cssSelector: "#local-password"
+              timeout: 10000
+            - description: "Submit the local QA login form"
+              type: "CLICK"
+              cssSelector: "form.auth-dev button[type='submit']"
+              timeout: 10000
         verification:
           method: "poll"
           pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
