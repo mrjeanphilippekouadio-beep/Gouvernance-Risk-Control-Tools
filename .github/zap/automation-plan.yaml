@@ -29,6 +29,14 @@ env:
         method: "browser"
         parameters:
           loginPageUrl: ${ZAP_TARGET_URL}
+          loginPageWait: 10
+          stepDelay: 1
+          browserId: "firefox-headless"
+          # Make the helper explicitly run its standard field discovery/fill/submit
+          # sequence instead of relying only on implicit defaults.
+          steps:
+            - description: "Automatically identify, fill and submit the local QA login form"
+              type: "AUTO_STEPS"
         verification:
           method: "poll"
           pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
