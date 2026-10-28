@@ -248,6 +248,16 @@ describe("KriService.update (ACT-131)", () => {
     const updated = await service.update(actor, kri.id, { thresholdRed: 20 }, "REQ-10");
     expect(updated.thresholdRed).toBe(20);
   });
+
+  it("never changes `active` (false or true): deactivation goes through disable under kri.delete", async () => {
+    const kris = inMemoryKriRepository();
+    const service = new KriService(kris, inMemoryKriMeasureRepository(), fakeRiskRepository(["risk-1"]), inMemoryAuditRepository());
+    const kri = await service.create(actor, validInput, "REQ-11");
+
+    await expect(service.update(updateOnlyActor, kri.id, { active: false }, "REQ-12")).rejects.toThrow(ValidationError);
+    await expect(service.update(actor, kri.id, { active: true }, "REQ-13")).rejects.toThrow(ValidationError);
+    expect((await service.get(actor, kri.id)).active).toBe(true);
+  });
 });
 
 describe("KriService.disable (ACT-132, terminal-state permission gating)", () => {

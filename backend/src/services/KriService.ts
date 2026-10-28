@@ -129,6 +129,11 @@ export class KriService {
     requestId: string,
   ): Promise<Kri> {
     requirePermission(actor, "kri.update");
+    // CLAUDE.md / SEC-013-014: a generic update never changes the active state; deactivation is terminal and
+    // has its own method and permission (disable, kri.delete). No reactivation exists, so `true` is refused too.
+    if (input.active !== undefined) {
+      throw new ValidationError("active cannot be changed through update — use PATCH /kris/:id/disable (kri.delete)");
+    }
     const before = await this.requireKri(actor.tenantId, id);
 
     if (input.label !== undefined && !input.label.trim()) throw new ValidationError("label cannot be empty");

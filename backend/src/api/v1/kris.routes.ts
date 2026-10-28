@@ -21,7 +21,8 @@ const CreateKriBody = z.object({
   active: z.boolean().optional(),
 });
 
-const UpdateKriBody = CreateKriBody.omit({ riskId: true }).partial();
+// `active` is never updatable here: deactivation is terminal and goes through PATCH /:id/disable (kri.delete).
+const UpdateKriBody = CreateKriBody.omit({ riskId: true, active: true }).partial();
 
 const CoveredRisksBody = z.object({ riskIds: boundedArray(z.string().min(1), 1000) });
 
