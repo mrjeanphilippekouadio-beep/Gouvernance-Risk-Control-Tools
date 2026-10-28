@@ -2419,4 +2419,15 @@ DECISION (PO, cockpit q188) : recommandation retenue — badge de ligne dans la
 RELATED: q187, q188, q189, DECISION-097, PR #202.
 OWNER: @orchestrator @dev-backend @security
 STATUS: DÉCIDÉ — construction après q189, avant la production.
+
+DECISION-099
+DATE: 2026-10-28
+DECISION (PO, R3 privacy D6) : la date de « dernière activité » est
+  conservée 5 ans par défaut, durée paramétrable par client. Point de départ
+  et traitement des sauvegardes à valider par le juriste / DPO (note
+  `docs/privacy/note-juriste-dpo-D6-2026-10-28.md`). Construction avec D6
+  (paramètre + purge), après l'avis du juriste.
+RELATED: R3 (review-d2a-last-seen-2026-10-18), D6, q175.
+OWNER: @orchestrator @dev-backend @dev-db @privacy
+STATUS: DÉCIDÉ — durée ; avis juriste/DPO attendu.
 ```

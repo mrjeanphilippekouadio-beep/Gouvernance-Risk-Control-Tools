@@ -13,7 +13,7 @@ L'outil de gouvernance des risques enregistre, pour chaque compte, la date de sa
 - **Aujourd'hui** : une seule date par compte, remplacée à chaque nouvelle activité, sans historique. Aucune durée n'est définie : la date reste tant que le compte existe, et après sa suppression logique. Les sauvegardes et la restauration à un instant donné gardent des valeurs plus anciennes.
 - **Question** : combien de temps conserver cette date, à partir de quel événement, et que dit-on des copies de sauvegarde ?
 - **Qui décide** : le Product Owner fixe la durée. Le juriste ou le DPO valide la règle, y compris la position sur les sauvegardes. Une purge éventuelle est ensuite réalisée par l'équipe base de données.
-- **Proposition par défaut** : aucune durée n'a été proposée. Options déjà posées : effacer la date à la suspension du compte, ou à l'échéance de la conservation du compte. À confirmer.
+- **Proposition du Product Owner (28 octobre 2026)** : conserver la date **5 ans**, durée **paramétrable** par chaque client. À valider par le juriste ou le DPO : le point de départ (dernière activité, suspension ou fin du compte) et le traitement des sauvegardes au-delà de cette durée.
 
 ### R5. Texte d'information des personnes
 
