@@ -44,7 +44,7 @@ export const usersApi = {
   me: (token: string) => apiRequest<UserSummary>("/api/v1/users/me", { token }),
   /** The caller's own effective permissions (lot F4): used only to hide actions, the server still decides. */
   myPermissions: (token: string) => apiRequest<string[]>("/api/v1/users/me/permissions", { token }),
-  /** Active accounts a designation right may name (user.read, process.responsibility.assign or designation.manage). */
+  /** Active accounts a designation right may name (user.read, process.responsibility.assign, designation.manage or audit.mission.create). */
   directory: (token: string) => apiRequest<DirectoryEntry[]>("/api/v1/users/directory", { token }),
   listAdmin: (token: string, includeSuspended: boolean, offset: number) =>
     apiRequest<AdminUser[]>(`/api/v1/users?limit=${ADMIN_PAGE_SIZE}&offset=${offset}${includeSuspended ? "&includeSuspended=true" : ""}`, { token }),

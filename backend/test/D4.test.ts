@@ -10,6 +10,7 @@ import type { ControlExecution } from "../src/domain/entities/ControlExecution.j
 import type { Config } from "../src/domain/entities/Config.js";
 import type { AuditEvent } from "../src/domain/entities/AuditEvent.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
+import { fakeDelayRequests } from "./fakeDelayRequests.js";
 
 /** Lot D4 (DECISION-074): self-validation policy, gate, config route service, validationIndependence. Level 1. */
 
@@ -123,18 +124,18 @@ describe("ConfigService.setSelfValidationPolicy", () => {
         request?.id === id && request.status === "PENDING" ? (request = { ...request, status, decidedBy: by, decisionReason: why }) : null,
       reopen: async () => { if (request) request = { ...request, status: "PENDING", decidedBy: null }; },
     };
+    const upsert = async (tenantId: string, patch: object, by: string) => (row = { ...(row ?? ({ id: "cfg", tenantId, version: 0 } as Config)), ...patch, updatedBy: by } as Config);
+    const delays = fakeDelayRequests(upsert, events);
     const service = new ConfigService(
-      {
-        getByTenant: async () => row,
-        upsert: async (tenantId, patch, by) => (row = { ...(row ?? ({ id: "cfg", tenantId, version: 0 } as Config)), ...patch, updatedBy: by } as Config),
-      },
+      { getByTenant: async () => row, upsert },
       { record: async (e: Omit<AuditEvent, "id" | "timestamp">) => { events.push(e); } } as never,
       undefined,
       undefined,
       approver === "unwired" ? undefined : { existsOther: async () => approver },
       requests,
+      approver === "unwired" ? undefined : delays.repo,
     );
-    return { service, events, policy: () => row!.selfValidationPolicy, request: () => request };
+    return { service, events, policy: () => row!.selfValidationPolicy, request: () => request, row: () => row!, delays };
   }
   const admin = actor("u-admin", ["config.read", "config.selfvalidation.set"]);
   const approverActor = actor("u-rm", ["config.read", "config.selfvalidation.approve"]);
@@ -196,13 +197,68 @@ describe("ConfigService.setSelfValidationPolicy", () => {
       await expect(w.service.setGovernanceDelays(delaysAdmin, { acceptanceMaxDays: bad }, "r", "q")).rejects.toThrow(ValidationError);
     }
     await expect(w.service.setGovernanceDelays(delaysAdmin, {}, "r", "q")).rejects.toThrow(ValidationError);
-    const after = await w.service.setGovernanceDelays(delaysAdmin, { exceptionReviewDelayDays: 30, acceptanceMaxDays: 90, policyRequestExpiryDays: 7 }, "Paramétrage", "q");
+    // Configuring delays that were not set is a tightening: direct, unmarked, even with an approver around.
+    const { config: after } = await w.service.setGovernanceDelays(delaysAdmin, { exceptionReviewDelayDays: 30, acceptanceMaxDays: 90, policyRequestExpiryDays: 7 }, "Paramétrage", "q");
     expect([after.exceptionReviewDelayDays, after.acceptanceMaxDays, after.policyRequestExpiryDays]).toEqual([30, 90, 7]);
     expect(w.events.at(-1)).toMatchObject({ entityType: "Config", reason: "Paramétrage" });
+    expect(w.events.at(-1)!.governanceException).toBeUndefined();
+    // q182: clearing a delay is a relaxation: pending, nothing applied.
     const cleared = await w.service.setGovernanceDelays(delaysAdmin, { acceptanceMaxDays: null }, "r", "q");
-    // The dedicated permission alone is enough: config.read is not required on top.
-    await expect(w.service.setGovernanceDelays(actor("u-only", ["config.governancedelays.set"]), { acceptanceMaxDays: 5 }, "r", "q")).resolves.toMatchObject({ acceptanceMaxDays: 5 });
-    expect([cleared.acceptanceMaxDays, cleared.policyRequestExpiryDays]).toEqual([null, 7]);
+    expect(cleared.pendingRequest).toMatchObject({ status: "PENDING", requestedDelays: { acceptanceMaxDays: null }, requestedBy: "u-admin" });
+    expect(cleared.config.acceptanceMaxDays).toBe(90);
+    // The dedicated permission alone is enough (config.read is not required); shortening is direct and withdraws the pending request.
+    await expect(w.service.setGovernanceDelays(actor("u-only", ["config.governancedelays.set"]), { acceptanceMaxDays: 5 }, "r", "q")).resolves.toMatchObject({ config: { acceptanceMaxDays: 5 }, pendingRequest: null });
+    expect(w.delays.request()!.status).toBe("WITHDRAWN");
+  });
+
+  it("q182 lengthening with nobody else able to approve: applied by the administrator alone, marked and audited", async () => {
+    const w = configWorld(false);
+    const delaysAdmin = actor("u-admin", ["config.governancedelays.set"]);
+    await w.service.setGovernanceDelays(delaysAdmin, { acceptanceMaxDays: 30 }, "init", "q");
+    const { config, pendingRequest } = await w.service.setGovernanceDelays(delaysAdmin, { acceptanceMaxDays: 60, exceptionReviewDelayDays: 3 }, "Allonger", "q");
+    expect(pendingRequest).toBeNull();
+    expect([config.acceptanceMaxDays, config.exceptionReviewDelayDays]).toEqual([60, 3]);
+    expect(w.events.at(-1)).toMatchObject({ entityType: "Config", action: "UPDATE", reason: "Allonger", governanceException: "config.governancedelays.adminAlone" });
+    expect(w.delays.request()).toBeNull();
+  });
+
+  it("q182 a pending lengthening: approved by another person only (never its author), with a reason; or rejected", async () => {
+    const w = configWorld(true);
+    const delaysAdmin = actor("u-admin", ["config.governancedelays.set", "config.selfvalidation.approve"]);
+    await w.service.setGovernanceDelays(delaysAdmin, { riskManagerVacancyMaxDays: 30 }, "init", "q");
+    const { pendingRequest } = await w.service.setGovernanceDelays(delaysAdmin, { riskManagerVacancyMaxDays: 90 }, "Allonger", "q");
+    expect(w.events.at(-1)).toMatchObject({ entityType: "GovernanceDelayRequest", action: "SUBMIT", entityId: pendingRequest!.id });
+    await expect(w.service.getPendingGovernanceDelayRequest(approverActor)).resolves.toMatchObject({ id: pendingRequest!.id });
+    await expect(w.service.getPendingGovernanceDelayRequest(actor("u", ["config.read"]))).rejects.toThrow(ForbiddenError);
+    await expect(w.service.approveGovernanceDelays(delaysAdmin, pendingRequest!.id, "moi", "q")).rejects.toThrow(ForbiddenError);
+    await expect(w.service.approveGovernanceDelays(actor("u-x", ["config.governancedelays.set"]), pendingRequest!.id, "ok", "q")).rejects.toThrow(ForbiddenError);
+    await expect(w.service.approveGovernanceDelays(approverActor, pendingRequest!.id, " ", "q")).rejects.toThrow(ValidationError);
+    expect(w.row().riskManagerVacancyMaxDays).toBe(30);
+    const applied = await w.service.approveGovernanceDelays(approverActor, pendingRequest!.id, "D'accord", "q");
+    expect(applied.riskManagerVacancyMaxDays).toBe(90);
+    expect(w.events.at(-1)).toMatchObject({ entityType: "Config", action: "APPROVE", userId: "u-rm", reason: "D'accord", newValue: { approvedRequestId: pendingRequest!.id, requestedBy: "u-admin" } });
+    await expect(w.service.approveGovernanceDelays(approverActor, pendingRequest!.id, "encore", "q")).rejects.toThrow(ValidationError);
+
+    const again = await w.service.setGovernanceDelays(delaysAdmin, { riskManagerVacancyMaxDays: null }, "Retirer", "q");
+    await expect(w.service.rejectGovernanceDelays(approverActor, again.pendingRequest!.id, " ", "q")).rejects.toThrow(ValidationError);
+    await expect(w.service.rejectGovernanceDelays(approverActor, again.pendingRequest!.id, "Non", "q")).resolves.toMatchObject({ status: "REJECTED", decisionReason: "Non" });
+    expect(w.row().riskManagerVacancyMaxDays).toBe(90);
+  });
+
+  it("q182 + q174: a lengthening request expires like a policy request (fixed at submission); unwired = fail closed", async () => {
+    const w = configWorld(true);
+    const delaysAdmin = actor("u-admin", ["config.governancedelays.set"]);
+    await w.service.setGovernanceDelays(delaysAdmin, { policyRequestExpiryDays: 7, acceptanceMaxDays: 10 }, "init", "q");
+    const { pendingRequest } = await w.service.setGovernanceDelays(delaysAdmin, { acceptanceMaxDays: 20 }, "Allonger", "q");
+    expect(Math.abs(pendingRequest!.expiresAt!.getTime() - Date.now() - 7 * 86_400_000)).toBeLessThan(1000);
+    w.delays.setRequest({ ...pendingRequest!, expiresAt: new Date(Date.now() - 1000) });
+    await expect(w.service.approveGovernanceDelays(approverActor, pendingRequest!.id, "ok", "q")).rejects.toThrow(/expired/);
+    expect(w.row().acceptanceMaxDays).toBe(10);
+
+    const unwired = configWorld("unwired");
+    await unwired.service.setGovernanceDelays(delaysAdmin, { acceptanceMaxDays: 10 }, "init", "q"); // tightening stays available
+    await expect(unwired.service.setGovernanceDelays(delaysAdmin, { acceptanceMaxDays: 11 }, "r", "q")).rejects.toThrow(/not available/);
+    expect(unwired.row().acceptanceMaxDays).toBe(10);
   });
 
   it("q174: a request past the configured expiry cannot be approved (still rejectable); the pending view shows its expiry", async () => {
@@ -212,8 +268,10 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     const pending = await w.service.getPendingSelfValidationPolicyRequest(approverActor);
     expect(Math.abs(pending!.expiresAt!.getTime() - pending!.requestedAt.getTime() - 7 * 86_400_000)).toBeLessThan(1000);
     w.request()!.expiresAt = new Date(Date.now() - 1000);
-    // F-SAD-02: clearing the delay afterwards does not revive the expired request.
-    await w.service.setGovernanceDelays(actor("u-admin", ["config.read", "config.governancedelays.set"]), { policyRequestExpiryDays: null }, "r", "q");
+    // F-SAD-02: clearing the delay afterwards (a q182 lengthening, approved by a third party) does not revive the expired request.
+    const clearing = await w.service.setGovernanceDelays(actor("u-admin", ["config.read", "config.governancedelays.set"]), { policyRequestExpiryDays: null }, "r", "q");
+    await w.service.approveGovernanceDelays(approverActor, clearing.pendingRequest!.id, "ok", "q");
+    expect(w.row().policyRequestExpiryDays).toBeNull();
     await expect(w.service.approveSelfValidationPolicy(approverActor, "req1", "q")).rejects.toThrow(/expired/);
     expect(w.policy()).toBe("REFUSE");
     await expect(w.service.rejectSelfValidationPolicy(approverActor, "req1", "Échue", "q")).resolves.toMatchObject({ status: "REJECTED" });

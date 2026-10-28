@@ -32,6 +32,9 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeInfo[] = [
   // q170 (DECISION-083): the acceptor learns that someone else ended their acceptance early.
   { resourceType: "MANAGEMENT", eventType: "PRINCIPLE_ACCEPTANCE_REVOKED", label: "Acceptation d’un principe retirée", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "PRINCIPLE_ACCEPTANCE_PENDING", label: "Acceptation d’un principe en attente de confirmation", mandatory: true },
+  // DECISION-095: q182 (a lengthening of the governance delays waits for a second person), q178 (Risk Manager vacancy).
+  { resourceType: "MANAGEMENT", eventType: "GOVERNANCE_DELAY_REQUEST_PENDING", label: "Allongement des délais de gouvernance en attente", mandatory: true },
+  { resourceType: "MANAGEMENT", eventType: "RISK_MANAGER_VACANCY", label: "Groupe Risk Manager vacant", mandatory: true },
   { resourceType: "ACTION_PLAN", eventType: "ACTION_STARTED_LATE", label: "Action démarrée en retard", mandatory: true },
   { resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE", label: "Action en retard", mandatory: true },
   { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", label: "Seuil KRI dépassé", mandatory: true },

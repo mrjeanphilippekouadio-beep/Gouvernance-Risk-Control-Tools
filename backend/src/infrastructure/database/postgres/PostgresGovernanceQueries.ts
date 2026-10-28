@@ -81,7 +81,7 @@ export class PostgresGovernanceQueries
        LEFT JOIN roles r ON a.entity_type = 'Role' AND r.id = a.entity_id AND r.tenant_id = a.tenant_id
        WHERE a.tenant_id = $1 AND a.request_id = $2 AND a.user_id = $3 AND a."timestamp" > now() - interval '10 minutes'
          AND (a.governance_exception IS NOT NULL
-              OR a.entity_type IN ('Role', 'OrganizationProfile', 'SelfValidationPolicyRequest', 'GovernancePrincipleAcceptance', 'GovernanceExceptionReview'))
+              OR a.entity_type IN ('Role', 'OrganizationProfile', 'SelfValidationPolicyRequest', 'GovernancePrincipleAcceptance', 'GovernanceExceptionReview', 'GovernanceDelayRequest'))
        ORDER BY a."timestamp", a.id`,
       [tenantId, requestId, actorId],
     );
@@ -142,5 +142,19 @@ export class PostgresGovernanceQueries
       [tenantId],
     );
     return Number(rows[0]?.n ?? 0);
+  }
+
+  /** q178 (DECISION-095): start of the current Risk Manager vacancy (last vacancy trace while the group has no active member). */
+  async riskManagerVacancySince(tenantId: string): Promise<Date | null> {
+    const { rows } = await this.pool.query<{ since: Date | null }>(
+      `SELECT max(a."timestamp") AS since FROM audit_log a
+       WHERE a.tenant_id = $1 AND a.governance_exception = 'riskManager.vacancy'
+         AND NOT EXISTS (SELECT 1 FROM user_roles ur
+                         JOIN roles r ON r.id = ur.role_id AND r.tenant_id = ur.tenant_id AND r.deleted_at IS NULL AND r.system_group = 'RISK_MANAGER'
+                         JOIN users u ON u.id = ur.user_id AND u.tenant_id = ur.tenant_id AND u.deleted_at IS NULL
+                         WHERE ur.tenant_id = $1 AND ur.revoked_at IS NULL)`,
+      [tenantId],
+    );
+    return rows[0]?.since ?? null;
   }
 }

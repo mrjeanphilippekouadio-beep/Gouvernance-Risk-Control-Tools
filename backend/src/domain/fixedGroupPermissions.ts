@@ -65,6 +65,23 @@ export function isAuditGroupPermission(p: Permission): boolean {
   );
 }
 
+/**
+ * q179 (DECISION-095): the four governance decision rights. Carried by fixed groups only (never an ordinary role); the
+ * Audit may carry the review alone (q157: the Audit never confirms nor approves).
+ */
+export const GOVERNANCE_DECISION_RIGHTS = [
+  "config.selfvalidation.approve", "governanceprinciple.acceptance.confirm", "governanceexception.review", "orgprofile.approve",
+] as const satisfies readonly Permission[];
+export type GovernanceDecisionRight = (typeof GOVERNANCE_DECISION_RIGHTS)[number];
+export const isGovernanceDecisionRight = (p: string): p is GovernanceDecisionRight => (GOVERNANCE_DECISION_RIGHTS as readonly string[]).includes(p);
+
+/** q179: may this role (fixed group, or null = ordinary role) carry `p`? Only a statement about the four decision rights. */
+export function governanceRightAllowedOn(p: Permission, group: SystemGroup | null): boolean {
+  if (!isGovernanceDecisionRight(p)) return true;
+  if (group === null) return false;
+  return group !== "AUDIT" || p === "governanceexception.review";
+}
+
 /** F-B8b-01: rolegroup.audit.update is held by no role at all; .validate only by Audit and the Committee. */
 export function rolegroupAuditPermissionAllowedOn(p: Permission, group: SystemGroup | null): boolean {
   if (p === "rolegroup.audit.validate") return group === "AUDIT" || group === "RISK_COMMITTEE";

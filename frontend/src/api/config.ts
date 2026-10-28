@@ -10,6 +10,8 @@ export interface GovernanceConfig {
   exceptionReviewDelayDays: number | null;
   acceptanceMaxDays: number | null;
   policyRequestExpiryDays: number | null;
+  /** q178 (DECISION-095): longest Risk Manager vacancy; 60 days by default (PO). */
+  riskManagerVacancyMaxDays: number | null;
   version: number;
   updatedAt: string;
 }
@@ -31,14 +33,35 @@ export interface SelfValidationPolicyRequest {
   expiresAt?: string | null;
 }
 
-export type GovernanceDelays = Pick<GovernanceConfig, "exceptionReviewDelayDays" | "acceptanceMaxDays" | "policyRequestExpiryDays">;
+export type GovernanceDelays = Pick<GovernanceConfig, "exceptionReviewDelayDays" | "acceptanceMaxDays" | "policyRequestExpiryDays" | "riskManagerVacancyMaxDays">;
+
+/** q182: mirrors backend `GovernanceDelayRequest` — a lengthening of the delays waiting for a second person. */
+export interface GovernanceDelayRequest {
+  id: string;
+  requestedDelays: Partial<GovernanceDelays>;
+  reason: string;
+  status: PolicyRequestStatus;
+  requestedBy: string;
+  requestedAt: string;
+  expiresAt: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionReason: string | null;
+}
 
 const BASE = "/api/v1/config";
 const put = <T>(path: string, token: string, body: unknown) => apiRequest<T>(`${BASE}${path}`, { method: "PUT", body, token });
 
 export const configApi = {
   get: (token: string) => apiRequest<GovernanceConfig>(BASE, { token }),
-  setGovernanceDelays: (token: string, delays: Partial<GovernanceDelays>, reason: string) => put<GovernanceConfig>("/governance-delays", token, { ...delays, reason }),
+  /** 200 = applied; 202 = a lengthening waits for a second person (q182), `data` is the UNCHANGED config. */
+  setGovernanceDelays: (token: string, delays: Partial<GovernanceDelays>, reason: string): Promise<ApiResponse<GovernanceConfig>> =>
+    apiRequestFull<GovernanceConfig>(`${BASE}/governance-delays`, { method: "PUT", body: { ...delays, reason }, token }),
+  pendingDelayRequest: (token: string) => apiRequest<GovernanceDelayRequest | null>(`${BASE}/governance-delays/request`, { token }),
+  approveDelayRequest: (token: string, id: string, reason: string) =>
+    apiRequest<GovernanceConfig>(`${BASE}/governance-delays/requests/${encodeURIComponent(id)}/approve`, { method: "POST", body: { reason }, token }),
+  rejectDelayRequest: (token: string, id: string, reason: string) =>
+    apiRequest<GovernanceDelayRequest>(`${BASE}/governance-delays/requests/${encodeURIComponent(id)}/reject`, { method: "POST", body: { reason }, token }),
   setCommitteeAuditCumul: (token: string, allowed: boolean, reason: string) => put<GovernanceConfig>("/committee-audit-cumul", token, { allowed, reason }),
   /** 200 = applied; 202 = `pendingRequest` set, `data` is the UNCHANGED config. Callers must look at `status`. */
   setSelfValidationPolicy: (token: string, policy: SelfValidationPolicy, reason: string): Promise<ApiResponse<GovernanceConfig>> =>

@@ -30,6 +30,7 @@ interface ConfigRow {
   exception_review_delay_days: number | null;
   acceptance_max_days: number | null;
   policy_request_expiry_days: number | null;
+  risk_manager_vacancy_max_days: number | null;
   version: number;
   updated_by: string | null;
   created_at: Date;
@@ -53,6 +54,8 @@ function toDomain(row: ConfigRow): Config {
     exceptionReviewDelayDays: row.exception_review_delay_days ?? null,
     acceptanceMaxDays: row.acceptance_max_days ?? null,
     policyRequestExpiryDays: row.policy_request_expiry_days ?? null,
+    // q178: the column DEFAULT (60, migration 076) also fills a row created by the upsert below.
+    riskManagerVacancyMaxDays: row.risk_manager_vacancy_max_days ?? null,
     version: row.version,
     updatedBy: row.updated_by,
     createdAt: row.created_at,
@@ -93,6 +96,7 @@ export async function upsertConfigRow(db: Pick<Pool, "query">, tenantId: string,
       exception_review_delay_days: patch.exceptionReviewDelayDays,
       acceptance_max_days: patch.acceptanceMaxDays,
       policy_request_expiry_days: patch.policyRequestExpiryDays,
+      risk_manager_vacancy_max_days: patch.riskManagerVacancyMaxDays,
     },
     3,
   );

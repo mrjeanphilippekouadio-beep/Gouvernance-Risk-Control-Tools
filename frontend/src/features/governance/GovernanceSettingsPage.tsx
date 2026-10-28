@@ -3,10 +3,12 @@ import { Button, Card, FormField, MessageBanner, Modal, StatusBadge } from "@dja
 import {
   configApi,
   type GovernanceConfig,
+  type GovernanceDelayRequest,
   type GovernanceDelays,
   type SelfValidationPolicy,
   type SelfValidationPolicyRequest,
 } from "../../api/config";
+import { rolesApi, type FixedGroup, type GovernanceRight } from "../../api/roles";
 import { ApiError } from "../../api/client";
 import { describeError, isForbidden } from "../indicators/shared";
 import "../core/CorePages.css";
@@ -15,17 +17,26 @@ const POLICY_LABELS: Record<SelfValidationPolicy, string> = {
   REFUSE: "Refuser l'auto-validation",
   DOUBLE_CONFIRMATION: "Autoriser avec double confirmation",
 };
-type Setting = "policy" | "cumul" | "delays";
+type Setting = "policy" | "cumul" | "delays" | "right";
 const TITLES: Record<Setting, string> = {
   policy: "Politique d'auto-validation",
   cumul: "Cumul Comité et Audit",
   delays: "Délais de gouvernance",
+  right: "Droit de décision de gouvernance",
 };
 const DELAYS: { key: keyof GovernanceDelays; label: string; help: string }[] = [
-  { key: "exceptionReviewDelayDays", label: "Délai de revue d'une action sans validation indépendante", help: "q168 : enregistré ; les relances et le signal de retard attendent votre décision q180." },
+  { key: "exceptionReviewDelayDays", label: "Délai de revue d'une action sans validation indépendante", help: "q168 : enregistré ; le signal de retard s'affichera avec le panel de gouvernance (q180)." },
   { key: "acceptanceMaxDays", label: "Durée maximale d'une acceptation de principe faite seul", help: "q169 : une acceptation faite sans tiers pour la confirmer ne peut pas durer plus longtemps." },
   { key: "policyRequestExpiryDays", label: "Expiration d'une demande d'assouplissement", help: "q174 : passé ce délai, la demande ne peut plus être approuvée." },
+  { key: "riskManagerVacancyMaxDays", label: "Durée maximale d'une vacance du groupe Risk Manager", help: "q178 : 60 jours par défaut ; au-delà, la vacance est signalée comme dépassée." },
 ];
+const GROUP_LABELS: Record<FixedGroup, string> = { RISK_MANAGER: "Risk Manager", RISK_COMMITTEE: "Comité des risques", AUDIT: "Audit" };
+const RIGHT_LABELS: Record<string, string> = {
+  "config.selfvalidation.approve": "Approuver un assouplissement (auto-validation, délais)",
+  "governanceprinciple.acceptance.confirm": "Confirmer l'acceptation d'un principe",
+  "governanceexception.review": "Revoir une action sans validation indépendante",
+  "orgprofile.approve": "Confirmer une baisse de taille du profil d'organisation",
+};
 function dayLabel(v: number | null | undefined): string {
   if (v === null || v === undefined) return "Non configuré";
   return v > 1 ? `${v} jours` : `${v} jour`;
@@ -42,6 +53,18 @@ function changedDelays(form: Record<keyof GovernanceDelays, string>, config: Gov
 }
 
 const fmtDate = (iso: string | null) => (iso ? iso.slice(0, 10) : "—");
+
+/** QA-SUITES2-FR-01: the server refusals of PUT /roles/governance-rights, said in French; the server still decides. */
+const RIGHT_REFUSALS: Array<[RegExp, string]> = [
+  [/q157/, "L'Audit ne confirme ni n'approuve jamais (q157) : il ne peut porter que la revue des exceptions."],
+  [/At least one fixed group/, "Au moins un groupe fixe doit porter ce droit, y compris pendant qu'un changement de l'Audit attend sa validation."],
+  [/group you belong to/, "Vous êtes membre d'un des groupes modifiés : un autre administrateur doit faire ce changement."],
+  [/already pending/, "Un changement des droits de l'Audit attend déjà sa validation : il doit être décidé avant tout autre."],
+];
+function describeRightError(err: unknown): string {
+  const known = err instanceof ApiError ? RIGHT_REFUSALS.find(([re]) => re.test(err.message)) : undefined;
+  return known ? `${known[1]}${(err as ApiError).requestId ? ` (réf. ${(err as ApiError).requestId})` : ""}` : describeError(err);
+}
 const yesNo = (v: boolean, yes: string, no: string) => <StatusBadge label={v ? yes : no} tone={v ? "success" : "neutral"} />;
 
 export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: string; onOpenFrameworks?: () => void }) {
@@ -56,11 +79,15 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
   const [reason, setReason] = useState("");
   const [policy, setPolicy] = useState<SelfValidationPolicy>("REFUSE");
   const [flag, setFlag] = useState(false);
-  const [delays, setDelays] = useState<Record<keyof GovernanceDelays, string>>({ exceptionReviewDelayDays: "", acceptanceMaxDays: "", policyRequestExpiryDays: "" });
+  const [delays, setDelays] = useState<Record<keyof GovernanceDelays, string>>({ exceptionReviewDelayDays: "", acceptanceMaxDays: "", policyRequestExpiryDays: "", riskManagerVacancyMaxDays: "" });
+  const [delayPending, setDelayPending] = useState<GovernanceDelayRequest | null>(null);
+  const [rights, setRights] = useState<GovernanceRight[] | null>(null);
+  const [right, setRight] = useState<GovernanceRight | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [deciding_, setDecidingKind] = useState<"approve" | "reject" | null>(null);
+  const [decisionTarget, setDecisionTarget] = useState<"policy" | "delays">("policy");
   const [decisionReason, setDecisionReason] = useState("");
   const [deciding, setDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
@@ -80,6 +107,10 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
         // Neither the "set" nor the "approve" right: the pending request is simply not ours to see.
         if (id === latest.current) { setPending(null); setPendingReadable(false); if (!isForbidden(err)) setError(describeError(err)); }
       }
+      // Optional reads: without the right, the block is simply not shown (the server decides).
+      const delayReq = await configApi.pendingDelayRequest(token).catch(() => null);
+      const rightsList = await rolesApi.governanceRights(token).catch(() => null);
+      if (id === latest.current) { setDelayPending(delayReq); setRights(rightsList); }
     } catch (err) { if (id === latest.current) setError(describeError(err)); }
     finally { if (id === latest.current) setLoading(false); }
   }, [token]);
@@ -95,8 +126,15 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       exceptionReviewDelayDays: config.exceptionReviewDelayDays?.toString() ?? "",
       acceptanceMaxDays: config.acceptanceMaxDays?.toString() ?? "",
       policyRequestExpiryDays: config.policyRequestExpiryDays?.toString() ?? "",
+      riskManagerVacancyMaxDays: config.riskManagerVacancyMaxDays?.toString() ?? "",
     });
     setEditing(setting);
+  }
+
+  function openRight(r: GovernanceRight) {
+    setReason(""); setFormError(null);
+    setRight({ ...r, groups: [...r.groups] });
+    setEditing("right");
   }
 
   async function submit(event: FormEvent) {
@@ -120,10 +158,24 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       if (editing === "delays") {
         const changed = changedDelays(delays, config);
         if (Object.keys(changed).length === 0) { setFormError("Aucun délai modifié."); return; }
-        const next = await configApi.setGovernanceDelays(token, changed, why);
-        setConfig(next);
-        setNotice({ tone: "success", title: "Changement appliqué", text: "Délais de gouvernance mis à jour." });
+        const res = await configApi.setGovernanceDelays(token, changed, why);
+        setConfig(res.data);
+        if (res.status === 202) {
+          setNotice({ tone: "warning", title: "Changement NON appliqué : en attente d'approbation", text: "Allonger ou retirer un délai est un assouplissement : il attend qu'une seconde personne habilitée approuve la demande." });
+        } else {
+          setNotice({ tone: "success", title: "Changement appliqué", text: "Délais de gouvernance mis à jour." });
+        }
         setEditing(null);
+        await refresh();
+        return;
+      }
+      if (editing === "right" && right) {
+        const res = await rolesApi.setGovernanceRight(token, right.permission, right.groups, why);
+        setNotice(res.auditChangePending
+          ? { tone: "warning", title: "Changement en partie en attente", text: "Le changement des droits de l'Audit attend sa validation (Audit ou Comité)." }
+          : { tone: "success", title: "Changement appliqué", text: `${RIGHT_LABELS[right.permission] ?? right.permission} : ${res.groups.map((g) => GROUP_LABELS[g]).join(", ")}.` });
+        setEditing(null);
+        await refresh();
         return;
       }
       const next = await configApi.setCommitteeAuditCumul(token, flag, why);
@@ -131,18 +183,29 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       setNotice({ tone: "success", title: "Changement appliqué", text: `${TITLES[editing]} mis à jour.` });
       setEditing(null);
     } catch (err) {
-      setFormError(describeError(err));
+      setFormError(editing === "right" ? describeRightError(err) : describeError(err));
       if (isForbidden(err)) setEditing(null); // the global permission dialog explains it
     } finally { setSaving(false); }
   }
 
   async function decide(event: FormEvent) {
     event.preventDefault();
-    if (!pending || !deciding_) return;
+    if (!deciding_) return;
     setDeciding(true); setDecisionError(null);
     const why = decisionReason.trim();
     try {
-      if (deciding_ === "approve") {
+      if (decisionTarget === "delays") {
+        if (!delayPending) return;
+        if (deciding_ === "approve") {
+          setConfig(await configApi.approveDelayRequest(token, delayPending.id, why));
+          setNotice({ tone: "success", title: "Demande approuvée", text: "Les délais demandés sont appliqués." });
+        } else {
+          await configApi.rejectDelayRequest(token, delayPending.id, why);
+          setNotice({ tone: "success", title: "Demande rejetée", text: "Les délais de gouvernance restent inchangés." });
+        }
+      } else if (!pending) {
+        return;
+      } else if (deciding_ === "approve") {
         const next = await configApi.approvePolicyRequest(token, pending.id, why);
         setConfig(next);
         setNotice({ tone: "success", title: "Demande approuvée", text: `La politique est maintenant « ${POLICY_LABELS[next.selfValidationPolicy]} ».` });
@@ -164,6 +227,11 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
     if (err instanceof ApiError && (err.status === 404 || err.status === 409)) await refresh();
   }
 
+  const decisionButtons = (target: "policy" | "delays") => <div>
+    <Button variant="primary" disabled={deciding} onClick={() => { setDecisionReason(""); setDecisionError(null); setDecisionTarget(target); setDecidingKind("approve"); }}>Approuver</Button>{" "}
+    <Button variant="destructive" disabled={deciding} onClick={() => { setDecisionReason(""); setDecisionError(null); setDecisionTarget(target); setDecidingKind("reject"); }}>Rejeter</Button>
+  </div>;
+
   const policyCard = config && <Card
     header={<><strong>{TITLES.policy}</strong> <StatusBadge label={POLICY_LABELS[config.selfValidationPolicy]} tone={config.selfValidationPolicy === "REFUSE" ? "success" : "warning"} /></>}
     footer={<Button onClick={() => openEdit("policy")}>Modifier</Button>}
@@ -174,11 +242,8 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       <p>Motif : {pending.reason}</p>
       {pending.expiresAt && <p className="muted">Expire le {fmtDate(pending.expiresAt)} : passé cette date, elle ne peut plus être approuvée.</p>}
       <p className="muted">Demandée le {fmtDate(pending.requestedAt)} par {pending.requestedBy}. L'auteur ne peut pas approuver sa propre demande : le serveur refuse.</p>
-      {decisionError && <MessageBanner tone="danger">{decisionError}</MessageBanner>}
-      <div>
-        <Button variant="primary" disabled={deciding} onClick={() => { setDecisionReason(""); setDecisionError(null); setDecidingKind("approve"); }}>Approuver</Button>{" "}
-        <Button variant="destructive" disabled={deciding} onClick={() => { setDecisionReason(""); setDecisionError(null); setDecidingKind("reject"); }}>Rejeter</Button>
-      </div>
+      {decisionError && decisionTarget === "policy" && <MessageBanner tone="danger">{decisionError}</MessageBanner>}
+      {decisionButtons("policy")}
     </MessageBanner>}
     {!pending && !pendingReadable && <p className="muted">Demande en attente : non consultable avec vos droits.</p>}
   </Card>;
@@ -203,10 +268,25 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
         <p className="muted">Une même personne peut-elle appartenir au Comité et à l'Audit ? Le cumul Risk Manager et Audit reste toujours refusé.</p>
       </Card>
       <Card header={<strong>{TITLES.delays}</strong>} footer={<Button onClick={() => openEdit("delays")}>Modifier</Button>}>
-        <p className="muted">Fixés par vous au paramétrage, en jours. « Non configuré » : aucun délai ne s'applique.</p>
+        <p className="muted">Fixés par vous au paramétrage, en jours. « Non configuré » : aucun délai ne s'applique. Raccourcir un délai s'applique aussitôt ; l'allonger ou le retirer est confirmé par une seconde personne lorsqu'elle existe (le serveur décide).</p>
         <ul>{DELAYS.map((d) => <li key={d.key}>{d.label} : <strong>{dayLabel(config[d.key])}</strong></li>)}</ul>
+        {delayPending && <MessageBanner tone="warning" title="Demande en attente d'approbation : le changement n'est pas appliqué">
+          <ul>{DELAYS.filter((d) => d.key in delayPending.requestedDelays).map((d) => <li key={d.key}>{d.label} : {dayLabel(config[d.key])} → <strong>{dayLabel(delayPending.requestedDelays[d.key])}</strong></li>)}</ul>
+          <p>Motif : {delayPending.reason}</p>
+          {delayPending.expiresAt && <p className="muted">Expire le {fmtDate(delayPending.expiresAt)} : passé cette date, elle ne peut plus être approuvée.</p>}
+          <p className="muted">Demandée le {fmtDate(delayPending.requestedAt)} par {delayPending.requestedBy}. L'auteur ne peut pas approuver sa propre demande : le serveur refuse.</p>
+          {decisionError && decisionTarget === "delays" && <MessageBanner tone="danger">{decisionError}</MessageBanner>}
+          {decisionButtons("delays")}
+        </MessageBanner>}
       </Card>
-      <p className="muted">Version de la configuration : {config.version} · Mise à jour le {fmtDate(config.updatedAt)}</p>
+      {rights && <Card header={<strong>Droits de décision de gouvernance</strong>}>
+        <p className="muted">Portés uniquement par les groupes fixes. L'Audit ne confirme ni n'approuve jamais (q157) : il ne peut porter que la revue. Le serveur refuse toute contradiction.</p>
+        <ul>{rights.map((r) => <li key={r.permission}>
+          {RIGHT_LABELS[r.permission] ?? r.permission} : <strong>{r.groups.length ? r.groups.map((g) => GROUP_LABELS[g]).join(", ") : "aucun groupe"}</strong>{" "}
+          <Button onClick={() => openRight(r)}>Modifier</Button>
+        </li>)}</ul>
+      </Card>}
+      <p className="muted">Version de la configuration : {config.version} · {config.version === 0 ? "jamais enregistrée (valeurs par défaut)" : `Mise à jour le ${fmtDate(config.updatedAt)}`}</p>
     </>}
 
     <Modal
@@ -216,7 +296,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       busy={saving}
       actions={<>
         <Button onClick={() => setEditing(null)} disabled={saving}>Annuler</Button>
-        <Button type="submit" form="gov-setting-form" variant="primary" disabled={saving || !reason.trim()}>{saving ? "Envoi…" : "Enregistrer"}</Button>
+        <Button type="submit" form="gov-setting-form" variant="primary" disabled={saving || !reason.trim() || (editing === "right" && right?.groups.length === 0)}>{saving ? "Envoi…" : "Enregistrer"}</Button>
       </>}
     >
       {editing && <form id="gov-setting-form" onSubmit={submit}>
@@ -232,6 +312,17 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
         {editing === "delays" && DELAYS.map((d) => <FormField key={d.key} label={`${d.label} (jours)`} htmlFor={`gov-${d.key}`} help={`${d.help} Laisser vide : non configuré.`}>
           <input id={`gov-${d.key}`} type="number" min={1} max={3650} step={1} value={delays[d.key]} onChange={(e) => setDelays({ ...delays, [d.key]: e.target.value })} />
         </FormField>)}
+        {editing === "right" && right && <fieldset>
+          <legend>{RIGHT_LABELS[right.permission] ?? right.permission}</legend>
+          {(Object.keys(GROUP_LABELS) as FixedGroup[]).map((g) => <label key={g} className="core-filter">
+            <input
+              type="checkbox"
+              checked={right.groups.includes(g)}
+              onChange={(e) => setRight({ ...right, groups: e.target.checked ? [...right.groups, g] : right.groups.filter((x) => x !== g) })}
+            /> {GROUP_LABELS[g]}
+          </label>)}
+          {right.groups.length === 0 && <p className="muted">Cochez au moins un groupe : un droit de décision est toujours porté par un groupe fixe.</p>}
+        </fieldset>}
         {editing === "cumul" && <label className="core-filter">
           <input type="checkbox" checked={flag} onChange={(e) => setFlag(e.target.checked)} /> Cumul Comité et Audit autorisé
         </label>}

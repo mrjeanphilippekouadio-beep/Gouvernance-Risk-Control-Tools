@@ -64,6 +64,21 @@ export class PostgresGovernancePrincipleAcceptanceRepository implements Governan
     return rows.map(toDomain);
   }
 
+  async latestAloneReview(tenantId: string, principleId: string): Promise<{ acceptanceId: string; reviewed: boolean; open: boolean } | null> {
+    const { rows } = await this.pool.query<{ id: string; reviewed: boolean; open: boolean }>(
+      `SELECT a.id, (a.status IN ('PENDING', 'ACTIVE') AND a.expires_at > now()) AS open,
+              EXISTS (SELECT 1 FROM audit_log l
+                      JOIN governance_exception_reviews r ON r.tenant_id = l.tenant_id AND r.audit_log_id = l.id AND r.outcome = 'REVIEWED'
+                      WHERE l.tenant_id = a.tenant_id AND l.entity_type = 'GovernancePrincipleAcceptance' AND l.entity_id = a.id
+                        AND l.governance_exception IS NOT NULL) AS reviewed
+       FROM governance_principle_acceptances a
+       WHERE a.tenant_id = $1 AND a.principle_id = $2 AND a.regime = 'ALONE'
+       ORDER BY a.accepted_at DESC LIMIT 1`,
+      [tenantId, principleId],
+    );
+    return rows[0] ? { acceptanceId: rows[0].id, reviewed: rows[0].reviewed, open: rows[0].open } : null;
+  }
+
   async getById(tenantId: string, id: string): Promise<GovernancePrincipleAcceptance | null> {
     const { rows } = await this.pool.query<Row>(`SELECT * FROM governance_principle_acceptances WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
     return rows[0] ? toDomain(rows[0]) : null;

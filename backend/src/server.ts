@@ -7,6 +7,7 @@ import { pool } from "./infrastructure/database/pool.js";
 import { createLastSeenRecorder } from "./infrastructure/identity/lastSeen.js";
 import { assertProductionDatabaseRole } from "./infrastructure/database/postgres/databaseRoleSecurity.js";
 import { PostgresSelfValidationPolicyRequestRepository } from "./infrastructure/database/postgres/PostgresSelfValidationPolicyRequestRepository.js";
+import { PostgresGovernanceDelayRequestRepository } from "./infrastructure/database/postgres/PostgresGovernanceDelayRequestRepository.js";
 import { PostgresRiskRepository } from "./infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresAuditRepository } from "./infrastructure/database/postgres/PostgresAuditRepository.js";
 import { PostgresEvidenceRepository } from "./infrastructure/database/postgres/PostgresEvidenceRepository.js";
@@ -300,7 +301,7 @@ const notificationService = new NotificationService(notificationRepository, noti
 const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
 const governanceDesignationRepository = new PostgresGovernanceDesignationRepository(pool);
 const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository, governanceDesignationRepository);
-const governanceDesignationService = new GovernanceDesignationService(governanceDesignationRepository, auditRepository, userRepository, roleRepository);
+const governanceDesignationService = new GovernanceDesignationService(governanceDesignationRepository, auditRepository, userRepository, roleRepository, governanceQueries, configRepository);
 // Lot D5: reviews, principle acceptances, and the mandatory governance notifications (emitted after commit, see the middleware).
 const governanceExceptionService = new GovernanceExceptionService(new PostgresGovernanceExceptionReviewRepository(pool), auditRepository);
 const governancePrincipleAcceptanceService = new GovernancePrincipleAcceptanceService(
@@ -445,6 +446,7 @@ const configService = new ConfigService(
   riskFrameworkRepository,
   governanceQueries,
   new PostgresSelfValidationPolicyRequestRepository(pool),
+  new PostgresGovernanceDelayRequestRepository(pool),
 );
 const moduleToggleService = new ModuleToggleService(moduleToggleRepository, auditRepository);
 const tenantService = new TenantService(tenantRepository, auditRepository);

@@ -32,6 +32,8 @@ export type AcceptanceRegime = "ALONE" | "CONFIRMED";
 
 /** Journal marker written when an acceptance becomes ACTIVE with no second validation. */
 export const PRINCIPLE_ACCEPTANCE_ALONE_EXCEPTION = "principle.acceptance.alone";
+/** q181 (DECISION-095): an acceptance made alone renewing a previous one made alone that nobody could review (« renouvelé sans revue »). */
+export const PRINCIPLE_ACCEPTANCE_RENEWED_WITHOUT_REVIEW_EXCEPTION = "principle.acceptance.renewedWithoutReview";
 
 /**
  * DECISION-074 R-5 / q138: a dated acceptance of a principle that is not respected. Content immutable; expiry is not a

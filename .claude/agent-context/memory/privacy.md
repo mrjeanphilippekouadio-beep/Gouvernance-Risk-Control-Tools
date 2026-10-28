@@ -154,6 +154,25 @@ Principes ajoutés :
 10. Une date par personne reste une donnée personnelle même si le nom est
     masqué : sans droit de voir l'identité, n'exposer que des comptages.
 
+## Avis suites 2 — q183 annuaire, q178 vacance RM (2026-10-27, PRIV-REV-SUITES2-001)
+
+Statut : **OK AVEC RÉSERVES** sur les deux points (non bloquant). Document :
+`docs/privacy/review-suites2-q183-2026-10-27.md`.
+
+- q183 : `directory` (id + nom, actifs, tenant, 500) proportionné ; l'ouverture à
+  `audit.mission.create` élargit les lecteurs, pas les données. Recommandation :
+  pas de journal de consultation (annuaire non confidentiel ; rouvrir si un champ
+  s'ajoute) ; troncature à 500 à signaler (risque d'exactitude) et ordre
+  limite-puis-filtre à vérifier ; information : une phrase dans le texte R5.
+- q178 : date de vacance + notification sans nom : pas de surexposition ; à vérifier
+  que le lien (`entityId` = ligne d'audit, qui porte l'identité du retiré) ne
+  l'expose pas à un destinataire sans `audit.read`.
+
+Principe ajouté :
+11. Un annuaire d'identité minimal (id + nom) n'appelle pas de journal de
+    consultation tant qu'aucun champ confidentiel ne s'y ajoute ; en revanche,
+    une troncature silencieuse est un défaut d'exactitude à signaler.
+
 Points ouverts à inscrire dans ACTION_ITEMS (non fait par A24) : R1 (PO),
 R2 (PO), R3 (PO + juriste), R6 (juriste). Relecture A15 (Compliance)
 demandée par le plan RM-V1 ligne 595.

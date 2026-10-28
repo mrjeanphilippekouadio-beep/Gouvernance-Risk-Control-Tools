@@ -414,6 +414,8 @@ describe("UserService", () => {
     expect(Object.keys(entries[0]!).sort()).toEqual(["displayName", "id"]);
 
     await expect(userService.directory({ ...admin, roles: ["risk.read"] })).rejects.toThrow(ForbiddenError);
+    // q183: whoever may create an audit mission may compose its team.
+    await expect(userService.directory({ ...admin, userId: "auditor", roles: ["audit.mission.create"] })).resolves.toContainEqual({ id: kept.id, displayName: "Kept" });
   });
 
   it("scopes list() and get() to the actor's tenant", async () => {
@@ -550,5 +552,21 @@ describe("UserService", () => {
     await expect(
       userService.update(admin, user.id, { departmentId: otherTenantDepartment.id }, "REQ-29"),
     ).rejects.toThrow(ValidationError);
+  });
+});
+
+describe("SEC-077-01: a technical account (migration 077) stays inert", () => {
+  // Role assignment needs an active account (PostgresRoleRepository.assignToUser locks `deleted_at IS NULL`),
+  // so blocking reactivation keeps the suspended technical account out of every group.
+  it("cannot be reactivated or renamed", async () => {
+    const audit = inMemoryAuditRepository();
+    const userRepo = inMemoryUserRepository();
+    const userService = new UserService(userRepo, audit, new RoleService(inMemoryRoleRepository(), audit));
+    const system = await userRepo.create({ tenantId: admin.tenantId, email: "migration-077@system.invalid", displayName: "Système (migration 077)" });
+    await userRepo.suspend(admin.tenantId, system.id);
+
+    await expect(userService.reactivate(admin, system.id, "REQ-S1", "Motif de test")).rejects.toThrow(ForbiddenError);
+    await expect(userService.update(admin, system.id, { displayName: "Moi" }, "REQ-S2")).rejects.toThrow(ForbiddenError);
+    expect((await userRepo.getById(admin.tenantId, system.id))?.deletedAt).not.toBeNull();
   });
 });

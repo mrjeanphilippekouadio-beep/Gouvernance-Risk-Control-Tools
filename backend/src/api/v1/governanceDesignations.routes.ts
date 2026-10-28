@@ -22,7 +22,9 @@ export function governanceDesignationsRouter(service: GovernanceDesignationServi
   router.get("/", async (req, res, next) => {
     try {
       const query = ListQuery.parse(req.query);
-      res.json({ data: await service.list(req.user, query.includeEnded === "true") });
+      const data = await service.list(req.user, query.includeEnded === "true");
+      // q178: « vacance depuis le … / dépassée », computed by the server.
+      res.json({ data, riskManagerVacancy: await service.riskManagerVacancy(req.user) });
     } catch (err) {
       next(err);
     }

@@ -992,7 +992,9 @@ describe.skipIf(!HOST.startsWith("/"))("QA-panel2 real PostgreSQL", () => {
       const actor = w.as(w.admin, ["process.read", "process.responsibility.assign"]);
       for (const field of ["ownerUserId", "riskChampionUserId", "deputyUserId"] as const) {
         for (const own of [w.admin, w.admin.toUpperCase()]) {
-          await expect(svc.setResponsibilities(actor, proc, { [field]: own } as never, "r"), `${field} ${own === w.admin ? "lower" : "UPPER"}`).rejects.toMatchObject({ name: "ValidationError" });
+          // q166 (lot F4): the champion goes through the self-validation gate (ForbiddenError without an open DOUBLE_CONFIRMATION policy).
+          const expected = field === "riskChampionUserId" ? "ForbiddenError" : "ValidationError";
+          await expect(svc.setResponsibilities(actor, proc, { [field]: own } as never, "r"), `${field} ${own === w.admin ? "lower" : "UPPER"}`).rejects.toMatchObject({ name: expected });
         }
       }
       const done = await svc.setResponsibilities(actor, proc, { ownerUserId: other.toUpperCase() } as never, "r1");

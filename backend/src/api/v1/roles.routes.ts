@@ -39,6 +39,12 @@ const AuditGroupPermissionsBody = z.object({
   permissions: boundedArray(PermissionEnum, ALL_PERMISSIONS.length, 1),
   reason: reasonText(),
 });
+// q179 (DECISION-095): which fixed group(s) carry one governance decision right; reason mandatory.
+const GovernanceRightBody = z.object({
+  permission: PermissionEnum,
+  groups: boundedArray(z.enum(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"]), 3, 1),
+  reason: reasonText(),
+}).strict();
 const PermissionChangesQuery = z.object({ status: z.enum(["PENDING", "APPROVED", "REJECTED"]).default("PENDING") });
 const GrantorsQuery = z.object({ permission: PermissionEnum });
 
@@ -72,6 +78,24 @@ export function rolesRouter(roleService: RoleService): Router {
       const { permission } = GrantorsQuery.parse(req.query);
       const result = await roleService.listGrantors(req.user, permission, req.requestId);
       res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/governance-rights", async (req, res, next) => {
+    try {
+      res.json({ data: await roleService.governanceRights(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/governance-rights", async (req, res, next) => {
+    try {
+      const body = GovernanceRightBody.parse(req.body);
+      const result = await roleService.setGovernanceRightGroups(req.user, body.permission, body.groups, body.reason, req.requestId);
+      res.status(result.auditChangePending ? 202 : 200).json({ data: result });
     } catch (err) {
       next(err);
     }

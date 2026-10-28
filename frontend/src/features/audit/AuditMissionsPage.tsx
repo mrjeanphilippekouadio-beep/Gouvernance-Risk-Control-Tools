@@ -44,7 +44,7 @@ export function AuditMissionsPage({ token }: Readonly<{ token: string }>) {
   useEffect(() => { void refresh(); }, [refresh]);
 
   // Account names: the directory when the caller may read it (same rights as the server), otherwise their own account.
-  const canDirectory = can("user.read") || can("process.responsibility.assign") || can("designation.manage");
+  const canDirectory = can("user.read") || can("process.responsibility.assign") || can("designation.manage") || can("audit.mission.create");
   useEffect(() => {
     if (!loaded) return;
     let live = true;

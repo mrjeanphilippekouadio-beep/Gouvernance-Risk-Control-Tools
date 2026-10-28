@@ -133,7 +133,7 @@ describe("B-6c precondition: inventory of the readers of the legacy settings is 
     // "the ACTIVE scale" through the list of scales
     "ratingScales.list(": { "services/scoreCeiling.ts": 1, "services/RiskEvaluationService.ts": 1 /* (w) */, "services/CartographyService.ts": 1 /* (w) */, "services/RatingScaleService.ts": 1 /* public GET /rating-scales */ },
     // configs thresholds / modes
-    "configs.getByTenant(": { "services/ConfigService.ts": 2 /* (c) obsolete GET /config */, "services/RiskEvaluationService.ts": 2 /* (c) */, "services/TreatmentDecisionService.ts": 1 /* (c) */, "services/RatingScaleService.ts": 1 /* (u) */, "services/RoleService.ts": 1 /* (p) cumul setting */, "services/SelfValidationGate.ts": 1 /* (p) self-validation policy, D4 */, "services/GovernancePrincipleAcceptanceService.ts": 1 /* (p) q169 acceptance max duration */ },
+    "configs.getByTenant(": { "services/ConfigService.ts": 2 /* (c) obsolete GET /config */, "services/RiskEvaluationService.ts": 2 /* (c) */, "services/TreatmentDecisionService.ts": 1 /* (c) */, "services/RatingScaleService.ts": 1 /* (u) */, "services/RoleService.ts": 1 /* (p) cumul setting */, "services/SelfValidationGate.ts": 1 /* (p) self-validation policy, D4 */, "services/GovernancePrincipleAcceptanceService.ts": 1 /* (p) q169 acceptance max duration */, "services/GovernanceDesignationService.ts": 1 /* (p) q178 vacancy max duration */ },
     // risk_appetites
     "appetites.read": { "services/RiskEvaluationService.ts": 1 /* (c) */, "services/RatingScaleService.ts": 1 /* (u) */, "services/DashboardService.ts": 1 /* (w) */, "services/RiskAppetiteService.ts": 3 /* obsolete GET /appetite + closed writers */, "services/RiskDeviceViewService.ts": 1 /* (w) */ },
   };

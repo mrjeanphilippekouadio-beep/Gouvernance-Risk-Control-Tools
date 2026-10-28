@@ -540,7 +540,10 @@ describe.skipIf(!enabled)("QA-panel real PostgreSQL", () => {
   it("D2b: nobody designates themselves (lower case)", async () => {
     const w = await processWorld();
     for (const key of ["ownerUserId", "riskChampionUserId", "deputyUserId"] as const) {
-      await expect(w.svc.setResponsibilities(w.actor(), w.processId, { [key]: w.assigner }, "r")).rejects.toMatchObject({ name: "ValidationError" });
+      // q166 (lot F4): owner and N-1 stay a plain ValidationError; the champion goes through the self-validation gate, which
+      // refuses with a ForbiddenError when no DOUBLE_CONFIRMATION policy is open (here: not wired).
+      const expected = key === "riskChampionUserId" ? "ForbiddenError" : "ValidationError";
+      await expect(w.svc.setResponsibilities(w.actor(), w.processId, { [key]: w.assigner }, "r")).rejects.toMatchObject({ name: expected });
     }
   });
 
