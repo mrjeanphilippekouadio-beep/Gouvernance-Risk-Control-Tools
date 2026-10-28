@@ -42,12 +42,15 @@ import type { GovernanceDesignationRepository } from "../domain/repositories/Gov
 import type { AuditEvent } from "../domain/entities/AuditEvent.js";
 import type { GovernanceDesignation } from "../domain/entities/GovernanceDesignation.js";
 import { canonicalId } from "../domain/ids.js";
+import type { SensitiveViewGrant, SensitiveViewGrantRepository } from "../domain/repositories/SensitiveViewGrantRepository.js";
 
 const MAX_GROUP_REASON_LENGTH = 500;
 /** q188: same bound as the account directory (UserService MAX_DIRECTORY). */
 const MAX_MATRIX_ACCOUNTS = 500;
 /** q149: value of audit_log.governance_exception when the last Risk Manager leaves with no usable interim. */
 export const RISK_MANAGER_VACANCY_EXCEPTION = "riskManager.vacancy";
+
+const systemGroupsOf = (roles: Role[]): SystemGroup[] => roles.flatMap((r) => (r.systemGroup ? [r.systemGroup] : []));
 
 /** B-8 bis (q43): hard-coded for now (configurable part waits for PO q58). Risk Manager and Audit never cumulate. */
 const FORBIDDEN_CUMUL: Partial<Record<SystemGroup, SystemGroup>> = { RISK_MANAGER: "AUDIT", AUDIT: "RISK_MANAGER" };
@@ -167,6 +170,8 @@ export class RoleService {
     private readonly frameworks?: Pick<RiskFrameworkRepository, "latestBootstrapRequest">,
     /** D2c (q137/q149): the designated Risk Manager interim; absent = no interim, the last-member exit needs the confirmation. */
     private readonly designations?: Pick<GovernanceDesignationRepository, "getActive">,
+    /** q200 (DECISION-103): individual grants of role.read.sensitive; absent = nobody holds it (fail closed). */
+    private readonly sensitiveViews?: SensitiveViewGrantRepository,
   ) {}
 
   private readonly grantorsSeen = new Set<string>();
@@ -247,7 +252,81 @@ export class RoleService {
    */
   private async restrictedReader(actor: AuthenticatedUser): Promise<boolean> {
     if (actor.roles.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p)) || actor.roles.includes("role.read.sensitive")) return false;
-    return !(await this.fixedGroupsOf(actor.tenantId, actor.userId)).includes("AUDIT");
+    const groups = await this.fixedGroupsOf(actor.tenantId, actor.userId);
+    if (groups.includes("AUDIT")) return false;
+    return !(await this.holdsSensitiveGrant(actor.tenantId, actor.userId, groups));
+  }
+
+  /** q200: an APPROVED individual grant counts only while its holder is in the Risk Manager group. */
+  private async holdsSensitiveGrant(tenantId: string, userId: string, groups: SystemGroup[]): Promise<boolean> {
+    return Boolean(this.sensitiveViews) && groups.includes("RISK_MANAGER") && (await this.sensitiveViews!.isApproved(tenantId, userId));
+  }
+
+  // -- q200 (DECISION-103): individual grants of role.read.sensitive ------------------------------------------
+
+  /** Administrators (role.assign) and the confirmers (rolegroup.audit.validate: Committee, Audit) see the grants. */
+  async listSensitiveViewGrants(actor: AuthenticatedUser): Promise<SensitiveViewGrant[]> {
+    if (!actor.roles.includes("role.assign") && !actor.roles.includes("rolegroup.audit.validate")) {
+      requirePermission(actor, "role.assign");
+    }
+    return this.sensitiveViews ? this.sensitiveViews.list(actor.tenantId) : [];
+  }
+
+  /** An administrator asks for ONE Risk Manager member (never themself) to see the Audit and administrators. */
+  async requestSensitiveView(actor: AuthenticatedUser, userId: string, reason: string, requestId: string): Promise<SensitiveViewGrant> {
+    requirePermission(actor, "role.assign");
+    const grants = this.requireSensitiveViews();
+    if (userId === actor.userId) throw new ForbiddenError("You cannot ask a widened view for yourself — ask another administrator");
+    await this.assertRiskManagerMember(actor.tenantId, userId);
+    const days = (await this.configs?.getByTenant(actor.tenantId))?.policyRequestExpiryDays ?? null;
+    const expiresAt = days ? new Date(Date.now() + days * 86_400_000) : null;
+    const grant = await grants.create({ tenantId: actor.tenantId, userId, reason, requestedBy: actor.userId, expiresAt },
+      (g) => [this.grantAuditEvent(actor, g, "SUBMIT", null, reason, requestId)]);
+    await this.notifyMembers(actor, "rolegroup.audit.validate", userId, grant.id, "SENSITIVE_VIEW_GRANT_PENDING",
+      "Un administrateur demande qu'un membre du Risk Manager voie les droits de l'Audit et des administrateurs : à confirmer ou refuser.", requestId);
+    return grant;
+  }
+
+  /** A Committee or Audit member confirms or refuses — never the author nor the beneficiary (maker-checker). */
+  async decideSensitiveView(actor: AuthenticatedUser, id: string, approve: boolean, reason: string | null, requestId: string): Promise<SensitiveViewGrant> {
+    requirePermission(actor, "rolegroup.audit.validate");
+    const grants = this.requireSensitiveViews();
+    const before = await grants.getById(actor.tenantId, id);
+    if (!before) throw new NotFoundError("SensitiveViewGrant", id);
+    if (before.requestedBy === actor.userId || before.userId === actor.userId) {
+      throw new ForbiddenError("The author or the beneficiary of a request cannot confirm or refuse it (maker-checker)");
+    }
+    if (!approve && !reason) throw new ValidationError("A reason is required to refuse");
+    if (approve) await this.assertRiskManagerMember(actor.tenantId, before.userId);
+    return grants.decide(actor.tenantId, id, { status: approve ? "APPROVED" : "REJECTED", by: actor.userId, reason },
+      (g) => [this.grantAuditEvent(actor, g, approve ? "APPROVE" : "REJECT", before, reason, requestId)]);
+  }
+
+  /** Terminal: an administrator withdraws a pending request or ends an active grant, with a reason. */
+  async revokeSensitiveView(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<SensitiveViewGrant> {
+    requirePermission(actor, "role.assign");
+    const grants = this.requireSensitiveViews();
+    const before = await grants.getById(actor.tenantId, id);
+    if (!before) throw new NotFoundError("SensitiveViewGrant", id);
+    return grants.revoke(actor.tenantId, id, { by: actor.userId, reason },
+      (g) => [this.grantAuditEvent(actor, g, "UNASSIGN", before, reason, requestId)]);
+  }
+
+  private requireSensitiveViews(): SensitiveViewGrantRepository {
+    if (!this.sensitiveViews) throw new Error("RoleService requires a SensitiveViewGrantRepository for widened views");
+    return this.sensitiveViews;
+  }
+
+  private async assertRiskManagerMember(tenantId: string, userId: string): Promise<void> {
+    const user = await this.users?.getById(tenantId, userId);
+    if (!user || user.deletedAt) throw new NotFoundError("User", userId);
+    if (!(await this.fixedGroupsOf(tenantId, userId)).includes("RISK_MANAGER")) {
+      throw new ValidationError("A widened view is given to a member of the Risk Manager group only");
+    }
+  }
+
+  private grantAuditEvent(actor: AuthenticatedUser, g: SensitiveViewGrant, action: AuditEvent["action"], before: SensitiveViewGrant | null, reason: string | null, requestId: string) {
+    return { tenantId: actor.tenantId, userId: actor.userId, entityType: "SensitiveViewGrant", entityId: g.id, action, oldValue: before, newValue: g, reason, requestId };
   }
 
   /** q188/q189: an account a restricted reader may not see answers like an unknown account (404, no oracle). */
@@ -753,8 +832,9 @@ export class RoleService {
     if (user.deletedAt) return [];
 
     const rolePermissions = roles.flatMap((r) => r.permissions);
+    const granted: Permission[] = (await this.holdsSensitiveGrant(actor.tenantId, userId, systemGroupsOf(roles))) ? ["role.read.sensitive"] : [];
 
-    return Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePermissions]));
+    return Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePermissions, ...granted]));
   }
 
   /**
@@ -779,6 +859,7 @@ export class RoleService {
     for (const p of BASE_PERMISSIONS) add(p, { kind: "BASE" });
     for (const p of direct) add(p, { kind: "DIRECT" });
     for (const r of roles) for (const p of r.permissions) add(p, { kind: "ROLE", roleId: r.id, roleName: r.name, systemGroup: r.systemGroup });
+    if (await this.holdsSensitiveGrant(actor.tenantId, userId, systemGroupsOf(roles))) add("role.read.sensitive", { kind: "GRANT" });
     return { suspended: false, permissions: [...sources].map(([permission, from]) => ({ permission, sources: from })) };
   }
 
@@ -1228,7 +1309,9 @@ function auditChangeNeedsValidation(held: Role[]): boolean {
 export type PermissionSource =
   | { kind: "BASE" }
   | { kind: "DIRECT" }
-  | { kind: "ROLE"; roleId: string; roleName: string; systemGroup: SystemGroup | null };
+  | { kind: "ROLE"; roleId: string; roleName: string; systemGroup: SystemGroup | null }
+  /** q200: role.read.sensitive given to this Risk Manager member individually (an APPROVED grant). */
+  | { kind: "GRANT" };
 export interface EffectivePermissionSource {
   permission: Permission;
   sources: PermissionSource[];

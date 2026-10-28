@@ -5,10 +5,11 @@ import rightLabels from "../../api/rightLabels.json";
 import { DEFENSE_LINE_LABELS, FIXED_GROUP_LABELS, rolesApi, type EffectivePermission, type MatrixAccount, type MatrixRole, type PermissionSource, type Role } from "../../api/roles";
 import { usePermissions } from "../../auth/usePermissions";
 import { AccountPicker } from "../../design-system";
+import { SensitiveViewsCard } from "./SensitiveViewsCard";
 import { describeError, isForbidden } from "../indicators/shared";
 import "../core/CorePages.css";
 
-type Tab = "matrix" | "user";
+type Tab = "matrix" | "user" | "views";
 /** Display grouping only: the part of the identifier before the first dot. */
 const domainOf = (permission: string) => permission.split(".")[0] ?? permission;
 /** Label from the PO-validated rights catalogue (DECISION-072); the identifier alone when the catalogue lacks it. */
@@ -27,6 +28,7 @@ const matrixHeader = (r: MatrixRole) => `${roleLabel(r)} · ${DEFENSE_LINE_LABEL
 function sourceLabel(s: PermissionSource): string {
   if (s.kind === "BASE") return "Socle de tout compte";
   if (s.kind === "DIRECT") return "Attribution directe (ancienne)";
+  if (s.kind === "GRANT") return "Vue élargie confirmée";
   return s.systemGroup ? `Groupe fixe ${FIXED_GROUP_LABELS[s.systemGroup]}` : `Rôle ${s.roleName}`;
 }
 
@@ -35,7 +37,9 @@ function sourceLabel(s: PermissionSource): string {
  * as the server returns them. Changing a right stays in « IAM · Rôles » and in the governance settings.
  */
 export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
-  const { loaded } = usePermissions(token);
+  const { can, loaded } = usePermissions(token);
+  const canRequestView = can("role.assign");
+  const canDecideView = can("rolegroup.audit.validate");
   const [tab, setTab] = useState<Tab>("matrix");
   const [roles, setRoles] = useState<MatrixRole[]>([]);
   const [catalog, setCatalog] = useState<string[]>([]);
@@ -86,7 +90,8 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
       </div>
     </div>
     <SegmentedControl<Tab> ariaLabel="Vue" value={tab} onChange={setTab}
-      options={[{ value: "matrix", label: "Matrice des rôles" }, { value: "user", label: "Droits d'un compte" }]} />
+      options={[{ value: "matrix", label: "Matrice des rôles" }, { value: "user", label: "Droits d'un compte" },
+        ...(canRequestView || canDecideView ? [{ value: "views" as Tab, label: "Vue élargie du Risk Manager" }] : [])]} />
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
     {tab === "matrix" && <Card>
       <p>
@@ -104,6 +109,7 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
         caption="Matrice des droits par rôle" emptyMessage="Aucun droit ne correspond." />
     </Card>}
     {tab === "user" && loaded && <UserRights token={token} decisionRights={decisionRights} />}
+    {tab === "views" && loaded && <SensitiveViewsCard token={token} canRequest={canRequestView} canDecide={canDecideView} />}
   </section>;
 }
 

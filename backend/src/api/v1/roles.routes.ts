@@ -50,6 +50,10 @@ const GovernanceRightBody = z.object({
 }).strict();
 const PermissionChangesQuery = z.object({ status: z.enum(["PENDING", "APPROVED", "REJECTED"]).default("PENDING") });
 const GrantorsQuery = z.object({ permission: PermissionEnum });
+// q200 (DECISION-103): individual widened views (role.read.sensitive). The author is always the caller.
+const SensitiveViewRequestBody = z.object({ userId: z.guid(), reason: reasonText() }).strict();
+const SensitiveViewDecisionBody = z.object({ reason: reasonText().optional() }).strict();
+const SensitiveViewRevokeBody = z.object({ reason: reasonText() }).strict();
 
 export function rolesRouter(roleService: RoleService): Router {
   const router = Router();
@@ -69,6 +73,45 @@ export function rolesRouter(roleService: RoleService): Router {
   router.get("/matrix", async (req, res, next) => {
     try {
       res.json({ data: await roleService.matrix(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/sensitive-view-grants", async (req, res, next) => {
+    try {
+      res.json({ data: await roleService.listSensitiveViewGrants(req.user) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/sensitive-view-grants", async (req, res, next) => {
+    try {
+      const body = SensitiveViewRequestBody.parse(req.body);
+      res.status(201).json({ data: await roleService.requestSensitiveView(req.user, body.userId, body.reason, req.requestId) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  for (const [action, approve] of [["approve", true], ["reject", false]] as const) {
+    router.post(`/sensitive-view-grants/:grantId/${action}`, async (req, res, next) => {
+      try {
+        const id = UserIdParam.parse(req.params["grantId"]);
+        const body = SensitiveViewDecisionBody.parse(req.body ?? {});
+        res.json({ data: await roleService.decideSensitiveView(req.user, id, approve, body.reason ?? null, req.requestId) });
+      } catch (err) {
+        next(err);
+      }
+    });
+  }
+
+  router.post("/sensitive-view-grants/:grantId/revoke", async (req, res, next) => {
+    try {
+      const id = UserIdParam.parse(req.params["grantId"]);
+      const body = SensitiveViewRevokeBody.parse(req.body);
+      res.json({ data: await roleService.revokeSensitiveView(req.user, id, body.reason, req.requestId) });
     } catch (err) {
       next(err);
     }
