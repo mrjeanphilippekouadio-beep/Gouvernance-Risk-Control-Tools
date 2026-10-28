@@ -91,6 +91,76 @@ jobs:
           File.write(output, resolved, mode: "w", perm: 0o600)
           RUBY
 
+      - name: Preflight staging frontend and QA authentication
+        env:
+          ZAP_API_BASE_URL: https://gouvernance-risk-control-tools-staging.onrender.com
+          ZAP_TARGET_URL: ${{ secrets.ZAP_TARGET_URL }}
+          ZAP_TEST_EMAIL: qagrctest@gmail.com
+          ZAP_TEST_PASSWORD: ${{ secrets.ZAP_TEST_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          # Wake a sleeping Render service before ZAP's browser-auth helper
+          # makes its first login request. Do not print response bodies or tokens.
+          echo "Checking staging API readiness..."
+          curl --fail --silent --show-error \
+            --retry 5 --retry-delay 5 --retry-all-errors \
+            --connect-timeout 10 --max-time 90 \
+            "${ZAP_API_BASE_URL}/ready" --output /dev/null
+
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          import urllib.error
+          import urllib.request
+
+          frontend = os.environ["ZAP_TARGET_URL"].rstrip("/")
+          api = os.environ["ZAP_API_BASE_URL"].rstrip("/")
+          email = os.environ["ZAP_TEST_EMAIL"]
+          password = os.environ["ZAP_TEST_PASSWORD"]
+
+          # Fail early if Render is serving a Google-only build instead of the
+          # local-login UI expected by the staging-only ZAP test.
+          def fetch(url, timeout=30):
+              request = urllib.request.Request(url, headers={"User-Agent": "GRC-ZAP-preflight"})
+              with urllib.request.urlopen(request, timeout=timeout) as response:
+                  return response.read().decode("utf-8", errors="replace")
+
+          html = fetch(frontend)
+          assets = re.findall(r'<script[^>]+src=["\']([^"\']+\.js(?:\?[^"\']*)?)["\']', html)
+          bundle_text = ""
+          for asset in assets:
+              asset_url = asset if asset.startswith("http") else frontend + (asset if asset.startswith("/") else "/" + asset)
+              try:
+                  bundle_text += fetch(asset_url)
+              except Exception:
+                  continue
+          if "local-email" not in bundle_text or "local-password" not in bundle_text:
+              sys.exit("Staging frontend bundle does not expose the local QA login form. Verify VITE_AUTH_PROVIDER=local and redeploy staging.")
+
+          # Authenticate once outside ZAP to warm the backend and validate the
+          # QA credentials. Never print the request body, response body or token.
+          payload = json.dumps({"email": email, "password": password}).encode("utf-8")
+          request = urllib.request.Request(
+              api + "/api/v1/auth/local",
+              data=payload,
+              headers={"Content-Type": "application/json", "Accept": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  body = json.loads(response.read().decode("utf-8"))
+                  if response.status < 200 or response.status >= 300 or not body.get("accessToken"):
+                      sys.exit("Staging QA authentication preflight failed: response did not contain an access token.")
+          except urllib.error.HTTPError as error:
+              sys.exit(f"Staging QA authentication preflight failed with HTTP {error.code}; check QA credentials and backend logs.")
+          except Exception as error:
+              sys.exit(f"Staging QA authentication preflight failed ({type(error).__name__}); check staging API readiness.")
+          print("Staging frontend local-login form is present and QA authentication succeeded.")
+          PY
+
       - name: ZAP authenticated full scan
         id: zap_scan
         env:
