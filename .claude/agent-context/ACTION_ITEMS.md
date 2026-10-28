@@ -421,8 +421,8 @@ pour l'usage.
 | HUMAN @dev-db @security | **q186 (cockpit)** — rôles ordinaires détenant déjà un droit de décision : les nettoyer par migration (recommandé) ou laisser l'admin les retirer. PO : retirer par migration, avec trace d'audit (couvre aussi SEC-SA2-02). | 2026-10-27 | **Fermé** — 077, PR #199 fusionnée le 2026-10-28 |
 | HUMAN @security @dev-frontend | **q187 (cockpit)** — F7-S3 matrice des droits : ouvrir la consultation au groupe Audit en ajoutant `role.read` (lecture seule) par le circuit des droits Audit (recommandé), ou réserver l'écran à l'Administrateur. Aucun code requis. | 2026-10-28 | **Fermé** (DECISION-097) |
 | HUMAN @security @dev-backend @risk-manager | **q188 (cockpit), précision PO sur q187** — le Risk Manager voit par défaut les rôles et droits de la 1re ligne ; 2e ligne et administrateurs seulement si activé sur son rôle. À trancher : découpage 1re/2e ligne/admin (et Audit), forme du droit d'accès élargi. **Requis avant la production** ; PR #202 fusionnable dans staging avant (Risk Manager voit tout en attendant). | 2026-10-28 | **Répondu** (DECISION-098) ; reste **q189** |
-| HUMAN @dev-backend @security | **q189 (cockpit)** — suite q188 : tous les membres du groupe Risk Manager voient les lignes 1 et 2 (A, recommandé) ou un « Risk Manager principal » désigné seulement (B, nouvelle désignation). Bloque la restriction de la matrice (avant la production). | 2026-10-28 | **Ouvert — HUMAN : q189** |
-| @architect @risk-manager @security HUMAN | **DECISION-100 — confidentialité configurable des ressources** : risques, KRI et ressources du même type doivent pouvoir être restreints (visibilité) dès leur création ; aujourd'hui toute lecture est globale au client (SEC F7S6 INFO-03). A05 + A13 : proposer le modèle (niveaux de visibilité, qui choisit, héritage risque → KRI/contrôles/plans, effet sur tableaux de bord, audit, comptages du panel) puis questions PO. Pas de code avant validation. Proposition livrée : `docs/architecture/RM-V1-Visibilite-Ressources-spec.md` (option A, lots V0-V4). | 2026-10-28 | **Ouvert — HUMAN : q190 à q196** |
+| HUMAN @dev-backend @security | **q189 (cockpit)** — suite q188 : tous les membres du groupe Risk Manager voient les lignes 1 et 2 (A, recommandé) ou un « Risk Manager principal » désigné seulement (B, nouvelle désignation). Bloque la restriction de la matrice (avant la production). | 2026-10-28 | **Fermé** (DECISION-101) — construction à lancer |
+| @architect @risk-manager @security HUMAN | **DECISION-100 — confidentialité configurable des ressources** : risques, KRI et ressources du même type doivent pouvoir être restreints (visibilité) dès leur création ; aujourd'hui toute lecture est globale au client (SEC F7S6 INFO-03). A05 + A13 : proposer le modèle (niveaux de visibilité, qui choisit, héritage risque → KRI/contrôles/plans, effet sur tableaux de bord, audit, comptages du panel) puis questions PO. Pas de code avant validation. Proposition livrée : `docs/architecture/RM-V1-Visibilite-Ressources-spec.md` (option A, lots V0-V4). | 2026-10-28 | **Répondu** (DECISION-102) — spec à mettre à jour (A05), point administrateurs à approfondir |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
@@ -2443,4 +2443,31 @@ DECISION (PO) : pour les risques, les KRI « et toutes les ressources de ce
 RELATED: SEC-f7s6 INFO-03, F7-S6, DECISION-097/098 (lignes de défense).
 OWNER: @orchestrator @architect @risk-manager @security
 STATUS: DÉCIDÉ — principe ; modèle à proposer.
+
+DECISION-101
+DATE: 2026-10-28
+DECISION (PO, cockpit q189) : option A — tous les membres du groupe Risk
+  Manager voient, dans la matrice des droits, les lignes 1 et 2 ; voir l'Audit
+  et les administrateurs s'active individuellement sur le rôle d'un membre
+  (droit distinct, confirmé par une autre personne) ; badge de ligne.
+RELATED: q188, q189, DECISION-098.
+OWNER: @orchestrator @dev-backend @security
+STATUS: DÉCIDÉ — construction lancée, avant la production.
+
+DECISION-102
+DATE: 2026-10-28
+DECISION (PO, cockpit q190 à q196, visibilité des ressources DECISION-100) :
+  q190 trois niveaux dès maintenant (tout le client / restreint au périmètre /
+  personnes nommées) ; q191 Risk Manager, Comité, Audit ET administrateurs
+  voient tout — mais le PO veut réfléchir au cas d'un administrateur sans
+  rôle dans le domaine des risques (point ouvert, à instruire par A05/A13/A10) ;
+  q192 périmètre = département, propriétaire, N+1, RACI, responsable du
+  processus, plus une liste de personnes configurable ; q193 héritage depuis le
+  risque, réglage propre pour le contrôle ; q194 le Risk Manager et le
+  propriétaire de la ressource peuvent modifier la visibilité, tout est tracé ;
+  q195 les KPI suivent le même réglage que les KRI ; q196 afficher
+  « X éléments non visibles » dans les totaux.
+RELATED: DECISION-100, docs/architecture/RM-V1-Visibilite-Ressources-spec.md.
+OWNER: @orchestrator @architect @risk-manager @security
+STATUS: DÉCIDÉ — spec à réviser, puis lots V0 à V4.
 ```
