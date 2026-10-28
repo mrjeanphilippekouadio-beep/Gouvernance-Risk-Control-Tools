@@ -49,13 +49,9 @@ env:
             password: ${ZAP_TEST_PASSWORD}
 
 jobs:
-  - type: spider
-    parameters:
-      context: grc-tools
-      user: qa
-      url: ${ZAP_TARGET_URL}
-      maxDuration: 2
-
+  # Use the Client Spider as the sole frontend crawler. The traditional spider
+  # was also probing the backend origin at "/" (which correctly returns 404),
+  # producing a plan warning unrelated to the SPA crawl.
   - type: spiderClient
     parameters:
       context: grc-tools
@@ -64,12 +60,11 @@ jobs:
       maxDuration: 12
       maxCrawlDepth: 10
       maxChildren: 100
-      # The GRC SPA uses buttons for in-app navigation rather than URL links.
-      # Ask the Client Spider to click standard interactive elements so it can
-      # trigger authenticated page loads and discover the API calls behind them.
-      clickDefaultElems: true
-      clickElemsOnce: true
-      randomInputs: false
+      browserId: "firefox-headless"
+      initialLoadTime: 5
+      pageLoadTime: 2
+      actionWaitTime: 1
+      shutdownTime: 10
       numberOfBrowsers: 1
       logoutAvoidance: true
       scopeCheck: "Flexible"
