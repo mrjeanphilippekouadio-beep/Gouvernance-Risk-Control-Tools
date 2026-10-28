@@ -419,7 +419,7 @@ pour l'usage.
 | HUMAN @dev-backend | **q184 (cockpit)** — demande de délais mêlant allongements et raccourcissements : recommandation, toute la demande passe en attente de validation (pas d'application partielle des raccourcissements). Implémenté ainsi (fail-closed). | 2026-10-27 | **Fermé** (DECISION-096) |
 | HUMAN @dev-backend @security | **q185 (cockpit)** — droits de décision q179 : chaque droit garde au moins un groupe fixe ; Audit limité à la revue. Recommandation appliquée. | 2026-10-27 | **Fermé** (DECISION-096) |
 | HUMAN @dev-db @security | **q186 (cockpit)** — rôles ordinaires détenant déjà un droit de décision : les nettoyer par migration (recommandé) ou laisser l'admin les retirer. PO : retirer par migration, avec trace d'audit (couvre aussi SEC-SA2-02). | 2026-10-27 | **En cours** (DECISION-096), migration 077 sur `feat/r1-suites-arbitrages-2` |
-| HUMAN @security @dev-frontend | **q187 (cockpit)** — F7-S3 matrice des droits : ouvrir la consultation au groupe Audit en ajoutant `role.read` (lecture seule) par le circuit des droits Audit (recommandé), ou réserver l'écran à l'Administrateur. Aucun code requis. | 2026-10-28 | **Ouvert — HUMAN : q187** |
+| HUMAN @security @dev-frontend | **q187 (cockpit)** — F7-S3 matrice des droits : ouvrir la consultation au groupe Audit en ajoutant `role.read` (lecture seule) par le circuit des droits Audit (recommandé), ou réserver l'écran à l'Administrateur. Aucun code requis. | 2026-10-28 | **Fermé** (DECISION-097) |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
@@ -2391,4 +2391,17 @@ DECISION (PO, cockpit) : q184 — une modification de délais contenant un
 RELATED: DECISION-095 ; q179, q182 ; SEC-SA2-02 ; PR #199.
 OWNER: @orchestrator @dev-db @security
 STATUS: DÉCIDÉ — q184/q185 fermés ; q186 en cours.
+
+DECISION-097
+DATE: 2026-10-28
+DECISION (PO, cockpit q187) : l'Audit peut consulter la matrice des droits
+  (`role.read` ajouté au groupe Audit par le circuit des droits Audit, sans
+  code). « Faire de même » pour le groupe Risk Manager : une entreprise peut
+  avoir un gestionnaire de risque sans département d'audit interne. Mise en
+  œuvre : `role.read` dans `FIXED_GROUP_PERMISSIONS.RISK_MANAGER` + migration
+  pour les groupes existants (auditée) ; l'onglet « Droits d'un compte » exige
+  l'annuaire : `role.read` ouvre aussi `GET /users/directory` (passage Privacy).
+RELATED: q187, F7-S3, q183, SEC-f7s3.
+OWNER: @orchestrator @dev-backend @dev-db @security @privacy
+STATUS: DÉCIDÉ — en cours (branche feat/r1-f7-s3).
 ```
