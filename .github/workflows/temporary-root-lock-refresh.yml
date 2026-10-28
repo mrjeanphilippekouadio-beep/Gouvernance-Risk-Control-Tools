@@ -1,0 +1,37 @@
+name: Temporary root lockfile refresh
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-root-lock:
+    if: github.event.pull_request.head.ref == 'fix/zap-authenticated-coverage-gate' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fix/zap-authenticated-coverage-gate
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Regenerate root lockfile for patched Vite
+        run: npm install --package-lock-only --workspace=@grc-tools/frontend
+      - name: Commit refreshed root lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "No root lockfile changes were generated."
+            exit 0
+          fi
+          git commit -m "fix(deps): lock patched Vite release"
+          git fetch origin fix/zap-authenticated-coverage-gate
+          git rebase origin/fix/zap-authenticated-coverage-gate
+          git push origin HEAD:fix/zap-authenticated-coverage-gate
