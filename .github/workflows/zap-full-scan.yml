@@ -92,6 +92,7 @@ jobs:
           RUBY
 
       - name: ZAP authenticated full scan
+        id: zap_scan
         env:
           ZAP_API_BASE_URL: https://gouvernance-risk-control-tools-staging.onrender.com
           ZAP_TARGET_URL: ${{ secrets.ZAP_TARGET_URL }}
@@ -131,6 +132,12 @@ jobs:
             --entrypoint bash \
             ghcr.io/zaproxy/zaproxy:stable \
             -c 'test -r /zap/wrk/automation-plan.resolved.yaml || { echo "Resolved plan is not readable inside ZAP container" >&2; exit 1; }; zap.sh -cmd -host 127.0.0.1 -port 8080 -autorun /zap/wrk/automation-plan.resolved.yaml; rc=$?; echo "===ZAP LOG(S) FOUND ON DISK==="; find /home /zap /tmp /root -iname "zap.log*" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null; exit $rc' || rc=$?
+
+          # ZAP runs as uid 1000 and creates root-owned-to-ZAP report files.
+          # Return ownership to the runner before redaction; never chmod the
+          # workspace broadly or publish an artifact if sanitization fails.
+          sudo chown -R "$(id -u):$(id -g)" report
+          chmod -R u+rwX report
 
           zap_log="zap-home/zap.log"
           if [ ! -s "$zap_log" ]; then
@@ -257,9 +264,12 @@ jobs:
             fi
           done
 
-          # Reports are published as workflow artifacts. Remove raw and URL-encoded
-          # QA credentials before upload so request bodies cannot leak secrets.
+          # Reports are published as workflow artifacts. Redact credentials in
+          # every text report and fail closed if any supported representation
+          # remains. Artifact upload is enabled only after this step succeeds.
           python3 <<'PY'
+          import html
+          import json
           import os
           from pathlib import Path
           from urllib.parse import quote, quote_plus
@@ -273,23 +283,42 @@ jobs:
           for secret in secrets_to_mask:
               if not secret:
                   continue
-              replacements.update({secret, quote(secret, safe=""), quote_plus(secret, safe="")})
+              replacements.update({
+                  secret,
+                  quote(secret, safe=""),
+                  quote_plus(secret, safe=""),
+                  json.dumps(secret, ensure_ascii=True)[1:-1],
+                  html.escape(secret, quote=True),
+              })
+          replacements = {value for value in replacements if value}
 
           for file_path in report_dir.rglob("*"):
               if not file_path.is_file():
                   continue
               try:
                   raw = file_path.read_text(encoding="utf-8")
-              except (UnicodeDecodeError, OSError):
-                  continue
+              except UnicodeDecodeError:
+                  # Do not publish an uninspectable report file.
+                  raise SystemExit(f"Refusing to publish non-text report: {file_path}")
               masked = raw
               for secret in sorted(replacements, key=len, reverse=True):
                   masked = masked.replace(secret, "[REDACTED_QA_CREDENTIAL]")
               if masked != raw:
                   file_path.write_text(masked, encoding="utf-8")
                   print(f"Redacted QA credentials from {file_path}")
+
+          # Verify after writing, rather than assuming that the rewrite worked.
+          for file_path in report_dir.rglob("*"):
+              if not file_path.is_file():
+                  continue
+              text = file_path.read_text(encoding="utf-8")
+              if any(secret in text for secret in replacements):
+                  raise SystemExit(
+                      f"Refusing to publish report: credential representation remains in {file_path}"
+                  )
           PY
 
+          echo "reports_safe=true" >> "$GITHUB_OUTPUT"
           rm -f "$RUNNER_TEMP/automation-plan.resolved.yaml"
           echo "ZAP exit code: $rc"
           # Exit 2 means the plan ran with warnings (including detected alerts).
@@ -299,7 +328,7 @@ jobs:
           fi
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
+        if: always() && steps.zap_scan.outputs.reports_safe == 'true'
         with:
           name: zap-full-scan-report
           path: report/
