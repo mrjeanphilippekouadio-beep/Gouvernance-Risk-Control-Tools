@@ -6,6 +6,7 @@
 //   C « Cible Droits QA »      users.roles = risk.read (DIRECT) + role ordinaire « Analyste QA » (risk.read, control.read)
 //                              + groupe fixe Comite + role DESACTIVE « Role desactive QA » (audit.read)
 //   S « Suspendu Droits QA »   suspendu (deleted_at)      O : compte d'un AUTRE tenant
+//   R « Risk Manager Droits QA » membre du seul groupe fixe Risk Manager (role.read par le groupe, migration 078, q187)
 //
 // ORACLES
 //  0. API (PG reel)
@@ -26,6 +27,8 @@
 //         Choisir N : « Rôles détenus : aucun », uniquement 2 lignes « Socle de tout compte ».
 //     1.7 Aucun console.error ni exception JS pendant 1.1..1.6.
 //  2. N : l'entree « Matrice des droits » est ABSENTE du menu (Administration deplie).
+//  4. q187 : R (Risk Manager, sans droit direct) voit l'entree, la matrice, et l'onglet compte (annuaire, droits de C).
+//  0.4 F7S3-01 : compte suspendu -> 200, liste vide, suspended: true.
 //  3. Acces direct sans role.read : la page n'a pas de route propre (pas d'URL) ; on retire role.read a A en base puis on remonte l'ecran
 //     (Comptes -> Matrice) : le serveur refuse (403), l'ecran affiche le refus (bandeau « Chargement impossible »), aucune donnee de droit affichee.
 //
@@ -43,7 +46,7 @@ const API = process.env.QA_API ?? "http://127.0.0.1:8099";
 const APP = process.env.QA_APP ?? "http://127.0.0.1:5199";
 const SHOTS = process.env.QA_SHOTS ?? "qa-shots/f7s3";
 const PG = ["-h", "127.0.0.1", "-p", process.env.QA_DB_PORT ?? "55437", "-U", "postgres", "-d", "grc_qa_f7s3", "-Atq"];
-const EMAIL = { a: "qa-f7s3-a@f7s3.test", n: "qa-f7s3-n@f7s3.test", c: "qa-f7s3-c@f7s3.test", s: "qa-f7s3-s@f7s3.test", o: "qa-f7s3-o@f7s3.test" };
+const EMAIL = { a: "qa-f7s3-a@f7s3.test", n: "qa-f7s3-n@f7s3.test", c: "qa-f7s3-c@f7s3.test", s: "qa-f7s3-s@f7s3.test", o: "qa-f7s3-o@f7s3.test", r: "qa-f7s3-r@f7s3.test" };
 const LABELS = JSON.parse(readFileSync(new URL("../../frontend/src/api/rightLabels.json", import.meta.url), "utf8"));
 mkdirSync(SHOTS, { recursive: true });
 const sql = (q) => execFileSync("psql", [...PG, "-c", q], { encoding: "utf8" }).trim();
@@ -87,7 +90,7 @@ async function open(who) {
 }
 
 try {
-  for (const w of ["a", "n", "c"]) await login(w);
+  for (const w of ["a", "n", "c", "r"]) await login(w);
   const id = (r) => r.json?.data?.id;
   const ids = { a: id(await api("a", "GET", "/users/me")), n: id(await api("n", "GET", "/users/me")), c: id(await api("c", "GET", "/users/me")) };
   ids.s = sql("select id from users where email='qa-f7s3-s@f7s3.test'");
@@ -104,9 +107,10 @@ try {
   check("0.2 compte d'un autre tenant : 404, identique à un id inconnu, aucun droit dans le corps",
     cross.status === 404 && unknown.status === 404 && !JSON.stringify(cross.json).includes("risk.read"), `cross=${cross.status}; inconnu=${unknown.status}`);
   const malformed = await api("a", "GET", "/roles/users/not-a-uuid/permission-sources");
-  check("0.2 identifiant mal formé : 4xx attendu (pas 500) [DEFECT QA-F7S3-01 si FAIL]", malformed.status >= 400 && malformed.status < 500, `status=${malformed.status}`);
+  check("0.2 identifiant mal formé : 400 (pas 500) [QA-F7S3-01]", malformed.status === 400, `status=${malformed.status}`);
   const susp = await api("a", "GET", `/roles/users/${ids.s}/permission-sources`);
-  console.log(`INFO  compte suspendu : GET permission-sources = ${susp.status} (${susp.json?.data?.length ?? 0} droits)`);
+  check("0.4 compte suspendu : 200, aucun droit, suspended: true [F7S3-01]",
+    susp.status === 200 && susp.json?.suspended === true && (susp.json?.data ?? [1]).length === 0, `status=${susp.status}; ${JSON.stringify(susp.json).slice(0, 120)}`);
 
   const src = (await api("a", "GET", `/roles/users/${ids.c}/permission-sources`)).json?.data ?? [];
   const listed = src.map((x) => x.permission).sort();
@@ -249,8 +253,25 @@ try {
   check("3 sans role.read en base : le serveur refuse (403) et l'écran affiche le refus (bandeau « Chargement impossible »)",
     refused.some((c) => c.status === 403) && /Chargement impossible/.test(banner), `banniere=${banner.slice(0, 200)}; appels=${JSON.stringify(refused)}`);
   check("3 aucune donnée de droit affichée après le refus", !/Droit de décision/.test(bodyText) && (await A.rows().filter({ hasText: "risk.read" }).count()) === 0);
-  check("3 le refus est en français (info : le message serveur peut être en anglais)", /Missing permission/.test(banner) ? false : true, banner.slice(0, 200));
+  check("3 le refus est en français, sans clé brute [QA-F7S3-02]", !/Missing permission|role\.read/.test(banner) && /Voir les rôles/.test(banner), banner.slice(0, 200));
   sql(`update users set roles='{role.read,user.read}' where id='${ids.a}'`);
+
+  // ================================================================================================ 4. R, Risk Manager (q187)
+  const R = await open("r");
+  await R.admin();
+  const rEntries = (await R.nav.locator("button").allInnerTexts()).map(norm);
+  check("4 Risk Manager (role.read par le groupe fixe) : l'entrée « Matrice des droits » est présente", rEntries.some((t) => /^Matrice des droits/.test(t)), rEntries.slice(0, 40).join("|"));
+  R.consoleErrors.length = 0;
+  await R.goto(/^Matrice des droits/, "Matrice des droits");
+  check("4 Risk Manager : la matrice s'affiche (une ligne par droit)", (await R.rows().count()) === catalog.length, `lignes=${await R.rows().count()}`);
+  await R.page.getByRole("group", { name: "Vue" }).getByRole("button", { name: "Droits d'un compte" }).click();
+  await sleep(900);
+  const rPicker = R.page.locator("#rights-user");
+  await rPicker.selectOption({ label: "Cible Droits QA" });
+  await sleep(1200);
+  await R.page.screenshot({ path: `${SHOTS}/07-risk-manager-compte.png`, fullPage: true });
+  check("4 Risk Manager : onglet compte, droits de C affichés (même nombre que l'API)", (await R.rows().count()) === src.length, `lignes=${await R.rows().count()}; api=${src.length}`);
+  check("4 aucun console.error ni exception JS (Risk Manager)", R.consoleErrors.length === 0 && R.jsErrors.length === 0, `console=${R.consoleErrors.join(" || ")}; js=${R.jsErrors.join(" || ")}`);
 } catch (e) {
   check("script : exception inattendue", false, String(e?.stack ?? e));
 } finally {

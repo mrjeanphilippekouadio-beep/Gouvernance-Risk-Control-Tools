@@ -124,10 +124,16 @@ describe("B8bis-02 single source of truth for the fixed groups' rights", () => {
     AUDIT: ["governanceexception.review", "governanceprinciple.acceptance.revoke"],
   };
 
+  // q187 (DECISION-097): migration 078 adds role.read to the Risk Manager group only (Audit: through its own circuit).
+  const addedBy078 = (g: string) => {
+    const up78 = readFileSync("../database/postgresql/migrations/078_risk_manager_role_read.sql", "utf8");
+    return g === "RISK_MANAGER" && /system_group = 'RISK_MANAGER'/.test(up78) ? ["role.read"] : [];
+  };
+
   // D1 (DECISION-074): migration 066 adds governancehealth.read to the three groups.
   // D2b: migration 069 adds process.responsibility.assign to the Risk Manager group only.
-  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055, 066, 069, 071, 072 and 073", (g) => {
-    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g), "governancehealth.read", ...addedBy069(g), ...addedBy071[g]!, ...addedBy072(g), ...addedBy073[g]!]);
+  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055, 066, 069, 071, 072, 073 and 078", (g) => {
+    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g), "governancehealth.read", ...addedBy069(g), ...addedBy071[g]!, ...addedBy072(g), ...addedBy073[g]!, ...addedBy078(g)]);
     expect(FIXED_GROUP_PERMISSIONS[g].every((p) => ALL_PERMISSIONS.includes(p))).toBe(true);
   });
 

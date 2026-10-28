@@ -6,6 +6,9 @@ import { ALL_PERMISSIONS, type Permission } from "../../domain/permissions.js";
 import { grantorsRateLimiter } from "../middleware/rateLimit.js";
 import { DASHBOARD_SCOPE_MODES, type DashboardScopeMode } from "../../domain/entities/DashboardScope.js";
 
+/** QA-F7S3-01: a malformed id is a 400, never a 500 from PostgreSQL (22P02). */
+const UserIdParam = z.guid();
+
 const PermissionEnum = z.enum(ALL_PERMISSIONS as [Permission, ...Permission[]]);
 // PROCESS is a valid enum value here too (kept in sync with the DB CHECK
 // / TS type) — RoleService.create/update is what actually rejects it at
@@ -146,7 +149,7 @@ export function rolesRouter(roleService: RoleService): Router {
   // ACT-115: also registered before "/:id" for the same reason.
   router.get("/users/:userId", async (req, res, next) => {
     try {
-      const roles = await roleService.listForUser(req.user, req.params["userId"] as string);
+      const roles = await roleService.listForUser(req.user, UserIdParam.parse(req.params["userId"]));
       res.json({ data: roles });
     } catch (err) {
       next(err);
@@ -159,7 +162,7 @@ export function rolesRouter(roleService: RoleService): Router {
   // server.ts's identity resolver uses to gate requests.
   router.get("/users/:userId/permissions", async (req, res, next) => {
     try {
-      const permissions = await roleService.getEffectivePermissions(req.user, req.params["userId"] as string);
+      const permissions = await roleService.getEffectivePermissions(req.user, UserIdParam.parse(req.params["userId"]));
       res.json({ data: permissions });
     } catch (err) {
       next(err);
@@ -169,8 +172,8 @@ export function rolesRouter(roleService: RoleService): Router {
   // F7-S3: the effective permissions with their origin (base, direct grant, or which role).
   router.get("/users/:userId/permission-sources", async (req, res, next) => {
     try {
-      const data = await roleService.getEffectivePermissionSources(req.user, req.params["userId"] as string);
-      res.json({ data });
+      const { suspended, permissions } = await roleService.getEffectivePermissionSources(req.user, UserIdParam.parse(req.params["userId"]));
+      res.json({ data: permissions, suspended });
     } catch (err) {
       next(err);
     }

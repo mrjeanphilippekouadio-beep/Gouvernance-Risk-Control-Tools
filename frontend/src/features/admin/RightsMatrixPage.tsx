@@ -6,7 +6,7 @@ import { FIXED_GROUP_LABELS, rolesApi, type EffectivePermission, type Permission
 import { usersApi, type DirectoryEntry } from "../../api/users";
 import { usePermissions } from "../../auth/usePermissions";
 import { AccountPicker } from "../../design-system";
-import { describeError } from "../indicators/shared";
+import { describeError, isForbidden } from "../indicators/shared";
 import "../core/CorePages.css";
 
 type Tab = "matrix" | "user";
@@ -18,6 +18,9 @@ function RightName({ code }: Readonly<{ code: string }>) {
   const label = LABELS[code];
   return label ? <>{label}<br /><small><code>{code}</code></small></> : <code>{code}</code>;
 }
+/** QA-F7S3-02: a refusal in French, never the raw server key. */
+const describeLoadError = (err: unknown) =>
+  isForbidden(err) ? "Votre compte n'a pas le droit « Voir les rôles » : la matrice des droits ne peut pas s'afficher." : describeError(err);
 const roleLabel = (r: Role) => (r.systemGroup ? `${r.name} (groupe fixe ${FIXED_GROUP_LABELS[r.systemGroup]})` : r.name);
 
 function sourceLabel(s: PermissionSource): string {
@@ -48,7 +51,7 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
         if (!live) return;
         setRoles(r); setCatalog(p); setDecisionRights(new Set(g.map((x) => x.permission)));
       })
-      .catch((err) => { if (live) setError(describeError(err)); })
+      .catch((err) => { if (live) setError(describeLoadError(err)); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [token]);
@@ -99,7 +102,7 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
       <Table columns={columns} rows={rows} rowKey={(p) => p} loading={loading} density="compact" striped
         caption="Matrice des droits par rôle" emptyMessage="Aucun droit ne correspond." />
     </Card>}
-    {tab === "user" && loaded && <UserRights token={token} canDirectory={can("user.read") || can("process.responsibility.assign") || can("designation.manage") || can("audit.mission.create")} decisionRights={decisionRights} />}
+    {tab === "user" && loaded && <UserRights token={token} canDirectory={can("user.read") || can("process.responsibility.assign") || can("designation.manage") || can("audit.mission.create") || can("role.read")} decisionRights={decisionRights} />}
   </section>;
 }
 
@@ -108,13 +111,14 @@ function UserRights({ token, canDirectory, decisionRights }: Readonly<{ token: s
   const [userId, setUserId] = useState("");
   const [held, setHeld] = useState<Role[]>([]);
   const [effective, setEffective] = useState<EffectivePermission[]>([]);
+  const [suspended, setSuspended] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canDirectory) return;
     let live = true;
-    usersApi.directory(token).then((list) => { if (live) setAccounts(list); }).catch((err) => { if (live) setError(describeError(err)); });
+    usersApi.directory(token).then((list) => { if (live) setAccounts(list); }).catch((err) => { if (live) setError(describeLoadError(err)); });
     return () => { live = false; };
   }, [token, canDirectory]);
 
@@ -122,8 +126,8 @@ function UserRights({ token, canDirectory, decisionRights }: Readonly<{ token: s
     if (!userId) return;
     let live = true;
     Promise.all([rolesApi.forUser(token, userId), rolesApi.permissionSources(token, userId)])
-      .then(([r, e]) => { if (live) { setHeld(r); setEffective([...e].sort((a, b) => a.permission.localeCompare(b.permission))); } })
-      .catch((err) => { if (live) setError(describeError(err)); })
+      .then(([r, e]) => { if (live) { setHeld(r); setSuspended(e.suspended); setEffective([...e.permissions].sort((a, b) => a.permission.localeCompare(b.permission))); } })
+      .catch((err) => { if (live) setError(describeLoadError(err)); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [token, userId]);
@@ -137,9 +141,10 @@ function UserRights({ token, canDirectory, decisionRights }: Readonly<{ token: s
 
   return <Card>
     {!canDirectory && <MessageBanner tone="info">Votre compte ne peut pas consulter l'annuaire des comptes : la liste des comptes n'est pas disponible.</MessageBanner>}
-    {canDirectory && <AccountPicker id="rights-user" label="Compte" value={userId} onChange={(id) => { setHeld([]); setEffective([]); setError(null); setLoading(Boolean(id)); setUserId(id); }} accounts={accounts} allowEmpty={false} />}
+    {canDirectory && <AccountPicker id="rights-user" label="Compte" value={userId} onChange={(id) => { setHeld([]); setEffective([]); setSuspended(false); setError(null); setLoading(Boolean(id)); setUserId(id); }} accounts={accounts} allowEmpty={false} />}
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
     {userId && !error && <>
+      {suspended && <MessageBanner tone="warning" title="Compte suspendu">Un compte suspendu ne détient aucun droit tant qu'il n'est pas réactivé.</MessageBanner>}
       <p><strong>Rôles détenus :</strong> {held.length ? held.map(roleLabel).join(", ") : "aucun"}</p>
       <Table columns={columns} rows={effective} rowKey={(e) => e.permission} loading={loading} density="compact" striped
         caption="Droits effectifs du compte et leur origine" emptyMessage="Aucun droit effectif." />

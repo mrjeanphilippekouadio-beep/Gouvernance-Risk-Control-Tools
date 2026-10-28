@@ -303,7 +303,8 @@ describe("RoleService", () => {
       const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read", "evidence.upload"] }, "REQ-30");
       await service.assignToUser(admin, role.id, targetUser.id, "REQ-31", "motif de test");
 
-      const sources = await service.getEffectivePermissionSources(admin, targetUser.id);
+      const { suspended, permissions: sources } = await service.getEffectivePermissionSources(admin, targetUser.id);
+      expect(suspended).toBe(false);
       const of = (p: string) => sources.find((s) => s.permission === p)?.sources;
 
       expect(of("feedback.create")).toEqual([{ kind: "BASE" }]);
@@ -311,6 +312,16 @@ describe("RoleService", () => {
       expect(of("evidence.upload")?.map((s) => s.kind)).toEqual(["DIRECT", "ROLE"]);
       expect(of("not.a.real.permission")).toBeUndefined();
       expect(sources.map((s) => s.permission).sort()).toEqual((await service.getEffectivePermissions(admin, targetUser.id)).sort());
+    });
+
+    it("F7S3-01: a suspended account holds nothing — empty list, flagged suspended", async () => {
+      const suspendedUser: User = { ...targetUser, deletedAt: new Date() };
+      const roles = inMemoryRoleRepository();
+      const service = new RoleService(roles, inMemoryAuditRepository(), inMemoryUserRepository([suspendedUser]));
+      const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-40");
+      await roles.assignToUser("tenant-1", role.id, suspendedUser.id, admin.userId); // granted before the suspension
+      expect(await service.getEffectivePermissionSources(admin, suspendedUser.id)).toEqual({ suspended: true, permissions: [] });
+      expect(await service.getEffectivePermissions(admin, suspendedUser.id)).toEqual([]);
     });
 
     it("F7-S3: origins require role.read", async () => {

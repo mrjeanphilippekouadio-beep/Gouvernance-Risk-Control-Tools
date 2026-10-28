@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
  *    The test leaves the database in the full 071 state.
  */
 const DIR = join(__dirname, "..", "..", "database", "postgresql", "migrations");
-const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077"] as const;
+const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078"] as const;
 const up = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && !f.endsWith(".down.sql"))!;
 const down = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && f.endsWith(".down.sql"))!;
 const read = (f: string) => readFileSync(join(DIR, f), "utf8");

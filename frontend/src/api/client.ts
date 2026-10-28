@@ -54,6 +54,8 @@ export interface ApiResponse<T> {
   pendingRequest?: unknown;
   /** q178: the Risk Manager vacancy sent next to the designations (GET /governance-designations). */
   riskManagerVacancy?: unknown;
+  /** F7S3-01: the account is suspended, so it holds no right (GET /roles/users/:id/permission-sources). */
+  suspended?: boolean;
 }
 
 type DeniedListener = (permission: string) => void;
@@ -104,7 +106,8 @@ export async function apiRequestFull<T>(path: string, options: RequestOptions): 
   if (res.status === 204) return { data: undefined as T, status: 204 };
   const payload = await res.json();
   return { data: payload.data as T, status: res.status, ...(payload.pendingRequest !== undefined ? { pendingRequest: payload.pendingRequest } : {}),
-    ...(payload.riskManagerVacancy !== undefined ? { riskManagerVacancy: payload.riskManagerVacancy } : {}) };
+    ...(payload.riskManagerVacancy !== undefined ? { riskManagerVacancy: payload.riskManagerVacancy } : {}),
+    ...(payload.suspended !== undefined ? { suspended: payload.suspended === true } : {}) };
 }
 
 /** Same as `apiRequestFull` but returns only `data` (the common case). */

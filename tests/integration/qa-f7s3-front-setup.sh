@@ -1,6 +1,6 @@
 #!/bin/bash
 # OUTILLAGE DE TEST (QA F7-S3). Cluster PostgreSQL 16 LOCAL jetable (jamais Neon) pour qa-f7s3-front-playwright.mjs.
-# Usage : qa-f7s3-front-setup.sh up   -> initdb (si absent) + start + base grc_qa_f7s3 (migrations 001..077 par psql) + comptes
+# Usage : qa-f7s3-front-setup.sh up   -> initdb (si absent) + start + base grc_qa_f7s3 (migrations 001..078 par psql) + comptes
 #         qa-f7s3-front-setup.sh down -> arret du cluster et suppression du dossier.
 # Root : initdb/pg_ctl via setpriv (utilisateur postgres). TCP 127.0.0.1:55437 seulement.
 export PGHOST=127.0.0.1 PGPORT=55437 PGUSER=postgres
@@ -40,10 +40,13 @@ N=$(u qa-f7s3-n@f7s3.test "Sans Droit QA" "")
 C=$(u qa-f7s3-c@f7s3.test "Cible Droits QA" "risk.read")
 S=$(u qa-f7s3-s@f7s3.test "Suspendu Droits QA" "risk.read")
 $P -c "update users set deleted_at=now() where id='$S'"
+# q187 (DECISION-097) : R, membre du seul groupe fixe Risk Manager (role.read par le groupe, aucun droit direct).
+R=$(u qa-f7s3-r@f7s3.test "Risk Manager Droits QA" "")
+$P -c "insert into user_roles (tenant_id,role_id,user_id,granted_by) select '$T', r.id, '$R', '$A' from roles r where r.tenant_id='$T' and r.system_group='RISK_MANAGER'"
 $P -c "insert into roles (tenant_id,name,permissions) values ('$T','Analyste QA','{risk.read,control.read}')"
 $P -c "insert into roles (tenant_id,name,permissions,deleted_at) values ('$T','Role desactive QA','{audit.read}',now())"
 $P -c "insert into user_roles (tenant_id,role_id,user_id,granted_by) select '$T', r.id, '$C', '$A' from roles r where r.tenant_id='$T' and (r.name in ('Analyste QA','Role desactive QA') or r.system_group='RISK_COMMITTEE')"
 # Autre tenant : un compte que l'admin ne doit jamais atteindre.
 T2=$($P -c "insert into tenants (name) values ('Autre tenant QA') returning id" | head -1)
 O=$($P -c "insert into users (tenant_id,email,display_name,roles) values ('$T2','qa-f7s3-o@f7s3.test','Autre Tenant QA','{risk.read}') returning id")
-printf 'tenant=%s\nA=%s\nN=%s\nC=%s\nS=%s\nT2=%s\nO=%s\n' "$T" "$A" "$N" "$C" "$S" "$T2" "$O"
+printf 'tenant=%s\nA=%s\nN=%s\nC=%s\nS=%s\nR=%s\nT2=%s\nO=%s\n' "$T" "$A" "$N" "$C" "$S" "$R" "$T2" "$O"

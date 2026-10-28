@@ -466,3 +466,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - q181 : `latestAloneReview` (dépôt) ; un précédent encore ouvert n'est pas un renouvellement (le 409 du dépôt reste prioritaire, sinon un test PG passait de 409 à 400). Marqueur `principle.acceptance.renewedWithoutReview`.
 - q179 : `governanceRightAllowedOn` dans `assertRolePermissionRules` (rôle ordinaire refusé, Audit = revue seule) ; `PUT /roles/governance-rights` passe par `update` (RM/Comité) ou le circuit Audit (peut être PENDING, 202). Choix non tranché par le PO : au moins un groupe par droit (refus si vide). Données existantes non nettoyées (aucune migration n'a donné ces droits à un rôle ordinaire).
 - Bases PG locales : socket dans `/tmp/pgXXX` (chemin du scratchpad trop long pour un socket Unix > 107 octets). Échecs PG préexistants (déjà sur HEAD) : QA-panel-pg:543 et QA-panel2-pg:995 attendent ValidationError, reçoivent ForbiddenError (auto-désignation).
+
+## 2026-10-28 — F7-S3 corrections (F7S3-01, QA-F7S3-01/02) + q187
+
+- Toute vue « droits effectifs » doit suivre la résolution d'identité : un compte suspendu (`deleted_at`) ne détient rien → liste vide + `suspended: true` (200, pas 404 : le compte existe). `UserRepository.getById` ne filtre pas `deleted_at`, c'est au service de le faire.
+- Identifiant en paramètre de route : `z.guid().parse(req.params[...])` (ZodError → 400 via errorHandler), sinon PostgreSQL renvoie 22P02 → 500.
+- Un champ hors `data` dans une réponse (ex. `suspended`) doit être ajouté à `apiRequestFull`/`ApiResponse` côté front, qui ne recopie que les champs connus.
+- `DIRECTORY_PERMISSIONS` (UserService) : tout droit qui doit désigner ou consulter un compte précis y entre (q183 `audit.mission.create`, q187 `role.read`) ; chaque ajout repasse Privacy.

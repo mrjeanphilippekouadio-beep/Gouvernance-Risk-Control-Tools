@@ -159,3 +159,9 @@
   avant/après dans RETURNING. Down = no-op (ne restaure pas des droits interdits) : l'avant reste dans audit_log.
 - Les listes de permissions en dur dans une migration doivent être tenues en synchro par un test statique (ici
   GOVERNANCE_DECISION_RIGHTS ↔ littéraux ARRAY de 077).
+
+## 2026-10-28 — Migration 078 (q187, DECISION-097) : role.read au groupe Risk Manager
+
+- Ajout d'un droit à un groupe fixe existant = constante `FIXED_GROUP_PERMISSIONS` + migration qui complète les groupes existants (tous, supprimés compris), avec une ligne `audit_log` PERMISSION_CHANGE par groupe, signée par un compte technique suspendu `migration-NNN@system.invalid` (un par migration : le nom affiché dit quelle migration a agi ; `isSystemAccount` reconnaît le domaine). Le `.down` retire le droit et l'audite aussi (`request_id 'migration:078:down'`).
+- Épingles à mettre à jour à chaque nouvelle migration : `QA-panel-migrations` / `QA-panel2-migrations` (série + max), et pour un droit de groupe fixe `B8ter` (`addedByNNN`) + la regex de `QA-B6a` qui recopie l'expression de B8ter.
+- Test up/down/up : sur une copie `create database … template …` de la base de test, jamais sur la base qu'un parcours navigateur réutilise.

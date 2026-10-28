@@ -27,6 +27,8 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "config.selfvalidation.approve",
     "governanceexception.review", "governanceprinciple.accept", "governanceprinciple.acceptance.confirm",
     "governanceprinciple.acceptance.revoke",
+    // q187 (DECISION-097, migration 078): read-only rights matrix, also without an internal audit department.
+    "role.read",
   ],
   RISK_COMMITTEE: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",

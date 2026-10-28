@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, apiRequestFull } from "./client";
 
 export interface Role {
   id: string;
@@ -49,8 +49,11 @@ export const rolesApi = {
 
   /** F7-S3: a user's held roles and effective permissions with their origin (role.read). */
   forUser: (token: string, userId: string) => apiRequest<Role[]>(`/api/v1/roles/users/${encodeURIComponent(userId)}`, { token }),
-  permissionSources: (token: string, userId: string) =>
-    apiRequest<EffectivePermission[]>(`/api/v1/roles/users/${encodeURIComponent(userId)}/permission-sources`, { token }),
+  /** A suspended account holds nothing: empty list, `suspended` true (F7S3-01). */
+  permissionSources: async (token: string, userId: string) => {
+    const r = await apiRequestFull<EffectivePermission[]>(`/api/v1/roles/users/${encodeURIComponent(userId)}/permission-sources`, { token });
+    return { permissions: r.data, suspended: r.suspended === true };
+  },
 
   grantors: (token: string, permission: string) =>
     apiRequest<Grantors>(`/api/v1/roles/grantors?permission=${encodeURIComponent(permission)}`, { token }),

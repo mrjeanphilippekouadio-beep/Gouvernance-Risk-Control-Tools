@@ -159,11 +159,19 @@ describe("QA-f7s3 permission-sources: origins", () => {
 });
 
 describe("QA-f7s3 permission-sources: account states", () => {
-  it("a suspended account (users.deleted_at set) is still answered 200 with its stored rights (observation: PostgresUserRepository.getById has no deleted_at filter)", async () => {
+  it("F7S3-01: a suspended account (users.deleted_at set) holds nothing — 200, empty list, suspended: true (the identity resolver rejects it)", async () => {
     const w = world([user(1, ["risk.read"], { deletedAt: new Date() })], [], []);
     const r = await http(w.service, reader(), sourcesPath(id(1)));
     expect(r.status).toBe(200);
-    expect(body(r).data.map((s: any) => s.permission)).toContain("risk.read");
+    expect(body(r)).toEqual({ data: [], suspended: true });
+    expect(body(await http(w.service, reader(), `/roles/users/${id(1)}/permissions`)).data).toEqual([]);
+  });
+
+  it("QA-F7S3-01: a malformed userId is a 400 on the three /roles/users/:userId routes, never a 500", async () => {
+    const w = world([user(1, [])], [], []);
+    for (const path of ["/roles/users/not-a-uuid", "/roles/users/not-a-uuid/permissions", sourcesPath("not-a-uuid")]) {
+      expect((await http(w.service, reader(), path)).status, path).toBe(400);
+    }
   });
 
   it("an account without any role row nor direct right still has exactly the base rights", async () => {
