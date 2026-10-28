@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import { Pool } from "pg";
+import { readFileSync } from "node:fs";
 import { errorHandler } from "../src/api/middleware/errorHandler.js";
 import { configRouter } from "../src/api/v1/config.routes.js";
 import { rolesRouter } from "../src/api/v1/roles.routes.js";
@@ -224,6 +225,12 @@ describe("QA-suites2 q182 governance delay requests", () => {
     expect(w.row().acceptanceMaxDays).toBe(90);
   });
 
+  it("Codex PR #199: the delays reason is capped at 500 like the request table (501 = 400, nothing written)", async () => {
+    const w = configWorld();
+    expect((await http(mount(w), author, "PUT", "/config/governance-delays", { acceptanceMaxDays: 30, reason: "x".repeat(501) })).status).toBe(400);
+    expect((await http(mount(w), author, "PUT", "/config/governance-delays", { acceptanceMaxDays: 30, reason: "x".repeat(500) })).status).toBe(200);
+  });
+
   it("HTTP: lengthening = 202 with pendingRequest and the unchanged config; shortening = 200; view needs set OR approve; unknown / foreign id", async () => {
     const w = configWorld();
     expect((await http(mount(w), author, "PUT", "/config/governance-delays", { acceptanceMaxDays: 30, reason: "init" })).status).toBe(200);
@@ -400,6 +407,13 @@ describe("QA-suites2 q179 governance decision rights", () => {
     await expect(w.service.setGovernanceRightGroups(noAudit, REVIEW, ["RISK_MANAGER", "RISK_COMMITTEE"], "Retirer à l'Audit", "q")).rejects.toThrow(ForbiddenError);
     expect(w.snapshot()).toBe(before);
     expect((await http((a) => a.use("/roles", rolesRouter(w.service)), user("x", ["role.read"]), "PUT", "/roles/governance-rights", { permission: ORG, groups: ["RISK_MANAGER"], reason: "r" })).status).toBe(403);
+  });
+
+  it("Codex PR #199: role.update without role.read moves the right AND gets its answer (no 403 after the write)", async () => {
+    const w = roleWorld();
+    await expect(w.service.setGovernanceRightGroups(user("w", ["role.update"]), ORG, ["RISK_COMMITTEE"], "Comité seul", "q"))
+      .resolves.toMatchObject({ permission: ORG, groups: ["RISK_COMMITTEE"], auditChangePending: false });
+    expect(w.holders(ORG)).toEqual(["RISK_COMMITTEE"]);
   });
 
   it("HTTP strictness: extra / attribution keys, non-right permission, blank / 501-char reason, GET shape and permission", async () => {
@@ -672,6 +686,17 @@ describe.skipIf(!HOST.startsWith("/"))("QA-suites2 q181 real PostgreSQL", () => 
   });
 });
 
+describe("Codex PR #199: every entity type the notifier reacts to is read by rowsForRequest", () => {
+  it("GovernanceNotifier entity types are all in PostgresGovernanceQueries.rowsForRequest's list", () => {
+    const src = (f: string) => readFileSync(new URL(f, import.meta.url), "utf8");
+    const notifier = src("../src/services/GovernanceNotifier.ts");
+    const queries = src("../src/infrastructure/database/postgres/PostgresGovernanceQueries.ts");
+    const types = [...new Set([...notifier.matchAll(/row\.entityType === "(\w+)"/g)].map((m) => m[1]))];
+    expect(types).toContain("GovernanceDelayRequest");
+    for (const t of types) expect(queries, t).toContain(`'${t}'`);
+  });
+});
+
 describe.skipIf(!HOST.startsWith("/"))("QA-suites2 q179 real PostgreSQL (SEC-SA2-03)", () => {
   it("setGroupPermissions: several groups + audit rows in ONE transaction; a failure on the second group rolls the first back", async () => {
     const pool = new Pool({ host: HOST, port: Number(process.env.QA_SWP_PGPORT ?? 5531), user: "postgres", database: process.env.QA_SWP_PGDB ?? "grc_qa_a08", max: 3 });
@@ -693,6 +718,12 @@ describe.skipIf(!HOST.startsWith("/"))("QA-suites2 q179 real PostgreSQL (SEC-SA2
       expect(await perms(rm)).toEqual(["risk.read"]);
       expect(await perms(com)).toEqual(["risk.read"]);
       expect(await audits()).toBe(2);
+      // Codex PR #199: membership rechecked under the user-then-role locks (actor assigned to a target group meanwhile).
+      await pool.query(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $3)`, [tenant, com, actor]);
+      await expect(repo.setGroupPermissions(tenant, [{ id: com, permissions: ["risk.read", ORG] }], audit, actor)).rejects.toThrow(ForbiddenError);
+      expect(await perms(com)).toEqual(["risk.read"]);
+      expect(await audits()).toBe(2);
+      await expect(repo.setGroupPermissions(tenant, [{ id: rm, permissions: ["risk.read", ORG] }], audit, actor)).resolves.toHaveLength(1);
     } finally {
       await pool.end();
     }

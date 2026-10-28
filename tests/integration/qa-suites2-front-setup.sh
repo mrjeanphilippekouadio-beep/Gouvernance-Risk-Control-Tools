@@ -20,4 +20,7 @@ u qa-s2-b@s2.test "Approbateur QA" "config.read,config.selfvalidation.approve"
 u qa-s2-e@s2.test "Lecteur Droits QA" "config.read,role.read"
 u qa-s2-c@s2.test "Missions QA" "audit.mission.read,audit.mission.create"
 u qa-s2-d@s2.test "Autre Compte QA" "audit.mission.read"
+u qa-s2-f@s2.test "Designations QA" "designation.manage"
+# q178 (Codex PR #199) : Risk Manager vacant depuis 70 jours (> 60 par defaut) -> bandeau « depassee » sur Designations.
+psql -Atq -d grc_qa_s2f -c "insert into audit_log (tenant_id,user_id,entity_type,entity_id,action,request_id,governance_exception,\"timestamp\") select '$T',id,'Role',gen_random_uuid(),'ROLE_CHANGE','qa-s2-vac','riskManager.vacancy',now() - interval '70 days' from users where email='qa-s2-a@s2.test'"
 echo "tenant=$T"

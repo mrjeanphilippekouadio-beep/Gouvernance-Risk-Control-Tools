@@ -746,7 +746,11 @@ export class RoleService {
   /** q179 (DECISION-095): which fixed group(s) carry each of the four governance decision rights. */
   async governanceRights(actor: AuthenticatedUser): Promise<Array<{ permission: GovernanceDecisionRight; groups: SystemGroup[] }>> {
     requirePermission(actor, "role.read");
-    const groups = (await this.roles.list(actor.tenantId)).filter((r) => r.systemGroup);
+    return this.governanceRightsOf(actor.tenantId);
+  }
+
+  private async governanceRightsOf(tenantId: string): Promise<Array<{ permission: GovernanceDecisionRight; groups: SystemGroup[] }>> {
+    const groups = (await this.roles.list(tenantId)).filter((r) => r.systemGroup);
     return GOVERNANCE_DECISION_RIGHTS.map((permission) => ({
       permission,
       groups: groups.filter((r) => r.permissions.includes(permission)).map((r) => r.systemGroup!),
@@ -823,7 +827,7 @@ export class RoleService {
       }));
       const list = direct.map((r) => ({ id: r.id, permissions: toggled(r) }));
       if (this.roles.setGroupPermissions) {
-        await this.roles.setGroupPermissions(actor.tenantId, list, rows);
+        await this.roles.setGroupPermissions(actor.tenantId, list, rows, actor.userId);
       } else {
         const after: Role[] = [];
         for (const c of list) after.push(await this.roles.update(actor.tenantId, c.id, { permissions: c.permissions }));
@@ -831,7 +835,8 @@ export class RoleService {
       }
     }
     if (auditChange && auditChangePending) await this.changeAuditGroupPermissions(actor, toggled(auditChange), requestId, why);
-    const now = (await this.governanceRights(actor)).find((r) => r.permission === permission)!;
+    // The answer to a write never needs role.read on top of role.update (Codex PR #199).
+    const now = (await this.governanceRightsOf(actor.tenantId)).find((r) => r.permission === permission)!;
     return { ...now, auditChangePending };
   }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Card, DatePicker, FormField, MessageBanner, Modal, StatusBadge } from "@djamo/design-system";
-import { governanceDesignationsApi, type DesignationKind, type GovernanceDesignation } from "../../api/governanceDesignations";
+import { governanceDesignationsApi, type DesignationKind, type GovernanceDesignation, type RiskManagerVacancy } from "../../api/governanceDesignations";
 import { usersApi, type DirectoryEntry } from "../../api/users";
 import { AccountPicker, accountName } from "../../design-system";
 import { describeError, isPermissionDenied } from "../indicators/shared";
@@ -15,6 +15,7 @@ const fmtDate = (iso: string | null) => (iso ? iso.slice(0, 10) : "—");
 /** O13 (D2c): the two designation slots. All rules (no self-designation, active account, interim end date) are the server's. */
 export function DesignationsPage({ token }: Readonly<{ token: string }>) {
   const [rows, setRows] = useState<GovernanceDesignation[]>([]);
+  const [vacancy, setVacancy] = useState<RiskManagerVacancy | null>(null);
   const [includeEnded, setIncludeEnded] = useState(false);
   const [accounts, setAccounts] = useState<DirectoryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +31,10 @@ export function DesignationsPage({ token }: Readonly<{ token: string }>) {
 
   const refresh = useCallback(async () => {
     setError(null);
-    try { setRows(await governanceDesignationsApi.list(token, includeEnded)); }
+    try {
+      const res = await governanceDesignationsApi.list(token, includeEnded);
+      setRows(res.rows); setVacancy(res.riskManagerVacancy);
+    }
     catch (err) { setError(describeError(err)); }
   }, [token, includeEnded]);
   useEffect(() => { void refresh(); }, [refresh]);
@@ -68,6 +72,11 @@ export function DesignationsPage({ token }: Readonly<{ token: string }>) {
     </div>
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
     {notice && <MessageBanner tone="success">{notice}</MessageBanner>}
+    {vacancy && <MessageBanner tone={vacancy.overdue ? "danger" : "warning"} title={vacancy.overdue ? "Vacance du Risk Manager dépassée" : "Groupe Risk Manager vacant"}>
+      Aucun Risk Manager depuis le {fmtDate(vacancy.since)}
+      {vacancy.maxDays !== null ? ` · durée maximale : ${vacancy.maxDays} jours` : " · aucune durée maximale fixée"}
+      {vacancy.overdue ? " · la durée maximale est dépassée." : "."} Un nouveau Risk Manager doit être désigné.
+    </MessageBanner>}
 
     {KINDS.map(({ kind, title, text }) => {
       const active = rows.find((r) => r.kind === kind && !r.endedAt) ?? null;

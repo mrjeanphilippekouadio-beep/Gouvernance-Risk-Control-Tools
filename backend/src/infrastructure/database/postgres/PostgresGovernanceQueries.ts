@@ -81,7 +81,7 @@ export class PostgresGovernanceQueries
        LEFT JOIN roles r ON a.entity_type = 'Role' AND r.id = a.entity_id AND r.tenant_id = a.tenant_id
        WHERE a.tenant_id = $1 AND a.request_id = $2 AND a.user_id = $3 AND a."timestamp" > now() - interval '10 minutes'
          AND (a.governance_exception IS NOT NULL
-              OR a.entity_type IN ('Role', 'OrganizationProfile', 'SelfValidationPolicyRequest', 'GovernancePrincipleAcceptance', 'GovernanceExceptionReview'))
+              OR a.entity_type IN ('Role', 'OrganizationProfile', 'SelfValidationPolicyRequest', 'GovernancePrincipleAcceptance', 'GovernanceExceptionReview', 'GovernanceDelayRequest'))
        ORDER BY a."timestamp", a.id`,
       [tenantId, requestId, actorId],
     );

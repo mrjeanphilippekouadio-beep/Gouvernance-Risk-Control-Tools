@@ -52,6 +52,8 @@ export interface ApiResponse<T> {
   status: number;
   /** Set on a 202: the change waits for a second person (e.g. PUT /config/self-validation-policy). */
   pendingRequest?: unknown;
+  /** q178: the Risk Manager vacancy sent next to the designations (GET /governance-designations). */
+  riskManagerVacancy?: unknown;
 }
 
 type DeniedListener = (permission: string) => void;
@@ -101,7 +103,8 @@ export async function apiRequestFull<T>(path: string, options: RequestOptions): 
 
   if (res.status === 204) return { data: undefined as T, status: 204 };
   const payload = await res.json();
-  return { data: payload.data as T, status: res.status, ...(payload.pendingRequest !== undefined ? { pendingRequest: payload.pendingRequest } : {}) };
+  return { data: payload.data as T, status: res.status, ...(payload.pendingRequest !== undefined ? { pendingRequest: payload.pendingRequest } : {}),
+    ...(payload.riskManagerVacancy !== undefined ? { riskManagerVacancy: payload.riskManagerVacancy } : {}) };
 }
 
 /** Same as `apiRequestFull` but returns only `data` (the common case). */

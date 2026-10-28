@@ -17,7 +17,7 @@ const UpdateCommitteeThresholdsBody = z.object({
 
 const Days = z.number().int().min(1).max(3650).nullable().optional();
 const GovernanceDelaysBody = z
-  .object({ exceptionReviewDelayDays: Days, acceptanceMaxDays: Days, policyRequestExpiryDays: Days, riskManagerVacancyMaxDays: Days, reason: reasonText(2000) })
+  .object({ exceptionReviewDelayDays: Days, acceptanceMaxDays: Days, policyRequestExpiryDays: Days, riskManagerVacancyMaxDays: Days, reason: reasonText(500) })
   .strict();
 
 const UpdateCommitteeEnforcementBody = z.object({

@@ -50,7 +50,7 @@ const { chromium } = require("playwright");
 const API = process.env.QA_API ?? "http://127.0.0.1:8099";
 const APP = process.env.QA_APP ?? "http://127.0.0.1:5199";
 const SHOTS = process.env.QA_SHOTS ?? "qa-shots/suites2";
-const EMAIL = { a: "qa-s2-a@s2.test", b: "qa-s2-b@s2.test", e: "qa-s2-e@s2.test", c: "qa-s2-c@s2.test", d: "qa-s2-d@s2.test" };
+const EMAIL = { a: "qa-s2-a@s2.test", b: "qa-s2-b@s2.test", e: "qa-s2-e@s2.test", c: "qa-s2-c@s2.test", d: "qa-s2-d@s2.test", f: "qa-s2-f@s2.test" };
 mkdirSync(SHOTS, { recursive: true });
 
 const { check, failures } = verdicts();
@@ -112,7 +112,7 @@ async function openDelays(st) {
 const LABEL = { confirm: "Confirmer l'acceptation d'un principe", review: "Revoir une action sans validation indépendante" };
 
 try {
-  for (const w of ["a", "b", "e", "c", "d"]) await login(w);
+  for (const w of ["a", "b", "e", "c", "d", "f"]) await login(w);
   const ids = {};
   for (const w of ["a", "b", "e", "c", "d"]) ids[w] = (await api(w, "GET", "/users/me")).json?.data?.id;
   check("preparation : 5 comptes connectés, identifiants lus", Object.values(ids).every(Boolean), JSON.stringify(ids));
@@ -285,6 +285,19 @@ try {
   const dBtn = await D.page.getByRole("button", { name: "Nouvelle mission" }).count();
   const dDir = await api("d", "GET", "/users/directory");
   check("3.3 D (audit.mission.read seul) : pas de bouton « Nouvelle mission » ; annuaire = 403 par l'API", dBtn === 0 && dDir.status === 403, `bouton=${dBtn}; annuaire=${dDir.status}`);
+
+  // ================================================================================================ 5. Vacance du Risk Manager (q178, Codex PR #199)
+  const F = await open("f");
+  const adm = F.page.getByRole("navigation", { name: "Navigation principale" }).locator("button.sidebar-group-toggle", { hasText: /Administration/i });
+  if ((await adm.getAttribute("aria-expanded")) !== "true") await adm.click();
+  await F.page.getByRole("navigation", { name: "Navigation principale" }).getByRole("button", { name: /^Désignations/ }).click();
+  await F.page.getByRole("heading", { name: "Désignations" }).waitFor();
+  await sleep(900);
+  const vac = (await api("f", "GET", "/governance-designations")).json?.riskManagerVacancy;
+  const fBanner = await F.notice();
+  check("5.1 API : vacance renvoyée par le serveur (depuis 70 j, limite 60, dépassée)", vac?.overdue === true && vac?.maxDays === 60, JSON.stringify(vac));
+  check("5.2 Désignations affiche « Vacance du Risk Manager dépassée », la date de début et la limite de 60 jours",
+    /Vacance du Risk Manager dépassée/.test(fBanner) && fBanner.includes(String(vac?.since ?? "").slice(0, 10)) && /60 jours/.test(fBanner) && F.jsErrors.length === 0, fBanner.slice(0, 300));
 
   const consoleOther = [...A.consoleErrors, ...B.consoleErrors];
   check("4 aucune exception JS sur tout le parcours", allJs.length === 0, allJs.join(" || ").slice(0, 300));

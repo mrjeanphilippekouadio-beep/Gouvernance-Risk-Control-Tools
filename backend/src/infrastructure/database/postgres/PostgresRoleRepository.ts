@@ -5,7 +5,7 @@ import { insertAuditEvent, runAudited } from "./PostgresAuditRepository.js";
 import type { CreateRoleInput, Role, RoleAssignment, SystemGroup, UpdateRoleInput } from "../../../domain/entities/Role.js";
 import type { Permission } from "../../../domain/permissions.js";
 import type { DashboardScopeMode } from "../../../domain/entities/DashboardScope.js";
-import { ConflictError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import type { RoleAssignRecheck, RoleUpdateRecheck } from "../../../domain/repositories/RoleRepository.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 
@@ -168,8 +168,20 @@ export class PostgresRoleRepository implements RoleRepository {
     tenantId: string,
     changes: Array<{ id: string; permissions: Permission[] }>,
     audit: (roles: Role[]) => Array<Omit<AuditEvent, "id" | "timestamp">>,
+    actorUserId?: string,
   ): Promise<Role[]> {
     return runAudited(this.pool, async (db) => {
+      if (actorUserId) {
+        // Same lock order as assignToUser (user THEN role): an assignment of the actor to a target group either
+        // committed before (seen below) or waits for this transaction.
+        await db.query(`SELECT id FROM users WHERE tenant_id = $1 AND id = $2 FOR UPDATE`, [tenantId, actorUserId]);
+        const ids = changes.map((c) => c.id).sort();
+        await db.query(`SELECT id FROM roles WHERE tenant_id = $1 AND id = ANY($2::uuid[]) ORDER BY id FOR UPDATE`, [tenantId, ids]);
+        const { rows: held } = await db.query<RoleRow>(ROLES_OF_USER_SQL, [tenantId, actorUserId]);
+        if (held.some((r) => ids.includes(r.id))) {
+          throw new ForbiddenError("You cannot change the permissions of a group you belong to — ask another admin");
+        }
+      }
       const out: Role[] = [];
       for (const c of changes) {
         const { rows } = await db.query<RoleRow>(

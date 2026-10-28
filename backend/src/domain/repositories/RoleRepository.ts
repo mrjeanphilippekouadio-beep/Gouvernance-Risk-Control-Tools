@@ -32,9 +32,15 @@ export interface RoleRepository {
   update(tenantId: string, id: string, input: UpdateRoleInput, recheck?: RoleUpdateRecheck): Promise<Role>;
   /**
    * q179 (QA-SUITES2-02): the permissions of several fixed groups and their audit rows in ONE transaction.
-   * Optional for the existing test doubles; RoleService then writes them one by one.
+   * Optional for the existing test doubles; RoleService then writes them one by one. `actorUserId`: rechecked under
+   * the user-then-role locks, the actor never belongs to a changed group (Codex PR #199).
    */
-  setGroupPermissions?(tenantId: string, changes: Array<{ id: string; permissions: Permission[] }>, audit: (roles: Role[]) => AuditToWrite[]): Promise<Role[]>;
+  setGroupPermissions?(
+    tenantId: string,
+    changes: Array<{ id: string; permissions: Permission[] }>,
+    audit: (roles: Role[]) => AuditToWrite[],
+    actorUserId?: string,
+  ): Promise<Role[]>;
   disable(tenantId: string, id: string): Promise<void>;
   /** Used by ACT-112: a role can't be disabled while a user is still actively assigned to it. */
   countActiveAssignments(tenantId: string, roleId: string): Promise<number>;

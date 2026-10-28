@@ -70,6 +70,11 @@ describe.skipIf(!HOST.startsWith("/") || !DB)("migration 073 (real PostgreSQL)",
     const rows = await q.rowsForRequest(tenant, "req-d5b", author);
     expect(rows).toHaveLength(1);
     expect(await q.rowsForRequest(tenant, "req-d5b", rev)).toEqual([]);
+    // Codex PR #199: a pending delay request (no exception marker) reaches the notifier.
+    await pool.query(
+      `INSERT INTO audit_log (tenant_id, user_id, entity_type, entity_id, action, request_id)
+       VALUES ($1, $2, 'GovernanceDelayRequest', gen_random_uuid(), 'SUBMIT', 'req-d5c')`, [tenant, author]);
+    expect((await q.rowsForRequest(tenant, "req-d5c", author)).map((r) => r.entityType)).toEqual(["GovernanceDelayRequest"]);
   });
 
   it("acceptances: pending/confirm maker-checker in base, one open per principle, expired one replaced, terminal states frozen", async () => {
