@@ -9,6 +9,10 @@ WITH changed AS (
       updated_at = now()
   FROM roles old
   WHERE old.id = r.id AND r.system_group = 'RISK_MANAGER' AND 'role.read' = ANY (r.permissions)
+    -- F7S3-06 : seulement les groupes que 078 a modifiés (audités `migration:078`), jamais ceux qui ont reçu
+    -- `role.read` à leur création (constante), qui n'ont pas de compte technique 078 et perdraient le droit sans trace.
+    AND EXISTS (SELECT 1 FROM audit_log a
+                WHERE a.tenant_id = r.tenant_id AND a.entity_id::text = r.id::text AND a.request_id = 'migration:078')
   RETURNING r.tenant_id, r.id, r.name, old.permissions AS before, r.permissions AS after
 )
 INSERT INTO audit_log (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, reason, request_id)
