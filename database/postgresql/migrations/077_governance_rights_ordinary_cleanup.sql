@@ -1,5 +1,5 @@
 -- 077 — q186 (DECISION-096) : retirer les 4 droits de décision de gouvernance (q179) des rôles ordinaires
--- (system_group IS NULL) et des droits directs `users.roles`, avec une ligne d'audit_log par rôle / compte modifié.
+-- (system_group IS NULL, y compris supprimés : un rôle restauré ne doit pas les retrouver, SEC-077-02) et des droits directs `users.roles`, avec une ligne d'audit_log par rôle / compte modifié.
 -- Depuis q179 ils ne peuvent plus y être ajoutés (RoleService), mais un administrateur a pu le faire avant :
 -- ces droits comptaient encore comme approbateurs (PostgresGovernanceQueries.existsOther, SEC-SA2-02).
 -- Liste identique à GOVERNANCE_DECISION_RIGHTS (backend/src/domain/fixedGroupPermissions.ts, un test garde la synchro).
@@ -14,7 +14,7 @@ INSERT INTO users (tenant_id, email, display_name, roles, deleted_at)
 SELECT t.tenant_id, 'migration-077@system.invalid', 'Système (migration 077)', '{}', now()
 FROM (
   SELECT tenant_id FROM roles
-  WHERE deleted_at IS NULL AND system_group IS NULL
+  WHERE system_group IS NULL
     AND permissions && ARRAY['config.selfvalidation.approve', 'governanceprinciple.acceptance.confirm', 'governanceexception.review', 'orgprofile.approve']::text[]
   UNION
   SELECT tenant_id FROM users
@@ -30,7 +30,7 @@ WITH changed AS (
         ORDER BY i),
       updated_at = now()
   FROM roles old
-  WHERE old.id = r.id AND r.deleted_at IS NULL AND r.system_group IS NULL
+  WHERE old.id = r.id AND r.system_group IS NULL
     AND r.permissions && ARRAY['config.selfvalidation.approve', 'governanceprinciple.acceptance.confirm', 'governanceexception.review', 'orgprofile.approve']::text[]
   RETURNING r.tenant_id, r.id, r.name, old.permissions AS before, r.permissions AS after
 )

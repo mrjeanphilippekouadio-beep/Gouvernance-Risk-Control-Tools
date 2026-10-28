@@ -11,6 +11,7 @@ import type { SystemGroup } from "../domain/entities/Role.js";
 import type { Permission } from "../domain/permissions.js";
 import { canonicalId } from "../domain/ids.js";
 import { isAcceptableReason } from "../domain/governance/selfValidation.js";
+import { isSystemAccount } from "../domain/systemAccounts.js";
 
 /** B-8 bis (q43): user sheet with the fixed groups. riskManagerAndCommittee is now a forbidden cumul (q94): kept only to flag pre-existing ones. */
 export interface UserDetail extends User {
@@ -235,6 +236,7 @@ export class UserService {
   async update(actor: AuthenticatedUser, id: string, input: UpdateUserInput, requestId: string): Promise<User> {
     requirePermission(actor, "user.update");
     const before = await this.get(actor, id);
+    if (isSystemAccount(before)) throw new ForbiddenError("A technical account cannot be changed");
 
     if (input.displayName !== undefined && !input.displayName.trim()) {
       throw new ValidationError("displayName cannot be empty");
@@ -312,6 +314,7 @@ export class UserService {
     const before = await this.users.getById(actor.tenantId, id);
     if (!before) throw new NotFoundError("User", id);
     if (!before.deletedAt) throw new ValidationError("User is not suspended");
+    if (isSystemAccount(before)) throw new ForbiddenError("A technical account cannot be reactivated");
     // q94: refuse to revive a forbidden Risk Manager cumul (Committee / Audit) that predates the rule.
     await this.roleService?.assertReactivable(actor.tenantId, id);
 
