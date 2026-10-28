@@ -13,6 +13,7 @@ import {
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import type { VisibilityResolver } from "./VisibilityResolver.js";
 
 export interface KpiWithStatus extends Kpi {
   status: KpiStatus;
@@ -37,6 +38,8 @@ export class KpiService {
     private readonly departments: DepartmentRepository,
     private readonly processes: ProcessRepository,
     private readonly audit: AuditRepository,
+    /** DECISION-100 (lot V0): optional — absent, reads are not filtered (tests, internal callers). Wired in server.ts. */
+    private readonly visibility?: VisibilityResolver,
   ) {}
 
   async create(
@@ -72,7 +75,8 @@ export class KpiService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<KpiWithStatus> {
     requirePermission(actor, "kpi.read");
-    const kpi = await this.requireKpi(actor.tenantId, id);
+    const kpi = await this.kpis.getById(actor.tenantId, id, await this.visibility?.resolve(actor));
+    if (!kpi) throw new NotFoundError("Kpi", id);
     return this.withStatus(actor.tenantId, kpi);
   }
 
@@ -84,7 +88,7 @@ export class KpiService {
    */
   async list(actor: AuthenticatedUser, filters?: KpiListFilters): Promise<KpiWithStatus[]> {
     requirePermission(actor, "kpi.read");
-    const kpis = await this.kpis.list(actor.tenantId, filters);
+    const kpis = await this.kpis.list(actor.tenantId, filters, await this.visibility?.resolve(actor));
     return Promise.all(kpis.map((kpi) => this.withStatus(actor.tenantId, kpi)));
   }
 

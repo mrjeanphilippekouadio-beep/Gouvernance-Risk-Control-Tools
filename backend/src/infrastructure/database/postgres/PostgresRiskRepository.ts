@@ -1,4 +1,6 @@
 import type { Pool } from "pg";
+import { visibilityClause } from "./visibilityFilter.js";
+import type { ReadScope } from "../../../domain/visibility.js";
 import type { RiskRepository } from "../../../domain/repositories/RiskRepository.js";
 import type { CreateRiskInput, Risk, UpdateRiskInput } from "../../../domain/entities/Risk.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
@@ -43,9 +45,9 @@ function toDomain(row: RiskRow): Risk {
 export class PostgresRiskRepository implements RiskRepository {
   constructor(private readonly pool: Pool) {}
 
-  async getById(tenantId: string, id: string): Promise<Risk | null> {
+  async getById(tenantId: string, id: string, scope?: ReadScope): Promise<Risk | null> {
     const { rows } = await this.pool.query<RiskRow>(
-      `SELECT * FROM risks WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
+      `SELECT * FROM risks WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL ${visibilityClause(scope)}`,
       [tenantId, id],
     );
     return rows[0] ? toDomain(rows[0]) : null;
@@ -69,6 +71,7 @@ export class PostgresRiskRepository implements RiskRepository {
       processIds?: string[];
       ids?: string[];
     },
+    scope?: ReadScope,
   ): Promise<Risk[]> {
     const statusFilter = options?.includeArchived ? "" : "AND status <> 'ARCHIVED'";
     const params: unknown[] = [tenantId];
@@ -98,7 +101,7 @@ export class PostgresRiskRepository implements RiskRepository {
 
     const { rows } = await this.pool.query<RiskRow>(
       `SELECT * FROM risks
-       WHERE tenant_id = $1 AND deleted_at IS NULL ${statusFilter} ${ownerFilter} ${scopeFilter}
+       WHERE tenant_id = $1 AND deleted_at IS NULL ${statusFilter} ${ownerFilter} ${scopeFilter} ${visibilityClause(scope)}
        ORDER BY created_at DESC`,
       params,
     );

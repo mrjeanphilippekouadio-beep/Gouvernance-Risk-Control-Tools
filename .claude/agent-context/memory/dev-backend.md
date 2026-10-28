@@ -473,3 +473,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Identifiant en paramètre de route : `z.guid().parse(req.params[...])` (ZodError → 400 via errorHandler), sinon PostgreSQL renvoie 22P02 → 500.
 - Un champ hors `data` dans une réponse (ex. `suspended`) doit être ajouté à `apiRequestFull`/`ApiResponse` côté front, qui ne recopie que les champs connus.
 - `DIRECTORY_PERMISSIONS` (UserService) : tout droit qui doit désigner ou consulter un compte précis y entre (q183 `audit.mission.create`, q187 `role.read`) ; chaque ajout repasse Privacy.
+
+## 2026-10-28 — Visibilité V0 (DECISION-100/102/103, feat/r1-visibility-v0)
+- Point unique de filtre : `infrastructure/database/postgres/visibilityFilter.ts` (`visibilityClause(scope)`), appelé dans
+  getById/list des 5 racines (risks, controls, anomalies, action_plans, kpis). Pas de scope = pas de filtre (lectures internes).
+- `VisibilityResolver` (paramètre de constructeur optionnel, en dernier) : RM/Comité/Audit → `{ all: true }`, sinon
+  `{ all: false }` = CLIENT seulement. Les services passent le scope uniquement dans leurs `get`/`list` publics (et donc
+  aussi dans `update` qui relit via `get`). V1 élargira `{ all: false }` (périmètre + accès accordés), enfants hérités.
+- Piège numérotation : 080 posé avec 079 réservé ailleurs → les tests de contiguïté (QA-B8quater, QA-panel2) échouent
+  tant que 079 n'existe pas. Ne jamais les affaiblir : fusionner 079 d'abord ou renuméroter.

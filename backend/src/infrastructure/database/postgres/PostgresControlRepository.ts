@@ -1,4 +1,6 @@
 import type { Pool, PoolClient } from "pg";
+import { visibilityClause } from "./visibilityFilter.js";
+import type { ReadScope } from "../../../domain/visibility.js";
 import type { ControlRepository } from "../../../domain/repositories/ControlRepository.js";
 import type {
   Control,
@@ -113,9 +115,9 @@ async function replaceCoveredRisks(
 export class PostgresControlRepository implements ControlRepository {
   constructor(private readonly pool: Pool) {}
 
-  async getById(tenantId: string, id: string): Promise<Control | null> {
+  async getById(tenantId: string, id: string, scope?: ReadScope): Promise<Control | null> {
     const { rows } = await this.pool.query<ControlRow>(
-      `SELECT * FROM controls WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
+      `SELECT * FROM controls WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL ${visibilityClause(scope)}`,
       [tenantId, id],
     );
     const row = rows[0];
@@ -123,11 +125,11 @@ export class PostgresControlRepository implements ControlRepository {
     return toDomain(row, await coveredRiskIdsFor(this.pool, row.id));
   }
 
-  async list(tenantId: string, options?: { includeArchived?: boolean }): Promise<Control[]> {
+  async list(tenantId: string, options?: { includeArchived?: boolean }, scope?: ReadScope): Promise<Control[]> {
     const statusFilter = options?.includeArchived ? "" : "AND status <> 'ARCHIVED'";
     const { rows } = await this.pool.query<ControlRow>(
       `SELECT * FROM controls
-       WHERE tenant_id = $1 AND deleted_at IS NULL ${statusFilter}
+       WHERE tenant_id = $1 AND deleted_at IS NULL ${statusFilter} ${visibilityClause(scope)}
        ORDER BY created_at DESC`,
       [tenantId],
     );

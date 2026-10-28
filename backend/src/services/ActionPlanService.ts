@@ -24,6 +24,7 @@ import {
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import type { VisibilityResolver } from "./VisibilityResolver.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 import type { NotificationService } from "./NotificationService.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
@@ -115,6 +116,8 @@ export class ActionPlanService {
     private readonly notifications?: NotificationService,
     /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
     private readonly selfValidation?: SelfValidationGate,
+    /** DECISION-100 (lot V0): optional — absent, reads are not filtered (tests, internal callers). Wired in server.ts. */
+    private readonly visibility?: VisibilityResolver,
   ) {}
 
   /** Best effort: recipient = the action's responsible user only (risk owner / superior not wired, see handoff). */
@@ -229,7 +232,7 @@ export class ActionPlanService {
 
   async list(actor: AuthenticatedUser, filters?: ActionPlanListFilters): Promise<ActionPlanView[]> {
     requirePermission(actor, "actionplan.read");
-    const rows = await this.actions.list(actor.tenantId, filters);
+    const rows = await this.actions.list(actor.tenantId, filters, await this.visibility?.resolve(actor));
     return rows.map((row) => this.toView(row));
   }
 
@@ -499,7 +502,7 @@ export class ActionPlanService {
   }
 
   private async getRaw(actor: AuthenticatedUser, id: string): Promise<ActionPlan> {
-    const action = await this.actions.getById(actor.tenantId, id);
+    const action = await this.actions.getById(actor.tenantId, id, await this.visibility?.resolve(actor));
     if (!action) throw new NotFoundError("ActionPlan", id);
     return action;
   }

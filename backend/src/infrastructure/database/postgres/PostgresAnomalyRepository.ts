@@ -1,4 +1,6 @@
 import type { Pool } from "pg";
+import { visibilityClause } from "./visibilityFilter.js";
+import type { ReadScope } from "../../../domain/visibility.js";
 import type { AnomalyRepository } from "../../../domain/repositories/AnomalyRepository.js";
 import type {
   Anomaly,
@@ -51,19 +53,19 @@ function toDomain(row: AnomalyRow): Anomaly {
 export class PostgresAnomalyRepository implements AnomalyRepository {
   constructor(private readonly pool: Pool) {}
 
-  async getById(tenantId: string, id: string): Promise<Anomaly | null> {
+  async getById(tenantId: string, id: string, scope?: ReadScope): Promise<Anomaly | null> {
     const { rows } = await this.pool.query<AnomalyRow>(
-      `SELECT * FROM anomalies WHERE tenant_id = $1 AND id = $2`,
+      `SELECT * FROM anomalies WHERE tenant_id = $1 AND id = $2 ${visibilityClause(scope)}`,
       [tenantId, id],
     );
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
-  async list(tenantId: string, options?: { status?: AnomalyStatus }): Promise<Anomaly[]> {
+  async list(tenantId: string, options?: { status?: AnomalyStatus }, scope?: ReadScope): Promise<Anomaly[]> {
     const statusFilter = options?.status ? "AND status = $2" : "";
     const params = options?.status ? [tenantId, options.status] : [tenantId];
     const { rows } = await this.pool.query<AnomalyRow>(
-      `SELECT * FROM anomalies WHERE tenant_id = $1 ${statusFilter} ORDER BY observed_at DESC`,
+      `SELECT * FROM anomalies WHERE tenant_id = $1 ${statusFilter} ${visibilityClause(scope)} ORDER BY observed_at DESC`,
       params,
     );
     return rows.map(toDomain);

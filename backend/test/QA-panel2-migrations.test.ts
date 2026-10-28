@@ -15,7 +15,7 @@ import { Pool } from "pg";
  *   QA_PANEL_MIGHOST (unix socket dir), QA_PANEL_MIGDB (= full 073 database) and QA_PANEL_REFDB (= database built with 001..065).
  */
 const DIR = join(__dirname, "..", "..", "database", "postgresql", "migrations");
-const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078"] as const;
+const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "080"] as const;
 const files = readdirSync(DIR);
 const up = (n: string) => files.find((f) => f.startsWith(`${n}_`) && !f.endsWith(".down.sql"))!;
 const down = (n: string) => files.find((f) => f.startsWith(`${n}_`) && f.endsWith(".down.sql"))!;

@@ -1,11 +1,13 @@
 import type { ActionLink, ActionPlan, ActionPlanListFilters, CreateActionPlanInput } from "../entities/ActionPlan.js";
+import type { ReadScope } from "../visibility.js";
 import type { TransactionalAudit } from "../entities/RiskFramework.js";
 
 export interface ActionPlanRepository {
   /** DECISION-079: true when `close` inserts the events given by `audit` in the SAME transaction. Absent = the service records the audit after (test fakes). */
   readonly auditsInTransaction?: boolean;
-  getById(tenantId: string, id: string): Promise<ActionPlan | null>;
-  list(tenantId: string, filters?: ActionPlanListFilters): Promise<ActionPlan[]>;
+  /** `scope` (DECISION-100): the reader's visibility; omitted for internal reads (no filter). */
+  getById(tenantId: string, id: string, scope?: ReadScope): Promise<ActionPlan | null>;
+  list(tenantId: string, filters?: ActionPlanListFilters, scope?: ReadScope): Promise<ActionPlan[]>;
   create(input: CreateActionPlanInput): Promise<ActionPlan>;
   /** ACT-191: narrow — sets progressPercent + the latest progress comment only, never a generic field-by-field update. */
   updateProgress(tenantId: string, id: string, progressPercent: number, comment: string | null): Promise<ActionPlan>;

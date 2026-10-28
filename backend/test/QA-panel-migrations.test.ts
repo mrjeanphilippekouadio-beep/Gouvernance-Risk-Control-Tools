@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
  *    The test leaves the database in the full 071 state.
  */
 const DIR = join(__dirname, "..", "..", "database", "postgresql", "migrations");
-const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078"] as const;
+const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "080"] as const;
 const up = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && !f.endsWith(".down.sql"))!;
 const down = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && f.endsWith(".down.sql"))!;
 const read = (f: string) => readFileSync(join(DIR, f), "utf8");
@@ -59,7 +59,7 @@ describe("QA-panel migrations 066-071 (static)", () => {
         expect(header, `${up(n)} ${m[1]}`).toMatch(/SET\s+search_path\s*=\s*pg_catalog,\s*public,\s*pg_temp\b/i);
       }
     }
-    expect(functions).toBe(15); // 068 x3, 070 x2 (guard + truncate guard), 071 x2, 072 x2, 073 x4, 076 x2
+    expect(functions).toBe(17); // 068 x3, 070 x2 (guard + truncate guard), 071 x2, 072 x2, 073 x4, 076 x2, 080 x2
   });
 
   it("066 adds the audit column without touching existing audit rows (no UPDATE/DELETE on audit_log)", () => {

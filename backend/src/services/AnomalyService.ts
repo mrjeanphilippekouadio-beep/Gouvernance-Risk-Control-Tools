@@ -7,6 +7,7 @@ import type { Anomaly, AnomalyStatus, CreateAnomalyInput } from "../domain/entit
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import type { VisibilityResolver } from "./VisibilityResolver.js";
 
 /**
  * Rules ported from apps-script-legacy/14_Anomalies.gs: unlike
@@ -28,6 +29,8 @@ export class AnomalyService {
     private readonly controls?: ControlRepository,
     private readonly controlExecutions?: ControlExecutionRepository,
     private readonly risks?: RiskRepository,
+    /** DECISION-100 (lot V0): optional — absent, reads are not filtered (tests, internal callers). Wired in server.ts. */
+    private readonly visibility?: VisibilityResolver,
   ) {}
 
   async create(
@@ -81,14 +84,14 @@ export class AnomalyService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<Anomaly> {
     requirePermission(actor, "anomaly.read");
-    const anomaly = await this.anomalies.getById(actor.tenantId, id);
+    const anomaly = await this.anomalies.getById(actor.tenantId, id, await this.visibility?.resolve(actor));
     if (!anomaly) throw new NotFoundError("Anomaly", id);
     return anomaly;
   }
 
   async list(actor: AuthenticatedUser, status?: AnomalyStatus): Promise<Anomaly[]> {
     requirePermission(actor, "anomaly.read");
-    return this.anomalies.list(actor.tenantId, { status });
+    return this.anomalies.list(actor.tenantId, { status }, await this.visibility?.resolve(actor));
   }
 
   async updateStatus(
