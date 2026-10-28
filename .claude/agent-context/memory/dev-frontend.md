@@ -153,3 +153,10 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - Navigation : `NavItem.requires` masque une entrée sans la permission (usePermissions dans Sidebar). Seule la matrice l'utilise ; les autres entrées restent visibles (403 côté écran).
 - `FIXED_GROUP_LABELS` vit dans `api/roles.ts` (partagé avec GovernanceSettingsPage).
 - Toutes ces routes exigent `role.read`, que le groupe Audit n'a pas : ouverture à l'Audit = décision PO.
+
+## F7-S6 — gestion complète des KRI (2026-10-28, branche feat/r1-f7-s6)
+- On étend `features/indicators/KriPage.tsx` plutôt que de créer un écran : la liste vient de `GET /kris/dashboard` (statut, dernier relevé, département calculés par le serveur ; filtres statut / département / entité / période côté serveur, filtre risque principal en affichage seul).
+- Fiche : `GET /kris/:id` porte désormais `coveredRiskIds` (seul ajout backend) ; « Risques couverts » = `POST /kris/:id/risks` (remplace l'ensemble, risque principal fixé à la création) ; « Désactiver » = `PATCH /kris/:id/disable` sous `kri.delete`, motif obligatoire, jamais via `active: false`.
+- Boutons masqués par permission (create : nouveau KRI et saisie de mesure ; update : modifier, risques couverts ; delete : désactiver) ; entrée « KRI » avec `requires: "kri.read"`.
+- Le filtre département disparaît sans `department.read` (403 → pas de liste).
+- Build en worktree : `npm install` à la racine puis `npm run build` dans `packages/design-system` avant le build frontend (sinon `styles.css` introuvable).

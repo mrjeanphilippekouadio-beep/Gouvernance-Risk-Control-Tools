@@ -23,6 +23,25 @@ export interface Kri {
   latestMeasureDate: string | null;
 }
 
+/** GET /kris/dashboard row: departmentId is resolved by the server from the primary risk. */
+export interface KriDashboardRow extends Kri {
+  departmentId: string | null;
+}
+
+/** GET /kris/:id also returns the additional covered risks (ACT-136). */
+export interface KriDetail extends Kri {
+  coveredRiskIds: string[];
+}
+
+/** Server-side filters of GET /kris/dashboard (status is computed by the server). */
+export interface KriDashboardFilters {
+  status?: KriStatus;
+  departmentId?: string;
+  entity?: string;
+  from?: string;
+  to?: string;
+}
+
 export interface KriInput {
   label: string;
   formula: string;
@@ -107,6 +126,17 @@ const enc = encodeURIComponent;
 
 export const krisApi = {
   list: (token: string) => apiRequest<Kri[]>("/api/v1/kris", { token }),
+  dashboard: (token: string, filters: KriDashboardFilters) => {
+    const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][]).toString();
+    return apiRequest<KriDashboardRow[]>(`/api/v1/kris/dashboard${query ? `?${query}` : ""}`, { token });
+  },
+  get: (token: string, id: string) => apiRequest<KriDetail>(`/api/v1/kris/${enc(id)}`, { token }),
+  /** Replaces the additional covered risks (the primary risk stays fixed); needs kri.update. */
+  setCoveredRisks: (token: string, id: string, riskIds: string[]) =>
+    apiRequest<{ riskId: string; coveredRiskIds: string[] }>(`/api/v1/kris/${enc(id)}/risks`, { method: "POST", body: { riskIds }, token }),
+  /** Terminal: soft-delete with a mandatory reason; needs kri.delete. */
+  disable: (token: string, id: string, reason: string) =>
+    apiRequest<{ status: string }>(`/api/v1/kris/${enc(id)}/disable`, { method: "PATCH", body: { reason }, token }),
   create: (token: string, input: KriInput & { riskId: string }) =>
     apiRequest<Kri>("/api/v1/kris", { method: "POST", body: input, token }),
   update: (token: string, id: string, input: Partial<KriInput>) =>

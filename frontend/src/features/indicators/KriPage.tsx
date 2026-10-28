@@ -3,12 +3,16 @@ import { Button, Card, FormField, LineChart, MessageBanner, StatusBadge, Table, 
 import {
   krisApi,
   type IndicatorFrequency,
-  type Kri,
+  type KriDashboardFilters,
+  type KriDashboardRow,
+  type KriDetail,
   type KriInput,
   type KriMeasure,
   type KriStatus,
 } from "../../api/indicators";
 import { risksApi, type Risk } from "../../api/risks";
+import { departmentsApi, type DepartmentSummary } from "../../api/departments";
+import { usePermissions } from "../../auth/usePermissions";
 import {
   FormModal,
   FREQUENCY_LABELS,
@@ -42,7 +46,16 @@ const EMPTY_MEASURE: MeasureForm = { measureDate: "", value: "", source: "", com
 const nullable = (value: string) => value.trim() || null;
 
 export function KriPage({ token }: { token: string }) {
-  const [rows, setRows] = useState<Kri[]>([]);
+  const { can } = usePermissions(token);
+  const [rows, setRows] = useState<KriDashboardRow[]>([]);
+  const [filters, setFilters] = useState<KriDashboardFilters>({});
+  const [riskFilter, setRiskFilter] = useState("");
+  const [departments, setDepartments] = useState<DepartmentSummary[] | null>(null);
+  const [detail, setDetail] = useState<KriDetail | null>(null);
+  const [coverOpen, setCoverOpen] = useState(false);
+  const [covered, setCovered] = useState<string[]>([]);
+  const [disableOpen, setDisableOpen] = useState(false);
+  const [disableReason, setDisableReason] = useState("");
   const [risks, setRisks] = useState<Risk[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,14 +76,19 @@ export function KriPage({ token }: { token: string }) {
 
   const refresh = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setRows(await krisApi.list(token)); }
+    try { setRows(await krisApi.dashboard(token, filters)); }
     catch (err) { fail(err, setError); }
     finally { setLoading(false); }
-  }, [token, fail]);
+  }, [token, fail, filters]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   // Risk labels are a convenience: a 403/failure just falls back to the raw id.
   useEffect(() => { risksApi.list(token).then(setRisks).catch(() => setRisks([])); }, [token]);
+  // Department filter only when the directory is readable (department.read); otherwise it is hidden.
+  useEffect(() => { departmentsApi.list(token).then(setDepartments).catch(() => setDepartments(null)); }, [token]);
+
+  // Display filter on the primary risk; status/department/entity/period are filtered by the server.
+  const visibleRows = riskFilter ? rows.filter((row) => row.riskId === riskFilter) : rows;
 
   const selected = useMemo(() => rows.find((row) => row.id === selectedId) ?? null, [rows, selectedId]);
   const riskLabel = (riskId: string) => risks.find((risk) => risk.id === riskId)?.description ?? riskId;
@@ -86,8 +104,38 @@ export function KriPage({ token }: { token: string }) {
 
   useEffect(() => { if (selectedId) void loadMeasures(selectedId); else setMeasures([]); }, [selectedId, loadMeasures]);
 
+  const loadDetail = useCallback(async (kriId: string) => {
+    try { setDetail(await krisApi.get(token, kriId)); }
+    catch { setDetail(null); }
+  }, [token]);
+  useEffect(() => { if (selectedId) void loadDetail(selectedId); else setDetail(null); }, [selectedId, loadDetail]);
+
+  async function submitCovered(event: FormEvent) {
+    event.preventDefault();
+    if (!selected) return;
+    setSaving(true); setFormError(null);
+    try {
+      await krisApi.setCoveredRisks(token, selected.id, covered);
+      setCoverOpen(false);
+      await loadDetail(selected.id);
+    } catch (err) { fail(err, setFormError); if (isForbidden(err)) setCoverOpen(false); }
+    finally { setSaving(false); }
+  }
+
+  async function submitDisable(event: FormEvent) {
+    event.preventDefault();
+    if (!selected) return;
+    setSaving(true); setFormError(null);
+    try {
+      await krisApi.disable(token, selected.id, disableReason.trim());
+      setDisableOpen(false); setSelectedId(null);
+      await refresh();
+    } catch (err) { fail(err, setFormError); if (isForbidden(err)) setDisableOpen(false); }
+    finally { setSaving(false); }
+  }
+
   function openCreate() { setForm(EMPTY_FORM); setFormError(null); setFormOpen("create"); }
-  function openEdit(row: Kri) {
+  function openEdit(row: KriDashboardRow) {
     setForm({
       label: row.label, formula: row.formula, thresholdGreen: String(row.thresholdGreen), thresholdOrange: String(row.thresholdOrange),
       thresholdRed: String(row.thresholdRed), frequency: row.frequency, riskId: row.riskId, entity: row.entity ?? "",
@@ -111,7 +159,7 @@ export function KriPage({ token }: { token: string }) {
       }
       setFormOpen(null);
       await refresh();
-      if (formOpen === "edit" && selectedId) await loadMeasures(selectedId);
+      if (formOpen === "edit" && selectedId) await Promise.all([loadMeasures(selectedId), loadDetail(selectedId)]);
     } catch (err) { fail(err, setFormError); if (isForbidden(err)) setFormOpen(null); }
     finally { setSaving(false); }
   }
@@ -131,7 +179,7 @@ export function KriPage({ token }: { token: string }) {
     finally { setSaving(false); }
   }
 
-  const columns: TableColumn<Kri>[] = [
+  const columns: TableColumn<KriDashboardRow>[] = [
     { key: "label", header: "Indicateur", render: (row) => <><strong>{row.label}</strong>{!row.active && <div className="muted">Inactif</div>}<div className="muted">Risque : {riskLabel(row.riskId)}</div></> },
     { key: "status", header: "Statut", render: (row) => <StatusBadge label={STATUS[row.status].label} tone={STATUS[row.status].tone} /> },
     { key: "latest", header: "Dernière mesure", render: (row) => row.latestMeasureValue === null ? "—" : <><strong>{fmt(row.latestMeasureValue)}</strong><div className="muted">{dateOnly(row.latestMeasureDate)}</div></> },
@@ -156,22 +204,53 @@ export function KriPage({ token }: { token: string }) {
         <h1>Indicateurs de risque (KRI)</h1>
         <p className="core-page__subtitle">Seuils, dernière mesure et statut tels que calculés par le serveur. Chaque KRI est rattaché à un risque du registre.</p>
       </div>
-      <Button variant="primary" onClick={openCreate}>Nouveau KRI</Button>
+      {can("kri.create") && <Button variant="primary" onClick={openCreate}>Nouveau KRI</Button>}
     </div>
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
-    <Card header={<strong>Liste des KRI</strong>}>
-      <Table columns={columns} rows={rows} rowKey={(row) => row.id} loading={loading} emptyMessage="Aucun KRI défini pour l'instant." />
+    <Card header={<strong>Tableau de bord des KRI</strong>}>
+      <div className="core-form">
+        <FormField label="Statut" htmlFor="kri-f-status">
+          <select id="kri-f-status" value={filters.status ?? ""} onChange={(e) => setFilters({ ...filters, status: (e.target.value || undefined) as KriStatus | undefined })}>
+            <option value="">Tous</option>
+            {(Object.keys(STATUS) as KriStatus[]).map((key) => <option key={key} value={key}>{STATUS[key].label}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Risque" htmlFor="kri-f-risk">
+          <select id="kri-f-risk" value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}>
+            <option value="">Tous</option>
+            {risks.map((r) => <option key={r.id} value={r.id}>{r.description}</option>)}
+          </select>
+        </FormField>
+        {departments && <FormField label="Département" htmlFor="kri-f-dept">
+          <select id="kri-f-dept" value={filters.departmentId ?? ""} onChange={(e) => setFilters({ ...filters, departmentId: e.target.value || undefined })}>
+            <option value="">Tous</option>
+            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </FormField>}
+        <FormField label="Entité" htmlFor="kri-f-entity"><input id="kri-f-entity" value={filters.entity ?? ""} onChange={(e) => setFilters({ ...filters, entity: e.target.value || undefined })} /></FormField>
+        <FormField label="Dernière mesure du" htmlFor="kri-f-from"><input id="kri-f-from" type="date" value={filters.from ?? ""} onChange={(e) => setFilters({ ...filters, from: e.target.value || undefined })} /></FormField>
+        <FormField label="au" htmlFor="kri-f-to"><input id="kri-f-to" type="date" value={filters.to ?? ""} onChange={(e) => setFilters({ ...filters, to: e.target.value || undefined })} /></FormField>
+      </div>
+      <Table columns={columns} rows={visibleRows} rowKey={(row) => row.id} loading={loading} emptyMessage="Aucun KRI ne correspond aux filtres." />
     </Card>
 
     {selected && <Card
       header={<><strong>{selected.label}</strong> <StatusBadge label={STATUS[selected.status].label} tone={STATUS[selected.status].tone} /></>}
-      footer={<><Button onClick={() => openEdit(selected)}>Modifier</Button><Button variant="primary" onClick={() => { setMeasureForm(EMPTY_MEASURE); setFormError(null); setMeasureOpen(true); }}>Saisir une mesure</Button></>}
+      footer={<>
+        {can("kri.update") && <Button onClick={() => openEdit(selected)}>Modifier</Button>}
+        {can("kri.update") && detail && <Button onClick={() => { setCovered(detail.coveredRiskIds); setFormError(null); setCoverOpen(true); }}>Risques couverts</Button>}
+        {can("kri.delete") && <Button variant="destructive" onClick={() => { setDisableReason(""); setFormError(null); setDisableOpen(true); }}>Désactiver</Button>}
+        {can("kri.create") && <Button variant="primary" onClick={() => { setMeasureForm(EMPTY_MEASURE); setFormError(null); setMeasureOpen(true); }}>Saisir une mesure</Button>}
+      </>}
     >
       <p className="muted">Formule : {selected.formula}</p>
       {selected.description && <p className="muted">{selected.description}</p>}
       <p className="muted">
         Risque : {riskLabel(selected.riskId)} · Entité : {selected.entity ?? "—"} · Méthodologie : {selected.methodologyVersion ?? "—"}
       </p>
+      {detail && detail.id === selected.id && <p className="muted">
+        Autres risques couverts : {detail.coveredRiskIds.length === 0 ? "aucun" : detail.coveredRiskIds.map(riskLabel).join(" · ")}
+      </p>}
       {measuresError && <MessageBanner tone="danger" title="Historique indisponible">{measuresError}</MessageBanner>}
       {chronological.length > 1 && <LineChart
         labels={chronological.map((m) => dateOnly(m.measureDate))}
@@ -208,6 +287,25 @@ export function KriPage({ token }: { token: string }) {
         <FormField label="Entité" htmlFor="kri-entity"><input id="kri-entity" value={form.entity} onChange={(e) => setForm({ ...form, entity: e.target.value })} /></FormField>
         <FormField label="Version méthodologique" htmlFor="kri-method"><input id="kri-method" value={form.methodologyVersion} onChange={(e) => setForm({ ...form, methodologyVersion: e.target.value })} /></FormField>
         <FormField label="Description" htmlFor="kri-desc"><textarea id="kri-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></FormField>
+      </form>
+    </FormModal>
+
+    <FormModal open={coverOpen} onClose={() => setCoverOpen(false)} title="Risques couverts" formId="kri-cover-form" saving={saving} submitLabel="Enregistrer">
+      <form id="kri-cover-form" onSubmit={submitCovered}>
+        {formError && <MessageBanner tone="danger">{formError}</MessageBanner>}
+        <p className="muted">Le risque principal ({selected ? riskLabel(selected.riskId) : "—"}) reste fixé à la création. Cochez les autres risques que ce KRI surveille.</p>
+        {risks.filter((r) => r.status !== "ARCHIVED" && r.id !== selected?.riskId).map((r) => <label key={r.id} className="core-filter">
+          <input type="checkbox" checked={covered.includes(r.id)} onChange={(e) => setCovered(e.target.checked ? [...covered, r.id] : covered.filter((id) => id !== r.id))} /> {r.description}
+        </label>)}
+        {risks.length === 0 && <p className="muted">Aucun risque disponible (registre vide ou droit de lecture manquant).</p>}
+      </form>
+    </FormModal>
+
+    <FormModal open={disableOpen} onClose={() => setDisableOpen(false)} title="Désactiver le KRI" formId="kri-disable-form" saving={saving} submitLabel="Désactiver">
+      <form id="kri-disable-form" onSubmit={submitDisable}>
+        {formError && <MessageBanner tone="danger">{formError}</MessageBanner>}
+        <MessageBanner tone="warning">La désactivation est définitive : le KRI et son historique restent tracés, mais il ne reçoit plus de mesure.</MessageBanner>
+        <FormField label="Motif *" htmlFor="kri-disable-reason"><textarea id="kri-disable-reason" value={disableReason} onChange={(e) => setDisableReason(e.target.value)} required /></FormField>
       </form>
     </FormModal>
 

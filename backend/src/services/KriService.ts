@@ -80,10 +80,11 @@ export class KriService {
     return kri;
   }
 
-  async get(actor: AuthenticatedUser, id: string): Promise<KriWithStatus> {
+  /** F7-S6: the detail also carries the additional covered risks (ACT-136), so the screen can show and edit them. */
+  async get(actor: AuthenticatedUser, id: string): Promise<KriWithStatus & { coveredRiskIds: string[] }> {
     requirePermission(actor, "kri.read");
     const kri = await this.requireKri(actor.tenantId, id);
-    return this.withStatus(actor.tenantId, kri);
+    return { ...(await this.withStatus(actor.tenantId, kri)), coveredRiskIds: await this.kris.listCoveredRiskIds(actor.tenantId, id) };
   }
 
   async list(actor: AuthenticatedUser, filters?: KriListFilters): Promise<KriWithStatus[]> {
@@ -178,6 +179,8 @@ export class KriService {
       await this.assertRisksExist(actor.tenantId, uniqueIds);
     }
 
+    // Read the previous set before replacing it: the audit's oldValue must not be the new set.
+    const previous = await this.kris.listCoveredRiskIds(actor.tenantId, id);
     await this.kris.replaceCoveredRisks(actor.tenantId, id, uniqueIds);
 
     await this.audit.record({
@@ -186,7 +189,7 @@ export class KriService {
       entityType: "Kri",
       entityId: id,
       action: "ASSIGN",
-      oldValue: { coveredRiskIds: await this.kris.listCoveredRiskIds(actor.tenantId, id) },
+      oldValue: { coveredRiskIds: previous },
       newValue: { coveredRiskIds: uniqueIds },
       reason: null,
       requestId,

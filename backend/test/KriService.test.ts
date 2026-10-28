@@ -286,6 +286,20 @@ describe("KriService.addCoveredRisks (ACT-136)", () => {
     const kri = await service.create(actor, validInput, "REQ-18");
     await expect(service.addCoveredRisks(actor, kri.id, ["missing-risk"], "REQ-19")).rejects.toThrow(ValidationError);
   });
+
+  it("F7-S6: get returns the covered risks; replacing them audits the previous set as oldValue", async () => {
+    const kris = inMemoryKriRepository();
+    const events: Array<{ oldValue: unknown; newValue: unknown }> = [];
+    const audit = { ...inMemoryAuditRepository(), async record(e: { oldValue: unknown; newValue: unknown }) { events.push(e); } } as AuditRepository;
+    const service = new KriService(kris, inMemoryKriMeasureRepository(), fakeRiskRepository(["risk-1", "risk-2", "risk-3"]), audit);
+    const kri = await service.create(actor, validInput, "REQ-20");
+
+    await service.addCoveredRisks(actor, kri.id, ["risk-2"], "REQ-21");
+    expect((await service.get(readOnlyActor, kri.id)).coveredRiskIds).toEqual(["risk-2"]);
+    await service.addCoveredRisks(actor, kri.id, ["risk-3"], "REQ-22");
+    expect((await service.get(readOnlyActor, kri.id)).coveredRiskIds).toEqual(["risk-3"]);
+    expect(events.at(-1)).toMatchObject({ oldValue: { coveredRiskIds: ["risk-2"] }, newValue: { coveredRiskIds: ["risk-3"] } });
+  });
 });
 
 describe("KriService.dashboard (ACT-137)", () => {
