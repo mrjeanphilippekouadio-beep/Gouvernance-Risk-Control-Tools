@@ -176,3 +176,24 @@ Principe ajouté :
 Points ouverts à inscrire dans ACTION_ITEMS (non fait par A24) : R1 (PO),
 R2 (PO), R3 (PO + juriste), R6 (juriste). Relecture A15 (Compliance)
 demandée par le plan RM-V1 ligne 595.
+
+## Avis F7-S3 — annuaire ouvert à `role.read` (2026-10-28, PRIV-REV-F7S3-001)
+
+Statut : **OK AVEC RÉSERVES** (non bloquant). Document :
+`docs/privacy/review-f7s3-directory-2026-10-28.md`.
+
+- Annuaire inchangé (id + nom) ; la vraie nouveauté est la lecture des droits
+  effectifs d'un compte (`role.read`) par Audit et Risk Manager, en plus de
+  l'administration. Finalité (revue des habilitations) proportionnée.
+- Pas de journal de consultation (cohérent avec q183) ; à rouvrir si champ
+  ajouté, export, ou lecteur hors Audit/RM/administration.
+- R5 : ajouter que rôles et droits sont consultables par administration, Audit,
+  Risk Manager. Troncature à 500 plus grave pour un contrôle d'habilitations ;
+  comptes suspendus absents de l'annuaire. Lecture croisée RM sur membres Audit
+  à confirmer par Compliance/PO (séparation F-B8b-05).
+
+Principe ajouté :
+12. Un droit de lecture donné à un nouveau rôle sur des données d'habilitation
+    est une revue Privacy même si le champ de l'annuaire ne change pas : la
+    sensibilité vient de ce que l'écran en aval révèle (fonction, position dans
+    le dispositif de contrôle), pas du seul contrat d'API.
