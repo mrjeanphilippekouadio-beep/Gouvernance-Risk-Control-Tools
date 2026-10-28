@@ -1,184 +1,148 @@
-# RM-V1 — Visibilité configurable des ressources (DECISION-100)
+# RM-V1 — Visibilité configurable des ressources (DECISION-100, révisée DECISION-102)
 
-Auteur : A05 Architect, avec le regard GRC d'A13. Date : 2026-10-28. Statut : **proposition, questions PO ouvertes, aucun code**.
-Source lue : checkout principal (branche `chore/suivi-r1-f7s3`, qui contient déjà 078 / DECISION-097). Je n'ai pas pu
-basculer sur `origin/staging` (pas de shell dans cette session), donc les écarts éventuels avec staging sont à vérifier
-avant le dispatch A06. Le service du panel de gouvernance (D1-D6) n'est pas présent dans ce checkout : §1.3 le traite
-d'après sa spec (`RM-V1-Panel-Principes-Gouvernance.md`).
+Auteur : A05 Architect, avec le regard GRC d'A13. Date : 2026-10-28 (révision du même jour après DECISION-102, q190-q196).
+Statut : **modèle arrêté par le PO, 3 questions ouvertes (§8), aucun code**. Source lue : checkout principal, branche
+`chore/suivi-r1-f7s3` (contient 078 / DECISION-097). Les écarts avec `origin/staging` sont à vérifier avant le dispatch A06.
 
 ## 0. Interprétations à confirmer (principe 5)
 
-- **I-1** « Ressources de ce genre » = les objets métier du dispositif de risque créés par la 1re ligne ou le RM (liste §1.1).
-  Le référentiel (départements, processus, échelles, Dispositif, appétit) et les objets d'Audit (missions, constats)
-  n'en font **pas** partie : ils sont déjà réservés ou sont communs à tous par nature.
-- **I-2** « Restreindre » porte sur **qui peut lire**. Qui peut modifier reste régi par les permissions `*.update`, mais
-  on ne peut ni modifier ni lier une ressource qu'on ne voit pas.
-- **I-3** « Configurable » = un choix posé **sur la ressource** (à la création, modifiable ensuite avec un droit dédié).
-  Ce n'est pas seulement un périmètre de rôle comme `dashboard_scope_mode`. Les deux mécanismes coexistent (§2.5).
+- **I-1** « Ressources de ce genre » = objets métier du dispositif créés par la 1re ligne ou le RM (§1). Le référentiel
+  (départements, processus, échelles, Dispositif, appétit) et les objets d'Audit n'en font pas partie.
+- **I-2** La visibilité règle **qui peut lire**. Modifier reste régi par `*.update`, mais on ne modifie ni ne lie ce qu'on ne voit pas.
+- **I-3 (nouveau)** Au niveau « Personnes nommées », le **propriétaire** de la ressource reste toujours dans la liste
+  (il peut modifier la visibilité, q194, il doit donc voir l'objet). Département, N+1, RACI et responsable du processus
+  n'ouvrent plus l'accès à ce niveau.
+- **I-4 (nouveau, q195)** Un KPI n'a pas de risque (`kpis` : `department_id`, `process_id`, aucun `risk_id`). « Même réglage
+  que les KRI » est lu comme : le KPI porte **son propre réglage**, avec les trois mêmes niveaux et les mêmes règles.
+  Limite : `kpis.owner` est un **texte libre**, pas un compte. Pour un KPI, il n'y a donc ni propriétaire dans le périmètre
+  ni modification par le propriétaire tant que ce champ n'est pas une FK `users` (chantier séparé, A07).
+- **I-5 (nouveau, q192)** La « liste de personnes configurable » est commune aux niveaux 2 et 3. Au niveau 2, elle
+  **s'ajoute** au périmètre calculé. Au niveau 3, elle **est** le périmètre (avec le propriétaire, I-3).
 
-## 1. Inventaire
+## 1. Ressources et héritage (q193, q195)
 
-### 1.1 Ressources concernées et rattachement
-
-| Ressource | Rattachement existant | Lecture aujourd'hui |
+| Ressource | Réglage | Rattachement servant au périmètre |
 |---|---|---|
-| **Risque** (racine) | `owner_department_id`, `process_id` (jamais rétro-rempli), `owner_id`, `superior_owner_id`, RACI | `risk.read` : `GET /risks`, `/:id`, `/:id/raci`, `/:id/360`, globale au client |
-| Évaluations, décisions de traitement, escalades | `risk_id` (obligatoire) | `riskevaluation.read`, `treatmentdecision.read`, globales |
-| **KRI** + mesures | `risk_id` principal obligatoire + `kri_risks` (N-N) ; mesures → `kri_id` | `kri.read` : `/kris`, `/kris/dashboard`, globale |
-| **Contrôle** | `control_risks` (N-N), `process_id`, `department_id` propres | `control.read`, globale |
-| Exécutions, efficacité | `control_id` | `execution.read`, `effectiveness.read`, globales |
-| Preuves | `control_execution_id` (nullable) | `evidence.read` / `.download` : contrôle tenant puis Drive (patron EvidenceService) |
-| Anomalies | `risk_id`, `control_id` (nullables) | `anomaly.read`, globale |
-| Plans d'action | `source_type` RISK/CONTROL/KRI/AUDIT/INCIDENT/MANAGEMENT + `source_id`, `department_id`, `responsible_user_id` | `actionplan.read`, globale ; `/actions` (tableau) |
-| KPI (à confirmer, Q-6) | `department_id`, `process_id` propres, sans risque | `kpi.read`, globale |
+| **Risque** | propre | `owner_department_id`, `process_id`, `owner_id`, `superior_owner_id`, RACI |
+| Évaluations, décisions de traitement, escalades, **KRI** (par `risk_id` principal), mesures de KRI | suit le risque | — |
+| **Contrôle** | propre (il couvre plusieurs risques) | `department_id`, `process_id`, propriétaire s'il est un compte |
+| Exécutions, efficacité, preuves | suit le contrôle (preuve sans exécution : niveau 1) | — |
+| **Anomalie** | suit le risque, sinon le contrôle, sinon propre | `risk_id`, `control_id` |
+| **Plan d'action** | suit la source RISK/CONTROL/KRI, sinon propre | `department_id`, `responsible_user_id` |
+| **KPI** + mesures | propre (I-4) | `department_id`, `process_id` |
 
-### 1.2 Agrégats et vues transverses
+Liens N-N (`kri_risks`, `control_risks`) : seuls les identifiants visibles sont exposés. Lier vers un objet invisible
+renvoie la même erreur que vers un objet inexistant. Règle « ce qui m'est assigné » : le responsable d'un plan d'action
+ou l'exécutant d'un contrôle voit l'élément qui lui est assigné, sans voir le parent.
 
-- `dashboard.read` (risques, anomalies, conformité, propriétaire, `/department/:id`) : **global**, sans périmètre.
-- `dashboard.executive` + rapports comité / consolidé / KRI consolidé : périmètre par rôle via `DashboardScopeResolver`
-  (`roles.dashboard_scope_mode` GLOBAL | DEPARTMENT, PROCESS refusé faute de `process_id` rempli). Filtre SQL `= ANY`,
-  jamais en mémoire. C'est le seul endroit où un périmètre existe (constat INFO-03).
-- Cartographie (`cartography.read`, `/`, `/scale`, `/compare`) : globale.
-- Journal d'audit (`audit.read`, `GET /audit-logs`) : globale, et il **contient le contenu** des objets (avant/après).
-- Notifications : le titre de l'objet est dans le message.
-- Panel de gouvernance D1-D6 (`governancehealth.read`, groupes fixes seulement) : comptages sur tout le client.
-- Exports : pas de route d'export dédiée. Les rapports ci-dessus jouent ce rôle ; l'import Excel est en écriture seule.
+## 2. Modèle de données (pour A07)
 
-### 1.3 Mécanismes réutilisables
+- Colonne `visibility text NOT NULL DEFAULT 'CLIENT' CHECK (visibility IN ('CLIENT','PERIMETRE','NOMINATIF'))` sur les
+  racines : `risks`, `controls`, `anomalies`, `action_plans`, `kpis`. Les données existantes passent en `CLIENT`, ce qui
+  reproduit le comportement actuel : aucune régression, donc aucune ligne d'audit pour l'ajout de colonne.
+- Table **`resource_access_grants`** (ajout seul) : `id`, `tenant_id`, `resource_type` (CHECK RISK | CONTROL | ANOMALY |
+  ACTION_PLAN | KPI), `resource_id`, `user_id` (FK `users`), `granted_by`, `granted_at`, `grant_reason`, `revoked_at`,
+  `revoked_by`, `revoke_reason`. Index unique partiel `(tenant_id, resource_type, resource_id, user_id) WHERE revoked_at
+  IS NULL`. Révocation par `revoked_at`, jamais de `DELETE`. Pas de FK sur `resource_id` (cible polymorphe) : le service
+  vérifie l'existence, dans le client, avant d'insérer (patron EvidenceService). `granted_by` / `revoked_by` = `actor.userId`.
+- Migrations : numéro **suivant le dernier présent** au moment du lot, jamais fixé ici. Permission ajoutée au groupe
+  RISK_MANAGER par migration auditée (patron 078).
 
-1. `DashboardScopeResolver` / `RiskScope` : calcul à la lecture, jamais stocké. Les R/A et le propriétaire donnent
-   le département, les C/I donnent le processus. Ce calcul et le filtre SQL de `RiskRepository.list` se réutilisent tels quels.
-2. Groupes de département (`roles.department_id`, un par département) : appartenance via `user_roles`, auditée,
-   **sans auto-attribution** (maker-checker de `RoleService`). C'est une source d'appartenance plus fiable que
-   `users.department_id`, simple champ de fiche modifiable par `user.update`.
-3. Responsabilités de processus (069) : propriétaire, champion, N-1. Propriétaire et N+1 du risque (B-0).
-4. Groupes fixes RISK_MANAGER / RISK_COMMITTEE / AUDIT et leur classement en lignes (DECISION-098).
+## 3. Lecture : qui voit quoi
 
-## 2. Options de modèle
-
-### Option A : deux niveaux sur la ressource racine (la plus simple)
-
-- `visibility` ∈ { **CLIENT** (défaut, comportement actuel), **PERIMETRE** }.
-- Une ressource PERIMETRE est lisible par : (i) les membres du groupe du département de la ressource, (ii) les personnes
-  rattachées (propriétaire, N+1, RACI R/A/C/I, responsable du processus), (iii) les **groupes fixes** RM, Comité et Audit.
-  Si la ressource n'a ni département ni processus, seuls (ii) et (iii) la voient : on refuse l'accès plutôt que de l'ouvrir.
-- Coût : une colonne sur 4 tables racines, un résolveur et un prédicat SQL. Pas de table d'accès.
-
-### Option B : A + niveau « Personnes nommées »
-
-- Troisième valeur **NOMINATIF** : liste explicite de personnes (table `resource_access_grants`, ajout seul, révocation par
-  `revoked_at`, audit). Le département n'ouvre plus l'accès. Cas d'usage : fraude, enquête, risque RH ou juridique.
-- Coût : une table, un écran de gestion de la liste, la règle « on ne s'ajoute pas soi-même » et un passage Privacy.
-
-### Option C : périmètre de lecture par rôle généralisé + étiquette
-
-- `dashboard_scope_mode` devient un périmètre appliqué à **tous** les `*.read`, et l'étiquette A s'y ajoute. Toute
-  lecture est filtrée, même pour les ressources CLIENT.
-- Coût élevé : il change ce que voient tous les utilisateurs existants, ce qui inverse la décision « défaut = tout le client ».
-  Elle exige aussi le remplissage de `process_id`, jamais fait. Ce n'est pas ce que demande le PO (restreindre **à la création**).
-
-### 2.1 Qui choisit, qui modifie
-
-- **À la création** : celui qui crée choisit le niveau. Le formulaire propose CLIENT par défaut. Restreindre est un
-  resserrement, donc aucun droit supplémentaire n'est demandé. Le service refuse PERIMETRE (400) si le créateur
-  ne ferait lui-même pas partie du périmètre et n'est pas d'un groupe fixe, pour ne pas créer d'objet orphelin invisible.
-- **Après la création** : permission dédiée **`resourcevisibility.set`**, unique pour toutes les ressources racines,
-  attribuée au groupe RISK_MANAGER et jamais incluse dans `*.update` (convention SEC-013/014). Restreindre ou élargir
-  demande un **motif**. Élargir (PERIMETRE → CLIENT) est une divulgation : motif obligatoire, audit
-  `VISIBILITY_CHANGE` dans la même transaction (`writeAudited`).
-- Pas de champ d'attribution venant du client : la personne qui fait le changement est toujours `actor.userId`.
-
-### 2.2 Héritage
-
-| Enfant | Règle |
-|---|---|
-| Évaluation, décision de traitement, escalade, KRI (par `risk_id` principal), mesure de KRI | **suit son risque**, sans réglage propre |
-| Contrôle | **réglage propre** (il couvre plusieurs risques). La liste `coveredRiskIds` affichée ne montre que les risques visibles pour le lecteur |
-| Exécution, efficacité, preuve | suit son contrôle. Une preuve sans exécution suit le niveau CLIENT |
-| Anomalie | suit son risque, sinon son contrôle, sinon réglage propre |
-| Plan d'action | suit sa source RISK/CONTROL/KRI, sinon réglage propre (AUDIT/INCIDENT/MANAGEMENT) |
-| Liens N-N (`kri_risks`, `control_risks`) | on n'expose que les identifiants visibles ; lier vers un objet invisible renvoie la même erreur que vers un objet inexistant |
-
-Règle « ce qui m'est assigné » : le responsable d'un plan d'action ou l'exécutant d'un contrôle voit **l'élément qui lui est
-assigné**, même si le parent est restreint. Il ne voit pas le parent pour autant.
-
-### 2.3 Non-contournement (lignes de défense, DECISION-097/098)
-
-- **Voient tout** : les membres des groupes fixes **RISK_MANAGER, RISK_COMMITTEE** (2e ligne, supervision du dispositif
-  complet) et **AUDIT** (3e ligne : la charte d'audit exige un accès sans restriction, IIA). Lecture A13 : si la 2e ligne
-  n'a pas une vue complète, le profil de risque présenté au Comité est incomplet sans que personne le sache. Ce serait un
-  défaut de conception du dispositif, pas une protection.
-- **Les administrateurs ne voient pas tout du seul fait d'être administrateurs** : administrer des comptes, ce n'est pas lire le métier
-  (séparation des tâches). Le contournement « je m'ajoute au groupe du département » est déjà bloqué (pas
-  d'auto-attribution de rôle) et toute attribution est auditée.
-- **Aucun rôle ordinaire ne peut porter « voit tout »**. Le seul moyen est d'appartenir à un groupe fixe, dont la
-  composition est déjà contrôlée.
-- **Hors périmètre = 404**, comme une ressource d'un autre client, et non 403 : on ne révèle pas qu'elle existe.
-- Écritures : `assertVisible` passe **avant** toute écriture ou liaison (même patron que `EvidenceService` : la vérification
-  en base précède l'action).
-
-### 2.4 Agrégats et comptages
-
-- **Toutes les vues** (`dashboard.read`, `dashboard.executive`, rapports, cartographie, `/kris/dashboard`, `/actions`) se
-  calculent sur **ce que le lecteur voit**. Le filtre est en SQL, jamais après lecture, pour que la pagination et les
-  totaux restent cohérents. On n'affiche pas « N éléments masqués », qui révélerait leur existence.
-- Les vues exécutives ont déjà un `scopeSummary`. On y ajoute la mention « vue limitée à votre périmètre » quand le lecteur
-  n'appartient pas à un groupe fixe.
-- **Panel D1-D6** : inchangé. Il mesure le dispositif entier et n'est lu que par les groupes fixes, qui voient tout.
-  Garde-fou : si `governancehealth.read` était un jour donné à un rôle ordinaire, le panel ne montrerait que des
-  comptages, sans titre d'objet restreint.
-- **Journal d'audit** : les détails d'une ressource restreinte sont filtrés pour un porteur de `audit.read` qui n'est
-  pas d'un groupe fixe (ex. rôle « Auditeur » seedé). **Notifications** : pas de titre de ressource restreinte dans le message
-  quand un destinataire est hors du périmètre.
-
-### 2.5 Articulation avec `dashboard_scope_mode`
-
-Il y a deux couches distinctes. La visibilité dit **ce que j'ai le droit de voir**. `dashboard_scope_mode` dit **ce que la
-vue exécutive agrège pour moi**. Le résultat effectif est leur **intersection**. Aucun changement sur `dashboard_scope_mode`.
-
-### 2.6 Conception technique (pour A06/A07)
-
-- `domain/visibility.ts` : type `Visibility`, type `ReadScope` = `{ all: true } | { departmentIds, processIds,
-  riskIds, controlIds, assignedIds }`, prédicat pur `isVisible(scope, resource)` pour les tests.
-- `services/VisibilityResolver.ts` : calcule le `ReadScope` **une fois par requête**. Il reprend le calcul de
-  `DashboardScopeResolver` (RACI + propriétaire) et y ajoute les groupes de département et les groupes fixes. Comme pour
-  `Notifier`, c'est un paramètre de constructeur **optionnel** dans les services ; absent, on retombe sur `{ all: true }`,
-  donc aucun test existant ne casse.
-- Repositories : les méthodes `list*`/`getById` reçoivent un `ReadScope` optionnel et ajoutent
-  `AND (visibility = 'CLIENT' OR … = ANY($n))`. Les enfants font une jointure sur la racine.
-- Migration (numéro **suivant le dernier présent**, jamais fixé ici) : `visibility text NOT NULL DEFAULT 'CLIENT'
-  CHECK (visibility IN ('CLIENT','PERIMETRE'))` sur `risks`, `controls`, `anomalies`, `action_plans`. **Données existantes :
-  CLIENT**, ce qui reproduit le comportement actuel sans aucune régression. L'ajout de la colonne ne change la visibilité
-  de personne et ne demande donc pas de ligne d'audit. Permission `resourcevisibility.set` ajoutée au groupe RISK_MANAGER
-  par une migration auditée (patron 078).
-
-## 3. Recommandation et lots
-
-**Option A**, avec une colonne `visibility` qui permet d'ajouter NOMINATIF (option B) plus tard sans refonte si le PO le
-demande. L'option C est écartée : elle change le défaut et dépend de données absentes.
-
-| Lot | Contenu | Passages |
+| Niveau | Libellé UI | Lisible par (en plus des « voient tout », §4) |
 |---|---|---|
-| V0 | `VisibilityResolver` + `ReadScope` branchés partout, **toutes ressources CLIENT** : aucun changement de comportement, tests d'inventaire (aucune route `*.read` sans `ReadScope`) | QA |
-| V1 | Risques + enfants hérités (évaluations, décisions, escalades, KRI, mesures) : colonne, choix à la création, `resourcevisibility.set`, audit, `/360`, cartographie, tableaux de bord, rapports, sélecteur frontend | QA, Security, Compliance |
-| V2 | Contrôles (réglage propre) + exécutions, efficacité, preuves, anomalies, plans d'action, règle « assigné » | QA, Security, Compliance |
-| V3 | Journal d'audit pour les porteurs non membres d'un groupe fixe, notifications, garde-fou panel | Security, Privacy |
-| V4 | (si Q-1 = oui) niveau NOMINATIF | Security, Privacy, Compliance |
+| CLIENT | Tout le client | tout porteur de `x.read` (comportement actuel) |
+| PERIMETRE | Restreint au périmètre | membres du **groupe du département** (appartenance via `user_roles`, pas `users.department_id`) + propriétaire, N+1, RACI R/A/C/I, responsable du processus + **liste** |
+| NOMINATIF | Personnes nommées | **liste** + propriétaire (I-3) |
 
-À noter : DECISION-100 déclenche un balayage complet (8bis). V0 peut partir dès la validation du principe. V1 attend les
-réponses Q-1 à Q-5.
+- Une ressource PERIMETRE sans département ni processus n'est vue que par les personnes rattachées et la liste : on
+  refuse plutôt que d'ouvrir.
+- **Hors périmètre = 404** (comme une ressource d'un autre client). `assertVisible` passe **avant** toute écriture ou
+  liaison, avec une vérification en base qui précède l'action.
+- Le résultat effectif est l'**intersection** avec `dashboard_scope_mode` (ce que la vue agrège), qui reste inchangé.
 
-## 4. Questions au PO
+## 4. Qui voit tout, et le cas de l'administrateur (q191)
 
-- **Q-1** Deux niveaux suffisent-ils (« Tout le client » / « Restreint au département et aux personnes concernées »),
-  ou faut-il aussi « Personnes nommées seulement » (cas confidentiels) ? *Reco : deux niveaux maintenant, le troisième plus tard si besoin.*
-- **Q-2** Qui voit toujours tout ? *Reco : Risk Manager, Comité et Audit. Les administrateurs non, en tant que tels.*
-- **Q-3** « Restreint » = membres du groupe du département + propriétaire, N+1, personnes du RACI et responsable du
-  processus ? *Reco : oui, avec l'appartenance au département lue dans le groupe de département, pas dans la fiche utilisateur.*
-- **Q-4** Un KRI, une évaluation ou une décision suivent la visibilité de leur risque ; un contrôle (qui couvre plusieurs
-  risques) a son propre réglage ? *Reco : oui.*
-- **Q-5** Qui modifie la visibilité après la création ? *Reco : un nouveau droit dédié, donné au Risk Manager, avec un
-  motif obligatoire. Celui qui crée ne choisit qu'au moment de la création.*
-- **Q-6** Les KPI sont-ils concernés ? *Reco : non pour l'instant (indicateurs de performance, pas de risque).*
-- **Q-7** Un utilisateur au périmètre limité voit-il des totaux calculés uniquement sur ce qu'il voit, sans mention
-  « éléments masqués » ? *Reco : oui.*
+**Voient tout, sans réglage possible** : groupes fixes **RISK_MANAGER, RISK_COMMITTEE** (2e ligne : sinon le profil de
+risque présenté au Comité est incomplet sans que personne le sache) et **AUDIT** (3e ligne : accès sans restriction exigé
+par la charte d'audit, IIA). C'est vrai aussi au niveau NOMINATIF. Information, sans rouvrir la décision : une enquête
+visant un membre de la 2e ligne se mène hors de l'outil, ou par l'Audit et le Comité.
+
+**Administrateur sans rôle dans le domaine des risques** : trois options instruites.
+
+| Option | Effet | Séparation des tâches | TPE (admin = RM) |
+|---|---|---|---|
+| **A1** Admin technique, sans accès aux contenus | voit niveau, nombre d'ayants droit, identifiants ; aucun titre ni contenu | maximale : administrer ≠ lire le métier | sans effet : il voit tout **en tant que RM** |
+| **A2** Admin voit tout (lecture littérale de q191) | simple, aucun droit nouveau | faible : le service informatique lit les dossiers NOMINATIF (fraude, RH) ; contredit l'esprit de DECISION-098/101, où même le RM ne voit les comptes d'admin que par un droit explicite | sans effet |
+| **A3** Droit de **lecture des contenus** séparé, attribué explicitement | `resource.readall`, hors `ADMIN_PERMISSIONS` (piège q63 : sinon tout lecteur devient « admin »), posé sur le rôle d'un administrateur, **confirmé par une autre personne**, badge dans la matrice, audité, révocable | conservée par défaut ; l'exception est voulue, nommée et tracée | sans effet ; si l'admin est seul et n'est pas RM, la confirmation passe par la double confirmation du panel (marquée « sans second regard ») |
+
+Cohérence avec DECISION-097/098/101 : la matrice classe déjà les administrateurs dans une ligne à part, et tout
+élargissement de lecture y est individuel, distinct et confirmé par un tiers. A3 reprend exactement ce mécanisme. A2 serait
+le seul endroit où le rôle d'administrateur donnerait accès au contenu métier. Les contournements restent bloqués :
+pas d'auto-attribution de rôle, pas d'auto-ajout à une liste, et toute attribution est auditée.
+**Recommandation : A3, non attribué par défaut** (§8, Q-1). A1 en est le comportement par défaut.
+
+## 5. Modifier la visibilité (q194)
+
+- **À la création** : le créateur choisit le niveau et la liste ; le formulaire propose CLIENT. Refus (400) si le créateur
+  ne ferait pas lui-même partie de l'ensemble résultant et n'appartient pas à un groupe « voit tout ».
+- **Après la création** : peuvent changer le niveau et la liste (i) un porteur de **`resourcevisibility.set`** (groupe
+  RISK_MANAGER, jamais inclus dans `*.update`, conformément à SEC-013/014) et (ii) le **propriétaire** de la ressource, par
+  relation (`owner_id` ou équivalent compte ; pas pour un KPI, I-4).
+- **Motif obligatoire** dans les deux sens. Audit `VISIBILITY_CHANGE` (avant/après) et `ACCESS_GRANT` / `ACCESS_REVOKE`
+  dans **la même transaction** (`writeAudited`). L'auteur est toujours `actor.userId`, jamais un champ venant du client.
+- Gardes : personne ne s'ajoute soi-même à une liste. Le propriétaire ne peut pas être retiré tant qu'il est propriétaire.
+  Changer de propriétaire n'emporte pas l'ancien propriétaire dans la liste. Un passage vers un niveau plus ouvert est
+  une divulgation : l'audit le marque `widening: true`, pour les revues.
+
+## 6. Agrégats et « X éléments non visibles » (q196)
+
+- Toutes les vues (`dashboard.read`, `dashboard.executive`, rapports, cartographie, `/kris/dashboard`, `/actions`, KPI)
+  se calculent en SQL sur **ce que le lecteur voit**. Le filtre est appliqué avant la pagination, jamais en mémoire.
+- **Ce que la mention révèle, honnêtement** : l'**existence** et le **nombre** d'objets cachés. Si elle est calculée sur
+  une vue filtrée, elle révèle aussi leurs **attributs** par différence : « 1 non visible » sur un filtre
+  département = Finance + criticité = Critique + mois courant désigne un risque critique restreint de la Finance. Son
+  évolution dans le temps révèle aussi la date de création. Dans un contexte fintech (CENTIF), cela peut prévenir la
+  personne visée par une enquête.
+- **Limitation proposée, qui garde l'affichage voulu par le PO** : (i) **un seul nombre par type de ressource**, calculé
+  sur tout le client et **indépendant des filtres** ; (ii) aucune ventilation par catégorie, criticité, département,
+  statut ou période ; (iii) aucun lien, identifiant ni tri sur ces éléments ; (iv) pas de mention pour les groupes
+  « voient tout », pour qui elle vaut toujours 0 ; (v) les objets NOMINATIF exclus du nombre (§8, Q-2).
+- Panel D1-D6 : inchangé (lu par les groupes fixes). Journal d'audit : détails d'une ressource restreinte filtrés pour un
+  porteur d'`audit.read` hors groupe fixe. Notifications : pas de titre restreint quand un destinataire est hors périmètre.
+
+## 7. Conception technique, lots révisés et effort
+
+- `domain/visibility.ts` : types `Visibility` et `ReadScope` = `{ all: true } | { departmentIds, processIds, riskIds,
+  controlIds, assignedIds, grantedIds }`, prédicat pur `isVisible`. `services/VisibilityResolver.ts` calcule le `ReadScope`
+  **une fois par requête** : il reprend le calcul de `DashboardScopeResolver` et y ajoute les groupes de département, les
+  groupes fixes, `resource.readall` (si A3) et les accès accordés. C'est un paramètre de constructeur **optionnel** :
+  absent, on retombe sur `{ all: true }`, et aucun test existant ne casse. Repositories : `ReadScope` optionnel et prédicat
+  `AND (visibility = 'CLIENT' OR …)` en SQL ; les enfants font une jointure sur la racine.
+- Prédicats `isAdministrator` / `isRiskManagerMember` : à déplacer dans `domain/fixedGroupPermissions.ts`, jamais dupliqués.
+
+| Lot | Contenu | Effort A06/A07 | Passages |
+|---|---|---|---|
+| V0 | Résolveur + `ReadScope` branchés partout, tout reste CLIENT : aucun changement visible ; test d'inventaire (aucune route `*.read` sans `ReadScope`) | 3 j | QA |
+| V1 | Colonne + `resource_access_grants` ; **risques + enfants hérités (KRI compris)**, les 3 niveaux, liste, `resourcevisibility.set` + modification par le propriétaire, motif, audit, `/360`, cartographie, tableaux de bord, rapports ; sélecteur + éditeur de liste dans le frontend | 7-8 j | QA, Security, Compliance, Privacy |
+| V2 | Contrôles (réglage propre) + exécutions, efficacité, preuves ; anomalies, plans d'action, règle « assigné » ; **KPI** + mesures | 5-6 j | QA, Security, Compliance |
+| V3 | « X éléments non visibles » (§6), filtrage du journal d'audit, notifications, garde-fou panel | 3 j | Security, Privacy |
+| V4 | Cas administrateur selon Q-1 (A3 : `resource.readall`, confirmation par un tiers, badge de matrice ; A1 : vue des métadonnées pour le support) | 2 j | Security, Compliance |
+
+Total : **20 à 22 jours-agent**, hors passages et frontend fin. Ordre : V0 puis V1 ; V2, V3 et V4 peuvent être menés en
+parallèle (worktrees) après V1, car `permissions.ts` et `server.ts` sont partagés. V0 et V1 n'attendent pas Q-1 : sans
+`resource.readall`, le défaut est A1. La production attend V4 si le PO retient A3.
+
+## 8. Questions encore ouvertes
+
+- **Q-1 (administrateur, q191)** Un administrateur qui n'est ni RM, ni Comité, ni Audit voit-il les contenus ?
+  *Reco : A3. Par défaut il ne voit que les métadonnées (A1). Un droit « lecture de tous les contenus », distinct
+  du droit d'administration, peut lui être donné explicitement, confirmé par une autre personne, avec un badge dans la
+  matrice, comme pour DECISION-101. Dans une TPE où l'admin est aussi RM, il voit déjà tout en tant que RM.*
+- **Q-2 (q196)** Les objets « Personnes nommées » entrent-ils dans le nombre « X éléments non visibles » ? *Reco : non. Les
+  compter signale qu'une enquête existe, ce qui peut prévenir la personne visée. Le nombre reste affiché pour les objets
+  « restreints au périmètre », global et sans ventilation (§6).*
+- **Q-3 (q194)** Quand le propriétaire **élargit** une ressource que le RM avait restreinte, faut-il davantage que la
+  trace ? *Reco : pas de blocage, conformément à la décision. Le RM est notifié après la validation, et l'élargissement
+  apparaît dans les revues (`widening: true`).*

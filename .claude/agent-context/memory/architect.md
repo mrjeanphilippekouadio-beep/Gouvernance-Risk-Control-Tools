@@ -107,6 +107,16 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
   Audit voient tout ; admin non ; aucun rôle ordinaire « voit tout ». Hors périmètre = 404. Agrégats filtrés en SQL, sans
   « N masqués ». `resourcevisibility.set` (RM), motif, audit même transaction. Intersection avec `dashboard_scope_mode`.
   Lots V0 (résolveur, zéro changement) → V4 (NOMINATIF si Q-1). Questions Q-1..Q-7.
+- 2026-10-28 (bis) : révision DECISION-102 (q190-q196), même fichier. 3 niveaux CLIENT|PERIMETRE|NOMINATIF sur risks,
+  controls, anomalies, action_plans, **kpis** (KPI = réglage propre, pas de risk_id ; `kpis.owner` est du TEXTE donc pas
+  de propriétaire-compte). Table `resource_access_grants` (ajout seul, revoked_at, cible polymorphe vérifiée au service) :
+  liste ajoutée au périmètre en PERIMETRE, seule source (avec le propriétaire) en NOMINATIF. Modification : RM
+  (`resourcevisibility.set`) OU propriétaire par relation ; motif dans les deux sens ; audit même transaction ;
+  `widening: true`. Admin : options A1 (technique, métadonnées seulement) / A2 (voit tout) / A3 (`resource.readall`, hors
+  ADMIN_PERMISSIONS, confirmé par un tiers, badge, comme DECISION-101) ; **reco A3, défaut A1**. « X non visibles » :
+  un nombre par type, global, indépendant des filtres, sans ventilation, NOMINATIF exclu (risque d'alerter la personne
+  visée, CENTIF). Lots V0 3j, V1 7-8j, V2 5-6j, V3 3j, V4 2j (≈20-22 j). Questions Q-1 admin, Q-2 NOMINATIF dans le
+  comptage, Q-3 notifier le RM quand le propriétaire élargit.
 
 ## Principe ajouté (2026-10-18)
 
@@ -118,7 +128,14 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
 14. **Un droit de lecture restreint se pose en deux couches** : ce que j'ai le droit de voir (sur la ressource) ∩ ce que
     la vue choisit d'agréger (sur le rôle). Ne pas fusionner les deux ; la 2e/3e ligne ne doit jamais être restreignable.
 
+15. **Un comptage d'éléments cachés fuit par différence** dès qu'il suit les filtres de la vue : le rendre global,
+    indépendant des filtres et sans ventilation ; exclure les objets dont la seule existence est sensible (enquête).
+16. **« Admin voit tout » se traite comme un droit de lecture distinct, explicite et confirmé par un tiers**, jamais
+    comme une conséquence implicite du rôle d'administration (même logique que la matrice des lignes, DECISION-098/101).
+
 ## Pièges rencontrés
+
+- `kpis.owner` est un texte libre (016), pas une FK `users` : aucune règle « propriétaire » n'est applicable aux KPI.
 
 - La table des paramètres est `configs` (pluriel, 024), contrairement à `audit_log` (singulier).
 - Les triggers AFTER INSERT de 062 comptent les membres de groupe ligne par ligne : tout échange de membre dans une
