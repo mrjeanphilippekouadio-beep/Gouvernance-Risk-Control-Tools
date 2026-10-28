@@ -416,9 +416,9 @@ pour l'usage.
 | @privacy | **CMP-F4-08** — avis A15 sur `GET /users/directory` (finalité, plafond 500 sans signal, pas de journal de consultation). Sécurité le juge proportionné (SEC-F4 §2). | 2026-10-26 | **Traité — avis Privacy PRIV-REV-SUITES2-001 (2026-10-27)** : proportionné ; pas de journal de consultation recommandé (décision PO à consigner) ; troncature déjà signalée par AccountPicker (≥ 500) ; une phrase à ajouter au texte R5 (D6). |
 | @security | **SEC-F4-02 (LOW, rattaché à SEC-PNL-04)** — un admin peut fabriquer « personne d'autre ne peut désigner » (suspension / révocation des autres détenteurs) pour ouvrir q166 ; abus visible (audit + notification). | 2026-10-26 | Ouvert |
 | @dev-backend @security | **Action 5 — I-RT3-01** : notifications D5 envoyées après `res.end` perdues à l'arrêt Cloud Run → attendre leur envoi au shutdown (petit lot backend + revue A10), avant prod. | 2026-10-24 | **Ouvert — A06** |
-| HUMAN @dev-backend | **q184 (cockpit)** — demande de délais mêlant allongements et raccourcissements : recommandation, toute la demande passe en attente de validation (pas d'application partielle des raccourcissements). Implémenté ainsi en attendant (fail-closed). | 2026-10-27 | **Ouvert — HUMAN : q184** |
-| HUMAN @dev-backend @security | **q185 (cockpit)** — droits de décision q179 : chaque droit garde au moins un groupe fixe ; Audit limité à la revue. Recommandation appliquée en attendant. | 2026-10-27 | **Ouvert — HUMAN : q185** |
-| HUMAN @dev-db @security | **q186 (cockpit)** — rôles ordinaires détenant déjà un droit de décision : les nettoyer par migration (recommandé) ou laisser l'admin les retirer. Aucune migration écrite avant réponse. | 2026-10-27 | **Ouvert — HUMAN : q186** |
+| HUMAN @dev-backend | **q184 (cockpit)** — demande de délais mêlant allongements et raccourcissements : recommandation, toute la demande passe en attente de validation (pas d'application partielle des raccourcissements). Implémenté ainsi (fail-closed). | 2026-10-27 | **Fermé** (DECISION-096) |
+| HUMAN @dev-backend @security | **q185 (cockpit)** — droits de décision q179 : chaque droit garde au moins un groupe fixe ; Audit limité à la revue. Recommandation appliquée. | 2026-10-27 | **Fermé** (DECISION-096) |
+| HUMAN @dev-db @security | **q186 (cockpit)** — rôles ordinaires détenant déjà un droit de décision : les nettoyer par migration (recommandé) ou laisser l'admin les retirer. PO : retirer par migration, avec trace d'audit (couvre aussi SEC-SA2-02). | 2026-10-27 | **En cours** (DECISION-096), migration 077 sur `feat/r1-suites-arbitrages-2` |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
@@ -2378,4 +2378,16 @@ DECISION (PO) : feu vert du lot « suites des arbitrages 2 » (q178, q179, q181,
 RELATED: DECISION-092, 094.
 OWNER: @orchestrator @dev-backend @dev-db
 STATUS: DÉCIDÉ — en cours.
+
+DECISION-096
+DATE: 2026-10-28
+DECISION (PO, cockpit) : q184 — une modification de délais contenant un
+  allongement attend entièrement l'approbation (déjà implémenté) ; q185 —
+  chaque droit de décision garde au moins un groupe fixe, l'Audit ne porte
+  que la revue (déjà implémenté) ; q186 — retirer par migration les 4 droits
+  de décision des rôles ordinaires et des entrées `users.roles`, avec trace
+  d'audit (migration 077, avant la production ; ferme SEC-SA2-02).
+RELATED: DECISION-095 ; q179, q182 ; SEC-SA2-02 ; PR #199.
+OWNER: @orchestrator @dev-db @security
+STATUS: DÉCIDÉ — q184/q185 fermés ; q186 en cours.
 ```
