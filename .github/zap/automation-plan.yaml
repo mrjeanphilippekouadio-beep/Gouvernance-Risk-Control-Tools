@@ -64,6 +64,12 @@ jobs:
       maxDuration: 12
       maxCrawlDepth: 10
       maxChildren: 100
+      # The GRC SPA uses buttons for in-app navigation rather than URL links.
+      # Ask the Client Spider to click standard interactive elements so it can
+      # trigger authenticated page loads and discover the API calls behind them.
+      clickDefaultElems: true
+      clickElemsOnce: true
+      randomInputs: false
       numberOfBrowsers: 1
       logoutAvoidance: true
       scopeCheck: "Flexible"
