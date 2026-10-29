@@ -77,8 +77,10 @@ jobs:
           credentials["username"] = ENV.fetch("ZAP_TEST_EMAIL")
           credentials["password"] = ENV.fetch("ZAP_TEST_PASSWORD")
 
-          # Explicit browser-auth steps need their values resolved from the
-          # same protected environment as the QA user credentials.
+          # Resolve the browser steps from the same protected environment as
+          # the QA user's credentials. CUSTOM_FIELD is intentional here: the
+          # USERNAME/PASSWORD helpers may try to submit with Enter, which makes
+          # React replace the password input while Selenium still references it.
           steps = auth.fetch("parameters").fetch("steps", [])
           steps.each do |step|
             case step.fetch("type")
@@ -86,6 +88,13 @@ jobs:
               step["value"] = credentials.fetch("username")
             when "PASSWORD"
               step["value"] = credentials.fetch("password")
+            when "CUSTOM_FIELD"
+              case step.fetch("value", nil)
+              when "${ZAP_TEST_EMAIL}"
+                step["value"] = credentials.fetch("username")
+              when "${ZAP_TEST_PASSWORD}"
+                step["value"] = credentials.fetch("password")
+              end
             end
           end
 
