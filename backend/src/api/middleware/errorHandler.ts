@@ -29,6 +29,12 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     res.status(403).json({ error: err.message, requestId: req.requestId });
     return;
   }
+  // QA-RL-01: a malformed identifier that reached the database (invalid_text_representation, e.g. "not-a-uuid" on a
+  // `/:id` route) is the caller's input error — a 400 on every route, never a 500.
+  if ((err as { code?: unknown } | null)?.code === "22P02") {
+    res.status(400).json({ error: "Requête invalide.", requestId: req.requestId });
+    return;
+  }
 
   req.log?.error({ err, requestId: req.requestId }, "Unhandled error");
   res.status(500).json({ error: "Internal server error", requestId: req.requestId });

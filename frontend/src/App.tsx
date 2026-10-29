@@ -42,7 +42,7 @@ const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefin
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
 type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "auditmissions" | "rightsmatrix";
-type NavItem = { id: View; label: string; icon: string; available?: boolean; /** Hidden without this permission (display only). */ requires?: string } | { separator: string };
+type NavItem = { id: View; label: string; icon: string; available?: boolean; /** Hidden without this permission (display only). */ requires?: string | string[] } | { separator: string };
 const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -91,7 +91,7 @@ const NAV_GROUPS: NavGroup[] = [
     { separator: "Plateforme" },
     { id: "users", label: "Comptes", icon: "user", available: true },
     { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
-    { id: "rightsmatrix", label: "Matrice des droits", icon: "table", available: true, requires: "role.read" },
+    { id: "rightsmatrix", label: "Matrice des droits", icon: "table", available: true, requires: ["role.read", "rolegroup.audit.validate", "role.assign"] },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
   ] },
@@ -157,15 +157,19 @@ function App() {
               className="auth-dev"
               onSubmit={(event) => {
                 event.preventDefault();
-                void localAuth.signIn();
+                const formData = new FormData(event.currentTarget);
+                void localAuth.signIn(
+                  String(formData.get("email") ?? ""),
+                  String(formData.get("password") ?? ""),
+                );
               }}
             >
               {localAuth.error && <p role="alert">{localAuth.error}</p>}
               <FormField label="Adresse e-mail QA" htmlFor="local-email">
-                <input id="local-email" type="email" value={localAuth.email} onChange={(event) => localAuth.setEmail(event.target.value)} autoComplete="username" />
+                <input id="local-email" name="email" type="email" defaultValue={LOCAL_AUTH_EMAIL} autoComplete="username" />
               </FormField>
               <FormField label="Mot de passe QA" htmlFor="local-password">
-                <input id="local-password" type="password" value={localAuth.password} onChange={(event) => localAuth.setPassword(event.target.value)} autoComplete="current-password" />
+                <input id="local-password" name="password" type="password" autoComplete="current-password" />
               </FormField>
               <Button type="submit" disabled={localAuth.loading}>
                 {localAuth.loading ? "Connexion…" : "Se connecter"}
@@ -354,7 +358,7 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen, token }: {
       {!collapsed && <div className="sidebar-tenant"><span className="tenant-avatar">D</span><div><strong>Workspace</strong><small>Dispositif de gouvernance</small></div><span className="tenant-chevron">⌄</span></div>}
       <nav className="sidebar-nav" aria-label="Navigation principale">
         {NAV_GROUPS.map((navGroup) => {
-          const group = { ...navGroup, items: navGroup.items.filter((item) => isSeparator(item) || !item.requires || can(item.requires)) };
+          const group = { ...navGroup, items: navGroup.items.filter((item) => isSeparator(item) || !item.requires || [item.requires].flat().some((p) => can(p))) };
           const open = openGroup === group.label;
           return (
             <div className="sidebar-group" key={group.label}>

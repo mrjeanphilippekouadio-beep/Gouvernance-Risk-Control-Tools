@@ -21,6 +21,7 @@ import { PostgresFindingRepository } from "./infrastructure/database/postgres/Po
 import { PostgresDepartmentRepository } from "./infrastructure/database/postgres/PostgresDepartmentRepository.js";
 import { PostgresProcessRepository } from "./infrastructure/database/postgres/PostgresProcessRepository.js";
 import { PostgresRolePermissionChangeRepository } from "./infrastructure/database/postgres/PostgresRolePermissionChangeRepository.js";
+import { PostgresSensitiveViewGrantRepository } from "./infrastructure/database/postgres/PostgresSensitiveViewGrantRepository.js";
 import { PostgresRoleRepository } from "./infrastructure/database/postgres/PostgresRoleRepository.js";
 import { PostgresFeedbackRepository } from "./infrastructure/database/postgres/PostgresFeedbackRepository.js";
 import { PostgresKpiRepository } from "./infrastructure/database/postgres/PostgresKpiRepository.js";
@@ -305,7 +306,7 @@ const findingService = new FindingService(
 const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
 const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
 const governanceDesignationRepository = new PostgresGovernanceDesignationRepository(pool);
-const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository, governanceDesignationRepository);
+const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository, governanceDesignationRepository, new PostgresSensitiveViewGrantRepository(pool));
 const governanceDesignationService = new GovernanceDesignationService(governanceDesignationRepository, auditRepository, userRepository, roleRepository, governanceQueries, configRepository);
 // Lot D5: reviews, principle acceptances, and the mandatory governance notifications (emitted after commit, see the middleware).
 const governanceExceptionService = new GovernanceExceptionService(new PostgresGovernanceExceptionReviewRepository(pool), auditRepository);
