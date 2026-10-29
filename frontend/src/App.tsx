@@ -157,15 +157,19 @@ function App() {
               className="auth-dev"
               onSubmit={(event) => {
                 event.preventDefault();
-                void localAuth.signIn();
+                const formData = new FormData(event.currentTarget);
+                void localAuth.signIn(
+                  String(formData.get("email") ?? ""),
+                  String(formData.get("password") ?? ""),
+                );
               }}
             >
               {localAuth.error && <p role="alert">{localAuth.error}</p>}
               <FormField label="Adresse e-mail QA" htmlFor="local-email">
-                <input id="local-email" type="email" value={localAuth.email} onChange={(event) => localAuth.setEmail(event.target.value)} autoComplete="username" />
+                <input id="local-email" name="email" type="email" defaultValue={LOCAL_AUTH_EMAIL} autoComplete="username" />
               </FormField>
               <FormField label="Mot de passe QA" htmlFor="local-password">
-                <input id="local-password" type="password" value={localAuth.password} onChange={(event) => localAuth.setPassword(event.target.value)} autoComplete="current-password" />
+                <input id="local-password" name="password" type="password" autoComplete="current-password" />
               </FormField>
               <Button type="submit" disabled={localAuth.loading}>
                 {localAuth.loading ? "Connexion…" : "Se connecter"}
