@@ -143,8 +143,8 @@ jobs:
           python3 <<'PY'
           import json
           import os
-          import re
           import sys
+          from html.parser import HTMLParser
           import urllib.error
           import urllib.request
 
@@ -159,7 +159,20 @@ jobs:
                   return response.read().decode("utf-8", errors="replace")
 
           html = fetch(frontend)
-          assets = re.findall(r'<script[^>]+src=["\\']([^"\\']+\\.js(?:\\?[^"\\']*)?)["\\']', html)
+          class ScriptSourceParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.sources = []
+
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() == "script":
+                      src = dict(attrs).get("src", "")
+                      if src.split("?", 1)[0].endswith(".js"):
+                          self.sources.append(src)
+
+          parser = ScriptSourceParser()
+          parser.feed(html)
+          assets = parser.sources
           bundle_text = ""
           for asset in assets:
               asset_url = asset if asset.startswith("http") else frontend + (asset if asset.startswith("/") else "/" + asset)
@@ -303,8 +316,8 @@ jobs:
               for item in items
           )
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"auth_ok={'true' if auth_ok else 'false'}\\n")
-              output.write(f"visited_count={len(visited)}\\n")
+              output.write(f"auth_ok={'true' if auth_ok else 'false'}\n")
+              output.write(f"visited_count={len(visited)}\n")
           lines.extend(["", "## Client Map", f"- Visited nodes: {len(visited)}"])
           for url in visited[:30]:
               lines.append(f"- {url}")
