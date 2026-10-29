@@ -38,8 +38,21 @@ env:
           # Make the helper explicitly run its standard field discovery/fill/submit
           # sequence instead of relying only on implicit defaults.
           steps:
-            - description: "Automatically identify, fill and submit the local QA login form"
-              type: "AUTO_STEPS"
+            - description: "Fill the local QA email field"
+              type: "USERNAME"
+              cssSelector: "#local-email"
+              timeout: 5000
+            - description: "Fill the local QA password field"
+              type: "PASSWORD"
+              cssSelector: "#local-password"
+              timeout: 5000
+            - description: "Submit the local QA login form"
+              type: "CLICK"
+              cssSelector: "form.auth-dev button[type='submit']"
+              timeout: 5000
+            - description: "Wait for the React app shell to render after login"
+              type: "WAIT"
+              timeout: 5000
         verification:
           method: "poll"
           pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
