@@ -41,8 +41,12 @@ env:
         verification:
           method: "poll"
           pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
-          loggedOutRegex: "Missing bearer token|Invalid or expired token"
-          pollFrequency: 20
+          # ZAP needs a positive as well as a negative indicator for poll-based
+          # verification. This protected endpoint returns 200 only with a valid
+          # bearer token; unauthenticated requests return 401.
+          loggedInRegex: '\Q 200 OK\E'
+          loggedOutRegex: '401 Unauthorized|Missing bearer token|Invalid or expired token'
+          pollFrequency: 1
           pollUnits: "requests"
       sessionManagement:
         # The frontend keeps its token in React state. Browser-driven scanning
