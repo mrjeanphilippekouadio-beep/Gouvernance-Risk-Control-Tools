@@ -35,28 +35,11 @@ env:
           # Capture why the browser helper may fail to authenticate; this is
           # needed because API preflight succeeds while Client Spider visits no nodes.
           diagnostics: true
-          # Fill these React-controlled login fields as custom fields, then
-          # click Submit explicitly. USERNAME/PASSWORD helpers can try to press
-          # Enter on the password element; React replaces that DOM node and
-          # Selenium then raises StaleElementReferenceException.
-          steps:
-            - description: "Fill the local QA email field without auto-submit"
-              type: "CUSTOM_FIELD"
-              cssSelector: "#local-email"
-              value: ${ZAP_TEST_EMAIL}
-              timeout: 10000
-            - description: "Fill the local QA password field without auto-submit"
-              type: "CUSTOM_FIELD"
-              cssSelector: "#local-password"
-              value: ${ZAP_TEST_PASSWORD}
-              timeout: 10000
-            - description: "Submit the local QA login form explicitly"
-              type: "CLICK"
-              cssSelector: "form.auth-dev button[type='submit']"
-              timeout: 10000
-            - description: "Wait for the React app shell to render after login"
-              type: "WAIT"
-              timeout: 5000
+          # Let ZAP's built-in Browser Based Authentication discover and submit
+          # the username/password fields. The diagnostic report showed that our
+          # custom fill/click steps ran before ZAP's automatic fill/submit retry,
+          # resulting in two competing login sequences. Avoid custom steps until
+          # the default browser login is proven to work.
         verification:
           method: "poll"
           pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
