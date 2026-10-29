@@ -77,26 +77,10 @@ jobs:
           credentials["username"] = ENV.fetch("ZAP_TEST_EMAIL")
           credentials["password"] = ENV.fetch("ZAP_TEST_PASSWORD")
 
-          # Resolve the browser steps from the same protected environment as
-          # the QA user's credentials. CUSTOM_FIELD is intentional here: the
-          # USERNAME/PASSWORD helpers may try to submit with Enter, which makes
-          # React replace the password input while Selenium still references it.
-          steps = auth.fetch("parameters").fetch("steps", [])
-          steps.each do |step|
-            case step.fetch("type")
-            when "USERNAME"
-              step["value"] = credentials.fetch("username")
-            when "PASSWORD"
-              step["value"] = credentials.fetch("password")
-            when "CUSTOM_FIELD"
-              case step.fetch("value", nil)
-              when "${ZAP_TEST_EMAIL}"
-                step["value"] = credentials.fetch("username")
-              when "${ZAP_TEST_PASSWORD}"
-                step["value"] = credentials.fetch("password")
-              end
-            end
-          end
+          # Keep authentication entirely in the browser helper's built-in
+          # field detection/submission flow; do not inject a second manual form
+          # sequence, which the diagnostic report showed is followed by another
+          # automatic login attempt.
 
           plan.fetch("jobs").each do |job|
             next unless %w[spider spiderClient].include?(job.fetch("type"))
