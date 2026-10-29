@@ -34,6 +34,8 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeInfo[] = [
   { resourceType: "MANAGEMENT", eventType: "PRINCIPLE_ACCEPTANCE_PENDING", label: "Acceptation d’un principe en attente de confirmation", mandatory: true },
   // DECISION-095: q182 (a lengthening of the governance delays waits for a second person), q178 (Risk Manager vacancy).
   { resourceType: "MANAGEMENT", eventType: "GOVERNANCE_DELAY_REQUEST_PENDING", label: "Allongement des délais de gouvernance en attente", mandatory: true },
+  // q200 (DECISION-103): a Committee/Audit member must confirm a Risk Manager's widened view of the rights matrix.
+  { resourceType: "MANAGEMENT", eventType: "SENSITIVE_VIEW_GRANT_PENDING", label: "Vue élargie de la matrice des droits en attente", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "RISK_MANAGER_VACANCY", label: "Groupe Risk Manager vacant", mandatory: true },
   { resourceType: "ACTION_PLAN", eventType: "ACTION_STARTED_LATE", label: "Action démarrée en retard", mandatory: true },
   { resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE", label: "Action en retard", mandatory: true },

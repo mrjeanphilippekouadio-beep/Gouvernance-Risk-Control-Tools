@@ -70,6 +70,12 @@ export type Permission =
   | "evaluationmode.validate"
   | "audit.read"
   | "role.read"
+  /**
+   * q188/q189 (DECISION-098, DECISION-101): widens a role.read holder's view of the rights matrix to the Audit
+   * group and the administrators. Never grantable through role create/update (assertRolePermissionRules): it waits
+   * for its dedicated maker-checker circuit — until then nobody holds it (fail closed).
+   */
+  | "role.read.sensitive"
   | "role.create"
   | "role.update"
   | "role.delete"
@@ -271,6 +277,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "evaluationmode.validate",
   "audit.read",
   "role.read",
+  "role.read.sensitive",
   "role.create",
   "role.update",
   "role.delete",
