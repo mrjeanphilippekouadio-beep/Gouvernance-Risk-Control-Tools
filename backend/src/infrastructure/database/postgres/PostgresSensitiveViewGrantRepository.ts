@@ -3,6 +3,7 @@ import type {
   SensitiveViewGrant,
   SensitiveViewGrantRepository,
   SensitiveViewGrantStatus,
+  RevokedGrant,
 } from "../../../domain/repositories/SensitiveViewGrantRepository.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { ConflictError } from "../../../domain/errors/DomainErrors.js";
@@ -103,15 +104,31 @@ export class PostgresSensitiveViewGrantRepository implements SensitiveViewGrantR
     }, audit);
   }
 
-  async revoke(tenantId: string, id: string, change: { by: string; reason: string }, audit: TransactionalAudit<SensitiveViewGrant>): Promise<SensitiveViewGrant> {
-    return runAudited(this.pool, async (db) => {
-      const { rows } = await db.query<Row>(
-        `UPDATE sensitive_view_grants SET status = 'REVOKED', revoked_by = $3, revoked_at = now(), revoke_reason = $4
-         WHERE tenant_id = $1 AND id = $2 AND status IN ('PENDING', 'APPROVED') RETURNING *`,
-        [tenantId, id, change.by, change.reason],
-      );
-      if (!rows[0]) throw new ConflictError("This widened view is already refused or revoked");
-      return toDomain(rows[0]);
+  async revoke(tenantId: string, id: string, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>): Promise<SensitiveViewGrant> {
+    const out = await runAudited<RevokedGrant>(this.pool, async (db) => {
+      const r = await revokeLocked(db, `id = $2`, tenantId, id, change);
+      if (!r) throw new ConflictError("This widened view is already refused or revoked"); // rolls back, no audit row
+      return r;
     }, audit);
+    return out.after;
   }
+
+  async revokeLiveOf(tenantId: string, userId: string, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>): Promise<SensitiveViewGrant | null> {
+    const out = await runAudited<RevokedGrant | null>(this.pool, (db) => revokeLocked(db, `user_id = $2`, tenantId, userId, change),
+      (r) => (r ? audit(r) : []));
+    return out?.after ?? null;
+  }
+}
+
+/** Codex PR #207: the live row is locked, then updated; the audit is built from those two rows, in the same transaction. */
+async function revokeLocked(db: Pick<Pool, "query">, match: string, tenantId: string, key: string, change: { by: string; reason: string }): Promise<RevokedGrant | null> {
+  const { rows: locked } = await db.query<Row>(
+    `SELECT * FROM sensitive_view_grants WHERE tenant_id = $1 AND ${match} AND status IN ('PENDING', 'APPROVED') FOR UPDATE`, [tenantId, key]);
+  if (!locked[0]) return null;
+  const { rows } = await db.query<Row>(
+    `UPDATE sensitive_view_grants SET status = 'REVOKED', revoked_by = $3, revoked_at = now(), revoke_reason = $4
+     WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+    [tenantId, locked[0].id, change.by, change.reason],
+  );
+  return { before: toDomain(locked[0]), after: toDomain(rows[0]!) };
 }

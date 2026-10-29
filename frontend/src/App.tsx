@@ -91,7 +91,7 @@ const NAV_GROUPS: NavGroup[] = [
     { separator: "Plateforme" },
     { id: "users", label: "Comptes", icon: "user", available: true },
     { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
-    { id: "rightsmatrix", label: "Matrice des droits", icon: "table", available: true, requires: ["role.read", "rolegroup.audit.validate"] },
+    { id: "rightsmatrix", label: "Matrice des droits", icon: "table", available: true, requires: ["role.read", "rolegroup.audit.validate", "role.assign"] },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
   ] },

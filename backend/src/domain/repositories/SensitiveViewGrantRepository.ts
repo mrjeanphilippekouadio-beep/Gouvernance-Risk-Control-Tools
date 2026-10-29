@@ -42,5 +42,14 @@ export interface SensitiveViewGrantRepository {
     change: { status: "APPROVED" | "REJECTED"; by: string; reason: string | null },
     audit: TransactionalAudit<SensitiveViewGrant>,
   ): Promise<SensitiveViewGrant>;
-  revoke(tenantId: string, id: string, change: { by: string; reason: string }, audit: TransactionalAudit<SensitiveViewGrant>): Promise<SensitiveViewGrant>;
+  /** Locks the live grant, revokes it; the audit sees the locked row and the updated one. ConflictError when not live. */
+  revoke(tenantId: string, id: string, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>): Promise<SensitiveViewGrant>;
+  /** SEC-RL-05: the live grant of ONE account (targeted lookup, locked), revoked; null when it has none. */
+  revokeLiveOf(tenantId: string, userId: string, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>): Promise<SensitiveViewGrant | null>;
+}
+
+/** A revocation as written in its transaction: the locked row and the updated one. */
+export interface RevokedGrant {
+  before: SensitiveViewGrant;
+  after: SensitiveViewGrant;
 }

@@ -283,7 +283,7 @@ export class RoleService {
     const stale = (await grants.list(actor.tenantId)).find((g) => g.userId === userId && g.status === "PENDING" && g.expiresAt && g.expiresAt.getTime() <= Date.now());
     if (stale) {
       await grants.revoke(actor.tenantId, stale.id, { by: actor.userId, reason: "Demande expirée, remplacée par une nouvelle demande" },
-        (g) => [this.grantAuditEvent(actor, g, "UNASSIGN", stale, "Demande expirée, remplacée par une nouvelle demande", requestId)]);
+        (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, "Demande expirée, remplacée par une nouvelle demande", requestId)]);
     }
     const days = (await this.configs?.getByTenant(actor.tenantId))?.policyRequestExpiryDays ?? null;
     const expiresAt = days ? new Date(Date.now() + days * 86_400_000) : null;
@@ -303,6 +303,13 @@ export class RoleService {
     if (before.requestedBy === actor.userId || before.userId === actor.userId) {
       throw new ForbiddenError("The author or the beneficiary of a request cannot confirm or refuse it (maker-checker)");
     }
+    // Codex PR #207, same rule as decideAuditPermissionChange: a real seat in the Committee or the Audit group,
+    // never the permission alone (it can come from a legacy users.roles grant), and never a Risk Manager.
+    const seats = await this.fixedGroupsOf(actor.tenantId, actor.userId);
+    if (!seats.includes("AUDIT") && !seats.includes("RISK_COMMITTEE")) {
+      throw new ForbiddenError("Only a member of the Audit group or of the Committee can confirm or refuse a widened view");
+    }
+    if (seats.includes("RISK_MANAGER")) throw new ForbiddenError("A Risk Manager cannot confirm or refuse a widened view");
     if (!approve && !reason) throw new ValidationError("A reason is required to refuse");
     if (approve) await this.assertRiskManagerMember(actor.tenantId, before.userId);
     return grants.decide(actor.tenantId, id, { status: approve ? "APPROVED" : "REJECTED", by: actor.userId, reason },
@@ -329,10 +336,9 @@ export class RoleService {
    */
   async endSensitiveView(actor: AuthenticatedUser, userId: string, reason: string, requestId: string): Promise<void> {
     if (!this.sensitiveViews) return;
-    const live = (await this.sensitiveViews.list(actor.tenantId)).find((g) => g.userId === userId && (g.status === "PENDING" || g.status === "APPROVED"));
-    if (!live) return;
-    await this.sensitiveViews.revoke(actor.tenantId, live.id, { by: actor.userId, reason },
-      (g) => [this.grantAuditEvent(actor, g, "UNASSIGN", live, reason, requestId)]);
+    // Codex PR #207: a targeted, locked lookup of this account's live grant (never a bounded list).
+    await this.sensitiveViews.revokeLiveOf(actor.tenantId, userId, { by: actor.userId, reason },
+      (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, reason, requestId)]);
   }
 
   /** Terminal: an administrator withdraws a pending request or ends an active grant, with a reason. */
@@ -341,8 +347,9 @@ export class RoleService {
     const grants = this.requireSensitiveViews();
     const before = await grants.getById(actor.tenantId, id);
     if (!before) throw new NotFoundError("SensitiveViewGrant", id);
+    // Codex PR #207: the audit is built from the row locked and updated in the transaction, not from the read above.
     return grants.revoke(actor.tenantId, id, { by: actor.userId, reason },
-      (g) => [this.grantAuditEvent(actor, g, "UNASSIGN", before, reason, requestId)]);
+      (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, reason, requestId)]);
   }
 
   private requireSensitiveViews(): SensitiveViewGrantRepository {

@@ -21,6 +21,8 @@ function world() {
   const roles: Role[] = [];
   const assignments: RoleAssignment[] = [];
   const grants: SensitiveViewGrant[] = [];
+  let revokeLiveCalls = 0;
+  let listCalls = 0;
   const audit: Array<Omit<AuditEvent, "id" | "timestamp">> = [];
   const roleRepo = {
     async list(tenantId: string) { return roles.filter((r) => r.tenantId === tenantId); },
@@ -37,7 +39,7 @@ function world() {
   } as unknown as UserRepository;
   const transactional = <R>(out: R, events: (r: R) => Array<Omit<AuditEvent, "id" | "timestamp">>) => { audit.push(...events(out)); return out; };
   const grantRepo: SensitiveViewGrantRepository = {
-    async list() { return [...grants]; },
+    async list() { listCalls += 1; return [...grants]; },
     async getById(_t, id) { return grants.find((g) => g.id === id) ?? null; },
     async isApproved(_t, userId) { return grants.some((g) => g.userId === userId && g.status === "APPROVED"); },
     async create(input, events) {
@@ -56,8 +58,17 @@ function world() {
     async revoke(_t, id, change, events) {
       const g = grants.find((x) => x.id === id && (x.status === "PENDING" || x.status === "APPROVED"));
       if (!g) throw new ConflictError("final");
+      const before = { ...g };
       Object.assign(g, { status: "REVOKED", revokedBy: change.by, revokedAt: new Date(), revokeReason: change.reason });
-      return transactional({ ...g }, events);
+      return transactional({ before, after: { ...g } }, events).after;
+    },
+    async revokeLiveOf(_t, userId, change, events) {
+      const g = grants.find((x) => x.userId === userId && (x.status === "PENDING" || x.status === "APPROVED"));
+      if (!g) return null;
+      revokeLiveCalls += 1;
+      const before = { ...g };
+      Object.assign(g, { status: "REVOKED", revokedBy: change.by, revokedAt: new Date(), revokeReason: change.reason });
+      return transactional({ before, after: { ...g } }, events).after;
     },
   };
   const fixed = (name: string, systemGroup: Role["systemGroup"], permissions: string[], members: string[]) => {
@@ -69,7 +80,7 @@ function world() {
   fixed("Audit", "AUDIT", ["audit.read", "rolegroup.audit.validate"], ["auditor"]);
   fixed("Administrateurs", null, ["role.assign"], ["boss"]);
   const service = new RoleService(roleRepo, { record: async () => {} } as never, userRepo, undefined, undefined, undefined, undefined, undefined, undefined, grantRepo);
-  return { service, audit };
+  return { service, audit, counts: () => ({ revokeLiveCalls, listCalls }) };
 }
 
 const admin = actor("boss", ["role.read", "role.assign"]);
@@ -140,6 +151,37 @@ describe("q200 review fixes (QA-RL-04, SEC-RL-05, INFO)", () => {
     expect((await service.requestSensitiveView(admin, "rm", "Relance", "REQ-2")).status).toBe("PENDING");
     expect((await service.listSensitiveViewGrants(admin)).find((g) => g.id === old.id)?.status).toBe("REVOKED");
     await expect(service.requestSensitiveView(actor("boss", ["role.assign"]), "BOSS", "Pour moi", "REQ-3")).rejects.toThrow(ForbiddenError);
+  });
+});
+
+describe("Codex PR #207", () => {
+  it("ending a widened view looks up the account's live grant directly (never the bounded list)", async () => {
+    const { service, counts } = world();
+    const grant = await service.requestSensitiveView(admin, "rm", "Contrôle", "REQ-1");
+    await service.decideSensitiveView(validator, grant.id, true, null, "REQ-2");
+    const before = counts().listCalls;
+    await service.endSensitiveView(admin, "rm", "Fin", "REQ-3");
+    expect(counts()).toEqual({ revokeLiveCalls: 1, listCalls: before });
+    await service.endSensitiveView(admin, "rm", "Fin", "REQ-4"); // nothing live any more: a no-op
+    expect(counts().revokeLiveCalls).toBe(1);
+  });
+
+  it("confirming needs a real Committee or Audit seat, not rolegroup.audit.validate alone (legacy grant), and never a Risk Manager", async () => {
+    const { service } = world();
+    const grant = await service.requestSensitiveView(admin, "rm", "Contrôle", "REQ-1");
+    await expect(service.decideSensitiveView(actor("staff", ["rolegroup.audit.validate"]), grant.id, true, null, "REQ-2")).rejects.toThrow(ForbiddenError);
+    await expect(service.decideSensitiveView(actor("rm2", ["rolegroup.audit.validate"]), grant.id, true, null, "REQ-3")).rejects.toThrow(ForbiddenError);
+    expect((await service.decideSensitiveView(validator, grant.id, true, null, "REQ-4")).status).toBe("APPROVED");
+  });
+
+  it("the revocation audit carries the locked row (before) and the updated one (after)", async () => {
+    const { service, audit } = world();
+    const grant = await service.requestSensitiveView(admin, "rm", "Contrôle", "REQ-1");
+    await service.decideSensitiveView(validator, grant.id, true, null, "REQ-2");
+    await service.revokeSensitiveView(admin, grant.id, "Fin de mission", "REQ-3");
+    const last = audit.at(-1)!;
+    expect((last.oldValue as { status: string }).status).toBe("APPROVED");
+    expect((last.newValue as { status: string }).status).toBe("REVOKED");
   });
 });
 

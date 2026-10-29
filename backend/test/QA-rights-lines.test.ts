@@ -114,8 +114,16 @@ function world(opts: { expiryDays?: number | null; withNotifications?: boolean }
     revoke: async (t, id, c, events) => {
       const g = grants.find((x) => x.tenantId === t && x.id === id && (x.status === "PENDING" || x.status === "APPROVED"));
       if (!g) throw new ConflictError("final");
+      const before = { ...g };
       Object.assign(g, { status: "REVOKED", revokedBy: c.by, revokedAt: new Date(), revokeReason: c.reason });
-      return push({ ...g }, events);
+      return push({ before, after: { ...g } }, events).after;
+    },
+    revokeLiveOf: async (t, userId, c, events) => {
+      const g = grants.find((x) => x.tenantId === t && x.userId === userId && (x.status === "PENDING" || x.status === "APPROVED"));
+      if (!g) return null;
+      const before = { ...g };
+      Object.assign(g, { status: "REVOKED", revokedBy: c.by, revokedAt: new Date(), revokeReason: c.reason });
+      return push({ before, after: { ...g } }, events).after;
     },
   };
   const notifications = opts.withNotifications === false ? undefined : ({
