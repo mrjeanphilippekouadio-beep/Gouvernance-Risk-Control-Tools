@@ -430,6 +430,8 @@ pour l'usage.
 | HUMAN @security @dev-backend | **q201 (cockpit)** — SEC-RL-01/03 : cacher aussi les noms des administrateurs et de l'Audit au Risk Manager restreint (annuaire), ou seulement leurs droits (B recommandé). | 2026-10-28 | **Ouvert — HUMAN : q201** |
 | HUMAN @security @dev-backend | **q202 (cockpit)** — SEC-RL-04 : celui qui confirme une vue élargie ne doit pas être administrateur (A recommandé). | 2026-10-28 | **Ouvert — HUMAN : q202** |
 | @dev-backend | **SEC-RL-02/05 + INFO (revue A10 feat/r1-rights-lines)** : 404 cohérent sur `/roles/users/:userId` ; vue élargie invalide après sortie du groupe ou suspension (pas de réactivation au retour) ; demande expirée ne bloque plus ; id canonique (casse). À corriger dans la branche avant PR. | 2026-10-28 | **En cours** |
+| HUMAN @security @architect @privacy | **q203 (cockpit)** — SEC V0-03 : le journal d'audit restitue le contenu des ressources restreintes ; réserver `audit.read` au groupe Audit (A, recommandé) ou masquer le contenu non visible (B). Bloque V1. V0-05 rattaché à q202. | 2026-10-29 | **Ouvert — HUMAN : q203** |
+| @dev-backend @dev-db | **Visibilité — à lever avant V1 (SEC-visibility-v0)** : V0-01 (scope absent = pas de filtre → fail-closed), V0-02 (tableaux de bord, rapports, cartographie, `?coveringRiskId=`, vues 360, KRI/KPI, `ActionPlanService.dashboard` non filtrés), V0-04 (KPI `requireKpi` et validations de liens), V0-06/07 INFO ; retest A10 avant de livrer V1. | 2026-10-29 | **Ouvert** |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
