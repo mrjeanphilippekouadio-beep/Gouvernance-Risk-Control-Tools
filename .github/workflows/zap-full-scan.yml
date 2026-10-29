@@ -77,17 +77,8 @@ jobs:
           credentials["username"] = ENV.fetch("ZAP_TEST_EMAIL")
           credentials["password"] = ENV.fetch("ZAP_TEST_PASSWORD")
 
-          # Explicit browser-auth steps need their values resolved from the
-          # same protected environment as the QA user credentials.
-          steps = auth.fetch("parameters").fetch("steps", [])
-          steps.each do |step|
-            case step.fetch("type")
-            when "USERNAME"
-              step["value"] = credentials.fetch("username")
-            when "PASSWORD"
-              step["value"] = credentials.fetch("password")
-            end
-          end
+          # No custom browser steps are configured: ZAP performs one built-in
+          # username/password discovery and submission sequence.
 
           plan.fetch("jobs").each do |job|
             next unless %w[spider spiderClient].include?(job.fetch("type"))

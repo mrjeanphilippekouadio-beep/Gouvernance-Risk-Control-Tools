@@ -114,8 +114,7 @@ jobs:
                 "template" => "auth-report-json",
                 "reportDir" => "/zap/wrk/report",
                 "reportFile" => "auth-diagnostics",
-                "reportTitle" => "GRC Tools — ZAP Authentication Diagnostics",
-                "sites" => [target_url, api_url]
+                "reportTitle" => "GRC Tools — ZAP Authentication Diagnostics"
               }
             }
           ]
