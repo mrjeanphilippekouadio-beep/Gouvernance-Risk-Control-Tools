@@ -5,9 +5,7 @@ interface UseLocalSignInResult {
   error: string | null;
   email: string;
   setEmail: (email: string) => void;
-  password: string;
-  setPassword: (password: string) => void;
-  signIn: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => void;
   loading: boolean;
 }
@@ -17,11 +15,12 @@ const API_BASE_URL = (import.meta.env["VITE_API_BASE_URL"] as string | undefined
 export function useLocalSignIn(defaultEmail: string): UseLocalSignInResult {
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState(defaultEmail);
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function signIn(): Promise<void> {
+  async function signIn(emailInput: string, passwordInput: string): Promise<void> {
+    const normalizedEmail = emailInput.trim();
+    setEmail(normalizedEmail);
     if (!API_BASE_URL) {
       setError("VITE_API_BASE_URL is not configured");
       return;
@@ -33,7 +32,7 @@ export function useLocalSignIn(defaultEmail: string): UseLocalSignInResult {
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/local`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalizedEmail, password: passwordInput }),
       });
       if (!response.ok) {
         setError("Identifiants invalides");
@@ -45,7 +44,6 @@ export function useLocalSignIn(defaultEmail: string): UseLocalSignInResult {
         return;
       }
       setToken(data.accessToken);
-      setPassword("");
     } catch {
       setError("Service d'authentification indisponible");
     } finally {
@@ -55,8 +53,7 @@ export function useLocalSignIn(defaultEmail: string): UseLocalSignInResult {
 
   function signOut(): void {
     setToken(null);
-    setPassword("");
   }
 
-  return { token, error, email, setEmail, password, setPassword, signIn, signOut, loading };
+  return { token, error, email, setEmail, signIn, signOut, loading };
 }
