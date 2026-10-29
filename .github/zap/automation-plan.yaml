@@ -29,30 +29,15 @@ env:
         method: "browser"
         parameters:
           loginPageUrl: ${ZAP_TARGET_URL}
-          loginPageWait: 10
-          stepDelay: 1
+          loginPageWait: 20
+          stepDelay: 2
           browserId: "firefox-headless"
           # Capture why the browser helper may fail to authenticate; this is
           # needed because API preflight succeeds while Client Spider visits no nodes.
           diagnostics: true
-          # Make the helper explicitly run its standard field discovery/fill/submit
-          # sequence instead of relying only on implicit defaults.
-          steps:
-            - description: "Fill the local QA email field"
-              type: "USERNAME"
-              cssSelector: "#local-email"
-              timeout: 5000
-            - description: "Fill the local QA password field"
-              type: "PASSWORD"
-              cssSelector: "#local-password"
-              timeout: 5000
-            - description: "Submit the local QA login form"
-              type: "CLICK"
-              cssSelector: "form.auth-dev button[type='submit']"
-              timeout: 5000
-            - description: "Wait for the React app shell to render after login"
-              type: "WAIT"
-              timeout: 5000
+          # Use only ZAP's built-in browser login sequence. The last diagnostic
+          # showed custom fill/click steps followed by a second automatic
+          # fill/submit attempt, so the custom sequence has been removed.
         verification:
           method: "poll"
           pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
