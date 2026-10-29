@@ -35,9 +35,25 @@ env:
           # Capture why the browser helper may fail to authenticate; this is
           # needed because API preflight succeeds while Client Spider visits no nodes.
           diagnostics: true
-          # Use only ZAP's built-in browser login sequence. The last diagnostic
-          # showed custom fill/click steps followed by a second automatic
-          # fill/submit attempt, so the custom sequence has been removed.
+          # The QA login is a React form. ZAP's automatic flow fills the fields
+          # and sends Return but does not click the submit button in the current
+          # staging build, so use an explicit, deterministic form sequence.
+          steps:
+            - description: "Fill the staging QA email field"
+              type: "USERNAME"
+              cssSelector: "#local-email"
+              timeout: 10000
+            - description: "Fill the staging QA password field"
+              type: "PASSWORD"
+              cssSelector: "#local-password"
+              timeout: 10000
+            - description: "Click the staging QA login submit button"
+              type: "CLICK"
+              cssSelector: "form.auth-dev button[type='submit']"
+              timeout: 10000
+            - description: "Wait for the authenticated React app shell"
+              type: "WAIT"
+              timeout: 10000
         verification:
           method: "poll"
           pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
