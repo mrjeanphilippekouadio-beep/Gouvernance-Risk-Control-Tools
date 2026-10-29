@@ -248,6 +248,41 @@ describe("KriService.update (ACT-131)", () => {
     const updated = await service.update(actor, kri.id, { thresholdRed: 20 }, "REQ-10");
     expect(updated.thresholdRed).toBe(20);
   });
+
+  it("F7S6-01: with a transactional repository, every write hands its audit rows to the repository (none recorded after)", async () => {
+    const base = inMemoryKriRepository();
+    const handed: string[] = [];
+    type Builder = ((r: unknown) => Array<{ action: string }>) | undefined;
+    const take = (audit: Builder, result: unknown) => { for (const e of audit?.(result) ?? []) handed.push(e.action); };
+    const kris = {
+      ...base,
+      auditsInTransaction: true,
+      async create(i: Parameters<KriRepository["create"]>[0], a?: Builder) { const k = await base.create(i); take(a, k); return k; },
+      async update(t: string, id: string, i: Parameters<KriRepository["update"]>[2], a?: Builder) { const k = await base.update(t, id, i); take(a, k); return k; },
+      async replaceCoveredRisks(t: string, id: string, ids: string[], a?: Builder) { const old = await base.listCoveredRiskIds(t, id); await base.replaceCoveredRisks(t, id, ids); take(a, old); return old; },
+      async softDelete(t: string, id: string, by: string, r: string, a?: Builder) { await base.softDelete(t, id, by, r); take(a, undefined); },
+    } as unknown as KriRepository;
+    let recorded = 0;
+    const audit = { ...inMemoryAuditRepository(), async record() { recorded++; } } as AuditRepository;
+    const service = new KriService(kris, inMemoryKriMeasureRepository(), fakeRiskRepository(["risk-1", "risk-2"]), audit);
+
+    const kri = await service.create(actor, validInput, "REQ-30");
+    await service.update(actor, kri.id, { label: "Nouveau" }, "REQ-31");
+    await service.addCoveredRisks(actor, kri.id, ["risk-2"], "REQ-32");
+    await service.disable(actor, kri.id, "motif", "REQ-33");
+    expect(handed).toEqual(["CREATE", "UPDATE", "ASSIGN", "DELETE"]);
+    expect(recorded).toBe(0);
+  });
+
+  it("never changes `active` (false or true): deactivation goes through disable under kri.delete", async () => {
+    const kris = inMemoryKriRepository();
+    const service = new KriService(kris, inMemoryKriMeasureRepository(), fakeRiskRepository(["risk-1"]), inMemoryAuditRepository());
+    const kri = await service.create(actor, validInput, "REQ-11");
+
+    await expect(service.update(updateOnlyActor, kri.id, { active: false }, "REQ-12")).rejects.toThrow(ValidationError);
+    await expect(service.update(actor, kri.id, { active: true }, "REQ-13")).rejects.toThrow(ValidationError);
+    expect((await service.get(actor, kri.id)).active).toBe(true);
+  });
 });
 
 describe("KriService.disable (ACT-132, terminal-state permission gating)", () => {
@@ -285,6 +320,20 @@ describe("KriService.addCoveredRisks (ACT-136)", () => {
     const service = new KriService(kris, inMemoryKriMeasureRepository(), fakeRiskRepository(["risk-1"]), inMemoryAuditRepository());
     const kri = await service.create(actor, validInput, "REQ-18");
     await expect(service.addCoveredRisks(actor, kri.id, ["missing-risk"], "REQ-19")).rejects.toThrow(ValidationError);
+  });
+
+  it("F7-S6: get returns the covered risks; replacing them audits the previous set as oldValue", async () => {
+    const kris = inMemoryKriRepository();
+    const events: Array<{ oldValue: unknown; newValue: unknown }> = [];
+    const audit = { ...inMemoryAuditRepository(), async record(e: { oldValue: unknown; newValue: unknown }) { events.push(e); } } as AuditRepository;
+    const service = new KriService(kris, inMemoryKriMeasureRepository(), fakeRiskRepository(["risk-1", "risk-2", "risk-3"]), audit);
+    const kri = await service.create(actor, validInput, "REQ-20");
+
+    await service.addCoveredRisks(actor, kri.id, ["risk-2"], "REQ-21");
+    expect((await service.get(readOnlyActor, kri.id)).coveredRiskIds).toEqual(["risk-2"]);
+    await service.addCoveredRisks(actor, kri.id, ["risk-3"], "REQ-22");
+    expect((await service.get(readOnlyActor, kri.id)).coveredRiskIds).toEqual(["risk-3"]);
+    expect(events.at(-1)).toMatchObject({ oldValue: { coveredRiskIds: ["risk-2"] }, newValue: { coveredRiskIds: ["risk-3"] } });
   });
 });
 
