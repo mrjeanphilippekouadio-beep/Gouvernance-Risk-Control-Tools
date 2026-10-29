@@ -32,6 +32,9 @@ env:
           loginPageWait: 10
           stepDelay: 1
           browserId: "firefox-headless"
+          # Capture why the browser helper may fail to authenticate; this is
+          # needed because API preflight succeeds while Client Spider visits no nodes.
+          diagnostics: true
           # Make the helper explicitly run its standard field discovery/fill/submit
           # sequence instead of relying only on implicit defaults.
           steps:
