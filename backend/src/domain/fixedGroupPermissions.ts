@@ -128,3 +128,27 @@ export const isCommitteeRole = (r: Role): boolean => r.systemGroup === "RISK_COM
 export const isCommitteeMember = (roles: Role[]): boolean => roles.some(isCommitteeRole);
 /** q104 (DECISION-046): Audit membership = the system group only (extension to audit.* permissions is F-D044-08, with A13). */
 export const isAuditGroupMember = (roles: Role[]): boolean => roles.some((r) => r.systemGroup === "AUDIT");
+
+/**
+ * q188/q189 (DECISION-098, DECISION-101): line of defense shown as a badge in the rights matrix, and the basis of what
+ * a Risk Manager reader sees there. Most sensitive wins when an account cumulates: ADMIN > AUDIT > LINE_2 > LINE_1.
+ * ADMIN = an administration right (ADMIN_PERMISSIONS, the isAdministrator notion); AUDIT = the Audit group;
+ * LINE_2 = the Risk Manager or Committee group; LINE_1 = everyone else.
+ */
+export type DefenseLine = "ADMIN" | "AUDIT" | "LINE_2" | "LINE_1";
+
+function lineOf(groups: Array<SystemGroup | null>, permissions: string[]): DefenseLine {
+  if (permissions.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p))) return "ADMIN";
+  if (groups.includes("AUDIT")) return "AUDIT";
+  if (groups.includes("RISK_MANAGER") || groups.includes("RISK_COMMITTEE")) return "LINE_2";
+  return "LINE_1";
+}
+
+export const roleLine = (r: Role): DefenseLine => lineOf([r.systemGroup], r.permissions);
+
+/** An account's line: every active role it holds plus its direct (legacy `users.roles`) permissions. */
+export const accountLine = (roles: Role[], directPermissions: string[]): DefenseLine =>
+  lineOf(roles.map((r) => r.systemGroup), [...roles.flatMap((r) => r.permissions), ...directPermissions]);
+
+/** What a restricted reader (no administration right, not Audit, no role.read.sensitive) never sees. */
+export const isSensitiveLine = (line: DefenseLine): boolean => line === "ADMIN" || line === "AUDIT";

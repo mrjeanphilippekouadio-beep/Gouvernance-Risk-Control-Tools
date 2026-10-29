@@ -428,3 +428,62 @@ describe("RoleService", () => {
     });
   });
 });
+
+describe("q188/q189 (DECISION-098, DECISION-101): the rights matrix by line of defense", () => {
+  const person = (id: string, roles: string[] = []): User =>
+    ({ id, tenantId: "tenant-1", email: `${id}@example.com`, displayName: id, roles, createdAt: new Date(), deletedAt: null });
+  const rmReader: AuthenticatedUser = { ...admin, userId: "rm", roles: ["role.read"] };
+
+  async function setup() {
+    const roles = inMemoryRoleRepository();
+    const users = [person("rm"), person("auditor"), person("boss"), person("staff"), person("committee"), person("legacy-admin", ["user.update"])];
+    const service = new RoleService(roles, inMemoryAuditRepository(), inMemoryUserRepository(users));
+    const group = (name: string, systemGroup: Role["systemGroup"], permissions: string[]) =>
+      roles.create({ tenantId: "tenant-1", name, permissions, systemGroup } as never);
+    const rm = await group("Risk Manager", "RISK_MANAGER", ["role.read", "risk.read"]);
+    const audit = await group("Audit", "AUDIT", ["audit.read"]);
+    const committee = await group("Comité", "RISK_COMMITTEE", ["risk.read"]);
+    const adminRole = await group("Administrateurs", null, ["role.update"]);
+    const ordinary = await group("Métier", null, ["risk.read"]);
+    const seats: Array<[string, string]> = [[rm.id, "rm"], [audit.id, "auditor"], [committee.id, "committee"], [adminRole.id, "boss"], [ordinary.id, "staff"]];
+    for (const [roleId, userId] of seats) await roles.assignToUser("tenant-1", roleId, userId, "seed");
+    return { service, audit, adminRole, ordinary };
+  }
+
+  it("badges every role and account with its line (administrator > Audit > 2nd line > 1st line)", async () => {
+    const { service } = await setup();
+    const lines = Object.fromEntries((await service.matrix(admin)).map((r) => [r.name, r.line]));
+    expect(lines).toEqual({ "Risk Manager": "LINE_2", Audit: "AUDIT", "Comité": "LINE_2", Administrateurs: "ADMIN", "Métier": "LINE_1" });
+    const accounts = Object.fromEntries((await service.accounts(admin)).map((a) => [a.id, a.line]));
+    expect(accounts).toEqual({ rm: "LINE_2", auditor: "AUDIT", boss: "ADMIN", staff: "LINE_1", committee: "LINE_2", "legacy-admin": "ADMIN" });
+  });
+
+  it("a Risk Manager reader sees the 1st and 2nd lines only; Audit and administrators answer like unknown ids", async () => {
+    const { service, audit, adminRole, ordinary } = await setup();
+    expect((await service.matrix(rmReader)).map((r) => r.name).sort()).toEqual(["Comité", "Métier", "Risk Manager"]);
+    expect((await service.list(rmReader)).map((r) => r.name).sort()).toEqual(["Comité", "Métier", "Risk Manager"]);
+    expect((await service.accounts(rmReader)).map((a) => a.id).sort()).toEqual(["committee", "rm", "staff"]);
+    await expect(service.get(rmReader, audit.id)).rejects.toThrow(NotFoundError);
+    await expect(service.get(rmReader, adminRole.id)).rejects.toThrow(NotFoundError);
+    expect((await service.get(rmReader, ordinary.id)).name).toBe("Métier");
+    for (const hidden of ["auditor", "boss", "legacy-admin"]) {
+      await expect(service.getEffectivePermissionSources(rmReader, hidden)).rejects.toThrow(NotFoundError);
+      await expect(service.getEffectivePermissions(rmReader, hidden)).rejects.toThrow(NotFoundError);
+      await expect(service.listForUser(rmReader, hidden)).rejects.toThrow(NotFoundError);
+    }
+    expect((await service.getEffectivePermissionSources(rmReader, "staff")).suspended).toBe(false);
+  });
+
+  it("administrators, the Audit group and holders of role.read.sensitive see every line", async () => {
+    const { service } = await setup();
+    const auditReader: AuthenticatedUser = { ...admin, userId: "auditor", roles: ["role.read"] };
+    const widened: AuthenticatedUser = { ...rmReader, roles: ["role.read", "role.read.sensitive"] };
+    for (const reader of [admin, auditReader, widened]) expect(await service.accounts(reader)).toHaveLength(6);
+  });
+
+  it("role.read.sensitive is never carried by a role (its own circuit, fail closed)", async () => {
+    const { service, ordinary } = await setup();
+    await expect(service.create(admin, { name: "Vue large", permissions: ["role.read.sensitive"] }, "REQ-L1")).rejects.toThrow(ValidationError);
+    await expect(service.update(admin, ordinary.id, { permissions: ["risk.read", "role.read.sensitive"] }, "REQ-L2")).rejects.toThrow(ValidationError);
+  });
+});
