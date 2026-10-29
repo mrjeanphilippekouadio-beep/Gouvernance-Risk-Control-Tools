@@ -172,7 +172,7 @@ jobs:
           ZAP_TEST_PASSWORD: ${{ secrets.ZAP_TEST_PASSWORD }}
         run: |
           set -euo pipefail
-          ruby -ryaml -rjson -e 'File.write(ARGV.fetch(1), JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)) + "\\n")' report/client-map.yaml report/client-map.json
+          ruby -ryaml -rjson -e 'File.write(ARGV.fetch(1), JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)))' report/client-map.yaml report/client-map.json
           python3 <<'PY'
           import json
           import os
@@ -249,8 +249,8 @@ jobs:
               for secret in secrets:
                   if secret:
                       line = line.replace(secret, "[REDACTED]")
-              line = re.sub(r"(?i)Bearer\\s+[^\\s\"']+", "Bearer [REDACTED]", line)
-              line = re.sub(r"\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{5,}\\b", "[REDACTED_TOKEN]", line)
+              line = re.sub(r"(?i)Bearer\s+[^\s\"']+", "Bearer [REDACTED]", line)
+              line = re.sub(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}\b", "[REDACTED_TOKEN]", line)
               clean_lines.append(line)
           lines = clean_lines
 
