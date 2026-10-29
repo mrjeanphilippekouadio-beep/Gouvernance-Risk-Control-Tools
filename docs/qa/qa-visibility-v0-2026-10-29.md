@@ -1,6 +1,6 @@
 # QA — lot V0 visibilité des ressources (DECISION-100/102/103) — 2026-10-29
 
-Branche `feat/r1-visibility-v0`, tête c1ae09d. Tests : `backend/test/QA-visibility-v0.test.ts` (33 tests : 31 PASS + 2 `it.fails` = défauts, 0 FAIL). Verdict : **PARTIAL_PASS** (V0 conforme à « aucun changement visible » ; 2 défauts de base mineurs ; 62 lectures non branchées, écart attendu pour V1). Ceci n'est pas un avis Security / Privacy / Compliance.
+Branche `feat/r1-visibility-v0`, tête c1ae09d. Tests : `backend/test/QA-visibility-v0.test.ts` (33 tests : 31 PASS + 2 `it.fails` = défauts, 0 FAIL). Verdict : **PARTIAL_PASS** (V0 conforme à « aucun changement visible » ; 2 défauts de base mineurs ; 60 lectures non branchées, écart attendu pour V1). Ceci n'est pas un avis Security / Privacy / Compliance.
 
 ## Méthode
 - Partie mémoire (toujours exécutée) : 5 services x get/list x 8 profils de lecteur (ordinaire, administrateur sans groupe, sans rôle, rôle seulement NOMMÉ « Risk Manager », RM, Comité, Audit, Audit parmi d'autres) ; double de dépôt fidèle au filtre SQL ; inventaire statique des lectures (parenthèses équilibrées).
@@ -32,7 +32,7 @@ Branche `feat/r1-visibility-v0`, tête c1ae09d. Tests : `backend/test/QA-visibil
 Aucun défaut de sécurité suspecté dans le périmètre testé (à confirmer par Security : rapport séparé `docs/security/`). Les deux défauts ci-dessus sont à porter à Security pour avis sur la gravité, pas évalués ici.
 
 ## Lectures NON branchées (écart pour V1, non corrigé)
-Les 10 lectures publiques `get` / `list` des 5 services sont branchées (garde de test : liste exacte). Les 62 lectures de racines suivantes n'ont pas de portée (un test d'instantané par fichier échoue si l'une change). Dès que V1 écrira PERIMETRE / NOMINATIF, chacune devient une fuite possible :
+Les 10 lectures publiques `get` / `list` des 5 services sont branchées (garde de test : liste exacte). Les 60 lectures de racines suivantes n'ont pas de portée (un test d'instantané par fichier échoue si l'une change). Dès que V1 écrira PERIMETRE / NOMINATIF, chacune devient une fuite possible :
 
 **Lectures utilisateur directes (priorité V1)**
 - `ActionPlanService.ts:251` `listForRisk`, `:264` `dashboard` (liste filtrée des plans, ACT-196) ; `ControlService.ts:76` `listCoveringRisk` ; `KpiService.ts:201` `getById` (interne mais renvoie le KPI).
