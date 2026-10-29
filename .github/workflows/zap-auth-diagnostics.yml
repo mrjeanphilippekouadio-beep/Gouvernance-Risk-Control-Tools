@@ -1,0 +1,249 @@
+name: ZAP Auth Diagnostics
+
+# Short, manual-only diagnostic run. This does not perform an active scan.
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Authentication diagnostics are restricted to staging"
+        type: choice
+        options:
+          - staging
+        default: staging
+
+jobs:
+  auth-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve a short, staging-only authentication plan
+        env:
+          ZAP_TARGET_URL: ${{ secrets.ZAP_TARGET_URL }}
+          ZAP_API_BASE_URL: https://gouvernance-risk-control-tools-staging.onrender.com
+          ZAP_TEST_EMAIL: qagrctest@gmail.com
+          ZAP_TEST_PASSWORD: ${{ secrets.ZAP_TEST_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          ruby <<'RUBY'
+          require "yaml"
+          require "uri"
+
+          target_uri = URI.parse(ENV.fetch("ZAP_TARGET_URL"))
+          api_uri = URI.parse(ENV.fetch("ZAP_API_BASE_URL"))
+          expected_frontend = "gouvernanceriskcontroltools-staging.onrender.com"
+          expected_backend = "gouvernance-risk-control-tools-staging.onrender.com"
+
+          unless target_uri.scheme == "https" &&
+                 target_uri.host == expected_frontend &&
+                 [nil, "", "/"].include?(target_uri.path) &&
+                 target_uri.query.nil? && target_uri.fragment.nil?
+            abort("ZAP_TARGET_URL must be the staging frontend origin; refusing to test an unexpected target.")
+          end
+          unless api_uri.scheme == "https" &&
+                 api_uri.host == expected_backend &&
+                 [nil, "", "/"].include?(api_uri.path) &&
+                 api_uri.query.nil? && api_uri.fragment.nil?
+            abort("ZAP_API_BASE_URL must be the staging API origin; refusing to test an unexpected target.")
+          end
+
+          target_url = "#{target_uri.scheme}://#{target_uri.host}"
+          api_url = "#{api_uri.scheme}://#{api_uri.host}"
+          plan = YAML.safe_load(File.read(".github/zap/automation-plan.yaml"), aliases: false)
+          context = plan.fetch("env").fetch("contexts").find { |item| item.fetch("name") == "grc-tools" }
+          abort("Context grc-tools is missing") unless context
+
+          context["urls"] = [target_url, api_url].uniq
+          auth = context.fetch("authentication")
+          auth.fetch("parameters")["loginPageUrl"] = target_url
+          auth.fetch("verification")["pollUrl"] = "#{api_url}/api/v1/users/me"
+          qa_user = context.fetch("users").find { |item| item.fetch("name") == "qa" }
+          abort("QA user is missing from ZAP context") unless qa_user
+          credentials = qa_user.fetch("credentials")
+          credentials["username"] = ENV.fetch("ZAP_TEST_EMAIL")
+          credentials["password"] = ENV.fetch("ZAP_TEST_PASSWORD")
+
+          auth.fetch("parameters").fetch("steps", []).each do |step|
+            case step.fetch("type")
+            when "USERNAME"
+              step["value"] = credentials.fetch("username")
+            when "PASSWORD"
+              step["value"] = credentials.fetch("password")
+            when "CUSTOM_FIELD"
+              step["value"] = case step.fetch("value", nil)
+                              when "${ZAP_TEST_EMAIL}" then credentials.fetch("username")
+                              when "${ZAP_TEST_PASSWORD}" then credentials.fetch("password")
+                              else step.fetch("value", nil)
+                              end
+            end
+          end
+
+          spider = plan.fetch("jobs").find { |job| job.fetch("type") == "spiderClient" }
+          abort("spiderClient job is missing") unless spider
+          spider.fetch("parameters")["url"] = target_url
+          spider.fetch("parameters")["maxDuration"] = 3
+          spider.fetch("parameters")["maxCrawlDepth"] = 3
+          spider.fetch("parameters")["maxChildren"] = 25
+          spider.fetch("parameters")["initialLoadTime"] = 8
+          spider.fetch("parameters")["pageLoadTime"] = 2
+          spider.fetch("parameters")["actionWaitTime"] = 1
+          spider.fetch("parameters")["shutdownTime"] = 5
+
+          # Deliberately do not include passive wait or activeScan: diagnose login
+          # and client-side exploration before spending time on the full scan.
+          plan["jobs"] = [
+            spider,
+            {
+              "type" => "export",
+              "parameters" => {
+                "context" => "grc-tools",
+                "type" => "yaml",
+                "source" => "clientmap",
+                "fileName" => "/zap/wrk/report/client-map.yaml"
+              }
+            },
+            {
+              "type" => "report",
+              "parameters" => {
+                "template" => "auth-report-json",
+                "reportDir" => "/zap/wrk/report",
+                "reportFile" => "auth-diagnostics",
+                "reportTitle" => "GRC Tools — ZAP Authentication Diagnostics",
+                "sites" => [target_url, api_url]
+              }
+            }
+          ]
+
+          resolved = YAML.dump(plan)
+          if resolved.match?(/\$\{ZAP_(?:TARGET_URL|API_BASE_URL|TEST_EMAIL|TEST_PASSWORD)\}/)
+            abort("Unresolved ZAP environment placeholder remains in the diagnostic plan")
+          end
+          output = File.join(ENV.fetch("RUNNER_TEMP"), "auth-diagnostics-plan.yaml")
+          File.write(output, resolved, mode: "w", perm: 0o600)
+          RUBY
+
+      - name: Run browser authentication diagnostics (no active scan)
+        env:
+          ZAP_API_BASE_URL: https://gouvernance-risk-control-tools-staging.onrender.com
+        run: |
+          set -uo pipefail
+          mkdir -p report zap-home
+          sudo chown 1000:1000 report zap-home
+          plan_path="$RUNNER_TEMP/auth-diagnostics-plan.yaml"
+          test -s "$plan_path"
+          sudo chown 1000:1000 "$plan_path"
+          sudo chmod 600 "$plan_path"
+
+          docker_rc=0
+          docker run --rm \
+            --network host \
+            -v "${{ github.workspace }}/report:/zap/wrk/report:rw" \
+            -v "${{ github.workspace }}/zap-home:/home/zap/.ZAP:rw" \
+            --mount "type=bind,src=$plan_path,dst=/zap/wrk/auth-diagnostics-plan.yaml,readonly" \
+            --add-host=zap:127.0.0.1 \
+            --entrypoint bash \
+            ghcr.io/zaproxy/zaproxy:stable \
+            -c 'test -r /zap/wrk/auth-diagnostics-plan.yaml || { echo "Diagnostic plan unreadable" >&2; exit 1; }; zap.sh -cmd -host 127.0.0.1 -port 8080 -autorun /zap/wrk/auth-diagnostics-plan.yaml; rc=$?; echo "ZAP diagnostic plan exit code: $rc"; exit $rc' || docker_rc=$?
+
+          sudo chown -R "$(id -u):$(id -g)" report
+          chmod -R u+rwX report
+          if [ ! -s report/auth-diagnostics.json ]; then
+            echo "::error::ZAP did not produce auth-diagnostics.json; diagnostics cannot be interpreted."
+            exit 1
+          fi
+          if [ ! -s report/client-map.yaml ]; then
+            echo "::error::ZAP did not produce client-map.yaml."
+            exit 1
+          fi
+          echo "Diagnostic scanner exit code: $docker_rc (warnings may produce exit code 2)."
+
+      - name: Extract a sanitized diagnostic summary
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json
+          import re
+          import urllib.parse
+          from pathlib import Path
+          import yaml
+
+          report = json.loads(Path("report/auth-diagnostics.json").read_text(encoding="utf-8"))
+          lines = [
+              "# ZAP browser authentication diagnostics",
+              "",
+              "This is a short diagnostic run; no active scan was executed.",
+              "",
+              "## Authentication checks",
+          ]
+          items = report.get("summaryItems", [])
+          if not items:
+              lines.append("- ZAP did not emit authentication summary items; inspect plan/setup before interpreting this result.")
+          for item in items:
+              passed = item.get("passed")
+              mark = "PASS" if passed is True else "FAIL" if passed is False else "INFO"
+              desc = re.sub(r"[\r\n]+", " ", str(item.get("description", item.get("key", "Unspecified check"))))
+              lines.append(f"- **{mark}** — {desc}")
+
+          failures = report.get("failureReasons", [])
+          if failures:
+              lines.extend(["", "## Failure reasons"])
+              for item in failures:
+                  desc = re.sub(r"[\r\n]+", " ", str(item.get("description", item.get("key", "Unspecified failure"))))
+                  lines.append(f"- {desc}")
+
+          diagnostics = report.get("diagnostics", [])
+          lines.extend(["", "## Browser steps"])
+          step_count = 0
+          for attempt, entry in enumerate(diagnostics, 1):
+              lines.append(f"- Attempt {attempt}: method={entry.get('authenticationMethod', 'unknown')}; user={entry.get('user', 'unknown')}")
+              for step in entry.get("steps", []):
+                  step_count += 1
+                  desc = re.sub(r"[\r\n]+", " ", str(step.get("description", "Step without description")))
+                  raw_url = str(step.get("url", ""))
+                  parsed = urllib.parse.urlsplit(raw_url)
+                  safe_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme and parsed.netloc else "(URL not recorded)"
+                  lines.append(f"  - {desc} — {safe_url}")
+          if not diagnostics:
+              lines.append("- No browser authentication diagnostic attempts were recorded by ZAP.")
+          else:
+              lines.append(f"- Recorded {step_count} browser step(s) across {len(diagnostics)} attempt(s).")
+
+          client_map = yaml.safe_load(Path("report/client-map.yaml").read_text(encoding="utf-8"))
+          visited = []
+          def walk(node):
+              if isinstance(node, dict):
+                  if node.get("visited") is True and isinstance(node.get("url"), str):
+                      parsed = urllib.parse.urlsplit(node["url"])
+                      visited.append(f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme and parsed.netloc else node["url"])
+                  for value in node.values():
+                      walk(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      walk(value)
+          walk(client_map)
+          lines.extend(["", "## Client Map", f"- Visited nodes: {len(visited)}"])
+          for url in visited[:30]:
+              lines.append(f"- {url}")
+          if not visited:
+              lines.append("- No node is marked visited; authenticated browser exploration is not proven.")
+
+          # Only this allow-listed summary is published. The raw auth report can
+          # contain request bodies, tokens, storage and screenshots; never upload it.
+          Path("report/diagnostic-summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          Path("report/auth-diagnostics.json").unlink(missing_ok=True)
+          Path("report/client-map.yaml").unlink(missing_ok=True)
+          print("\n".join(lines))
+          PY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: zap-auth-diagnostic-summary
+          path: report/diagnostic-summary.md
+          if-no-files-found: warn
