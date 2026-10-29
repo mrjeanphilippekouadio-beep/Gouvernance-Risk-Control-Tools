@@ -131,6 +131,8 @@ jobs:
       - name: Run browser authentication diagnostics (no active scan)
         env:
           ZAP_API_BASE_URL: https://gouvernance-risk-control-tools-staging.onrender.com
+          ZAP_TEST_EMAIL: qagrctest@gmail.com
+          ZAP_TEST_PASSWORD: ${{ secrets.ZAP_TEST_PASSWORD }}
         run: |
           set -uo pipefail
           mkdir -p report zap-home
@@ -153,6 +155,7 @@ jobs:
 
           sudo chown -R "$(id -u):$(id -g)" report
           chmod -R u+rwX report
+          rm -f "$plan_path"
           if [ ! -s report/auth-diagnostics.json ]; then
             echo "::error::ZAP did not produce auth-diagnostics.json; diagnostics cannot be interpreted."
             exit 1
@@ -164,15 +167,21 @@ jobs:
           echo "Diagnostic scanner exit code: $docker_rc (warnings may produce exit code 2)."
 
       - name: Extract a sanitized diagnostic summary
+        env:
+          ZAP_TEST_EMAIL: qagrctest@gmail.com
+          ZAP_TEST_PASSWORD: ${{ secrets.ZAP_TEST_PASSWORD }}
         run: |
           set -euo pipefail
+          ruby -ryaml -rjson -e 'File.write(ARGV.fetch(1), JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)) + "\\n")' report/client-map.yaml report/client-map.json
           python3 <<'PY'
           import json
+          import os
           import re
           import urllib.parse
           from pathlib import Path
-          import yaml
 
+          # PyYAML is not guaranteed on every GitHub-hosted runner. Convert the
+          # ZAP YAML export with Ruby's standard YAML library before this step.
           report = json.loads(Path("report/auth-diagnostics.json").read_text(encoding="utf-8"))
           lines = [
               "# ZAP browser authentication diagnostics",
@@ -214,7 +223,7 @@ jobs:
           else:
               lines.append(f"- Recorded {step_count} browser step(s) across {len(diagnostics)} attempt(s).")
 
-          client_map = yaml.safe_load(Path("report/client-map.yaml").read_text(encoding="utf-8"))
+          client_map = json.loads(Path("report/client-map.json").read_text(encoding="utf-8"))
           visited = []
           def walk(node):
               if isinstance(node, dict):
@@ -233,11 +242,24 @@ jobs:
           if not visited:
               lines.append("- No node is marked visited; authenticated browser exploration is not proven.")
 
+          # Never print credentials, bearer/JWT values, request data or screenshots.
+          secrets = [os.environ.get("ZAP_TEST_EMAIL", ""), os.environ.get("ZAP_TEST_PASSWORD", "")]
+          clean_lines = []
+          for line in lines:
+              for secret in secrets:
+                  if secret:
+                      line = line.replace(secret, "[REDACTED]")
+              line = re.sub(r"(?i)Bearer\\s+[^\\s\"']+", "Bearer [REDACTED]", line)
+              line = re.sub(r"\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{5,}\\b", "[REDACTED_TOKEN]", line)
+              clean_lines.append(line)
+          lines = clean_lines
+
           # Only this allow-listed summary is published. The raw auth report can
           # contain request bodies, tokens, storage and screenshots; never upload it.
           Path("report/diagnostic-summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
           Path("report/auth-diagnostics.json").unlink(missing_ok=True)
           Path("report/client-map.yaml").unlink(missing_ok=True)
+          Path("report/client-map.json").unlink(missing_ok=True)
           print("\n".join(lines))
           PY
 
