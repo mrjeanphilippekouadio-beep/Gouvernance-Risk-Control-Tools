@@ -62,7 +62,6 @@ jobs:
           context["urls"] = [target_url, api_url].uniq
           auth = context.fetch("authentication")
           auth.fetch("parameters")["loginPageUrl"] = target_url
-          auth.fetch("verification")["pollUrl"] = "#{api_url}/api/v1/users/me"
           qa_user = context.fetch("users").find { |item| item.fetch("name") == "qa" }
           abort("QA user is missing from ZAP context") unless qa_user
           credentials = qa_user.fetch("credentials")
@@ -302,7 +301,10 @@ jobs:
           visited = []
           def walk(node):
               if isinstance(node, dict):
-                  if node.get("visited") is True and isinstance(node.get("url"), str):
+                  # In ZAP's AF Client Map export, unvisited discovered nodes
+                  # are explicitly marked visited: false. Visited nodes can omit
+                  # the field entirely, so do not require visited is True.
+                  if isinstance(node.get("url"), str) and node.get("visited") is not False:
                       parsed = urllib.parse.urlsplit(node["url"])
                       visited.append(f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme and parsed.netloc else node["url"])
                   for value in node.values():
@@ -311,6 +313,7 @@ jobs:
                   for value in node:
                       walk(value)
           walk(client_map)
+          visited = list(dict.fromkeys(visited))
           auth_ok = any(
               item.get("key") == "auth.summary.auth" and item.get("passed") is True
               for item in items
