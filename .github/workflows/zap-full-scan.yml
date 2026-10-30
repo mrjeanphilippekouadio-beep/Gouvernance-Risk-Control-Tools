@@ -69,7 +69,6 @@ jobs:
           context["urls"] = [target_url, api_url].uniq
           auth = context.fetch("authentication")
           auth.fetch("parameters")["loginPageUrl"] = target_url
-          auth.fetch("verification")["pollUrl"] = "#{api_url}/api/v1/users/me"
 
           qa_user = context.fetch("users").find { |item| item.fetch("name") == "qa" }
           abort("QA user is missing from ZAP context") unless qa_user
