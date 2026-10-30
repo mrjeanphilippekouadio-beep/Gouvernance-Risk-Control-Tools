@@ -380,6 +380,7 @@ jobs:
           protected_api_count = len(successful_api_paths)
           module_coverage_count = len(covered_modules)
           auth_ok = protected_api_count >= 5 and module_coverage_count >= 6
+          auth_ok = protected_api_count >= 5 and module_coverage_count >= 6
           protected_api_count = len(successful_api_paths)
           module_coverage_count = len(covered_modules)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
