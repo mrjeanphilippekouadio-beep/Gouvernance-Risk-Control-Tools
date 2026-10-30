@@ -331,29 +331,6 @@ jobs:
           site_tree = json.loads(Path("report/site-tree.json").read_text(encoding="utf-8"))
           successful_api_paths = set()
           module_paths = set()
-          def walk_site_tree(node):
-              if isinstance(node, dict):
-                  raw_url = node.get("url")
-                  method = str(node.get("method", "")).upper()
-                  code = node.get("statusCode")
-                  if isinstance(raw_url, str):
-                      parsed = urllib.parse.urlsplit(raw_url)
-                      path = parsed.path or ""
-                      if parsed.hostname == api_host and path.startswith("/api/v1/") and method == "GET":
-                          if isinstance(code, int) and 200 <= code < 300:
-                              successful_api_paths.add(path)
-                          # A 403 proves the authenticated view was reached but
-                          # the QA identity lacks that module permission. It is
-                          # reported as visited, not misclassified as unauthenticated.
-                          if isinstance(code, int) and (200 <= code < 300 or code == 403):
-                              module_paths.add(path)
-                  for value in node.values():
-                      walk_site_tree(value)
-              elif isinstance(node, list):
-                  for value in node:
-                      walk_site_tree(value)
-          walk_site_tree(site_tree)
-
           module_rules = {
               "cartography": lambda p: p == "/api/v1/cartography" or p.startswith("/api/v1/cartography/"),
               "risk_register": lambda p: p == "/api/v1/risks" or p.startswith("/api/v1/risks/"),
@@ -365,6 +342,26 @@ jobs:
               "audit": lambda p: p == "/api/v1/audit-missions" or p.startswith("/api/v1/audit-missions/") or p == "/api/v1/findings" or p.startswith("/api/v1/findings/"),
               "action_plans": lambda p: p == "/api/v1/dashboard/actions" or p.startswith("/api/v1/dashboard/actions/") or p == "/api/v1/actions" or p.startswith("/api/v1/actions/"),
           }
+          def walk_site_tree(node):
+              if isinstance(node, dict):
+                  raw_url = node.get("url")
+                  method = str(node.get("method", "")).upper()
+                  code = node.get("statusCode")
+                  if isinstance(raw_url, str):
+                      parsed = urllib.parse.urlsplit(raw_url)
+                      path = parsed.path or ""
+                      if parsed.hostname == api_host and method == "GET":
+                          if path.startswith("/api/v1/") and isinstance(code, int) and 200 <= code < 300:
+                              successful_api_paths.add(path)
+                          if isinstance(code, int) and (200 <= code < 300 or code == 403):
+                              if any(predicate(path) for predicate in module_rules.values()):
+                                  module_paths.add(path)
+                  for value in node.values():
+                      walk_site_tree(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      walk_site_tree(value)
+          walk_site_tree(site_tree)
           covered_modules = [name for name, predicate in module_rules.items() if any(predicate(path) for path in module_paths)]
           # Browser-based authentication on this React SPA keeps the JWT in
           # client state. ZAP's Authentication Report can therefore report FAIL
