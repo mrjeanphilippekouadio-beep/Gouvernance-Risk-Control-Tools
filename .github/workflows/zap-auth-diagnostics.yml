@@ -86,13 +86,13 @@ jobs:
           spider = plan.fetch("jobs").find { |job| job.fetch("type") == "spiderClient" }
           abort("spiderClient job is missing") unless spider
           spider.fetch("parameters")["url"] = target_url
-          spider.fetch("parameters")["maxDuration"] = 3
-          spider.fetch("parameters")["maxCrawlDepth"] = 3
-          spider.fetch("parameters")["maxChildren"] = 25
+          spider.fetch("parameters")["maxDuration"] = 5
+          spider.fetch("parameters")["maxCrawlDepth"] = 6
+          spider.fetch("parameters")["maxChildren"] = 75
           spider.fetch("parameters")["initialLoadTime"] = 8
           spider.fetch("parameters")["pageLoadTime"] = 2
           spider.fetch("parameters")["actionWaitTime"] = 1
-          spider.fetch("parameters")["shutdownTime"] = 5
+          spider.fetch("parameters")["shutdownTime"] = 8
 
           # Deliberately do not include passive wait or activeScan: diagnose login
           # and client-side exploration before spending time on the full scan.
@@ -105,6 +105,15 @@ jobs:
                 "type" => "yaml",
                 "source" => "clientmap",
                 "fileName" => "/zap/wrk/report/client-map.yaml"
+              }
+            },
+            {
+              "type" => "export",
+              "parameters" => {
+                "context" => "grc-tools",
+                "type" => "yaml",
+                "source" => "sitestree",
+                "fileName" => "/zap/wrk/report/site-tree.yaml"
               }
             },
             {
@@ -237,6 +246,10 @@ jobs:
             echo "::error::ZAP did not produce client-map.yaml."
             exit 1
           fi
+          if [ ! -s report/site-tree.yaml ]; then
+            echo "::error::ZAP did not produce site-tree.yaml."
+            exit 1
+          fi
           echo "Diagnostic scanner exit code: $docker_rc (warnings may produce exit code 2)."
 
       - name: Extract a sanitized diagnostic summary
@@ -247,6 +260,7 @@ jobs:
         run: |
           set -euo pipefail
           ruby -ryaml -rjson -e 'File.write(ARGV.fetch(1), JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)))' report/client-map.yaml report/client-map.json
+          ruby -ryaml -rjson -e 'File.write(ARGV.fetch(1), JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)))' report/site-tree.yaml report/site-tree.json
           python3 <<'PY'
           import json
           import os
@@ -254,9 +268,8 @@ jobs:
           import urllib.parse
           from pathlib import Path
 
-          # PyYAML is not guaranteed on every GitHub-hosted runner. Convert the
-          # ZAP YAML export with Ruby's standard YAML library before this step.
           report = json.loads(Path("report/auth-diagnostics.json").read_text(encoding="utf-8"))
+          items = report.get("summaryItems", [])
           lines = [
               "# ZAP browser authentication diagnostics",
               "",
@@ -264,88 +277,138 @@ jobs:
               "",
               "## Authentication checks",
           ]
-          items = report.get("summaryItems", [])
           if not items:
               lines.append("- ZAP did not emit authentication summary items; inspect plan/setup before interpreting this result.")
           for item in items:
               passed = item.get("passed")
               mark = "PASS" if passed is True else "FAIL" if passed is False else "INFO"
-              desc = re.sub(r"[\r\n]+", " ", str(item.get("description", item.get("key", "Unspecified check"))))
+              desc = re.sub(r"[\\r\\n]+", " ", str(item.get("description", item.get("key", "Unspecified check"))))
               lines.append(f"- **{mark}** — {desc}")
 
           failures = report.get("failureReasons", [])
           if failures:
               lines.extend(["", "## Failure reasons"])
               for item in failures:
-                  desc = re.sub(r"[\r\n]+", " ", str(item.get("description", item.get("key", "Unspecified failure"))))
+                  desc = re.sub(r"[\\r\\n]+", " ", str(item.get("description", item.get("key", "Unspecified failure"))))
                   lines.append(f"- {desc}")
 
           diagnostics = report.get("diagnostics", [])
           lines.extend(["", "## Browser steps"])
           step_count = 0
+          error_steps = 0
           for attempt, entry in enumerate(diagnostics, 1):
               lines.append(f"- Attempt {attempt}: method={entry.get('authenticationMethod', 'unknown')}; user={entry.get('user', 'unknown')}")
               for step in entry.get("steps", []):
                   step_count += 1
-                  desc = re.sub(r"[\r\n]+", " ", str(step.get("description", "Step without description")))
+                  desc = re.sub(r"[\\r\\n]+", " ", str(step.get("description", "Step without description")))
                   raw_url = str(step.get("url", ""))
                   parsed = urllib.parse.urlsplit(raw_url)
                   safe_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme and parsed.netloc else "(URL not recorded)"
                   lines.append(f"  - {desc} — {safe_url}")
+                  if "error" in desc.lower():
+                      error_steps += 1
           if not diagnostics:
               lines.append("- No browser authentication diagnostic attempts were recorded by ZAP.")
           else:
-              lines.append(f"- Recorded {step_count} browser step(s) across {len(diagnostics)} attempt(s).")
+              lines.append(f"- Recorded {step_count} browser step(s) across {len(diagnostics)} attempt(s); error-labelled steps: {error_steps}.")
 
           client_map = json.loads(Path("report/client-map.json").read_text(encoding="utf-8"))
           visited = []
-          def walk(node):
+          def walk_client_map(node):
               if isinstance(node, dict):
-                  # In ZAP's AF Client Map export, unvisited discovered nodes
-                  # are explicitly marked visited: false. Visited nodes can omit
-                  # the field entirely, so do not require visited is True.
-                  if isinstance(node.get("url"), str) and node.get("visited") is not False:
+                  if isinstance(node.get("url"), str) and node.get("visited") is True:
                       parsed = urllib.parse.urlsplit(node["url"])
                       visited.append(f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme and parsed.netloc else node["url"])
                   for value in node.values():
-                      walk(value)
+                      walk_client_map(value)
               elif isinstance(node, list):
                   for value in node:
-                      walk(value)
-          walk(client_map)
+                      walk_client_map(value)
+          walk_client_map(client_map)
           visited = list(dict.fromkeys(visited))
+
+          api_host = "gouvernance-risk-control-tools-staging.onrender.com"
+          site_tree = json.loads(Path("report/site-tree.json").read_text(encoding="utf-8"))
+          successful_api_paths = set()
+          module_paths = set()
+          def walk_site_tree(node):
+              if isinstance(node, dict):
+                  raw_url = node.get("url")
+                  method = str(node.get("method", "")).upper()
+                  code = node.get("statusCode")
+                  if isinstance(raw_url, str):
+                      parsed = urllib.parse.urlsplit(raw_url)
+                      path = parsed.path or ""
+                      if parsed.hostname == api_host and path.startswith("/api/v1/") and method == "GET":
+                          if isinstance(code, int) and 200 <= code < 300:
+                              successful_api_paths.add(path)
+                          # A 403 proves the authenticated view was reached but
+                          # the QA identity lacks that module permission. It is
+                          # reported as visited, not misclassified as unauthenticated.
+                          if isinstance(code, int) and (200 <= code < 300 or code == 403):
+                              module_paths.add(path)
+                  for value in node.values():
+                      walk_site_tree(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      walk_site_tree(value)
+          walk_site_tree(site_tree)
+
+          module_rules = {
+              "cartography": lambda p: p.startswith("/api/v1/cartography/"),
+              "risk_register": lambda p: p == "/api/v1/risks" or p.startswith("/api/v1/risks/"),
+              "risk_evaluation": lambda p: p.startswith("/api/v1/risk-evaluations"),
+              "risk_appetite": lambda p: p.startswith("/api/v1/appetite"),
+              "rating_scales": lambda p: p.startswith("/api/v1/rating-scales"),
+              "controls": lambda p: p.startswith("/api/v1/controls"),
+              "control_monitoring": lambda p: p.startswith("/api/v1/executions") or p.startswith("/api/v1/effectiveness"),
+              "audit": lambda p: p.startswith("/api/v1/audit-missions") or p.startswith("/api/v1/findings"),
+              "action_plans": lambda p: p.startswith("/api/v1/dashboard/actions") or p.startswith("/api/v1/actions"),
+          }
+          covered_modules = [name for name, predicate in module_rules.items() if any(predicate(path) for path in module_paths)]
           auth_ok = any(
               item.get("key") == "auth.summary.auth" and item.get("passed") is True
               for item in items
           )
+          protected_api_count = len(successful_api_paths)
+          module_coverage_count = len(covered_modules)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"auth_ok={'true' if auth_ok else 'false'}\n")
-              output.write(f"visited_count={len(visited)}\n")
-          lines.extend(["", "## Client Map", f"- Visited nodes: {len(visited)}"])
-          for url in visited[:30]:
-              lines.append(f"- {url}")
-          if not visited:
-              lines.append("- No node is marked visited; authenticated browser exploration is not proven.")
+              output.write(f"auth_ok={'true' if auth_ok else 'false'}\\n")
+              output.write(f"protected_api_count={protected_api_count}\\n")
+              output.write(f"module_coverage_count={module_coverage_count}\\n")
 
-          # Never print credentials, bearer/JWT values, request data or screenshots.
+          lines.extend([
+              "",
+              "## Authenticated API and module coverage",
+              f"- Distinct protected API paths with successful GET responses: {protected_api_count}",
+              f"- GRC modules reached through protected GET requests: {module_coverage_count}/9",
+              "- Covered modules: " + (", ".join(covered_modules) if covered_modules else "none"),
+              "",
+              "## Client Map (informational)",
+              f"- Nodes explicitly marked visited: {len(visited)}",
+          ])
+          for url in visited[:20]:
+              lines.append(f"- {url}")
+          lines.append("- Client Map visit flags are not used as the pass/fail gate because SPA module changes are state transitions and do not necessarily create new URLs.")
+
           secrets = [os.environ.get("ZAP_TEST_EMAIL", ""), os.environ.get("ZAP_TEST_PASSWORD", "")]
           clean_lines = []
           for line in lines:
               for secret in secrets:
                   if secret:
                       line = line.replace(secret, "[REDACTED]")
-              line = re.sub(r"(?i)Bearer\s+[^\s\"']+", "Bearer [REDACTED]", line)
-              line = re.sub(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}\b", "[REDACTED_TOKEN]", line)
+              line = re.sub(r"(?i)Bearer\\s+[^\\s\\\"']+", "Bearer [REDACTED]", line)
+              line = re.sub(r"\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{5,}\\b", "[REDACTED_TOKEN]", line)
               clean_lines.append(line)
           lines = clean_lines
 
-          # Only this allow-listed summary is published. The raw auth report can
-          # contain request bodies, tokens, storage and screenshots; never upload it.
-          Path("report/diagnostic-summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          Path("report/diagnostic-summary.md").write_text("\\n".join(lines) + "\\n", encoding="utf-8")
           Path("report/auth-diagnostics.json").unlink(missing_ok=True)
           Path("report/client-map.yaml").unlink(missing_ok=True)
           Path("report/client-map.json").unlink(missing_ok=True)
-          print("\n".join(lines))
+          Path("report/site-tree.yaml").unlink(missing_ok=True)
+          Path("report/site-tree.json").unlink(missing_ok=True)
+          print("\\n".join(lines))
           PY
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -359,15 +422,20 @@ jobs:
         if: always()
         env:
           AUTH_OK: ${{ steps.summarize.outputs.auth_ok }}
-          VISITED_COUNT: ${{ steps.summarize.outputs.visited_count }}
+          PROTECTED_API_COUNT: ${{ steps.summarize.outputs.protected_api_count }}
+          MODULE_COVERAGE_COUNT: ${{ steps.summarize.outputs.module_coverage_count }}
         run: |
           set -euo pipefail
           if [ "$AUTH_OK" != "true" ]; then
             echo "::error::ZAP did not confirm a successful authenticated session. See the sanitized diagnostic summary artifact."
             exit 1
           fi
-          if ! [[ "$VISITED_COUNT" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error::ZAP Client Map has no visited nodes; authenticated browser exploration is unproven."
+          if ! [[ "$PROTECTED_API_COUNT" =~ ^[0-9]+$ ]] || [ "$PROTECTED_API_COUNT" -lt 5 ]; then
+            echo "::error::Fewer than 5 distinct protected API paths returned successful GET responses."
             exit 1
           fi
-          echo "PASS: ZAP authentication succeeded and the browser visited $VISITED_COUNT node(s)."
+          if ! [[ "$MODULE_COVERAGE_COUNT" =~ ^[0-9]+$ ]] || [ "$MODULE_COVERAGE_COUNT" -lt 6 ]; then
+            echo "::error::The browser reached fewer than 6 of the 9 required GRC module API groups."
+            exit 1
+          fi
+          echo "PASS: ZAP authenticated successfully, reached $PROTECTED_API_COUNT protected API path(s), and covered $MODULE_COVERAGE_COUNT GRC module group(s)."
