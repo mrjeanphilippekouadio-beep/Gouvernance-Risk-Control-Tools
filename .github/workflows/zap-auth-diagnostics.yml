@@ -355,15 +355,15 @@ jobs:
           walk_site_tree(site_tree)
 
           module_rules = {
-              "cartography": lambda p: p.startswith("/api/v1/cartography/"),
+              "cartography": lambda p: p == "/api/v1/cartography" or p.startswith("/api/v1/cartography/"),
               "risk_register": lambda p: p == "/api/v1/risks" or p.startswith("/api/v1/risks/"),
-              "risk_evaluation": lambda p: p.startswith("/api/v1/risk-evaluations"),
-              "risk_appetite": lambda p: p.startswith("/api/v1/appetite"),
-              "rating_scales": lambda p: p.startswith("/api/v1/rating-scales"),
-              "controls": lambda p: p.startswith("/api/v1/controls"),
-              "control_monitoring": lambda p: p.startswith("/api/v1/executions") or p.startswith("/api/v1/effectiveness"),
-              "audit": lambda p: p.startswith("/api/v1/audit-missions") or p.startswith("/api/v1/findings"),
-              "action_plans": lambda p: p.startswith("/api/v1/dashboard/actions") or p.startswith("/api/v1/actions"),
+              "risk_evaluation": lambda p: p == "/api/v1/risk-evaluations" or p.startswith("/api/v1/risk-evaluations/"),
+              "risk_appetite": lambda p: p == "/api/v1/appetite" or p.startswith("/api/v1/appetite/"),
+              "rating_scales": lambda p: p == "/api/v1/rating-scales" or p.startswith("/api/v1/rating-scales/"),
+              "controls": lambda p: p == "/api/v1/controls" or p.startswith("/api/v1/controls/"),
+              "control_monitoring": lambda p: p == "/api/v1/executions" or p.startswith("/api/v1/executions/") or p == "/api/v1/effectiveness" or p.startswith("/api/v1/effectiveness/"),
+              "audit": lambda p: p == "/api/v1/audit-missions" or p.startswith("/api/v1/audit-missions/") or p == "/api/v1/findings" or p.startswith("/api/v1/findings/"),
+              "action_plans": lambda p: p == "/api/v1/dashboard/actions" or p.startswith("/api/v1/dashboard/actions/") or p == "/api/v1/actions" or p.startswith("/api/v1/actions/"),
           }
           covered_modules = [name for name, predicate in module_rules.items() if any(predicate(path) for path in module_paths)]
           # Browser-based authentication on this React SPA keeps the JWT in
