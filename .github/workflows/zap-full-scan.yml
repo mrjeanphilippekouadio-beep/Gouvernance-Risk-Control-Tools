@@ -243,11 +243,10 @@ jobs:
             fi
           fi
 
-          # Exported Sites Tree is evidence, not just the alert-only report.
-          # Require at least the login, identity-verification and one further
-          # backend endpoint so a green job cannot mean "login page only".
-          if [ ! -s report/site-tree.yaml ]; then
-            echo "::error::ZAP Sites Tree evidence is missing."
+          # Use the Sites Tree snapshot captured immediately after Client Spider,
+          # before active scanning can add API requests and inflate browser coverage.
+          if [ ! -s report/spider-site-tree.yaml ]; then
+            echo "::error::Pre-active-scan SPA Sites Tree evidence is missing."
             rc=1
           else
             if ! ruby -ryaml -ruri -e '
@@ -302,7 +301,7 @@ jobs:
                 exit 1
               end
               puts "ZAP API coverage gate passed (#{paths.length} distinct non-root API paths; #{successful_paths.length} distinct protected API paths with non-OPTIONS/HEAD 2xx responses)."
-            ' report/site-tree.yaml; then
+            ' report/spider-site-tree.yaml; then
               rc=1
             fi
           fi
@@ -362,11 +361,11 @@ jobs:
               exit 1
             end
             puts "ZAP SPA coverage gate passed (#{covered.length}/9 GRC module groups: #{covered.join(', ')})."
-          ' report/site-tree.yaml; then
+          ' report/spider-site-tree.yaml; then
             rc=1
           fi
 
-          for report_file in report_html.html report_md.md report_json.json client-map.yaml; do
+          for report_file in report_html.html report_md.md report_json.json site-tree.yaml spider-site-tree.yaml client-map.yaml; do
             if [ ! -s "report/$report_file" ]; then
               echo "::error::Expected ZAP artifact report/$report_file is missing."
               rc=1
