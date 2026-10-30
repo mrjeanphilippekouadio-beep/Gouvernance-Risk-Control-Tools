@@ -14,8 +14,8 @@
 #   Frontend login form -> POST <API>/api/v1/auth/local
 #     {"email","password"} -> {"accessToken","tokenType"}
 # The verification strategy recognizes both the token response and subsequent
-# Bearer-authenticated requests. The browser steps then exercise the SPA views
-# so the Client Spider sees the same module transitions as a real user.
+# Bearer-authenticated requests. Keep the authentication sequence limited to
+# login; the Client Spider explores the application's interactive React views.
 # Protected routes require Authorization: Bearer <accessToken>.
 #
 # ZAP active scanning is restricted to the dedicated staging environment.
@@ -55,75 +55,7 @@ env:
               timeout: 10000
             - description: "Wait for the authenticated React app shell"
               type: "WAIT"
-              timeout: 2500
-            - description: "Open the risk evaluation module"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Évaluations']]"
-              timeout: 10000
-            - description: "Allow risk evaluations to load"
-              type: "WAIT"
-              timeout: 750
-            - description: "Open the risk appetite module"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Appétence']]"
-              timeout: 10000
-            - description: "Allow risk appetite to load"
-              type: "WAIT"
-              timeout: 750
-            - description: "Open the rating scales module"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Grilles de cotation']]"
-              timeout: 10000
-            - description: "Allow rating scales to load"
-              type: "WAIT"
-              timeout: 750
-            - description: "Open the risk register module"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Registre']]"
-              timeout: 10000
-            - description: "Allow the risk register to load"
-              type: "WAIT"
-              timeout: 750
-            - description: "Expand the internal control navigation group"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-group-toggle')][.//span[normalize-space(.)='Contrôle interne']]"
-              timeout: 10000
-            - description: "Open the controls module"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Contrôles']]"
-              timeout: 10000
-            - description: "Allow controls to load"
-              type: "WAIT"
-              timeout: 750
-            - description: "Open the control monitoring module"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Exécutions & efficacité']]"
-              timeout: 10000
-            - description: "Allow control monitoring to load"
-              type: "WAIT"
-              timeout: 750
-            - description: "Expand the action plans navigation group"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-group-toggle')][.//span[normalize-space(.)='Plans & revues']]"
-              timeout: 10000
-            - description: "Open the action plans module"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Plans d’action' or normalize-space(.)=\"Plans d'action\"]]"
-              timeout: 10000
-            - description: "Allow action plans to load"
-              type: "WAIT"
-              timeout: 750
-            - description: "Expand the audit navigation group"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-group-toggle')][.//span[normalize-space(.)='Audit']]"
-              timeout: 10000
-            - description: "Open the audit findings module"
-              type: "CLICK"
-              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Constats & recommandations']]"
-              timeout: 10000
-            - description: "Allow audit findings to load"
-              type: "WAIT"
-              timeout: 750
+              timeout: 3000
         verification:
           # Check both sides of each message. The successful login response
           # contains accessToken; protected SPA/API requests carry the Bearer
