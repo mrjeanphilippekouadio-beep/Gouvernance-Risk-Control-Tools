@@ -179,22 +179,6 @@ function App() {
 
         <div className="workspace-grid">
           <main className="app-content">
-            {/*
-              ZAP authenticated SPA exploration hook.
-              Only active after the user explicitly starts browser security
-              diagnostics; it traverses enabled views without writing data.
-            */}
-            <div className="sr-only" data-zap-spa-discovery="true">
-              <button type="button" data-zap-module="cartography" onClick={() => go("cartography")}>Cartography</button>
-              <button type="button" data-zap-module="risk-register" onClick={() => go("risks")}>Risk register</button>
-              <button type="button" data-zap-module="risk-evaluation" onClick={() => go("evaluation")}>Risk evaluation</button>
-              <button type="button" data-zap-module="risk-appetite" onClick={() => go("appetite")}>Risk appetite</button>
-              <button type="button" data-zap-module="rating-scales" onClick={() => go("scales")}>Rating scales</button>
-              <button type="button" data-zap-module="controls" onClick={() => go("controls")}>Controls</button>
-              <button type="button" data-zap-module="control-monitoring" onClick={() => go("monitoring")}>Control monitoring</button>
-              <button type="button" data-zap-module="audit" onClick={() => go("findings")}>Audit findings</button>
-              <button type="button" data-zap-module="action-plans" onClick={() => go("actions")}>Action plans</button>
-            </div>
             {view === "cartography" && <CartographyPage token={token} />}
             {view === "appetite" && <AppetitePage token={token} />}
             {view === "scales" && <RatingScalesPage token={token} />}
