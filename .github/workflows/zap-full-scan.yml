@@ -69,7 +69,6 @@ jobs:
           context["urls"] = [target_url, api_url].uniq
           auth = context.fetch("authentication")
           auth.fetch("parameters")["loginPageUrl"] = target_url
-          auth.fetch("verification")["pollUrl"] = "#{api_url}/api/v1/users/me"
 
           qa_user = context.fetch("users").find { |item| item.fetch("name") == "qa" }
           abort("QA user is missing from ZAP context") unless qa_user
@@ -77,8 +76,9 @@ jobs:
           credentials["username"] = ENV.fetch("ZAP_TEST_EMAIL")
           credentials["password"] = ENV.fetch("ZAP_TEST_PASSWORD")
 
-          # No custom browser steps are configured: ZAP performs one built-in
-          # username/password discovery and submission sequence.
+          # The shared plan defines explicit React login selectors. The Client
+          # Spider then explores the interactive SPA; module coverage is checked
+          # from the protected API requests in the exported Sites Tree.
 
           plan.fetch("jobs").each do |job|
             next unless %w[spider spiderClient].include?(job.fetch("type"))
@@ -243,11 +243,10 @@ jobs:
             fi
           fi
 
-          # Exported Sites Tree is evidence, not just the alert-only report.
-          # Require at least the login, identity-verification and one further
-          # backend endpoint so a green job cannot mean "login page only".
-          if [ ! -s report/site-tree.yaml ]; then
-            echo "::error::ZAP Sites Tree evidence is missing."
+          # Use the Sites Tree snapshot captured immediately after Client Spider,
+          # before active scanning can add API requests and inflate browser coverage.
+          if [ ! -s report/spider-site-tree.yaml ]; then
+            echo "::error::Pre-active-scan SPA Sites Tree evidence is missing."
             rc=1
           else
             if ! ruby -ryaml -ruri -e '
@@ -302,39 +301,71 @@ jobs:
                 exit 1
               end
               puts "ZAP API coverage gate passed (#{paths.length} distinct non-root API paths; #{successful_paths.length} distinct protected API paths with non-OPTIONS/HEAD 2xx responses)."
-            ' report/site-tree.yaml; then
+            ' report/spider-site-tree.yaml; then
               rc=1
             fi
           fi
 
-          # The Client Spider is the only evidence that the React SPA was explored.
-          # API coverage alone must not allow a green run when the browser stayed on login.
+          # Client Map is retained as diagnostic evidence, but its visited flag is
+          # not a reliable SPA module signal when React changes view state without
+          # changing the URL. The Sites Tree module gate above/below uses the
+          # authenticated GET endpoints actually reached by the browser.
           if [ ! -s report/client-map.yaml ]; then
             echo "::error::ZAP Client Map evidence is missing."
             rc=1
-          elif ! ruby -ryaml -e '
+          fi
+
+          if ! ruby -ryaml -ruri -e '
+            api_host = URI.parse(ENV.fetch("ZAP_API_BASE_URL")).host
             tree = YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)
-            visited = []
+            paths = []
             walk = lambda do |node|
               case node
               when Hash
-                visited << node if node["visited"] == true
+                if node["url"].is_a?(String)
+                  begin
+                    uri = URI.parse(node["url"])
+                    code = node["statusCode"]
+                    method = node["method"].to_s.upcase
+                    if uri.host == api_host &&
+                       uri.path.to_s.start_with?("/api/v1/") &&
+                       method == "GET" &&
+                       code.is_a?(Integer) &&
+                       ((200..299).cover?(code) || code == 403)
+                      paths << uri.path
+                    end
+                  rescue URI::InvalidURIError
+                    # Ignore non-URL labels.
+                  end
+                end
                 node.each_value { |value| walk.call(value) }
               when Array
                 node.each { |value| walk.call(value) }
               end
             end
             walk.call(tree)
-            if visited.empty?
-              warn "::error::ZAP browser coverage gate failed: Client Map contains no nodes marked visited; authenticated SPA exploration is unproven."
+            groups = {
+              "cartography" => ->(p) { p == "/api/v1/cartography" || p.start_with?("/api/v1/cartography/") },
+              "risk_register" => ->(p) { p == "/api/v1/risks" || p.start_with?("/api/v1/risks/") },
+              "risk_evaluation" => ->(p) { p == "/api/v1/risk-evaluations" || p.start_with?("/api/v1/risk-evaluations/") },
+              "risk_appetite" => ->(p) { p == "/api/v1/appetite" || p.start_with?("/api/v1/appetite/") },
+              "rating_scales" => ->(p) { p == "/api/v1/rating-scales" || p.start_with?("/api/v1/rating-scales/") },
+              "controls" => ->(p) { p == "/api/v1/controls" || p.start_with?("/api/v1/controls/") },
+              "control_monitoring" => ->(p) { p == "/api/v1/executions" || p.start_with?("/api/v1/executions/") || p == "/api/v1/effectiveness" || p.start_with?("/api/v1/effectiveness/") },
+              "audit" => ->(p) { p == "/api/v1/audit-missions" || p.start_with?("/api/v1/audit-missions/") || p == "/api/v1/findings" || p.start_with?("/api/v1/findings/") },
+              "action_plans" => ->(p) { p == "/api/v1/dashboard/actions" || p.start_with?("/api/v1/dashboard/actions/") || p == "/api/v1/actions" || p.start_with?("/api/v1/actions/") }
+            }
+            covered = groups.select { |_name, predicate| paths.any? { |path| predicate.call(path) } }.keys
+            if covered.length < 6
+              warn "::error::ZAP SPA coverage gate failed: only #{covered.length}/9 GRC module groups reached through authenticated GET requests (#{covered.join(', ')})."
               exit 1
             end
-            puts "ZAP browser coverage gate passed (#{visited.length} visited Client Map nodes)."
-          ' report/client-map.yaml; then
+            puts "ZAP SPA coverage gate passed (#{covered.length}/9 GRC module groups: #{covered.join(', ')})."
+          ' report/spider-site-tree.yaml; then
             rc=1
           fi
 
-          for report_file in report_html.html report_md.md report_json.json client-map.yaml; do
+          for report_file in report_html.html report_md.md report_json.json site-tree.yaml spider-site-tree.yaml client-map.yaml; do
             if [ ! -s "report/$report_file" ]; then
               echo "::error::Expected ZAP artifact report/$report_file is missing."
               rc=1

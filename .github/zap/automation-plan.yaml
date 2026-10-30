@@ -13,7 +13,9 @@
 # Login flow:
 #   Frontend login form -> POST <API>/api/v1/auth/local
 #     {"email","password"} -> {"accessToken","tokenType"}
-#   Verification: GET <API>/api/v1/users/me
+# The verification strategy recognizes both the token response and subsequent
+# Bearer-authenticated requests. Keep the authentication sequence limited to
+# login; the Client Spider explores the application's interactive React views.
 # Protected routes require Authorization: Bearer <accessToken>.
 #
 # ZAP active scanning is restricted to the dedicated staging environment.
@@ -29,8 +31,8 @@ env:
         method: "browser"
         parameters:
           loginPageUrl: ${ZAP_TARGET_URL}
-          loginPageWait: 20
-          stepDelay: 2
+          loginPageWait: 5
+          stepDelay: 0
           browserId: "firefox-headless"
           # Capture why the browser helper may fail to authenticate; this is
           # needed because API preflight succeeds while Client Spider visits no nodes.
@@ -47,23 +49,20 @@ env:
               type: "PASSWORD"
               cssSelector: "#local-password"
               timeout: 10000
-            - description: "Click the staging QA login submit button"
+            - description: "Submit the staging QA login form"
               type: "CLICK"
               cssSelector: "form.auth-dev button[type='submit']"
               timeout: 10000
             - description: "Wait for the authenticated React app shell"
               type: "WAIT"
-              timeout: 10000
+              timeout: 3000
         verification:
-          method: "poll"
-          pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
-          # ZAP needs a positive as well as a negative indicator for poll-based
-          # verification. This protected endpoint returns 200 only with a valid
-          # bearer token; unauthenticated requests return 401.
-          loggedInRegex: '\Q 200 OK\E'
-          loggedOutRegex: '401 Unauthorized|Missing bearer token|Invalid or expired token'
-          pollFrequency: 1
-          pollUnits: "requests"
+          # Check both sides of each message. The successful login response
+          # contains accessToken; protected SPA/API requests carry the Bearer
+          # header. A 401 or explicit auth error is a negative indicator.
+          method: "both"
+          loggedInRegex: '(?i)(Authorization:\s*Bearer\s+\S+|"accessToken"\s*:\s*"[^"]+")'
+          loggedOutRegex: '(?i)(401 Unauthorized|Missing bearer token|Invalid or expired token|Invalid credentials)'
       sessionManagement:
         # The frontend keeps its token in React state. Browser-driven scanning
         # observes the real login flow; ZAP's header session management replays
@@ -98,6 +97,16 @@ jobs:
       numberOfBrowsers: 1
       logoutAvoidance: true
       scopeCheck: "Flexible"
+
+  # Freeze the browser-discovery evidence before passive/active scanning.
+  # The active scanner can create additional API nodes and must not inflate
+  # the SPA module-coverage gate.
+  - type: export
+    parameters:
+      context: grc-tools
+      type: yaml
+      source: sitestree
+      fileName: /zap/wrk/report/spider-site-tree.yaml
 
   - type: passiveScan-wait
     parameters:
