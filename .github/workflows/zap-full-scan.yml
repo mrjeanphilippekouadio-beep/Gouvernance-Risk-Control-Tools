@@ -76,8 +76,9 @@ jobs:
           credentials["username"] = ENV.fetch("ZAP_TEST_EMAIL")
           credentials["password"] = ENV.fetch("ZAP_TEST_PASSWORD")
 
-          # The shared plan defines explicit React login selectors and navigates
-          # each major SPA module before the Client Spider explores the app.
+          # The shared plan defines explicit React login selectors. The Client
+          # Spider then explores the interactive SPA; module coverage is checked
+          # from the protected API requests in the exported Sites Tree.
 
           plan.fetch("jobs").each do |job|
             next unless %w[spider spiderClient].include?(job.fetch("type"))
