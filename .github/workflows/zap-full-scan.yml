@@ -345,15 +345,15 @@ jobs:
             end
             walk.call(tree)
             groups = {
-              "cartography" => ->(p) { p.start_with?("/api/v1/cartography/") },
+              "cartography" => ->(p) { p == "/api/v1/cartography" || p.start_with?("/api/v1/cartography/") },
               "risk_register" => ->(p) { p == "/api/v1/risks" || p.start_with?("/api/v1/risks/") },
-              "risk_evaluation" => ->(p) { p.start_with?("/api/v1/risk-evaluations") },
-              "risk_appetite" => ->(p) { p.start_with?("/api/v1/appetite") },
-              "rating_scales" => ->(p) { p.start_with?("/api/v1/rating-scales") },
-              "controls" => ->(p) { p.start_with?("/api/v1/controls") },
-              "control_monitoring" => ->(p) { p.start_with?("/api/v1/executions") || p.start_with?("/api/v1/effectiveness") },
-              "audit" => ->(p) { p.start_with?("/api/v1/audit-missions") || p.start_with?("/api/v1/findings") },
-              "action_plans" => ->(p) { p.start_with?("/api/v1/dashboard/actions") || p.start_with?("/api/v1/actions") }
+              "risk_evaluation" => ->(p) { p == "/api/v1/risk-evaluations" || p.start_with?("/api/v1/risk-evaluations/") },
+              "risk_appetite" => ->(p) { p == "/api/v1/appetite" || p.start_with?("/api/v1/appetite/") },
+              "rating_scales" => ->(p) { p == "/api/v1/rating-scales" || p.start_with?("/api/v1/rating-scales/") },
+              "controls" => ->(p) { p == "/api/v1/controls" || p.start_with?("/api/v1/controls/") },
+              "control_monitoring" => ->(p) { p == "/api/v1/executions" || p.start_with?("/api/v1/executions/") || p == "/api/v1/effectiveness" || p.start_with?("/api/v1/effectiveness/") },
+              "audit" => ->(p) { p == "/api/v1/audit-missions" || p.start_with?("/api/v1/audit-missions/") || p == "/api/v1/findings" || p.start_with?("/api/v1/findings/") },
+              "action_plans" => ->(p) { p == "/api/v1/dashboard/actions" || p.start_with?("/api/v1/dashboard/actions/") || p == "/api/v1/actions" || p.start_with?("/api/v1/actions/") }
             }
             covered = groups.select { |_name, predicate| paths.any? { |path| predicate.call(path) } }.keys
             if covered.length < 6
