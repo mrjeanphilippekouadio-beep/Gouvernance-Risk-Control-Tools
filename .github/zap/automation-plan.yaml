@@ -13,7 +13,9 @@
 # Login flow:
 #   Frontend login form -> POST <API>/api/v1/auth/local
 #     {"email","password"} -> {"accessToken","tokenType"}
-#   Verification: GET <API>/api/v1/users/me
+# The verification strategy recognizes both the token response and subsequent
+# Bearer-authenticated requests. The browser steps then exercise the SPA views
+# so the Client Spider sees the same module transitions as a real user.
 # Protected routes require Authorization: Bearer <accessToken>.
 #
 # ZAP active scanning is restricted to the dedicated staging environment.
@@ -29,8 +31,8 @@ env:
         method: "browser"
         parameters:
           loginPageUrl: ${ZAP_TARGET_URL}
-          loginPageWait: 20
-          stepDelay: 2
+          loginPageWait: 5
+          stepDelay: 0
           browserId: "firefox-headless"
           # Capture why the browser helper may fail to authenticate; this is
           # needed because API preflight succeeds while Client Spider visits no nodes.
@@ -47,19 +49,88 @@ env:
               type: "PASSWORD"
               cssSelector: "#local-password"
               timeout: 10000
-            - description: "Click the staging QA login submit button"
+            - description: "Submit the staging QA login form"
               type: "CLICK"
               cssSelector: "form.auth-dev button[type='submit']"
               timeout: 10000
             - description: "Wait for the authenticated React app shell"
               type: "WAIT"
+              timeout: 2500
+            - description: "Open the risk evaluation module"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Évaluations']]"
               timeout: 10000
+            - description: "Allow risk evaluations to load"
+              type: "WAIT"
+              timeout: 750
+            - description: "Open the risk appetite module"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Appétence']]"
+              timeout: 10000
+            - description: "Allow risk appetite to load"
+              type: "WAIT"
+              timeout: 750
+            - description: "Open the rating scales module"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Grilles de cotation']]"
+              timeout: 10000
+            - description: "Allow rating scales to load"
+              type: "WAIT"
+              timeout: 750
+            - description: "Open the risk register module"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Registre']]"
+              timeout: 10000
+            - description: "Allow the risk register to load"
+              type: "WAIT"
+              timeout: 750
+            - description: "Expand the internal control navigation group"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-group-toggle')][.//span[normalize-space(.)='Contrôle interne']]"
+              timeout: 10000
+            - description: "Open the controls module"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Contrôles']]"
+              timeout: 10000
+            - description: "Allow controls to load"
+              type: "WAIT"
+              timeout: 750
+            - description: "Open the control monitoring module"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Exécutions & efficacité']]"
+              timeout: 10000
+            - description: "Allow control monitoring to load"
+              type: "WAIT"
+              timeout: 750
+            - description: "Expand the action plans navigation group"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-group-toggle')][.//span[normalize-space(.)='Plans & revues']]"
+              timeout: 10000
+            - description: "Open the action plans module"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Plans d’action' or normalize-space(.)=\"Plans d'action\"]]"
+              timeout: 10000
+            - description: "Allow action plans to load"
+              type: "WAIT"
+              timeout: 750
+            - description: "Expand the audit navigation group"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-group-toggle')][.//span[normalize-space(.)='Audit']]"
+              timeout: 10000
+            - description: "Open the audit findings module"
+              type: "CLICK"
+              xpath: "//button[contains(@class,'sidebar-link')][.//span[normalize-space(.)='Constats & recommandations']]"
+              timeout: 10000
+            - description: "Allow audit findings to load"
+              type: "WAIT"
+              timeout: 750
         verification:
-          # The React SPA stores the access token in memory and sends it as a
-          # Bearer header on authenticated API requests. For modern SPAs, ZAP
-          # recommends request-based verification rather than polling a URL.
-          method: "request"
-          loggedInRegex: '(?i)Authorization:\s*Bearer\s+\S+'
+          # Check both sides of each message. The successful login response
+          # contains accessToken; protected SPA/API requests carry the Bearer
+          # header. A 401 or explicit auth error is a negative indicator.
+          method: "both"
+          loggedInRegex: '(?i)(Authorization:\s*Bearer\s+\S+|"accessToken"\s*:\s*"[^"]+")'
+          loggedOutRegex: '(?i)(401 Unauthorized|Missing bearer token|Invalid or expired token|Invalid credentials)'
       sessionManagement:
         # The frontend keeps its token in React state. Browser-driven scanning
         # observes the real login flow; ZAP's header session management replays
