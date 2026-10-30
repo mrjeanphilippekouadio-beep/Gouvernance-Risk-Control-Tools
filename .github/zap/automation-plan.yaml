@@ -59,7 +59,7 @@ env:
           # Bearer header on authenticated API requests. For modern SPAs, ZAP
           # recommends request-based verification rather than polling a URL.
           method: "request"
-          loggedInRegex: '(?i)Authorization:\\s*Bearer\\s+\\S+'
+          loggedInRegex: '(?i)Authorization:\s*Bearer\s+\S+'
       sessionManagement:
         # The frontend keeps its token in React state. Browser-driven scanning
         # observes the real login flow; ZAP's header session management replays
