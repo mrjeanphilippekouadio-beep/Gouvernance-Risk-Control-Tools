@@ -55,15 +55,11 @@ env:
               type: "WAIT"
               timeout: 10000
         verification:
-          method: "poll"
-          pollUrl: ${ZAP_API_BASE_URL}/api/v1/users/me
-          # ZAP needs a positive as well as a negative indicator for poll-based
-          # verification. This protected endpoint returns 200 only with a valid
-          # bearer token; unauthenticated requests return 401.
-          loggedInRegex: '\Q 200 OK\E'
-          loggedOutRegex: '401 Unauthorized|Missing bearer token|Invalid or expired token'
-          pollFrequency: 1
-          pollUnits: "requests"
+          # The React SPA stores the access token in memory and sends it as a
+          # Bearer header on authenticated API requests. For modern SPAs, ZAP
+          # recommends request-based verification rather than polling a URL.
+          method: "request"
+          loggedInRegex: '(?i)Authorization:\\s*Bearer\\s+\\S+'
       sessionManagement:
         # The frontend keeps its token in React state. Browser-driven scanning
         # observes the real login flow; ZAP's header session management replays
