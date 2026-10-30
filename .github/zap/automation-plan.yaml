@@ -98,6 +98,16 @@ jobs:
       logoutAvoidance: true
       scopeCheck: "Flexible"
 
+  # Freeze the browser-discovery evidence before passive/active scanning.
+  # The active scanner can create additional API nodes and must not inflate
+  # the SPA module-coverage gate.
+  - type: export
+    parameters:
+      context: grc-tools
+      type: yaml
+      source: sitestree
+      fileName: /zap/wrk/report/spider-site-tree.yaml
+
   - type: passiveScan-wait
     parameters:
       maxDuration: 5
