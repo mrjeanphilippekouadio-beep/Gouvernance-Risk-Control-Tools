@@ -282,14 +282,14 @@ jobs:
           for item in items:
               passed = item.get("passed")
               mark = "PASS" if passed is True else "FAIL" if passed is False else "INFO"
-              desc = re.sub(r"[\\r\\n]+", " ", str(item.get("description", item.get("key", "Unspecified check"))))
+              desc = re.sub(r"[\r\n]+", " ", str(item.get("description", item.get("key", "Unspecified check"))))
               lines.append(f"- **{mark}** — {desc}")
 
           failures = report.get("failureReasons", [])
           if failures:
               lines.extend(["", "## Failure reasons"])
               for item in failures:
-                  desc = re.sub(r"[\\r\\n]+", " ", str(item.get("description", item.get("key", "Unspecified failure"))))
+                  desc = re.sub(r"[\r\n]+", " ", str(item.get("description", item.get("key", "Unspecified failure"))))
                   lines.append(f"- {desc}")
 
           diagnostics = report.get("diagnostics", [])
@@ -300,7 +300,7 @@ jobs:
               lines.append(f"- Attempt {attempt}: method={entry.get('authenticationMethod', 'unknown')}; user={entry.get('user', 'unknown')}")
               for step in entry.get("steps", []):
                   step_count += 1
-                  desc = re.sub(r"[\\r\\n]+", " ", str(step.get("description", "Step without description")))
+                  desc = re.sub(r"[\r\n]+", " ", str(step.get("description", "Step without description")))
                   raw_url = str(step.get("url", ""))
                   parsed = urllib.parse.urlsplit(raw_url)
                   safe_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme and parsed.netloc else "(URL not recorded)"
@@ -373,9 +373,9 @@ jobs:
           protected_api_count = len(successful_api_paths)
           module_coverage_count = len(covered_modules)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"auth_ok={'true' if auth_ok else 'false'}\\n")
-              output.write(f"protected_api_count={protected_api_count}\\n")
-              output.write(f"module_coverage_count={module_coverage_count}\\n")
+              output.write(f"auth_ok={'true' if auth_ok else 'false'}\n")
+              output.write(f"protected_api_count={protected_api_count}\n")
+              output.write(f"module_coverage_count={module_coverage_count}\n")
 
           lines.extend([
               "",
@@ -397,18 +397,18 @@ jobs:
               for secret in secrets:
                   if secret:
                       line = line.replace(secret, "[REDACTED]")
-              line = re.sub(r"(?i)Bearer\\s+[^\\s\\\"']+", "Bearer [REDACTED]", line)
-              line = re.sub(r"\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{5,}\\b", "[REDACTED_TOKEN]", line)
+              line = re.sub(r"(?i)Bearer\s+[^\s\\"']+", "Bearer [REDACTED]", line)
+              line = re.sub(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}\b", "[REDACTED_TOKEN]", line)
               clean_lines.append(line)
           lines = clean_lines
 
-          Path("report/diagnostic-summary.md").write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+          Path("report/diagnostic-summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
           Path("report/auth-diagnostics.json").unlink(missing_ok=True)
           Path("report/client-map.yaml").unlink(missing_ok=True)
           Path("report/client-map.json").unlink(missing_ok=True)
           Path("report/site-tree.yaml").unlink(missing_ok=True)
           Path("report/site-tree.json").unlink(missing_ok=True)
-          print("\\n".join(lines))
+          print("\n".join(lines))
           PY
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
