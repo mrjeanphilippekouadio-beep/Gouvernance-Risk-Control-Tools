@@ -366,10 +366,20 @@ jobs:
               "action_plans": lambda p: p.startswith("/api/v1/dashboard/actions") or p.startswith("/api/v1/actions"),
           }
           covered_modules = [name for name, predicate in module_rules.items() if any(predicate(path) for path in module_paths)]
-          auth_ok = any(
+          # Browser-based authentication on this React SPA keeps the JWT in
+          # client state. ZAP's Authentication Report can therefore report FAIL
+          # after its helper's post-submit WAIT even when the browser successfully
+          # calls protected API routes. Prove the session from the browser's own
+          # Sites Tree requests instead: five distinct successful protected GETs
+          # and at least one successful request for each counted module group.
+          # Keep ZAP's auth report visible as a diagnostic signal, not the sole gate.
+          auth_report_ok = any(
               item.get("key") == "auth.summary.auth" and item.get("passed") is True
               for item in items
           )
+          protected_api_count = len(successful_api_paths)
+          module_coverage_count = len(covered_modules)
+          auth_ok = protected_api_count >= 5 and module_coverage_count >= 6
           protected_api_count = len(successful_api_paths)
           module_coverage_count = len(covered_modules)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
@@ -378,6 +388,10 @@ jobs:
               output.write(f"module_coverage_count={module_coverage_count}\n")
 
           lines.extend([
+              "",
+              "## Authentication evidence",
+              f"- ZAP Authentication Report verdict: {'PASS' if auth_report_ok else 'FAIL'}",
+              f"- Protected API evidence gate: {'PASS' if protected_api_count >= 5 else 'FAIL'}",
               "",
               "## Authenticated API and module coverage",
               f"- Distinct protected API paths with successful GET responses: {protected_api_count}",
@@ -427,7 +441,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$AUTH_OK" != "true" ]; then
-            echo "::error::ZAP did not confirm a successful authenticated session. See the sanitized diagnostic summary artifact."
+            echo "::error::The browser Sites Tree did not prove an authenticated session (requires at least 5 distinct successful protected GET paths and 6/9 module groups). See the sanitized diagnostic summary artifact."
             exit 1
           fi
           if ! [[ "$PROTECTED_API_COUNT" =~ ^[0-9]+$ ]] || [ "$PROTECTED_API_COUNT" -lt 5 ]; then
