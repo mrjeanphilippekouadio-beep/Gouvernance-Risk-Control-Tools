@@ -427,10 +427,10 @@ pour l'usage.
 | HUMAN @architect @privacy | **q198 (cockpit)** — « X éléments non visibles » : exclure les dossiers « personnes nommées » du nombre (recommandé). Bloque V3. | 2026-10-28 | **Fermé** (DECISION-103) |
 | HUMAN @architect @risk-manager | **q199 (cockpit)** — propriétaire qui élargit une ressource restreinte par le Risk Manager : notifier sans bloquer (recommandé). Bloque V1. | 2026-10-28 | **Fermé** (DECISION-103) |
 | HUMAN @security @dev-backend | **q200 (cockpit)** — circuit d'attribution de l'accès élargi `role.read.sensitive` à un membre du Risk Manager : demande admin + motif, confirmée par Comité ou Audit (recommandé ; petite migration). Restriction q188/q189 construite (`feat/r1-rights-lines`, 48f1e00). | 2026-10-28 | **Fermé** (DECISION-103) |
-| HUMAN @security @dev-backend | **q201 (cockpit)** — SEC-RL-01/03 : cacher aussi les noms des administrateurs et de l'Audit au Risk Manager restreint (annuaire), ou seulement leurs droits (B recommandé). | 2026-10-28 | **Ouvert — HUMAN : q201** |
-| HUMAN @security @dev-backend | **q202 (cockpit)** — SEC-RL-04 : celui qui confirme une vue élargie ne doit pas être administrateur (A recommandé). | 2026-10-28 | **Ouvert — HUMAN : q202** |
+| HUMAN @security @dev-backend | **q201 (cockpit)** — SEC-RL-01/03 : cacher aussi les noms des administrateurs et de l'Audit au Risk Manager restreint (annuaire), ou seulement leurs droits (B recommandé). | 2026-10-28 | **Fermé** (DECISION-104) |
+| HUMAN @security @dev-backend | **q202 (cockpit)** — SEC-RL-04 : celui qui confirme une vue élargie ne doit pas être administrateur (A recommandé). | 2026-10-28 | **Fermé** (DECISION-104) |
 | @dev-backend | **SEC-RL-02/05 + INFO (revue A10 feat/r1-rights-lines)** : 404 cohérent sur `/roles/users/:userId` ; vue élargie invalide après sortie du groupe ou suspension (pas de réactivation au retour) ; demande expirée ne bloque plus ; id canonique (casse). À corriger dans la branche avant PR. | 2026-10-28 | **En cours** |
-| HUMAN @security @architect @privacy | **q203 (cockpit)** — SEC V0-03 : le journal d'audit restitue le contenu des ressources restreintes ; réserver `audit.read` au groupe Audit (A, recommandé) ou masquer le contenu non visible (B). Bloque V1. V0-05 rattaché à q202. | 2026-10-29 | **Ouvert — HUMAN : q203** |
+| HUMAN @security @architect @privacy | **q203 (cockpit)** — SEC V0-03 : le journal d'audit restitue le contenu des ressources restreintes ; réserver `audit.read` au groupe Audit (A, recommandé) ou masquer le contenu non visible (B). Bloque V1. V0-05 rattaché à q202. | 2026-10-29 | **Fermé** (DECISION-104) |
 | @dev-backend @dev-db | **Visibilité — à lever avant V1 (SEC-visibility-v0)** : V0-01 (scope absent = pas de filtre → fail-closed), V0-02 (tableaux de bord, rapports, cartographie, `?coveringRiskId=`, vues 360, KRI/KPI, `ActionPlanService.dashboard` non filtrés), V0-04 (KPI `requireKpi` et validations de liens), V0-06/07 INFO ; retest A10 avant de livrer V1. | 2026-10-29 | **Ouvert** |
 ## Decision Log
 
@@ -2496,4 +2496,19 @@ DECISION (PO, cockpit q197 à q200, recommandations retenues ; « ok fait le »)
 RELATED: DECISION-100/101/102, spec RM-V1-Visibilite-Ressources-spec.md.
 OWNER: @orchestrator @dev-backend @dev-db @security
 STATUS: DÉCIDÉ — construction lancée.
+
+DECISION-104
+DATE: 2026-10-31
+DECISION (PO, cockpit) : q201 B — on cache au Risk Manager restreint les
+  droits des administrateurs et de l'Audit, pas leurs noms (non
+  confidentiels) : SEC-RL-01/03 acceptés, aucun code. q202 B — un
+  administrateur membre du Comité ou de l'Audit peut confirmer une vue
+  élargie ; l'action reste tracée : SEC-RL-04 et SEC V0-05 acceptés, aucun
+  code. q203 A — la lecture du journal d'audit (`audit.*`) est réservée au
+  groupe Audit : refuser `audit.*` sur tout rôle hors groupe Audit et
+  nettoyer par migration auditée les rôles ordinaires qui la portent
+  (prérequis de la visibilité V1, ferme SEC V0-03).
+RELATED: q201-q203, SEC-rights-lines, SEC-visibility-v0, DECISION-102/103.
+OWNER: @orchestrator @dev-backend @dev-db @security
+STATUS: DÉCIDÉ — q201/q202 sans code ; q203 à construire avec V1.
 ```
