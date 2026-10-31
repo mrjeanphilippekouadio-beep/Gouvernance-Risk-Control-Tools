@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
@@ -59,7 +60,7 @@ export class RiskOwnershipService {
   async listOwners(actor: AuthenticatedUser, options?: { includeArchived?: boolean }): Promise<RiskOwnerGroup[]> {
     requirePermission(actor, "risk.read");
 
-    const risks = await this.risks.list(actor.tenantId, { includeArchived: options?.includeArchived ?? false });
+    const risks = await this.risks.list(actor.tenantId, { includeArchived: options?.includeArchived ?? false }, SYSTEM_SCOPE);
     const ownedRisks = risks.filter((r): r is typeof r & { ownerId: string } => r.ownerId !== null);
 
     const scoreByRiskId = new Map<string, number | null>();

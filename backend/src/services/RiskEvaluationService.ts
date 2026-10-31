@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -201,7 +202,7 @@ export class RiskEvaluationService {
 
     let risk = null;
     if (this.risks) {
-      risk = await this.risks.getById(actor.tenantId, input.riskId);
+      risk = await this.risks.getById(actor.tenantId, input.riskId, SYSTEM_SCOPE);
       if (!risk) throw new ValidationError(`Risk ${input.riskId} does not exist in this tenant`);
     }
 
@@ -298,7 +299,7 @@ export class RiskEvaluationService {
   ): Promise<RiskEvaluation[]> {
     requirePermission(actor, "riskevaluation.read");
     if (this.risks) {
-      const risk = await this.risks.getById(actor.tenantId, riskId);
+      const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
       if (!risk) throw new ValidationError(`Risk ${riskId} does not exist in this tenant`);
     }
     return this.evaluations.listForRisk(actor.tenantId, riskId, options);
@@ -719,7 +720,7 @@ export class RiskEvaluationService {
     if (!this.frameworks) return this.resolveActiveRatingScale(tenantId);
     if (e.ratingScaleId) return this.getRatingScaleOrThrow(tenantId, e.ratingScaleId);
     if (!this.ratingScales) throw new Error("RatingScaleRepository is not configured for RiskEvaluationService");
-    const risk = this.risks ? await this.risks.getById(tenantId, e.riskId) : null;
+    const risk = this.risks ? await this.risks.getById(tenantId, e.riskId, SYSTEM_SCOPE) : null;
     const applicable = await resolveApplicableVersion(
       { frameworks: this.frameworks, ratingScales: this.ratingScales, processes: this.processes },
       tenantId,

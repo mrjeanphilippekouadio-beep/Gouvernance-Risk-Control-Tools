@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import "dotenv/config";
 import { writeFileSync } from "node:fs";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -135,7 +136,7 @@ export async function buildBackfillReport(
   tenantId: string,
 ): Promise<BackfillReport> {
   const [allRisks, allProcesses] = await Promise.all([
-    riskRepository.list(tenantId, { includeArchived: true }),
+    riskRepository.list(tenantId, { includeArchived: true }, SYSTEM_SCOPE),
     processRepository.list(tenantId, { includeInactive: true }),
   ]);
 

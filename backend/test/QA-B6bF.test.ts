@@ -9,6 +9,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../src/domain/er
 import type { Permission } from "../src/domain/permissions.js";
 import type { RiskFrameworkVersion } from "../src/domain/entities/RiskFramework.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
+import { SYSTEM_SCOPE } from "../src/domain/visibility.js";
 
 // QA pass on the B-6b follow-up batch (A06 fixes + migration 060). Oracles written before running.
 
@@ -284,7 +285,7 @@ describe("QA-B6bF /applicable?riskId= requires risk.read (F-B6b-03)", () => {
   it("with both: existing -> result, unknown -> NotFound (tenant-scoped lookup)", async () => {
     const a = actor(["riskframework.read", "risk.read"], T2);
     await expect(s.getApplicable(a, { riskId: "nope" })).rejects.toThrow(NotFoundError);
-    expect(getById).toHaveBeenLastCalledWith(T2, "nope");
+    expect(getById).toHaveBeenLastCalledWith(T2, "nope", SYSTEM_SCOPE); // an internal tenant-scoped existence check (SEC V0-01: explicit)
   });
   it("the processId / default branches do NOT need risk.read (unchanged contract)", async () => {
     await expect(s.getApplicable(actor(["riskframework.read"]), {})).resolves.toBeTruthy();

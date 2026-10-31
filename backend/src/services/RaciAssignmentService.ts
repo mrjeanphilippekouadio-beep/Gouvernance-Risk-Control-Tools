@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { RaciAssignmentRepository } from "../domain/repositories/RaciAssignmentRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -163,13 +164,13 @@ export class RaciAssignmentService {
   /** Never trust entityId blindly (EvidenceService pattern, CLAUDE.md) — resolve the target row in the actor's tenant before any write. */
   private async assertEntityExists(tenantId: string, entityType: RaciEntityType, entityId: string): Promise<void> {
     if (entityType === "RISK" && this.risks) {
-      const risk = await this.risks.getById(tenantId, entityId);
+      const risk = await this.risks.getById(tenantId, entityId, SYSTEM_SCOPE);
       if (!risk) throw new ValidationError(`Risk ${entityId} does not exist in this tenant`);
     } else if (entityType === "CONTROL" && this.controls) {
-      const control = await this.controls.getById(tenantId, entityId);
+      const control = await this.controls.getById(tenantId, entityId, SYSTEM_SCOPE);
       if (!control) throw new ValidationError(`Control ${entityId} does not exist in this tenant`);
     } else if (entityType === "ACTION_PLAN" && this.actionPlans) {
-      const action = await this.actionPlans.getById(tenantId, entityId);
+      const action = await this.actionPlans.getById(tenantId, entityId, SYSTEM_SCOPE);
       if (!action) throw new ValidationError(`ActionPlan ${entityId} does not exist in this tenant`);
     }
   }

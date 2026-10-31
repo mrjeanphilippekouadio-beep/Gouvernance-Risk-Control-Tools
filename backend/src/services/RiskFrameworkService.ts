@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
 import type { RiskCategoryRepository } from "../domain/repositories/RiskCategoryRepository.js";
@@ -202,7 +203,7 @@ export class RiskFrameworkService {
     if (q.riskId) {
       requirePermission(actor, "risk.read"); // F-B6b-03: the existence of a risk must not be deducible without it
       if (!this.risks) throw new ValidationError("Risk lookup is not available");
-      const risk = await this.risks.getById(actor.tenantId, q.riskId);
+      const risk = await this.risks.getById(actor.tenantId, q.riskId, SYSTEM_SCOPE);
       if (!risk) throw new NotFoundError("Risk", q.riskId);
       processId = risk.processId ?? null;
     } else if (processId) {

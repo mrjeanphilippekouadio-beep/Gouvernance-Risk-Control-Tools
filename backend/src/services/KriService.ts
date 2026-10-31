@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { KriListFilters, KriRepository } from "../domain/repositories/KriRepository.js";
 import type { KriMeasureRepository } from "../domain/repositories/KriMeasureRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -240,7 +241,7 @@ export class KriService {
   }
 
   private async assertRiskExists(tenantId: string, riskId: string): Promise<void> {
-    const risk = await this.risks.getById(tenantId, riskId);
+    const risk = await this.risks.getById(tenantId, riskId, SYSTEM_SCOPE);
     if (!risk) throw new ValidationError(`Risk ${riskId} does not exist in this tenant`);
   }
 

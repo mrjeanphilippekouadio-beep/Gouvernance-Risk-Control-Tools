@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { ControlExecutionRepository } from "../domain/repositories/ControlExecutionRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
@@ -32,7 +33,7 @@ export class ControlExecutionService {
   ): Promise<ControlExecution> {
     requirePermission(actor, "execution.create");
 
-    const control = await this.controls.getById(actor.tenantId, input.controlId);
+    const control = await this.controls.getById(actor.tenantId, input.controlId, SYSTEM_SCOPE);
     if (!control) throw new ValidationError(`Control ${input.controlId} does not exist in this tenant`);
 
     if (input.status !== "DONE" && !input.justificationIfNotDone?.trim()) {

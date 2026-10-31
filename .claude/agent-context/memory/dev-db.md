@@ -165,3 +165,9 @@
 - Ajout d'un droit à un groupe fixe existant = constante `FIXED_GROUP_PERMISSIONS` + migration qui complète les groupes existants (tous, supprimés compris), avec une ligne `audit_log` PERMISSION_CHANGE par groupe, signée par un compte technique suspendu `migration-NNN@system.invalid` (un par migration : le nom affiché dit quelle migration a agi ; `isSystemAccount` reconnaît le domaine). Le `.down` retire le droit et l'audite aussi (`request_id 'migration:078:down'`).
 - Épingles à mettre à jour à chaque nouvelle migration : `QA-panel-migrations` / `QA-panel2-migrations` (série + max), et pour un droit de groupe fixe `B8ter` (`addedByNNN`) + la regex de `QA-B6a` qui recopie l'expression de B8ter.
 - Test up/down/up : sur une copie `create database … template …` de la base de test, jamais sur la base qu'un parcours navigateur réutilise.
+
+## 2026-10-28 — Migration 080 (visibilité V0)
+- `visibility` (CLIENT|PERIMETRE|NOMINATIF, défaut CLIENT) sur risks, controls, anomalies, action_plans, kpis ; table
+  `resource_access_grants` ajout seul (garde trigger : pas de DELETE, contenu immuable, révocation une seule fois, TRUNCATE
+  refusé, `search_path` épinglé), CHECK anti auto-attribution. Down : supprime table + colonnes. up/down/up vérifié sur
+  PG16 local jetable (/var/tmp/pgv0), jamais Neon.

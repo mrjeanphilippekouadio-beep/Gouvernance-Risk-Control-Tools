@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { ProcessEvaluationModeRequestRepository } from "../domain/repositories/ProcessEvaluationModeRequestRepository.js";
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -281,7 +282,7 @@ export class ProcessEvaluationModeRequestService {
    * consulted for authorization.
    */
   private async getRiskOwners(tenantId: string, processId: string): Promise<RiskOwnerRef[]> {
-    const risks = await this.risks.list(tenantId);
+    const risks = await this.risks.list(tenantId, undefined, SYSTEM_SCOPE);
     return risks
       .filter((r): r is typeof r & { ownerId: string } => r.processId === processId && r.ownerId !== null)
       .map((r) => ({ riskId: r.id, ownerId: r.ownerId }));

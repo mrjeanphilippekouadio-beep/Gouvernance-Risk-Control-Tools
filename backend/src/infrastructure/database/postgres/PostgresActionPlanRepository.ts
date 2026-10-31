@@ -1,4 +1,6 @@
 import type { Pool, PoolClient } from "pg";
+import { visibilityClause } from "./visibilityFilter.js";
+import type { ReadScope } from "../../../domain/visibility.js";
 import type { ActionPlanRepository } from "../../../domain/repositories/ActionPlanRepository.js";
 import type {
   ActionLink,
@@ -73,15 +75,15 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
 
   constructor(private readonly pool: Pool) {}
 
-  async getById(tenantId: string, id: string): Promise<ActionPlan | null> {
+  async getById(tenantId: string, id: string, scope: ReadScope): Promise<ActionPlan | null> {
     const { rows } = await this.pool.query<ActionPlanRow>(
-      `SELECT * FROM action_plans WHERE tenant_id = $1 AND id = $2`,
+      `SELECT * FROM action_plans WHERE tenant_id = $1 AND id = $2 ${visibilityClause(scope)}`,
       [tenantId, id],
     );
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
-  async list(tenantId: string, filters?: ActionPlanListFilters): Promise<ActionPlan[]> {
+  async list(tenantId: string, filters: ActionPlanListFilters | undefined, scope: ReadScope): Promise<ActionPlan[]> {
     const conditions: string[] = ["tenant_id = $1"];
     const params: unknown[] = [tenantId];
 
@@ -111,7 +113,7 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
     }
 
     const { rows } = await this.pool.query<ActionPlanRow>(
-      `SELECT * FROM action_plans WHERE ${conditions.join(" AND ")} ORDER BY due_date ASC`,
+      `SELECT * FROM action_plans WHERE ${conditions.join(" AND ")} ${visibilityClause(scope)} ORDER BY due_date ASC`,
       params,
     );
     return rows.map(toDomain);

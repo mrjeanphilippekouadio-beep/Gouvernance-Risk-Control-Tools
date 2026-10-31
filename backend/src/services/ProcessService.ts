@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -418,7 +419,7 @@ export class ProcessService {
   /** See `archive()`'s doc comment — checks live (non-archived, non-soft-deleted) references only, mirroring `list()`'s own default scoping for each repository. */
   private async assertNoActiveReferences(tenantId: string, processId: string): Promise<void> {
     if (this.risks) {
-      const risks = await this.risks.list(tenantId);
+      const risks = await this.risks.list(tenantId, undefined, SYSTEM_SCOPE);
       if (risks.some((r) => r.processId === processId)) {
         throw new ValidationError(
           "Cannot archive this process: it is still referenced by risks.processId — unlink those risks first, or the FK would silently dangle",
@@ -426,7 +427,7 @@ export class ProcessService {
       }
     }
     if (this.controls) {
-      const controls = await this.controls.list(tenantId);
+      const controls = await this.controls.list(tenantId, undefined, SYSTEM_SCOPE);
       if (controls.some((c) => c.processId === processId)) {
         throw new ValidationError(
           "Cannot archive this process: it is still referenced by controls.processId — unlink those controls first, or the FK would silently dangle",

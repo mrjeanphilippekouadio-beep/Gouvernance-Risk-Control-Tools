@@ -55,6 +55,7 @@ import { localAuthRouter } from "./api/v1/localAuth.routes.js";
 import type { DocumentStorage } from "./infrastructure/storage/DocumentStorage.js";
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
+import { VisibilityResolver } from "./services/VisibilityResolver.js";
 import { EvidenceService } from "./services/EvidenceService.js";
 import { ControlService } from "./services/ControlService.js";
 import { ControlExecutionService } from "./services/ControlExecutionService.js";
@@ -211,6 +212,8 @@ const findingRepository = new PostgresFindingRepository(pool);
 const departmentRepository = new PostgresDepartmentRepository(pool);
 const processRepository = new PostgresProcessRepository(pool);
 const roleRepository = new PostgresRoleRepository(pool);
+// DECISION-100 (lot V0): one resolver for the read scope of risks, controls, anomalies, action plans and KPIs.
+const visibilityResolver = new VisibilityResolver(roleRepository);
 const feedbackRepository = new PostgresFeedbackRepository(pool);
 const kpiRepository = new PostgresKpiRepository(pool);
 const kpiMeasureRepository = new PostgresKpiMeasureRepository(pool);
@@ -246,6 +249,7 @@ const riskService = new RiskService(
   notifier,
   riskEscalationRepository,
   processRepository,
+  visibilityResolver,
 );
 const departmentService = new DepartmentService(departmentRepository, auditRepository, processRepository);
 // DECISION-074 D4: one gate for every self-validation guard, one query object for validators / third parties / markers.
@@ -273,7 +277,7 @@ const organizationProfileService = new OrganizationProfileService(
   auditRepository,
 );
 const auditLogService = new AuditLogService(auditRepository);
-const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository);
+const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository, visibilityResolver);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository, selfValidationGate);
 const effectivenessService = new ControlEffectivenessService(
   effectivenessRepository,
@@ -287,6 +291,7 @@ const anomalyService = new AnomalyService(
   controlRepository,
   executionRepository,
   riskRepository,
+  visibilityResolver,
 );
 const auditMissionService = new AuditMissionService(auditMissionRepository, auditRepository, userRepository);
 const findingService = new FindingService(
@@ -314,7 +319,7 @@ const governancePrincipleAcceptanceService = new GovernancePrincipleAcceptanceSe
 );
 const governanceNotifier = new GovernanceNotifier(notificationService, governanceQueries);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
-const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository);
+const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository, visibilityResolver);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
 // B-6b: the Dispositif is wired into the services that read or used to own the methodology parameters.
 const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository, riskCategoryRepository, ratingScaleRepository, riskFrameworkRepository);
@@ -374,6 +379,7 @@ const actionPlanService = new ActionPlanService(
   findingRepository,
   notificationService,
   selfValidationGate,
+  visibilityResolver,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository, riskFrameworkRepository);
 const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository);

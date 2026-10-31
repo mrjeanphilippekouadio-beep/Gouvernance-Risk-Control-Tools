@@ -473,5 +473,14 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Identifiant en paramètre de route : `z.guid().parse(req.params[...])` (ZodError → 400 via errorHandler), sinon PostgreSQL renvoie 22P02 → 500.
 - Un champ hors `data` dans une réponse (ex. `suspended`) doit être ajouté à `apiRequestFull`/`ApiResponse` côté front, qui ne recopie que les champs connus.
 - `DIRECTORY_PERMISSIONS` (UserService) : tout droit qui doit désigner ou consulter un compte précis y entre (q183 `audit.mission.create`, q187 `role.read`) ; chaque ajout repasse Privacy.
+
+## 2026-10-28 — Visibilité V0 (DECISION-100/102/103, feat/r1-visibility-v0)
+- Point unique de filtre : `infrastructure/database/postgres/visibilityFilter.ts` (`visibilityClause(scope)`), appelé dans
+  getById/list des 5 racines (risks, controls, anomalies, action_plans, kpis). Pas de scope = pas de filtre (lectures internes).
+- `VisibilityResolver` (paramètre de constructeur optionnel, en dernier) : RM/Comité/Audit → `{ all: true }`, sinon
+  `{ all: false }` = CLIENT seulement. Les services passent le scope uniquement dans leurs `get`/`list` publics (et donc
+  aussi dans `update` qui relit via `get`). V1 élargira `{ all: false }` (périmètre + accès accordés), enfants hérités.
+- Piège numérotation : 080 posé avec 079 réservé ailleurs → les tests de contiguïté (QA-B8quater, QA-panel2) échouent
+  tant que 079 n'existe pas. Ne jamais les affaiblir : fusionner 079 d'abord ou renuméroter.
 - q188/q189 (DECISION-098/101) : la ligne de défense se calcule côté serveur (`lineOf`/`roleLine`/`accountLine` dans `fixedGroupPermissions.ts`, ADMIN > AUDIT > LINE_2 > LINE_1, ADMIN = `ADMIN_PERMISSIONS`). Lecteur restreint = `role.read` sans droit d'administration, hors groupe Audit, sans `role.read.sensitive` : listes filtrées, routes par id → 404 identique à un id inconnu. Une permission dont le circuit de validation n'existe pas encore est refusée dans `assertRolePermissionRules` (fail closed), jamais laissée attribuable par `PATCH /roles/:id`.
 - q200 (DECISION-103, migration 079) : un droit donné à UNE personne avec confirmation d'un tiers vit dans sa propre table de demandes (PENDING → APPROVED/REJECTED, → REVOKED), jamais copié dans `roles.permissions` ; le droit effectif se relit à chaque lecture (`isApproved`) et seulement tant que la personne reste dans le groupe concerné. Maker-checker doublé en CHECK SQL (ni l'auteur ni le bénéficiaire). Retrait = endpoint dédié avec motif (`role.assign`), confirmation = `rolegroup.audit.validate`. Nouvelle notification obligatoire → mettre à jour les 4 épingles du catalogue (QA-D044, QA-Notifications x2, NotificationsCenter) ; nouveau `configs.getByTenant` dans un service → inventaire de B6bFollowups.
