@@ -10,6 +10,7 @@
 --    retiré par `revoked_at` (jamais de DELETE). Le contenu d'un accès est immuable ; seule la révocation, une fois,
 --    est permise. `resource_id` n'a pas de FK (cible polymorphe) : le service vérifie l'existence dans le client avant
 --    d'insérer (patron EvidenceService). Maker-checker : personne ne s'ajoute soi-même (q194, spec §5).
+--    Motifs : 1 à 500 caractères hors blancs (espace, tabulation, saut de ligne : QA-VIS0-02, même famille que F-PNL-11).
 -- Mêmes garanties que 076 : aucune suppression (REVOKE + trigger), garde TRUNCATE,
 -- `search_path = pg_catalog, public, pg_temp` sur chaque définition. Idempotente (IF NOT EXISTS / OR REPLACE).
 -- Ne jamais appliquer à la main : passe par `npm run migrate`.
@@ -28,15 +29,16 @@ CREATE TABLE IF NOT EXISTS resource_access_grants (
   user_id        uuid NOT NULL,
   granted_by     uuid NOT NULL,
   granted_at     timestamptz NOT NULL DEFAULT now(),
-  grant_reason   text NOT NULL CHECK (char_length(btrim(grant_reason)) BETWEEN 1 AND 500),
+  grant_reason   text NOT NULL CHECK (char_length(btrim(grant_reason, E' \t\n\r\f\013')) BETWEEN 1 AND 500),
   revoked_by     uuid NULL,
   revoked_at     timestamptz NULL,
-  revoke_reason  text NULL CHECK (revoke_reason IS NULL OR char_length(btrim(revoke_reason)) BETWEEN 1 AND 500),
+  revoke_reason  text NULL CHECK (revoke_reason IS NULL OR char_length(btrim(revoke_reason, E' \t\n\r\f\013')) BETWEEN 1 AND 500),
   CONSTRAINT rag_user_tenant_fk FOREIGN KEY (tenant_id, user_id) REFERENCES users (tenant_id, id),
   CONSTRAINT rag_granted_by_tenant_fk FOREIGN KEY (tenant_id, granted_by) REFERENCES users (tenant_id, id),
   CONSTRAINT rag_revoked_by_tenant_fk FOREIGN KEY (tenant_id, revoked_by) REFERENCES users (tenant_id, id),
   CONSTRAINT rag_no_self_grant_check CHECK (granted_by <> user_id),
-  CONSTRAINT rag_revocation_shape_check CHECK ((revoked_at IS NULL) = (revoked_by IS NULL AND revoke_reason IS NULL))
+  -- QA-VIS0-01 : une révocation porte toujours son auteur ET son motif (jamais l'un sans l'autre).
+  CONSTRAINT rag_revocation_shape_check CHECK ((revoked_at IS NULL) = (revoked_by IS NULL) AND (revoked_at IS NULL) = (revoke_reason IS NULL))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS rag_active_idx

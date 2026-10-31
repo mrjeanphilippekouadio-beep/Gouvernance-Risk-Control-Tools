@@ -8,8 +8,8 @@ import type { ReadScope } from "../visibility.js";
  * ADR-001.
  */
 export interface RiskRepository {
-  /** `scope` (DECISION-100): the reader's visibility; omitted for internal reads (no filter). */
-  getById(tenantId: string, id: string, scope?: ReadScope): Promise<Risk | null>;
+  /** `scope` (DECISION-100, fail-closed SEC V0-01): the reader's visibility, mandatory; internal reads pass SYSTEM_SCOPE. */
+  getById(tenantId: string, id: string, scope: ReadScope): Promise<Risk | null>;
   /** Batched existence check — used instead of N getById calls (e.g. validating a control's covered risks). */
   listByIds(tenantId: string, ids: string[]): Promise<Risk[]>;
   /**
@@ -22,14 +22,14 @@ export interface RiskRepository {
    */
   list(
     tenantId: string,
-    options?: {
+    options: {
       includeArchived?: boolean;
       ownerId?: string;
       ownerDepartmentIds?: string[];
       processIds?: string[];
       ids?: string[];
-    },
-    scope?: ReadScope,
+    } | undefined,
+    scope: ReadScope,
   ): Promise<Risk[]>;
   create(input: CreateRiskInput): Promise<Risk>;
   /** Create once for a tenant-scoped Idempotency-Key; retries return the original resource. */

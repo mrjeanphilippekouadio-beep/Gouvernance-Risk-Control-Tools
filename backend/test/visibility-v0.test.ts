@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isVisible, SEES_EVERYTHING, type ReadScope } from "../src/domain/visibility.js";
+import { isVisible, READER_DEFAULT_SCOPE, SEES_EVERYTHING, SYSTEM_SCOPE, type ReadScope } from "../src/domain/visibility.js";
 import { visibilityClause } from "../src/infrastructure/database/postgres/visibilityFilter.js";
 import { PostgresRiskRepository } from "../src/infrastructure/database/postgres/PostgresRiskRepository.js";
 import { VisibilityResolver } from "../src/services/VisibilityResolver.js";
@@ -28,11 +28,12 @@ describe("visibility V0 — model and single filter point", () => {
     expect(UP).toMatch(/rag_no_self_grant_check CHECK \(granted_by <> user_id\)/);
   });
 
-  it("the SQL filter adds nothing without a scope or for a 'sees everything' scope, and keeps CLIENT rows otherwise", () => {
-    expect(visibilityClause(undefined)).toBe("");
+  it("the SQL filter adds nothing for a 'sees everything' scope (fixed group or explicit SYSTEM_SCOPE) and keeps CLIENT rows otherwise", () => {
+    expect(visibilityClause(SYSTEM_SCOPE)).toBe("");
     expect(visibilityClause({ all: true })).toBe("");
     expect(visibilityClause({ all: false })).toBe("AND visibility = 'CLIENT'");
-    expect(isVisible("PERIMETRE", undefined)).toBe(true);
+    expect(isVisible("PERIMETRE", SYSTEM_SCOPE)).toBe(true);
+    expect(isVisible("PERIMETRE", READER_DEFAULT_SCOPE)).toBe(false);
     expect(isVisible("NOMINATIF", { all: true })).toBe(true);
     expect(isVisible("CLIENT", { all: false })).toBe(true);
     expect(isVisible("PERIMETRE", { all: false })).toBe(false);
@@ -48,7 +49,7 @@ describe("visibility V0 — model and single filter point", () => {
     expect(await ordinary.resolve(actor)).toEqual({ all: false });
   });
 
-  it("the service passes the reader's scope to the repository; without a resolver it passes nothing (no filter)", async () => {
+  it("the service passes the reader's scope to the repository; without a resolver it is fail-closed (CLIENT only, SEC V0-01)", async () => {
     const seen: (ReadScope | undefined)[] = [];
     const risks = {
       getById: async (_t: string, _id: string, scope?: ReadScope) => { seen.push(scope); return { id: "r1" }; },
@@ -60,7 +61,7 @@ describe("visibility V0 — model and single filter point", () => {
     await new RiskService(risks, audit).get(actor, "r1");
     await new RiskService(risks, audit, undefined, undefined, undefined, undefined, undefined, resolver).get(actor, "r1");
     await new RiskService(risks, audit, undefined, undefined, undefined, undefined, undefined, resolver).list(actor);
-    expect(seen).toEqual([undefined, { all: false }, { all: false }]);
+    expect(seen).toEqual([{ all: false }, { all: false }, { all: false }]);
   });
 });
 
@@ -77,8 +78,8 @@ describe.skipIf(!hasLocalPg)("visibility V0 (real PostgreSQL)", () => {
     await ctx.pool.query(`UPDATE risks SET visibility = 'PERIMETRE' WHERE id = $1`, [restricted]);
 
     const repo = new PostgresRiskRepository(ctx.pool);
-    const ids = async (scope?: ReadScope) => (await repo.list(ctx.tenant, {}, scope)).map((r) => r.id).sort();
-    expect(await ids()).toEqual([open.id, restricted].sort());
+    const ids = async (scope: ReadScope) => (await repo.list(ctx.tenant, {}, scope)).map((r) => r.id).sort();
+    expect(await ids(SYSTEM_SCOPE)).toEqual([open.id, restricted].sort());
     expect(await ids({ all: true })).toEqual([open.id, restricted].sort());
     expect(await ids({ all: false })).toEqual([open.id]);
     expect(await repo.getById(ctx.tenant, restricted, { all: false })).toBeNull();

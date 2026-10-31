@@ -53,7 +53,7 @@ function toDomain(row: AnomalyRow): Anomaly {
 export class PostgresAnomalyRepository implements AnomalyRepository {
   constructor(private readonly pool: Pool) {}
 
-  async getById(tenantId: string, id: string, scope?: ReadScope): Promise<Anomaly | null> {
+  async getById(tenantId: string, id: string, scope: ReadScope): Promise<Anomaly | null> {
     const { rows } = await this.pool.query<AnomalyRow>(
       `SELECT * FROM anomalies WHERE tenant_id = $1 AND id = $2 ${visibilityClause(scope)}`,
       [tenantId, id],
@@ -61,7 +61,7 @@ export class PostgresAnomalyRepository implements AnomalyRepository {
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
-  async list(tenantId: string, options?: { status?: AnomalyStatus }, scope?: ReadScope): Promise<Anomaly[]> {
+  async list(tenantId: string, options: { status?: AnomalyStatus } | undefined, scope: ReadScope): Promise<Anomaly[]> {
     const statusFilter = options?.status ? "AND status = $2" : "";
     const params = options?.status ? [tenantId, options.status] : [tenantId];
     const { rows } = await this.pool.query<AnomalyRow>(

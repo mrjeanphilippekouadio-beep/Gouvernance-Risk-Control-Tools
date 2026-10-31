@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { KriMeasureListFilters, KriMeasureListResult, KriMeasureRepository } from "../domain/repositories/KriMeasureRepository.js";
 import type { KriRepository } from "../domain/repositories/KriRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
@@ -97,7 +98,7 @@ export class KriMeasureService {
   private async persistBreach(actor: AuthenticatedUser, kriId: string, riskId: string, message: string, requestId: string): Promise<void> {
     if (!this.notifications || !this.risks) return;
     try {
-      const risk = await this.risks.getById(actor.tenantId, riskId);
+      const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
       if (risk?.status === "ARCHIVED" || risk?.deletedAt) return; // F-NOTIF-06
       const recipients = new Set([risk?.ownerId, risk?.superiorOwnerId].filter((id): id is string => !!id));
       for (const recipientUserId of recipients) {

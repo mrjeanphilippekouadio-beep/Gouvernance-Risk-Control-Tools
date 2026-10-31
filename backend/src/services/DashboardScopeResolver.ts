@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { RaciAssignmentRepository } from "../domain/repositories/RaciAssignmentRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskScope } from "../domain/entities/DashboardScope.js";
@@ -38,7 +39,7 @@ export class DashboardScopeResolver {
     const [wideRaci, narrowRaci, ownedRisks] = await Promise.all([
       this.raci.listForUser(actor.tenantId, actor.userId, { roles: ["R", "A"] }),
       this.raci.listForUser(actor.tenantId, actor.userId, { roles: ["C", "I"] }),
-      this.risks.list(actor.tenantId, { includeArchived: true, ownerId: actor.userId }),
+      this.risks.list(actor.tenantId, { includeArchived: true, ownerId: actor.userId }, SYSTEM_SCOPE),
     ]);
 
     const wideRiskIds = new Set<string>([

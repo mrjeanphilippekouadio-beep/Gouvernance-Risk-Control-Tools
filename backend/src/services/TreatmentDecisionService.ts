@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { TreatmentDecisionRepository } from "../domain/repositories/TreatmentDecisionRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -57,7 +58,7 @@ export class TreatmentDecisionService {
       throw new ForbiddenError("Only the designated evaluator of the parent evaluation can propose a treatment decision");
     }
 
-    const risk = await this.risks.getById(actor.tenantId, evaluation.riskId);
+    const risk = await this.risks.getById(actor.tenantId, evaluation.riskId, SYSTEM_SCOPE);
     if (!risk) throw new ValidationError(`Risk ${evaluation.riskId} does not exist in this tenant`);
 
     // G3 — fail-closed, mirrors RiskService.escalate.

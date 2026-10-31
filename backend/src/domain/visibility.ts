@@ -17,5 +17,13 @@ export const SEES_EVERYTHING: readonly SystemGroup[] = ["RISK_MANAGER", "RISK_CO
  */
 export type ReadScope = { all: true } | { all: false };
 
-export const isVisible = (visibility: Visibility, scope: ReadScope | undefined): boolean =>
-  !scope || scope.all || visibility === "CLIENT";
+/**
+ * SEC V0-01 (fail-closed): the scope is mandatory on every root read. A server-internal read that legitimately needs
+ * every row (validation of a link, a recomputation, a dashboard already gated by its own permission) says so explicitly
+ * with this marker — never by omitting the scope. A reader-facing read uses `VisibilityResolver`; without a resolver
+ * the reader gets `READER_DEFAULT_SCOPE` (CLIENT rows only), never everything.
+ */
+export const SYSTEM_SCOPE: ReadScope = Object.freeze({ all: true });
+export const READER_DEFAULT_SCOPE: ReadScope = Object.freeze({ all: false });
+
+export const isVisible = (visibility: Visibility, scope: ReadScope): boolean => scope.all || visibility === "CLIENT";

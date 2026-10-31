@@ -25,6 +25,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
+import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 import type { NotificationService } from "./NotificationService.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
@@ -116,7 +117,7 @@ export class ActionPlanService {
     private readonly notifications?: NotificationService,
     /** DECISION-074 D4: optional; without it a self-validation is refused as before. Wired in server.ts. */
     private readonly selfValidation?: SelfValidationGate,
-    /** DECISION-100 (lot V0): optional — absent, reads are not filtered (tests, internal callers). Wired in server.ts. */
+    /** DECISION-100 (lot V0): optional for existing tests — absent, a reader sees CLIENT rows only (fail-closed, SEC V0-01). Wired in server.ts. */
     private readonly visibility?: VisibilityResolver,
   ) {}
 
@@ -140,7 +141,7 @@ export class ActionPlanService {
         if (kri?.riskId) riskIds.add(kri.riskId);
       }
       for (const riskId of riskIds) {
-        const risk = await this.risks.getById(actor.tenantId, riskId);
+        const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
         if (!risk || risk.status === "ARCHIVED" || risk.deletedAt) continue;
         for (const id of [risk.ownerId, risk.superiorOwnerId]) if (id) recipients.add(id);
       }
@@ -232,7 +233,7 @@ export class ActionPlanService {
 
   async list(actor: AuthenticatedUser, filters?: ActionPlanListFilters): Promise<ActionPlanView[]> {
     requirePermission(actor, "actionplan.read");
-    const rows = await this.actions.list(actor.tenantId, filters, await this.visibility?.resolve(actor));
+    const rows = await this.actions.list(actor.tenantId, filters, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     return rows.map((row) => this.toView(row));
   }
 
@@ -245,7 +246,7 @@ export class ActionPlanService {
   async listForRisk(actor: AuthenticatedUser, riskId: string): Promise<ActionPlanView[]> {
     requirePermission(actor, "actionplan.read");
     if (this.risks) {
-      const risk = await this.risks.getById(actor.tenantId, riskId);
+      const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
       if (!risk) throw new ValidationError(`Risk ${riskId} does not exist in this tenant`);
     }
     const rows = await this.actions.listForRisk(actor.tenantId, riskId);
@@ -261,7 +262,7 @@ export class ActionPlanService {
     const storedStatusFilter = wantsOverdueOnly ? undefined : (filters?.status as ActionPlanListFilters["status"]);
     const repoFilters: ActionPlanListFilters = { ...filters, status: storedStatusFilter };
 
-    const rows = await this.actions.list(actor.tenantId, repoFilters);
+    const rows = await this.actions.list(actor.tenantId, repoFilters, SYSTEM_SCOPE);
     const views = rows.map((row) => this.toView(row));
     return wantsOverdueOnly ? views.filter((v) => v.computedStatus === "EN_RETARD") : views;
   }
@@ -502,7 +503,7 @@ export class ActionPlanService {
   }
 
   private async getRaw(actor: AuthenticatedUser, id: string): Promise<ActionPlan> {
-    const action = await this.actions.getById(actor.tenantId, id, await this.visibility?.resolve(actor));
+    const action = await this.actions.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!action) throw new NotFoundError("ActionPlan", id);
     return action;
   }
@@ -514,10 +515,10 @@ export class ActionPlanService {
 
   private async assertSourceExists(tenantId: string, sourceType: ActionPlanSourceType, sourceId: string): Promise<void> {
     if (sourceType === "RISK" && this.risks) {
-      const risk = await this.risks.getById(tenantId, sourceId);
+      const risk = await this.risks.getById(tenantId, sourceId, SYSTEM_SCOPE);
       if (!risk) throw new ValidationError(`Risk ${sourceId} does not exist in this tenant`);
     } else if (sourceType === "CONTROL" && this.controls) {
-      const control = await this.controls.getById(tenantId, sourceId);
+      const control = await this.controls.getById(tenantId, sourceId, SYSTEM_SCOPE);
       if (!control) throw new ValidationError(`Control ${sourceId} does not exist in this tenant`);
     } else if (sourceType === "KRI" && this.kris) {
       const kri = await this.kris.getById(tenantId, sourceId);
@@ -545,16 +546,16 @@ export class ActionPlanService {
 
   private async assertLinkTargetExists(tenantId: string, resourceType: ActionLinkResourceType, resourceId: string): Promise<void> {
     if (resourceType === "RISK" && this.risks) {
-      const risk = await this.risks.getById(tenantId, resourceId);
+      const risk = await this.risks.getById(tenantId, resourceId, SYSTEM_SCOPE);
       if (!risk) throw new ValidationError(`Risk ${resourceId} does not exist in this tenant`);
     } else if (resourceType === "CONTROL" && this.controls) {
-      const control = await this.controls.getById(tenantId, resourceId);
+      const control = await this.controls.getById(tenantId, resourceId, SYSTEM_SCOPE);
       if (!control) throw new ValidationError(`Control ${resourceId} does not exist in this tenant`);
     } else if (resourceType === "KRI" && this.kris) {
       const kri = await this.kris.getById(tenantId, resourceId);
       if (!kri) throw new ValidationError(`Kri ${resourceId} does not exist in this tenant`);
     } else if (resourceType === "ANOMALY" && this.anomalies) {
-      const anomaly = await this.anomalies.getById(tenantId, resourceId);
+      const anomaly = await this.anomalies.getById(tenantId, resourceId, SYSTEM_SCOPE);
       if (!anomaly) throw new ValidationError(`Anomaly ${resourceId} does not exist in this tenant`);
     }
   }

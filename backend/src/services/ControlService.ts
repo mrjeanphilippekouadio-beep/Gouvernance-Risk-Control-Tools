@@ -7,6 +7,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
+import { READER_DEFAULT_SCOPE } from "../domain/visibility.js";
 
 /**
  * Rules ported from apps-script-legacy/11_Controles.gs (validateControle_):
@@ -29,7 +30,7 @@ export class ControlService {
      * for `processId` to ever be accepted.
      */
     private readonly processes?: ProcessRepository,
-    /** DECISION-100 (lot V0): optional — absent, reads are not filtered (tests, internal callers). Wired in server.ts. */
+    /** DECISION-100 (lot V0): optional for existing tests — absent, a reader sees CLIENT rows only (fail-closed, SEC V0-01). Wired in server.ts. */
     private readonly visibility?: VisibilityResolver,
   ) {}
 
@@ -61,14 +62,14 @@ export class ControlService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<Control> {
     requirePermission(actor, "control.read");
-    const control = await this.controls.getById(actor.tenantId, id, await this.visibility?.resolve(actor));
+    const control = await this.controls.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!control) throw new NotFoundError("Control", id);
     return control;
   }
 
   async list(actor: AuthenticatedUser, includeArchived = false): Promise<Control[]> {
     requirePermission(actor, "control.read");
-    return this.controls.list(actor.tenantId, { includeArchived }, await this.visibility?.resolve(actor));
+    return this.controls.list(actor.tenantId, { includeArchived }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
   }
 
   async listCoveringRisk(actor: AuthenticatedUser, riskId: string): Promise<Control[]> {

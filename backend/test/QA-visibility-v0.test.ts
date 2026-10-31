@@ -10,7 +10,7 @@ import { ControlService } from "../src/services/ControlService.js";
 import { AnomalyService } from "../src/services/AnomalyService.js";
 import { ActionPlanService } from "../src/services/ActionPlanService.js";
 import { KpiService } from "../src/services/KpiService.js";
-import { isVisible, type ReadScope, type Visibility } from "../src/domain/visibility.js";
+import { isVisible, SYSTEM_SCOPE, type ReadScope, type Visibility } from "../src/domain/visibility.js";
 import { visibilityClause } from "../src/infrastructure/database/postgres/visibilityFilter.js";
 import { PostgresRiskRepository } from "../src/infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresControlRepository } from "../src/infrastructure/database/postgres/PostgresControlRepository.js";
@@ -59,7 +59,7 @@ const role = (systemGroup: SystemGroup | null, extra: Partial<Role> = {}) => ({ 
 
 // ================================================================================================ NR (in memory)
 type Row = { id: string; tenantId: string; visibility: Visibility; dueDate?: Date; status?: string; progressPercent?: number };
-/** A repository double faithful to the SQL filter: scope undefined or all -> everything, else CLIENT only; tenant-scoped. */
+/** A repository double faithful to the SQL filter: scope all -> everything, else CLIENT only; tenant-scoped. */
 function fakeRepo(rows: Row[], seen: (ReadScope | undefined)[]) {
   const vis = (tenantId: string, scope?: ReadScope) =>
     rows.filter((r) => r.tenantId === tenantId && isVisible(r.visibility, scope)).map((r) => ({ dueDate: new Date(Date.now() + 864e5), status: "PLANIFIEE", progressPercent: 0, ...r }));
@@ -112,14 +112,14 @@ describe("QA-visibility-v0 NR: services hand the right scope to the repository (
     });
   }
 
-  it("no resolver wired (tests, internal callers): scope is undefined on all 10 reads = unfiltered", async () => {
+  it("no resolver wired (tests): fail-closed, the reader gets CLIENT rows only on all 10 reads (SEC V0-01)", async () => {
     const seen: (ReadScope | undefined)[] = [];
     const id = randomUUID();
     const s = services([{ id, tenantId: T, visibility: "PERIMETRE" }], seen);
     for (const [name, call] of Object.entries(calls(s, id))) {
       seen.length = 0;
-      await call();
-      expect(seen, name).toEqual([undefined]);
+      await call().catch(() => undefined); // the PERIMETRE row is hidden: get answers NotFound, list is empty
+      expect(seen, name).toEqual([{ all: false }]);
     }
   });
 
@@ -169,8 +169,8 @@ describe("QA-visibility-v0 NR: services hand the right scope to the repository (
     }
   });
 
-  it("clause: adds nothing without scope / with all; CLIENT only otherwise; never a client value; only the 5 repos use it (2 call sites each)", () => {
-    expect(visibilityClause(undefined)).toBe("");
+  it("clause: adds nothing with all (fixed group or SYSTEM_SCOPE); CLIENT only otherwise; never a client value; only the 5 repos use it (2 call sites each)", () => {
+    expect(visibilityClause(SYSTEM_SCOPE)).toBe("");
     expect(visibilityClause({ all: true })).toBe("");
     expect(visibilityClause({ all: false })).toBe("AND visibility = 'CLIENT'");
     const infra = join(__dirname, "..", "src", "infrastructure", "database", "postgres");
@@ -403,9 +403,8 @@ describe.skipIf(!live)("QA-visibility-v0 on real PostgreSQL 16 (QA_VIS_PGHOST so
       await expect(grant({ revoked_by: b })).rejects.toThrow(/inserted active|rag_revocation_shape_check/);
     });
 
-    // QA-VIS0-01 (MINOR): rag_revocation_shape_check is `(revoked_at IS NULL) = (revoked_by IS NULL AND revoke_reason IS NULL)`,
-    // so revoked_at + revoked_by WITHOUT a reason (or revoked_at + reason without the revoker) satisfies it. Expected: refused.
-    it.fails("QA-VIS0-01: a revocation without reason or without revoker is refused by the database (today it is accepted)", async () => {
+    // QA-VIS0-01 (MINOR, fixed in 080): a revocation always carries its revoker AND its reason.
+    it("QA-VIS0-01: a revocation without reason or without revoker is refused by the database", async () => {
       const noReason = await idOf();
       await expect(p.query(`UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $2 WHERE id = $1`, [noReason, b])).rejects.toThrow();
       const noRevoker = await idOf();
@@ -459,8 +458,8 @@ describe.skipIf(!live)("QA-visibility-v0 on real PostgreSQL 16 (QA_VIS_PGHOST so
       void resId;
     });
 
-    // QA-VIS0-02 (TRIVIAL, same family as F-PNL-11): btrim() strips spaces only, so a reason made of tabs / newlines satisfies BETWEEN 1 AND 500.
-    it.fails("QA-VIS0-02: a grant / revoke reason made only of tab or newline characters is refused (today it is accepted)", async () => {
+    // QA-VIS0-02 (TRIVIAL, fixed in 080, same family as F-PNL-11): blank-only reasons (tab, newline...) are refused.
+    it("QA-VIS0-02: a grant / revoke reason made only of tab or newline characters is refused", async () => {
       await expect(grant({ grant_reason: "\t\n" })).rejects.toThrow(/check constraint/);
     });
 
@@ -599,7 +598,7 @@ describe.skipIf(!live)("QA-visibility-v0 on real PostgreSQL 16 (QA_VIS_PGHOST so
       for (const k of Object.keys(ids) as Array<keyof typeof ids>) expect(foreign[k]).toEqual([ids[k].other]);
     });
 
-    it("repository level: scope undefined = everything (internal reads unchanged), {all:true} = everything, {all:false} = CLIENT; filter applied BEFORE the by-id fetch", async () => {
+    it("repository level: SYSTEM_SCOPE (explicit internal read) = everything, {all:true} = everything, {all:false} = CLIENT; filter applied BEFORE the by-id fetch", async () => {
       const { repos } = svc();
       const one = async (k: keyof typeof ids, scope?: ReadScope) => {
         const r = { risks: repos.risks, controls: repos.controls, anomalies: repos.anomalies, action_plans: repos.actions, kpis: repos.kpis }[k] as unknown as {
@@ -607,7 +606,7 @@ describe.skipIf(!live)("QA-visibility-v0 on real PostgreSQL 16 (QA_VIS_PGHOST so
         return { byId: await r.getById(t, ids[k].perimetre, scope), list: (await r.list(t, undefined, scope)).map((x) => x.id) };
       };
       for (const k of Object.keys(ids) as Array<keyof typeof ids>) {
-        for (const scope of [undefined, { all: true } as ReadScope]) {
+        for (const scope of [SYSTEM_SCOPE, { all: true } as ReadScope]) {
           const r = await one(k, scope);
           expect(r.byId, k).not.toBeNull();
           expect(r.list.length, k).toBe(3);
@@ -622,7 +621,7 @@ describe.skipIf(!live)("QA-visibility-v0 on real PostgreSQL 16 (QA_VIS_PGHOST so
       for (const k of Object.keys(ids) as Array<keyof typeof ids>) await p.query(`UPDATE ${k} SET visibility = 'CLIENT'`);
       const { repos } = svc();
       const lists = (scope?: ReadScope) => Promise.all([repos.risks.list(t, {}, scope), repos.controls.list(t, {}, scope), repos.anomalies.list(t, {}, scope), repos.actions.list(t, {}, scope), repos.kpis.list(t, {}, scope)]);
-      const ref = JSON.stringify(await lists(undefined));
+      const ref = JSON.stringify(await lists(SYSTEM_SCOPE));
       expect(JSON.stringify(await lists({ all: true }))).toBe(ref);
       expect(JSON.stringify(await lists({ all: false }))).toBe(ref);
       for (const who of ["reader", "rm", "aud"]) expect(await listIds(who, actor(u[who]!, t))).toEqual(await listIds("rm", actor(u["rm"]!, t)));

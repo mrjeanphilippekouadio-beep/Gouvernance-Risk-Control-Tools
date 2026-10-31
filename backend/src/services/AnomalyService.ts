@@ -8,6 +8,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
+import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE } from "../domain/visibility.js";
 
 /**
  * Rules ported from apps-script-legacy/14_Anomalies.gs: unlike
@@ -29,7 +30,7 @@ export class AnomalyService {
     private readonly controls?: ControlRepository,
     private readonly controlExecutions?: ControlExecutionRepository,
     private readonly risks?: RiskRepository,
-    /** DECISION-100 (lot V0): optional — absent, reads are not filtered (tests, internal callers). Wired in server.ts. */
+    /** DECISION-100 (lot V0): optional for existing tests — absent, a reader sees CLIENT rows only (fail-closed, SEC V0-01). Wired in server.ts. */
     private readonly visibility?: VisibilityResolver,
   ) {}
 
@@ -47,7 +48,7 @@ export class AnomalyService {
     // another tenant's control/execution/risk (latent today, single
     // tenant; a real cross-tenant leak the moment that changes).
     if (input.controlId && this.controls) {
-      const control = await this.controls.getById(actor.tenantId, input.controlId);
+      const control = await this.controls.getById(actor.tenantId, input.controlId, SYSTEM_SCOPE);
       if (!control) throw new ValidationError(`Control ${input.controlId} does not exist in this tenant`);
     }
     if (input.controlExecutionId && this.controlExecutions) {
@@ -57,7 +58,7 @@ export class AnomalyService {
       }
     }
     if (input.riskId && this.risks) {
-      const risk = await this.risks.getById(actor.tenantId, input.riskId);
+      const risk = await this.risks.getById(actor.tenantId, input.riskId, SYSTEM_SCOPE);
       if (!risk) throw new ValidationError(`Risk ${input.riskId} does not exist in this tenant`);
     }
 
@@ -84,14 +85,14 @@ export class AnomalyService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<Anomaly> {
     requirePermission(actor, "anomaly.read");
-    const anomaly = await this.anomalies.getById(actor.tenantId, id, await this.visibility?.resolve(actor));
+    const anomaly = await this.anomalies.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!anomaly) throw new NotFoundError("Anomaly", id);
     return anomaly;
   }
 
   async list(actor: AuthenticatedUser, status?: AnomalyStatus): Promise<Anomaly[]> {
     requirePermission(actor, "anomaly.read");
-    return this.anomalies.list(actor.tenantId, { status }, await this.visibility?.resolve(actor));
+    return this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
   }
 
   async updateStatus(

@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
@@ -189,7 +190,7 @@ export class RiskDeviceViewService {
     requirePermission(actor, "actionplan.read");
     requirePermission(actor, "riskappetite.read");
 
-    const risk = await this.risks.getById(actor.tenantId, riskId);
+    const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
     if (!risk) throw new NotFoundError("Risk", riskId);
 
     const evaluationHistory = await this.evaluations.listForRisk(actor.tenantId, riskId);

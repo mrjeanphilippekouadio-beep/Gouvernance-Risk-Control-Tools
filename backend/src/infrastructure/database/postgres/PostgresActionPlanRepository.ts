@@ -75,7 +75,7 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
 
   constructor(private readonly pool: Pool) {}
 
-  async getById(tenantId: string, id: string, scope?: ReadScope): Promise<ActionPlan | null> {
+  async getById(tenantId: string, id: string, scope: ReadScope): Promise<ActionPlan | null> {
     const { rows } = await this.pool.query<ActionPlanRow>(
       `SELECT * FROM action_plans WHERE tenant_id = $1 AND id = $2 ${visibilityClause(scope)}`,
       [tenantId, id],
@@ -83,7 +83,7 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
-  async list(tenantId: string, filters?: ActionPlanListFilters, scope?: ReadScope): Promise<ActionPlan[]> {
+  async list(tenantId: string, filters: ActionPlanListFilters | undefined, scope: ReadScope): Promise<ActionPlan[]> {
     const conditions: string[] = ["tenant_id = $1"];
     const params: unknown[] = [tenantId];
 

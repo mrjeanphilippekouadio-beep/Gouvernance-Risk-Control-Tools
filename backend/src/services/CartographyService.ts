@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
@@ -270,7 +271,7 @@ export class CartographyService {
   ): Promise<CartographyDataPoint[]> {
     // RiskRepository.list() with no options already excludes ARCHIVED and
     // soft-deleted risks — see PostgresRiskRepository.list.
-    const risks = await this.risks.list(actor.tenantId);
+    const risks = await this.risks.list(actor.tenantId, undefined, SYSTEM_SCOPE);
     const candidates = risks.filter((risk) => this.matchesStaticFilters(risk, filters));
 
     // B-6b (spec §9): one Dispositif at a time. An evaluation belongs to one through its version; rows from

@@ -45,7 +45,7 @@ function toDomain(row: RiskRow): Risk {
 export class PostgresRiskRepository implements RiskRepository {
   constructor(private readonly pool: Pool) {}
 
-  async getById(tenantId: string, id: string, scope?: ReadScope): Promise<Risk | null> {
+  async getById(tenantId: string, id: string, scope: ReadScope): Promise<Risk | null> {
     const { rows } = await this.pool.query<RiskRow>(
       `SELECT * FROM risks WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL ${visibilityClause(scope)}`,
       [tenantId, id],
@@ -64,14 +64,14 @@ export class PostgresRiskRepository implements RiskRepository {
 
   async list(
     tenantId: string,
-    options?: {
+    options: {
       includeArchived?: boolean;
       ownerId?: string;
       ownerDepartmentIds?: string[];
       processIds?: string[];
       ids?: string[];
-    },
-    scope?: ReadScope,
+    } | undefined,
+    scope: ReadScope,
   ): Promise<Risk[]> {
     const statusFilter = options?.includeArchived ? "" : "AND status <> 'ARCHIVED'";
     const params: unknown[] = [tenantId];

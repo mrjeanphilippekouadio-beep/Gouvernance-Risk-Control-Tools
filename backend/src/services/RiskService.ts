@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
+import { READER_DEFAULT_SCOPE } from "../domain/visibility.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 
 /**
@@ -44,7 +45,7 @@ export class RiskService {
      * real repository for `processId` to ever be accepted.
      */
     private readonly processes?: ProcessRepository,
-    /** DECISION-100 (lot V0): optional — absent, reads are not filtered (tests, internal callers). Wired in server.ts. */
+    /** DECISION-100 (lot V0): optional for existing tests — absent, a reader sees CLIENT rows only (fail-closed, SEC V0-01). Wired in server.ts. */
     private readonly visibility?: VisibilityResolver,
   ) {}
 
@@ -91,7 +92,7 @@ export class RiskService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<Risk> {
     requirePermission(actor, "risk.read");
-    const risk = await this.risks.getById(actor.tenantId, id, await this.visibility?.resolve(actor));
+    const risk = await this.risks.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!risk) throw new NotFoundError("Risk", id);
     return risk;
   }
@@ -99,7 +100,7 @@ export class RiskService {
   /** ACT-124: `ownerId` (resolved by the route layer — "me" -> actor.userId) filters to that owner's risks. */
   async list(actor: AuthenticatedUser, includeArchived = false, ownerId?: string): Promise<Risk[]> {
     requirePermission(actor, "risk.read");
-    return this.risks.list(actor.tenantId, { includeArchived, ownerId }, await this.visibility?.resolve(actor));
+    return this.risks.list(actor.tenantId, { includeArchived, ownerId }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
   }
 
   async update(actor: AuthenticatedUser, id: string, input: UpdateRiskInput, requestId: string): Promise<Risk> {

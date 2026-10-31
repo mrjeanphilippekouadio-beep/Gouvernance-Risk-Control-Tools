@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import { visibilityClause } from "./visibilityFilter.js";
-import type { ReadScope } from "../../../domain/visibility.js";
+import { SYSTEM_SCOPE, type ReadScope } from "../../../domain/visibility.js";
 import type { KpiListFilters, KpiRepository } from "../../../domain/repositories/KpiRepository.js";
 import type { CreateKpiInput, Kpi, KpiFrequency, UpdateKpiInput } from "../../../domain/entities/Kpi.js";
 import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
@@ -47,7 +47,7 @@ function toDomain(row: KpiRow): Kpi {
 export class PostgresKpiRepository implements KpiRepository {
   constructor(private readonly pool: Pool) {}
 
-  async getById(tenantId: string, id: string, scope?: ReadScope): Promise<Kpi | null> {
+  async getById(tenantId: string, id: string, scope: ReadScope): Promise<Kpi | null> {
     const { rows } = await this.pool.query<KpiRow>(
       `SELECT * FROM kpis WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL ${visibilityClause(scope)}`,
       [tenantId, id],
@@ -55,7 +55,7 @@ export class PostgresKpiRepository implements KpiRepository {
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
-  async list(tenantId: string, filters?: KpiListFilters, scope?: ReadScope): Promise<Kpi[]> {
+  async list(tenantId: string, filters: KpiListFilters | undefined, scope: ReadScope): Promise<Kpi[]> {
     // Column names below are fixed literals (never user-supplied) —
     // only the values are parameterized, so this stays injection-safe
     // despite the conditions being built dynamically.
@@ -120,7 +120,7 @@ export class PostgresKpiRepository implements KpiRepository {
       3,
     );
     if (setClauses.length === 0) {
-      const current = await this.getById(tenantId, id);
+      const current = await this.getById(tenantId, id, SYSTEM_SCOPE);
       if (!current) throw new NotFoundError("Kpi", id);
       return current;
     }

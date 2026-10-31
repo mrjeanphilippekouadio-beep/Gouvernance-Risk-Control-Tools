@@ -2,9 +2,9 @@ import type { Control, CreateControlInput, UpdateControlInput } from "../entitie
 import type { ReadScope } from "../visibility.js";
 
 export interface ControlRepository {
-  /** `scope` (DECISION-100): the reader's visibility; omitted for internal reads (no filter). */
-  getById(tenantId: string, id: string, scope?: ReadScope): Promise<Control | null>;
-  list(tenantId: string, options?: { includeArchived?: boolean }, scope?: ReadScope): Promise<Control[]>;
+  /** `scope` (DECISION-100, fail-closed SEC V0-01): the reader's visibility, mandatory; internal reads pass SYSTEM_SCOPE. */
+  getById(tenantId: string, id: string, scope: ReadScope): Promise<Control | null>;
+  list(tenantId: string, options: { includeArchived?: boolean } | undefined, scope: ReadScope): Promise<Control[]>;
   listCoveringRisk(tenantId: string, riskId: string): Promise<Control[]>;
   create(input: CreateControlInput): Promise<Control>;
   update(tenantId: string, id: string, input: UpdateControlInput): Promise<Control>;

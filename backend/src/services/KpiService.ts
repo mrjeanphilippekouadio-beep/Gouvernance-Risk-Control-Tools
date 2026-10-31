@@ -14,6 +14,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
+import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE } from "../domain/visibility.js";
 
 export interface KpiWithStatus extends Kpi {
   status: KpiStatus;
@@ -38,7 +39,7 @@ export class KpiService {
     private readonly departments: DepartmentRepository,
     private readonly processes: ProcessRepository,
     private readonly audit: AuditRepository,
-    /** DECISION-100 (lot V0): optional — absent, reads are not filtered (tests, internal callers). Wired in server.ts. */
+    /** DECISION-100 (lot V0): optional for existing tests — absent, a reader sees CLIENT rows only (fail-closed, SEC V0-01). Wired in server.ts. */
     private readonly visibility?: VisibilityResolver,
   ) {}
 
@@ -75,7 +76,7 @@ export class KpiService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<KpiWithStatus> {
     requirePermission(actor, "kpi.read");
-    const kpi = await this.kpis.getById(actor.tenantId, id, await this.visibility?.resolve(actor));
+    const kpi = await this.kpis.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!kpi) throw new NotFoundError("Kpi", id);
     return this.withStatus(actor.tenantId, kpi);
   }
@@ -88,7 +89,7 @@ export class KpiService {
    */
   async list(actor: AuthenticatedUser, filters?: KpiListFilters): Promise<KpiWithStatus[]> {
     requirePermission(actor, "kpi.read");
-    const kpis = await this.kpis.list(actor.tenantId, filters, await this.visibility?.resolve(actor));
+    const kpis = await this.kpis.list(actor.tenantId, filters, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     return Promise.all(kpis.map((kpi) => this.withStatus(actor.tenantId, kpi)));
   }
 
@@ -198,7 +199,7 @@ export class KpiService {
   }
 
   private async requireKpi(tenantId: string, id: string): Promise<Kpi> {
-    const kpi = await this.kpis.getById(tenantId, id);
+    const kpi = await this.kpis.getById(tenantId, id, SYSTEM_SCOPE);
     if (!kpi) throw new NotFoundError("Kpi", id);
     return kpi;
   }

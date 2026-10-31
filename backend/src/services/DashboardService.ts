@@ -1,3 +1,4 @@
+import { SYSTEM_SCOPE } from "../domain/visibility.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
@@ -308,7 +309,7 @@ export class DashboardService {
   /** GET /dashboard/risks — consolidated, tenant-filtered risk view. Includes risks with no validated evaluation yet (score/criticality null), unlike CartographyService which excludes them. */
   async getRisksOverview(actor: AuthenticatedUser): Promise<DashboardRiskSummary[]> {
     requirePermission(actor, "dashboard.read");
-    const risks = await this.risks.list(actor.tenantId);
+    const risks = await this.risks.list(actor.tenantId, undefined, SYSTEM_SCOPE);
     return Promise.all(risks.map((risk) => this.toRiskSummaryOrNull(actor.tenantId, risk)));
   }
 
@@ -327,7 +328,7 @@ export class DashboardService {
     requirePermission(actor, "dashboard.read");
     const wanted: AnomalyStatus[] =
       statuses && statuses.length > 0 ? statuses : ["NEW", "UNDER_ANALYSIS", "ACTION_IN_PROGRESS"];
-    const all = await this.anomalies.list(actor.tenantId);
+    const all = await this.anomalies.list(actor.tenantId, undefined, SYSTEM_SCOPE);
     return all.filter((a) => wanted.includes(a.status));
   }
 
@@ -348,7 +349,7 @@ export class DashboardService {
       throw new ValidationError("framework is required (ACT-210: cadre obligatoire en paramètre)");
     }
 
-    const controls = await this.controls.list(actor.tenantId, { includeArchived: false });
+    const controls = await this.controls.list(actor.tenantId, { includeArchived: false }, SYSTEM_SCOPE);
     const scopedControls = filters.entity
       ? await this.filterControlsByEntity(actor.tenantId, controls, filters.entity)
       : controls;
@@ -400,7 +401,7 @@ export class DashboardService {
     const bandsCache = new Map<string, Promise<ScoreThreshold[]>>();
     requirePermission(actor, "dashboard.read");
 
-    const ownedRisks = await this.risks.list(actor.tenantId, { ownerId: actor.userId });
+    const ownedRisks = await this.risks.list(actor.tenantId, { ownerId: actor.userId }, SYSTEM_SCOPE);
     const withEvaluations = await Promise.all(
       ownedRisks.map(async (risk) => ({
         risk,
@@ -417,7 +418,7 @@ export class DashboardService {
     const ownedKris = allKris.filter((k) => ownedRiskIds.has(k.riskId));
     const kriSummaries = await Promise.all(ownedKris.map((k) => this.toKriSummary(actor.tenantId, k)));
 
-    const actions = await this.actionPlans.list(actor.tenantId, { responsibleUserId: actor.userId });
+    const actions = await this.actionPlans.list(actor.tenantId, { responsibleUserId: actor.userId }, SYSTEM_SCOPE);
     const actionViews = actions.map(toActionPlanView);
 
     const alerts: RiskOwnerAlert[] = [];
@@ -471,10 +472,10 @@ export class DashboardService {
     this.assertDepartmentAccess(actor, department);
 
     const [allRisks, allControls, kpis, actions] = await Promise.all([
-      this.risks.list(actor.tenantId),
-      this.controls.list(actor.tenantId),
-      this.kpis.list(actor.tenantId, { departmentId }),
-      this.actionPlans.list(actor.tenantId, { departmentIds: [departmentId] }),
+      this.risks.list(actor.tenantId, undefined, SYSTEM_SCOPE),
+      this.controls.list(actor.tenantId, undefined, SYSTEM_SCOPE),
+      this.kpis.list(actor.tenantId, { departmentId }, SYSTEM_SCOPE),
+      this.actionPlans.list(actor.tenantId, { departmentIds: [departmentId] }, SYSTEM_SCOPE),
     ]);
 
     const departmentRisks = allRisks.filter((r) => r.ownerDepartmentId === departmentId);
@@ -518,11 +519,11 @@ export class DashboardService {
 
     const riskListOptions = this.riskListOptionsForScope(scope);
     const [allRisks, scored, kriSummaries, overdueActions, allAnomalies, scopedRiskIds] = await Promise.all([
-      this.risks.list(actor.tenantId, riskListOptions),
+      this.risks.list(actor.tenantId, riskListOptions, SYSTEM_SCOPE),
       this.getScoredRisks(actor.tenantId, riskListOptions),
       this.getKriSummariesScoped(actor.tenantId, scope),
       this.getOverdueActionViewsScoped(actor.tenantId, scope),
-      this.anomalies.list(actor.tenantId),
+      this.anomalies.list(actor.tenantId, undefined, SYSTEM_SCOPE),
       this.getScopedRiskIds(actor.tenantId, scope),
     ]);
 
@@ -928,7 +929,7 @@ export class DashboardService {
     tenantId: string,
     options?: { includeArchived?: boolean; ownerDepartmentIds?: string[]; processIds?: string[]; ids?: string[] },
   ): Promise<ScoredRisk[]> {
-    const risks = await this.risks.list(tenantId, options);
+    const risks = await this.risks.list(tenantId, options, SYSTEM_SCOPE);
     const scored: ScoredRisk[] = [];
     for (const risk of risks) {
       const evaluation = await this.getMostRecentAuthoritativeEvaluation(tenantId, risk.id);
@@ -974,7 +975,7 @@ export class DashboardService {
   }
 
   private async getOverdueActionViews(tenantId: string, filters?: ActionPlanListFilters): Promise<ActionPlanView[]> {
-    const rows = await this.actionPlans.list(tenantId, filters);
+    const rows = await this.actionPlans.list(tenantId, filters, SYSTEM_SCOPE);
     return rows.map(toActionPlanView).filter((v) => v.computedStatus === "EN_RETARD");
   }
 
@@ -1022,7 +1023,7 @@ export class DashboardService {
   private async getScopedRiskIds(tenantId: string, scope: RiskScope): Promise<Set<string> | null> {
     if (scope.mode === "GLOBAL") return null;
     if (this.scopeIsEmpty(scope)) return new Set();
-    const risks = await this.risks.list(tenantId, this.riskListOptionsForScope(scope, { includeArchived: true }));
+    const risks = await this.risks.list(tenantId, this.riskListOptionsForScope(scope, { includeArchived: true }), SYSTEM_SCOPE);
     return new Set(risks.map((r) => r.id));
   }
 
