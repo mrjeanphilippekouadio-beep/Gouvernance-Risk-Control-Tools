@@ -153,9 +153,9 @@ const otherAdmin: AuthenticatedUser = { ...admin, userId: "admin-2" };
 describe("RoleService", () => {
   it("creates a role with a valid permission set", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
-    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-1");
+    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-1");
     expect(role.name).toBe("Auditeur");
-    expect(role.permissions).toEqual(["audit.read"]);
+    expect(role.permissions).toEqual(["audit.mission.read"]);
   });
 
   it("rejects an unknown permission", async () => {
@@ -167,15 +167,15 @@ describe("RoleService", () => {
 
   it("rejects a duplicate active role name", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
-    await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-3");
+    await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-3");
     await expect(
-      service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-4"),
+      service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-4"),
     ).rejects.toThrow(ValidationError);
   });
 
   it("refuses to let an admin assign a role to themselves", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
-    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-5");
+    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-5");
     await expect(service.assignToUser(admin, role.id, admin.userId, "REQ-6", "motif de test")).rejects.toThrow(ForbiddenError);
     // Upper-case form of the actor's own id: same user for Postgres, must be refused too (QA-B6d-01 class)
     await expect(service.assignToUser(admin, role.id, ` ${admin.userId.toUpperCase()}`, "REQ-6b", "motif de test")).rejects.toThrow(ForbiddenError);
@@ -183,7 +183,7 @@ describe("RoleService", () => {
 
   it("assigns a role to another user, granting it via listForUser", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
-    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-7");
+    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-7");
     await service.assignToUser(admin, role.id, "user-1", "REQ-8", "motif de test");
     const userRoles = await service.listForUser(admin, "user-1");
     expect(userRoles.map((r) => r.id)).toContain(role.id);
@@ -191,21 +191,21 @@ describe("RoleService", () => {
 
   it("refuses to disable a role that still has active assignments", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
-    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-9");
+    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-9");
     await service.assignToUser(admin, role.id, "user-1", "REQ-10", "motif de test");
     await expect(service.disable(admin, role.id, "REQ-11")).rejects.toThrow(ValidationError);
   });
 
   it("refuses to revoke a user's last active role", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
-    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-12");
+    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-12");
     await service.assignToUser(admin, role.id, "user-1", "REQ-13", "motif de test");
     await expect(service.revokeFromUser(otherAdmin, role.id, "user-1", "REQ-14", "motif de test")).rejects.toThrow(ValidationError);
   });
 
   it("refuses to let an admin revoke their own role", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
-    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-15");
+    const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-15");
     await service.assignToUser(otherAdmin, role.id, admin.userId, "REQ-16", "motif de test");
     await expect(service.revokeFromUser(admin, role.id, admin.userId, "REQ-17", "motif de test")).rejects.toThrow(ForbiddenError);
     await expect(service.revokeFromUser(admin, role.id, admin.userId.toUpperCase(), "REQ-17b", "motif de test")).rejects.toThrow(ForbiddenError);
@@ -274,14 +274,14 @@ describe("RoleService", () => {
         inMemoryAuditRepository(),
         inMemoryUserRepository([targetUser]),
       );
-      const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-18");
+      const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-18");
       await service.assignToUser(admin, role.id, targetUser.id, "REQ-19", "motif de test");
 
       const permissions = await service.getEffectivePermissions(admin, targetUser.id);
 
       expect(permissions).toContain("feedback.create"); // BASE_PERMISSIONS
       expect(permissions).toContain("evidence.upload"); // legacy grant, known permission
-      expect(permissions).toContain("audit.read"); // via RBAC role
+      expect(permissions).toContain("audit.mission.read"); // via RBAC role
       expect(permissions).not.toContain("not.a.real.permission");
     });
 
@@ -300,7 +300,7 @@ describe("RoleService", () => {
         inMemoryAuditRepository(),
         inMemoryUserRepository([targetUser]),
       );
-      const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read", "evidence.upload"] }, "REQ-30");
+      const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read", "evidence.upload"] }, "REQ-30");
       await service.assignToUser(admin, role.id, targetUser.id, "REQ-31", "motif de test");
 
       const { suspended, permissions: sources } = await service.getEffectivePermissionSources(admin, targetUser.id);
@@ -308,7 +308,7 @@ describe("RoleService", () => {
       const of = (p: string) => sources.find((s) => s.permission === p)?.sources;
 
       expect(of("feedback.create")).toEqual([{ kind: "BASE" }]);
-      expect(of("audit.read")).toEqual([{ kind: "ROLE", roleId: role.id, roleName: "Auditeur", systemGroup: null }]);
+      expect(of("audit.mission.read")).toEqual([{ kind: "ROLE", roleId: role.id, roleName: "Auditeur", systemGroup: null }]);
       expect(of("evidence.upload")?.map((s) => s.kind)).toEqual(["DIRECT", "ROLE"]);
       expect(of("not.a.real.permission")).toBeUndefined();
       expect(sources.map((s) => s.permission).sort()).toEqual((await service.getEffectivePermissions(admin, targetUser.id)).sort());
@@ -318,7 +318,7 @@ describe("RoleService", () => {
       const suspendedUser: User = { ...targetUser, deletedAt: new Date() };
       const roles = inMemoryRoleRepository();
       const service = new RoleService(roles, inMemoryAuditRepository(), inMemoryUserRepository([suspendedUser]));
-      const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.read"] }, "REQ-40");
+      const role = await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-40");
       await roles.assignToUser("tenant-1", role.id, suspendedUser.id, admin.userId); // granted before the suspension
       expect(await service.getEffectivePermissionSources(admin, suspendedUser.id)).toEqual({ suspended: true, permissions: [] });
       expect(await service.getEffectivePermissions(admin, suspendedUser.id)).toEqual([]);
@@ -410,20 +410,20 @@ describe("RoleService", () => {
 
     it("links a role to a department only once, and only to a real department", async () => {
       const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository(), undefined, departments);
-      const role = await service.create(admin, { name: "Finance", permissions: ["audit.read"], departmentId: "dept-1" }, "REQ-1");
+      const role = await service.create(admin, { name: "Finance", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "REQ-1");
       expect(role.departmentId).toBe("dept-1");
       await expect(
-        service.create(admin, { name: "Finance 2", permissions: ["audit.read"], departmentId: "dept-1" }, "REQ-2"),
+        service.create(admin, { name: "Finance 2", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "REQ-2"),
       ).rejects.toThrow(ValidationError);
       await expect(
-        service.create(admin, { name: "Ghost", permissions: ["audit.read"], departmentId: "nope" }, "REQ-3"),
+        service.create(admin, { name: "Ghost", permissions: ["audit.mission.read"], departmentId: "nope" }, "REQ-3"),
       ).rejects.toThrow(ValidationError);
     });
 
     it("fails closed when a departmentId is given without a DepartmentRepository", async () => {
       const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
       await expect(
-        service.create(admin, { name: "Finance", permissions: ["audit.read"], departmentId: "dept-1" }, "REQ-1"),
+        service.create(admin, { name: "Finance", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "REQ-1"),
       ).rejects.toThrow("requires a DepartmentRepository");
     });
   });

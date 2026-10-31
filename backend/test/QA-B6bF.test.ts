@@ -285,7 +285,7 @@ describe("QA-B6bF /applicable?riskId= requires risk.read (F-B6b-03)", () => {
   it("with both: existing -> result, unknown -> NotFound (tenant-scoped lookup)", async () => {
     const a = actor(["riskframework.read", "risk.read"], T2);
     await expect(s.getApplicable(a, { riskId: "nope" })).rejects.toThrow(NotFoundError);
-    expect(getById).toHaveBeenLastCalledWith(T2, "nope", SYSTEM_SCOPE); // an internal tenant-scoped existence check (SEC V0-01: explicit)
+    expect(getById).toHaveBeenLastCalledWith(T2, "nope", { all: false, userId: "u1" }); // tenant-scoped, and since V1 the reader's own visibility (a hidden risk = 404)
   });
   it("the processId / default branches do NOT need risk.read (unchanged contract)", async () => {
     await expect(s.getApplicable(actor(["riskframework.read"]), {})).resolves.toBeTruthy();

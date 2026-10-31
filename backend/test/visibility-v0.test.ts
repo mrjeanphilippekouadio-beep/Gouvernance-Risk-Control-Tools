@@ -46,7 +46,7 @@ describe("visibility V0 — model and single filter point", () => {
       expect(await resolver.resolve(actor)).toEqual({ all: true });
     }
     const ordinary = new VisibilityResolver({ listForUser: async () => [role(null)] });
-    expect(await ordinary.resolve(actor)).toEqual({ all: false });
+    expect(await ordinary.resolve(actor)).toEqual({ all: false, userId: "u1" }); // V1: the reader is named so that risk_visible_to can grant a restricted risk
   });
 
   it("the service passes the reader's scope to the repository; without a resolver it is fail-closed (CLIENT only, SEC V0-01)", async () => {
@@ -61,7 +61,7 @@ describe("visibility V0 — model and single filter point", () => {
     await new RiskService(risks, audit).get(actor, "r1");
     await new RiskService(risks, audit, undefined, undefined, undefined, undefined, undefined, resolver).get(actor, "r1");
     await new RiskService(risks, audit, undefined, undefined, undefined, undefined, undefined, resolver).list(actor);
-    expect(seen).toEqual([{ all: false }, { all: false }, { all: false }]);
+    expect(seen).toEqual([{ all: false }, { all: false, userId: "u1" }, { all: false, userId: "u1" }]); // no resolver: CLIENT only (no user named)
   });
 });
 

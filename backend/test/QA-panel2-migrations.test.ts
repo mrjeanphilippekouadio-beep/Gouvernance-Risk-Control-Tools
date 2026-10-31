@@ -15,7 +15,7 @@ import { Pool } from "pg";
  *   QA_PANEL_MIGHOST (unix socket dir), QA_PANEL_MIGDB (= full 073 database) and QA_PANEL_REFDB (= database built with 001..065).
  */
 const DIR = join(__dirname, "..", "..", "database", "postgresql", "migrations");
-const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "079", "080"] as const;
+const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "079", "080", "081", "082"] as const;
 const files = readdirSync(DIR);
 const up = (n: string) => files.find((f) => f.startsWith(`${n}_`) && !f.endsWith(".down.sql"))!;
 const down = (n: string) => files.find((f) => f.startsWith(`${n}_`) && f.endsWith(".down.sql"))!;
@@ -25,8 +25,8 @@ const stripComments = (sql: string) => sql.split("\n").filter((l) => !l.trim().s
 describe("QA-panel2 migrations 066-073 (static)", () => {
   it("numbers 066..073 are contiguous (numerically, no hole), one up and one down each", () => {
     const nums = files.filter((f) => /^\d{3}_/.test(f) && !f.endsWith(".down.sql")).map((f) => Number(f.slice(0, 3)));
-    for (let n = 66; n <= 80; n += 1) expect(nums.filter((x) => x === n), `number ${n}`).toHaveLength(1);
-    expect(Math.max(...nums)).toBe(80);
+    for (let n = 66; n <= 82; n += 1) expect(nums.filter((x) => x === n), `number ${n}`).toHaveLength(1);
+    expect(Math.max(...nums)).toBe(82);
     for (const n of NUMBERS) expect(down(n), n).toBeDefined();
   });
 

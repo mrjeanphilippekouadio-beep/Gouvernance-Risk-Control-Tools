@@ -75,7 +75,7 @@ describe("F-B8t-01 RoleService.update replays the cumul rules for each holder", 
   it("refuses giving audit.* to a role held by a Risk Manager, and stores nothing", async () => {
     const w = setup();
     w.held.set("u1", ["rm", "plain"]);
-    await expect(w.service.update(admin, "plain", { permissions: ["audit.read"] }, "r")).rejects.toThrow(ValidationError);
+    await expect(w.service.update(admin, "plain", { permissions: ["audit.mission.read"] }, "r")).rejects.toThrow(ValidationError);
     expect(w.roles.find((r) => r.id === "plain")!.permissions).toEqual(["risk.read"]);
     expect(w.events).toHaveLength(0);
   });
@@ -83,10 +83,10 @@ describe("F-B8t-01 RoleService.update replays the cumul rules for each holder", 
   it("refuses giving audit.* to a role held by a Committee member when the tenant forbids the cumul, allows it otherwise", async () => {
     const forbid = setup({ cumul: false });
     forbid.held.set("u1", ["co", "plain"]);
-    await expect(forbid.service.update(admin, "plain", { permissions: ["audit.read"] }, "r")).rejects.toThrow(/setting of this tenant/);
+    await expect(forbid.service.update(admin, "plain", { permissions: ["audit.mission.read"] }, "r")).rejects.toThrow(/setting of this tenant/);
     const allow = setup({ cumul: true });
     allow.held.set("u1", ["co", "plain"]);
-    await expect(allow.service.update(admin, "plain", { permissions: ["audit.read"] }, "r")).resolves.toBeDefined();
+    await expect(allow.service.update(admin, "plain", { permissions: ["audit.mission.read"] }, "r")).resolves.toBeDefined();
   });
 
   it("new admin + Risk Manager cumul: reason required, then audited with the reason and notified once per holder", async () => {

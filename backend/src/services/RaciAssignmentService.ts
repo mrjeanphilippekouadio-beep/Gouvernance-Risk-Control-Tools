@@ -1,4 +1,5 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
+import { assertReadableByRisk } from "./riskVisibility.js";
 import type { RaciAssignmentRepository } from "../domain/repositories/RaciAssignmentRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -64,7 +65,7 @@ export class RaciAssignmentService {
       throw new ValidationError(`role must be one of: ${ROLES.join(", ")}`);
     }
 
-    await this.assertEntityExists(actor.tenantId, entityType, entityId);
+    await this.assertEntityExists(actor.tenantId, entityType, entityId, readerScope(actor));
     // Fail closed: only assign business responsibility to an active user in this tenant.
     if (!this.users) throw new ValidationError("RACI target-user validation is not configured");
     const targetUser = await this.users.getById(actor.tenantId, userId);
@@ -158,13 +159,15 @@ export class RaciAssignmentService {
     if (!ENTITY_TYPES.includes(entityType)) {
       throw new ValidationError(`entityType must be one of: ${ENTITY_TYPES.join(", ")}`);
     }
+    // Lot V1: who works on a restricted risk is as restricted as the risk itself.
+    if (entityType === "RISK") await assertReadableByRisk(this.risks, actor, entityId, "Risk", entityId);
     return this.raci.listForEntity(actor.tenantId, entityType, entityId);
   }
 
   /** Never trust entityId blindly (EvidenceService pattern, CLAUDE.md) — resolve the target row in the actor's tenant before any write. */
-  private async assertEntityExists(tenantId: string, entityType: RaciEntityType, entityId: string): Promise<void> {
+  private async assertEntityExists(tenantId: string, entityType: RaciEntityType, entityId: string, scope: ReadScope): Promise<void> {
     if (entityType === "RISK" && this.risks) {
-      const risk = await this.risks.getById(tenantId, entityId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(tenantId, entityId, scope);
       if (!risk) throw new ValidationError(`Risk ${entityId} does not exist in this tenant`);
     } else if (entityType === "CONTROL" && this.controls) {
       const control = await this.controls.getById(tenantId, entityId, SYSTEM_SCOPE);

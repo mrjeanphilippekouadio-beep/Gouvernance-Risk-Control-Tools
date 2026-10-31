@@ -25,7 +25,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
-import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE } from "../domain/visibility.js";
+import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 import type { NotificationService } from "./NotificationService.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
@@ -141,7 +141,7 @@ export class ActionPlanService {
         if (kri?.riskId) riskIds.add(kri.riskId);
       }
       for (const riskId of riskIds) {
-        const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
+        const risk = await this.risks.getById(actor.tenantId, riskId, readerScope(actor));
         if (!risk || risk.status === "ARCHIVED" || risk.deletedAt) continue;
         for (const id of [risk.ownerId, risk.superiorOwnerId]) if (id) recipients.add(id);
       }
@@ -192,7 +192,7 @@ export class ActionPlanService {
       throw new ValidationError(`sourceId must be omitted when sourceType is ${input.sourceType} (not tied to an existing entity row)`);
     }
     if (isEntityBacked && input.sourceId) {
-      await this.assertSourceExists(actor.tenantId, input.sourceType, input.sourceId);
+      await this.assertSourceExists(actor.tenantId, input.sourceType, input.sourceId, readerScope(actor));
     }
     await this.assertActiveUser(actor.tenantId, input.responsibleUserId);
     await this.assertDepartmentExists(actor.tenantId, input.departmentId);
@@ -246,7 +246,7 @@ export class ActionPlanService {
   async listForRisk(actor: AuthenticatedUser, riskId: string): Promise<ActionPlanView[]> {
     requirePermission(actor, "actionplan.read");
     if (this.risks) {
-      const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(actor.tenantId, riskId, readerScope(actor));
       if (!risk) throw new ValidationError(`Risk ${riskId} does not exist in this tenant`);
     }
     const rows = await this.actions.listForRisk(actor.tenantId, riskId);
@@ -408,7 +408,7 @@ export class ActionPlanService {
       if (!link.resourceId?.trim()) {
         throw new ValidationError("Each link requires a non-empty resourceId");
       }
-      await this.assertLinkTargetExists(actor.tenantId, link.resourceType, link.resourceId);
+      await this.assertLinkTargetExists(actor.tenantId, link.resourceType, link.resourceId, readerScope(actor));
     }
 
     const before = await this.actions.listLinks(actor.tenantId, id);
@@ -513,9 +513,10 @@ export class ActionPlanService {
     return { ...action, computedStatus, priority: computeActionPlanPriority(computedStatus) };
   }
 
-  private async assertSourceExists(tenantId: string, sourceType: ActionPlanSourceType, sourceId: string): Promise<void> {
+  /** Lot V1: one cannot attach a plan to a risk one does not see (same answer as a missing risk). */
+  private async assertSourceExists(tenantId: string, sourceType: ActionPlanSourceType, sourceId: string, scope: ReadScope): Promise<void> {
     if (sourceType === "RISK" && this.risks) {
-      const risk = await this.risks.getById(tenantId, sourceId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(tenantId, sourceId, scope);
       if (!risk) throw new ValidationError(`Risk ${sourceId} does not exist in this tenant`);
     } else if (sourceType === "CONTROL" && this.controls) {
       const control = await this.controls.getById(tenantId, sourceId, SYSTEM_SCOPE);
@@ -544,9 +545,9 @@ export class ActionPlanService {
     if (!department) throw new ValidationError(`Department ${departmentId} does not exist in this tenant`);
   }
 
-  private async assertLinkTargetExists(tenantId: string, resourceType: ActionLinkResourceType, resourceId: string): Promise<void> {
+  private async assertLinkTargetExists(tenantId: string, resourceType: ActionLinkResourceType, resourceId: string, scope: ReadScope): Promise<void> {
     if (resourceType === "RISK" && this.risks) {
-      const risk = await this.risks.getById(tenantId, resourceId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(tenantId, resourceId, scope);
       if (!risk) throw new ValidationError(`Risk ${resourceId} does not exist in this tenant`);
     } else if (resourceType === "CONTROL" && this.controls) {
       const control = await this.controls.getById(tenantId, resourceId, SYSTEM_SCOPE);

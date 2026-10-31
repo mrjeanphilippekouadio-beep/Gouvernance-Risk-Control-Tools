@@ -90,6 +90,14 @@ function assertRolePermissionRules(group: SystemGroup | null, permissions: Permi
       throw new ValidationError(`The Risk Manager group cannot carry Committee validation permissions (${committee.join(", ")}): Risk Manager and Committee never cumulate`);
     }
   }
+  // DECISION-102 (q194): changing a resource's visibility is the Risk Manager group's (and the owner's, by relation).
+  if (group !== "RISK_MANAGER" && permissions.includes("resourcevisibility.set")) {
+    throw new ValidationError("resourcevisibility.set is carried by the Risk Manager group only");
+  }
+  // q203 (DECISION-104): the audit log returns whole resources (restricted ones too) — reading it is the Audit group's alone.
+  if (group !== "AUDIT" && permissions.includes("audit.read")) {
+    throw new ValidationError("audit.read (reading the audit log) is carried by the Audit group only (q203)");
+  }
   if (group === "RISK_MANAGER" || group === "RISK_COMMITTEE") {
     const audit = permissions.filter(isAuditPermission);
     if (audit.length > 0) {

@@ -930,7 +930,7 @@ describe("QA-B6a static checks: repository SQL, migration 055, permissions (noth
 
   it("the legitimate adaptation of B8ter stays strict: constant == 051 list + 055 additions, in order, per group (the test would fail on any extra or missing right)", () => {
     const src = readFileSync("test/B8ter.test.ts", "utf8");
-    expect(src).toMatch(/toEqual\(\[\.\.\.fromMigration\(g\), \.\.\.addedBy055\(g\), "governancehealth\.read", \.\.\.addedBy069\(g\), \.\.\.addedBy071\[g\]!, \.\.\.addedBy072\(g\), \.\.\.addedBy073\[g\]!, \.\.\.addedBy078\(g\)\]\)/); // D1: + 066; D2b: + 069; D3: + 071; q158: + 072; D5: + 073; q187: + 078
+    expect(src).toMatch(/toEqual\(\[\.\.\.fromMigration\(g\), \.\.\.addedBy055\(g\), "governancehealth\.read", \.\.\.addedBy069\(g\), \.\.\.addedBy071\[g\]!, \.\.\.addedBy072\(g\), \.\.\.addedBy073\[g\]!, \.\.\.addedBy078\(g\), \.\.\.addedBy082\(g\)\]\)/); // D1: + 066; D2b: + 069; D3: + 071; q158: + 072; D5: + 073; q187: + 078; V1: + 082
     const q = readFileSync("test/QA-B8quater.test.ts", "utf8");
     expect(q).toMatch(/gap-free from 53/); // still no gap and no reuse from 53 on
   });

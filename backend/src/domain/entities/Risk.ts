@@ -1,3 +1,5 @@
+import type { Visibility } from "../visibility.js";
+
 export type RiskStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
 
 /**
@@ -37,6 +39,11 @@ export interface Risk {
    * assignSuperiorOwner in RiskService for the bidirectional check.
    */
   superiorOwnerId: string | null;
+  /**
+   * DECISION-100/102 (lot V1): who may read the risk and what inherits from it. Set at creation, then only through
+   * `RiskService.setVisibility` (never the generic `update()`). Optional for test fakes built before V1: absent = CLIENT.
+   */
+  visibility?: Visibility;
   status: RiskStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -51,6 +58,27 @@ export interface CreateRiskInput {
   description: string;
   ownerDepartmentId?: string | null;
   processId?: string | null;
+  /** Lot V1: defaults to CLIENT. A restricted level is checked by the service (the creator must still see the risk). */
+  visibility?: Visibility;
+  /** Lot V1 (q192): the list of named people, written with the risk in one transaction. Never the creator (q194). */
+  accessUserIds?: string[];
+  /** Set by the service from `actor.userId`, never by the client: author of the initial access grants. */
+  grantedBy?: string;
+}
+
+/** Lot V1 (q194): a visibility change after creation — level and list, with its mandatory reason. */
+export interface RiskVisibilityChange {
+  visibility: Visibility;
+  addUserIds: string[];
+  revokeUserIds: string[];
+  reason: string;
+  /** Forced to `actor.userId` by the service. */
+  changedBy: string;
+}
+
+export interface RiskVisibilityState {
+  visibility: Visibility;
+  accessUserIds: string[];
 }
 
 export interface UpdateRiskInput {

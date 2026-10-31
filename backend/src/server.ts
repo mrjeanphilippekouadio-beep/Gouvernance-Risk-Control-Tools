@@ -250,6 +250,7 @@ const riskService = new RiskService(
   riskEscalationRepository,
   processRepository,
   visibilityResolver,
+  notificationRepository,
 );
 const departmentService = new DepartmentService(departmentRepository, auditRepository, processRepository);
 // DECISION-074 D4: one gate for every self-validation guard, one query object for validators / third parties / markers.

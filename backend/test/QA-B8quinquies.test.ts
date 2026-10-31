@@ -290,33 +290,33 @@ describe("F-B8t-01 RoleService.update with several holders", () => {
       const w = world({ cumul: false });
       w.held.set("u1", ["plain"]);
       w.held.set("u2", ["co", "plain"]);
-      await expect(w.service.update(admin, "plain", { permissions: ["risk.read", "audit.read"] }, "r")).rejects.toThrow(/setting of this tenant/);
+      await expect(w.service.update(admin, "plain", { permissions: ["risk.read", "audit.mission.read"] }, "r")).rejects.toThrow(/setting of this tenant/);
       expect(perms(w, "plain")).toEqual(["risk.read"]);
       expect(w.events).toHaveLength(0);
     });
     it("same widening with the setting on: allowed, and the setting is read only when a pair exists", async () => {
       const w = world({ cumul: true });
       w.held.set("u1", ["plain"]);
-      await w.service.update(admin, "plain", { permissions: ["risk.read", "audit.read"] }, "r");
+      await w.service.update(admin, "plain", { permissions: ["risk.read", "audit.mission.read"] }, "r");
       expect(w.configReads()).toBe(0);
     });
     it("fails closed when the tenant setting cannot be read for a Committee holder", async () => {
       const w = world({ configThrows: true });
       w.held.set("u2", ["co", "plain"]);
-      await expect(w.service.update(admin, "plain", { permissions: ["risk.read", "audit.read"] }, "r")).rejects.toThrow("cfg down");
+      await expect(w.service.update(admin, "plain", { permissions: ["risk.read", "audit.mission.read"] }, "r")).rejects.toThrow("cfg down");
       expect(w.updates).toHaveLength(0);
     });
     it("Risk Manager + audit.*: refused with the tenant setting on or off", async () => {
       for (const cumul of [true, false]) {
         const w = world({ cumul });
         w.held.set("u1", ["rm", "plain"]);
-        await expect(w.service.update(admin, "plain", { permissions: ["risk.read", "audit.read"] }, "r")).rejects.toThrow(/Risk Manager/);
+        await expect(w.service.update(admin, "plain", { permissions: ["risk.read", "audit.mission.read"] }, "r")).rejects.toThrow(/Risk Manager/);
       }
     });
     it("OBSERVATION: a role that already carries audit.* and is held by a Committee member under a forbid cannot receive any unrelated widening", async () => {
       const w = world({ cumul: false });
       w.held.set("u2", ["co", "auditish"]); // legacy cumul created while it was allowed
-      await expect(w.service.update(admin, "auditish", { permissions: ["audit.read", "kri.read"] }, "r")).rejects.toThrow(ValidationError);
+      await expect(w.service.update(admin, "auditish", { permissions: ["audit.mission.read", "kri.read"] }, "r")).rejects.toThrow(ValidationError);
     });
   });
 
@@ -333,7 +333,7 @@ describe("F-B8t-01 RoleService.update with several holders", () => {
     const w = world();
     w.held.set("admin", ["plain"]);
     await expect(w.service.update(admin, "plain", { permissions: ["risk.read", "kri.read"] }, "r")).rejects.toThrow(ForbiddenError);
-    await expect(w.service.update(admin, "au", { permissions: ["audit.read"] }, "r")).rejects.toThrow(/dedicated endpoint/);
+    await expect(w.service.update(admin, "au", { permissions: ["audit.mission.read"] }, "r")).rejects.toThrow(/dedicated endpoint/);
   });
 });
 

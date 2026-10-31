@@ -484,3 +484,18 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
   tant que 079 n'existe pas. Ne jamais les affaiblir : fusionner 079 d'abord ou renuméroter.
 - q188/q189 (DECISION-098/101) : la ligne de défense se calcule côté serveur (`lineOf`/`roleLine`/`accountLine` dans `fixedGroupPermissions.ts`, ADMIN > AUDIT > LINE_2 > LINE_1, ADMIN = `ADMIN_PERMISSIONS`). Lecteur restreint = `role.read` sans droit d'administration, hors groupe Audit, sans `role.read.sensitive` : listes filtrées, routes par id → 404 identique à un id inconnu. Une permission dont le circuit de validation n'existe pas encore est refusée dans `assertRolePermissionRules` (fail closed), jamais laissée attribuable par `PATCH /roles/:id`.
 - q200 (DECISION-103, migration 079) : un droit donné à UNE personne avec confirmation d'un tiers vit dans sa propre table de demandes (PENDING → APPROVED/REJECTED, → REVOKED), jamais copié dans `roles.permissions` ; le droit effectif se relit à chaque lecture (`isApproved`) et seulement tant que la personne reste dans le groupe concerné. Maker-checker doublé en CHECK SQL (ni l'auteur ni le bénéficiaire). Retrait = endpoint dédié avec motif (`role.assign`), confirmation = `rolegroup.audit.validate`. Nouvelle notification obligatoire → mettre à jour les 4 épingles du catalogue (QA-D044, QA-Notifications x2, NotificationsCenter) ; nouveau `configs.getByTenant` dans un service → inventaire de B6bFollowups.
+
+## 2026-10-31 — Visibilité V1 (DECISION-102/104, feat/r1-visibility-v1)
+- `ReadScope` non « all » porte désormais le lecteur : `readerScope(actor)` = `{ all: false, userId }`. Les risques se
+  filtrent par `riskVisibilityClause(scope)` → `risk_visible_to(tenant_id, id, '<uuid>'::uuid)` (fonction SQL 082, UUID
+  validé par regex avant interpolation) ; sans `userId` = CLIENT seulement (fail-closed V0 conservé).
+- Héritage (q193) : évaluations, décisions, KRI/mesures, RACI d'un risque masqué → `services/riskVisibility.ts`
+  (`hiddenRiskIds` / `keepReadableByRisk` / `assertReadableByRisk`, une requête `hiddenIds`, 404 identique à un id inconnu).
+  Un faux repository sans `hiddenIds` ne masque rien. Lectures internes (contrôles d'existence, getRiskOwners, findings) :
+  `SYSTEM_SCOPE` explicite.
+- `setVisibility` : RM (`resourcevisibility.set`) ou propriétaire, motif 1–500, PERMISSION_CHANGE dans la même transaction
+  (`writeAudited`), retour à CLIENT = révocation de toute la liste, jamais d'auto-ajout. « Élargir » = niveau plus ouvert,
+  ou même niveau + une personne ajoutée ; un niveau plus fermé n'élargit jamais, même avec des noms (bug trouvé par test).
+- q203 : `audit.read` (journal) réservé au groupe AUDIT dans `assertRolePermissionRules` ; dans les tests, un rôle ordinaire
+  « auditeur » prend `audit.mission.read`.
+- Nouvelle notification obligatoire → 4 épingles (QA-D044, QA-Notifications, NotificationsCenter, compte 25).

@@ -8,7 +8,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
-import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE } from "../domain/visibility.js";
+import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE, readerScope } from "../domain/visibility.js";
 
 /**
  * Rules ported from apps-script-legacy/14_Anomalies.gs: unlike
@@ -58,7 +58,7 @@ export class AnomalyService {
       }
     }
     if (input.riskId && this.risks) {
-      const risk = await this.risks.getById(actor.tenantId, input.riskId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(actor.tenantId, input.riskId, readerScope(actor));
       if (!risk) throw new ValidationError(`Risk ${input.riskId} does not exist in this tenant`);
     }
 

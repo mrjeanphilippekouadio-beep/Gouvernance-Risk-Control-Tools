@@ -1,4 +1,5 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
+import { keepReadableByRisk } from "./riskVisibility.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
@@ -309,7 +310,7 @@ export class DashboardService {
   /** GET /dashboard/risks — consolidated, tenant-filtered risk view. Includes risks with no validated evaluation yet (score/criticality null), unlike CartographyService which excludes them. */
   async getRisksOverview(actor: AuthenticatedUser): Promise<DashboardRiskSummary[]> {
     requirePermission(actor, "dashboard.read");
-    const risks = await this.risks.list(actor.tenantId, undefined, SYSTEM_SCOPE);
+    const risks = await this.risks.list(actor.tenantId, undefined, readerScope(actor));
     return Promise.all(risks.map((risk) => this.toRiskSummaryOrNull(actor.tenantId, risk)));
   }
 
@@ -401,7 +402,7 @@ export class DashboardService {
     const bandsCache = new Map<string, Promise<ScoreThreshold[]>>();
     requirePermission(actor, "dashboard.read");
 
-    const ownedRisks = await this.risks.list(actor.tenantId, { ownerId: actor.userId }, SYSTEM_SCOPE);
+    const ownedRisks = await this.risks.list(actor.tenantId, { ownerId: actor.userId }, readerScope(actor));
     const withEvaluations = await Promise.all(
       ownedRisks.map(async (risk) => ({
         risk,
@@ -472,7 +473,7 @@ export class DashboardService {
     this.assertDepartmentAccess(actor, department);
 
     const [allRisks, allControls, kpis, actions] = await Promise.all([
-      this.risks.list(actor.tenantId, undefined, SYSTEM_SCOPE),
+      this.risks.list(actor.tenantId, undefined, readerScope(actor)),
       this.controls.list(actor.tenantId, undefined, SYSTEM_SCOPE),
       this.kpis.list(actor.tenantId, { departmentId }, SYSTEM_SCOPE),
       this.actionPlans.list(actor.tenantId, { departmentIds: [departmentId] }, SYSTEM_SCOPE),
@@ -519,12 +520,12 @@ export class DashboardService {
 
     const riskListOptions = this.riskListOptionsForScope(scope);
     const [allRisks, scored, kriSummaries, overdueActions, allAnomalies, scopedRiskIds] = await Promise.all([
-      this.risks.list(actor.tenantId, riskListOptions, SYSTEM_SCOPE),
-      this.getScoredRisks(actor.tenantId, riskListOptions),
-      this.getKriSummariesScoped(actor.tenantId, scope),
+      this.risks.list(actor.tenantId, riskListOptions, readerScope(actor)),
+      this.getScoredRisks(actor.tenantId, riskListOptions, readerScope(actor)),
+      this.getKriSummariesScoped(actor, scope),
       this.getOverdueActionViewsScoped(actor.tenantId, scope),
       this.anomalies.list(actor.tenantId, undefined, SYSTEM_SCOPE),
-      this.getScopedRiskIds(actor.tenantId, scope),
+      this.getScopedRiskIds(actor.tenantId, scope, readerScope(actor)),
     ]);
 
     const topRisks = await Promise.all(
@@ -562,8 +563,8 @@ export class DashboardService {
 
     const riskListOptions = this.riskListOptionsForScope(scope);
     const [scored, kriSummaries, overdueActions] = await Promise.all([
-      this.getScoredRisks(actor.tenantId, riskListOptions),
-      this.getKriSummariesScoped(actor.tenantId, scope),
+      this.getScoredRisks(actor.tenantId, riskListOptions, readerScope(actor)),
+      this.getKriSummariesScoped(actor, scope),
       this.getOverdueActionViewsScoped(actor.tenantId, scope),
     ]);
 
@@ -614,8 +615,8 @@ export class DashboardService {
 
     const riskListOptions = this.riskListOptionsForScope(scope);
     const [scored, kriSummaries] = await Promise.all([
-      this.getScoredRisks(actor.tenantId, riskListOptions),
-      this.getKriSummariesScoped(actor.tenantId, scope),
+      this.getScoredRisks(actor.tenantId, riskListOptions, readerScope(actor)),
+      this.getKriSummariesScoped(actor, scope),
     ]);
 
     const entityKey = (v: string | null) => v ?? "UNSPECIFIED";
@@ -664,7 +665,7 @@ export class DashboardService {
     if (this.scopeIsEmpty(scope)) return [];
 
     const riskListOptions = this.riskListOptionsForScope(scope);
-    const scored = await this.getScoredRisks(actor.tenantId, riskListOptions);
+    const scored = await this.getScoredRisks(actor.tenantId, riskListOptions, readerScope(actor));
 
     interface Group {
       subCategory: string;
@@ -789,7 +790,7 @@ export class DashboardService {
 
     let kriListFilters: { riskIds?: string[] } | undefined;
     if (scope.mode !== "GLOBAL") {
-      const scopedRiskIds = await this.getScopedRiskIds(actor.tenantId, scope);
+      const scopedRiskIds = await this.getScopedRiskIds(actor.tenantId, scope, readerScope(actor));
       const riskIds = [...(scopedRiskIds ?? new Set<string>())];
       // A non-empty perimeter (scopeIsEmpty already returned above
       // otherwise) can still resolve to zero actual risks — e.g. the
@@ -805,7 +806,7 @@ export class DashboardService {
       kriListFilters = { riskIds };
     }
 
-    const kris = await this.kris.list(actor.tenantId, kriListFilters);
+    const kris = await keepReadableByRisk(this.risks, actor, await this.kris.list(actor.tenantId, kriListFilters), (k) => k.riskId);
     const rows = await Promise.all(
       kris.map(async (kri): Promise<KriConsolidatedRow> => {
         const summary = await this.toKriSummary(actor.tenantId, kri);
@@ -927,9 +928,11 @@ export class DashboardService {
    */
   private async getScoredRisks(
     tenantId: string,
-    options?: { includeArchived?: boolean; ownerDepartmentIds?: string[]; processIds?: string[]; ids?: string[] },
+    options: { includeArchived?: boolean; ownerDepartmentIds?: string[]; processIds?: string[]; ids?: string[] } | undefined,
+    read: ReadScope,
   ): Promise<ScoredRisk[]> {
-    const risks = await this.risks.list(tenantId, options, SYSTEM_SCOPE);
+    // Lot V1: the reader's visibility, in SQL (never a post-fetch filter).
+    const risks = await this.risks.list(tenantId, options, read);
     const scored: ScoredRisk[] = [];
     for (const risk of risks) {
       const evaluation = await this.getMostRecentAuthoritativeEvaluation(tenantId, risk.id);
@@ -947,9 +950,10 @@ export class DashboardService {
     return { kri, status, latestValue: latest?.value ?? null, latestMeasureDate: latest?.measureDate ?? null };
   }
 
-  private async getAllKriSummaries(tenantId: string): Promise<DashboardKriSummary[]> {
-    const kris = await this.kris.list(tenantId);
-    return Promise.all(kris.map((kri) => this.toKriSummary(tenantId, kri)));
+  /** Lot V1 (q193): a KRI follows the visibility of its primary risk. */
+  private async getAllKriSummaries(actor: AuthenticatedUser): Promise<DashboardKriSummary[]> {
+    const kris = await keepReadableByRisk(this.risks, actor, await this.kris.list(actor.tenantId), (k) => k.riskId);
+    return Promise.all(kris.map((kri) => this.toKriSummary(actor.tenantId, kri)));
   }
 
   /**
@@ -958,14 +962,14 @@ export class DashboardService {
    * no risk IDs must fail closed; KriRepository treats riskIds: [] as
    * unfiltered, so never pass an empty array to it.
    */
-  private async getKriSummariesScoped(tenantId: string, scope: RiskScope): Promise<DashboardKriSummary[]> {
-    if (scope.mode === "GLOBAL") return this.getAllKriSummaries(tenantId);
+  private async getKriSummariesScoped(actor: AuthenticatedUser, scope: RiskScope): Promise<DashboardKriSummary[]> {
+    if (scope.mode === "GLOBAL") return this.getAllKriSummaries(actor);
 
-    const scopedRiskIds = await this.getScopedRiskIds(tenantId, scope);
+    const scopedRiskIds = await this.getScopedRiskIds(actor.tenantId, scope, readerScope(actor));
     if (!scopedRiskIds || scopedRiskIds.size === 0) return [];
 
-    const kris = await this.kris.list(tenantId, { riskIds: [...scopedRiskIds] });
-    return Promise.all(kris.map((kri) => this.toKriSummary(tenantId, kri)));
+    const kris = await this.kris.list(actor.tenantId, { riskIds: [...scopedRiskIds] });
+    return Promise.all(kris.map((kri) => this.toKriSummary(actor.tenantId, kri)));
   }
 
   private async toKpiSummary(tenantId: string, kpi: Kpi): Promise<DashboardKpiSummary> {
@@ -1020,10 +1024,10 @@ export class DashboardService {
    * too), used only for anomaly-membership checks. `null` for GLOBAL —
    * callers must treat `null` as "no filtering needed", not "empty".
    */
-  private async getScopedRiskIds(tenantId: string, scope: RiskScope): Promise<Set<string> | null> {
+  private async getScopedRiskIds(tenantId: string, scope: RiskScope, read: ReadScope): Promise<Set<string> | null> {
     if (scope.mode === "GLOBAL") return null;
     if (this.scopeIsEmpty(scope)) return new Set();
-    const risks = await this.risks.list(tenantId, this.riskListOptionsForScope(scope, { includeArchived: true }), SYSTEM_SCOPE);
+    const risks = await this.risks.list(tenantId, this.riskListOptionsForScope(scope, { includeArchived: true }), read);
     return new Set(risks.map((r) => r.id));
   }
 

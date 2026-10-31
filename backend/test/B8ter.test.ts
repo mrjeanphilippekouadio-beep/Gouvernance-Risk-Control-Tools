@@ -130,10 +130,16 @@ describe("B8bis-02 single source of truth for the fixed groups' rights", () => {
     return g === "RISK_MANAGER" && /system_group = 'RISK_MANAGER'/.test(up78) ? ["role.read"] : [];
   };
 
+  // DECISION-102 (q194): migration 082 adds resourcevisibility.set to the Risk Manager group only.
+  const addedBy082 = (g: string) => {
+    const up82 = readFileSync("../database/postgresql/migrations/082_risk_visibility.sql", "utf8");
+    return g === "RISK_MANAGER" && /ARRAY\['resourcevisibility\.set'\]/.test(up82) ? ["resourcevisibility.set"] : [];
+  };
+
   // D1 (DECISION-074): migration 066 adds governancehealth.read to the three groups.
   // D2b: migration 069 adds process.responsibility.assign to the Risk Manager group only.
-  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055, 066, 069, 071, 072, 073 and 078", (g) => {
-    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g), "governancehealth.read", ...addedBy069(g), ...addedBy071[g]!, ...addedBy072(g), ...addedBy073[g]!, ...addedBy078(g)]);
+  it.each(["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const)("the TS constant for %s equals the list seeded by migration 051 completed by 055, 066, 069, 071, 072, 073, 078 and 082", (g) => {
+    expect(FIXED_GROUP_PERMISSIONS[g]).toEqual([...fromMigration(g), ...addedBy055(g), "governancehealth.read", ...addedBy069(g), ...addedBy071[g]!, ...addedBy072(g), ...addedBy073[g]!, ...addedBy078(g), ...addedBy082(g)]);
     expect(FIXED_GROUP_PERMISSIONS[g].every((p) => ALL_PERMISSIONS.includes(p))).toBe(true);
   });
 
@@ -298,7 +304,7 @@ describe("F-B8b-05 Risk Manager / Audit cumul on effective permissions", () => {
 
   it("the Risk Manager and Committee groups cannot be given audit.* by a role update", async () => {
     const { service } = setup();
-    await expect(service.update(admin, "rm", { permissions: ["risk.read", "audit.read"] }, "r")).rejects.toThrow(/cannot carry audit/);
+    await expect(service.update(admin, "rm", { permissions: ["risk.read", "audit.mission.read"] }, "r")).rejects.toThrow(/cannot carry audit/);
     await expect(service.update(admin, "co", { permissions: ["risk.read", "audit.finding.read"] }, "r")).rejects.toThrow(/cannot carry audit/);
   });
 

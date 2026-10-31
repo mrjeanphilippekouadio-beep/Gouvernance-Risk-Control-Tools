@@ -107,7 +107,7 @@ describe("QA-visibility-v0 NR: services hand the right scope to the repository (
       for (const [name, call] of Object.entries(calls(s, id))) {
         seen.length = 0;
         await call();
-        expect(seen, name).toEqual([r.all ? { all: true } : { all: false }]);
+        expect(seen, name).toEqual([r.all ? { all: true } : { all: false, userId: "u" }]); // V1: the reader is named (risk_visible_to)
       }
     });
   }
@@ -175,11 +175,14 @@ describe("QA-visibility-v0 NR: services hand the right scope to the repository (
     expect(visibilityClause({ all: false })).toBe("AND visibility = 'CLIENT'");
     const infra = join(__dirname, "..", "src", "infrastructure", "database", "postgres");
     const users = readdirSync(infra).filter((f) => f.endsWith(".ts") && f !== "visibilityFilter.ts" && /visibilityClause\(/.test(readFileSync(join(infra, f), "utf8")));
-    expect(users.sort()).toEqual(["PostgresActionPlanRepository.ts", "PostgresAnomalyRepository.ts", "PostgresControlRepository.ts", "PostgresKpiRepository.ts", "PostgresRiskRepository.ts"]);
+    // Lot V1: risks moved to riskVisibilityClause (risk_visible_to), still 2 call sites (get + list).
+    expect(users.sort()).toEqual(["PostgresActionPlanRepository.ts", "PostgresAnomalyRepository.ts", "PostgresControlRepository.ts", "PostgresKpiRepository.ts"]);
     for (const f of users) {
       const src = readFileSync(join(infra, f), "utf8");
       expect((src.match(/\$\{visibilityClause\(scope\)\}/g) ?? []).length, f).toBe(2);
     }
+    const riskSrc = readFileSync(join(infra, "PostgresRiskRepository.ts"), "utf8");
+    expect((riskSrc.match(/\$\{riskVisibilityClause\(scope\)\}/g) ?? []).length).toBe(2);
   });
 });
 

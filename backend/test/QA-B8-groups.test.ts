@@ -169,7 +169,7 @@ describe("QA-B8 fixed groups", () => {
   it("a role cannot be created under a fixed group's name (name collision)", async () => {
     const { service } = setup();
     for (const [name] of GROUPS) {
-      await expect(service.create(admin, { name, permissions: ["audit.read"] }, "R4")).rejects.toThrow(ValidationError);
+      await expect(service.create(admin, { name, permissions: ["audit.mission.read"] }, "R4")).rejects.toThrow(ValidationError);
     }
   });
 
@@ -236,29 +236,29 @@ describe("QA-B8 fixed groups", () => {
   describe("department groups", () => {
     it("accepts one department's group, then refuses a second group for the same department", async () => {
       const { service, audit } = setup();
-      const g = await service.create(admin, { name: "Dept 1", permissions: ["audit.read"], departmentId: "dept-1" }, "R14");
+      const g = await service.create(admin, { name: "Dept 1", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "R14");
       expect(g.departmentId).toBe("dept-1");
       expect(audit.events).toHaveLength(1);
       await expect(
-        service.create(admin, { name: "Dept 1 bis", permissions: ["audit.read"], departmentId: "dept-1" }, "R15"),
+        service.create(admin, { name: "Dept 1 bis", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "R15"),
       ).rejects.toThrow(/already has a group/);
-      const g2 = await service.create(admin, { name: "Dept 2", permissions: ["audit.read"], departmentId: "dept-2" }, "R16");
+      const g2 = await service.create(admin, { name: "Dept 2", permissions: ["audit.mission.read"], departmentId: "dept-2" }, "R16");
       await expect(service.update(admin, g2.id, { departmentId: "dept-1" }, "R17")).rejects.toThrow(/already has a group/);
     });
 
     it("re-saving a group with its own departmentId is accepted (self excluded from the duplicate check)", async () => {
       const { service } = setup();
-      const g = await service.create(admin, { name: "Dept 1", permissions: ["audit.read"], departmentId: "dept-1" }, "R18");
+      const g = await service.create(admin, { name: "Dept 1", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "R18");
       await expect(service.update(admin, g.id, { departmentId: "dept-1", description: "d" }, "R19")).resolves.toBeTruthy();
     });
 
     it("refuses a departmentId of another tenant or a nonexistent one (create and update), with no audit", async () => {
       const { service, audit } = setup();
-      const plain = await service.create(admin, { name: "Plain", permissions: ["audit.read"] }, "R20");
+      const plain = await service.create(admin, { name: "Plain", permissions: ["audit.mission.read"] }, "R20");
       audit.events.length = 0;
       for (const id of ["dept-x", "does-not-exist"]) {
         await expect(
-          service.create(admin, { name: `N-${id}`, permissions: ["audit.read"], departmentId: id }, "R21"),
+          service.create(admin, { name: `N-${id}`, permissions: ["audit.mission.read"], departmentId: id }, "R21"),
         ).rejects.toThrow(/does not exist in this tenant/);
         await expect(service.update(admin, plain.id, { departmentId: id }, "R22")).rejects.toThrow(ValidationError);
       }
@@ -270,7 +270,7 @@ describe("QA-B8 fixed groups", () => {
       const audit = auditRepo();
       const service = new RoleService(repo, audit);
       await expect(
-        service.create(admin, { name: "D", permissions: ["audit.read"], departmentId: "dept-1" }, "R23"),
+        service.create(admin, { name: "D", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "R23"),
       ).rejects.toThrow(/requires a DepartmentRepository/);
       expect(await repo.list("tenant-1")).toHaveLength(0);
       expect(audit.events).toHaveLength(0);
@@ -278,19 +278,19 @@ describe("QA-B8 fixed groups", () => {
 
     it("a department group can be unlinked (departmentId: null) and the department then re-used", async () => {
       const { service } = setup();
-      const g = await service.create(admin, { name: "Dept 1", permissions: ["audit.read"], departmentId: "dept-1" }, "R24");
+      const g = await service.create(admin, { name: "Dept 1", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "R24");
       await service.update(admin, g.id, { departmentId: null }, "R25");
       await expect(
-        service.create(admin, { name: "Dept 1 new", permissions: ["audit.read"], departmentId: "dept-1" }, "R26"),
+        service.create(admin, { name: "Dept 1 new", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "R26"),
       ).resolves.toBeTruthy();
     });
 
     it("a disabled department group frees its department", async () => {
       const { service } = setup();
-      const g = await service.create(admin, { name: "Dept 1", permissions: ["audit.read"], departmentId: "dept-1" }, "R27");
+      const g = await service.create(admin, { name: "Dept 1", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "R27");
       await service.disable(admin, g.id, "R28");
       await expect(
-        service.create(admin, { name: "Dept 1 new", permissions: ["audit.read"], departmentId: "dept-1" }, "R29"),
+        service.create(admin, { name: "Dept 1 new", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "R29"),
       ).resolves.toBeTruthy();
     });
   });
@@ -313,7 +313,7 @@ describe("QA-B8 fixed groups", () => {
     it("tenant-2 cannot link tenant-1's department to one of its groups", async () => {
       const { service } = setup();
       await expect(
-        service.create(otherTenantAdmin, { name: "Dept 1", permissions: ["audit.read"], departmentId: "dept-1" }, "R35"),
+        service.create(otherTenantAdmin, { name: "Dept 1", permissions: ["audit.mission.read"], departmentId: "dept-1" }, "R35"),
       ).rejects.toThrow(/does not exist in this tenant/);
     });
   });
@@ -321,10 +321,10 @@ describe("QA-B8 fixed groups", () => {
   describe("audit on every mutation", () => {
     it("create, update, assign, revoke and disable each write one event with actor and tenant", async () => {
       const { service, audit } = setup();
-      const r = await service.create(admin, { name: "Custom", permissions: ["audit.read"] }, "A1");
+      const r = await service.create(admin, { name: "Custom", permissions: ["audit.mission.read"] }, "A1");
       await service.update(admin, r.id, { description: "d" }, "A2");
       await service.assignToUser(admin, r.id, "u1", "A3", "motif de test");
-      const other = await service.create(admin, { name: "Custom2", permissions: ["audit.read"] }, "A3b");
+      const other = await service.create(admin, { name: "Custom2", permissions: ["audit.mission.read"] }, "A3b");
       await service.assignToUser(admin, other.id, "u1", "A3c", "motif de test");
       await service.revokeFromUser(admin, r.id, "u1", "A4", "motif de test");
       await service.disable(admin, r.id, "A5");

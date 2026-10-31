@@ -6,6 +6,7 @@ import type { Control, ControlStatus, CreateControlInput, UpdateControlInput } f
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { assertReadableByRisk, hiddenRiskIds } from "./riskVisibility.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
 import { READER_DEFAULT_SCOPE } from "../domain/visibility.js";
 
@@ -40,7 +41,7 @@ export class ControlService {
     requestId: string,
   ): Promise<Control> {
     requirePermission(actor, "control.create");
-    await this.validate(actor.tenantId, input);
+    await this.validate(actor, input);
     await this.assertProcessExists(actor.tenantId, input.processId);
 
     const control = await this.controls.create({ ...input, tenantId: actor.tenantId });
@@ -74,6 +75,8 @@ export class ControlService {
 
   async listCoveringRisk(actor: AuthenticatedUser, riskId: string): Promise<Control[]> {
     requirePermission(actor, "control.read");
+    // Lot V1: which controls cover a restricted risk is as restricted as the risk.
+    await assertReadableByRisk(this.risks, actor, riskId, "Risk", riskId);
     return this.controls.listCoveringRisk(actor.tenantId, riskId);
   }
 
@@ -100,7 +103,7 @@ export class ControlService {
           "A control must cover at least one risk (a risk must have at least one control, and vice versa)",
         );
       }
-      await this.assertRisksExist(actor.tenantId, input.coveredRiskIds);
+      await this.assertRisksExist(actor, input.coveredRiskIds);
     }
     await this.assertProcessExists(actor.tenantId, input.processId);
 
@@ -141,7 +144,7 @@ export class ControlService {
     });
   }
 
-  private async validate(tenantId: string, input: Omit<CreateControlInput, "tenantId">): Promise<void> {
+  private async validate(actor: AuthenticatedUser, input: Omit<CreateControlInput, "tenantId">): Promise<void> {
     if (!input.label.trim()) throw new ValidationError("label is required");
     if (input.coveredRiskIds.length === 0) {
       throw new ValidationError(
@@ -152,12 +155,14 @@ export class ControlService {
     if (!input.executor.trim()) throw new ValidationError("executor is required");
     if (!input.complianceCriteria.trim()) throw new ValidationError("complianceCriteria is required");
 
-    await this.assertRisksExist(tenantId, input.coveredRiskIds);
+    await this.assertRisksExist(actor, input.coveredRiskIds);
   }
 
-  private async assertRisksExist(tenantId: string, riskIds: string[]): Promise<void> {
-    const found = await this.risks.listByIds(tenantId, riskIds);
-    const foundIds = new Set(found.map((r) => r.id));
+  /** Lot V1: covering a risk one does not see answers like covering a missing one. */
+  private async assertRisksExist(actor: AuthenticatedUser, riskIds: string[]): Promise<void> {
+    const found = await this.risks.listByIds(actor.tenantId, riskIds);
+    const hidden = await hiddenRiskIds(this.risks, actor, riskIds);
+    const foundIds = new Set(found.map((r) => r.id).filter((id) => !hidden.has(id)));
     const missing = riskIds.filter((id) => !foundIds.has(id));
     if (missing.length > 0) {
       throw new ValidationError(`Risk(s) do not exist in this tenant: ${missing.join(", ")}`);

@@ -5,13 +5,16 @@ import type { DepartmentRepository } from "../domain/repositories/DepartmentRepo
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { RiskEscalationRepository } from "../domain/repositories/RiskEscalationRepository.js";
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
-import type { CreateRiskInput, Risk, UpdateRiskInput } from "../domain/entities/Risk.js";
+import type { CreateRiskInput, Risk, RiskVisibilityState, UpdateRiskInput } from "../domain/entities/Risk.js";
+import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
+import { isAcceptableReason } from "../domain/governance/selfValidation.js";
+import { writeAudited } from "./auditedWrite.js";
 import type { RiskEscalation } from "../domain/entities/RiskEscalation.js";
-import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
-import { READER_DEFAULT_SCOPE } from "../domain/visibility.js";
+import { READER_DEFAULT_SCOPE, type Visibility } from "../domain/visibility.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 
 /**
@@ -47,18 +50,30 @@ export class RiskService {
     private readonly processes?: ProcessRepository,
     /** DECISION-100 (lot V0): optional for existing tests — absent, a reader sees CLIENT rows only (fail-closed, SEC V0-01). Wired in server.ts. */
     private readonly visibility?: VisibilityResolver,
+    /** Lot V1 (q199): notifies the Risk Manager group when an owner widens a risk. Optional: absent = no notification. */
+    private readonly notifications?: Pick<NotificationRepository, "create">,
   ) {}
 
-  async create(actor: AuthenticatedUser, input: Omit<CreateRiskInput, "tenantId">, requestId: string, idempotencyKey?: string): Promise<Risk> {
+  async create(
+    actor: AuthenticatedUser,
+    input: Omit<CreateRiskInput, "tenantId" | "grantedBy">,
+    requestId: string,
+    idempotencyKey?: string,
+  ): Promise<Risk> {
     requirePermission(actor, "risk.create");
     if (!input.process.trim()) throw new ValidationError("process is required");
     if (!input.description.trim()) throw new ValidationError("description is required");
     await this.assertDepartmentExists(actor.tenantId, input.ownerDepartmentId);
     await this.assertProcessExists(actor.tenantId, input.processId);
+    const visibility: Visibility = input.visibility ?? "CLIENT";
+    const accessUserIds = [...new Set(input.accessUserIds ?? [])];
+    await this.assertInitialVisibility(actor, visibility, accessUserIds, input.ownerDepartmentId ?? null, input.processId ?? null);
 
+    // The author of the initial grants is always the caller (never a client-supplied field).
+    const toCreate = { ...input, visibility, accessUserIds, grantedBy: actor.userId, tenantId: actor.tenantId };
     const result = idempotencyKey
-      ? await this.risks.createIdempotent({ ...input, tenantId: actor.tenantId }, idempotencyKey)
-      : { risk: await this.risks.create({ ...input, tenantId: actor.tenantId }), created: true };
+      ? await this.risks.createIdempotent(toCreate, idempotencyKey)
+      : { risk: await this.risks.create(toCreate), created: true };
 
     if (!result.created) {
       const existing = result.risk;
@@ -66,7 +81,8 @@ export class RiskService {
         existing.process !== input.process ||
         existing.description !== input.description ||
         existing.ownerDepartmentId !== (input.ownerDepartmentId ?? null) ||
-        existing.processId !== (input.processId ?? null)
+        existing.processId !== (input.processId ?? null) ||
+        (existing.visibility ?? "CLIENT") !== visibility
       ) {
         throw new ValidationError("Idempotency-Key was already used with a different risk payload");
       }
@@ -82,12 +98,77 @@ export class RiskService {
       entityId: risk.id,
       action: "CREATE",
       oldValue: null,
-      newValue: risk,
+      newValue: accessUserIds.length > 0 ? { ...risk, accessUserIds } : risk,
       reason: null,
       requestId,
     });
 
     return risk;
+  }
+
+  /** Lot V1 (q192): the level and active named-people list of a risk the caller can read. */
+  async getAccess(actor: AuthenticatedUser, id: string): Promise<RiskVisibilityState> {
+    const risk = await this.get(actor, id);
+    const accessUserIds = this.risks.listAccess ? await this.risks.listAccess(actor.tenantId, id) : [];
+    return { visibility: risk.visibility ?? "CLIENT", accessUserIds };
+  }
+
+  /**
+   * Lot V1 (q194, q199): change a risk's visibility after its creation, by a holder of `resourcevisibility.set` (Risk
+   * Manager group) or by the risk's owner, with a mandatory reason and the audit row in the same transaction. Nobody
+   * adds themselves to the list. Back to CLIENT revokes the whole list (it would otherwise come back silently on the
+   * next restriction). When the owner widens a risk, the Risk Manager group is notified; the change is not blocked.
+   */
+  async setVisibility(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { visibility: Visibility; addUserIds?: string[]; revokeUserIds?: string[]; reason: string },
+    requestId: string,
+  ): Promise<RiskVisibilityState> {
+    requirePermission(actor, "risk.read");
+    const before = await this.get(actor, id);
+    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const isOwner = before.ownerId !== null && sameUserId(before.ownerId, actor.userId);
+    if (!holdsRight && !isOwner) {
+      throw new ForbiddenError("Only the Risk Manager group or the risk owner can change its visibility");
+    }
+    const reason = input.reason?.trim() ?? "";
+    if (!reason || reason.length > 500 || !isAcceptableReason(reason)) {
+      throw new ValidationError("A reason (1 to 500 characters) is required to change a risk's visibility");
+    }
+    const repo = this.risks;
+    if (!repo.changeVisibility || !repo.listAccess) {
+      throw new ValidationError("Changing a risk's visibility is not available");
+    }
+    const current = await repo.listAccess(actor.tenantId, id);
+    const addUserIds = input.visibility === "CLIENT" ? [] : [...new Set(input.addUserIds ?? [])];
+    const revokeUserIds = input.visibility === "CLIENT" ? current : [...new Set(input.revokeUserIds ?? [])];
+    if (addUserIds.some((u) => sameUserId(u, actor.userId))) {
+      throw new ValidationError("You cannot add yourself to a risk's access list");
+    }
+    for (const userId of addUserIds) await this.assertActiveAccessUser(actor.tenantId, userId);
+    const change = { visibility: input.visibility, addUserIds, revokeUserIds, reason, changedBy: actor.userId };
+    const changeVisibility = repo.changeVisibility.bind(repo);
+    const result = await writeAudited<{ before: RiskVisibilityState; after: RiskVisibilityState }>(
+      repo.auditsInTransaction,
+      this.audit,
+      (audit) => changeVisibility(actor.tenantId, id, change, audit),
+      ({ before: b, after: a }) => [{
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Risk",
+        entityId: id,
+        action: "PERMISSION_CHANGE",
+        oldValue: b,
+        newValue: { ...a, widening: isWidening(b, a) },
+        reason,
+        requestId,
+      }],
+    );
+    if (!holdsRight && isWidening(result.before, result.after)) {
+      await this.notifyVisibilityWidened(actor, id, requestId);
+    }
+    return result.after;
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<Risk> {
@@ -307,6 +388,60 @@ export class RiskService {
   }
 
   /** ACT-120/122: an owner/superiorOwner, if validation is wired, must be an active user in the caller's tenant. */
+  /**
+   * Lot V1: a restricted level at creation needs the repository support, a list of active users of the tenant without
+   * the creator (q194), and a creator who would still see the risk (spec §5) unless they see everything.
+   */
+  private async assertInitialVisibility(
+    actor: AuthenticatedUser,
+    visibility: Visibility,
+    accessUserIds: string[],
+    ownerDepartmentId: string | null,
+    processId: string | null,
+  ): Promise<void> {
+    if (visibility === "CLIENT") {
+      if (accessUserIds.length > 0) throw new ValidationError("A named-people list only applies to a restricted risk");
+      return;
+    }
+    if (!this.risks.creatorWouldSee) throw new ValidationError("Restricted visibility is not available");
+    if (accessUserIds.some((u) => sameUserId(u, actor.userId))) {
+      throw new ValidationError("You cannot add yourself to a risk's access list");
+    }
+    for (const userId of accessUserIds) await this.assertActiveAccessUser(actor.tenantId, userId);
+    const scope = (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE;
+    if (scope.all) return;
+    if (!(await this.risks.creatorWouldSee(actor.tenantId, actor.userId, { visibility, ownerDepartmentId, processId }))) {
+      throw new ValidationError("You would not see this risk yourself with this visibility: choose a level that includes you");
+    }
+  }
+
+  private async assertActiveAccessUser(tenantId: string, userId: string): Promise<void> {
+    if (!this.users) throw new ValidationError("Access lists are not available");
+    const user = await this.users.getById(tenantId, userId);
+    if (!user) throw new ValidationError(`User ${userId} does not exist in this tenant`);
+    if (user.deletedAt) throw new ValidationError(`User ${userId} is suspended and cannot be given access`);
+  }
+
+  /** q199: best-effort, a notification failure never undoes the visibility change. Never names the risk content. */
+  private async notifyVisibilityWidened(actor: AuthenticatedUser, riskId: string, requestId: string): Promise<void> {
+    if (!this.notifications || !this.users?.listWithPermission) return;
+    try {
+      const managers = await this.users.listWithPermission(actor.tenantId, "resourcevisibility.set", actor.userId);
+      for (const m of managers) {
+        await this.notifications.create({
+          tenantId: actor.tenantId,
+          recipientUserId: m.id,
+          resourceType: "RISK",
+          resourceId: riskId,
+          eventType: "RISK_VISIBILITY_WIDENED",
+          message: "Le propriétaire d'un risque a élargi sa visibilité.",
+        });
+      }
+    } catch (err) {
+      console.error(`RISK_VISIBILITY_WIDENED ${riskId}: managers could not be notified (requestId ${requestId})`, err instanceof Error ? err.message : err);
+    }
+  }
+
   private async assertActiveUser(tenantId: string, userId: string, role: "owner" | "superior owner"): Promise<void> {
     if (!this.users) return;
     const user = await this.users.getById(tenantId, userId);
@@ -359,6 +494,14 @@ export function newRequestId(): string {
  * without dashes, so a plain string comparison with actor.userId could be
  * bypassed. Compare the normalised forms instead.
  */
+/** Openness order: NOMINATIF < PERIMETRE < CLIENT. Widening = a more open level, or new people in the list. */
+const OPENNESS: Record<Visibility, number> = { NOMINATIF: 0, PERIMETRE: 1, CLIENT: 2 };
+function isWidening(before: RiskVisibilityState, after: RiskVisibilityState): boolean {
+  // A more open level widens; a more closed level never does (even with names added); same level: widens if someone is added.
+  if (OPENNESS[after.visibility] !== OPENNESS[before.visibility]) return OPENNESS[after.visibility] > OPENNESS[before.visibility];
+  return after.accessUserIds.some((u) => !before.accessUserIds.includes(u));
+}
+
 function sameUserId(a: string, b: string): boolean {
   const normalise = (id: string) => id.toLowerCase().replace(/[{}-]/g, "");
   return normalise(a) === normalise(b);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { risksApi, type Risk, type RiskStatus } from "../../api/risks";
+import { risksApi, type Risk, type RiskStatus, type RiskVisibility } from "../../api/risks";
+import { AccessPeopleField, RiskVisibilityBadge, useDirectory, VisibilityLevelField } from "./RiskVisibility";
 import { departmentsApi, type DepartmentSummary } from "../../api/departments";
 import { usersApi, type UserSummary } from "../../api/users";
 import { ApiError } from "../../api/client";
@@ -78,6 +79,9 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
   const [process, setProcess] = useState("");
   const [description, setDescription] = useState("");
   const [ownerDepartmentId, setOwnerDepartmentId] = useState("");
+  const [visibility, setVisibility] = useState<RiskVisibility>("CLIENT");
+  const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
+  const accountDirectory = useDirectory(token);
   const [creating, setCreating] = useState(false);
   const [createIdempotencyKey, setCreateIdempotencyKey] = useState(() => crypto.randomUUID());
 
@@ -157,13 +161,21 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
     try {
       await risksApi.create(
         token,
-        { process, description, ownerDepartmentId: ownerDepartmentId || null },
+        {
+          process,
+          description,
+          ownerDepartmentId: ownerDepartmentId || null,
+          visibility,
+          ...(visibility === "CLIENT" ? {} : { accessUserIds }),
+        },
         createIdempotencyKey,
       );
       setCreateIdempotencyKey(crypto.randomUUID());
       setProcess("");
       setDescription("");
       setOwnerDepartmentId("");
+      setVisibility("CLIENT");
+      setAccessUserIds([]);
       await refresh();
     } catch (err) {
       setError(describeError(err));
@@ -239,6 +251,7 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
       superiorOwnerLabel={sheetRisk.superiorOwnerId ? ownerLabel(sheetRisk.superiorOwnerId) : null}
       departmentLabel={departmentLabel(sheetRisk.ownerDepartmentId)}
       shortcuts={shortcuts}
+      onVisibilityChanged={(v) => setRisks((all) => all.map((r) => (r.id === sheetRisk.id ? { ...r, visibility: v } : r)))}
     />;
   }
 
@@ -306,6 +319,10 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
                 </select>
               </div>
             )}
+            <VisibilityLevelField id="risk-visibility" value={visibility} onChange={setVisibility} />
+            {visibility !== "CLIENT" && (
+              <AccessPeopleField id="risk-access" accounts={accountDirectory} value={accessUserIds} onChange={setAccessUserIds} label="Personnes nommées (facultatif)" />
+            )}
             <div className="core-form-actions">
               <Button type="submit" variant="primary" disabled={creating} aria-busy={creating}>
                 {creating ? "Création…" : "Créer"}
@@ -351,6 +368,7 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
             { key: "process", header: "Processus", render: (risk) => risk.process },
             { key: "description", header: "Description", render: (risk) => <strong>{risk.description}</strong> },
             { key: "department", header: "Département", render: (risk) => departmentLabel(risk.ownerDepartmentId) },
+            { key: "visibility", header: "Visibilité", render: (risk) => <RiskVisibilityBadge visibility={risk.visibility} /> },
             {
               key: "owner",
               header: "Risk Owner",

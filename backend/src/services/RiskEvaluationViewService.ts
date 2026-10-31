@@ -1,4 +1,4 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { readerScope } from "../domain/visibility.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
@@ -67,7 +67,7 @@ export class RiskEvaluationViewService {
     const evaluation = await this.evaluations.getById(actor.tenantId, riskEvaluationId);
     if (!evaluation) throw new NotFoundError("RiskEvaluation", riskEvaluationId);
 
-    const risk = await this.risks.getById(actor.tenantId, evaluation.riskId, SYSTEM_SCOPE);
+    const risk = await this.risks.getById(actor.tenantId, evaluation.riskId, readerScope(actor));
     if (!risk) throw new NotFoundError("Risk", evaluation.riskId);
 
     const controls = await this.controls.listCoveringRisk(actor.tenantId, evaluation.riskId);
