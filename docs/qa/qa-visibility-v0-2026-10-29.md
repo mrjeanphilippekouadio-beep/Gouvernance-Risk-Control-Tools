@@ -55,3 +55,8 @@ Les 10 lectures publiques `get` / `list` des 5 services sont branchées (garde d
 initdb -D /var/tmp/qavisv0/data -A trust -U postgres ; pg_ctl -D … -o "-p 55441 -c listen_addresses= -c unix_socket_directories=/var/tmp/qavisv0" start
 cd backend && QA_VIS_PGHOST=/var/tmp/qavisv0 QA_VIS_PGPORT=55441 npx vitest run test/QA-visibility-v0.test.ts
 ```
+
+## Corrections (2026-10-31, commit de la passe V0)
+- **QA-VIS0-01 : corrigé** — `rag_revocation_shape_check` impose révocateur ET motif avec la date ; le test `it.fails` est devenu un test normal (vert sur PG16 local).
+- **QA-VIS0-02 : corrigé** — motifs `btrim(…, E' \t\n\r\f\013')` : un motif fait seulement de blancs est refusé ; test normal, vert.
+- Instantané des lectures non branchées : `KriService.ts` passe de 3 à 4 après fusion de staging (PR #203, contrôle de vie des risques couverts par `listByIds`, lecture interne). Les lectures internes portent désormais le marqueur explicite `SYSTEM_SCOPE` (SEC V0-01), sans changement de résultat.

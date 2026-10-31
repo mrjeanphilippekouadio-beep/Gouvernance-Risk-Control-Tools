@@ -83,3 +83,7 @@ Lectures qui contournent le filtre, toutes tenant-scopées mais **sans visibilit
 
 ## Statut
 FINDING_IDENTIFIED (V0-01 à V0-04 à lever avant V1). Owners : A06 (V0-01, V0-02, V0-04, V0-06), A07 (V0-07), HUMAN/A05 (V0-03, V0-05). CLOSED ne vaut pas validation Risk, Compliance ou Privacy.
+
+## Statut des constats (2026-10-31)
+- **V0-01 : corrigé (fail-closed).** `scope` est obligatoire sur `getById`/`list` des 5 dépôts (le compilateur a trouvé tous les appelants). Les lectures internes passent `SYSTEM_SCOPE` explicitement ; un service sans résolveur donne `READER_DEFAULT_SCOPE` (CLIENT seulement), jamais tout. Tests de non-régression QA verts.
+- V0-02 à V0-04, V0-06 : inchangés, pour V1 (hors périmètre de la passe).

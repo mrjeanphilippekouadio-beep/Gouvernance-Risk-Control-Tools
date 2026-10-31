@@ -217,7 +217,7 @@ describe("QA-visibility-v0 INV: reads of the 5 roots that carry no scope (V1 gap
     expect(perFile).toEqual({
       "ActionPlanService.ts": 9, "AnomalyService.ts": 2, "CartographyService.ts": 1, "ControlEffectivenessService.ts": 1, "ControlExecutionService.ts": 1,
       "ControlService.ts": 2, "DashboardScopeResolver.ts": 3, "DashboardService.ts": 14, "FindingService.ts": 3, "KpiMeasureService.ts": 2,
-      "KpiService.ts": 1, "KriMeasureService.ts": 1, "KriService.ts": 3, "ProcessEvaluationModeRequestService.ts": 1, "ProcessService.ts": 2,
+      "KpiService.ts": 1, "KriMeasureService.ts": 1, "KriService.ts": 4, /* +1: PR #203 coveredRiskIds liveness (listByIds) */ "ProcessEvaluationModeRequestService.ts": 1, "ProcessService.ts": 2,
       "RaciAssignmentService.ts": 3, "RiskDeviceViewService.ts": 3, "RiskEvaluationService.ts": 3, "RiskEvaluationViewService.ts": 2,
       "RiskFrameworkService.ts": 1, "RiskOwnershipService.ts": 1, "TreatmentDecisionService.ts": 1,
     });
