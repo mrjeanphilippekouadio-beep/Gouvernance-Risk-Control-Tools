@@ -60,7 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "placeholder", label: "Lignes de défense", icon: "shield" },
   ] },
   { label: "Indicateurs", items: [
-    { id: "kri", label: "KRI", icon: "trend", available: true },
+    { id: "kri", label: "KRI", icon: "trend", available: true, requires: "kri.read" },
     { id: "kpi", label: "KPI", icon: "trend", available: true },
     { id: "placeholder", label: "Dashboards", icon: "dashboard" },
   ] },

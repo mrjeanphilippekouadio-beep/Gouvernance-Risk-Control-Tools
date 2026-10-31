@@ -3,6 +3,8 @@ import type { KriListFilters, KriRepository } from "../../../domain/repositories
 import type { CreateKriInput, Kri, KriFrequency, UpdateKriInput } from "../../../domain/entities/Kri.js";
 import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
+import { runAudited } from "./PostgresAuditRepository.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 
 interface KriRow {
   id: string;
@@ -55,7 +57,7 @@ function toDomain(row: KriRow): Kri {
  * never touch another tenant's row even if kriId were reused.
  */
 async function replaceCoveredRisksInternal(
-  client: PoolClient,
+  client: Pick<PoolClient, "query">,
   tenantId: string,
   kriId: string,
   riskIds: string[],
@@ -71,6 +73,8 @@ async function replaceCoveredRisksInternal(
 }
 
 export class PostgresKriRepository implements KriRepository {
+  readonly auditsInTransaction = true;
+
   constructor(private readonly pool: Pool) {}
 
   async getById(tenantId: string, id: string): Promise<Kri | null> {
@@ -113,34 +117,36 @@ export class PostgresKriRepository implements KriRepository {
     return rows.map(toDomain);
   }
 
-  async create(input: CreateKriInput): Promise<Kri> {
-    const { rows } = await this.pool.query<KriRow>(
-      `INSERT INTO kris
-         (tenant_id, label, formula, threshold_green, threshold_orange, threshold_red,
-          frequency, risk_id, entity, methodology_version, description, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-       RETURNING *`,
-      [
-        input.tenantId,
-        input.label,
-        input.formula,
-        input.thresholdGreen,
-        input.thresholdOrange,
-        input.thresholdRed,
-        input.frequency,
-        input.riskId,
-        input.entity ?? null,
-        input.methodologyVersion ?? null,
-        input.description ?? null,
-        input.active ?? true,
-      ],
-    );
-    const row = rows[0];
-    if (!row) throw new Error("Insert into kris returned no row");
-    return toDomain(row);
+  async create(input: CreateKriInput, audit?: TransactionalAudit<Kri>): Promise<Kri> {
+    return runAudited(this.pool, async (db) => {
+      const { rows } = await db.query<KriRow>(
+        `INSERT INTO kris
+           (tenant_id, label, formula, threshold_green, threshold_orange, threshold_red,
+            frequency, risk_id, entity, methodology_version, description, active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         RETURNING *`,
+        [
+          input.tenantId,
+          input.label,
+          input.formula,
+          input.thresholdGreen,
+          input.thresholdOrange,
+          input.thresholdRed,
+          input.frequency,
+          input.riskId,
+          input.entity ?? null,
+          input.methodologyVersion ?? null,
+          input.description ?? null,
+          input.active ?? true,
+        ],
+      );
+      const row = rows[0];
+      if (!row) throw new Error("Insert into kris returned no row");
+      return toDomain(row);
+    }, audit);
   }
 
-  async update(tenantId: string, id: string, input: UpdateKriInput): Promise<Kri> {
+  async update(tenantId: string, id: string, input: UpdateKriInput, audit?: TransactionalAudit<Kri>): Promise<Kri> {
     const { setClauses, values } = buildUpdateSet(
       {
         label: input.label,
@@ -162,25 +168,29 @@ export class PostgresKriRepository implements KriRepository {
       return current;
     }
 
-    const { rows } = await this.pool.query<KriRow>(
-      `UPDATE kris SET ${setClauses.join(", ")}, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
-       RETURNING *`,
-      [tenantId, id, ...values],
-    );
-    const row = rows[0];
-    if (!row) throw new NotFoundError("Kri", id);
-    return toDomain(row);
+    return runAudited(this.pool, async (db) => {
+      const { rows } = await db.query<KriRow>(
+        `UPDATE kris SET ${setClauses.join(", ")}, updated_at = now()
+         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+         RETURNING *`,
+        [tenantId, id, ...values],
+      );
+      const row = rows[0];
+      if (!row) throw new NotFoundError("Kri", id);
+      return toDomain(row);
+    }, audit);
   }
 
-  async softDelete(tenantId: string, id: string, deletedBy: string, reason: string): Promise<void> {
-    const { rowCount } = await this.pool.query(
-      `UPDATE kris
-       SET deleted_at = now(), deleted_by = $3, deletion_reason = $4
-       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
-      [tenantId, id, deletedBy, reason],
-    );
-    if (!rowCount) throw new NotFoundError("Kri", id);
+  async softDelete(tenantId: string, id: string, deletedBy: string, reason: string, audit?: TransactionalAudit<void>): Promise<void> {
+    await runAudited(this.pool, async (db) => {
+      const { rowCount } = await db.query(
+        `UPDATE kris
+         SET deleted_at = now(), deleted_by = $3, deletion_reason = $4
+         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
+        [tenantId, id, deletedBy, reason],
+      );
+      if (!rowCount) throw new NotFoundError("Kri", id);
+    }, audit);
   }
 
   async listCoveredRiskIds(tenantId: string, kriId: string): Promise<string[]> {
@@ -191,17 +201,21 @@ export class PostgresKriRepository implements KriRepository {
     return rows.map((r) => r.risk_id);
   }
 
-  async replaceCoveredRisks(tenantId: string, kriId: string, riskIds: string[]): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      await replaceCoveredRisksInternal(client, tenantId, kriId, riskIds);
-      await client.query("COMMIT");
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    } finally {
-      client.release();
-    }
+  async replaceCoveredRisks(tenantId: string, kriId: string, riskIds: string[], audit?: TransactionalAudit<string[]>): Promise<string[]> {
+    // Always one transaction (an empty audit still opens it): lock the KRI, which must still be active (a concurrent
+    // disable wins), read the set being overwritten, rebuild it, then the audit rows.
+    return runAudited(this.pool, async (db) => {
+      const { rowCount } = await db.query(
+        `SELECT id FROM kris WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+        [tenantId, kriId],
+      );
+      if (!rowCount) throw new NotFoundError("Kri", kriId);
+      const { rows } = await db.query<{ risk_id: string }>(
+        `SELECT risk_id FROM kri_risks WHERE tenant_id = $1 AND kri_id = $2`,
+        [tenantId, kriId],
+      );
+      await replaceCoveredRisksInternal(db, tenantId, kriId, riskIds);
+      return rows.map((r) => r.risk_id);
+    }, audit ?? (() => []));
   }
 }
