@@ -432,6 +432,8 @@ pour l'usage.
 | @dev-backend | **SEC-RL-02/05 + INFO (revue A10 feat/r1-rights-lines)** : 404 cohérent sur `/roles/users/:userId` ; vue élargie invalide après sortie du groupe ou suspension (pas de réactivation au retour) ; demande expirée ne bloque plus ; id canonique (casse). À corriger dans la branche avant PR. | 2026-10-28 | **En cours** |
 | HUMAN @security @architect @privacy | **q203 (cockpit)** — SEC V0-03 : le journal d'audit restitue le contenu des ressources restreintes ; réserver `audit.read` au groupe Audit (A, recommandé) ou masquer le contenu non visible (B). Bloque V1. V0-05 rattaché à q202. | 2026-10-29 | **Fermé** (DECISION-104) |
 | @dev-backend @dev-db | **Visibilité — à lever avant V1 (SEC-visibility-v0)** : V0-01 (scope absent = pas de filtre → fail-closed), V0-02 (tableaux de bord, rapports, cartographie, `?coveringRiskId=`, vues 360, KRI/KPI, `ActionPlanService.dashboard` non filtrés), V0-04 (KPI `requireKpi` et validations de liens), V0-06/07 INFO ; retest A10 avant de livrer V1. | 2026-10-29 | **Ouvert** |
+| HUMAN @dev-backend @risk-manager | **q204 (cockpit)** — notifier le Risk Manager à chaque élargissement par le propriétaire (A, construit ainsi en V1) ou seulement si la restriction venait du RM (B). | 2026-11-01 | **Ouvert — HUMAN : q204** |
+| HUMAN @privacy @security @dev-backend | **q205 (cockpit)** — annuaire pour nommer des personnes à la création d'un risque : ouvrir à tout créateur/modificateur de risque après avis Privacy (A, recommandé) ou réserver au RM et détenteurs actuels (B). | 2026-11-01 | **Ouvert — HUMAN : q205** |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
