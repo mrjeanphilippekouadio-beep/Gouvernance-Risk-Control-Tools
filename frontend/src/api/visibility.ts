@@ -53,8 +53,18 @@ export interface RestrictedResource {
 /** V3 (q196, q198): one number per type the reader may list; null for the groups that see everything (no mention). */
 export type HiddenCounts = Partial<Record<RestrictedResource["type"], number>> | null;
 
+const RESTRICTED_PAGE = 500;
+
 export const restrictedResourcesApi = {
-  list: (token: string) => apiRequest<RestrictedResource[]>("/api/v1/restricted-resources?limit=500", { token }),
+  /** Codex P2 (PR #225): reads every page (500 per call, stable order on the server) so nothing is silently left out. */
+  list: async (token: string): Promise<RestrictedResource[]> => {
+    const all: RestrictedResource[] = [];
+    for (let offset = 0; ; offset += RESTRICTED_PAGE) {
+      const page = await apiRequest<RestrictedResource[]>(`/api/v1/restricted-resources?limit=${RESTRICTED_PAGE}&offset=${offset}`, { token });
+      all.push(...page);
+      if (page.length < RESTRICTED_PAGE) return all;
+    }
+  },
 };
 
 export const hiddenCountsApi = {
