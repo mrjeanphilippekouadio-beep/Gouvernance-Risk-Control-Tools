@@ -1,6 +1,7 @@
 import type { CreateRaciAssignmentInput, RaciAssignment, RaciEntityType, RaciRole } from "../entities/RaciAssignment.js";
 
 export interface RaciAssignmentRepository {
+  /** QA-V2B-01: refuses (ConflictError) an assignment identical to an active one, even under concurrent requests. */
   create(input: CreateRaciAssignmentInput): Promise<RaciAssignment>;
   getById(tenantId: string, id: string): Promise<RaciAssignment | null>;
   listForEntity(tenantId: string, entityType: RaciEntityType, entityId: string): Promise<RaciAssignment[]>;

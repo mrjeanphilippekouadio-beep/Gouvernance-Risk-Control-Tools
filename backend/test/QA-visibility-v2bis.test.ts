@@ -232,7 +232,7 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       expect(await sees("out", `/controls/${I("c02")}`)).toBe(false);
     });
 
-    it.fails("QA-V2B-01 (MINOR): the same opening assignment sent 5 times at once leaves ONE active row, ONE PERMISSION_CHANGE and ONE RM notification (today every request passes the `canRead` pre-check: 5 rows, 5 audit rows, 5 notifications; raci_assignments has no uniqueness)", async () => {
+    it("QA-V2B-01 (MINOR): the same opening assignment sent 5 times at once leaves ONE active row, ONE PERMISSION_CHANGE and ONE RM notification (today every request passes the `canRead` pre-check: 5 rows, 5 audit rows, 5 notifications; raci_assignments has no uniqueness)", async () => {
       const before = (await permChanges(I("a06"))).length;
       const n0 = (await notifs("rm", I("a06"))).length;
       const rs = await Promise.all(Array.from({ length: 5 }, () => raci("own", "ACTION_PLAN", I("a06"), "out2", "C", "Course QA")));
@@ -399,7 +399,7 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       expect((await vis("rm", `/kpis/${k.json.data.id}`, "CLIENT")).status).toBe(200);
       for (const id of [c.json.data.id as string, k.json.data.id as string]) for (const w of WHO) expect((await notifs(w, id)).filter((n) => /VISIBILITY/.test(n.event_type)), `${w} ${id}`).toEqual([]);
     });
-    it.fails("QA-V2B-02 (MINOR): an owner request that changes NOTHING (same level, no list change) does not wake the RM group", async () => {
+    it("QA-V2B-02 (MINOR): an owner request that changes NOTHING (same level, no list change) does not wake the RM group", async () => {
       const c = await post("rm", "/actions", { title: "Plan noop QA", sourceType: "MANAGEMENT", responsibleUserId: UID.own, departmentId: I("201"), dueDate: "2027-06-30", visibility: "PERIMETRE" });
       const id = c.json.data.id as string;
       await vis("rm", `/actions/${id}`, "PERIMETRE", [UID.named]);

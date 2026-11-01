@@ -9,6 +9,7 @@ import type { CreateRiskInput, Risk, RiskVisibilityState, UpdateRiskInput } from
 import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
 import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 import { writeAudited } from "./auditedWrite.js";
+import { sameVisibilityState } from "./resourceVisibility.js";
 import type { RiskEscalation } from "../domain/entities/RiskEscalation.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -170,7 +171,7 @@ export class RiskService {
       }],
     );
     // q208 (DECISION-107): every change by the owner reaches the Risk Manager group, widening or restricting.
-    if (!holdsRight) {
+    if (!holdsRight && !sameVisibilityState(result.before, result.after)) {
       await this.notifyVisibilityChanged(actor, id, result.widening ?? isWidening(result.before, result.after), requestId);
     }
     return this.withNames(actor.tenantId, result.after);

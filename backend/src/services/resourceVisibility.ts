@@ -50,6 +50,12 @@ const RACI_WIDENED: Record<"RISK" | "CONTROL" | "ACTION_PLAN", OwnerEvent> = {
   ACTION_PLAN: { resourceType: "ACTION_PLAN", eventType: "ACTION_PLAN_VISIBILITY_WIDENED", message: "Une affectation RACI a ouvert la lecture d'un plan d'action restreint." },
 };
 
+/** Same level and same named people (order ignored). */
+export function sameVisibilityState(a: { visibility: string; accessUserIds: string[] }, b: { visibility: string; accessUserIds: string[] }): boolean {
+  return a.visibility === b.visibility && a.accessUserIds.length === b.accessUserIds.length
+    && a.accessUserIds.every((u) => b.accessUserIds.some((v) => sameUserId(u, v)));
+}
+
 export function sameUserId(a: string, b: string): boolean {
   const normalise = (id: string) => id.toLowerCase().replace(/[{}-]/g, "");
   return normalise(a) === normalise(b);
@@ -123,7 +129,8 @@ export class ResourceVisibilityManager {
       }],
     );
     // q208 (DECISION-107): every change by the owner reaches the Risk Manager group, widening or restricting.
-    if (!holdsRight) await this.notifyOwnerChange(actor, target, result.widening, requestId);
+    // QA-V2B-02: a request that changes nothing (same level, same list) does not wake the group.
+    if (!holdsRight && !sameVisibilityState(result.before, result.after)) await this.notifyOwnerChange(actor, target, result.widening, requestId);
     return this.withNames(actor.tenantId, result.after);
   }
 

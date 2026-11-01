@@ -52,3 +52,14 @@ Deux tests existants ont dû être mis à jour, légitimement, par la décision 
 - Les suites live qui reconstruisent chacune leur base peuvent tourner ensemble avec `--no-file-parallelism` (fait) ; elles partagent le port 55442 mais pas les bases ni les ports serveur.
 - Non couvert : charge de la liste (pas de pagination), upload de preuve (Drive absent), autre tenant pour les fonctions SQL (couvert en V1).
 - Retest après correction de QA-V2B-01/02 : `QA_VIS2B_LIVE=1 npx vitest run test/QA-visibility-v2bis.test.ts`, passer les 2 `it.fails` en `it`.
+
+## Corrections (orchestrateur, 2026-11-01)
+
+| Constat | Statut | Correction |
+|---|---|---|
+| QA-V2B-01 | **CORRIGÉ** | `PostgresRaciAssignmentRepository.create` : verrou consultatif transactionnel sur (client, entité, personne, rôle) et insertion refusée (409) si une affectation identique est active. Cinq requêtes simultanées donnent une ligne, un `PERMISSION_CHANGE` et une notification. Aucune migration (pas de dédoublonnage de données existantes). |
+| QA-V2B-02 | **CORRIGÉ** | Une demande du propriétaire qui ne change rien (même niveau, même liste) ne notifie plus le RM (`sameVisibilityState`, contrôles/anomalies/plans/KPI et risques). |
+| QA-V2B-03 | Reporté (UX) | Les messages d'erreur de l'API sont en anglais dans tout le projet ; la traduction relève d'un chantier transverse, pas de V2bis. |
+
+Retest : les 2 `it.fails` repassés en `it`. Suites live QA V1 + V2 + V2bis (`--no-file-parallelism`) : 252/252. `npm test` : 2741 verts.
+Points remontés au PO : groupe de département et désignation d'un propriétaire de risque (q212) ; pagination de la liste (suite V3).
