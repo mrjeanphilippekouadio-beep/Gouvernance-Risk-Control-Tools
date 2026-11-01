@@ -132,3 +132,21 @@ Test de garde du câblage `server.ts` présent.
 
 **Verdict après retest : VERT** pour livrer V2. Seul V2-03 reste ouvert, en attente d'une décision HUMAN (7bis).
 CLOSED ne vaut pas validation Risk, Compliance ou Privacy.
+
+## 8. Retest QA-VIS2 (commit 552858b, lecture de `git diff b4277c3..552858b -- backend/src`)
+
+Qualification A10 des constats QA (`docs/qa/qa-visibility-v2-2026-11-01.md`) et retest par lecture. La suite live QA est
+annoncée à 147/147 : non rejouée ici.
+
+| Constat | Qualification A10 | Retest |
+|---|---|---|
+| QA-VIS2-01 clôture d'un plan avec la preuve d'une exécution masquée | LOW 3,7 `AV:N/AC:H/PR:L/UI:N/S:U/C:L/I:L/A:N` (UUID de preuve à connaître : oracle d'existence + rattachement d'une preuve hors périmètre) | **RETEST_PASS** : `executionHidden` (contrôle masqué et lecteur non exécutant) → même 400 que pour une preuve inconnue. |
+| QA-VIS2-02 ids contrôle/exécution masqués dans une anomalie lisible | LOW 2,7 `AV:N/AC:L/PR:H/UI:N/S:U/C:L/I:N/A:N` (ids seuls, même famille que V1-05) | **RETEST_PASS** : `maskAnomalyParents` sur `get`/`list`/retour d'`updateStatus` et sur les anomalies ouvertes du tableau de bord (manager câblé dans `server.ts`). `hiddenExecutionIds` : SQL paramétré, tenant filtré, `control_visible_to` ; lecteur NULL = tout masqué sauf CLIENT (fail-closed). |
+| QA-VIS2-03 liens CONTROL/ANOMALY/KRI masqués listés | LOW 2,7 (même vecteur, ids seuls) | **RETEST_PASS** : `hiddenLinks` filtre risques, contrôles, anomalies et KRI (via leur risque) en lecture. |
+| QA-VIS2-04 perte des liens masqués au remplacement | INFO (intégrité ; conséquence du filtre 03, évitée dans le même commit) | **RETEST_PASS** : les liens masqués sont conservés côté serveur lors d'un remplacement (patron Codex P2). |
+
+Résidus INFO : `hiddenLinks` lit les KRI un par un (N requêtes, liste bornée) ; un KRI introuvable ou un dépôt absent
+n'est pas masqué (id seul, sans contenu ; dépôts câblés en production). QA-VIS2-05 (département inconnu → 400 au lieu de
+500) : sans incidence sécurité, PASS.
+
+**Verdict inchangé : VERT** pour livrer V2. Seul V2-03 reste ouvert (HUMAN).

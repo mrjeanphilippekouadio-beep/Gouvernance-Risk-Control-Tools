@@ -513,3 +513,8 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
   masqués à l'éditeur ; toute réponse (lecture ET mutation) passe par `maskCoveredRisks`/`maskRiskSource`/`withoutHiddenRisk`,
   l'audit garde la vérité. « Élargir » = ensembles effectifs réels (`risk_visible_to` avant/après sous verrou), pas un ordre
   de niveaux. Rejeu idempotent : comparer aussi la liste accordée à la création.
+- Lot V2 visibilité : une racine restreignable = fonction SQL `<root>_visible_to` (083) + `resourceVisibilityClause` ;
+  les enfants passent par `readerScope(actor)` ; toute sortie lisible masque aussi les ids de parents masqués (contrôle,
+  exécution, liens). Changement de périmètre d'une ressource restreinte = verrou + lecteurs avant/après + audit dans la
+  même transaction (`changePerimeter`). Piège vécu : un script d'édition qui s'arrête à mi-parcours laisse des fichiers à
+  moitié modifiés (INSERT sans `visibility`, SEC V2-01) — relire le diff complet avant de pousser.
