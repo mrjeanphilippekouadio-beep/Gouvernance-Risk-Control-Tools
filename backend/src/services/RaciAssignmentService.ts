@@ -1,5 +1,8 @@
 import { SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
 import { hiddenRiskIds } from "./riskVisibility.js";
+import type { ResourceVisibilityManager } from "./resourceVisibility.js";
+
+const AUDIT_ENTITY: Record<RaciEntityType, string> = { RISK: "Risk", CONTROL: "Control", ACTION_PLAN: "ActionPlan" };
 import type { RaciAssignmentRepository } from "../domain/repositories/RaciAssignmentRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -44,6 +47,8 @@ export class RaciAssignmentService {
     private readonly controls?: ControlRepository,
     private readonly actionPlans?: ActionPlanRepository,
     private readonly users?: UserRepository,
+    /** q207 (DECISION-107): an assignment that opens a restricted resource is reasoned, traced and reported. Wired in server.ts. */
+    private readonly access?: ResourceVisibilityManager,
   ) {}
 
   async assign(
@@ -53,6 +58,7 @@ export class RaciAssignmentService {
     userId: string,
     role: RaciRole,
     requestId: string,
+    reason?: string,
   ): Promise<RaciAssignment> {
     requirePermission(actor, "raci.assign");
 
@@ -73,7 +79,10 @@ export class RaciAssignmentService {
       throw new ValidationError("Target user does not exist in this tenant or is suspended");
     }
     await this.assertNoSelfRaConflict(actor.tenantId, entityType, entityId, actor.userId, userId, role);
+    // q207: does this assignment give the person read access to a restricted resource? (reason required outside the RM group)
+    const opening = this.access ? await this.access.guardRaciOpening(actor, entityType, entityId, userId, reason) : null;
 
+    let opened = false;
     const assignment = await this.raci.create({
       tenantId: actor.tenantId,
       entityType,
@@ -92,9 +101,23 @@ export class RaciAssignmentService {
         action: "CREATE",
         oldValue: null,
         newValue: assignment,
-        reason: null,
+        reason: opening?.reason ?? null,
         requestId,
       });
+      if (opening && (await this.access!.raciOpened(actor, entityType, entityId, userId))) {
+        opened = true;
+        await this.audit.record({
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: AUDIT_ENTITY[entityType],
+          entityId,
+          action: "PERMISSION_CHANGE",
+          oldValue: { raciUserId: userId, reads: false },
+          newValue: { raciUserId: userId, role, reads: true, widening: true, through: "RACI" },
+          reason: opening.reason,
+          requestId,
+        });
+      }
     } catch (auditError) {
       try {
         await this.raci.remove(actor.tenantId, assignment.id);
@@ -106,6 +129,7 @@ export class RaciAssignmentService {
       }
       throw auditError;
     }
+    if (opened && !opening!.holdsRight) await this.access!.notifyRaciOpening(actor, entityType, entityId, requestId);
 
     return assignment;
   }

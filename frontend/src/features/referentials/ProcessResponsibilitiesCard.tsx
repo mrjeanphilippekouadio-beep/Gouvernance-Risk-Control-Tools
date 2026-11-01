@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Button, Card, MessageBanner, StatusBadge } from "@djamo/design-system";
+import { Button, Card, FormField, MessageBanner, StatusBadge } from "@djamo/design-system";
 import { processesApi, type ProcessResponsibilities, type ResponsibilitiesInput } from "../../api/processes";
 import type { DirectoryEntry } from "../../api/users";
 import { AccountPicker, accountName, useGovernanceConfirm } from "../../design-system";
@@ -28,6 +28,7 @@ export function ProcessResponsibilitiesCard({ token, processId, accounts, canAss
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [reason, setReason] = useState("");
   const gov = useGovernanceConfirm();
 
   const load = useCallback(async () => {
@@ -46,6 +47,7 @@ export function ProcessResponsibilitiesCard({ token, processId, accounts, canAss
     try {
       await gov.run((c) => processesApi.setResponsibilities(token, processId, body, c));
       setNotice(done);
+      setReason("");
       await load();
       onChanged?.();
     } catch (err) {
@@ -62,6 +64,7 @@ export function ProcessResponsibilitiesCard({ token, processId, accounts, canAss
       if (next !== data[key]) body[key] = next;
     }
     if (Object.keys(body).length === 0) { setNotice("Aucun changement à enregistrer."); return; }
+    if (reason.trim()) body.reason = reason.trim();
     void send(body, "Responsabilités enregistrées.");
   }
 
@@ -94,6 +97,9 @@ export function ProcessResponsibilitiesCard({ token, processId, accounts, canAss
           accounts={accounts}
         />)}
         <p className="muted">Seuls des comptes actifs peuvent être désignés. Personne ne se désigne soi-même, sauf le champion dans une structure à une personne : le serveur demande alors une double confirmation avec motif.</p>
+        <FormField label="Motif" htmlFor="resp-reason" help="Demandé si le nouveau responsable lirait des ressources restreintes au périmètre.">
+          <input id="resp-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
+        </FormField>
         <Button type="submit" variant="primary" disabled={saving}>{saving ? "Envoi…" : "Enregistrer les responsabilités"}</Button>
       </form>}
     </>}

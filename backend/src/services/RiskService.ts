@@ -169,8 +169,9 @@ export class RiskService {
         requestId,
       }],
     );
-    if (!holdsRight && (result.widening ?? isWidening(result.before, result.after))) {
-      await this.notifyVisibilityWidened(actor, id, requestId);
+    // q208 (DECISION-107): every change by the owner reaches the Risk Manager group, widening or restricting.
+    if (!holdsRight) {
+      await this.notifyVisibilityChanged(actor, id, result.widening ?? isWidening(result.before, result.after), requestId);
     }
     return this.withNames(actor.tenantId, result.after);
   }
@@ -257,7 +258,7 @@ export class RiskService {
         }] : []),
       ],
     );
-    if (perimeter && widened(written) && !holdsRight) await this.notifyVisibilityWidened(actor, id, requestId);
+    if (perimeter && !holdsRight) await this.notifyVisibilityChanged(actor, id, widened(written), requestId);
     return withoutWidening(written);
   }
 
@@ -483,8 +484,9 @@ export class RiskService {
   }
 
   /** q199: best-effort, a notification failure never undoes the visibility change. Never names the risk content. */
-  private async notifyVisibilityWidened(actor: AuthenticatedUser, riskId: string, requestId: string): Promise<void> {
+  private async notifyVisibilityChanged(actor: AuthenticatedUser, riskId: string, widened: boolean, requestId: string): Promise<void> {
     if (!this.notifications || !this.users?.listWithPermission) return;
+    const eventType = widened ? "RISK_VISIBILITY_WIDENED" : "RISK_VISIBILITY_RESTRICTED";
     try {
       const managers = await this.users.listWithPermission(actor.tenantId, "resourcevisibility.set", actor.userId);
       for (const m of managers) {
@@ -493,12 +495,12 @@ export class RiskService {
           recipientUserId: m.id,
           resourceType: "RISK",
           resourceId: riskId,
-          eventType: "RISK_VISIBILITY_WIDENED",
-          message: "Le propriétaire d'un risque a élargi sa visibilité.",
+          eventType,
+          message: widened ? "Le propriétaire d'un risque a élargi sa visibilité." : "Le propriétaire d'un risque a modifié ou restreint sa visibilité.",
         });
       }
     } catch (err) {
-      console.error(`RISK_VISIBILITY_WIDENED ${riskId}: managers could not be notified (requestId ${requestId})`, err instanceof Error ? err.message : err);
+      console.error(`${eventType} ${riskId}: managers could not be notified (requestId ${requestId})`, err instanceof Error ? err.message : err);
     }
   }
 

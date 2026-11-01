@@ -23,8 +23,9 @@ export const raciApi = {
   list: (token: string, entityType: RaciEntityType, entityId: string) =>
     apiRequest<RaciAssignment[]>(`/api/v1/raci?${query(entityType, entityId)}`, { token }),
 
-  assign: (token: string, entityType: RaciEntityType, entityId: string, userId: string, role: RaciRole) =>
-    apiRequest<RaciAssignment>("/api/v1/raci", { method: "POST", body: { entityType, entityId, userId, role }, token }),
+  // q207: `reason` is required by the server when the assignment opens a restricted resource (author outside the RM group).
+  assign: (token: string, entityType: RaciEntityType, entityId: string, userId: string, role: RaciRole, reason?: string) =>
+    apiRequest<RaciAssignment>("/api/v1/raci", { method: "POST", body: { entityType, entityId, userId, role, ...(reason ? { reason } : {}) }, token }),
 
   revoke: (token: string, entityType: RaciEntityType, entityId: string, assignmentId: string) =>
     apiRequest<RaciAssignment>(`/api/v1/raci/${assignmentId}?${query(entityType, entityId)}`, {

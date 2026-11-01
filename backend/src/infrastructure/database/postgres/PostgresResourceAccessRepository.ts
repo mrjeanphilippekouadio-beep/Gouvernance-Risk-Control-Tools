@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import type {
+  RestrictedResourceRow,
   PerimeterChange,
   PerimeterChangeResult,
   ResourceAccessRepository,
@@ -63,6 +64,54 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
       [tenantId, ids],
     );
     return rows.map((r) => r.id);
+  }
+
+  async canRead(tenantId: string, type: RestrictableResource | "RISK", id: string, userId: string): Promise<boolean> {
+    const { rows } = await this.pool.query<{ ok: boolean }>(
+      `SELECT ${visibleToFunction(type)}($1, $2, $3) AS ok`,
+      [tenantId, id, userId],
+    );
+    return rows[0]?.ok === true;
+  }
+
+  async processOwnerGains(tenantId: string, processId: string, userId: string): Promise<Array<{ type: string; id: string }>> {
+    const { rows } = await this.pool.query<{ type: string; id: string }>(
+      `SELECT 'RISK' AS type, id FROM risks
+         WHERE tenant_id = $1 AND process_id = $2 AND deleted_at IS NULL AND visibility = 'PERIMETRE' AND NOT risk_visible_to($1, id, $3)
+       UNION ALL
+       SELECT 'CONTROL', id FROM controls
+         WHERE tenant_id = $1 AND process_id = $2 AND deleted_at IS NULL AND visibility = 'PERIMETRE' AND NOT control_visible_to($1, id, $3)
+       UNION ALL
+       SELECT 'KPI', id FROM kpis
+         WHERE tenant_id = $1 AND process_id = $2 AND deleted_at IS NULL AND visibility = 'PERIMETRE' AND NOT kpi_visible_to($1, id, $3)
+       ORDER BY 1, 2`,
+      [tenantId, processId, userId],
+    );
+    return rows;
+  }
+
+  async listRestricted(tenantId: string): Promise<RestrictedResourceRow[]> {
+    const { rows } = await this.pool.query<{ type: RestrictedResourceRow["type"]; id: string; label: string; visibility: Visibility; access_count: string; updated_at: Date }>(
+      `WITH restricted AS (
+         SELECT 'RISK' AS type, id, left(description, 160) AS label, visibility, updated_at FROM risks
+           WHERE tenant_id = $1 AND deleted_at IS NULL AND visibility <> 'CLIENT'
+         UNION ALL SELECT 'CONTROL', id, label, visibility, updated_at FROM controls
+           WHERE tenant_id = $1 AND deleted_at IS NULL AND visibility <> 'CLIENT'
+         UNION ALL SELECT 'ANOMALY', id, left(description, 160), visibility, updated_at FROM anomalies
+           WHERE tenant_id = $1 AND visibility <> 'CLIENT'
+         UNION ALL SELECT 'ACTION_PLAN', id, title, visibility, updated_at FROM action_plans
+           WHERE tenant_id = $1 AND visibility <> 'CLIENT'
+         UNION ALL SELECT 'KPI', id, label, visibility, updated_at FROM kpis
+           WHERE tenant_id = $1 AND deleted_at IS NULL AND visibility <> 'CLIENT'
+       )
+       SELECT r.type, r.id, r.label, r.visibility, r.updated_at,
+              (SELECT count(*) FROM resource_access_grants g
+                WHERE g.tenant_id = $1 AND g.resource_type = r.type AND g.resource_id = r.id AND g.revoked_at IS NULL) AS access_count
+       FROM restricted r
+       ORDER BY r.updated_at DESC, r.id`,
+      [tenantId],
+    );
+    return rows.map((r) => ({ type: r.type, id: r.id, label: r.label, visibility: r.visibility, accessCount: Number(r.access_count), updatedAt: r.updated_at }));
   }
 
   async hiddenExecutionIds(tenantId: string, ids: string[], scope: ReadScope): Promise<string[]> {

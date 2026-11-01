@@ -38,6 +38,7 @@ export function RaciPanel({ token, entityType, entityId }: RaciPanelProps) {
   const [readOnly, setReadOnly] = useState(false);
   const [role, setRole] = useState<RaciRole>("R");
   const [userId, setUserId] = useState("");
+  const [reason, setReason] = useState("");
 
   async function refresh() {
     setLoading(true);
@@ -66,8 +67,9 @@ export function RaciPanel({ token, entityType, entityId }: RaciPanelProps) {
     if (!userId.trim()) return;
     setError(null);
     try {
-      await raciApi.assign(token, entityType, entityId, userId.trim(), role);
+      await raciApi.assign(token, entityType, entityId, userId.trim(), role, reason.trim() || undefined);
       setUserId("");
+      setReason("");
       await refresh();
     } catch (err) {
       // Covers SEC-016: backend rejects self R+A with a ForbiddenError
@@ -174,6 +176,9 @@ export function RaciPanel({ token, entityType, entityId }: RaciPanelProps) {
                 required
               />
             )}
+          </FormField>
+          <FormField label="Motif" htmlFor="raci-reason" help="Demandé si cette personne ne voit pas encore une ressource restreinte.">
+            <input id="raci-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
           </FormField>
           <Button type="submit" variant="primary">
             Ajouter

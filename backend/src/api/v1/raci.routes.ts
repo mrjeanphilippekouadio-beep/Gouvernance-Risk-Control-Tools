@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { reasonText } from "../validation.js";
 import type { RaciAssignmentService } from "../../services/RaciAssignmentService.js";
 import { RACI_ENTITY_TYPES, type RaciEntityType, type RaciRole } from "../../domain/entities/RaciAssignment.js";
 
@@ -11,6 +12,8 @@ const AssignBody = z.object({
   entityId: z.string().min(1),
   userId: z.string().min(1),
   role: RaciRoleSchema,
+  /** q207: required by the service when the assignment opens a restricted resource and the author is outside the RM group. */
+  reason: reasonText(500).optional(),
 });
 
 /** Lot 1 RACI minimal — mounted at /api/v1/raci by server.ts. */
@@ -38,6 +41,7 @@ export function raciRouter(raciService: RaciAssignmentService): Router {
         body.userId,
         body.role as RaciRole,
         req.requestId,
+        body.reason,
       );
       res.status(201).json({ data: assignment });
     } catch (err) {
