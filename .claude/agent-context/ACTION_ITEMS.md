@@ -439,7 +439,7 @@ pour l'usage.
 | HUMAN @compliance @security @dev-backend | **q208 (cockpit)** — I-6 (lot V2) : le responsable d'un plan et le déclarant d'une anomalie (réglage propre) sont traités comme propriétaires (lisent toujours, modifient le niveau). A10 : acceptable. A14 (CMP-V2-02, condition de production) : oui, à condition de notifier le RM de tout changement par le propriétaire dans les deux sens (restriction comprise) et d'offrir une liste consultable des ressources restreintes (A, recommandé) ; ou garder la notification sur élargissement seul (B, construit). | 2026-11-01 | **Décidé** (DECISION-107) — A : à construire avant production (A06) |
 | HUMAN @compliance | **q209 (cockpit)** — CMP Q3 : le Comité et l'Audit reçoivent-ils aussi les notifications d'élargissement ? Non, un compteur et une liste consultable suffisent (A, recommandé, lot V3) ou oui (B). | 2026-11-01 | **Fermé** (DECISION-107) — A : compteur + liste en V3 |
 | HUMAN @orchestrator | **q210 (cockpit)** — fusionner la PR #223 (lot V2 visibilité, migration 083) dans staging (A, recommandé) ou attendre (B). | 2026-11-01 | **Fermé** (DECISION-107) — PR #223 fusionnée, 083 appliquée sur staging |
-| HUMAN @orchestrator @dev-backend | **q211 (cockpit)** — lancer maintenant le lot V2bis (q207 + q208, condition de production de V2) puis V3/V4 (A, recommandé), intégrer q207/q208 à V3 (B) ou attendre (C). | 2026-11-01 | **Ouvert — HUMAN : q211** |
+| HUMAN @orchestrator @dev-backend | **q211 (cockpit)** — lancer maintenant le lot V2bis (q207 + q208, condition de production de V2) puis V3/V4 (A, recommandé), intégrer q207/q208 à V3 (B) ou attendre (C). | 2026-11-01 | **Fermé** (DECISION-108) — V2bis lancé (`feat/r1-visibility-v2bis`) |
 | @dev-backend @security | **Lot V2 visibilité** — `feat/r1-visibility-v2` (migration 083) : QA ORANGE→corrigé (QA-VIS2-01..06, 147/147), Sécurité VERT après retest (V2-01/02/04 corrigés), Compliance conforme avec réserves (CMP-V2-01 corrigé ; CMP-V2-02 → q208). Info A10 : sur contrôle/KPI, périmètre et autres champs en deux transactions ; niveau « restreint » lu avant verrou. | 2026-11-01 | **Fait** — PR #223 fusionnée (65007ad), migrate.yml : 083 appliquée sur staging. Suite : q207/q208 (A06), V3, V4 |
 | HUMAN @dev-backend | **Résidus visibilité V1 (SEC-visibility-v1, retest vert)** : V1-05 LOW (ids de risques masqués dans la vue département, actions en retard de la vue exécutive, contrôles du contexte d'évaluation) et V1-03 (texte des anomalies/plans liés à un risque masqué, compteur d'anomalies de la vue exécutive) — acceptés jusqu'à V2, à corriger dans V2. | 2026-11-01 | **Ouvert — V2** |
 ## Decision Log
@@ -2558,4 +2558,16 @@ DECISION (PO, cockpit) : q207 A — un ajout au RACI ou un nouveau
 RELATED: q207-q210, SEC V2-03, CMP-V2-02/03, DECISION-104/105.
 OWNER: @orchestrator @dev-backend @security @compliance
 STATUS: DÉCIDÉ — q210 fait ; q207/q208 à construire (prochain lot), q209 en V3.
+
+DECISION-108
+DATE: 2026-11-01
+DECISION (PO, cockpit) : q211 A — lancer maintenant le lot V2bis (q207 :
+  motif, trace « élargissement » et notification RM pour un ajout RACI ou
+  un changement de responsable de processus qui ouvre la lecture d'une
+  ressource restreinte ; q208 : RM notifié dans les deux sens + liste
+  consultable des ressources restreintes), puis V3 et V4. Consigne
+  permanente associée : toujours répondre en français.
+RELATED: q207, q208, q211, DECISION-107.
+OWNER: @orchestrator @dev-backend
+STATUS: EN COURS — V2bis.
 ```
