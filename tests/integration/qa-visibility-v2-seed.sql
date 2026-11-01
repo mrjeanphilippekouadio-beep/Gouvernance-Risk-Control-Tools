@@ -19,8 +19,8 @@ INSERT INTO raci_assignments (tenant_id, entity_type, entity_id, user_id, role, 
  VALUES (:T, 'CONTROL', 'aaaaaaaa-0000-4000-8000-000000000c02', :RACI, 'C', :OWN);
 -- Executions (0b01 : executant `out` = « assigne » ; les autres : `own`), efficacite, preuves (0f04 : sans execution = niveau 1).
 INSERT INTO control_executions (id, tenant_id, control_id, planned_date, executed_by, status, observed_anomalies) VALUES
- ('aaaaaaaa-0000-4000-8000-000000000b01', :T, 'aaaaaaaa-0000-4000-8000-000000000c02', current_date, :OUT, 'DONE', 'CANARY-V2-EXEC-PERIM-ASSIGNED'),
- ('aaaaaaaa-0000-4000-8000-000000000b02', :T, 'aaaaaaaa-0000-4000-8000-000000000c02', current_date, :OWN, 'DONE', 'CANARY-V2-EXEC-PERIM'),
+ ('aaaaaaaa-0000-4000-8000-000000000b01', :T, 'aaaaaaaa-0000-4000-8000-000000000c02', current_date, :OUT, 'DONE', 'CANARY-V2-EXEC-ASSIGNED-PERIM'),
+ ('aaaaaaaa-0000-4000-8000-000000000b02', :T, 'aaaaaaaa-0000-4000-8000-000000000c02', current_date, :OWN, 'DONE', 'CANARY-V2-EXEC-OWN-PERIM'),
  ('aaaaaaaa-0000-4000-8000-000000000b03', :T, 'aaaaaaaa-0000-4000-8000-000000000c03', current_date, :OWN, 'DONE', 'CANARY-V2-EXEC-NOMIN'),
  ('aaaaaaaa-0000-4000-8000-000000000b04', :T, 'aaaaaaaa-0000-4000-8000-000000000c01', current_date, :OWN, 'DONE', 'CANARY-V2-EXEC-CLIENT');
 INSERT INTO control_effectiveness_assessments (id, tenant_id, control_id, evaluated_by, operational_effectiveness, justification) VALUES
@@ -35,7 +35,7 @@ INSERT INTO evidences (id, tenant_id, control_execution_id, file_name, drive_fil
 -- Anomalies. 0d02 : declarant `out` d'une anomalie sur un risque masque. 0d08 : niveau propre NOMINATIF mais risque CLIENT (le niveau propre ne s'applique pas).
 INSERT INTO anomalies (id, tenant_id, risk_id, control_id, description, severity, detected_by, visibility) VALUES
  ('aaaaaaaa-0000-4000-8000-000000000d01', :T, 'aaaaaaaa-0000-4000-8000-000000000502', NULL, 'CANARY-V2-ANO-RISKHID', 'LOW', :OWN, 'CLIENT'),
- ('aaaaaaaa-0000-4000-8000-000000000d02', :T, 'aaaaaaaa-0000-4000-8000-000000000502', NULL, 'CANARY-V2-ANO-RISKHID-DECLARER', 'LOW', :OUT, 'CLIENT'),
+ ('aaaaaaaa-0000-4000-8000-000000000d02', :T, 'aaaaaaaa-0000-4000-8000-000000000502', NULL, 'CANARY-V2-ANO-DECL-RISKHID', 'LOW', :OUT, 'CLIENT'),
  ('aaaaaaaa-0000-4000-8000-000000000d03', :T, NULL, 'aaaaaaaa-0000-4000-8000-000000000c02', 'CANARY-V2-ANO-CTL', 'LOW', :OWN, 'CLIENT'),
  ('aaaaaaaa-0000-4000-8000-000000000d04', :T, NULL, NULL, 'CANARY-V2-ANO-PERIM', 'LOW', :DEPT, 'PERIMETRE'),
  ('aaaaaaaa-0000-4000-8000-000000000d05', :T, NULL, NULL, 'CANARY-V2-ANO-NOMIN', 'LOW', :OWN, 'NOMINATIF'),
@@ -51,7 +51,7 @@ INSERT INTO action_plans (id, tenant_id, title, source_type, source_id, responsi
  ('aaaaaaaa-0000-4000-8000-000000000a06', :T, 'CANARY-V2-PLAN-PERIM', 'MANAGEMENT', NULL, :OWN, current_date + 30, :OWN, :FIN, 'PERIMETRE'),
  ('aaaaaaaa-0000-4000-8000-000000000a07', :T, 'CANARY-V2-PLAN-NOMIN', 'MANAGEMENT', NULL, :OWN, current_date + 30, :OWN, :FIN, 'NOMINATIF'),
  ('aaaaaaaa-0000-4000-8000-000000000a08', :T, 'CANARY-V2-PLAN-CLIENT', 'MANAGEMENT', NULL, :OWN, current_date + 30, :OWN, :FIN, 'CLIENT'),
- ('aaaaaaaa-0000-4000-8000-000000000a09', :T, 'CANARY-V2-PLAN-ASSIGNED-NOMIN', 'MANAGEMENT', NULL, :OUT, current_date + 30, :OWN, :FIN, 'NOMINATIF');
+ ('aaaaaaaa-0000-4000-8000-000000000a09', :T, 'CANARY-V2-PLAN-OUTNOM', 'MANAGEMENT', NULL, :OUT, current_date + 30, :OWN, :FIN, 'NOMINATIF');
 INSERT INTO raci_assignments (tenant_id, entity_type, entity_id, user_id, role, created_by)
  VALUES (:T, 'ACTION_PLAN', 'aaaaaaaa-0000-4000-8000-000000000a06', :RACI, 'C', :OWN);
 -- KPI : CLIENT / PERIMETRE (Finance + processus) / NOMINATIF + une mesure chacun.
