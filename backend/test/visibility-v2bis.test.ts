@@ -85,10 +85,10 @@ describe("q207 / q208 — process owner and list of restricted resources", () =>
     await expect(w.manager.guardProcessOwnerOpening(actor(RM, ["resourcevisibility.set"]), "p1", TARGET, undefined)).resolves.toMatchObject({ reason: null, holdsRight: true });
   });
 
-  it("the list of restricted resources is for the Risk Manager group only", async () => {
+  it("the list of restricted resources is for the groups that see everything (PRIV-V3-01: membership, never a permission alone)", async () => {
     const w = world(true);
     await expect(w.manager.listRestricted(actor(EDITOR))).rejects.toBeInstanceOf(ForbiddenError);
-    await expect(w.manager.listRestricted(actor(RM, ["resourcevisibility.set"]))).resolves.toEqual([]);
+    await expect(w.manager.listRestricted(actor(RM, ["resourcevisibility.set"]))).rejects.toBeInstanceOf(ForbiddenError);
   });
 });
 

@@ -37,10 +37,20 @@ describe("V3 — « X éléments non visibles » (q196, q198)", () => {
 });
 
 describe("V3 — list of the restricted resources (q209)", () => {
-  it("Risk Manager group (resourcevisibility.set) or a group that sees everything (Committee, Audit); anyone else 403", async () => {
+  it("members of a group that sees everything (Risk Manager, Committee, Audit); a permission alone is not enough (PRIV-V3-01)", async () => {
     await expect(manager().m.listRestricted(actor(READER, ["risk.read"]))).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(manager().m.listRestricted(actor(RM, ["resourcevisibility.set"]))).rejects.toBeInstanceOf(ForbiddenError);
     await expect(manager({ seesEverything: vi.fn(async () => true) }).m.listRestricted(actor(READER))).resolves.toEqual([]);
-    await expect(manager().m.listRestricted(actor(RM, ["resourcevisibility.set"]))).resolves.toEqual([]);
+  });
+
+  it("PRIV-V3-05: the author of the last change is shown (by name) to the Risk Manager group and Audit, never to the Committee", async () => {
+    const row = { type: "RISK", id: "r1", label: "l", visibility: "PERIMETRE", accessCount: 0, updatedAt: new Date(),
+      lastChange: { userId: RM, at: new Date(), reason: "Motif", widening: false } };
+    const over = { seesEverything: vi.fn(async () => true), listRestricted: vi.fn(async () => [row]) };
+    const committee = await manager(over).m.listRestricted(actor(READER, ["riskevaluation.validate.committee"]));
+    expect(committee[0]!.lastChange).toEqual({ at: row.lastChange.at, reason: "Motif", widening: false });
+    const audit = await manager(over).m.listRestricted(actor(READER, ["audit.read"]));
+    expect(audit[0]!.lastChange).toMatchObject({ userId: RM, reason: "Motif" });
   });
 });
 
