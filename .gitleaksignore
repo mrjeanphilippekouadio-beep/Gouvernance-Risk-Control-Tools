@@ -1,0 +1,3 @@
+# Valeur de test factice (jamais un vrai secret) dans un script QA local, remplacée par une valeur aléatoire
+# générée à l'exécution au commit suivant ; l'empreinte reste dans l'historique de la PR #222.
+6b8410640d8f40100208ba3afa82c994ae2a0519:tests/integration/qa-visibility-v1-server.sh:generic-api-key:13
