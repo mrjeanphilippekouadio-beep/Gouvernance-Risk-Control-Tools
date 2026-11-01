@@ -434,11 +434,11 @@ pour l'usage.
 | @dev-backend @dev-db | **Visibilité — à lever avant V1 (SEC-visibility-v0)** : V0-01 (scope absent = pas de filtre → fail-closed), V0-02 (tableaux de bord, rapports, cartographie, `?coveringRiskId=`, vues 360, KRI/KPI, `ActionPlanService.dashboard` non filtrés), V0-04 (KPI `requireKpi` et validations de liens), V0-06/07 INFO ; retest A10 avant de livrer V1. | 2026-10-29 | **Ouvert** |
 | HUMAN @dev-backend @risk-manager | **q204 (cockpit)** — notifier le Risk Manager à chaque élargissement par le propriétaire (A, construit ainsi en V1) ou seulement si la restriction venait du RM (B). | 2026-11-01 | **Fermé** (DECISION-105) |
 | HUMAN @privacy @security @dev-backend | **q205 (cockpit)** — annuaire pour nommer des personnes à la création d'un risque : ouvrir à tout créateur/modificateur de risque après avis Privacy (A, recommandé) ou réserver au RM et détenteurs actuels (B). | 2026-11-01 | **Décidé** (DECISION-105) — avis Privacy puis code dans V1 |
-| HUMAN @security @dev-backend | **q206 (cockpit)** — portée de q203 : seule la lecture du journal d'audit réservée au groupe Audit (A, construit ainsi) ou aussi missions et constats (B). | 2026-11-01 | **Ouvert — HUMAN : q206** |
+| HUMAN @security @dev-backend | **q206 (cockpit)** — portée de q203 : seule la lecture du journal d'audit réservée au groupe Audit (A, construit ainsi) ou aussi missions et constats (B). | 2026-11-01 | **Fermé** (DECISION-106) — A, déjà construit ainsi |
 | HUMAN @security @dev-backend @compliance | **q207 (cockpit)** — SEC V2-03 / CMP-V2-03 : sur une ressource « Restreint au périmètre » (risques depuis V1, et V2), ajouter quelqu'un au RACI ou changer le responsable du processus lui ouvre la lecture sans motif, sans `widening` ni notification. Garder RACI comme critère mais exiger motif + `widening` + notification RM pour un ajout par un non-RM (A, recommandé par A10 et A14) ou accepter le résidu (B). | 2026-11-01 | **Ouvert — HUMAN : q207** |
 | HUMAN @compliance @security @dev-backend | **q208 (cockpit)** — I-6 (lot V2) : le responsable d'un plan et le déclarant d'une anomalie (réglage propre) sont traités comme propriétaires (lisent toujours, modifient le niveau). A10 : acceptable. A14 (CMP-V2-02, condition de production) : oui, à condition de notifier le RM de tout changement par le propriétaire dans les deux sens (restriction comprise) et d'offrir une liste consultable des ressources restreintes (A, recommandé) ; ou garder la notification sur élargissement seul (B, construit). | 2026-11-01 | **Ouvert — HUMAN : q208** |
 | HUMAN @compliance | **q209 (cockpit)** — CMP Q3 : le Comité et l'Audit reçoivent-ils aussi les notifications d'élargissement ? Non, un compteur et une liste consultable suffisent (A, recommandé, lot V3) ou oui (B). | 2026-11-01 | **Ouvert — HUMAN : q209** |
-| @dev-backend @security | **Lot V2 visibilité** — `feat/r1-visibility-v2` (migration 083) : QA ORANGE→corrigé (QA-VIS2-01..06, 147/147), Sécurité VERT après retest (V2-01/02/04 corrigés), Compliance conforme avec réserves (CMP-V2-01 corrigé ; CMP-V2-02 → q208). Info A10 : sur contrôle/KPI, périmètre et autres champs en deux transactions ; niveau « restreint » lu avant verrou. | 2026-11-01 | En cours — PR après retest A10 QA-VIS2 |
+| @dev-backend @security | **Lot V2 visibilité** — `feat/r1-visibility-v2` (migration 083) : QA ORANGE→corrigé (QA-VIS2-01..06, 147/147), Sécurité VERT après retest (V2-01/02/04 corrigés), Compliance conforme avec réserves (CMP-V2-01 corrigé ; CMP-V2-02 → q208). Info A10 : sur contrôle/KPI, périmètre et autres champs en deux transactions ; niveau « restreint » lu avant verrou. | 2026-11-01 | QA et Sécurité VERT (retest QA-VIS2 fait) — PR vers staging, fusion sur accord PO |
 | HUMAN @dev-backend | **Résidus visibilité V1 (SEC-visibility-v1, retest vert)** : V1-05 LOW (ids de risques masqués dans la vue département, actions en retard de la vue exécutive, contrôles du contexte d'évaluation) et V1-03 (texte des anomalies/plans liés à un risque masqué, compteur d'anomalies de la vue exécutive) — acceptés jusqu'à V2, à corriger dans V2. | 2026-11-01 | **Ouvert — V2** |
 ## Decision Log
 
@@ -2531,4 +2531,13 @@ DECISION (PO, cockpit) : q204 A — le Risk Manager est prévenu à chaque
 RELATED: q199, q204, q205, DECISION-097 (annuaire élargi à role.read), D6/R5.
 OWNER: @orchestrator @privacy @dev-backend
 STATUS: DÉCIDÉ — q204 fait ; q205 après avis Privacy, dans la PR V1.
+
+DECISION-106
+DATE: 2026-11-01
+DECISION (PO, cockpit) : q206 A — seule la lecture du journal d'audit est
+  réservée au groupe Audit (portée de q203) ; missions et constats d'audit
+  restent attribuables à d'autres rôles. Aucun code : construit ainsi en V1.
+RELATED: q203, q206, DECISION-104, SEC V0-03.
+OWNER: @orchestrator @security
+STATUS: DÉCIDÉ — rien à construire.
 ```
