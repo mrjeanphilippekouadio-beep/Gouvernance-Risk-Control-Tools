@@ -131,7 +131,7 @@ import { GovernanceDesignationService } from "./services/GovernanceDesignationSe
 import { PostgresGovernanceDesignationRepository } from "./infrastructure/database/postgres/PostgresGovernanceDesignationRepository.js";
 import { feedbackRouter } from "./api/v1/feedback.routes.js";
 import { kpisRouter } from "./api/v1/kpis.routes.js";
-import { restrictedResourcesRouter } from "./api/v1/restrictedResources.routes.js";
+import { hiddenCountsRouter, restrictedResourcesRouter } from "./api/v1/restrictedResources.routes.js";
 import { kpiMeasuresRouter } from "./api/v1/kpiMeasures.routes.js";
 import { riskAppetiteRouter } from "./api/v1/riskAppetite.routes.js";
 import { ratingScalesRouter } from "./api/v1/ratingScales.routes.js";
@@ -245,6 +245,8 @@ const notifier =
     ? new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID)
     : new NoopNotifier();
 
+// Lot V2 (DECISION-100/102): level and named-people list of controls, anomalies, action plans and KPIs.
+const resourceVisibilityManager = new ResourceVisibilityManager(new PostgresResourceAccessRepository(pool), auditRepository, userRepository, notificationRepository);
 const riskService = new RiskService(
   riskRepository,
   auditRepository,
@@ -255,13 +257,12 @@ const riskService = new RiskService(
   processRepository,
   visibilityResolver,
   notificationRepository,
+  resourceVisibilityManager,
 );
 const departmentService = new DepartmentService(departmentRepository, auditRepository, processRepository);
 // DECISION-074 D4: one gate for every self-validation guard, one query object for validators / third parties / markers.
 const governanceQueries = new PostgresGovernanceQueries(pool);
 const selfValidationGate = new SelfValidationGate(configRepository, governanceQueries);
-// Lot V2 (DECISION-100/102): level and named-people list of controls, anomalies, action plans and KPIs.
-const resourceVisibilityManager = new ResourceVisibilityManager(new PostgresResourceAccessRepository(pool), auditRepository, userRepository, notificationRepository);
 const processService = new ProcessService(
   processRepository,
   auditRepository,
@@ -315,7 +316,7 @@ const findingService = new FindingService(
 const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
 const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
 const governanceDesignationRepository = new PostgresGovernanceDesignationRepository(pool);
-const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository, governanceDesignationRepository, new PostgresSensitiveViewGrantRepository(pool));
+const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository, governanceDesignationRepository, new PostgresSensitiveViewGrantRepository(pool), resourceVisibilityManager);
 const governanceDesignationService = new GovernanceDesignationService(governanceDesignationRepository, auditRepository, userRepository, roleRepository, governanceQueries, configRepository);
 // Lot D5: reviews, principle acceptances, and the mandatory governance notifications (emitted after commit, see the middleware).
 const governanceExceptionService = new GovernanceExceptionService(new PostgresGovernanceExceptionReviewRepository(pool), auditRepository);
@@ -631,6 +632,8 @@ app.use(
 );
 // q208 (DECISION-107): list of the restricted resources, Risk Manager group only (checked by the service).
 app.use("/api/v1/restricted-resources", authMiddleware(identityProvider), restrictedResourcesRouter(resourceVisibilityManager));
+// V3 (q196, q198): hidden PERIMETRE counts of the reader (null for the groups that see everything).
+app.use("/api/v1/hidden-counts", authMiddleware(identityProvider), hiddenCountsRouter(resourceVisibilityManager));
 app.use("/api/v1/kpi-measures", authMiddleware(identityProvider), kpiMeasuresRouter(kpiMeasureService));
 app.use("/api/v1/appetite", authMiddleware(identityProvider), riskAppetiteRouter(riskAppetiteService));
 app.use("/api/v1/rating-scales", authMiddleware(identityProvider), ratingScalesRouter(ratingScaleService));

@@ -23,6 +23,7 @@ function world(readsBefore: boolean, readsAfter = true) {
     canRead: vi.fn(async () => (created ? readsAfter : readsBefore)),
     processOwnerGains: vi.fn(async () => []),
     listRestricted: vi.fn(async () => []),
+    seesEverything: vi.fn(async () => false),
   } as unknown as ResourceAccessRepository;
   const notifications = { create: vi.fn(async (n: unknown) => n) };
   const users = {

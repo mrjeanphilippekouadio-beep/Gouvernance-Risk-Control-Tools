@@ -9,7 +9,7 @@ import type { CreateRiskInput, Risk, RiskVisibilityState, UpdateRiskInput } from
 import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
 import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 import { writeAudited } from "./auditedWrite.js";
-import { sameVisibilityState } from "./resourceVisibility.js";
+import { sameVisibilityState, type ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { RiskEscalation } from "../domain/entities/RiskEscalation.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -53,7 +53,36 @@ export class RiskService {
     private readonly visibility?: VisibilityResolver,
     /** Lot V1 (q199): notifies the Risk Manager group when an owner widens a risk. Optional: absent = no notification. */
     private readonly notifications?: Pick<NotificationRepository, "create">,
+    /** q212 (DECISION-109): a designation that opens a restricted risk is reasoned, traced and reported. Wired in server.ts. */
+    private readonly access?: ResourceVisibilityManager,
   ) {}
+
+  /** q212: before a designation, whether it opens the restricted risk (reason required outside the RM group). */
+  private async designationOpening(actor: AuthenticatedUser, risk: Risk, userId: string | null, reason: string | undefined) {
+    if (!userId || !this.access || (risk.visibility ?? "CLIENT") === "CLIENT") return null;
+    return this.access.guardRiskDesignationOpening(actor, risk.id, userId, reason);
+  }
+
+  private async recordDesignationOpening(
+    actor: AuthenticatedUser,
+    riskId: string,
+    opening: { reason: string | null; holdsRight: boolean },
+    designated: { role: "owner" | "superior owner"; userId: string },
+    requestId: string,
+  ): Promise<void> {
+    await this.audit.record({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      entityType: "Risk",
+      entityId: riskId,
+      action: "PERMISSION_CHANGE",
+      oldValue: { designatedUserId: designated.userId, reads: false },
+      newValue: { designatedUserId: designated.userId, as: designated.role, reads: true, widening: true, through: "DESIGNATION" },
+      reason: opening.reason,
+      requestId,
+    });
+    if (!opening.holdsRight) await this.access!.notifyRiskDesignationOpening(actor, riskId, requestId);
+  }
 
   async create(
     actor: AuthenticatedUser,
@@ -309,7 +338,7 @@ export class RiskService {
    * client-supplied id that could point at another tenant's user, or a
    * suspended one).
    */
-  async assignOwner(actor: AuthenticatedUser, id: string, ownerId: string | null, requestId: string): Promise<Risk> {
+  async assignOwner(actor: AuthenticatedUser, id: string, ownerId: string | null, requestId: string, reason?: string): Promise<Risk> {
     requirePermission(actor, "risk.owner.assign");
     const before = await this.get(actor, id);
 
@@ -322,6 +351,7 @@ export class RiskService {
         throw new ValidationError("The risk owner cannot be the same person as the superior owner (N+1)");
       }
     }
+    const opening = await this.designationOpening(actor, before, ownerId, reason);
 
     const after = await this.risks.assignOwner(actor.tenantId, id, ownerId);
 
@@ -333,9 +363,10 @@ export class RiskService {
       action: "ASSIGN",
       oldValue: before,
       newValue: after,
-      reason: null,
+      reason: opening?.reason ?? null,
       requestId,
     });
+    if (opening && ownerId) await this.recordDesignationOpening(actor, id, opening, { role: "owner", userId: ownerId }, requestId);
 
     // ACT-121: best-effort broadcast on reassignment — never blocks the write.
     if (this.notifier && before.ownerId !== after.ownerId) {
@@ -365,6 +396,7 @@ export class RiskService {
     id: string,
     superiorOwnerId: string | null,
     requestId: string,
+    reason?: string,
   ): Promise<Risk> {
     requirePermission(actor, "risk.owner.assign");
     const before = await this.get(actor, id);
@@ -378,6 +410,7 @@ export class RiskService {
         throw new ValidationError("The superior owner (N+1) cannot be the same person as the risk owner");
       }
     }
+    const opening = await this.designationOpening(actor, before, superiorOwnerId, reason);
 
     const after = await this.risks.assignSuperiorOwner(actor.tenantId, id, superiorOwnerId);
 
@@ -389,9 +422,12 @@ export class RiskService {
       action: "ASSIGN",
       oldValue: before,
       newValue: after,
-      reason: null,
+      reason: opening?.reason ?? null,
       requestId,
     });
+    if (opening && superiorOwnerId) {
+      await this.recordDesignationOpening(actor, id, opening, { role: "superior owner", userId: superiorOwnerId }, requestId);
+    }
 
     return after;
   }

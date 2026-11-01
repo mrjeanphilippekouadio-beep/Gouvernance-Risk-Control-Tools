@@ -1,4 +1,5 @@
 import type { RoleRepository, RoleUpdateRecheck } from "../domain/repositories/RoleRepository.js";
+import type { ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
@@ -180,6 +181,8 @@ export class RoleService {
     private readonly designations?: Pick<GovernanceDesignationRepository, "getActive">,
     /** q200 (DECISION-103): individual grants of role.read.sensitive; absent = nobody holds it (fail closed). */
     private readonly sensitiveViews?: SensitiveViewGrantRepository,
+    /** q212 (DECISION-109): a department-group assignment that opens restricted resources is reasoned, traced, reported. */
+    private readonly access?: ResourceVisibilityManager,
   ) {}
 
   private readonly grantorsSeen = new Set<string>();
@@ -628,6 +631,10 @@ export class RoleService {
     }
     const pre = await this.assertAssignable(actor, roleId, userId, reason);
     const { role } = pre;
+    // q212: joining a department's group opens its PERIMETRE resources; outside the RM group a reason is required.
+    const opening = role.departmentId && this.access
+      ? await this.access.guardDepartmentGroupOpening(actor, role.departmentId, userId, reason)
+      : null;
     let { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul, createsAdminAuditCumul } = pre;
 
     // F-B8s-01: the check above may be stale; the repository replays it under the user + role locks.
@@ -647,9 +654,23 @@ export class RoleService {
       action: "ROLE_CHANGE",
       oldValue: null,
       newValue: { ...assignment, roleName: role.name },
-      reason: cleanReason,
+      reason: cleanReason ?? opening?.reason ?? null,
       requestId,
     });
+    if (opening) {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Role",
+        entityId: roleId,
+        action: "PERMISSION_CHANGE",
+        oldValue: { userId, reads: [] },
+        newValue: { userId, departmentId: role.departmentId, widening: true, through: "DEPARTMENT_GROUP", opened: opening.opened },
+        reason: opening.reason,
+        requestId,
+      });
+      if (!opening.holdsRight) await this.access!.notifyDepartmentGroupOpening(actor, roleId, requestId);
+    }
 
     // q63: administrator + Risk Manager cumul -> Audit and Committee members. q65: Committee entry -> Audit members.
     if (createsAdminRiskManagerCumul) await this.notifyAdminCumul(actor, userId, "Risk Manager", requestId);

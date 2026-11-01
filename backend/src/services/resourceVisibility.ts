@@ -2,6 +2,7 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type {
+  HiddenCounts,
   RestrictedResourceRow,
   PerimeterChange,
   PerimeterChangeResult,
@@ -253,6 +254,58 @@ export class ResourceVisibilityManager {
     return { reason, holdsRight, opened };
   }
 
+  /**
+   * q212 (DECISION-109): joining a department's group opens its PERIMETRE resources. Returns what would open (null when
+   * nothing); an author outside the Risk Manager group must then give a reason.
+   */
+  async guardDepartmentGroupOpening(
+    actor: AuthenticatedUser,
+    departmentId: string,
+    userId: string,
+    rawReason: string | undefined,
+  ): Promise<{ reason: string | null; holdsRight: boolean; opened: Array<{ type: string; id: string }> } | null> {
+    const opened = await this.access.departmentGroupGains(actor.tenantId, departmentId, userId);
+    if (opened.length === 0) return null;
+    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const reason = rawReason?.trim() ? checkedReason(rawReason, "open restricted resources through a department group") : null;
+    if (!holdsRight && !reason) {
+      throw new ValidationError("A reason (1 to 500 characters) is required: this role gives read access to restricted resources of its department");
+    }
+    return { reason, holdsRight, opened };
+  }
+
+  /** q212: designating a risk owner or N+1 who does not read the restricted risk yet. Null when nothing opens. */
+  async guardRiskDesignationOpening(
+    actor: AuthenticatedUser,
+    riskId: string,
+    userId: string,
+    rawReason: string | undefined,
+  ): Promise<{ reason: string | null; holdsRight: boolean } | null> {
+    if (await this.access.canRead(actor.tenantId, "RISK", riskId, userId)) return null;
+    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const reason = rawReason?.trim() ? checkedReason(rawReason, "open a restricted risk through a designation") : null;
+    if (!holdsRight && !reason) {
+      throw new ValidationError("A reason (1 to 500 characters) is required: this designation gives read access to a restricted risk");
+    }
+    return { reason, holdsRight };
+  }
+
+  async notifyDepartmentGroupOpening(actor: AuthenticatedUser, roleId: string, requestId: string): Promise<void> {
+    await this.notifyManagers(actor, {
+      resourceType: "MANAGEMENT",
+      eventType: "DEPARTMENT_GROUP_VISIBILITY_WIDENED",
+      message: "Une attribution de rôle de département ouvre la lecture de ressources restreintes.",
+    }, roleId, requestId);
+  }
+
+  async notifyRiskDesignationOpening(actor: AuthenticatedUser, riskId: string, requestId: string): Promise<void> {
+    await this.notifyManagers(actor, {
+      resourceType: "RISK",
+      eventType: "RISK_VISIBILITY_WIDENED",
+      message: "Une désignation (propriétaire ou N+1) ouvre la lecture d'un risque restreint.",
+    }, riskId, requestId);
+  }
+
   async notifyProcessOwnerOpening(actor: AuthenticatedUser, processId: string, requestId: string): Promise<void> {
     await this.notifyManagers(actor, {
       resourceType: "MANAGEMENT",
@@ -261,12 +314,31 @@ export class ResourceVisibilityManager {
     }, processId, requestId);
   }
 
-  /** q208 (DECISION-107): every restricted resource of the client, for the Risk Manager group (`resourcevisibility.set`). */
-  async listRestricted(actor: AuthenticatedUser): Promise<RestrictedResourceRow[]> {
-    if (!actor.roles.includes("resourcevisibility.set")) {
-      throw new ForbiddenError("Only the Risk Manager group can list the restricted resources");
+  /**
+   * q208 / q209 (DECISION-107): every restricted resource of the client, with its last change (R-1), for the Risk
+   * Manager group (`resourcevisibility.set`) and the Committee and Audit groups (who see everything anyway).
+   */
+  async listRestricted(actor: AuthenticatedUser, page?: { limit?: number; offset?: number }): Promise<RestrictedResourceRow[]> {
+    if (!actor.roles.includes("resourcevisibility.set") && !(await this.access.seesEverything(actor.tenantId, actor.userId))) {
+      throw new ForbiddenError("Only the Risk Manager, Committee and Audit groups can list the restricted resources");
     }
-    return this.access.listRestricted(actor.tenantId);
+    return this.access.listRestricted(actor.tenantId, page);
+  }
+
+  /**
+   * V3 (q196, q198): « X éléments non visibles » — one number per type, over the whole client, never broken down, never
+   * linked; NOMINATIF never counted; null (no mention) for the groups that see everything.
+   */
+  async hiddenCounts(actor: AuthenticatedUser): Promise<Partial<HiddenCounts> | null> {
+    const counts = await this.access.hiddenCounts(actor.tenantId, actor.userId);
+    if (!counts) return null;
+    // Only the types the reader may list at all (a reader without risk.read learns nothing about risks).
+    const out: Partial<HiddenCounts> = {};
+    for (const [type, permission] of [["RISK", "risk.read"], ["CONTROL", "control.read"], ["ANOMALY", "anomaly.read"],
+      ["ACTION_PLAN", "actionplan.read"], ["KPI", "kpi.read"]] as const) {
+      if (actor.roles.includes(permission)) out[type] = counts[type];
+    }
+    return out;
   }
 
   /** Among `ids`, those the actor may NOT read (one query). */

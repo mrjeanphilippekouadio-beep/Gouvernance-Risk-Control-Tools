@@ -25,6 +25,7 @@ export function RolesAdmin({ token }: RolesAdminProps) {
   const [permissionSearch, setPermissionSearch] = useState("");
 
   const [assignUserId, setAssignUserId] = useState<Record<string, string>>({});
+  const [assignReason, setAssignReason] = useState<Record<string, string>>({});
 
   async function refresh() {
     setLoading(true);
@@ -80,7 +81,7 @@ export function RolesAdmin({ token }: RolesAdminProps) {
     if (!userId) return;
     setError(null);
     try {
-      await rolesApi.assign(token, id, userId);
+      await rolesApi.assign(token, id, userId, assignReason[id]?.trim() || undefined);
       await refresh();
     } catch (err) {
       setError(describeError(err));
@@ -170,6 +171,13 @@ export function RolesAdmin({ token }: RolesAdminProps) {
                   placeholder="user id"
                   value={assignUserId[role.id] ?? ""}
                   onChange={(e) => setAssignUserId((prev) => ({ ...prev, [role.id]: e.target.value }))}
+                />
+                <input
+                  aria-label={`Motif de l'attribution du rôle ${role.name}`}
+                  placeholder="motif (si demandé)"
+                  maxLength={500}
+                  value={assignReason[role.id] ?? ""}
+                  onChange={(e) => setAssignReason((prev) => ({ ...prev, [role.id]: e.target.value }))}
                 />
                 <Button onClick={() => handleAssign(role.id)}>Assigner</Button>
                 <Button variant="destructive" onClick={() => handleRevoke(role.id)}>

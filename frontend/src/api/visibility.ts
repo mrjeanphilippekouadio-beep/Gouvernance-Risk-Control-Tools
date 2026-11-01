@@ -46,8 +46,17 @@ export interface RestrictedResource {
   visibility: "PERIMETRE" | "NOMINATIF";
   accessCount: number;
   updatedAt: string;
+  /** R-1: last visibility change (author id, date, reason, widening), when there is one. */
+  lastChange: { userId: string; at: string; reason: string | null; widening: boolean | null } | null;
 }
 
+/** V3 (q196, q198): one number per type the reader may list; null for the groups that see everything (no mention). */
+export type HiddenCounts = Partial<Record<RestrictedResource["type"], number>> | null;
+
 export const restrictedResourcesApi = {
-  list: (token: string) => apiRequest<RestrictedResource[]>("/api/v1/restricted-resources", { token }),
+  list: (token: string) => apiRequest<RestrictedResource[]>("/api/v1/restricted-resources?limit=500", { token }),
+};
+
+export const hiddenCountsApi = {
+  get: (token: string) => apiRequest<HiddenCounts>("/api/v1/hidden-counts", { token }),
 };

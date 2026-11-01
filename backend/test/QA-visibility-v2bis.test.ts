@@ -56,10 +56,11 @@ describe("QA-visibility-v2bis STATIC", () => {
     const names = execFileSync("ls", [join(ROOT, "database", "postgresql", "migrations")], { encoding: "utf8" }).split("\n").filter((f) => f.endsWith(".sql") && !f.endsWith(".down.sql"));
     expect(names.sort((a, b) => a.localeCompare(b)).at(-1)).toBe("083_resource_visibility_v2.sql");
   });
-  it("OBSERVATION: the list query has no LIMIT / pagination (grows with the number of restricted resources)", () => {
+  it("V3: the list query is paginated (LIMIT / OFFSET, limit bounded to 500)", () => {
     const src = read("backend", "src", "infrastructure", "database", "postgres", "PostgresResourceAccessRepository.ts");
     const q = src.slice(src.indexOf("async listRestricted"));
-    expect(q).not.toMatch(/\bLIMIT\b/i);
+    expect(q).toMatch(/LIMIT \$2 OFFSET \$3/);
+    expect(q).toMatch(/500\)/);
   });
   it("frontend: menu entry gated by resourcevisibility.set, page calls the endpoint, RACI panel and process card send `reason`", () => {
     expect(read("frontend", "src", "App.tsx")).toMatch(/restricted[\s\S]{0,200}resourcevisibility\.set|resourcevisibility\.set[\s\S]{0,200}restricted/i);

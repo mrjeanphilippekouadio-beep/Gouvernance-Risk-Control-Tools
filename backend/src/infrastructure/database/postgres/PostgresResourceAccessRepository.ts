@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import type {
+  HiddenCounts,
   RestrictedResourceRow,
   PerimeterChange,
   PerimeterChangeResult,
@@ -66,6 +67,49 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
     return rows.map((r) => r.id);
   }
 
+  async seesEverything(tenantId: string, userId: string): Promise<boolean> {
+    const { rows } = await this.pool.query<{ ok: boolean }>(`SELECT visibility_sees_everything($1, $2) AS ok`, [tenantId, userId]);
+    return rows[0]?.ok === true;
+  }
+
+  async hiddenCounts(tenantId: string, userId: string): Promise<HiddenCounts | null> {
+    if (await this.seesEverything(tenantId, userId)) return null;
+    // One number per type, over the whole client, independent of any filter (spec §6). Only PERIMETRE restrictions are
+    // counted (q198: NOMINATIF never); an anomaly / a plan counts under the level it actually inherits.
+    const { rows } = await this.pool.query<{ type: string; n: string }>(
+      `SELECT 'RISK' AS type, count(*) AS n FROM risks
+         WHERE tenant_id = $1 AND deleted_at IS NULL AND visibility = 'PERIMETRE' AND NOT risk_visible_to($1, id, $2)
+       UNION ALL SELECT 'CONTROL', count(*) FROM controls
+         WHERE tenant_id = $1 AND deleted_at IS NULL AND visibility = 'PERIMETRE' AND NOT control_visible_to($1, id, $2)
+       UNION ALL SELECT 'KPI', count(*) FROM kpis
+         WHERE tenant_id = $1 AND deleted_at IS NULL AND visibility = 'PERIMETRE' AND NOT kpi_visible_to($1, id, $2)
+       UNION ALL SELECT 'ANOMALY', count(*) FROM anomalies a
+         LEFT JOIN risks r ON r.tenant_id = a.tenant_id AND r.id = a.risk_id
+         LEFT JOIN controls c ON c.tenant_id = a.tenant_id AND c.id = a.control_id
+         LEFT JOIN control_executions ce ON ce.tenant_id = a.tenant_id AND ce.id = a.control_execution_id
+         LEFT JOIN controls cx ON cx.tenant_id = a.tenant_id AND cx.id = ce.control_id
+         WHERE a.tenant_id = $1
+           AND CASE WHEN a.risk_id IS NOT NULL THEN r.visibility WHEN a.control_id IS NOT NULL THEN c.visibility
+                    WHEN a.control_execution_id IS NOT NULL THEN cx.visibility ELSE a.visibility END = 'PERIMETRE'
+           AND NOT anomaly_visible_to($1, a.id, $2)
+       UNION ALL SELECT 'ACTION_PLAN', count(*) FROM action_plans ap
+         LEFT JOIN risks r ON ap.source_type = 'RISK' AND r.tenant_id = ap.tenant_id AND r.id = ap.source_id
+         LEFT JOIN controls c ON ap.source_type = 'CONTROL' AND c.tenant_id = ap.tenant_id AND c.id = ap.source_id
+         LEFT JOIN kris k ON ap.source_type = 'KRI' AND k.tenant_id = ap.tenant_id AND k.id = ap.source_id
+         LEFT JOIN risks kr ON kr.tenant_id = ap.tenant_id AND kr.id = k.risk_id
+         WHERE ap.tenant_id = $1
+           AND CASE WHEN ap.source_type = 'RISK' AND ap.source_id IS NOT NULL THEN r.visibility
+                    WHEN ap.source_type = 'CONTROL' AND ap.source_id IS NOT NULL THEN c.visibility
+                    WHEN ap.source_type = 'KRI' AND ap.source_id IS NOT NULL THEN kr.visibility
+                    ELSE ap.visibility END = 'PERIMETRE'
+           AND NOT action_plan_visible_to($1, ap.id, $2)`,
+      [tenantId, userId],
+    );
+    const out: HiddenCounts = { RISK: 0, CONTROL: 0, ANOMALY: 0, ACTION_PLAN: 0, KPI: 0 };
+    for (const r of rows) out[r.type as keyof HiddenCounts] = Number(r.n);
+    return out;
+  }
+
   async canRead(tenantId: string, type: RestrictableResource | "RISK", id: string, userId: string): Promise<boolean> {
     const { rows } = await this.pool.query<{ ok: boolean }>(
       `SELECT ${visibleToFunction(type)}($1, $2, $3) AS ok`,
@@ -90,8 +134,30 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
     return rows;
   }
 
-  async listRestricted(tenantId: string): Promise<RestrictedResourceRow[]> {
-    const { rows } = await this.pool.query<{ type: RestrictedResourceRow["type"]; id: string; label: string; visibility: Visibility; access_count: string; updated_at: Date }>(
+  async departmentGroupGains(tenantId: string, departmentId: string, userId: string): Promise<Array<{ type: string; id: string }>> {
+    const { rows } = await this.pool.query<{ type: string; id: string }>(
+      `SELECT 'RISK' AS type, id FROM risks
+         WHERE tenant_id = $1 AND owner_department_id = $2 AND deleted_at IS NULL AND visibility = 'PERIMETRE' AND NOT risk_visible_to($1, id, $3)
+       UNION ALL
+       SELECT 'CONTROL', id FROM controls
+         WHERE tenant_id = $1 AND department_id = $2 AND deleted_at IS NULL AND visibility = 'PERIMETRE' AND NOT control_visible_to($1, id, $3)
+       UNION ALL
+       SELECT 'KPI', id FROM kpis
+         WHERE tenant_id = $1 AND department_id = $2 AND deleted_at IS NULL AND visibility = 'PERIMETRE' AND NOT kpi_visible_to($1, id, $3)
+       UNION ALL
+       SELECT 'ACTION_PLAN', id FROM action_plans
+         WHERE tenant_id = $1 AND department_id = $2 AND visibility = 'PERIMETRE' AND NOT action_plan_visible_to($1, id, $3)
+       ORDER BY 1, 2`,
+      [tenantId, departmentId, userId],
+    );
+    return rows;
+  }
+
+  async listRestricted(tenantId: string, page?: { limit?: number; offset?: number }): Promise<RestrictedResourceRow[]> {
+    const limit = Math.min(Math.max(Math.trunc(page?.limit ?? 200), 1), 500);
+    const offset = Math.max(Math.trunc(page?.offset ?? 0), 0);
+    const { rows } = await this.pool.query<{ type: RestrictedResourceRow["type"]; id: string; label: string; visibility: Visibility; access_count: string; updated_at: Date;
+      last_by: string | null; last_at: Date | null; last_reason: string | null; last_widening: boolean | null }>(
       `WITH restricted AS (
          SELECT 'RISK' AS type, id, left(description, 160) AS label, visibility, updated_at FROM risks
            WHERE tenant_id = $1 AND deleted_at IS NULL AND visibility <> 'CLIENT'
@@ -106,12 +172,24 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
        )
        SELECT r.type, r.id, r.label, r.visibility, r.updated_at,
               (SELECT count(*) FROM resource_access_grants g
-                WHERE g.tenant_id = $1 AND g.resource_type = r.type AND g.resource_id = r.id AND g.revoked_at IS NULL) AS access_count
+                WHERE g.tenant_id = $1 AND g.resource_type = r.type AND g.resource_id = r.id AND g.revoked_at IS NULL) AS access_count,
+              lc.user_id AS last_by, lc."timestamp" AS last_at, lc.reason AS last_reason, (lc.new_value->>'widening')::boolean AS last_widening
        FROM restricted r
-       ORDER BY r.updated_at DESC, r.id`,
-      [tenantId],
+       LEFT JOIN LATERAL (
+         SELECT a.user_id, a."timestamp", a.reason, a.new_value FROM audit_log a
+         WHERE a.tenant_id = $1 AND a.action = 'PERMISSION_CHANGE' AND a.entity_id = r.id
+           AND a.entity_type = CASE r.type WHEN 'RISK' THEN 'Risk' WHEN 'CONTROL' THEN 'Control' WHEN 'ANOMALY' THEN 'Anomaly'
+                                           WHEN 'ACTION_PLAN' THEN 'ActionPlan' ELSE 'Kpi' END
+         ORDER BY a."timestamp" DESC LIMIT 1
+       ) lc ON true
+       ORDER BY r.updated_at DESC, r.id
+       LIMIT $2 OFFSET $3`,
+      [tenantId, limit, offset],
     );
-    return rows.map((r) => ({ type: r.type, id: r.id, label: r.label, visibility: r.visibility, accessCount: Number(r.access_count), updatedAt: r.updated_at }));
+    return rows.map((r) => ({
+      type: r.type, id: r.id, label: r.label, visibility: r.visibility, accessCount: Number(r.access_count), updatedAt: r.updated_at,
+      lastChange: r.last_by ? { userId: r.last_by, at: r.last_at as Date, reason: r.last_reason, widening: r.last_widening } : null,
+    }));
   }
 
   async hiddenExecutionIds(tenantId: string, ids: string[], scope: ReadScope): Promise<string[]> {
