@@ -61,7 +61,7 @@ export function sameUserId(a: string, b: string): boolean {
   return normalise(a) === normalise(b);
 }
 
-function checkedReason(raw: string | undefined, what: string): string {
+export function checkedReason(raw: string | undefined, what: string): string {
   const reason = raw?.trim() ?? "";
   if (!reason || reason.length > 500 || !isAcceptableReason(reason)) {
     throw new ValidationError(`A reason (1 to 500 characters) is required to ${what}`);

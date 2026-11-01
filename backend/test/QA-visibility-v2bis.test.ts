@@ -203,11 +203,9 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       expect((await call("rm", "DELETE", `/raci/${r2.json.data.id}?entityType=CONTROL&entityId=${I("c02")}`)).status).toBe(200);
     });
 
-    it("NOMINATIF (RACI does not open it, I-3): a non-RM author is still asked for a reason, but nothing is opened, traced or notified", async () => {
+    it("NOMINATIF (RACI does not open it, I-3): nothing opens, so no reason is asked (q207 targets an assignment that opens; Codex P2 PR #224 measures it in the transaction), and nothing is traced or notified", async () => {
       const without = await raci("named", "CONTROL", I("c03"), "out", "C");
-      expect(without.status).toBe(400);
-      const withReason = await raci("named", "CONTROL", I("c03"), "out", "C", "Pas d'effet");
-      expect(withReason.status, withReason.text).toBe(201);
+      expect(without.status, without.text).toBe(201);
       expect(await sees("out", `/controls/${I("c03")}`)).toBe(false);
       expect(await permChanges(I("c03"))).toEqual([]);
       expect((await notifs("rm", I("c03")))).toEqual([]);

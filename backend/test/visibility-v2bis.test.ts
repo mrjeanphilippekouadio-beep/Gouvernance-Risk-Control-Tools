@@ -111,4 +111,22 @@ describe.skipIf(!hasLocalPg)("lot V2bis on real PostgreSQL (local only)", () => 
     expect(list.map((r) => [r.type, r.id, r.visibility, r.accessCount])).toEqual(expect.arrayContaining([["RISK", risk, "PERIMETRE", 0], ["KPI", kpi, "NOMINATIF", 1]]));
     expect(list.find((r) => r.id === risk)?.label).toBe("Risque restreint V2bis");
   });
+
+  it("Codex P2 (PR #224): createChecked — refusal without reason writes nothing; audit and assignment commit or roll back together", async () => {
+    const { PostgresRaciAssignmentRepository } = await import("../src/infrastructure/database/postgres/PostgresRaciAssignmentRepository.js");
+    const [o, x] = await Promise.all(["o", "x"].map(user));
+    const risk = (await one(`INSERT INTO risks (tenant_id, process, description, owner_id, visibility) VALUES ($1, 'p', 'd', $2, 'PERIMETRE') RETURNING id`, [ctx.tenant, o])).id as string;
+    const repo = new PostgresRaciAssignmentRepository(ctx.pool);
+    const input = { tenantId: ctx.tenant, entityType: "RISK" as const, entityId: risk, userId: x!, role: "C" as const, createdBy: o! };
+    const count = async () => Number((await one(`SELECT count(*) AS n FROM raci_assignments WHERE entity_id = $1`, [risk])).n);
+    await expect(repo.createChecked(input, true, () => [])).rejects.toThrow(/reason/);
+    expect(await count()).toBe(0);
+    await expect(repo.createChecked(input, false, () => [{ tenantId: ctx.tenant } as never])).rejects.toThrow();
+    expect(await count()).toBe(0);
+    const ok = await repo.createChecked(input, false, ({ assignment }) => [{ tenantId: ctx.tenant, userId: o!, entityType: "RaciAssignment",
+      entityId: assignment.id, action: "CREATE", oldValue: null, newValue: assignment, reason: "Motif", requestId: "t-v2b-cc" }]);
+    expect(ok.opened).toBe(true);
+    expect(await count()).toBe(1);
+    expect(Number((await one(`SELECT count(*) AS n FROM audit_log WHERE request_id = 't-v2b-cc'`)).n)).toBe(1);
+  });
 });

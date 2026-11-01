@@ -1,7 +1,17 @@
 import type { Pool } from "pg";
 import type { RaciAssignmentRepository } from "../../../domain/repositories/RaciAssignmentRepository.js";
 import type { CreateRaciAssignmentInput, RaciAssignment, RaciEntityType, RaciRole } from "../../../domain/entities/RaciAssignment.js";
-import { ConflictError, NotFoundError } from "../../../domain/errors/DomainErrors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import type { RaciCreateResult } from "../../../domain/repositories/RaciAssignmentRepository.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
+import { insertAuditEvent } from "./PostgresAuditRepository.js";
+
+/** Fixed identifiers only: the table and visibility function of each RACI entity type. */
+const ENTITY_SQL: Record<RaciEntityType, { table: string; visibleTo: string }> = {
+  RISK: { table: "risks", visibleTo: "risk_visible_to" },
+  CONTROL: { table: "controls", visibleTo: "control_visible_to" },
+  ACTION_PLAN: { table: "action_plans", visibleTo: "action_plan_visible_to" },
+};
 
 interface RaciAssignmentRow {
   id: string;
@@ -53,6 +63,49 @@ export class PostgresRaciAssignmentRepository implements RaciAssignmentRepositor
       const row = rows[0];
       if (!row) throw new ConflictError("This person already holds this role on this entity");
       return toDomain(row);
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async createChecked(
+    input: CreateRaciAssignmentInput,
+    requireReasonIfOpens: boolean,
+    audit: TransactionalAudit<RaciCreateResult>,
+  ): Promise<RaciCreateResult> {
+    const entity = ENTITY_SQL[input.entityType];
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`,
+        [`raci:${input.tenantId}:${input.entityType}:${input.entityId}:${input.userId}:${input.role}`]);
+      // Serializes with every visibility change of the entity (they lock the row FOR UPDATE).
+      await client.query(`SELECT 1 FROM ${entity.table} WHERE tenant_id = $1 AND id = $2 FOR SHARE`, [input.tenantId, input.entityId]);
+      const reads = async () =>
+        (await client.query<{ ok: boolean }>(`SELECT ${entity.visibleTo}($1, $2, $3) AS ok`, [input.tenantId, input.entityId, input.userId])).rows[0]?.ok === true;
+      const before = await reads();
+      const { rows } = await client.query<RaciAssignmentRow>(
+        `INSERT INTO raci_assignments (tenant_id, entity_type, entity_id, user_id, role, created_by)
+         SELECT $1, $2, $3, $4, $5, $6
+         WHERE NOT EXISTS (SELECT 1 FROM raci_assignments
+                           WHERE tenant_id = $1 AND entity_type = $2 AND entity_id = $3 AND user_id = $4 AND role = $5
+                             AND deleted_at IS NULL)
+         RETURNING *`,
+        [input.tenantId, input.entityType, input.entityId, input.userId, input.role, input.createdBy],
+      );
+      const row = rows[0];
+      if (!row) throw new ConflictError("This person already holds this role on this entity");
+      const opened = !before && (await reads());
+      if (opened && requireReasonIfOpens) {
+        throw new ValidationError("A reason (1 to 500 characters) is required: this RACI assignment gives read access to a restricted resource");
+      }
+      const result = { assignment: toDomain(row), opened };
+      for (const event of audit(result)) await insertAuditEvent(client, event);
+      await client.query("COMMIT");
+      return result;
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw err;
