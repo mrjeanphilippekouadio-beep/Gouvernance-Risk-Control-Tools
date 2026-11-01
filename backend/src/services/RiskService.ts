@@ -65,26 +65,42 @@ export class RiskService {
     return this.access.guardRiskDesignationOpening(actor, risk.id, userId, reason);
   }
 
-  private async recordDesignationOpening(
+  /** The ASSIGN row of a designation and, when it opens the restricted risk (q212), its PERMISSION_CHANGE row. */
+  private designationEvents(
     actor: AuthenticatedUser,
     riskId: string,
-    opening: { reason: string | null; holdsRight: boolean },
-    designated: { role: "owner" | "superior owner"; userId: string },
+    before: Risk,
+    after: Risk,
+    opening: { reason: string | null; holdsRight: boolean } | null,
+    designated: { role: "owner" | "superior owner"; userId: string } | null,
     requestId: string,
-  ): Promise<void> {
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Risk",
-      entityId: riskId,
-      action: "PERMISSION_CHANGE",
-      oldValue: { designatedUserId: designated.userId, reads: false },
-      newValue: { designatedUserId: designated.userId, as: designated.role, reads: true, widening: true, through: "DESIGNATION" },
-      reason: opening.reason,
-      requestId,
-    });
-    if (!opening.holdsRight) await this.access!.notifyRiskDesignationOpening(actor, riskId, requestId);
+  ) {
+    return [
+      {
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Risk",
+        entityId: riskId,
+        action: "ASSIGN" as const,
+        oldValue: before,
+        newValue: after,
+        reason: opening?.reason ?? null,
+        requestId,
+      },
+      ...(opening && designated ? [{
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Risk",
+        entityId: riskId,
+        action: "PERMISSION_CHANGE" as const,
+        oldValue: { designatedUserId: designated.userId, reads: false },
+        newValue: { designatedUserId: designated.userId, as: designated.role, reads: true, widening: true, through: "DESIGNATION" },
+        reason: opening.reason,
+        requestId,
+      }] : []),
+    ];
   }
+
 
   async create(
     actor: AuthenticatedUser,
@@ -355,20 +371,13 @@ export class RiskService {
     }
     const opening = await this.designationOpening(actor, before, ownerId, reason);
 
-    const after = await this.risks.assignOwner(actor.tenantId, id, ownerId);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Risk",
-      entityId: id,
-      action: "ASSIGN",
-      oldValue: before,
-      newValue: after,
-      reason: opening?.reason ?? null,
-      requestId,
-    });
-    if (opening && ownerId) await this.recordDesignationOpening(actor, id, opening, { role: "owner", userId: ownerId }, requestId);
+    // QA-V3-04: the ASSIGN row and, when the designation opens the restricted risk (q212), its PERMISSION_CHANGE row are
+    // written in the designation's transaction (writeAudited).
+    const repo = this.risks;
+    const after = await writeAudited<Risk>(repo.auditsInTransaction, this.audit,
+      (audit) => repo.assignOwner(actor.tenantId, id, ownerId, audit),
+      (updated) => this.designationEvents(actor, id, before, updated, opening, ownerId ? { role: "owner", userId: ownerId } : null, requestId));
+    if (opening && ownerId && !opening.holdsRight) await this.access!.notifyRiskDesignationOpening(actor, id, requestId);
 
     // ACT-121: best-effort broadcast on reassignment — never blocks the write.
     if (this.notifier && before.ownerId !== after.ownerId) {
@@ -414,22 +423,12 @@ export class RiskService {
     }
     const opening = await this.designationOpening(actor, before, superiorOwnerId, reason, "superior owner");
 
-    const after = await this.risks.assignSuperiorOwner(actor.tenantId, id, superiorOwnerId);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Risk",
-      entityId: id,
-      action: "ASSIGN",
-      oldValue: before,
-      newValue: after,
-      reason: opening?.reason ?? null,
-      requestId,
-    });
-    if (opening && superiorOwnerId) {
-      await this.recordDesignationOpening(actor, id, opening, { role: "superior owner", userId: superiorOwnerId }, requestId);
-    }
+    const repo = this.risks;
+    const after = await writeAudited<Risk>(repo.auditsInTransaction, this.audit,
+      (audit) => repo.assignSuperiorOwner(actor.tenantId, id, superiorOwnerId, audit),
+      (updated) => this.designationEvents(actor, id, before, updated, opening,
+        superiorOwnerId ? { role: "superior owner", userId: superiorOwnerId } : null, requestId));
+    if (opening && superiorOwnerId && !opening.holdsRight) await this.access!.notifyRiskDesignationOpening(actor, id, requestId);
 
     return after;
   }

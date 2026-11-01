@@ -124,10 +124,11 @@ describe.skipIf(!hasLocalPg)("lot V2bis on real PostgreSQL (local only)", () => 
     expect(await count()).toBe(0);
     await expect(repo.createChecked(input, false, () => [{ tenantId: ctx.tenant } as never])).rejects.toThrow();
     expect(await count()).toBe(0);
+    const requestId = `t-v2b-cc-${Math.random()}`; // the local database may be reused between runs
     const ok = await repo.createChecked(input, false, ({ assignment }) => [{ tenantId: ctx.tenant, userId: o!, entityType: "RaciAssignment",
-      entityId: assignment.id, action: "CREATE", oldValue: null, newValue: assignment, reason: "Motif", requestId: "t-v2b-cc" }]);
+      entityId: assignment.id, action: "CREATE", oldValue: null, newValue: assignment, reason: "Motif", requestId }]);
     expect(ok.opened).toBe(true);
     expect(await count()).toBe(1);
-    expect(Number((await one(`SELECT count(*) AS n FROM audit_log WHERE request_id = 't-v2b-cc'`)).n)).toBe(1);
+    expect(Number((await one(`SELECT count(*) AS n FROM audit_log WHERE request_id = $1`, [requestId])).n)).toBe(1);
   });
 });

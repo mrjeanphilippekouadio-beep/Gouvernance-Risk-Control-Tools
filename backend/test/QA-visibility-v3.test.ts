@@ -370,7 +370,7 @@ describe.skipIf(!live)("QA-visibility-v3 on the REAL server + LOCAL PostgreSQL 1
       expect(await permChanges(OPS)).toEqual([]);
       await drop(UID.out, OPS);
     });
-    it.fails("QA-V3-03 (MINOR): atomicity: if the PERMISSION_CHANGE row cannot be written, the membership is not left behind (no silent opening)", async () => {
+    it("QA-V3-03 (MINOR): atomicity: if the PERMISSION_CHANGE row cannot be written, the membership is not left behind (no silent opening)", async () => {
       await failAudit(FIN);
       let status = 0;
       let left = -1;
@@ -506,7 +506,7 @@ describe.skipIf(!live)("QA-visibility-v3 on the REAL server + LOCAL PostgreSQL 1
       expect((await notifs("rm", I("503"))).length - n0).toBe(0);
       expect((await superior("rm", I("503"), sup0)).status).toBe(200);
     });
-    it.fails("QA-V3-04 (MINOR): atomicity: if the PERMISSION_CHANGE row cannot be written, the designation is not left behind", async () => {
+    it("QA-V3-04 (MINOR): atomicity: if the PERMISSION_CHANGE row cannot be written, the designation is not left behind", async () => {
       const own0 = (await ownerOf(R502)).owner_id;
       await failAudit(R502);
       let status = 0;

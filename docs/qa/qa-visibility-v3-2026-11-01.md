@@ -48,3 +48,12 @@ Trois tests V2bis mis à jour légitimement (les observations « un groupe de d�
 
 - L'arbre testé contient des correctifs non commités (SEC V3-01, PRIV-V3-01/05, N+1 NOMINATIF) : rejouer après commit ; les 2 `it.fails` à repasser en `it` quand QA-V3-03/04 seront corrigés (`QA_VIS3_LIVE=1 npx vitest run test/QA-visibility-v3.test.ts`).
 - Non couvert : charge du comptage (4 sous-requêtes par type, pas de cache), RACI sur KPI (non supporté), archivage d'un risque parent dans le comptage des anomalies (point déjà noté par Security).
+
+## Corrections (orchestrateur, 2026-11-01)
+
+| Constat | Statut | Correction |
+|---|---|---|
+| QA-V3-03 | **CORRIGÉ** | `PostgresRoleRepository.assignToUser` écrit les lignes `ROLE_CHANGE` et `PERMISSION_CHANGE` (q212) dans la transaction de l'attribution (`assignAuditsInTransaction`) : un échec d'audit annule l'attribution. |
+| QA-V3-04 | **CORRIGÉ** | `assignOwner` / `assignSuperiorOwner` : lignes `ASSIGN` et `PERMISSION_CHANGE` dans la transaction de la désignation (`runAudited` / `writeAudited`). |
+
+Retest : les 2 `it.fails` repassés en `it`. Suites live V1 + V2 + V2bis + V3 (QA et niveau 1, `--no-file-parallelism`) vertes ; `npm test` : 2753 verts. Correction annexe d'un test niveau 1 qui supposait une base locale neuve (identifiant de requête unique).
