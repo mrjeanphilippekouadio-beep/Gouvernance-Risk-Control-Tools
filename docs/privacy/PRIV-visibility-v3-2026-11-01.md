@@ -40,6 +40,14 @@ Aucune durée pour les motifs d'`audit_log` (dépendance PO + juriste, comme D2a
 1. Motif visible du Comité ? **Recommandé : oui**, avec consigne de saisie, aperçu 140 caractères et texte complet au détail (PRIV-V3-04). Alternative : réserver le motif au RM et à l'Audit.
 2. Identité de l'auteur du changement visible du Comité ? **Recommandé : non** (RM et Audit seulement) (PRIV-V3-05).
 
+## Revalidation (2026-11-01)
+
+Lu : `ResourceVisibilityManager.listRestricted` (`backend/src/services/resourceVisibility.ts`), relecture du code uniquement (tests non exécutés par A15).
+- **PRIV-V3-01 : LEVÉ (CONFIRMED).** La garde exige `seesEverything` seul (groupes fixes RM/Comité/Audit) ; la permission `resourcevisibility.set` ne suffit plus. Une preuve de test avec un rôle personnalisé porteur de la permission reste à joindre (EVIDENCE_REQUIRED, A08).
+- **PRIV-V3-05 : LEVÉ (CONFIRMED).** `userId` et `byName` ne sont rendus qu'avec `resourcevisibility.set` ou `audit.read` ; pour le Comité, `lastChange` ne garde que date, motif et sens. Réserve mineure : un membre du Comité qui porterait aussi `audit.read` voit l'auteur, ce qui est cohérent avec son droit d'audit.
+- **Restent ouverts** : q215 (motif visible du Comité : A recommandé) et q217 (durée de conservation des motifs, juriste/DPO dans D6) = PRIV-V3-04 et V3-08, non bloquants pour V3.
+- Statut V3 après revalidation : **COMPLIANT_FOR_SCOPE** pour le comptage et la garde de la liste ; **PARTIALLY_COMPLIANT** tant que q215/q217 ne sont pas arbitrés.
+
 ## Verdict
 
 **OK AVEC RÉSERVES, non bloquant pour V3 sous condition de corriger PRIV-V3-01 avant fusion.** Comptage conforme à q196/q198 ; liste proportionnée une fois la garde alignée. Revalidation Privacy requise après PRIV-V3-01 et PRIV-V3-05. Revue Security (A10) du point V3-01 recommandée ; la cotation du risque revient au Risk Manager.
