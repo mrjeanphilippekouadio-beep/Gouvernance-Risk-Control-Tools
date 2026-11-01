@@ -122,7 +122,7 @@ export class RaciAssignmentService {
     const before = await this.raci.getById(actor.tenantId, assignmentId);
     if (!before) throw new NotFoundError("RaciAssignment", assignmentId);
     // Codex P2: an assignment on a risk the actor may not see answers like an unknown assignment, before any write.
-    if (before.entityType === "RISK" && (await hiddenRiskIds(this.risks, actor, [before.entityId])).size > 0) {
+    if (await this.entityHidden(actor, before.entityType, before.entityId)) {
       throw new NotFoundError("RaciAssignment", assignmentId);
     }
     if (before.entityType !== entityType || before.entityId !== entityId) {
@@ -165,7 +165,7 @@ export class RaciAssignmentService {
     }
     // Lot V1: who works on a restricted risk is as restricted as the risk itself; a hidden risk answers like an
     // unknown id (an empty list, QA-VIS1-01 / SEC V1-04).
-    if (entityType === "RISK" && (await hiddenRiskIds(this.risks, actor, [entityId])).size > 0) return [];
+    if (await this.entityHidden(actor, entityType, entityId)) return [];
     return this.raci.listForEntity(actor.tenantId, entityType, entityId);
   }
 
@@ -175,12 +175,29 @@ export class RaciAssignmentService {
       const risk = await this.risks.getById(tenantId, entityId, scope);
       if (!risk) throw new ValidationError(`Risk ${entityId} does not exist in this tenant`);
     } else if (entityType === "CONTROL" && this.controls) {
-      const control = await this.controls.getById(tenantId, entityId, SYSTEM_SCOPE);
+      const control = await this.controls.getById(tenantId, entityId, scope);
       if (!control) throw new ValidationError(`Control ${entityId} does not exist in this tenant`);
     } else if (entityType === "ACTION_PLAN" && this.actionPlans) {
-      const action = await this.actionPlans.getById(tenantId, entityId, SYSTEM_SCOPE);
+      const action = await this.actionPlans.getById(tenantId, entityId, scope);
       if (!action) throw new ValidationError(`ActionPlan ${entityId} does not exist in this tenant`);
     }
+  }
+
+  /**
+   * Lot V1/V2: who works on a restricted risk, control or plan is as restricted as the entity itself. Only an EXISTING
+   * entity the actor may not read counts as hidden (an unknown id is not "hidden": same empty answer either way).
+   */
+  private async entityHidden(actor: AuthenticatedUser, entityType: RaciEntityType, entityId: string): Promise<boolean> {
+    if (entityType === "RISK") return (await hiddenRiskIds(this.risks, actor, [entityId])).size > 0;
+    if (entityType === "CONTROL" && this.controls) {
+      return (await this.controls.getById(actor.tenantId, entityId, SYSTEM_SCOPE)) !== null
+        && (await this.controls.getById(actor.tenantId, entityId, readerScope(actor))) === null;
+    }
+    if (entityType === "ACTION_PLAN" && this.actionPlans) {
+      return (await this.actionPlans.getById(actor.tenantId, entityId, SYSTEM_SCOPE)) !== null
+        && (await this.actionPlans.getById(actor.tenantId, entityId, readerScope(actor))) === null;
+    }
+    return false;
   }
 
   /**

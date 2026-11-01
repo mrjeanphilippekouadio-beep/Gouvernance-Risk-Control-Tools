@@ -201,7 +201,7 @@ export class RiskDeviceViewService {
       evaluationHistory.find((e) => AUTHORITATIVE_EVALUATION_STATUSES.includes(e.status)) ?? null;
 
     // Codex P2: the other covered risks of these controls lose the ids the reader may not see.
-    const controls = await maskCoveredRisks(this.risks, actor, await this.controls.listCoveringRisk(actor.tenantId, riskId));
+    const controls = await maskCoveredRisks(this.risks, actor, await this.controls.listCoveringRisk(actor.tenantId, riskId, readerScope(actor)));
     // ponytail: one effectiveness query per covering control, same call as
     // RiskEvaluationViewService.getEvaluationContext — a risk carries a
     // handful of controls, not hundreds.

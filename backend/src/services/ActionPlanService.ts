@@ -26,7 +26,10 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
-import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
+import { READER_DEFAULT_SCOPE, readerScope, type ReadScope, type Visibility } from "../domain/visibility.js";
+import type { ResourceVisibilityManager, VisibilityTarget } from "./resourceVisibility.js";
+import { sameUserId } from "./resourceVisibility.js";
+import type { ResourceVisibilityState } from "../domain/repositories/ResourceAccessRepository.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 import type { NotificationService } from "./NotificationService.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
@@ -44,6 +47,8 @@ const LINK_RESOURCE_TYPES: readonly ActionLinkResourceType[] = ACTION_LINK_RESOU
 const ENTITY_BACKED_SOURCE_TYPES: ActionPlanSourceType[] = ["RISK", "CONTROL", "KRI", "FINDING"];
 
 export interface CreateActionPlanRequest {
+  /** Lot V2: level at creation (default CLIENT); only for a plan without RISK/CONTROL/KRI source. */
+  visibility?: Visibility;
   title: string;
   description?: string | null;
   sourceType: ActionPlanSourceType;
@@ -120,7 +125,34 @@ export class ActionPlanService {
     private readonly selfValidation?: SelfValidationGate,
     /** DECISION-100 (lot V0): optional for existing tests — absent, a reader sees CLIENT rows only (fail-closed, SEC V0-01). Wired in server.ts. */
     private readonly visibility?: VisibilityResolver,
+    /** Lot V2: own level and list of a plan without RISK/CONTROL/KRI source. Optional: absent, restriction refused. */
+    private readonly access?: ResourceVisibilityManager,
   ) {}
+
+  /** Spec §1: a plan follows its RISK / CONTROL / KRI source, else its own level; its responsible stands for the owner. */
+  private target(a: ActionPlan): VisibilityTarget {
+    const inherits = (a.sourceType === "RISK" || a.sourceType === "CONTROL" || a.sourceType === "KRI") && a.sourceId ? a.sourceType : null;
+    return { type: "ACTION_PLAN", entity: "ActionPlan", id: a.id, visibility: a.visibility ?? "CLIENT", ownerId: a.responsibleUserId, inheritsFrom: inherits };
+  }
+
+  async getAccess(actor: AuthenticatedUser, id: string): Promise<ResourceVisibilityState & { inheritsFrom: string | null }> {
+    requirePermission(actor, "actionplan.read");
+    const target = this.target(await this.getRaw(actor, id));
+    const state = this.access ? await this.access.get(actor, target) : { visibility: target.visibility, accessUserIds: [] };
+    return { ...state, inheritsFrom: target.inheritsFrom };
+  }
+
+  async setVisibility(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { visibility: Visibility; addUserIds?: string[]; revokeUserIds?: string[]; reason: string },
+    requestId: string,
+  ): Promise<ResourceVisibilityState> {
+    requirePermission(actor, "actionplan.read");
+    const plan = await this.getRaw(actor, id);
+    if (!this.access) throw new ValidationError("Changing an action plan's visibility is not available");
+    return this.access.set(actor, this.target(plan), input, requestId);
+  }
 
   /** Best effort: recipient = the action's responsible user only (risk owner / superior not wired, see handoff). */
   /** F-NOTIF-03: messages carry no title/date (readable with notification.read alone); `dedupe` = F-NOTIF-01. */
@@ -197,6 +229,18 @@ export class ActionPlanService {
     }
     await this.assertActiveUser(actor.tenantId, input.responsibleUserId);
     await this.assertDepartmentExists(actor.tenantId, input.departmentId);
+    const visibility: Visibility = input.visibility ?? "CLIENT";
+    if (visibility !== "CLIENT") {
+      if (!this.access) throw new ValidationError("Restricted visibility is not available");
+      const seesEverything = (await this.visibility?.resolve(actor))?.all === true;
+      await this.access.assertCreation(actor, {
+        visibility,
+        inheritsFrom: isEntityBacked && (input.sourceType === "RISK" || input.sourceType === "CONTROL" || input.sourceType === "KRI") ? input.sourceType : null,
+        isOwner: sameUserId(input.responsibleUserId, actor.userId),
+        departmentId: input.departmentId ?? null,
+        processId: null,
+      }, seesEverything);
+    }
 
     const createInput: CreateActionPlanInput = {
       tenantId: actor.tenantId,
@@ -208,6 +252,7 @@ export class ActionPlanService {
       departmentId: input.departmentId ?? null,
       dueDate: input.dueDate,
       createdBy: actor.userId,
+      visibility,
     };
 
     const action = await this.actions.create(createInput);
@@ -250,7 +295,7 @@ export class ActionPlanService {
       const risk = await this.risks.getById(actor.tenantId, riskId, readerScope(actor));
       if (!risk) throw new ValidationError(`Risk ${riskId} does not exist in this tenant`);
     }
-    const rows = await this.actions.listForRisk(actor.tenantId, riskId);
+    const rows = await this.actions.listForRisk(actor.tenantId, riskId, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     return this.views(actor, rows);
   }
 
@@ -263,7 +308,8 @@ export class ActionPlanService {
     const storedStatusFilter = wantsOverdueOnly ? undefined : (filters?.status as ActionPlanListFilters["status"]);
     const repoFilters: ActionPlanListFilters = { ...filters, status: storedStatusFilter };
 
-    const rows = await this.actions.list(actor.tenantId, repoFilters, SYSTEM_SCOPE);
+    // Lot V2 (SEC V1-03): the dashboard lists only the plans the reader sees.
+    const rows = await this.actions.list(actor.tenantId, repoFilters, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     const views = await this.views(actor, rows);
     return wantsOverdueOnly ? views.filter((v) => v.computedStatus === "EN_RETARD") : views;
   }
@@ -532,11 +578,12 @@ export class ActionPlanService {
       const risk = await this.risks.getById(tenantId, sourceId, scope);
       if (!risk) throw new ValidationError(`Risk ${sourceId} does not exist in this tenant`);
     } else if (sourceType === "CONTROL" && this.controls) {
-      const control = await this.controls.getById(tenantId, sourceId, SYSTEM_SCOPE);
+      const control = await this.controls.getById(tenantId, sourceId, scope);
       if (!control) throw new ValidationError(`Control ${sourceId} does not exist in this tenant`);
     } else if (sourceType === "KRI" && this.kris) {
       const kri = await this.kris.getById(tenantId, sourceId);
       if (!kri) throw new ValidationError(`Kri ${sourceId} does not exist in this tenant`);
+      await this.assertKriReadable(scope, tenantId, kri.riskId, sourceId);
     } else if (sourceType === "FINDING" && this.findings) {
       const finding = await this.findings.getById(tenantId, sourceId);
       if (!finding) throw new ValidationError(`Finding ${sourceId} does not exist in this tenant`);
@@ -563,14 +610,23 @@ export class ActionPlanService {
       const risk = await this.risks.getById(tenantId, resourceId, scope);
       if (!risk) throw new ValidationError(`Risk ${resourceId} does not exist in this tenant`);
     } else if (resourceType === "CONTROL" && this.controls) {
-      const control = await this.controls.getById(tenantId, resourceId, SYSTEM_SCOPE);
+      const control = await this.controls.getById(tenantId, resourceId, scope);
       if (!control) throw new ValidationError(`Control ${resourceId} does not exist in this tenant`);
     } else if (resourceType === "KRI" && this.kris) {
       const kri = await this.kris.getById(tenantId, resourceId);
       if (!kri) throw new ValidationError(`Kri ${resourceId} does not exist in this tenant`);
+      await this.assertKriReadable(scope, tenantId, kri.riskId, resourceId);
     } else if (resourceType === "ANOMALY" && this.anomalies) {
-      const anomaly = await this.anomalies.getById(tenantId, resourceId, SYSTEM_SCOPE);
+      const anomaly = await this.anomalies.getById(tenantId, resourceId, scope);
       if (!anomaly) throw new ValidationError(`Anomaly ${resourceId} does not exist in this tenant`);
+    }
+  }
+
+  /** Lot V2: a KRI follows its risk; one cannot attach a plan to a KRI one does not see (same answer as a missing one). */
+  private async assertKriReadable(scope: ReadScope, tenantId: string, riskId: string | null, kriId: string): Promise<void> {
+    if (!riskId || !this.risks?.hiddenIds) return;
+    if ((await this.risks.hiddenIds(tenantId, [riskId], scope)).length > 0) {
+      throw new ValidationError(`Kri ${kriId} does not exist in this tenant`);
     }
   }
 }

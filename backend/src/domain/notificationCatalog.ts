@@ -39,6 +39,9 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeInfo[] = [
   { resourceType: "MANAGEMENT", eventType: "RISK_MANAGER_VACANCY", label: "Groupe Risk Manager vacant", mandatory: true },
   // q199 (DECISION-102): an owner widened the visibility of a risk; the Risk Manager group is told, nothing is blocked.
   { resourceType: "RISK", eventType: "RISK_VISIBILITY_WIDENED", label: "Visibilité d’un risque élargie par son propriétaire", mandatory: true },
+  // Lot V2: same rule for an action plan (its responsible) or an anomaly (its declarer) with their own setting.
+  { resourceType: "ACTION_PLAN", eventType: "ACTION_PLAN_VISIBILITY_WIDENED", label: "Visibilité d’un plan d’action élargie par son responsable", mandatory: true },
+  { resourceType: "ANOMALY", eventType: "ANOMALY_VISIBILITY_WIDENED", label: "Visibilité d’une anomalie élargie par son déclarant", mandatory: true },
   { resourceType: "ACTION_PLAN", eventType: "ACTION_STARTED_LATE", label: "Action démarrée en retard", mandatory: true },
   { resourceType: "ACTION_PLAN", eventType: "ACTION_OVERDUE", label: "Action en retard", mandatory: true },
   { resourceType: "KRI", eventType: "KRI_THRESHOLD_BREACH", label: "Seuil KRI dépassé", mandatory: true },

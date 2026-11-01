@@ -1,3 +1,4 @@
+import type { Visibility } from "../visibility.js";
 /**
  * New domain — no apps-script-legacy precedent (ACT-190..196). An
  * ActionPlan ("action corrective") is a remediation ticket, structurally
@@ -88,6 +89,8 @@ export const ACTION_LINK_RESOURCE_TYPES = [
 export type ActionLinkResourceType = (typeof ACTION_LINK_RESOURCE_TYPES)[number];
 
 export interface ActionPlan {
+  /** Lot V2 (DECISION-100/102): who may read it. Set at creation, then only through PUT /:id/visibility. Absent = CLIENT. */
+  visibility?: Visibility;
   id: string;
   tenantId: string;
   title: string;
@@ -128,6 +131,8 @@ export interface ActionPlan {
 }
 
 export interface CreateActionPlanInput {
+  /** Lot V2: level at creation (default CLIENT); the named-people list is set afterwards (PUT /:id/visibility). */
+  visibility?: Visibility;
   tenantId: string;
   title: string;
   description?: string | null;

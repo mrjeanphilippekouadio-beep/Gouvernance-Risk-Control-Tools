@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
-import { visibilityClause } from "./visibilityFilter.js";
-import type { ReadScope } from "../../../domain/visibility.js";
+import { resourceVisibilityClause } from "./visibilityFilter.js";
+import type { ReadScope, Visibility } from "../../../domain/visibility.js";
 import type { AnomalyRepository } from "../../../domain/repositories/AnomalyRepository.js";
 import type {
   Anomaly,
@@ -27,6 +27,7 @@ interface AnomalyRow {
   closure_comment: string | null;
   created_at: Date;
   updated_at: Date;
+  visibility?: Visibility;
 }
 
 function toDomain(row: AnomalyRow): Anomaly {
@@ -47,6 +48,7 @@ function toDomain(row: AnomalyRow): Anomaly {
     closureComment: row.closure_comment,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    visibility: row.visibility ?? "CLIENT",
   };
 }
 
@@ -55,7 +57,7 @@ export class PostgresAnomalyRepository implements AnomalyRepository {
 
   async getById(tenantId: string, id: string, scope: ReadScope): Promise<Anomaly | null> {
     const { rows } = await this.pool.query<AnomalyRow>(
-      `SELECT * FROM anomalies WHERE tenant_id = $1 AND id = $2 ${visibilityClause(scope)}`,
+      `SELECT * FROM anomalies WHERE tenant_id = $1 AND id = $2 ${resourceVisibilityClause("ANOMALY", scope)}`,
       [tenantId, id],
     );
     return rows[0] ? toDomain(rows[0]) : null;
@@ -65,7 +67,7 @@ export class PostgresAnomalyRepository implements AnomalyRepository {
     const statusFilter = options?.status ? "AND status = $2" : "";
     const params = options?.status ? [tenantId, options.status] : [tenantId];
     const { rows } = await this.pool.query<AnomalyRow>(
-      `SELECT * FROM anomalies WHERE tenant_id = $1 ${statusFilter} ${visibilityClause(scope)} ORDER BY observed_at DESC`,
+      `SELECT * FROM anomalies WHERE tenant_id = $1 ${statusFilter} ${resourceVisibilityClause("ANOMALY", scope)} ORDER BY observed_at DESC`,
       params,
     );
     return rows.map(toDomain);

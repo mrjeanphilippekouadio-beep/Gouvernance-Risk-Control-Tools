@@ -286,7 +286,12 @@ export class PostgresRiskRepository implements RiskRepository {
     return rows[0]?.ok === true;
   }
 
-  async update(tenantId: string, id: string, input: UpdateRiskInput, audit?: TransactionalAudit<Risk>): Promise<Risk> {
+  async update(
+    tenantId: string,
+    id: string,
+    input: UpdateRiskInput,
+    audit?: TransactionalAudit<Risk & { perimeterWidening?: boolean }>,
+  ): Promise<Risk & { perimeterWidening?: boolean }> {
     // Dynamic SET list, not COALESCE: COALESCE($n, col) can't distinguish
     // "field omitted" from "field explicitly set to null", so a caller
     // could never clear ownerDepartmentId that way.
@@ -302,7 +307,19 @@ export class PostgresRiskRepository implements RiskRepository {
     );
     if (setClauses.length === 0) throw new ValidationError("No fields to update");
 
+    // Lot V2 (SEC V1-02): a perimeter change is measured on the real effective readers, under the row lock.
+    const perimeter = input.ownerDepartmentId !== undefined || input.processId !== undefined;
+    const readers = async (db: Pick<Pool, "query">) =>
+      (await db.query<{ id: string }>(
+        `SELECT id FROM users WHERE tenant_id = $1 AND deleted_at IS NULL AND risk_visible_to($1, $2, id)`,
+        [tenantId, id],
+      )).rows.map((r) => r.id);
     return runAudited(this.pool, async (db) => {
+      let before: string[] = [];
+      if (perimeter) {
+        await db.query(`SELECT 1 FROM risks WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, [tenantId, id]);
+        before = await readers(db);
+      }
       const { rows } = await db.query<RiskRow>(
         `UPDATE risks
          SET ${setClauses.join(", ")}, updated_at = now()
@@ -312,7 +329,9 @@ export class PostgresRiskRepository implements RiskRepository {
       );
       const row = rows[0];
       if (!row) throw new NotFoundError("Risk", id);
-      return toDomain(row);
+      if (!perimeter) return toDomain(row);
+      const perimeterWidening = (await readers(db)).some((u) => !before.includes(u));
+      return { ...toDomain(row), perimeterWidening };
     }, audit);
   }
 

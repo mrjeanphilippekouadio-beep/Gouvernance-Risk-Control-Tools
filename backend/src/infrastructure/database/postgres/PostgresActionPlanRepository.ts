@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from "pg";
-import { visibilityClause } from "./visibilityFilter.js";
-import type { ReadScope } from "../../../domain/visibility.js";
+import { resourceVisibilityClause } from "./visibilityFilter.js";
+import type { ReadScope, Visibility } from "../../../domain/visibility.js";
 import type { ActionPlanRepository } from "../../../domain/repositories/ActionPlanRepository.js";
 import type {
   ActionLink,
@@ -35,6 +35,7 @@ interface ActionPlanRow {
   closure_comment: string | null;
   created_at: Date;
   updated_at: Date;
+  visibility?: Visibility;
 }
 
 function toDomain(row: ActionPlanRow): ActionPlan {
@@ -58,6 +59,7 @@ function toDomain(row: ActionPlanRow): ActionPlan {
     closureComment: row.closure_comment,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    visibility: row.visibility ?? "CLIENT",
   };
 }
 
@@ -77,7 +79,7 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
 
   async getById(tenantId: string, id: string, scope: ReadScope): Promise<ActionPlan | null> {
     const { rows } = await this.pool.query<ActionPlanRow>(
-      `SELECT * FROM action_plans WHERE tenant_id = $1 AND id = $2 ${visibilityClause(scope)}`,
+      `SELECT * FROM action_plans WHERE tenant_id = $1 AND id = $2 ${resourceVisibilityClause("ACTION_PLAN", scope)}`,
       [tenantId, id],
     );
     return rows[0] ? toDomain(rows[0]) : null;
@@ -113,7 +115,7 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
     }
 
     const { rows } = await this.pool.query<ActionPlanRow>(
-      `SELECT * FROM action_plans WHERE ${conditions.join(" AND ")} ${visibilityClause(scope)} ORDER BY due_date ASC`,
+      `SELECT * FROM action_plans WHERE ${conditions.join(" AND ")} ${resourceVisibilityClause("ACTION_PLAN", scope)} ORDER BY due_date ASC`,
       params,
     );
     return rows.map(toDomain);
@@ -214,7 +216,7 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
    * an `action_links` row — in a single query (no N+1 across either the
    * tenant's full action plan list or a per-action link lookup).
    */
-  async listForRisk(tenantId: string, riskId: string): Promise<ActionPlan[]> {
+  async listForRisk(tenantId: string, riskId: string, scope: ReadScope): Promise<ActionPlan[]> {
     const { rows } = await this.pool.query<ActionPlanRow>(
       `SELECT DISTINCT ap.* FROM action_plans ap
        LEFT JOIN action_links al ON al.tenant_id = ap.tenant_id AND al.action_id = ap.id
@@ -222,7 +224,7 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
          AND (
            (ap.source_type = 'RISK' AND ap.source_id = $2)
            OR (al.resource_type = 'RISK' AND al.resource_id = $2)
-         )
+         ) ${resourceVisibilityClause("ACTION_PLAN", scope, "ap.")}
        ORDER BY ap.due_date ASC`,
       [tenantId, riskId],
     );

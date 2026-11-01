@@ -1,4 +1,4 @@
-import { SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
+import { readerScope, type ReadScope } from "../domain/visibility.js";
 import { keepReadableByRisk, maskCoveredRisks, maskRiskSource } from "./riskVisibility.js";
 import { withoutHiddenRisk } from "./AnomalyService.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -330,7 +330,7 @@ export class DashboardService {
     requirePermission(actor, "dashboard.read");
     const wanted: AnomalyStatus[] =
       statuses && statuses.length > 0 ? statuses : ["NEW", "UNDER_ANALYSIS", "ACTION_IN_PROGRESS"];
-    const all = await this.anomalies.list(actor.tenantId, undefined, SYSTEM_SCOPE);
+    const all = await this.anomalies.list(actor.tenantId, undefined, readerScope(actor));
     return withoutHiddenRisk(this.risks, actor, all.filter((a) => wanted.includes(a.status)));
   }
 
@@ -351,7 +351,7 @@ export class DashboardService {
       throw new ValidationError("framework is required (ACT-210: cadre obligatoire en paramètre)");
     }
 
-    const controls = await this.controls.list(actor.tenantId, { includeArchived: false }, SYSTEM_SCOPE);
+    const controls = await this.controls.list(actor.tenantId, { includeArchived: false }, readerScope(actor));
     const scopedControls = filters.entity
       ? await this.filterControlsByEntity(actor.tenantId, controls, filters.entity)
       : controls;
@@ -380,7 +380,7 @@ export class DashboardService {
     }
 
     const overdueControlActions = (
-      await this.getOverdueActionViews(actor.tenantId, { sourceType: "CONTROL" })
+      await this.getOverdueActionViews(actor, { sourceType: "CONTROL" })
     ).length;
 
     const executionSample = doneCount + notDoneCount;
@@ -420,7 +420,7 @@ export class DashboardService {
     const ownedKris = allKris.filter((k) => ownedRiskIds.has(k.riskId));
     const kriSummaries = await Promise.all(ownedKris.map((k) => this.toKriSummary(actor.tenantId, k)));
 
-    const actions = await this.actionPlans.list(actor.tenantId, { responsibleUserId: actor.userId }, SYSTEM_SCOPE);
+    const actions = await this.actionPlans.list(actor.tenantId, { responsibleUserId: actor.userId }, readerScope(actor));
     const actionViews = await maskRiskSource(this.risks, actor, actions.map(toActionPlanView));
 
     const alerts: RiskOwnerAlert[] = [];
@@ -475,9 +475,9 @@ export class DashboardService {
 
     const [allRisks, allControls, kpis, actions] = await Promise.all([
       this.risks.list(actor.tenantId, undefined, readerScope(actor)),
-      this.controls.list(actor.tenantId, undefined, SYSTEM_SCOPE),
-      this.kpis.list(actor.tenantId, { departmentId }, SYSTEM_SCOPE),
-      this.actionPlans.list(actor.tenantId, { departmentIds: [departmentId] }, SYSTEM_SCOPE),
+      this.controls.list(actor.tenantId, undefined, readerScope(actor)),
+      this.kpis.list(actor.tenantId, { departmentId }, readerScope(actor)),
+      this.actionPlans.list(actor.tenantId, { departmentIds: [departmentId] }, readerScope(actor)),
     ]);
 
     const departmentRisks = allRisks.filter((r) => r.ownerDepartmentId === departmentId);
@@ -526,7 +526,7 @@ export class DashboardService {
       this.getScoredRisks(actor.tenantId, riskListOptions, readerScope(actor)),
       this.getKriSummariesScoped(actor, scope),
       this.getOverdueActionViewsScoped(actor, scope),
-      this.anomalies.list(actor.tenantId, undefined, SYSTEM_SCOPE),
+      this.anomalies.list(actor.tenantId, undefined, readerScope(actor)),
       this.getScopedRiskIds(actor.tenantId, scope, readerScope(actor)),
     ]);
 
@@ -980,8 +980,9 @@ export class DashboardService {
     return { kpi, status, achievementRate, latestValue: latest?.value ?? null };
   }
 
-  private async getOverdueActionViews(tenantId: string, filters?: ActionPlanListFilters): Promise<ActionPlanView[]> {
-    const rows = await this.actionPlans.list(tenantId, filters, SYSTEM_SCOPE);
+  private async getOverdueActionViews(actor: AuthenticatedUser, filters?: ActionPlanListFilters): Promise<ActionPlanView[]> {
+    // Lot V2 (SEC V1-03): only the plans the reader sees.
+    const rows = await this.actionPlans.list(actor.tenantId, filters, readerScope(actor));
     return rows.map(toActionPlanView).filter((v) => v.computedStatus === "EN_RETARD");
   }
 
@@ -1072,6 +1073,6 @@ export class DashboardService {
     const scopedFilters = this.actionPlanFiltersForScope(scope, filters);
     if (scopedFilters === null) return [];
     // SEC V1-05: the overdue plans of the executive view / committee report lose a hidden risk source id.
-    return maskRiskSource(this.risks, actor, await this.getOverdueActionViews(actor.tenantId, scopedFilters));
+    return maskRiskSource(this.risks, actor, await this.getOverdueActionViews(actor, scopedFilters));
   }
 }

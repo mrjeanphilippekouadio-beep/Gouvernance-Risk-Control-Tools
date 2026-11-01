@@ -1,4 +1,4 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { readerScope } from "../domain/visibility.js";
 import type { KpiMeasureRepository } from "../domain/repositories/KpiMeasureRepository.js";
 import type { KpiRepository } from "../domain/repositories/KpiRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
@@ -26,7 +26,7 @@ export class KpiMeasureService {
   ): Promise<KpiMeasure> {
     requirePermission(actor, "kpi.create");
 
-    const kpi = await this.kpis.getById(actor.tenantId, input.kpiId, SYSTEM_SCOPE);
+    const kpi = await this.kpis.getById(actor.tenantId, input.kpiId, readerScope(actor));
     if (!kpi) throw new ValidationError(`Kpi ${input.kpiId} does not exist in this tenant`);
 
     if (!Number.isFinite(input.value)) {
@@ -59,7 +59,7 @@ export class KpiMeasureService {
 
   async listForKpi(actor: AuthenticatedUser, kpiId: string): Promise<KpiMeasure[]> {
     requirePermission(actor, "kpi.read");
-    const kpi = await this.kpis.getById(actor.tenantId, kpiId, SYSTEM_SCOPE);
+    const kpi = await this.kpis.getById(actor.tenantId, kpiId, readerScope(actor));
     if (!kpi) throw new ValidationError(`Kpi ${kpiId} does not exist in this tenant`);
     return this.measures.listForKpi(actor.tenantId, kpiId);
   }

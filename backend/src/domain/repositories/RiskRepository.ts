@@ -38,7 +38,12 @@ export interface RiskRepository {
   /** Create once for a tenant-scoped Idempotency-Key; retries return the original resource. */
   createIdempotent(input: CreateRiskInput, idempotencyKey: string): Promise<{ risk: Risk; created: boolean }>;
   /** `audit` (lot V1, SEC V1-02): when given, its rows are written in the same transaction as the update. */
-  update(tenantId: string, id: string, input: UpdateRiskInput, audit?: TransactionalAudit<Risk>): Promise<Risk>;
+  /**
+   * `audit` (lot V1, SEC V1-02): when given, its rows are written in the same transaction as the update. Lot V2: when
+   * department or process change, `perimeterWidening` tells whether someone reads the risk after who did not before
+   * (effective sets by risk_visible_to, under a row lock). Absent (test fakes): the service falls back on its own rule.
+   */
+  update(tenantId: string, id: string, input: UpdateRiskInput, audit?: TransactionalAudit<Risk & { perimeterWidening?: boolean }>): Promise<Risk & { perimeterWidening?: boolean }>;
   /** ACT-120/121: the only way `ownerId` is ever written — never via the generic `update()`. `null` clears it. */
   assignOwner(tenantId: string, id: string, ownerId: string | null): Promise<Risk>;
   /** ACT-122: the only way `superiorOwnerId` is ever written. `null` clears it. */

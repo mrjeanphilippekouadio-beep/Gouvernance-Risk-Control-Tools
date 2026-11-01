@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { mountVisibilityRoutes, VisibilityLevel } from "./resourceVisibility.routes.js";
 import { optionalComment } from "../validation.js";
 import type { AnomalyService } from "../../services/AnomalyService.js";
 
@@ -13,6 +14,7 @@ const CreateAnomalyBody = z.object({
   description: z.string().min(1),
   severity: Severity,
   origin: z.string().nullish(),
+  visibility: VisibilityLevel.optional(),
 });
 
 const UpdateStatusBody = z.object({
@@ -54,6 +56,8 @@ export function anomaliesRouter(anomalyService: AnomalyService): Router {
       next(err);
     }
   });
+
+  mountVisibilityRoutes(router, anomalyService);
 
   router.patch("/:id/status", async (req, res, next) => {
     try {

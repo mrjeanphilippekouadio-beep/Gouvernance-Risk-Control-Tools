@@ -8,6 +8,7 @@ export interface ActionPlanRepository {
   /** `scope` (DECISION-100, fail-closed SEC V0-01): the reader's visibility, mandatory; internal reads pass SYSTEM_SCOPE. */
   getById(tenantId: string, id: string, scope: ReadScope): Promise<ActionPlan | null>;
   list(tenantId: string, filters: ActionPlanListFilters | undefined, scope: ReadScope): Promise<ActionPlan[]>;
+
   create(input: CreateActionPlanInput): Promise<ActionPlan>;
   /** ACT-191: narrow — sets progressPercent + the latest progress comment only, never a generic field-by-field update. */
   updateProgress(tenantId: string, id: string, progressPercent: number, comment: string | null): Promise<ActionPlan>;
@@ -29,5 +30,6 @@ export interface ActionPlanRepository {
    * plan in the tenant or issuing one query per action to inspect its
    * links. Returns the union of both, no duplicates, single query.
    */
-  listForRisk(tenantId: string, riskId: string): Promise<ActionPlan[]>;
+  /** Lot V2: `scope` mandatory (fail-closed). */
+  listForRisk(tenantId: string, riskId: string, scope: ReadScope): Promise<ActionPlan[]>;
 }

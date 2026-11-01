@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { mountVisibilityRoutes, VisibilityLevel } from "./resourceVisibility.routes.js";
 import { boundedArray, reasonText } from "../validation.js";
 import type { ControlService } from "../../services/ControlService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
@@ -23,10 +24,13 @@ const CreateControlBody = z.object({
   validator: z.string().nullish(),
   expectedEvidence: z.string().nullish(),
   complianceCriteria: z.string().min(1),
+  visibility: VisibilityLevel.optional(),
 });
 
-const UpdateControlBody = CreateControlBody.partial().extend({
+const UpdateControlBody = CreateControlBody.omit({ visibility: true }).partial().extend({
   status: ControlStatus.optional(),
+  /** Lot V2: required by the service when the department or process of a restricted control changes. */
+  reason: reasonText(500).optional(),
 });
 
 const ArchiveControlBody = z.object({ reason: reasonText(2000) });
@@ -80,6 +84,8 @@ export function controlsRouter(
       next(err);
     }
   });
+
+  mountVisibilityRoutes(router, controlService);
 
   router.patch("/:id", async (req, res, next) => {
     try {

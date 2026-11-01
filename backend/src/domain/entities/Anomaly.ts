@@ -1,3 +1,4 @@
+import type { Visibility } from "../visibility.js";
 export type AnomalySeverity = "LOW" | "MODERATE" | "HIGH" | "MAJOR" | "CRITICAL";
 export type AnomalyStatus = "NEW" | "UNDER_ANALYSIS" | "ACTION_IN_PROGRESS" | "CLOSED";
 
@@ -7,6 +8,8 @@ export type AnomalyStatus = "NEW" | "UNDER_ANALYSIS" | "ACTION_IN_PROGRESS" | "C
  * see apps-script-legacy/14_Anomalies.gs.
  */
 export interface Anomaly {
+  /** Lot V2 (DECISION-100/102): who may read it. Set at creation, then only through PUT /:id/visibility. Absent = CLIENT. */
+  visibility?: Visibility;
   id: string;
   tenantId: string;
   controlId: string | null;
@@ -26,6 +29,8 @@ export interface Anomaly {
 }
 
 export interface CreateAnomalyInput {
+  /** Lot V2: level at creation (default CLIENT); the named-people list is set afterwards (PUT /:id/visibility). */
+  visibility?: Visibility;
   tenantId: string;
   controlId?: string | null;
   controlExecutionId?: string | null;

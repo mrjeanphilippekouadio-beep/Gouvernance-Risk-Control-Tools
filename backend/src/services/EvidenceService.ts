@@ -1,6 +1,8 @@
 import type { EvidenceRepository } from "../domain/repositories/EvidenceRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { ControlExecutionRepository } from "../domain/repositories/ControlExecutionRepository.js";
+import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
+import { readerScope } from "../domain/visibility.js";
 import { createHash } from "node:crypto";
 import type { Evidence } from "../domain/entities/Evidence.js";
 import { ConflictError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
@@ -37,7 +39,21 @@ export class EvidenceService {
     private readonly audit: AuditRepository,
     /** SEC-004: optional so existing tests keep compiling — server.ts must wire the real repository. */
     private readonly controlExecutions?: ControlExecutionRepository,
+    /** Lot V2: an evidence follows the control of its execution (except for the executor). Wired in server.ts. */
+    private readonly controls?: ControlRepository,
   ) {}
+
+  /**
+   * Lot V2 (spec §1): an evidence attached to an execution is readable when the execution is (its control is readable,
+   * or the reader executed it). An evidence without execution is not restricted (level CLIENT).
+   */
+  private async executionHidden(actor: AuthenticatedUser, executionId: string | null | undefined): Promise<boolean> {
+    if (!executionId || !this.controlExecutions || !this.controls) return false;
+    const execution = await this.controlExecutions.getById(actor.tenantId, executionId);
+    if (!execution) return false;
+    if (execution.executedBy.toLowerCase() === actor.userId.toLowerCase()) return false;
+    return (await this.controls.getById(actor.tenantId, execution.controlId, readerScope(actor))) === null;
+  }
 
   async upload(
     actor: AuthenticatedUser,
@@ -69,7 +85,7 @@ export class EvidenceService {
     // SEC-004: don't attach evidence to another tenant's control execution.
     if (params.controlExecutionId && this.controlExecutions) {
       const execution = await this.controlExecutions.getById(actor.tenantId, params.controlExecutionId);
-      if (!execution) {
+      if (!execution || (await this.executionHidden(actor, params.controlExecutionId))) {
         throw new ValidationError(`ControlExecution ${params.controlExecutionId} does not exist in this tenant`);
       }
     }
@@ -157,6 +173,7 @@ export class EvidenceService {
 
   async listForControlExecution(actor: AuthenticatedUser, controlExecutionId: string): Promise<EvidenceSummary[]> {
     requirePermission(actor, "evidence.read");
+    if (await this.executionHidden(actor, controlExecutionId)) return [];
     const items = await this.evidences.listForControlExecution(actor.tenantId, controlExecutionId);
     return items.map(toSummary);
   }
@@ -277,6 +294,7 @@ export class EvidenceService {
   private async getOwnedOrThrow(actor: AuthenticatedUser, id: string): Promise<Evidence> {
     const evidence = await this.evidences.getById(actor.tenantId, id);
     if (!evidence || evidence.status === "DELETED") throw new NotFoundError("Evidence", id);
+    if (await this.executionHidden(actor, evidence.controlExecutionId)) throw new NotFoundError("Evidence", id);
     return evidence;
   }
 }

@@ -226,7 +226,9 @@ export class RiskService {
     }
 
     const repo = this.risks;
-    const after = await writeAudited<Risk>(
+    // Lot V2: the repository measures the real effective readers (`perimeterWidening`); the rule below is the fallback.
+    const widened = (updated: Risk & { perimeterWidening?: boolean }) => updated.perimeterWidening ?? perimeter?.widening ?? false;
+    const written = await writeAudited<Risk & { perimeterWidening?: boolean }>(
       repo.auditsInTransaction,
       this.audit,
       (audit) => repo.update(actor.tenantId, id, fields, audit),
@@ -238,7 +240,7 @@ export class RiskService {
           entityId: id,
           action: fields.status ? "STATUS_CHANGE" : "UPDATE",
           oldValue: before,
-          newValue: updated,
+          newValue: withoutWidening(updated),
           reason: perimeter ? reason : null,
           requestId,
         },
@@ -249,17 +251,20 @@ export class RiskService {
           entityId: id,
           action: "PERMISSION_CHANGE" as const,
           oldValue: { visibility: before.visibility, ownerDepartmentId: before.ownerDepartmentId, processId: before.processId ?? null },
-          newValue: { visibility: updated.visibility, ownerDepartmentId: updated.ownerDepartmentId, processId: updated.processId ?? null, widening: perimeter.widening },
+          newValue: { visibility: updated.visibility, ownerDepartmentId: updated.ownerDepartmentId, processId: updated.processId ?? null, widening: widened(updated) },
           reason,
           requestId,
         }] : []),
       ],
     );
-    if (perimeter?.widening && !holdsRight) await this.notifyVisibilityWidened(actor, id, requestId);
-    return after;
+    if (perimeter && widened(written) && !holdsRight) await this.notifyVisibilityWidened(actor, id, requestId);
+    return withoutWidening(written);
   }
 
-  /** Null when the change does not touch who may read the risk (a CLIENT risk, or same department and process). */
+  /**
+   * Null when the change does not touch who may read the risk (a CLIENT risk, or same department and process). `widening`
+   * here is only the fallback for a repository that cannot measure the effective readers (test fakes).
+   */
   private perimeterChange(before: Risk, input: UpdateRiskInput): { widening: boolean } | null {
     if ((before.visibility ?? "CLIENT") === "CLIENT") return null;
     const dept = input.ownerDepartmentId !== undefined && (input.ownerDepartmentId ?? null) !== (before.ownerDepartmentId ?? null);
@@ -565,4 +570,9 @@ function isWidening(before: RiskVisibilityState, after: RiskVisibilityState): bo
 function sameUserId(a: string, b: string): boolean {
   const normalise = (id: string) => id.toLowerCase().replace(/[{}-]/g, "");
   return normalise(a) === normalise(b);
+}
+
+function withoutWidening(risk: Risk & { perimeterWidening?: boolean }): Risk {
+  const { perimeterWidening: _ignored, ...rest } = risk;
+  return rest;
 }

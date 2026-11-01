@@ -1,4 +1,4 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { readerScope } from "../domain/visibility.js";
 import type { ControlEffectivenessRepository } from "../domain/repositories/ControlEffectivenessRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
@@ -37,7 +37,8 @@ export class ControlEffectivenessService {
   ): Promise<ControlEffectivenessAssessment> {
     requirePermission(actor, "effectiveness.create");
 
-    const control = await this.controls.getById(actor.tenantId, input.controlId, SYSTEM_SCOPE);
+    // Lot V2: assessing a control one does not see answers like a missing control.
+    const control = await this.controls.getById(actor.tenantId, input.controlId, readerScope(actor));
     if (!control) throw new ValidationError(`Control ${input.controlId} does not exist in this tenant`);
 
     if (!input.justification.trim()) {
@@ -68,13 +69,24 @@ export class ControlEffectivenessService {
   async get(actor: AuthenticatedUser, id: string): Promise<ControlEffectivenessAssessment> {
     requirePermission(actor, "effectiveness.read");
     const assessment = await this.assessments.getById(actor.tenantId, id);
-    if (!assessment) throw new NotFoundError("ControlEffectivenessAssessment", id);
+    // Lot V2 (spec §1): an assessment follows its control.
+    if (!assessment || !(await this.controlReadable(actor, assessment.controlId))) {
+      throw new NotFoundError("ControlEffectivenessAssessment", id);
+    }
     return assessment;
   }
 
   async listForControl(actor: AuthenticatedUser, controlId: string): Promise<ControlEffectivenessAssessment[]> {
     requirePermission(actor, "effectiveness.read");
+    // A hidden control answers like an unknown one (an empty list).
+    if (!(await this.controlReadable(actor, controlId))) return [];
     return this.assessments.listForControl(actor.tenantId, controlId);
+  }
+
+  private async controlReadable(actor: AuthenticatedUser, controlId: string): Promise<boolean> {
+    // A fake repository without lookups holds no restricted control (same convention as RiskRepository.hiddenIds).
+    if (typeof this.controls.getById !== "function") return true;
+    return (await this.controls.getById(actor.tenantId, controlId, readerScope(actor))) !== null;
   }
 
   async validate(

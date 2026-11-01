@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
-import { visibilityClause } from "./visibilityFilter.js";
-import { SYSTEM_SCOPE, type ReadScope } from "../../../domain/visibility.js";
+import { resourceVisibilityClause } from "./visibilityFilter.js";
+import { SYSTEM_SCOPE, type ReadScope, type Visibility } from "../../../domain/visibility.js";
 import type { KpiListFilters, KpiRepository } from "../../../domain/repositories/KpiRepository.js";
 import type { CreateKpiInput, Kpi, KpiFrequency, UpdateKpiInput } from "../../../domain/entities/Kpi.js";
 import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
@@ -19,6 +19,7 @@ interface KpiRow {
   active: boolean;
   created_at: Date;
   updated_at: Date;
+  visibility?: Visibility;
   deleted_at: Date | null;
   deleted_by: string | null;
   deletion_reason: string | null;
@@ -38,6 +39,7 @@ function toDomain(row: KpiRow): Kpi {
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    visibility: row.visibility ?? "CLIENT",
     deletedAt: row.deleted_at,
     deletedBy: row.deleted_by,
     deletionReason: row.deletion_reason,
@@ -49,7 +51,7 @@ export class PostgresKpiRepository implements KpiRepository {
 
   async getById(tenantId: string, id: string, scope: ReadScope): Promise<Kpi | null> {
     const { rows } = await this.pool.query<KpiRow>(
-      `SELECT * FROM kpis WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL ${visibilityClause(scope)}`,
+      `SELECT * FROM kpis WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL ${resourceVisibilityClause("KPI", scope)}`,
       [tenantId, id],
     );
     return rows[0] ? toDomain(rows[0]) : null;
@@ -76,7 +78,7 @@ export class PostgresKpiRepository implements KpiRepository {
     }
 
     const { rows } = await this.pool.query<KpiRow>(
-      `SELECT * FROM kpis WHERE ${conditions.join(" AND ")} ${visibilityClause(scope)} ORDER BY label`,
+      `SELECT * FROM kpis WHERE ${conditions.join(" AND ")} ${resourceVisibilityClause("KPI", scope)} ORDER BY label`,
       values,
     );
     return rows.map(toDomain);
@@ -85,8 +87,8 @@ export class PostgresKpiRepository implements KpiRepository {
   async create(input: CreateKpiInput): Promise<Kpi> {
     const { rows } = await this.pool.query<KpiRow>(
       `INSERT INTO kpis
-         (tenant_id, label, target_value, unit, frequency, owner, department_id, process_id, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (tenant_id, label, target_value, unit, frequency, owner, department_id, process_id, active, visibility)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         input.tenantId,
@@ -98,6 +100,7 @@ export class PostgresKpiRepository implements KpiRepository {
         input.departmentId ?? null,
         input.processId ?? null,
         input.active ?? true,
+        input.visibility ?? "CLIENT",
       ],
     );
     const row = rows[0];
