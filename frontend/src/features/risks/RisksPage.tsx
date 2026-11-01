@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { HiddenCountNotice } from "./HiddenCountNotice";
 import { risksApi, type Risk, type RiskStatus, type RiskVisibility } from "../../api/risks";
 import { AccessPeopleField, RiskVisibilityBadge, VisibilityLevelField, type NamedPerson } from "./RiskVisibility";
 import { departmentsApi, type DepartmentSummary } from "../../api/departments";
@@ -95,6 +96,7 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
   const [ownerModalRisk, setOwnerModalRisk] = useState<Risk | null>(null);
   const [ownerDraft, setOwnerDraft] = useState("");
   const [superiorDraft, setSuperiorDraft] = useState("");
+  const [designationReason, setDesignationReason] = useState("");
   const [savingOwner, setSavingOwner] = useState(false);
   const [ownerModalError, setOwnerModalError] = useState<string | null>(null);
 
@@ -197,6 +199,7 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
     setOwnerModalRisk(risk);
     setOwnerDraft(risk.ownerId ?? "");
     setSuperiorDraft(risk.superiorOwnerId ?? "");
+    setDesignationReason("");
     setOwnerModalError(null);
   }
 
@@ -204,19 +207,28 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
     if (!ownerModalRisk || savingOwner) return;
     setSavingOwner(true);
     setOwnerModalError(null);
+    const ownerId = ownerDraft.trim() || null;
+    const superiorOwnerId = superiorDraft.trim() || null;
+    let ownerSaved = false;
     try {
-      const ownerId = ownerDraft.trim() || null;
-      const superiorOwnerId = superiorDraft.trim() || null;
       if (ownerId !== ownerModalRisk.ownerId) {
-        await risksApi.assignOwner(token, ownerModalRisk.id, ownerId);
+        await risksApi.assignOwner(token, ownerModalRisk.id, ownerId, designationReason.trim() || undefined);
+        ownerSaved = true;
       }
       if (superiorOwnerId !== ownerModalRisk.superiorOwnerId) {
-        await risksApi.assignSuperiorOwner(token, ownerModalRisk.id, superiorOwnerId);
+        await risksApi.assignSuperiorOwner(token, ownerModalRisk.id, superiorOwnerId, designationReason.trim() || undefined);
       }
       setOwnerModalRisk(null);
       await refresh();
     } catch (err) {
-      setOwnerModalError(describeError(err));
+      if (ownerSaved) {
+        // Codex P2 (PR #225): the two designations are two calls; say what was saved and keep the modal in step with it.
+        setOwnerModalRisk({ ...ownerModalRisk, ownerId });
+        setOwnerModalError(`Le propriétaire a été enregistré ; le N+1 n'a pas pu l'être : ${describeError(err)}`);
+        await refresh();
+      } else {
+        setOwnerModalError(describeError(err));
+      }
     } finally {
       setSavingOwner(false);
     }
@@ -357,6 +369,7 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
             </label>
           </div>
         </div>
+        <HiddenCountNotice token={token} type="RISK" />
 
         <Table
           loading={loading}
@@ -476,6 +489,9 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
                   placeholder="Identifiant utilisateur"
                 />
               )}
+            </FormField>
+            <FormField label="Motif" htmlFor="designation-reason" help="Demandé si la personne désignée ne voit pas encore ce risque restreint.">
+              <input id="designation-reason" value={designationReason} maxLength={500} onChange={(e) => setDesignationReason(e.target.value)} />
             </FormField>
           </>
         )}

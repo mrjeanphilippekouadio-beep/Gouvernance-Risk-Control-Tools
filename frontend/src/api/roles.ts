@@ -102,8 +102,9 @@ export const rolesApi = {
   disable: (token: string, id: string) =>
     apiRequest<void>(`/api/v1/roles/${id}/disable`, { method: "POST", token }),
 
-  assign: (token: string, id: string, userId: string) =>
-    apiRequest<void>(`/api/v1/roles/${id}/assign`, { method: "POST", body: { userId }, token }),
+  // q212: `reason` is required by the server when the role opens restricted resources of its department (outside the RM group).
+  assign: (token: string, id: string, userId: string, reason?: string) =>
+    apiRequest<void>(`/api/v1/roles/${id}/assign`, { method: "POST", body: { userId, ...(reason ? { reason } : {}) }, token }),
 
   revoke: (token: string, id: string, userId: string) =>
     apiRequest<void>(`/api/v1/roles/${id}/revoke`, { method: "POST", body: { userId }, token }),

@@ -1,3 +1,4 @@
+import type { TransactionalAudit } from "../entities/RiskFramework.js";
 import type { CreateRoleInput, Role, RoleAssignment, UpdateRoleInput } from "../entities/Role.js";
 import type { AuditEvent } from "../entities/AuditEvent.js";
 import type { Permission } from "../permissions.js";
@@ -44,7 +45,16 @@ export interface RoleRepository {
   disable(tenantId: string, id: string): Promise<void>;
   /** Used by ACT-112: a role can't be disabled while a user is still actively assigned to it. */
   countActiveAssignments(tenantId: string, roleId: string): Promise<number>;
-  assignToUser(tenantId: string, roleId: string, userId: string, grantedBy: string, recheck?: RoleAssignRecheck): Promise<RoleAssignment>;
+  /** QA-V3-03: true when `assignToUser` writes the rows of `audit` in its own transaction (before COMMIT). */
+  readonly assignAuditsInTransaction?: boolean;
+  assignToUser(
+    tenantId: string,
+    roleId: string,
+    userId: string,
+    grantedBy: string,
+    recheck?: RoleAssignRecheck,
+    audit?: TransactionalAudit<RoleAssignment>,
+  ): Promise<RoleAssignment>;
   /**
    * `minRemaining`: refuse (ValidationError) when fewer than that many active
    * members would remain after the revoke — checked atomically (B-8: the

@@ -38,12 +38,15 @@ const ArchiveRiskBody = z.object({
   reason: reasonText(2000),
 });
 
+// q212 (DECISION-109): `reason` required by the service when the designation opens a restricted risk (outside the RM group).
 const AssignOwnerBody = z.object({
   ownerId: z.string().nullable(),
+  reason: reasonText(500).optional(),
 });
 
 const AssignSuperiorOwnerBody = z.object({
   superiorOwnerId: z.string().nullable(),
+  reason: reasonText(500).optional(),
 });
 
 const EscalateRiskBody = z.object({
@@ -166,7 +169,7 @@ export function risksRouter(
   router.post("/:id/owner", async (req, res, next) => {
     try {
       const body = AssignOwnerBody.parse(req.body);
-      const risk = await riskService.assignOwner(req.user, req.params["id"] as string, body.ownerId, req.requestId);
+      const risk = await riskService.assignOwner(req.user, req.params["id"] as string, body.ownerId, req.requestId, body.reason);
       res.json({ data: risk });
     } catch (err) {
       next(err);
@@ -182,6 +185,7 @@ export function risksRouter(
         req.params["id"] as string,
         body.superiorOwnerId,
         req.requestId,
+        body.reason,
       );
       res.json({ data: risk });
     } catch (err) {

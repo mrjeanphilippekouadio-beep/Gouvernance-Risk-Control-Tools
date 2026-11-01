@@ -336,31 +336,35 @@ export class PostgresRiskRepository implements RiskRepository {
   }
 
   /** ACT-120/121: narrow write, never through the generic `update()` (see RiskRepository interface). */
-  async assignOwner(tenantId: string, id: string, ownerId: string | null): Promise<Risk> {
-    const { rows } = await this.pool.query<RiskRow>(
-      `UPDATE risks
-       SET owner_id = $3, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
-       RETURNING *`,
-      [tenantId, id, ownerId],
-    );
-    const row = rows[0];
-    if (!row) throw new NotFoundError("Risk", id);
-    return toDomain(row);
+  async assignOwner(tenantId: string, id: string, ownerId: string | null, audit?: TransactionalAudit<Risk>): Promise<Risk> {
+    return runAudited(this.pool, async (db) => {
+      const { rows } = await db.query<RiskRow>(
+        `UPDATE risks
+         SET owner_id = $3, updated_at = now()
+         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+         RETURNING *`,
+        [tenantId, id, ownerId],
+      );
+      const row = rows[0];
+      if (!row) throw new NotFoundError("Risk", id);
+      return toDomain(row);
+    }, audit);
   }
 
   /** ACT-122: narrow write, never through the generic `update()` (see RiskRepository interface). */
-  async assignSuperiorOwner(tenantId: string, id: string, superiorOwnerId: string | null): Promise<Risk> {
-    const { rows } = await this.pool.query<RiskRow>(
-      `UPDATE risks
-       SET superior_owner_id = $3, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
-       RETURNING *`,
-      [tenantId, id, superiorOwnerId],
-    );
-    const row = rows[0];
-    if (!row) throw new NotFoundError("Risk", id);
-    return toDomain(row);
+  async assignSuperiorOwner(tenantId: string, id: string, superiorOwnerId: string | null, audit?: TransactionalAudit<Risk>): Promise<Risk> {
+    return runAudited(this.pool, async (db) => {
+      const { rows } = await db.query<RiskRow>(
+        `UPDATE risks
+         SET superior_owner_id = $3, updated_at = now()
+         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+         RETURNING *`,
+        [tenantId, id, superiorOwnerId],
+      );
+      const row = rows[0];
+      if (!row) throw new NotFoundError("Risk", id);
+      return toDomain(row);
+    }, audit);
   }
 
   async softDelete(tenantId: string, id: string, deletedBy: string, reason: string): Promise<void> {

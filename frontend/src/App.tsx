@@ -93,7 +93,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "users", label: "Comptes", icon: "user", available: true },
     { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
     { id: "rightsmatrix", label: "Matrice des droits", icon: "table", available: true, requires: ["role.read", "rolegroup.audit.validate", "role.assign"] },
-    { id: "restricted", label: "Ressources restreintes", icon: "shield", available: true, requires: "resourcevisibility.set" },
+    { id: "restricted", label: "Ressources restreintes", icon: "shield", available: true, requires: ["resourcevisibility.set", "riskevaluation.validate.committee", "audit.read"] },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
   ] },

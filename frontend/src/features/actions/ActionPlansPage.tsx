@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { HiddenCountNotice } from "../risks/HiddenCountNotice";
 import { ResourceVisibilityCard, RiskVisibilityBadge } from "../risks/RiskVisibility";
 import { actionPlanVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { Button, Card, DatePicker, FileUpload, FormField, Grid, GridItem, MessageBanner, Modal, ProgressBar, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
@@ -208,6 +209,7 @@ export function ActionPlansPage({ token }: Props) {
         <FormField label="Source" htmlFor="action-filter-source"><select id="action-filter-source" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as "" | ActionPlanSourceType)}><option value="">Toutes les sources</option>{Object.entries(sourceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FormField>
       </div>
       <Table columns={columns} rows={actions} rowKey={(action) => action.id} loading={loading} emptyMessage="Aucun plan d'action ne correspond aux filtres." />
+      <HiddenCountNotice token={token} type="ACTION_PLAN" />
     </Card>
 
     {visibilityTarget && <section className="action-plan-raci">

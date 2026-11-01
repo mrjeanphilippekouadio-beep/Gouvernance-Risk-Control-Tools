@@ -45,6 +45,8 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeInfo[] = [
   { resourceType: "ANOMALY", eventType: "ANOMALY_VISIBILITY_RESTRICTED", label: "Visibilité d’une anomalie restreinte par son déclarant", mandatory: true },
   // q207 (DECISION-107): a RACI assignment or a new process owner opened a restricted resource (author outside the RM group).
   { resourceType: "CONTROL", eventType: "CONTROL_VISIBILITY_WIDENED", label: "Contrôle restreint ouvert par une affectation RACI", mandatory: true },
+  // q212 (DECISION-109): a department-group role assignment opened restricted resources (author outside the RM group).
+  { resourceType: "MANAGEMENT", eventType: "DEPARTMENT_GROUP_VISIBILITY_WIDENED", label: "Attribution de rôle de département : ressources restreintes ouvertes", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "PROCESS_OWNER_VISIBILITY_WIDENED", label: "Nouveau responsable de processus : ressources restreintes ouvertes", mandatory: true },
   // Lot V2: same rule for an action plan (its responsible) or an anomaly (its declarer) with their own setting.
   { resourceType: "ACTION_PLAN", eventType: "ACTION_PLAN_VISIBILITY_WIDENED", label: "Visibilité d’un plan d’action élargie par son responsable", mandatory: true },

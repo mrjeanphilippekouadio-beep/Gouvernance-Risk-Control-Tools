@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, useRef } from "react";
+import { HiddenCountNotice } from "../risks/HiddenCountNotice";
 import { ResourceVisibilityCard, RiskVisibilityBadge } from "../risks/RiskVisibility";
 import { kpiVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { Button, Card, FormField, LineChart, MessageBanner, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
@@ -157,6 +158,7 @@ export function KpiPage({ token }: { token: string }) {
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
     <Card header={<strong>Liste des KPI</strong>}>
       <Table columns={columns} rows={rows} rowKey={(row) => row.id} loading={loading} emptyMessage="Aucun KPI défini pour l'instant." />
+      <HiddenCountNotice token={token} type="KPI" />
     </Card>
 
     {selected && <Card

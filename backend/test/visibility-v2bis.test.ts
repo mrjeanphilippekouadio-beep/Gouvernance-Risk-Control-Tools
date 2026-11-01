@@ -23,6 +23,8 @@ function world(readsBefore: boolean, readsAfter = true) {
     canRead: vi.fn(async () => (created ? readsAfter : readsBefore)),
     processOwnerGains: vi.fn(async () => []),
     listRestricted: vi.fn(async () => []),
+    seesEverything: vi.fn(async () => false),
+    isRiskManagerMember: vi.fn(async (_t: string, u: string) => u === RM),
   } as unknown as ResourceAccessRepository;
   const notifications = { create: vi.fn(async (n: unknown) => n) };
   const users = {
@@ -63,6 +65,12 @@ describe("q207 — a RACI assignment that opens a restricted resource", () => {
     expect(w.notifications.create).not.toHaveBeenCalled();
   });
 
+  it("Codex P2 (PR #225): the permission without real Risk Manager membership exempts nothing", async () => {
+    const w = world(false);
+    await expect(w.svc.assign(actor(EDITOR, ["raci.assign", "resourcevisibility.set"]), "RISK", RISK, TARGET, "C", "r")).rejects.toBeInstanceOf(ValidationError);
+    expect(w.raci.create).not.toHaveBeenCalled();
+  });
+
   it("nothing opens (the person already reads it, or the level ignores RACI): no reason, no trace, no notification", async () => {
     for (const w of [world(true), world(false, false)]) {
       await w.svc.assign(actor(EDITOR, ["raci.assign"]), "RISK", RISK, TARGET, "C", "req", "Motif");
@@ -84,10 +92,10 @@ describe("q207 / q208 — process owner and list of restricted resources", () =>
     await expect(w.manager.guardProcessOwnerOpening(actor(RM, ["resourcevisibility.set"]), "p1", TARGET, undefined)).resolves.toMatchObject({ reason: null, holdsRight: true });
   });
 
-  it("the list of restricted resources is for the Risk Manager group only", async () => {
+  it("the list of restricted resources is for the groups that see everything (PRIV-V3-01: membership, never a permission alone)", async () => {
     const w = world(true);
     await expect(w.manager.listRestricted(actor(EDITOR))).rejects.toBeInstanceOf(ForbiddenError);
-    await expect(w.manager.listRestricted(actor(RM, ["resourcevisibility.set"]))).resolves.toEqual([]);
+    await expect(w.manager.listRestricted(actor(RM, ["resourcevisibility.set"]))).rejects.toBeInstanceOf(ForbiddenError);
   });
 });
 
@@ -123,10 +131,11 @@ describe.skipIf(!hasLocalPg)("lot V2bis on real PostgreSQL (local only)", () => 
     expect(await count()).toBe(0);
     await expect(repo.createChecked(input, false, () => [{ tenantId: ctx.tenant } as never])).rejects.toThrow();
     expect(await count()).toBe(0);
+    const requestId = `t-v2b-cc-${Math.random()}`; // the local database may be reused between runs
     const ok = await repo.createChecked(input, false, ({ assignment }) => [{ tenantId: ctx.tenant, userId: o!, entityType: "RaciAssignment",
-      entityId: assignment.id, action: "CREATE", oldValue: null, newValue: assignment, reason: "Motif", requestId: "t-v2b-cc" }]);
+      entityId: assignment.id, action: "CREATE", oldValue: null, newValue: assignment, reason: "Motif", requestId }]);
     expect(ok.opened).toBe(true);
     expect(await count()).toBe(1);
-    expect(Number((await one(`SELECT count(*) AS n FROM audit_log WHERE request_id = 't-v2b-cc'`)).n)).toBe(1);
+    expect(Number((await one(`SELECT count(*) AS n FROM audit_log WHERE request_id = $1`, [requestId])).n)).toBe(1);
   });
 });
