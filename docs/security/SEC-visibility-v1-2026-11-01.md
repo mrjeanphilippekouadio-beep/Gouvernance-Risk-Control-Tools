@@ -82,3 +82,29 @@ FINDING_IDENTIFIED. V0-02/V0-03 : RETEST_PASS (V0-02 limité aux risques et enfa
 | V1-03 | Partiel | Ids masqués retirés des contrôles, anomalies et plans (voir QA-VIS1-02). Texte des anomalies/plans et compteur exécutif : V2. |
 | V1-04 | **CORRIGÉ** | Risque masqué = id inconnu (200 `[]`) sur `/raci?entityType=RISK` et `?coveringRiskId=`. |
 | q205 | Livré | `GET /users/directory?q=` : recherche par nom (≥ 2 caractères, 20 max, filtre SQL avant limite, LIKE échappé, comptes actifs du tenant, id + nom), ouverte à `risk.create`/`risk.update` ; liste complète inchangée pour les droits actuels (403 sinon). Personnes nommées revalidées à l'écriture. |
+
+## Retest A10 (2026-11-01, commit `8791490`)
+
+Méthode : analyse statique du diff `a6b01e2..8791490` et `npx vitest run` de `visibility-v1`, `QA-visibility-v1`, `visibility-v0`, `QA-visibility-v0`, `RoleService`, `RiskService`, `UserService`, `QA-B6a11`, `boundedArray` : 175 verts, 87 ignorés (suites PostgreSQL locales, sans base). `tsc --noEmit` passe. Aucun accès Neon.
+
+**Verdict : VERT pour livrer V1**, avec des résidus LOW à suivre. Escalade HUMAN : aucune.
+
+| Constat | Retest | Analyse |
+|---|---|---|
+| V1-01 | **RETEST_PASS** | `RoleService.update` refuse (403) toute modification réelle de `departmentId` (lien ou retrait) sur un rôle que l'acteur détient. Même garde que pour `permissions`, tests de régression présents. Tentatives de contournement : créer un rôle lié au département puis se l'affecter est bloqué par le maker-checker (pas d'auto-affectation), et deux administrateurs restent la classe SEC-RL-04 acceptée (DECISION-104). Délier le groupe d'autrui reste possible, mais ne donne aucun accès (effet sur la disponibilité seulement, audité). |
+| V1-02 | **RETEST_PASS** | Sur un risque non CLIENT, changer le département ou le processus exige `resourcevisibility.set` ou d'être propriétaire (403 sinon) et un motif (`isAcceptableReason`, 500 caractères max). `UPDATE` et `PERMISSION_CHANGE` (avec `widening`) sont écrits dans la même transaction (`runAudited`). Le groupe RM est notifié si l'élargissement vient du propriétaire. Résidu INFO : la visibilité de référence est lue avant l'`UPDATE`, sans verrou. Un passage simultané CLIENT→PERIMETRE peut donc laisser passer un changement de département sans le contrôle (fenêtre étroite, sans gain d'accès pour l'acteur). |
+| V1-04 | **RETEST_PASS** | `/raci?entityType=RISK` et `?coveringRiskId=` répondent 200 `[]` pour un risque masqué comme pour un risque inexistant. `RiskEvaluationViewService` répond 404 `RiskEvaluation` (sans l'id du risque). |
+| V1-03 | **Partiel (LOW)** | `riskId`, `sourceId` et `coveredRiskIds` masqués sont retirés dans `ControlService.get/list`, `AnomalyService.get/list`, `ActionPlanService.get/list/dashboard/listLinks` et `DashboardService.getOpenAnomalies`. Le texte des anomalies et des plans reste lisible : il hérite en V2 (spec §1), acceptation du résidu jusqu'à V2 à journaliser (HUMAN). |
+
+**Ajouts vérifiés :**
+- `GET /users/directory?q=` : ouvert aussi à `risk.create`/`risk.update`. `q` doit être une chaîne unique (un tableau est refusé). Après `trim`, il faut 2 à 100 caractères. 20 résultats au plus. Le filtre SQL (`ILIKE`, avec `%`, `_` et `\` échappés, `ESCAPE '\\'`) est appliqué avant `LIMIT`, sur les comptes actifs du client (les comptes techniques des migrations, suspendus, sont exclus). Seuls `id` et `displayName` sont renvoyés. Conforme à DECISION-105/PRIV-REV-Q205-001. INFO : pas de limite de débit, donc une suite de recherches de 2 lettres reconstitue l'annuaire actif. C'est accepté par q201/q205, les noms n'étant pas confidentiels.
+- CORS : seul `Idempotency-Key` est ajouté aux en-têtes autorisés. Les origines restent la liste `CORS_ALLOWED_ORIGINS`, et les credentials ne changent pas. Sans risque.
+- Retour à CLIENT : la liste révoquée est celle lue **sous le verrou** `FOR UPDATE`, donc un accès accordé en concurrence ne survit pas. PASS.
+- `GET /:id/visibility` restitue les noms des personnes de la liste aux seuls lecteurs du risque (PRIV-REV-Q205-001). PASS.
+
+**Constats restants :**
+- **V1-05 — ids de risques masqués encore exposés hors des services corrigés (LOW, CVSS 2,7, CONFIRMED par lecture)** : `DashboardService.getDepartmentView` (`controls[].coveredRiskIds`, `actions[].sourceId`), `getOverdueActionViews` (vue exécutive, `sourceId`), `getRiskOwnerView` (`actions[].sourceId`, acceptable selon la règle « ce qui m'est assigné ») et `RiskEvaluationViewService.coveringControls` (`coveredRiskIds` des autres risques). Ce ne sont que des identifiants, sans contenu, mais ils confirment l'existence et le rattachement d'un risque masqué. Reco A06 : passer ces sorties par `maskHiddenRisks` / `withoutHiddenRisk`.
+- V1-03 résiduel (texte anomalie/plan, compteur `openAnomaliesCount` exécutif) : V2.
+- INFO déjà notées : écart DECISION-104 `audit.*`/`audit.read` (accord HUMAN), KRI filtrés en mémoire, perte silencieuse de liens KRI/contrôle masqués lors d'un remplacement complet, processus archivé dans `risk_visible_to`, fenêtre TOCTOU V1-02.
+
+Statut : V1-01, V1-02, V1-04 **RETEST_PASS**. V1-03 partiel (V2). V1-05 **REMEDIATION_REQUIRED** (A06, non bloquant). CLOSED ne vaut pas validation Risk, Compliance ou Privacy.
