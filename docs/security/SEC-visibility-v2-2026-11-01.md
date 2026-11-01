@@ -112,3 +112,23 @@ Correctif trivial, à faire avant merge. Le reste est LOW ou INFO.
 V2-01 **REMEDIATION_REQUIRED, bloquant** (A06, retest A10). V2-02 REMEDIATION_REQUIRED (A06/A07). V2-03 REVIEW_REQUIRED
 (HUMAN, puis A06). V2-04 dette acceptée sous réserve de tracking (A06). V0-04, V1-02, V1-03, V1-05 : RETEST_PASS.
 Verdict : **ORANGE**, VERT après correction et retest de V2-01. CLOSED ne vaut pas validation Risk, Compliance ou Privacy.
+
+## 7. Retest (commit b4277c3, 2026-11-01)
+
+Base locale fraîche `grc_sec_vv2r` (migrations 001..083 modifiée en place, PostgreSQL 16 local, jamais Neon), dépôts réels
+appelés par script, `tsc --noEmit` vert, vitest `visibility-v2` + `QA-visibility-v0` : 22 verts / 27 skip.
+
+| Constat | Résultat | Preuve |
+|---|---|---|
+| V2-01 | **RETEST_PASS** | Les deux INSERT écrivent `visibility`. Anomalie créée NOMINATIF : stockée NOMINATIF, tiers OUT 404 (`false`), déclarant lit. Plan créé NOMINATIF : idem, responsable lit. Sans niveau : CLIENT (défaut inchangé). |
+| V2-02 | **RETEST_PASS** | `anomaly_visible_to` : branche `control_execution_id` → exécutant ou `control_visible_to` du contrôle de l'exécution, sinon `false` (fail-closed). Contrôle NOMINATIF : tiers `false`, exécutant `true`. Un déclarant non exécutant ne lit plus sa propre anomalie si le contrôle lui est masqué : cohérent avec une anomalie rattachée au contrôle (héritage, pas de réglage propre). Service : `inheritsFrom = CONTROL`, réglage propre refusé. |
+| V2-04 | **RETEST_PASS** | `changePerimeter` : `SELECT … FOR UPDATE`, lecteurs avant/après et `UPDATE` dans la transaction de `runAudited`. Audit en échec : rollback vérifié (département inchangé). Audit OK : `PERMISSION_CHANGE` avec `widening = true` (membre du groupe du département devenu lecteur). `update`/`link` n'écrivent plus le périmètre hors de ce chemin. |
+| V2-03 | Inchangé | REVIEW_REQUIRED (HUMAN) : RACI et responsable de processus restent des écrivains de périmètre sans motif ni `widening`. |
+
+Résidus INFO (non bloquants) : (i) sur un contrôle/KPI, le périmètre et les autres champs sont écrits en deux
+transactions successives (le périmètre, seul enjeu de visibilité, est atomique avec son audit) ; (ii) la décision « ressource
+restreinte ? » est prise sur la lecture faite avant le verrou (même fenêtre étroite que V1-02, sans gain d'accès).
+Test de garde du câblage `server.ts` présent.
+
+**Verdict après retest : VERT** pour livrer V2. Seul V2-03 reste ouvert, en attente d'une décision HUMAN (7bis).
+CLOSED ne vaut pas validation Risk, Compliance ou Privacy.
