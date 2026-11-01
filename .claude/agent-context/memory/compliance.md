@@ -233,4 +233,9 @@ Détail : `docs/compliance/review-panel-d5-2026-10-19.md` (constats CMP-PNL2-01 
 Détail : `docs/compliance/CMP-F4.md` (CMP-F4-01 à 08). Bash indisponible, diff non exécuté ; fichiers lus directement. q166 conforme côté serveur (champion seul, politique DOUBLE_CONFIRMATION + aucun autre détenteur, motif, marqueur `noSelfValidation`), audit hors transaction et marqueur non affiché. Écran Comptes : pas de champ motif pour un rôle de groupe fixe (q44), libellé de suspension du dernier RM trompeur (DECISION-078). Annuaire id+nom conforme. Statut : recommandation, en attente de HUMAN (motif de suspension, affichage du marqueur, avis Privacy).
 32. Un écran qui expose un choix de rôle de gouvernance doit porter le motif que le serveur exige ; vérifier le contrat serveur avant de juger l'écran conforme.
 
+## Passage Compliance visibilité V2 (2026-11-01, branche feat/r1-visibility-v2)
+
+Détail : `docs/compliance/CMP-visibility-v2-2026-11-01.md` (CMP-V2-01 à 07). Spec §1/4/5/6 non lue (autre branche, pas de shell) ; tests non exécutés. Verdict : conforme avec réserves, pas de blocage de merge ; condition de production : CMP-V2-01 (audit du changement de périmètre hors transaction) et CMP-V2-02 (restriction par le propriétaire non notifiée, RM sans `audit.read` donc sans voie de consultation). En attente du PO : Q1 I-6 (recommandé oui avec contreparties), Q2 RACI comme levier de lecture sans motif, Q3 information Comité/Audit.
+33. Un levier de lecture secondaire (RACI, périmètre, propriétaire) doit laisser la même trace et le même signal que le circuit officiel ; un signal envoyé à un rôle qui ne peut pas relire la trace n'est pas un contrôle.
+
 31. Une table de décision qui n'est pas la piste d'audit mais en porte l'état (demandes, désignations) reçoit la même garde d'immuabilité que les autres (trigger, `search_path` épinglé, REVOKE) ; une méthode de réouverture d'un état terminal ne vit pas dans le dépôt de production.
