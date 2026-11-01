@@ -13,6 +13,7 @@ import { ControlMonitoringPage } from "./features/controls/ControlMonitoringPage
 import { AuditFindingsPage } from "./features/audit/AuditFindingsPage";
 import { ActionPlansPage } from "./features/actions/ActionPlansPage";
 import { AuditLogPage } from "./features/audit/AuditLogPage";
+import { RestrictedResourcesPage } from "./features/risks/RestrictedResourcesPage";
 import { AuditMissionsPage } from "./features/audit/AuditMissionsPage";
 import { RightsMatrixPage } from "./features/admin/RightsMatrixPage";
 import { usePermissions } from "./auth/usePermissions";
@@ -41,7 +42,7 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "auditmissions" | "rightsmatrix";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "auditmissions" | "rightsmatrix" | "restricted";
 type NavItem = { id: View; label: string; icon: string; available?: boolean; /** Hidden without this permission (display only). */ requires?: string | string[] } | { separator: string };
 const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
@@ -92,6 +93,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "users", label: "Comptes", icon: "user", available: true },
     { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
     { id: "rightsmatrix", label: "Matrice des droits", icon: "table", available: true, requires: ["role.read", "rolegroup.audit.validate", "role.assign"] },
+    { id: "restricted", label: "Ressources restreintes", icon: "shield", available: true, requires: "resourcevisibility.set" },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
   ] },
@@ -111,6 +113,7 @@ const PAGE_TITLES: Record<View, string> = {
   findings: "Constats & recommandations",
   actions: "Plans d’action",
   auditlog: "Journal d'audit",
+  restricted: "Ressources restreintes",
   anomalies: "Anomalies",
   kri: "Indicateurs de risque (KRI)",
   kpi: "Indicateurs de performance (KPI)",
@@ -242,6 +245,7 @@ function App() {
             {view === "findings" && <AuditFindingsPage token={token} />}
             {view === "actions" && <ActionPlansPage token={token} />}
             {view === "auditlog" && <AuditLogPage token={token} />}
+            {view === "restricted" && <RestrictedResourcesPage token={token} />}
             {view === "anomalies" && <AnomaliesPage token={token} />}
             {view === "kri" && <KriPage token={token} />}
             {view === "kpi" && <KpiPage token={token} />}

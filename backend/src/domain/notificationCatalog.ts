@@ -39,6 +39,13 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeInfo[] = [
   { resourceType: "MANAGEMENT", eventType: "RISK_MANAGER_VACANCY", label: "Groupe Risk Manager vacant", mandatory: true },
   // q199 (DECISION-102): an owner widened the visibility of a risk; the Risk Manager group is told, nothing is blocked.
   { resourceType: "RISK", eventType: "RISK_VISIBILITY_WIDENED", label: "Visibilité d’un risque élargie par son propriétaire", mandatory: true },
+  // q208 (DECISION-107): any change by the owner is reported, also when it restricts.
+  { resourceType: "RISK", eventType: "RISK_VISIBILITY_RESTRICTED", label: "Visibilité d’un risque restreinte par son propriétaire", mandatory: true },
+  { resourceType: "ACTION_PLAN", eventType: "ACTION_PLAN_VISIBILITY_RESTRICTED", label: "Visibilité d’un plan d’action restreinte par son responsable", mandatory: true },
+  { resourceType: "ANOMALY", eventType: "ANOMALY_VISIBILITY_RESTRICTED", label: "Visibilité d’une anomalie restreinte par son déclarant", mandatory: true },
+  // q207 (DECISION-107): a RACI assignment or a new process owner opened a restricted resource (author outside the RM group).
+  { resourceType: "CONTROL", eventType: "CONTROL_VISIBILITY_WIDENED", label: "Contrôle restreint ouvert par une affectation RACI", mandatory: true },
+  { resourceType: "MANAGEMENT", eventType: "PROCESS_OWNER_VISIBILITY_WIDENED", label: "Nouveau responsable de processus : ressources restreintes ouvertes", mandatory: true },
   // Lot V2: same rule for an action plan (its responsible) or an anomaly (its declarer) with their own setting.
   { resourceType: "ACTION_PLAN", eventType: "ACTION_PLAN_VISIBILITY_WIDENED", label: "Visibilité d’un plan d’action élargie par son responsable", mandatory: true },
   { resourceType: "ANOMALY", eventType: "ANOMALY_VISIBILITY_WIDENED", label: "Visibilité d’une anomalie élargie par son déclarant", mandatory: true },

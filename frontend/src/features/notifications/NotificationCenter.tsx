@@ -4,7 +4,7 @@ import { ApiError } from "../../api/client";
 import { notificationsApi, type AppNotification, type NotificationResourceType, type NotificationSubscription, type NotificationType } from "../../api/notifications";
 import "./NotificationCenter.css";
 
-export type NotificationTarget = "risks" | "actions" | "controls" | "evaluation" | "roles";
+export type NotificationTarget = "risks" | "actions" | "controls" | "evaluation" | "roles" | "processes";
 
 const POLL_MS = 60_000;
 const COUNT_CAP = 100;
@@ -16,6 +16,11 @@ const TARGETS: Partial<Record<NotificationResourceType, { view: NotificationTarg
   CONTROL: { view: "controls", label: "Ouvrir les contrôles" },
   RISK_EVALUATION: { view: "evaluation", label: "Ouvrir les évaluations" },
   MANAGEMENT: { view: "roles", label: "Ouvrir les rôles" },
+};
+
+/** Codex P2 (PR #224): an event whose screen is not its resource type's (a MANAGEMENT notice about a process). */
+const EVENT_TARGETS: Partial<Record<string, { view: NotificationTarget; label: string }>> = {
+  PROCESS_OWNER_VISIBILITY_WIDENED: { view: "processes", label: "Ouvrir les processus" },
 };
 
 function errorText(e: unknown): string {
@@ -158,7 +163,9 @@ export function NotificationCenter({ token, onNavigate }: { token: string; onNav
               <ul className="notif-list">
                 {items.map((n) => {
                   // Dispositif notices are MANAGEMENT too but have no screen yet: no link rather than "roles".
-                  const target = n.resourceId !== null && !n.eventType.startsWith("RISK_FRAMEWORK_") ? TARGETS[n.resourceType] : undefined;
+                  const target = n.resourceId !== null && !n.eventType.startsWith("RISK_FRAMEWORK_")
+                    ? EVENT_TARGETS[n.eventType] ?? TARGETS[n.resourceType]
+                    : undefined;
                   const isUnread = n.readAt === null;
                   return (
                     <li key={n.id} className="notif-item" data-unread={isUnread || undefined}>

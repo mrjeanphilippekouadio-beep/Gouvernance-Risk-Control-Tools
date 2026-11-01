@@ -482,7 +482,7 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
       expect((await get("own", `/risks/${id}`)).status).toBe(200);
     });
 
-    it("owner widens NOMINATIF -> PERIMETRE and adds a name at the same level: notified; owner narrows or RM widens: not notified", async () => {
+    it("owner widens NOMINATIF -> PERIMETRE and adds a name at the same level: notified; owner narrows: notified too since q208 (DECISION-107); RM widens: not notified", async () => {
       const id = await fresh("NOMINATIF");
       const count = async () => (await sql<{ n: number }>("SELECT count(*)::int AS n FROM notifications WHERE resource_id = $1 AND recipient_user_id = $2", [id, I("109")]))[0]!.n;
       await sql("DELETE FROM notifications WHERE true");
@@ -491,9 +491,10 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
       expect((await call("own", "PUT", `/risks/${id}/visibility`, { visibility: "PERIMETRE", reason: "Elargir" })).status).toBe(200);
       expect(await count()).toBe(2);
       expect((await call("own", "PUT", `/risks/${id}/visibility`, { visibility: "NOMINATIF", reason: "Restreindre" })).status).toBe(200);
-      expect(await count()).toBe(2);
+      expect(await count()).toBe(3); // q208 (DECISION-107): a restriction by the owner is reported too (RISK_VISIBILITY_RESTRICTED)
+      expect((await sql<{ event_type: string }>("SELECT event_type FROM notifications WHERE resource_id = $1 AND recipient_user_id = $2 ORDER BY sent_at, id", [id, I("109")])).map((r) => r.event_type)).toEqual(["RISK_VISIBILITY_WIDENED", "RISK_VISIBILITY_WIDENED", "RISK_VISIBILITY_RESTRICTED"]);
       expect((await call("rm", "PUT", `/risks/${id}/visibility`, { visibility: "CLIENT", reason: "RM ouvre" })).status).toBe(200);
-      expect(await count()).toBe(2);
+      expect(await count()).toBe(3);
     });
 
     it("a notification failure does not undo the change (best effort): RM group with no member to notify still gives 200", async () => {

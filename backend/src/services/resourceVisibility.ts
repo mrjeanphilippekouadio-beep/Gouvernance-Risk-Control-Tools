@@ -2,6 +2,7 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type {
+  RestrictedResourceRow,
   PerimeterChange,
   PerimeterChangeResult,
   ResourceAccessRepository,
@@ -29,17 +30,38 @@ export interface VisibilityTarget {
   inheritsFrom: string | null;
 }
 
-const WIDENED_EVENT: Partial<Record<RestrictableResource, { resourceType: NotificationResourceType; eventType: string; message: string }>> = {
-  ACTION_PLAN: { resourceType: "ACTION_PLAN", eventType: "ACTION_PLAN_VISIBILITY_WIDENED", message: "Le responsable d'un plan d'action a élargi sa visibilité." },
-  ANOMALY: { resourceType: "ANOMALY", eventType: "ANOMALY_VISIBILITY_WIDENED", message: "Le déclarant d'une anomalie a élargi sa visibilité." },
+type OwnerEvent = { resourceType: NotificationResourceType; eventType: string; message: string };
+/** q199/q204/q208: what the Risk Manager group receives when an owner changes a level (widening, or restricting). */
+const OWNER_EVENTS: Partial<Record<RestrictableResource, { widened: OwnerEvent; restricted: OwnerEvent }>> = {
+  ACTION_PLAN: {
+    widened: { resourceType: "ACTION_PLAN", eventType: "ACTION_PLAN_VISIBILITY_WIDENED", message: "Le responsable d'un plan d'action a élargi sa visibilité." },
+    restricted: { resourceType: "ACTION_PLAN", eventType: "ACTION_PLAN_VISIBILITY_RESTRICTED", message: "Le responsable d'un plan d'action a modifié ou restreint sa visibilité." },
+  },
+  ANOMALY: {
+    widened: { resourceType: "ANOMALY", eventType: "ANOMALY_VISIBILITY_WIDENED", message: "Le déclarant d'une anomalie a élargi sa visibilité." },
+    restricted: { resourceType: "ANOMALY", eventType: "ANOMALY_VISIBILITY_RESTRICTED", message: "Le déclarant d'une anomalie a modifié ou restreint sa visibilité." },
+  },
 };
+
+/** q207: a RACI assignment that opened a restricted resource to someone (author outside the Risk Manager group). */
+const RACI_WIDENED: Record<"RISK" | "CONTROL" | "ACTION_PLAN", OwnerEvent> = {
+  RISK: { resourceType: "RISK", eventType: "RISK_VISIBILITY_WIDENED", message: "Une affectation RACI a ouvert la lecture d'un risque restreint." },
+  CONTROL: { resourceType: "CONTROL", eventType: "CONTROL_VISIBILITY_WIDENED", message: "Une affectation RACI a ouvert la lecture d'un contrôle restreint." },
+  ACTION_PLAN: { resourceType: "ACTION_PLAN", eventType: "ACTION_PLAN_VISIBILITY_WIDENED", message: "Une affectation RACI a ouvert la lecture d'un plan d'action restreint." },
+};
+
+/** Same level and same named people (order ignored). */
+export function sameVisibilityState(a: { visibility: string; accessUserIds: string[] }, b: { visibility: string; accessUserIds: string[] }): boolean {
+  return a.visibility === b.visibility && a.accessUserIds.length === b.accessUserIds.length
+    && a.accessUserIds.every((u) => b.accessUserIds.some((v) => sameUserId(u, v)));
+}
 
 export function sameUserId(a: string, b: string): boolean {
   const normalise = (id: string) => id.toLowerCase().replace(/[{}-]/g, "");
   return normalise(a) === normalise(b);
 }
 
-function checkedReason(raw: string | undefined, what: string): string {
+export function checkedReason(raw: string | undefined, what: string): string {
   const reason = raw?.trim() ?? "";
   if (!reason || reason.length > 500 || !isAcceptableReason(reason)) {
     throw new ValidationError(`A reason (1 to 500 characters) is required to ${what}`);
@@ -106,7 +128,9 @@ export class ResourceVisibilityManager {
         requestId,
       }],
     );
-    if (!holdsRight && result.widening) await this.notifyWidened(actor, target, requestId);
+    // q208 (DECISION-107): every change by the owner reaches the Risk Manager group, widening or restricting.
+    // QA-V2B-02: a request that changes nothing (same level, same list) does not wake the group.
+    if (!holdsRight && !sameVisibilityState(result.before, result.after)) await this.notifyOwnerChange(actor, target, result.widening, requestId);
     return this.withNames(actor.tenantId, result.after);
   }
 
@@ -176,8 +200,73 @@ export class ResourceVisibilityManager {
         requestId,
       }],
     );
-    if (result.widening && !guard.holdsRight) await this.notifyWidened(actor, target, requestId);
+    if (!guard.holdsRight) await this.notifyOwnerChange(actor, target, result.widening, requestId);
     return result;
+  }
+
+  /**
+   * q207 (DECISION-107): before a RACI assignment on a risk, control or plan. Returns null when the person already reads
+   * it (nothing opens); otherwise the assignment may open it: an author outside the Risk Manager group must give a reason.
+   */
+  async guardRaciOpening(
+    actor: AuthenticatedUser,
+    type: "RISK" | "CONTROL" | "ACTION_PLAN",
+    id: string,
+    userId: string,
+    rawReason: string | undefined,
+  ): Promise<{ reason: string | null; holdsRight: boolean } | null> {
+    if (await this.access.canRead(actor.tenantId, type, id, userId)) return null;
+    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const reason = rawReason?.trim() ? checkedReason(rawReason, "open a restricted resource through RACI") : null;
+    if (!holdsRight && !reason) {
+      throw new ValidationError("A reason (1 to 500 characters) is required: this RACI assignment gives read access to a restricted resource");
+    }
+    return { reason, holdsRight };
+  }
+
+  /** q207: after the assignment, whether it really opened the resource; if so, the audit row and the notification. */
+  async raciOpened(actor: AuthenticatedUser, type: "RISK" | "CONTROL" | "ACTION_PLAN", id: string, userId: string): Promise<boolean> {
+    return this.access.canRead(actor.tenantId, type, id, userId);
+  }
+
+  async notifyRaciOpening(actor: AuthenticatedUser, type: "RISK" | "CONTROL" | "ACTION_PLAN", id: string, requestId: string): Promise<void> {
+    await this.notifyManagers(actor, RACI_WIDENED[type], id, requestId);
+  }
+
+  /**
+   * q207: a new process owner reads the PERIMETRE resources (risks, controls, KPIs) of that process. Returns those they
+   * cannot read yet; an author outside the Risk Manager group must then give a reason.
+   */
+  async guardProcessOwnerOpening(
+    actor: AuthenticatedUser,
+    processId: string,
+    newOwnerId: string,
+    rawReason: string | undefined,
+  ): Promise<{ reason: string | null; holdsRight: boolean; opened: Array<{ type: string; id: string }> } | null> {
+    const opened = await this.access.processOwnerGains(actor.tenantId, processId, newOwnerId);
+    if (opened.length === 0) return null;
+    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const reason = rawReason?.trim() ? checkedReason(rawReason, "open restricted resources through a process owner") : null;
+    if (!holdsRight && !reason) {
+      throw new ValidationError("A reason (1 to 500 characters) is required: the new process owner would read restricted resources");
+    }
+    return { reason, holdsRight, opened };
+  }
+
+  async notifyProcessOwnerOpening(actor: AuthenticatedUser, processId: string, requestId: string): Promise<void> {
+    await this.notifyManagers(actor, {
+      resourceType: "MANAGEMENT",
+      eventType: "PROCESS_OWNER_VISIBILITY_WIDENED",
+      message: "Un nouveau responsable de processus lit désormais des ressources restreintes.",
+    }, processId, requestId);
+  }
+
+  /** q208 (DECISION-107): every restricted resource of the client, for the Risk Manager group (`resourcevisibility.set`). */
+  async listRestricted(actor: AuthenticatedUser): Promise<RestrictedResourceRow[]> {
+    if (!actor.roles.includes("resourcevisibility.set")) {
+      throw new ForbiddenError("Only the Risk Manager group can list the restricted resources");
+    }
+    return this.access.listRestricted(actor.tenantId);
   }
 
   /** Among `ids`, those the actor may NOT read (one query). */
@@ -226,9 +315,14 @@ export class ResourceVisibilityManager {
   }
 
   /** q199/q204: best-effort, never undoes the change, never names the content. */
-  private async notifyWidened(actor: AuthenticatedUser, target: VisibilityTarget, requestId: string): Promise<void> {
-    const event = WIDENED_EVENT[target.type];
-    if (!event || !this.notifications || !this.users?.listWithPermission) return;
+  private async notifyOwnerChange(actor: AuthenticatedUser, target: VisibilityTarget, widened: boolean, requestId: string): Promise<void> {
+    const events = OWNER_EVENTS[target.type];
+    if (events) await this.notifyManagers(actor, widened ? events.widened : events.restricted, target.id, requestId);
+  }
+
+  /** q199/q207/q208: best-effort, never undoes the change, never names the content. */
+  private async notifyManagers(actor: AuthenticatedUser, event: OwnerEvent, resourceId: string, requestId: string): Promise<void> {
+    if (!this.notifications || !this.users?.listWithPermission) return;
     try {
       const managers = await this.users.listWithPermission(actor.tenantId, "resourcevisibility.set", actor.userId);
       for (const m of managers) {
@@ -236,13 +330,14 @@ export class ResourceVisibilityManager {
           tenantId: actor.tenantId,
           recipientUserId: m.id,
           resourceType: event.resourceType,
-          resourceId: target.id,
+          resourceId,
           eventType: event.eventType,
           message: event.message,
         });
       }
     } catch (err) {
-      console.error(`${event.eventType} ${target.id}: managers could not be notified (requestId ${requestId})`, err instanceof Error ? err.message : err);
+      console.error(`${event.eventType} ${resourceId}: managers could not be notified (requestId ${requestId})`, err instanceof Error ? err.message : err);
     }
   }
+
 }

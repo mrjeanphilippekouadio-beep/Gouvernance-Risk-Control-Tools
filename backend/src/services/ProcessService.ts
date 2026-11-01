@@ -1,4 +1,5 @@
 import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import type { ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -83,6 +84,8 @@ export class ProcessService {
     private readonly users?: UserRepository,
     /** q166: the only way past I-R1 (self as risk champion when nobody else can assign); without it, refused as before. */
     private readonly selfValidation?: SelfValidationGate,
+    /** q207 (DECISION-107): a new owner who opens restricted resources is reasoned, traced and reported. Wired in server.ts. */
+    private readonly access?: ResourceVisibilityManager,
   ) {}
 
   private async assertDepartmentExists(tenantId: string, departmentId: string): Promise<void> {
@@ -236,6 +239,7 @@ export class ProcessService {
     input: ProcessResponsibilitiesInput,
     requestId: string,
     confirmation?: GovernanceConfirmation,
+    reason?: string,
   ): Promise<Process> {
     requirePermission(actor, "process.responsibility.assign");
     const before = await this.get(actor, id);
@@ -271,9 +275,14 @@ export class ProcessService {
       ? (await this.ownerCandidates(actor.tenantId, before.owner)).some((c) => c.id === changes.ownerUserId)
       : undefined;
 
+    // q207 (DECISION-107): a new owner reads the PERIMETRE resources of the process; opening them is reasoned and traced.
+    const opening = changes.ownerUserId && this.access
+      ? await this.access.guardProcessOwnerOpening(actor, id, changes.ownerUserId, reason)
+      : null;
+
     const pick = (p: Process) => ({ ownerUserId: p.ownerUserId, riskChampionUserId: p.riskChampionUserId, deputyUserId: p.deputyUserId });
     // DECISION-079: the change and its audit row (with the q166 marker) in one transaction.
-    return writeAudited(
+    const result = await writeAudited<Process>(
       this.processes.auditsInTransaction,
       this.audit,
       (audit) => this.processes.setResponsibilities(actor.tenantId, id, changes, audit),
@@ -295,8 +304,21 @@ export class ProcessService {
           requestId,
           ...(selfChampion ? { governanceException: selfChampion.governanceException } : {}),
         },
+        ...(opening ? [{
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Process",
+          entityId: id,
+          action: "PERMISSION_CHANGE" as const,
+          oldValue: { ownerUserId: before.ownerUserId },
+          newValue: { ownerUserId: after.ownerUserId, widening: true, through: "PROCESS_OWNER", opened: opening.opened },
+          reason: opening.reason,
+          requestId,
+        }] : []),
       ],
     );
+    if (opening && !opening.holdsRight) await this.access!.notifyProcessOwnerOpening(actor, id, requestId);
+    return result;
   }
 
   /** Active accounts of the tenant whose display name equals the legacy owner text (accent/case/word-order insensitive). Id + name only. */

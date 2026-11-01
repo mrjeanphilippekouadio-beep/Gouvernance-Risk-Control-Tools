@@ -20,6 +20,15 @@ export interface ResourceVisibilityChange {
   changedBy: string;
 }
 
+export interface RestrictedResourceRow {
+  type: RestrictableResource | "RISK";
+  id: string;
+  label: string;
+  visibility: Visibility;
+  accessCount: number;
+  updatedAt: Date;
+}
+
 export interface PerimeterChange { departmentId?: string | null; processId?: string | null }
 export type PerimeterChangeResult = {
   before: { departmentId: string | null; processId: string | null };
@@ -57,6 +66,12 @@ export interface ResourceAccessRepository {
     change: PerimeterChange,
     audit?: TransactionalAudit<PerimeterChangeResult>,
   ): Promise<PerimeterChangeResult>;
+  /** q207: whether `userId` reads the resource now (SQL `<root>_visible_to`). */
+  canRead(tenantId: string, type: RestrictableResource | "RISK", id: string, userId: string): Promise<boolean>;
+  /** q207: the PERIMETRE risks, controls and KPIs of a process that `userId` does not read yet (what owning it would open). */
+  processOwnerGains(tenantId: string, processId: string, userId: string): Promise<Array<{ type: string; id: string }>>;
+  /** q208: every restricted resource of the tenant (any root, not deleted), with its active named-people count. */
+  listRestricted(tenantId: string): Promise<RestrictedResourceRow[]>;
   /** Active accounts of the tenant that read the resource now (SQL `<root>_visible_to`). */
   readers(tenantId: string, type: RestrictableResource | "RISK", id: string): Promise<string[]>;
   /** QA-VIS2-02: among control execution ids, those the scope may NOT read (control hidden and not their executor). */

@@ -61,13 +61,13 @@ describe("lot V2 — changing the level of a control, anomaly, plan or KPI", () 
     expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ recipientUserId: RM, eventType: "ACTION_PLAN_VISIBILITY_WIDENED" }));
   });
 
-  it("the Risk Manager widening, or an owner narrowing: no notification", async () => {
+  it("the Risk Manager changing a level: no notification; an owner restricting: notified too (q208, DECISION-107)", async () => {
     const a = manager(true);
     await a.m.set(actor(RM, ["resourcevisibility.set"]), target(), input, "r");
     expect(a.notifications.create).not.toHaveBeenCalled();
     const b = manager(false);
     await b.m.set(actor(OWNER), target(), input, "r");
-    expect(b.notifications.create).not.toHaveBeenCalled();
+    expect(b.notifications.create).toHaveBeenCalledWith(expect.objectContaining({ recipientUserId: RM, eventType: "ACTION_PLAN_VISIBILITY_RESTRICTED" }));
   });
 
   it("refused before any write: self-add, missing reason, a resource that follows its parent", async () => {

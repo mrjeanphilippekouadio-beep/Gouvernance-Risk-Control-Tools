@@ -37,3 +37,17 @@ export const INHERITS_LABEL: Record<"RISK" | "CONTROL" | "KRI", string> = {
   CONTROL: "Suit la visibilité de son contrôle.",
   KRI: "Suit la visibilité du risque de son KRI.",
 };
+
+/** q208 (DECISION-107): a restricted resource, as listed for the Risk Manager group. */
+export interface RestrictedResource {
+  type: "RISK" | "CONTROL" | "ANOMALY" | "ACTION_PLAN" | "KPI";
+  id: string;
+  label: string;
+  visibility: "PERIMETRE" | "NOMINATIF";
+  accessCount: number;
+  updatedAt: string;
+}
+
+export const restrictedResourcesApi = {
+  list: (token: string) => apiRequest<RestrictedResource[]>("/api/v1/restricted-resources", { token }),
+};

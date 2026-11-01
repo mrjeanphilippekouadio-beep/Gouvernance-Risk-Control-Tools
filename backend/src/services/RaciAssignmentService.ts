@@ -1,5 +1,8 @@
 import { SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
 import { hiddenRiskIds } from "./riskVisibility.js";
+import { checkedReason, type ResourceVisibilityManager } from "./resourceVisibility.js";
+
+const AUDIT_ENTITY: Record<RaciEntityType, string> = { RISK: "Risk", CONTROL: "Control", ACTION_PLAN: "ActionPlan" };
 import type { RaciAssignmentRepository } from "../domain/repositories/RaciAssignmentRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -44,6 +47,8 @@ export class RaciAssignmentService {
     private readonly controls?: ControlRepository,
     private readonly actionPlans?: ActionPlanRepository,
     private readonly users?: UserRepository,
+    /** q207 (DECISION-107): an assignment that opens a restricted resource is reasoned, traced and reported. Wired in server.ts. */
+    private readonly access?: ResourceVisibilityManager,
   ) {}
 
   async assign(
@@ -53,6 +58,7 @@ export class RaciAssignmentService {
     userId: string,
     role: RaciRole,
     requestId: string,
+    reason?: string,
   ): Promise<RaciAssignment> {
     requirePermission(actor, "raci.assign");
 
@@ -73,15 +79,46 @@ export class RaciAssignmentService {
       throw new ValidationError("Target user does not exist in this tenant or is suspended");
     }
     await this.assertNoSelfRaConflict(actor.tenantId, entityType, entityId, actor.userId, userId, role);
+    const input = { tenantId: actor.tenantId, entityType, entityId, userId, role, createdBy: actor.userId };
+    // Codex P2 (PR #224): with the real repository, the q207 check, the assignment and its audit rows are one
+    // transaction under a lock of the entity row (no visibility change can slip in between, no compensation needed).
+    if (this.access && this.raci.createChecked) {
+      const holdsRight = actor.roles.includes("resourcevisibility.set");
+      const givenReason = reason?.trim() ? checkedReason(reason, "open a restricted resource through RACI") : null;
+      const { assignment, opened } = await this.raci.createChecked(input, !holdsRight && !givenReason, ({ assignment: a, opened: o }) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "RaciAssignment",
+          entityId: a.id,
+          action: "CREATE",
+          oldValue: null,
+          newValue: a,
+          // An unneeded reason (nothing opens) is not recorded, as before.
+          reason: o ? givenReason : null,
+          requestId,
+        },
+        ...(o ? [{
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: AUDIT_ENTITY[entityType],
+          entityId,
+          action: "PERMISSION_CHANGE" as const,
+          oldValue: { raciUserId: userId, reads: false },
+          newValue: { raciUserId: userId, role, reads: true, widening: true, through: "RACI" },
+          reason: givenReason,
+          requestId,
+        }] : []),
+      ]);
+      if (opened && !holdsRight) await this.access.notifyRaciOpening(actor, entityType, entityId, requestId);
+      return assignment;
+    }
 
-    const assignment = await this.raci.create({
-      tenantId: actor.tenantId,
-      entityType,
-      entityId,
-      userId,
-      role,
-      createdBy: actor.userId,
-    });
+    // Test fakes without `createChecked`: the q207 check before the write, the audit after (compensated on failure).
+    const opening = this.access ? await this.access.guardRaciOpening(actor, entityType, entityId, userId, reason) : null;
+
+    let opened = false;
+    const assignment = await this.raci.create(input);
 
     try {
       await this.audit.record({
@@ -92,9 +129,23 @@ export class RaciAssignmentService {
         action: "CREATE",
         oldValue: null,
         newValue: assignment,
-        reason: null,
+        reason: opening?.reason ?? null,
         requestId,
       });
+      if (opening && (await this.access!.raciOpened(actor, entityType, entityId, userId))) {
+        opened = true;
+        await this.audit.record({
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: AUDIT_ENTITY[entityType],
+          entityId,
+          action: "PERMISSION_CHANGE",
+          oldValue: { raciUserId: userId, reads: false },
+          newValue: { raciUserId: userId, role, reads: true, widening: true, through: "RACI" },
+          reason: opening.reason,
+          requestId,
+        });
+      }
     } catch (auditError) {
       try {
         await this.raci.remove(actor.tenantId, assignment.id);
@@ -106,6 +157,7 @@ export class RaciAssignmentService {
       }
       throw auditError;
     }
+    if (opened && !opening!.holdsRight) await this.access!.notifyRaciOpening(actor, entityType, entityId, requestId);
 
     return assignment;
   }

@@ -43,7 +43,10 @@ export interface ProcessResponsibilities {
   /** q176: the current champion named themselves through the q166 exception (computed by the server from the audit). */
   riskChampionWithoutIndependentReview: boolean;
 }
-export type ResponsibilitiesInput = Partial<Record<"ownerUserId" | "riskChampionUserId" | "deputyUserId", string | null>>;
+export type ResponsibilitiesInput = Partial<Record<"ownerUserId" | "riskChampionUserId" | "deputyUserId", string | null>> & {
+  /** q207: required by the server when the new owner would read restricted resources (author outside the RM group). */
+  reason?: string;
+};
 
 export const processesApi = {
   responsibilities: (token: string, id: string) =>

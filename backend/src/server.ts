@@ -131,6 +131,7 @@ import { GovernanceDesignationService } from "./services/GovernanceDesignationSe
 import { PostgresGovernanceDesignationRepository } from "./infrastructure/database/postgres/PostgresGovernanceDesignationRepository.js";
 import { feedbackRouter } from "./api/v1/feedback.routes.js";
 import { kpisRouter } from "./api/v1/kpis.routes.js";
+import { restrictedResourcesRouter } from "./api/v1/restrictedResources.routes.js";
 import { kpiMeasuresRouter } from "./api/v1/kpiMeasures.routes.js";
 import { riskAppetiteRouter } from "./api/v1/riskAppetite.routes.js";
 import { ratingScalesRouter } from "./api/v1/ratingScales.routes.js";
@@ -259,6 +260,8 @@ const departmentService = new DepartmentService(departmentRepository, auditRepos
 // DECISION-074 D4: one gate for every self-validation guard, one query object for validators / third parties / markers.
 const governanceQueries = new PostgresGovernanceQueries(pool);
 const selfValidationGate = new SelfValidationGate(configRepository, governanceQueries);
+// Lot V2 (DECISION-100/102): level and named-people list of controls, anomalies, action plans and KPIs.
+const resourceVisibilityManager = new ResourceVisibilityManager(new PostgresResourceAccessRepository(pool), auditRepository, userRepository, notificationRepository);
 const processService = new ProcessService(
   processRepository,
   auditRepository,
@@ -268,6 +271,7 @@ const processService = new ProcessService(
   departmentRepository,
   userRepository,
   selfValidationGate,
+  resourceVisibilityManager,
 );
 const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
   processEvaluationModeRequestRepository,
@@ -281,8 +285,6 @@ const organizationProfileService = new OrganizationProfileService(
   auditRepository,
 );
 const auditLogService = new AuditLogService(auditRepository);
-// Lot V2 (DECISION-100/102): level and named-people list of controls, anomalies, action plans and KPIs.
-const resourceVisibilityManager = new ResourceVisibilityManager(new PostgresResourceAccessRepository(pool), auditRepository, userRepository, notificationRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository, visibilityResolver, resourceVisibilityManager);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository, selfValidationGate);
 const effectivenessService = new ControlEffectivenessService(
@@ -390,7 +392,7 @@ const actionPlanService = new ActionPlanService(
   resourceVisibilityManager,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository, riskFrameworkRepository);
-const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository);
+const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository, resourceVisibilityManager);
 // RACI read-side wiring (PO-confirmed follow-up to Lot 1, see RaciEnrichmentViewService
 // doc comment): composes risk/control/actionPlan services with raciAssignmentService,
 // read-only, never a condition for a write.
@@ -627,6 +629,8 @@ app.use(
   moduleGuard(moduleToggleService, "KPI"),
   kpisRouter(kpiService),
 );
+// q208 (DECISION-107): list of the restricted resources, Risk Manager group only (checked by the service).
+app.use("/api/v1/restricted-resources", authMiddleware(identityProvider), restrictedResourcesRouter(resourceVisibilityManager));
 app.use("/api/v1/kpi-measures", authMiddleware(identityProvider), kpiMeasuresRouter(kpiMeasureService));
 app.use("/api/v1/appetite", authMiddleware(identityProvider), riskAppetiteRouter(riskAppetiteService));
 app.use("/api/v1/rating-scales", authMiddleware(identityProvider), ratingScalesRouter(ratingScaleService));

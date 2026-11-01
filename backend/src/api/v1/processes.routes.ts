@@ -38,6 +38,8 @@ const ResponsibilitiesBody = z
     riskChampionUserId: z.guid().nullable().optional(),
     deputyUserId: z.guid().nullable().optional(),
     governanceConfirmation: GovernanceConfirmationBody.optional(),
+    /** q207: required by the service when the new owner would read restricted resources (author outside the RM group). */
+    reason: reasonText(500).optional(),
   })
   .strict();
 const ArchiveProcessBody = z.object({ reason: reasonText(2000) });
@@ -84,13 +86,14 @@ export function processesRouter(processService: ProcessService): Router {
 
   router.put("/:id/responsibilities", async (req, res, next) => {
     try {
-      const { governanceConfirmation, ...body } = ResponsibilitiesBody.parse(req.body);
+      const { governanceConfirmation, reason, ...body } = ResponsibilitiesBody.parse(req.body);
       const process = await processService.setResponsibilities(
         req.user,
         req.params["id"] as string,
         body,
         req.requestId,
         governanceConfirmation,
+        reason,
       );
       res.json({ data: process });
     } catch (err) {

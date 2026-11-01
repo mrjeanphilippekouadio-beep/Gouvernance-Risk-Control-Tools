@@ -1,7 +1,23 @@
 import type { CreateRaciAssignmentInput, RaciAssignment, RaciEntityType, RaciRole } from "../entities/RaciAssignment.js";
+import type { TransactionalAudit } from "../entities/RiskFramework.js";
+
+/** Codex P2 (PR #224): what `createChecked` measured, under the lock of the entity row. */
+export type RaciCreateResult = { assignment: RaciAssignment; opened: boolean };
 
 export interface RaciAssignmentRepository {
+  /** QA-V2B-01: refuses (ConflictError) an assignment identical to an active one, even under concurrent requests. */
   create(input: CreateRaciAssignmentInput): Promise<RaciAssignment>;
+  /**
+   * Codex P2 (PR #224), q207: the assignment, the check "does it give the person read access to a restricted entity?"
+   * and its audit rows in ONE transaction, the entity row locked (FOR SHARE) so that no visibility change can slip in
+   * between. `requireReasonIfOpens`: refuse (ValidationError, nothing written) when it opens and no reason was given.
+   * Optional: a fake without it goes through `create` + the service's own checks.
+   */
+  createChecked?(
+    input: CreateRaciAssignmentInput,
+    requireReasonIfOpens: boolean,
+    audit: TransactionalAudit<RaciCreateResult>,
+  ): Promise<RaciCreateResult>;
   getById(tenantId: string, id: string): Promise<RaciAssignment | null>;
   listForEntity(tenantId: string, entityType: RaciEntityType, entityId: string): Promise<RaciAssignment[]>;
   /**
