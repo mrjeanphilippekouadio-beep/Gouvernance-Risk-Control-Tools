@@ -197,3 +197,13 @@ Principe ajouté :
     est une revue Privacy même si le champ de l'annuaire ne change pas : la
     sensibilité vient de ce que l'écran en aval révèle (fonction, position dans
     le dispositif de contrôle), pas du seul contrat d'API.
+
+## Avis V3 — comptage « non visibles » et liste restreinte (2026-11-01, PRIV-VIS-V3)
+
+Statut : **OK AVEC RÉSERVES**. Document : `docs/privacy/PRIV-visibility-v3-2026-11-01.md`.
+- Comptage conforme (PERIMETRE seul, NOMINATIF jamais compté). Spec §6 non lue (pas d'accès git).
+- V3-01 à corriger : `listRestricted` accepte `resourcevisibility.set` seul, plus large que « voit tout » (groupes système RM/Comité/Audit) : fuite possible de NOMINATIF vers un rôle personnalisé.
+- Motif libre : recommandé visible des 3 groupes, agir à la source (consigne de saisie, aperçu 140). `lastChange.userId` à retirer de la réponse.
+- Questions PO : motif visible du Comité (recommandé oui) ; auteur visible du Comité (recommandé non).
+
+13. Quand un écran est ouvert à un groupe « qui voit déjà tout », vérifier que la garde utilise la définition de ce groupe (fonction SQL), pas une permission proxy qu'un rôle personnalisé peut porter seul.
