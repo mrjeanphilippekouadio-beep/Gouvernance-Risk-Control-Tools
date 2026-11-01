@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { risksApi, type Risk, type RiskStatus, type RiskVisibility } from "../../api/risks";
-import { AccessPeopleField, RiskVisibilityBadge, useDirectory, VisibilityLevelField } from "./RiskVisibility";
+import { AccessPeopleField, RiskVisibilityBadge, VisibilityLevelField, type NamedPerson } from "./RiskVisibility";
 import { departmentsApi, type DepartmentSummary } from "../../api/departments";
 import { usersApi, type UserSummary } from "../../api/users";
 import { ApiError } from "../../api/client";
@@ -80,8 +80,7 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
   const [description, setDescription] = useState("");
   const [ownerDepartmentId, setOwnerDepartmentId] = useState("");
   const [visibility, setVisibility] = useState<RiskVisibility>("CLIENT");
-  const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
-  const accountDirectory = useDirectory(token);
+  const [accessPeople, setAccessPeople] = useState<NamedPerson[]>([]);
   const [creating, setCreating] = useState(false);
   const [createIdempotencyKey, setCreateIdempotencyKey] = useState(() => crypto.randomUUID());
 
@@ -166,7 +165,7 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
           description,
           ownerDepartmentId: ownerDepartmentId || null,
           visibility,
-          ...(visibility === "CLIENT" ? {} : { accessUserIds }),
+          ...(visibility === "CLIENT" ? {} : { accessUserIds: accessPeople.map((p) => p.id) }),
         },
         createIdempotencyKey,
       );
@@ -175,7 +174,7 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
       setDescription("");
       setOwnerDepartmentId("");
       setVisibility("CLIENT");
-      setAccessUserIds([]);
+      setAccessPeople([]);
       await refresh();
     } catch (err) {
       setError(describeError(err));
@@ -321,7 +320,7 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
             )}
             <VisibilityLevelField id="risk-visibility" value={visibility} onChange={setVisibility} />
             {visibility !== "CLIENT" && (
-              <AccessPeopleField id="risk-access" accounts={accountDirectory} value={accessUserIds} onChange={setAccessUserIds} label="Personnes nommées (facultatif)" />
+              <AccessPeopleField id="risk-access" token={token} value={accessPeople} onChange={setAccessPeople} label="Personnes nommées (facultatif)" />
             )}
             <div className="core-form-actions">
               <Button type="submit" variant="primary" disabled={creating} aria-busy={creating}>

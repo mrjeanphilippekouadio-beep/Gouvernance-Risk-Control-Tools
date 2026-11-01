@@ -499,3 +499,13 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - q203 : `audit.read` (journal) réservé au groupe AUDIT dans `assertRolePermissionRules` ; dans les tests, un rôle ordinaire
   « auditeur » prend `audit.mission.read`.
 - Nouvelle notification obligatoire → 4 épingles (QA-D044, QA-Notifications, NotificationsCenter, compte 25).
+
+## 2026-11-01 — Passe de corrections V1
+- Un lien de rôle à un département ouvre un périmètre : même garde « rôle détenu » que `permissions` (SEC V1-01).
+- Un champ qui décide qui lit (département, processus d'un risque restreint) se change comme la visibilité : droit
+  dédié ou propriétaire, motif, audit dans la même transaction (`update(…, audit)` + `writeAudited`) — SEC V1-02.
+- Liste d'enfants d'un risque masqué = réponse d'un id inconnu (souvent `[]`, pas 404). Ids masqués dans une racine
+  CLIENT : `maskHiddenRisks` (une requête `hiddenIds`).
+- Revocation « retour à CLIENT » : lire la liste SOUS le verrou, jamais celle calculée avant la transaction (course).
+- q205 : `searchActive` (ILIKE échappé, filtre avant LIMIT) ; `GET /visibility` renvoie `accessUsers` (noms).
+- CORS : tout en-tête exigé par une route (Idempotency-Key) doit être dans `api/corsOptions.ts`.

@@ -110,7 +110,7 @@ export class RiskService {
   async getAccess(actor: AuthenticatedUser, id: string): Promise<RiskVisibilityState> {
     const risk = await this.get(actor, id);
     const accessUserIds = this.risks.listAccess ? await this.risks.listAccess(actor.tenantId, id) : [];
-    return { visibility: risk.visibility ?? "CLIENT", accessUserIds };
+    return this.withNames(actor.tenantId, { visibility: risk.visibility ?? "CLIENT", accessUserIds });
   }
 
   /**
@@ -168,7 +168,14 @@ export class RiskService {
     if (!holdsRight && isWidening(result.before, result.after)) {
       await this.notifyVisibilityWidened(actor, id, requestId);
     }
-    return result.after;
+    return this.withNames(actor.tenantId, result.after);
+  }
+
+  private async withNames(tenantId: string, state: RiskVisibilityState): Promise<RiskVisibilityState> {
+    if (!this.users) return state;
+    const users = this.users;
+    const accessUsers = await Promise.all(state.accessUserIds.map(async (id) => ({ id, displayName: (await users.getById(tenantId, id))?.displayName ?? null })));
+    return { ...state, accessUsers };
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<Risk> {
@@ -199,21 +206,65 @@ export class RiskService {
     await this.assertDepartmentExists(actor.tenantId, input.ownerDepartmentId);
     await this.assertProcessExists(actor.tenantId, input.processId);
 
-    const after = await this.risks.update(actor.tenantId, id, input);
+    // SEC V1-02: on a restricted risk, the department and the process decide who reads it (risk_visible_to). Changing
+    // them is a visibility change: Risk Manager group or owner, mandatory reason, audited with the update.
+    const { reason: rawReason, ...fields } = input;
+    const perimeter = this.perimeterChange(before, fields);
+    const reason = rawReason?.trim() ?? "";
+    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    if (perimeter) {
+      if (!holdsRight && !(before.ownerId !== null && sameUserId(before.ownerId, actor.userId))) {
+        throw new ForbiddenError("Only the Risk Manager group or the risk owner can change the department or process of a restricted risk");
+      }
+      if (!reason || reason.length > 500 || !isAcceptableReason(reason)) {
+        throw new ValidationError("A reason (1 to 500 characters) is required to change the department or process of a restricted risk");
+      }
+    }
 
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Risk",
-      entityId: id,
-      action: input.status ? "STATUS_CHANGE" : "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason: null,
-      requestId,
-    });
-
+    const repo = this.risks;
+    const after = await writeAudited<Risk>(
+      repo.auditsInTransaction,
+      this.audit,
+      (audit) => repo.update(actor.tenantId, id, fields, audit),
+      (updated) => [
+        {
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Risk",
+          entityId: id,
+          action: fields.status ? "STATUS_CHANGE" : "UPDATE",
+          oldValue: before,
+          newValue: updated,
+          reason: perimeter ? reason : null,
+          requestId,
+        },
+        ...(perimeter ? [{
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Risk",
+          entityId: id,
+          action: "PERMISSION_CHANGE" as const,
+          oldValue: { visibility: before.visibility, ownerDepartmentId: before.ownerDepartmentId, processId: before.processId ?? null },
+          newValue: { visibility: updated.visibility, ownerDepartmentId: updated.ownerDepartmentId, processId: updated.processId ?? null, widening: perimeter.widening },
+          reason,
+          requestId,
+        }] : []),
+      ],
+    );
+    if (perimeter?.widening && !holdsRight) await this.notifyVisibilityWidened(actor, id, requestId);
     return after;
+  }
+
+  /** Null when the change does not touch who may read the risk (a CLIENT risk, or same department and process). */
+  private perimeterChange(before: Risk, input: UpdateRiskInput): { widening: boolean } | null {
+    if ((before.visibility ?? "CLIENT") === "CLIENT") return null;
+    const dept = input.ownerDepartmentId !== undefined && (input.ownerDepartmentId ?? null) !== (before.ownerDepartmentId ?? null);
+    const proc = input.processId !== undefined && (input.processId ?? null) !== (before.processId ?? null);
+    if (!dept && !proc) return null;
+    // Only PERIMETRE reads through the department group and the process owner: a new non-null value lets new people in.
+    const widening = before.visibility === "PERIMETRE"
+      && ((dept && input.ownerDepartmentId != null) || (proc && input.processId != null));
+    return { widening };
   }
 
   async archive(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<void> {

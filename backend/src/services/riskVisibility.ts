@@ -29,6 +29,21 @@ export async function keepReadableByRisk<T>(
   return hidden.size === 0 ? rows : rows.filter((row) => !hidden.has(riskIdOf(row) ?? ""));
 }
 
+/**
+ * QA-VIS1-02: a row that stays readable (a CLIENT control, anomaly or plan) loses the ids of the risks the actor may not
+ * read — `mask` rewrites the row with the hidden set. One `hiddenIds` query for all the rows.
+ */
+export async function maskHiddenRisks<T>(
+  risks: Pick<RiskRepository, "hiddenIds"> | undefined,
+  actor: AuthenticatedUser,
+  rows: T[],
+  riskIdsOf: (row: T) => Array<string | null | undefined>,
+  mask: (row: T, hidden: Set<string>) => T,
+): Promise<T[]> {
+  const hidden = await hiddenRiskIds(risks, actor, rows.flatMap(riskIdsOf));
+  return hidden.size === 0 ? rows : rows.map((row) => mask(row, hidden));
+}
+
 /** A row of a hidden risk answers exactly like a missing one (404, no existence oracle). */
 export async function assertReadableByRisk(
   risks: Pick<RiskRepository, "hiddenIds"> | undefined,

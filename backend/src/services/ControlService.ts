@@ -6,7 +6,7 @@ import type { Control, ControlStatus, CreateControlInput, UpdateControlInput } f
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
-import { assertReadableByRisk, hiddenRiskIds } from "./riskVisibility.js";
+import { hiddenRiskIds, maskHiddenRisks } from "./riskVisibility.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
 import { READER_DEFAULT_SCOPE } from "../domain/visibility.js";
 
@@ -65,18 +65,25 @@ export class ControlService {
     requirePermission(actor, "control.read");
     const control = await this.controls.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!control) throw new NotFoundError("Control", id);
-    return control;
+    return (await this.withoutHiddenRisks(actor, [control]))[0]!;
+  }
+
+  /** QA-VIS1-02: a readable control never names a risk the reader may not see. */
+  private withoutHiddenRisks(actor: AuthenticatedUser, controls: Control[]): Promise<Control[]> {
+    return maskHiddenRisks(this.risks, actor, controls, (c) => c.coveredRiskIds ?? [],
+      (c, hidden) => ({ ...c, coveredRiskIds: c.coveredRiskIds.filter((r) => !hidden.has(r)) }));
   }
 
   async list(actor: AuthenticatedUser, includeArchived = false): Promise<Control[]> {
     requirePermission(actor, "control.read");
-    return this.controls.list(actor.tenantId, { includeArchived }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    return this.withoutHiddenRisks(actor, await this.controls.list(actor.tenantId, { includeArchived }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE));
   }
 
   async listCoveringRisk(actor: AuthenticatedUser, riskId: string): Promise<Control[]> {
     requirePermission(actor, "control.read");
-    // Lot V1: which controls cover a restricted risk is as restricted as the risk.
-    await assertReadableByRisk(this.risks, actor, riskId, "Risk", riskId);
+    // Lot V1: which controls cover a restricted risk is as restricted as the risk; a hidden risk answers like an
+    // unknown one (an empty list, QA-VIS1-01 / SEC V1-04).
+    if ((await hiddenRiskIds(this.risks, actor, [riskId])).size > 0) return [];
     return this.controls.listCoveringRisk(actor.tenantId, riskId);
   }
 

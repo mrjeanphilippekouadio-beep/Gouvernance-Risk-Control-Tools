@@ -79,6 +79,11 @@ export interface RiskVisibilityChange {
 export interface RiskVisibilityState {
   visibility: Visibility;
   accessUserIds: string[];
+  /**
+   * q205: names of the named people, for the risk's readers only (PRIV-REV-Q205-001: being named on a risk is visible to
+   * those who see it). Filled by the service on reads; a missing account has a null name.
+   */
+  accessUsers?: Array<{ id: string; displayName: string | null }>;
 }
 
 export interface UpdateRiskInput {
@@ -87,4 +92,6 @@ export interface UpdateRiskInput {
   ownerDepartmentId?: string | null;
   status?: RiskStatus;
   processId?: string | null;
+  /** Lot V1 (SEC V1-02): mandatory when the department or process of a restricted risk changes. Never stored on the risk. */
+  reason?: string;
 }

@@ -30,6 +30,8 @@ const UpdateRiskBody = z.object({
   ownerDepartmentId: z.string().nullish(),
   status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]).optional(),
   processId: z.string().nullish(),
+  /** SEC V1-02: required by the service when the perimeter of a restricted risk changes. */
+  reason: reasonText(500).optional(),
 });
 
 const ArchiveRiskBody = z.object({

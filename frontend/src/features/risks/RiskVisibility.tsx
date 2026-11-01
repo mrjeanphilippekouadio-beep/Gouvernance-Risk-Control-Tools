@@ -9,7 +9,6 @@ import {
 } from "../../api/risks";
 import { usersApi, type DirectoryEntry } from "../../api/users";
 import { ApiError } from "../../api/client";
-import { AccountPicker, accountName } from "../../design-system";
 
 /**
  * Lot V1 (DECISION-102): visibility of a risk on screen. Presentation only: who sees a risk, who may change it, the
@@ -28,17 +27,6 @@ function describe(err: unknown): string {
   return err instanceof Error ? err.message : "Une erreur inattendue est survenue.";
 }
 
-/** Directory of the accounts that can be named (GET /users/directory); null = not available to this caller. */
-export function useDirectory(token: string): DirectoryEntry[] | null {
-  const [accounts, setAccounts] = useState<DirectoryEntry[] | null>(null);
-  useEffect(() => {
-    let live = true;
-    usersApi.directory(token).then((a) => { if (live) setAccounts(a); }).catch(() => { if (live) setAccounts(null); });
-    return () => { live = false; };
-  }, [token]);
-  return accounts;
-}
-
 export function VisibilityLevelField({ id, value, onChange }: Readonly<{ id: string; value: RiskVisibility; onChange: (v: RiskVisibility) => void }>) {
   return <FormField label="Visibilité" htmlFor={id} help={RISK_VISIBILITY_HELP[value]}>
     <select id={id} value={value} onChange={(e) => onChange(e.target.value as RiskVisibility)}>
@@ -47,25 +35,53 @@ export function VisibilityLevelField({ id, value, onChange }: Readonly<{ id: str
   </FormField>;
 }
 
-/** People to add, picked from the directory. Never a typed id: without a directory, no one can be named here. */
-export function AccessPeopleField({ id, accounts, value, onChange, label = "Personnes à ajouter" }: Readonly<{
+/** A person chosen in the search: id and the name the server returned. */
+export interface NamedPerson { id: string; displayName: string }
+
+/**
+ * People to add, found by a name search on the server (q205: 2 characters minimum, 20 results). Never a typed id: the
+ * server validates each person again (active account of the tenant).
+ */
+export function AccessPeopleField({ id, token, value, onChange, label = "Personnes à ajouter" }: Readonly<{
   id: string;
-  accounts: DirectoryEntry[] | null;
-  value: string[];
-  onChange: (ids: string[]) => void;
+  token: string;
+  value: NamedPerson[];
+  onChange: (people: NamedPerson[]) => void;
   label?: string;
 }>) {
-  const [pick, setPick] = useState("");
-  if (accounts === null) {
-    return <MessageBanner tone="info">Annuaire des comptes indisponible pour votre profil : aucune personne ne peut être nommée ici.</MessageBanner>;
-  }
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<DirectoryEntry[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      usersApi.searchDirectory(token, q)
+        .then((r) => { if (live) { setResults(r); setSearchError(null); } })
+        .catch((err: unknown) => { if (live) { setResults([]); setSearchError(describe(err)); } });
+    }, 250);
+    return () => { live = false; clearTimeout(timer); };
+  }, [token, query]);
+
+  const shown = query.trim().length < 2 ? [] : results.filter((r) => !value.some((v) => v.id === r.id));
   return <div>
-    <AccountPicker id={id} label={label} value={pick} onChange={setPick} accounts={accounts.filter((a) => !value.includes(a.id))} />
-    <Button type="button" size="sm" variant="secondary" disabled={!pick} onClick={() => { onChange([...value, pick]); setPick(""); }}>Ajouter</Button>
+    <FormField label={label} htmlFor={id} help="Tapez au moins 2 caractères du nom (20 résultats au plus).">
+      <input id={id} type="search" value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off" />
+    </FormField>
+    {searchError && <MessageBanner tone="danger">{searchError}</MessageBanner>}
+    {shown.length > 0 && <ul className="risk-access-results" aria-label="Résultats de la recherche">
+      {shown.map((r) => <li key={r.id}>
+        {r.displayName}{" "}
+        <Button type="button" size="sm" variant="secondary" onClick={() => { onChange([...value, { id: r.id, displayName: r.displayName }]); setQuery(""); }}>Ajouter</Button>
+      </li>)}
+    </ul>}
+    {query.trim().length >= 2 && shown.length === 0 && !searchError && <p className="risk-access-empty">Aucun compte trouvé.</p>}
     {value.length > 0 && <ul className="risk-access-list">
-      {value.map((u) => <li key={u}>
-        {accountName(accounts, u)}{" "}
-        <Button type="button" size="sm" variant="secondary" onClick={() => onChange(value.filter((x) => x !== u))}>Retirer</Button>
+      {value.map((p) => <li key={p.id}>
+        {p.displayName}{" "}
+        <Button type="button" size="sm" variant="secondary" onClick={() => onChange(value.filter((x) => x.id !== p.id))}>Retirer</Button>
       </li>)}
     </ul>}
   </div>;
@@ -73,12 +89,11 @@ export function AccessPeopleField({ id, accounts, value, onChange, label = "Pers
 
 /** Fiche risque: current level and list, and the change form (level, people to add or revoke, mandatory reason). */
 export function RiskVisibilityCard({ token, riskId, onChanged }: Readonly<{ token: string; riskId: string; onChanged: (v: RiskVisibility) => void }>) {
-  const accounts = useDirectory(token);
   const [state, setState] = useState<RiskVisibilityState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [level, setLevel] = useState<RiskVisibility>("CLIENT");
-  const [add, setAdd] = useState<string[]>([]);
+  const [add, setAdd] = useState<NamedPerson[]>([]);
   const [revoke, setRevoke] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -105,7 +120,7 @@ export function RiskVisibilityCard({ token, riskId, onChanged }: Readonly<{ toke
     try {
       const next = await risksApi.setVisibility(token, riskId, {
         visibility: level,
-        ...(level === "CLIENT" ? {} : { addUserIds: add, revokeUserIds: revoke }),
+        ...(level === "CLIENT" ? {} : { addUserIds: add.map((p) => p.id), revokeUserIds: revoke }),
         reason: reason.trim(),
       });
       setState(next); setEditing(false); onChanged(next.visibility);
@@ -116,7 +131,8 @@ export function RiskVisibilityCard({ token, riskId, onChanged }: Readonly<{ toke
     }
   }
 
-  const names = (ids: string[]) => ids.map((u) => (accounts ? accountName(accounts, u) : "Compte nommé")).join(", ");
+  const nameOf = (u: string) => state?.accessUsers?.find((a) => a.id === u)?.displayName ?? "Compte non trouvé";
+  const names = (ids: string[]) => ids.map(nameOf).join(", ");
 
   return <Card header={<h2>Visibilité</h2>}>
     {loadError && <MessageBanner tone="danger">{loadError}</MessageBanner>}
@@ -131,13 +147,13 @@ export function RiskVisibilityCard({ token, riskId, onChanged }: Readonly<{ toke
         <MessageBanner tone="warning">Revenir à « {RISK_VISIBILITY_LABELS.CLIENT} » retire toute la liste des personnes nommées.</MessageBanner>
       )}
       {level !== "CLIENT" && <>
-        <AccessPeopleField id="risk-visibility-add" accounts={accounts} value={add} onChange={setAdd} />
+        <AccessPeopleField id="risk-visibility-add" token={token} value={add} onChange={setAdd} />
         {state.accessUserIds.length > 0 && <fieldset className="risk-access-revoke">
           <legend>Retirer de la liste</legend>
           {state.accessUserIds.map((u) => <label key={u}>
             <input type="checkbox" checked={revoke.includes(u)}
               onChange={(e) => setRevoke(e.target.checked ? [...revoke, u] : revoke.filter((x) => x !== u))} />
-            {" "}{accounts ? accountName(accounts, u) : "Compte nommé"}
+            {" "}{nameOf(u)}
           </label>)}
         </fieldset>}
       </>}

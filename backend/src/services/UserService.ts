@@ -54,6 +54,11 @@ const DIRECTORY_PERMISSIONS: Permission[] = [
   "role.read",
 ];
 const MAX_DIRECTORY = 500;
+/** q205 (DECISION-105): who names people on a risk searches the directory by name, never browses it. */
+const DIRECTORY_SEARCH_PERMISSIONS: Permission[] = ["risk.create", "risk.update"];
+const DIRECTORY_SEARCH_MIN = 2;
+const DIRECTORY_SEARCH_MAX = 100;
+export const DIRECTORY_SEARCH_LIMIT = 20;
 const MAX_ACCOUNT_REASON_LENGTH = 500;
 
 /** q177 (DECISION-084): suspending or reactivating an account always carries a reason, audited with the action. */
@@ -201,6 +206,24 @@ export class UserService {
       .filter((u) => !u.deletedAt)
       .map((u) => ({ id: u.id, displayName: u.displayName }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName, "fr"));
+  }
+
+  /**
+   * q205 (DECISION-105, Privacy PRIV-REV-Q205-001): search by name for whoever may browse the directory or name people
+   * on a risk (`risk.create` / `risk.update`). At least 2 characters, at most 20 results, active accounts of the tenant,
+   * id + display name only. The people actually named are validated again at write time (active, same tenant).
+   */
+  async searchDirectory(actor: AuthenticatedUser, text: string): Promise<Array<{ id: string; displayName: string }>> {
+    const allowed = [...DIRECTORY_PERMISSIONS, ...DIRECTORY_SEARCH_PERMISSIONS];
+    if (!allowed.some((p) => actor.roles.includes(p))) {
+      throw new ForbiddenError(`Missing permission: one of ${allowed.join(", ")}`);
+    }
+    const q = text.trim();
+    if (q.length < DIRECTORY_SEARCH_MIN || q.length > DIRECTORY_SEARCH_MAX) {
+      throw new ValidationError(`The search needs ${DIRECTORY_SEARCH_MIN} to ${DIRECTORY_SEARCH_MAX} characters`);
+    }
+    if (!this.users.searchActive) throw new ValidationError("Directory search is not available");
+    return this.users.searchActive(actor.tenantId, q, DIRECTORY_SEARCH_LIMIT);
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<User> {

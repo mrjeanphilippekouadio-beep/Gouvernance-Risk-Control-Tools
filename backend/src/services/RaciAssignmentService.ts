@@ -1,5 +1,5 @@
 import { SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
-import { assertReadableByRisk } from "./riskVisibility.js";
+import { hiddenRiskIds } from "./riskVisibility.js";
 import type { RaciAssignmentRepository } from "../domain/repositories/RaciAssignmentRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -159,8 +159,9 @@ export class RaciAssignmentService {
     if (!ENTITY_TYPES.includes(entityType)) {
       throw new ValidationError(`entityType must be one of: ${ENTITY_TYPES.join(", ")}`);
     }
-    // Lot V1: who works on a restricted risk is as restricted as the risk itself.
-    if (entityType === "RISK") await assertReadableByRisk(this.risks, actor, entityId, "Risk", entityId);
+    // Lot V1: who works on a restricted risk is as restricted as the risk itself; a hidden risk answers like an
+    // unknown id (an empty list, QA-VIS1-01 / SEC V1-04).
+    if (entityType === "RISK" && (await hiddenRiskIds(this.risks, actor, [entityId])).size > 0) return [];
     return this.raci.listForEntity(actor.tenantId, entityType, entityId);
   }
 

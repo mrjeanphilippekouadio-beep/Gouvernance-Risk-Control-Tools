@@ -68,7 +68,8 @@ export class RiskEvaluationViewService {
     if (!evaluation) throw new NotFoundError("RiskEvaluation", riskEvaluationId);
 
     const risk = await this.risks.getById(actor.tenantId, evaluation.riskId, readerScope(actor));
-    if (!risk) throw new NotFoundError("Risk", evaluation.riskId);
+    // QA-VIS1-03: an evaluation of a hidden risk answers exactly like an unknown evaluation (never the risk id).
+    if (!risk) throw new NotFoundError("RiskEvaluation", riskEvaluationId);
 
     const controls = await this.controls.listCoveringRisk(actor.tenantId, evaluation.riskId);
     // ponytail: one effectiveness query per covering control (a risk carries a

@@ -219,7 +219,9 @@ export class PostgresRiskRepository implements RiskRepository {
           [tenantId, riskId],
         )).rows.map((r) => r.user_id);
       const before: RiskVisibilityState = { visibility: locked.rows[0].visibility, accessUserIds: await list() };
-      for (const userId of new Set(change.revokeUserIds)) {
+      // Back to CLIENT revokes the list as read UNDER the lock: a grant added concurrently cannot survive (QA concurrency).
+      const revoke = change.visibility === "CLIENT" ? before.accessUserIds : change.revokeUserIds;
+      for (const userId of new Set(revoke)) {
         const { rowCount } = await db.query(
           `UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $4, revoke_reason = $5
            WHERE tenant_id = $1 AND resource_type = 'RISK' AND resource_id = $2 AND user_id = $3 AND revoked_at IS NULL`,
@@ -262,7 +264,7 @@ export class PostgresRiskRepository implements RiskRepository {
     return rows[0]?.ok === true;
   }
 
-  async update(tenantId: string, id: string, input: UpdateRiskInput): Promise<Risk> {
+  async update(tenantId: string, id: string, input: UpdateRiskInput, audit?: TransactionalAudit<Risk>): Promise<Risk> {
     // Dynamic SET list, not COALESCE: COALESCE($n, col) can't distinguish
     // "field omitted" from "field explicitly set to null", so a caller
     // could never clear ownerDepartmentId that way.
@@ -278,16 +280,18 @@ export class PostgresRiskRepository implements RiskRepository {
     );
     if (setClauses.length === 0) throw new ValidationError("No fields to update");
 
-    const { rows } = await this.pool.query<RiskRow>(
-      `UPDATE risks
-       SET ${setClauses.join(", ")}, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
-       RETURNING *`,
-      [tenantId, id, ...values],
-    );
-    const row = rows[0];
-    if (!row) throw new NotFoundError("Risk", id);
-    return toDomain(row);
+    return runAudited(this.pool, async (db) => {
+      const { rows } = await db.query<RiskRow>(
+        `UPDATE risks
+         SET ${setClauses.join(", ")}, updated_at = now()
+         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+         RETURNING *`,
+        [tenantId, id, ...values],
+      );
+      const row = rows[0];
+      if (!row) throw new NotFoundError("Risk", id);
+      return toDomain(row);
+    }, audit);
   }
 
   /** ACT-120/121: narrow write, never through the generic `update()` (see RiskRepository interface). */

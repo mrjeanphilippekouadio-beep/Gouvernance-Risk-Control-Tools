@@ -30,4 +30,9 @@ export interface UserRepository {
    * display name — used by RoleService.listGrantors, nothing else.
    */
   listWithPermission?(tenantId: string, permission: string, excludeUserId: string): Promise<Array<{ id: string; displayName: string }>>;
+  /**
+   * q205 (DECISION-105): active accounts of the tenant whose display name contains `text` (case-insensitive), filtered
+   * in SQL before the limit, ordered by name. Id + display name only.
+   */
+  searchActive?(tenantId: string, text: string, limit: number): Promise<Array<{ id: string; displayName: string }>>;
 }

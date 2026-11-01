@@ -46,6 +46,9 @@ export const usersApi = {
   myPermissions: (token: string) => apiRequest<string[]>("/api/v1/users/me/permissions", { token }),
   /** Active accounts a designation right may name (user.read, process.responsibility.assign, designation.manage or audit.mission.create). */
   directory: (token: string) => apiRequest<DirectoryEntry[]>("/api/v1/users/directory", { token }),
+  /** q205: search by name (2+ characters, 20 results max), also open to risk.create / risk.update. */
+  searchDirectory: (token: string, q: string) =>
+    apiRequest<DirectoryEntry[]>(`/api/v1/users/directory?${new URLSearchParams({ q }).toString()}`, { token }),
   listAdmin: (token: string, includeSuspended: boolean, offset: number) =>
     apiRequest<AdminUser[]>(`/api/v1/users?limit=${ADMIN_PAGE_SIZE}&offset=${offset}${includeSuspended ? "&includeSuspended=true" : ""}`, { token }),
   create: (token: string, body: CreateUserInput) => apiRequest<AdminUser>("/api/v1/users", { method: "POST", body, token }),

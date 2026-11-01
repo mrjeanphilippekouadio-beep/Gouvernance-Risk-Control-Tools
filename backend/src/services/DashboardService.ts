@@ -1,5 +1,6 @@
 import { SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
 import { keepReadableByRisk } from "./riskVisibility.js";
+import { withoutHiddenRisk } from "./AnomalyService.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
@@ -330,7 +331,7 @@ export class DashboardService {
     const wanted: AnomalyStatus[] =
       statuses && statuses.length > 0 ? statuses : ["NEW", "UNDER_ANALYSIS", "ACTION_IN_PROGRESS"];
     const all = await this.anomalies.list(actor.tenantId, undefined, SYSTEM_SCOPE);
-    return all.filter((a) => wanted.includes(a.status));
+    return withoutHiddenRisk(this.risks, actor, all.filter((a) => wanted.includes(a.status)));
   }
 
   // -- ACT-082 / ACT-210 / ACT-243 -------------------------------------

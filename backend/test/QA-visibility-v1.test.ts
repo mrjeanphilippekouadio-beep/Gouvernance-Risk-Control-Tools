@@ -236,7 +236,7 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
       expect((await sql("SELECT count(*)::int AS n FROM raci_assignments WHERE entity_id = $1", [R.PERIM]))[0]).toEqual({ n: 1 });
     });
 
-    it.fails("QA-VIS1-03: GET /risk-evaluations/:id/context of an evaluation of a hidden risk answers like an unknown evaluation (today: 404 \"Risk <riskId> not found\", another entity and the hidden risk id)", async () => {
+    it("QA-VIS1-03: GET /risk-evaluations/:id/context of an evaluation of a hidden risk answers like an unknown evaluation (fixed: no other entity, no hidden risk id)", async () => {
       const h = await get("out", `/risk-evaluations/${EVAL.PERIM}/context`);
       const u = await get("out", `/risk-evaluations/${UNKNOWN}/context`);
       expect(h.text).not.toContain(R.PERIM);
@@ -250,14 +250,14 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
       expect((await get("named", `/risk-evaluations/${EVAL.NOMIN}/context`)).status).toBe(200);
     });
 
-    // ---- defects found (assert the CORRECT behaviour; it.fails documents the gap and turns red once fixed -> remove the marker)
-    it.fails("QA-VIS1-01: GET /raci?entityType=RISK&entityId=<hidden> answers like an unknown id (today: 404 for hidden, 200 [] for unknown)", async () => {
+    // ---- defects found by QA, fixed in the V1 correction pass: plain tests since (they were it.fails)
+    it("QA-VIS1-01: GET /raci?entityType=RISK&entityId=<hidden> answers like an unknown id (fixed: 200 [] for both)", async () => {
       const h = await get("out", `/raci?entityType=RISK&entityId=${R.PERIM}`);
       const u = await get("out", `/raci?entityType=RISK&entityId=${UNKNOWN}`);
       expect(norm(h, R.PERIM)).toBe(norm(u, UNKNOWN));
     });
 
-    it.fails("QA-VIS1-02: ids of hidden risks do not leak through controls (coveredRiskIds), anomalies (riskId) and action plans (links) readable by an outsider", async () => {
+    it("QA-VIS1-02 (fixed): ids of hidden risks do not leak through controls (coveredRiskIds), anomalies (riskId) and action plans (links) readable by an outsider", async () => {
       for (const path of ["/controls", "/anomalies", "/dashboard/anomalies", "/actions", `/actions/${I("740")}/links`]) {
         const t = (await get("out", path)).text;
         expect(t, path).not.toContain(R.PERIM);
@@ -337,7 +337,7 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
       const id = c.json.data.id as string;
       expect((await get("named", `/risks/${id}`)).status).toBe(200);
       expect((await get("out", `/risks/${id}`)).status).toBe(404);
-      expect((await get("dept", `/risks/${id}/visibility`)).json.data).toEqual({ visibility: "PERIMETRE", accessUserIds: [I("106")] });
+      expect((await get("dept", `/risks/${id}/visibility`)).json.data).toMatchObject({ visibility: "PERIMETRE", accessUserIds: [I("106")], accessUsers: [{ id: I("106"), displayName: "QA named" }] }); // q205: names added to the contract
       const g = await sql<{ granted_by: string }>("SELECT granted_by FROM resource_access_grants WHERE resource_id = $1 AND revoked_at IS NULL", [id]);
       expect(g).toEqual([{ granted_by: I("105") }]);
       expect((await audits(id)).map((a) => a.action)).toContain("CREATE");
@@ -464,7 +464,7 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
       await sql("DELETE FROM notifications WHERE true");
       const r = await call("own", "PUT", `/risks/${id}/visibility`, { visibility: "CLIENT", reason: "Plus sensible" });
       expect(r.status, r.text).toBe(200);
-      expect(r.json.data).toEqual({ visibility: "CLIENT", accessUserIds: [] });
+      expect(r.json.data).toMatchObject({ visibility: "CLIENT", accessUserIds: [], accessUsers: [] });
       expect((await get("out", `/risks/${id}`)).status).toBe(200);
       expect(await sql("SELECT 1 FROM resource_access_grants WHERE resource_id = $1 AND revoked_at IS NULL", [id])).toHaveLength(0);
       const n = await sql<{ recipient_user_id: string; event_type: string; resource_id: string; message: string }>("SELECT recipient_user_id, event_type, resource_id, message FROM notifications");

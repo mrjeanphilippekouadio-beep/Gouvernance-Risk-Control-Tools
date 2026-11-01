@@ -1,3 +1,4 @@
+import { maskHiddenRisks, hiddenRiskIds } from "./riskVisibility.js";
 import type { ActionPlanRepository } from "../domain/repositories/ActionPlanRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -228,13 +229,13 @@ export class ActionPlanService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<ActionPlanView> {
     requirePermission(actor, "actionplan.read");
-    return this.toView(await this.getRaw(actor, id));
+    return (await this.views(actor, [await this.getRaw(actor, id)]))[0]!;
   }
 
   async list(actor: AuthenticatedUser, filters?: ActionPlanListFilters): Promise<ActionPlanView[]> {
     requirePermission(actor, "actionplan.read");
     const rows = await this.actions.list(actor.tenantId, filters, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
-    return rows.map((row) => this.toView(row));
+    return this.views(actor, rows);
   }
 
   /**
@@ -263,7 +264,7 @@ export class ActionPlanService {
     const repoFilters: ActionPlanListFilters = { ...filters, status: storedStatusFilter };
 
     const rows = await this.actions.list(actor.tenantId, repoFilters, SYSTEM_SCOPE);
-    const views = rows.map((row) => this.toView(row));
+    const views = await this.views(actor, rows);
     return wantsOverdueOnly ? views.filter((v) => v.computedStatus === "EN_RETARD") : views;
   }
 
@@ -432,7 +433,10 @@ export class ActionPlanService {
   async listLinks(actor: AuthenticatedUser, id: string): Promise<ActionLink[]> {
     requirePermission(actor, "actionplan.read");
     await this.getRaw(actor, id);
-    return this.actions.listLinks(actor.tenantId, id);
+    // QA-VIS1-02: a link to a risk the reader may not see is not listed.
+    const links = await this.actions.listLinks(actor.tenantId, id);
+    const hidden = await hiddenRiskIds(this.risks, actor, links.filter((l) => l.resourceType === "RISK").map((l) => l.resourceId));
+    return links.filter((l) => !(l.resourceType === "RISK" && hidden.has(l.resourceId)));
   }
 
   /**
@@ -506,6 +510,13 @@ export class ActionPlanService {
     const action = await this.actions.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!action) throw new NotFoundError("ActionPlan", id);
     return action;
+  }
+
+  /** QA-VIS1-02: a readable plan born from a risk the reader may not see shows no source id. */
+  private async views(actor: AuthenticatedUser, rows: ActionPlan[]): Promise<ActionPlanView[]> {
+    const masked = await maskHiddenRisks(this.risks, actor, rows, (a) => (a.sourceType === "RISK" ? [a.sourceId] : []),
+      (a, hidden) => (a.sourceType === "RISK" && a.sourceId && hidden.has(a.sourceId) ? { ...a, sourceId: null } : a));
+    return masked.map((row) => this.toView(row));
   }
 
   private toView(action: ActionPlan): ActionPlanView {

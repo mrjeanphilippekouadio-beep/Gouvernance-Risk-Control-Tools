@@ -20,6 +20,8 @@ export const RISK_VISIBILITY_HELP: Record<RiskVisibility, string> = {
 export interface RiskVisibilityState {
   visibility: RiskVisibility;
   accessUserIds: string[];
+  /** q205: names of the named people (null = account not found). */
+  accessUsers?: Array<{ id: string; displayName: string | null }>;
 }
 
 export interface Risk {

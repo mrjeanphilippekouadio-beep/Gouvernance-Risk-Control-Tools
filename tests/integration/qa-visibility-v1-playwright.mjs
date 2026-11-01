@@ -49,15 +49,7 @@ sql(`update users set roles = array_remove(roles, 'resourcevisibility.set') wher
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
 async function open(who) {
   const context = await browser.newContext({ viewport: { width: 1360, height: 1000 } });
-  // QA-VIS1-05 (preexisting, not V1): the server's CORS allow-list is Authorization,Content-Type only, so the browser blocks the
-  // `Idempotency-Key` header of POST /risks cross-origin. TEST WORKAROUND, production untouched: answer the preflight ourselves.
-  await context.route(`${API}/**`, (route) => {
-    const req = route.request();
-    if (req.method() !== "OPTIONS") return route.continue();
-    return route.fulfill({ status: 204, headers: {
-      "access-control-allow-origin": APP, "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
-      "access-control-allow-headers": "Authorization,Content-Type,Idempotency-Key", vary: "Origin" } });
-  });
+  // QA-VIS1-05 fixed: the server's CORS allow-list carries Idempotency-Key; no preflight workaround any more.
   const page = await context.newPage();
   const st = { page, context, consoleErrors: [], jsErrors: [] };
   page.on("pageerror", (e) => st.jsErrors.push(String(e)));
@@ -96,8 +88,9 @@ try {
   await D.page.locator("#risk-description").fill(DESC);
   await D.page.locator("#risk-department").selectOption({ label: "Finance QA" });
   await D.page.locator("#risk-visibility").selectOption("PERIMETRE");
-  await D.page.locator("#risk-access").selectOption({ label: "QA named" });
-  await D.page.getByRole("button", { name: "Ajouter", exact: true }).click();
+  // q205: the named people are found by a name search (2+ characters)
+  await D.page.locator("#risk-access").fill("QA nam");
+  await D.page.locator(".risk-access-results li", { hasText: "QA named" }).getByRole("button", { name: "Ajouter", exact: true }).click();
   const listed = norm(await D.page.locator(".risk-access-list").innerText());
   check("1.1 la personne nommée est listée dans le formulaire avant création", /QA named/.test(listed), listed);
   await D.page.getByRole("button", { name: "Créer", exact: true }).click();
@@ -176,8 +169,8 @@ try {
   await sleep(1500);
   await W3.page.getByRole("button", { name: "Modifier la visibilité" }).click();
   await W3.page.locator("#risk-visibility-level").selectOption("PERIMETRE");
-  await W3.page.locator("#risk-visibility-add").selectOption({ label: "QA own" });
-  await W3.page.locator("form", { has: W3.page.locator("#risk-visibility-level") }).getByRole("button", { name: "Ajouter", exact: true }).click();
+  await W3.page.locator("#risk-visibility-add").fill("QA ow");
+  await W3.page.locator(".risk-access-results li", { hasText: "QA own" }).getByRole("button", { name: "Ajouter", exact: true }).click();
   await W3.page.locator("#risk-visibility-reason").fill("Tentative auto-ajout");
   await W3.page.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await sleep(1200);

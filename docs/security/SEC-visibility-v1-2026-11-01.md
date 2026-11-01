@@ -72,3 +72,13 @@
 
 ## Statut
 FINDING_IDENTIFIED. V0-02/V0-03 : RETEST_PASS (V0-02 limité aux risques et enfants hérités, V1-03 résiduel). V0-04 : PASS (liens), KPI reporté en V2. Owners : A06 (V1-01, V1-02, V1-04, KRI SQL), HUMAN/A05 (acceptation V1-02 éventuelle, V1-03 jusqu'à V2, écart `audit.*`). Gate : retest A10 de V1-01/V1-02 avant livraison V1. CLOSED ne vaut pas validation Risk, Compliance ou Privacy.
+
+## Passe de corrections (dev-backend, 2026-11-01)
+
+| Constat | Statut | Correction |
+|---|---|---|
+| V1-01 | **CORRIGÉ** | `RoleService.update` : lier ou délier un département d'un rôle que l'acteur détient → 403 (« ask another admin »), comme pour `permissions`. Test de régression. |
+| V1-02 | **CORRIGÉ** | `RiskService.update` : sur un risque non CLIENT, changer département ou processus exige `resourcevisibility.set` ou d'être propriétaire, motif 1–500 ; ligne `PERMISSION_CHANGE` (avant/après, `widening`) écrite dans la même transaction que la mise à jour (`runAudited`) ; notification RM si le propriétaire élargit un PERIMETRE. Risque CLIENT : inchangé. |
+| V1-03 | Partiel | Ids masqués retirés des contrôles, anomalies et plans (voir QA-VIS1-02). Texte des anomalies/plans et compteur exécutif : V2. |
+| V1-04 | **CORRIGÉ** | Risque masqué = id inconnu (200 `[]`) sur `/raci?entityType=RISK` et `?coveringRiskId=`. |
+| q205 | Livré | `GET /users/directory?q=` : recherche par nom (≥ 2 caractères, 20 max, filtre SQL avant limite, LIKE échappé, comptes actifs du tenant, id + nom), ouverte à `risk.create`/`risk.update` ; liste complète inchangée pour les droits actuels (403 sinon). Personnes nommées revalidées à l'écriture. |

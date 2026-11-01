@@ -425,11 +425,16 @@ export class RoleService {
     const before = await this.get(actor, id);
     id = before.id; // SEC-ID-01: every comparison below uses the id read from the database
 
-    if (input.permissions !== undefined) {
+    // SEC V1-01: the department link opens the PERIMETRE risks of that department (risk_visible_to), so it is guarded
+    // like the permissions — linking or unlinking a role one holds goes through another administrator.
+    const departmentChanges = input.departmentId !== undefined && (input.departmentId ?? null) !== (before.departmentId ?? null);
+    if (input.permissions !== undefined || departmentChanges) {
       const held = await this.roles.listForUser(actor.tenantId, actor.userId);
       if (held.some((r) => r.id === id)) {
         throw new ForbiddenError(
-          "You cannot change the permissions of a role you hold yourself — ask another admin",
+          input.permissions !== undefined
+            ? "You cannot change the permissions of a role you hold yourself — ask another admin"
+            : "You cannot change the department of a role you hold yourself — ask another admin",
         );
       }
     }

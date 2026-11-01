@@ -76,3 +76,16 @@ QA_VIS_PGHOST=<dossier socket> QA_VIS_PGPORT=55442 npx vitest run test/QA-visibi
 QA_PORT=8099 bash tests/integration/qa-visibility-v1-server.sh start ; (frontend) VITE_AUTH_PROVIDER=local VITE_API_BASE_URL=http://127.0.0.1:8099 vite --port 5198
 node tests/integration/qa-visibility-v1-playwright.mjs
 ```
+
+## 9. Passe de corrections V1 (dev-backend, 2026-11-01)
+
+| ID | Statut | Correction |
+|---|---|---|
+| QA-VIS1-01 | **CORRIGÉ** | `/raci?entityType=RISK` et `/controls?coveringRiskId=` : risque masqué = réponse d'un id inconnu (200 `[]`). `it.fails` remplacé par un test normal. |
+| QA-VIS1-02 | **CORRIGÉ** | Filtrage simple par `hiddenIds` (`maskHiddenRisks`) : `controls.coveredRiskIds` sans les risques masqués, `anomalies.riskId` → null (liste, id, `/dashboard/anomalies`), plans d'action : `sourceId` d'une source RISK masquée → null, liens RISK masqués retirés de `/actions/:id/links`. Test normal. Restent pour V2 : le compteur d'anomalies ouvertes de la vue exécutive et le texte des anomalies/plans (SEC V1-03). |
+| QA-VIS1-03 | **CORRIGÉ** | `/risk-evaluations/:id/context` d'un risque masqué : `NotFoundError("RiskEvaluation", id)`, identique à un id inconnu, sans l'id du risque. Test normal. |
+| QA-VIS1-04 | Inchangé (INFO) | — |
+| QA-VIS1-05 | **CORRIGÉ** | `Idempotency-Key` ajouté à la liste CORS (`api/corsOptions.ts`, attendu par POST /risks) ; test de préflight ; contournement Playwright retiré. |
+| QA-VIS1-06 | Inchangé (INFO) | — |
+
+Rejoué sur PostgreSQL 16 local : suite QA live `QA_VIS1_LIVE=1` 68/68, suite complète avec PG 2954 verts, parcours Playwright 38/38 **sans contournement CORS** (sélection des personnes nommées par la recherche q205). Deux tests QA ajustés au contrat : `GET /visibility` renvoie aussi `accessUsers` (noms des personnes nommées, q205). La course propriétaire / RM (CLIENT avec un accès actif) a été vue une fois : le retour à CLIENT révoque désormais la liste lue sous verrou.

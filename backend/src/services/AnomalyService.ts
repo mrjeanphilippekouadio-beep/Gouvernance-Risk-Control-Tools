@@ -1,3 +1,4 @@
+import { maskHiddenRisks } from "./riskVisibility.js";
 import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
@@ -87,12 +88,12 @@ export class AnomalyService {
     requirePermission(actor, "anomaly.read");
     const anomaly = await this.anomalies.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!anomaly) throw new NotFoundError("Anomaly", id);
-    return anomaly;
+    return (await withoutHiddenRisk(this.risks, actor, [anomaly]))[0]!;
   }
 
   async list(actor: AuthenticatedUser, status?: AnomalyStatus): Promise<Anomaly[]> {
     requirePermission(actor, "anomaly.read");
-    return this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    return withoutHiddenRisk(this.risks, actor, await this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE));
   }
 
   async updateStatus(
@@ -138,3 +139,8 @@ const VALID_TRANSITIONS: Record<AnomalyStatus, AnomalyStatus[]> = {
   ACTION_IN_PROGRESS: ["CLOSED"],
   CLOSED: [],
 };
+
+/** QA-VIS1-02: a readable anomaly linked to a risk the reader may not see shows no risk (riskId null). */
+export function withoutHiddenRisk(risks: Pick<RiskRepository, "hiddenIds"> | undefined, actor: AuthenticatedUser, rows: Anomaly[]): Promise<Anomaly[]> {
+  return maskHiddenRisks(risks, actor, rows, (a) => [a.riskId], (a, hidden) => (a.riskId && hidden.has(a.riskId) ? { ...a, riskId: null } : a));
+}
