@@ -55,3 +55,9 @@ auteur exclu.
   q207 s'il le souhaite. Ce n'est pas un constat.
 - Statut : V2-03 **CLOSED (RETEST_PASS)**. Aucun nouveau constat ≥ LOW. CLOSED ne vaut pas validation Risk, Compliance
   ou Privacy.
+
+## 10. Retest QA-V2B (commit 926a641, lecture de `git diff 917aead..926a641 -- backend/src`)
+
+- **QA-V2B-01, RETEST_PASS.** Un verrou consultatif transactionnel (`pg_advisory_xact_lock`) est pris sur une clé qui contient le tenant. Il est libéré au COMMIT ou au ROLLBACK, donc limité à un client et à une requête. Une collision de `hashtext` ne ferait que sérialiser deux requêtes : le refus vient du `NOT EXISTS`, paramétré et filtré par tenant. Le 409 n'est atteint qu'après `assertEntityExists` en scope lecteur : une entité masquée répond toujours comme une entité inconnue, sans oracle nouveau (la RACI d'une entité lisible est déjà visible avec `raci.read`). Le motif n'est pas contourné : si l'affectation identique existe déjà, la personne lit déjà la ressource, donc rien ne s'ouvre et aucun motif n'est dû.
+- **QA-V2B-02, RETEST_PASS.** `sameVisibilityState` ne supprime que la notification au RM, et seulement quand le niveau et la liste sont identiques avant et après (lus sous verrou). La ligne `PERMISSION_CHANGE` et son motif restent écrits. Tout changement réel est toujours notifié. Pas de régression.
+- Verdict inchangé : **VERT**.
