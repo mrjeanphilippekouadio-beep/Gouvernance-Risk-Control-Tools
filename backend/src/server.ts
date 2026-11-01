@@ -452,6 +452,7 @@ const dashboardService = new DashboardService(
   dashboardScopeResolver,
   ratingScaleRepository,
   riskFrameworkRepository,
+  resourceVisibilityManager,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
 const configService = new ConfigService(

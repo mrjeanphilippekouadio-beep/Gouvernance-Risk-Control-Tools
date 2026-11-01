@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, useRef } from "react";
-import { ResourceVisibilityCard } from "../risks/RiskVisibility";
+import { ResourceVisibilityCard, RiskVisibilityBadge } from "../risks/RiskVisibility";
 import { kpiVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { Button, Card, FormField, LineChart, MessageBanner, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
 import {
@@ -133,6 +133,7 @@ export function KpiPage({ token }: { token: string }) {
     { key: "latest", header: "Dernière mesure", render: (row) => row.latestMeasureValue === null ? "—" : <><strong>{fmt(row.latestMeasureValue)} {row.unit}</strong><div className="muted">{dateOnly(row.latestMeasurePeriod)}</div></> },
     { key: "rate", header: "Atteinte", render: (row) => row.achievementRate === null ? "—" : percent.format(row.achievementRate) },
     { key: "owner", header: "Responsable", render: (row) => row.owner },
+    { key: "visibility", header: "Visibilité", render: (row) => <RiskVisibilityBadge visibility={row.visibility} /> },
     { key: "open", header: "", render: (row) => <Button onClick={() => setSelectedId(row.id)} aria-label={`Voir le détail de ${row.label}`}>Détail</Button> },
   ];
 

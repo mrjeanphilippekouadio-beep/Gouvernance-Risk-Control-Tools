@@ -58,3 +58,16 @@ V0 : `QA-visibility-v0` modifié par A06 relu, modifications légitimes (le cons
 - Non couvert : upload de preuve (Drive absent), multi-tenant des fonctions 083 (couvert en V1 pour `risk_visible_to`, seul un utilisateur d'un autre tenant est testé en `addUserIds`), pagination, charge, import de risques.
 - Retest requis après correction de QA-VIS2-01 à 05 : rejouer `QA_VIS2_LIVE=1 npx vitest run test/QA-visibility-v2.test.ts` et passer les 6 `it.fails` en `it`.
 - Security (A10) : QA-VIS2-01/02/03 sont des fuites d'identifiants ou d'existence à qualifier côté sécurité ; QA ne tranche pas leur criticité.
+
+## Corrections A06 (2026-11-01, après passage QA)
+
+| Constat | Statut | Correction |
+|---|---|---|
+| QA-VIS2-01 | **CORRIGÉ** | `ActionPlanService.close` : une preuve rattachée à une exécution illisible (contrôle masqué, pas l'exécutant) répond comme une preuve inconnue (`ResourceVisibilityManager.executionHidden`). |
+| QA-VIS2-02 | **CORRIGÉ** | `controlId` / `controlExecutionId` masqués retirés des anomalies lisibles (`maskAnomalyParents`, 2 requêtes), dans `AnomalyService.get/list/updateStatus` et `DashboardService.getOpenAnomalies`. |
+| QA-VIS2-03 | **CORRIGÉ** | `GET /actions/:id/links` ne liste plus les cibles CONTROL / ANOMALY masquées (ni un KRI dont le risque est masqué). |
+| QA-VIS2-04 | **CORRIGÉ** | `POST /actions/:id/links` conserve côté serveur les liens masqués (RISK, CONTROL, ANOMALY, KRI). |
+| QA-VIS2-05 | **CORRIGÉ** | Département inconnu sur un contrôle (création, mise à jour, changement de périmètre) : 400 au lieu d'une violation de clé étrangère (500). |
+| QA-VIS2-06 | **CORRIGÉ** | Badge de niveau (« Visibilité ») dans les listes des contrôles, anomalies, plans d'action et KPI. |
+
+Retest : les 6 `it.fails` repassés en `it` ; `QA_VIS2_LIVE=1` → 147/147. Suites live V0/V1/V2 : 152/152. `npm test` : 2723 verts. Build frontend vert.

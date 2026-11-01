@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { ResourceVisibilityCard } from "../risks/RiskVisibility";
+import { ResourceVisibilityCard, RiskVisibilityBadge } from "../risks/RiskVisibility";
 import { actionPlanVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { Button, Card, DatePicker, FileUpload, FormField, Grid, GridItem, MessageBanner, Modal, ProgressBar, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
 import { useGovernanceConfirm, WithoutReviewBadge } from "../../design-system";
@@ -157,6 +157,7 @@ export function ActionPlansPage({ token }: Props) {
     { key: "title", header: "Plan d'action", render: (action) => <div className="action-plan-cell"><strong>{action.title}</strong>{action.description && <span>{action.description}</span>}<small>Source : {sourceLabels[action.sourceType]}{action.sourceId ? ` · ${action.sourceId}` : ""}</small></div> },
     { key: "status", header: "Statut", render: (action) => <div className="action-plan-cell"><StatusBadge label={statusLabels[action.computedStatus]} tone={statusTone[action.computedStatus]} /><WithoutReviewBadge value={action.validationIndependence} /></div> },
     { key: "owner", header: "Responsable", render: (action) => <div className="action-plan-cell"><strong>{action.responsibleUserId}</strong>{action.departmentId && <small>Département : {action.departmentId}</small>}</div> },
+    { key: "visibility", header: "Visibilité", render: (action) => <RiskVisibilityBadge visibility={action.visibility} /> },
     { key: "due", header: "Échéance", render: (action) => dateLabel(action.dueDate) },
     { key: "progress", header: "Avancement", render: (action) => <div className="action-plan-progress"><ProgressBar value={action.progressPercent} label={`Avancement de ${action.title}`} /><small>{action.progressComment || "Aucun commentaire récent"}</small></div> },
     { key: "actions", header: "Actions", render: (action) => <div className="action-plan-row-actions">

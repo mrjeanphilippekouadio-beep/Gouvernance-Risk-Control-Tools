@@ -12,6 +12,7 @@ import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.
 import type { ReadScope, Visibility } from "../../../domain/visibility.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { runAudited } from "./PostgresAuditRepository.js";
+import { unknownDepartmentAsValidation } from "./foreignKey.js";
 import { resourceVisibleExpr, visibleToFunction } from "./visibilityFilter.js";
 
 /** Fixed identifiers only (never user input): the root table of each type and whether it has a soft-delete column. */
@@ -64,6 +65,18 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
     return rows.map((r) => r.id);
   }
 
+  async hiddenExecutionIds(tenantId: string, ids: string[], scope: ReadScope): Promise<string[]> {
+    if (scope.all || ids.length === 0) return [];
+    const reader = scope.userId ?? null;
+    const { rows } = await this.pool.query<{ id: string }>(
+      `SELECT ce.id FROM control_executions ce
+       WHERE ce.tenant_id = $1 AND ce.id = ANY($2::uuid[])
+         AND ce.executed_by IS DISTINCT FROM $3::uuid AND NOT ${resourceVisibleExpr("CONTROL", scope, "ce.tenant_id", "ce.control_id")}`,
+      [tenantId, ids, reader],
+    );
+    return rows.map((r) => r.id);
+  }
+
   async inPerimeter(tenantId: string, userId: string, departmentId: string | null, processId: string | null): Promise<boolean> {
     const { rows } = await this.pool.query<{ ok: boolean }>(
       `SELECT (visibility_in_department_group($1, $2, $3::uuid)
@@ -96,7 +109,7 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
       await db.query(
         `UPDATE ${root.table} SET department_id = $3, process_id = $4, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
         [tenantId, id, after.departmentId, after.processId],
-      );
+      ).catch((err: unknown) => unknownDepartmentAsValidation(err, change.departmentId));
       const readersAfter = await effectiveReaders(db, tenantId, type, id);
       return {
         before: { departmentId: row.department_id, processId: row.process_id },

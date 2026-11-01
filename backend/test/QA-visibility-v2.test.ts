@@ -406,7 +406,7 @@ describe.skipIf(!live)("QA-visibility-v2 on the REAL server + LOCAL PostgreSQL 1
       }
     });
 
-    it.fails("QA-VIS2-01 (MINOR, existence oracle + proof from a hidden execution): plan closure with the evidence of a HIDDEN execution answers like an unknown evidence (no link to an evidence the closer cannot read)", async () => {
+    it("QA-VIS2-01 (MINOR, existence oracle + proof from a hidden execution): plan closure with the evidence of a HIDDEN execution answers like an unknown evidence (no link to an evidence the closer cannot read)", async () => {
       const unk = await call("out2", "PATCH", `/actions/${I("a0a")}/close`, { evidenceId: UNKNOWN });
       expect(unk.status).toBe(400);
       expect(unk.text).toMatch(/does not exist/);
@@ -415,23 +415,23 @@ describe.skipIf(!live)("QA-visibility-v2 on the REAL server + LOCAL PostgreSQL 1
       expect((await sql("SELECT status, evidence_id FROM action_plans WHERE id = $1", [I("a0a")]))[0]).toMatchObject({ status: "PLANIFIEE", evidence_id: null });
     });
 
-    it.fails("QA-VIS2-02 (MINOR): a readable anomaly that cites a hidden control / execution does not hand their ids to an outsider", async () => {
+    it("QA-VIS2-02 (MINOR): a readable anomaly that cites a hidden control / execution does not hand their ids to an outsider", async () => {
       const t = (await get("out", `/anomalies/${I("d09")}`)).text;
       expect(t).not.toContain(I("c03"));
       expect(t).not.toContain(I("b03"));
     });
-    it.fails("QA-VIS2-02 (MINOR): same through the list and the dashboard", async () => {
+    it("QA-VIS2-02 (MINOR): same through the list and the dashboard", async () => {
       for (const p of ["/anomalies", "/dashboard/anomalies"]) {
         const t = (await get("out", p)).text;
         expect(t, p).not.toContain(I("c03"));
         expect(t, p).not.toContain(I("b03"));
       }
     });
-    it.fails("QA-VIS2-03 (MINOR): the links of a readable plan list only the targets the reader sees (hidden CONTROL / ANOMALY ids, like the hidden RISK ids, are left out)", async () => {
+    it("QA-VIS2-03 (MINOR): the links of a readable plan list only the targets the reader sees (hidden CONTROL / ANOMALY ids, like the hidden RISK ids, are left out)", async () => {
       const links = (await get("out", `/actions/${I("a0b")}/links`)).json.data as Array<{ resourceType: string; resourceId: string }>;
       expect(links.map((l) => `${l.resourceType}:${l.resourceId}`)).toEqual([]);
     });
-    it.fails("QA-VIS2-04 (MINOR, data loss): replacing the links of a readable plan keeps the links the editor cannot see (hidden CONTROL / ANOMALY too, as already done for RISK)", async () => {
+    it("QA-VIS2-04 (MINOR, data loss): replacing the links of a readable plan keeps the links the editor cannot see (hidden CONTROL / ANOMALY too, as already done for RISK)", async () => {
       const r = await post("out", `/actions/${I("a0b")}/links`, { links: [] });
       expect(r.status).toBe(200);
       const left = await sql<{ resource_type: string }>("SELECT resource_type FROM action_links WHERE action_id = $1 ORDER BY 1", [I("a0b")]);
@@ -780,7 +780,7 @@ describe.skipIf(!live)("QA-visibility-v2 on the REAL server + LOCAL PostgreSQL 1
       }
       expect((await sql<{ department_id: string; process_id: string | null }>("SELECT department_id, process_id FROM controls WHERE id = $1", [c.id]))[0]).toEqual({ department_id: I("201"), process_id: null });
     });
-    it.fails("QA-VIS2-05 (MINOR): PATCH /controls/:id with an unknown departmentId answers 400 like processId and the KPI do (today FK violation => 500), restricted or not", async () => {
+    it("QA-VIS2-05 (MINOR): PATCH /controls/:id with an unknown departmentId answers 400 like processId and the KPI do (today FK violation => 500), restricted or not", async () => {
       const c = await mk("control", "PERIMETRE", [UID.named], { departmentId: I("201") });
       const r = await patch("rm", `${c.route}/${c.id}`, { departmentId: UNKNOWN, reason: "Inconnu" });
       expect(r.status, r.text.slice(0, 100)).toBe(400);

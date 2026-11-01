@@ -1,6 +1,7 @@
 import { readerScope, type ReadScope } from "../domain/visibility.js";
 import { keepReadableByRisk, maskCoveredRisks, maskRiskSource } from "./riskVisibility.js";
 import { withoutHiddenRisk } from "./AnomalyService.js";
+import type { ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
@@ -304,6 +305,8 @@ export class DashboardService {
      * `risk_appetites`. Absent: legacy read (tests).
      */
     private readonly frameworks?: FrameworkResolutionDeps["frameworks"],
+    /** QA-VIS2-02: masks hidden control / execution ids of the open anomalies. Optional (tests): absent, nothing masked. */
+    private readonly access?: Pick<ResourceVisibilityManager, "maskAnomalyParents">,
   ) {}
 
   // -- ACT-080 ---------------------------------------------------------
@@ -331,7 +334,8 @@ export class DashboardService {
     const wanted: AnomalyStatus[] =
       statuses && statuses.length > 0 ? statuses : ["NEW", "UNDER_ANALYSIS", "ACTION_IN_PROGRESS"];
     const all = await this.anomalies.list(actor.tenantId, undefined, readerScope(actor));
-    return withoutHiddenRisk(this.risks, actor, all.filter((a) => wanted.includes(a.status)));
+    const rows = await withoutHiddenRisk(this.risks, actor, all.filter((a) => wanted.includes(a.status)));
+    return this.access ? this.access.maskAnomalyParents(actor, rows) : rows;
   }
 
   // -- ACT-082 / ACT-210 / ACT-243 -------------------------------------

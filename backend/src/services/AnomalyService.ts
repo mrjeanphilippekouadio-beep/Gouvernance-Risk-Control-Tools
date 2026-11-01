@@ -52,6 +52,12 @@ export class AnomalyService {
     };
   }
 
+  /** QA-VIS1-02 / QA-VIS2-02: hidden risk, control and execution ids are removed from a readable anomaly. */
+  private async masked(actor: AuthenticatedUser, rows: Anomaly[]): Promise<Anomaly[]> {
+    const withoutRisk = await withoutHiddenRisk(this.risks, actor, rows);
+    return this.access ? this.access.maskAnomalyParents(actor, withoutRisk) : withoutRisk;
+  }
+
   private async getRaw(actor: AuthenticatedUser, id: string): Promise<Anomaly> {
     const anomaly = await this.anomalies.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!anomaly) throw new NotFoundError("Anomaly", id);
@@ -147,12 +153,12 @@ export class AnomalyService {
   async get(actor: AuthenticatedUser, id: string): Promise<Anomaly> {
     requirePermission(actor, "anomaly.read");
     const anomaly = await this.getRaw(actor, id);
-    return (await withoutHiddenRisk(this.risks, actor, [anomaly]))[0]!;
+    return (await this.masked(actor, [anomaly]))[0]!;
   }
 
   async list(actor: AuthenticatedUser, status?: AnomalyStatus): Promise<Anomaly[]> {
     requirePermission(actor, "anomaly.read");
-    return withoutHiddenRisk(this.risks, actor, await this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE));
+    return this.masked(actor, await this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE));
   }
 
   async updateStatus(
@@ -192,7 +198,7 @@ export class AnomalyService {
     });
 
     // Codex P2: the mutation answer is masked like the reads.
-    return (await withoutHiddenRisk(this.risks, actor, [after]))[0]!;
+    return (await this.masked(actor, [after]))[0]!;
   }
 }
 

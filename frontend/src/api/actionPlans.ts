@@ -1,3 +1,4 @@
+import type { RiskVisibility } from "./risks";
 import { apiRequest, type GovernanceConfirmation, type ValidationIndependence } from "./client";
 
 export type ActionPlanSourceType = "RISK" | "CONTROL" | "KRI" | "AUDIT" | "INCIDENT" | "MANAGEMENT" | "FINDING";
@@ -7,6 +8,8 @@ export type ActionPlanPriority = "NORMAL" | "HIGH";
 export type ActionLinkResourceType = "RISK" | "CONTROL" | "KRI" | "ANOMALY";
 
 export interface ActionPlan {
+  /** Lot V2: absent on an older server = CLIENT. */
+  visibility?: RiskVisibility;
   id: string;
   title: string;
   description: string | null;

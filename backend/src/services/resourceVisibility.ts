@@ -187,6 +187,25 @@ export class ResourceVisibilityManager {
     return new Set(await this.access.hiddenIds(actor.tenantId, type, unique, readerScope(actor)));
   }
 
+  /** QA-VIS2-01: whether the actor may not read this control execution (its control is hidden and they did not run it). */
+  async executionHidden(actor: AuthenticatedUser, executionId: string | null | undefined): Promise<boolean> {
+    if (!executionId) return false;
+    return (await this.access.hiddenExecutionIds(actor.tenantId, [executionId], readerScope(actor))).length > 0;
+  }
+
+  /** QA-VIS2-02: a readable anomaly never names a control or an execution the reader may not see. Two queries for all rows. */
+  async maskAnomalyParents<T extends { controlId: string | null; controlExecutionId: string | null }>(actor: AuthenticatedUser, rows: T[]): Promise<T[]> {
+    const controls = await this.hidden(actor, "CONTROL", rows.map((r) => r.controlId));
+    const executionIds = [...new Set(rows.map((r) => r.controlExecutionId).filter((id): id is string => !!id))];
+    const executions = new Set(executionIds.length === 0 ? [] : await this.access.hiddenExecutionIds(actor.tenantId, executionIds, readerScope(actor)));
+    if (controls.size === 0 && executions.size === 0) return rows;
+    return rows.map((r) => ({
+      ...r,
+      controlId: r.controlId && controls.has(r.controlId) ? null : r.controlId,
+      controlExecutionId: r.controlExecutionId && executions.has(r.controlExecutionId) ? null : r.controlExecutionId,
+    }));
+  }
+
   /** A row of a hidden resource answers exactly like a missing one (404, no existence oracle). */
   async assertReadable(actor: AuthenticatedUser, type: RestrictableResource, id: string | null | undefined, entity: string, shownId: string): Promise<void> {
     if ((await this.hidden(actor, type, [id])).size > 0) throw new NotFoundError(entity, shownId);

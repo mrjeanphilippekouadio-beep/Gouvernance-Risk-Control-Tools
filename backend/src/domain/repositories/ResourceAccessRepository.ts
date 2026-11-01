@@ -59,6 +59,8 @@ export interface ResourceAccessRepository {
   ): Promise<PerimeterChangeResult>;
   /** Active accounts of the tenant that read the resource now (SQL `<root>_visible_to`). */
   readers(tenantId: string, type: RestrictableResource | "RISK", id: string): Promise<string[]>;
+  /** QA-VIS2-02: among control execution ids, those the scope may NOT read (control hidden and not their executor). */
+  hiddenExecutionIds(tenantId: string, ids: string[], scope: ReadScope): Promise<string[]>;
   /** Among `ids`, those the scope may NOT read (any status). */
   hiddenIds(tenantId: string, type: RestrictableResource, ids: string[], scope: ReadScope): Promise<string[]>;
   /** Whether `userId` belongs to the department's group or owns the process (the perimeter known at creation). */

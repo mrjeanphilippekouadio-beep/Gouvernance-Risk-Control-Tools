@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { ResourceVisibilityCard } from "../risks/RiskVisibility";
+import { ResourceVisibilityCard, RiskVisibilityBadge } from "../risks/RiskVisibility";
 import { anomalyVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { describeError } from "../indicators/shared";
 import { Button, Card, FormField, MessageBanner, Modal, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
@@ -79,6 +79,7 @@ export function AnomaliesPage({ token }: Props) {
     { key: "description", header: "Anomalie", render: (row) => <div className="workflow-cell-stack"><strong>{row.description}</strong>{row.origin && <small>Origine : {row.origin}</small>}</div> },
     { key: "severity", header: "Gravité", render: (row) => <StatusBadge label={severityLabels[row.severity]} tone={toneForSeverity(row.severity)} /> },
     { key: "status", header: "Statut", render: (row) => <StatusBadge label={statusLabels[row.status]} tone={toneForStatus(row.status)} /> },
+    { key: "visibility", header: "Visibilité", render: (row) => <RiskVisibilityBadge visibility={row.visibility} /> },
     { key: "observed", header: "Observée le", render: (row) => dateLabel(row.observedAt) },
     { key: "actions", header: "Actions", render: (row) => <Button onClick={() => open(row)}>Ouvrir</Button> },
   ], []);

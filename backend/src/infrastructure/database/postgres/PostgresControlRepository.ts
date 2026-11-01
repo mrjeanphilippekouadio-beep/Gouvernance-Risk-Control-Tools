@@ -11,6 +11,7 @@ import type {
 } from "../../../domain/entities/Control.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
+import { unknownDepartmentAsValidation } from "./foreignKey.js";
 
 interface ControlRow {
   id: string;
@@ -188,7 +189,7 @@ export class PostgresControlRepository implements ControlRepository {
       return toDomain(row, input.coveredRiskIds);
     } catch (err) {
       await client.query("ROLLBACK");
-      throw err;
+      unknownDepartmentAsValidation(err, input.departmentId);
     } finally {
       client.release();
     }
@@ -257,7 +258,7 @@ export class PostgresControlRepository implements ControlRepository {
       return toDomain(row, coveredRiskIds);
     } catch (err) {
       await client.query("ROLLBACK");
-      throw err;
+      unknownDepartmentAsValidation(err, input.departmentId);
     } finally {
       client.release();
     }

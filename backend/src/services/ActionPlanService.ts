@@ -459,9 +459,10 @@ export class ActionPlanService {
     }
 
     const before = await this.actions.listLinks(actor.tenantId, id);
-    // Codex P2: the editor replaces only the links they see; a link to a risk they may not see is kept server-side.
-    const hidden = await hiddenRiskIds(this.risks, actor, before.filter((l) => l.resourceType === "RISK").map((l) => l.resourceId));
-    const kept = before.filter((l) => l.resourceType === "RISK" && hidden.has(l.resourceId));
+    // Codex P2 / QA-VIS2-04: the editor replaces only the links they see; a link to a risk, control or anomaly they may
+    // not see is kept server-side.
+    const hiddenLink = await this.hiddenLinks(actor, before);
+    const kept = before.filter(hiddenLink);
     const stored = [...links, ...kept.filter((k) => !links.some((l) => l.resourceType === k.resourceType && l.resourceId === k.resourceId))];
     await this.actions.replaceLinks(actor.tenantId, id, stored);
 
@@ -483,10 +484,28 @@ export class ActionPlanService {
   async listLinks(actor: AuthenticatedUser, id: string): Promise<ActionLink[]> {
     requirePermission(actor, "actionplan.read");
     await this.getRaw(actor, id);
-    // QA-VIS1-02: a link to a risk the reader may not see is not listed.
+    // QA-VIS1-02 / QA-VIS2-03: a link to a risk, control or anomaly the reader may not see is not listed.
     const links = await this.actions.listLinks(actor.tenantId, id);
-    const hidden = await hiddenRiskIds(this.risks, actor, links.filter((l) => l.resourceType === "RISK").map((l) => l.resourceId));
-    return links.filter((l) => !(l.resourceType === "RISK" && hidden.has(l.resourceId)));
+    const hiddenLink = await this.hiddenLinks(actor, links);
+    return links.filter((l) => !hiddenLink(l));
+  }
+
+  /** One query per type: the links whose target (risk, control, anomaly; a KRI through its risk) the actor may not read. */
+  private async hiddenLinks(actor: AuthenticatedUser, links: ActionLink[]): Promise<(l: ActionLink) => boolean> {
+    const ids = (t: string) => links.filter((l) => l.resourceType === t).map((l) => l.resourceId);
+    const risks = await hiddenRiskIds(this.risks, actor, ids("RISK"));
+    const controls = this.access ? await this.access.hidden(actor, "CONTROL", ids("CONTROL")) : new Set<string>();
+    const anomalies = this.access ? await this.access.hidden(actor, "ANOMALY", ids("ANOMALY")) : new Set<string>();
+    const kriRisk = new Map<string, string>();
+    for (const kriId of ids("KRI")) {
+      const kri = await this.kris?.getById(actor.tenantId, kriId);
+      if (kri?.riskId) kriRisk.set(kriId, kri.riskId);
+    }
+    const kriHidden = await hiddenRiskIds(this.risks, actor, [...kriRisk.values()]);
+    return (l) => (l.resourceType === "RISK" && risks.has(l.resourceId))
+      || (l.resourceType === "CONTROL" && controls.has(l.resourceId))
+      || (l.resourceType === "ANOMALY" && anomalies.has(l.resourceId))
+      || (l.resourceType === "KRI" && kriHidden.has(kriRisk.get(l.resourceId) ?? ""));
   }
 
   /**
@@ -516,7 +535,10 @@ export class ActionPlanService {
     }
     if (this.evidences) {
       const evidence = await this.evidences.getById(actor.tenantId, evidenceId);
-      if (!evidence || evidence.status === "DELETED") throw new ValidationError(`Evidence ${evidenceId} does not exist in this tenant`);
+      // QA-VIS2-01: the evidence of an execution the closer may not read answers like an unknown evidence.
+      if (!evidence || evidence.status === "DELETED" || (await this.access?.executionHidden(actor, evidence.controlExecutionId))) {
+        throw new ValidationError(`Evidence ${evidenceId} does not exist in this tenant`);
+      }
     }
 
     // F-PNL2-05: the confirmation prompt comes after every precondition (state, evidence).
