@@ -434,6 +434,7 @@ pour l'usage.
 | @dev-backend @dev-db | **Visibilité — à lever avant V1 (SEC-visibility-v0)** : V0-01 (scope absent = pas de filtre → fail-closed), V0-02 (tableaux de bord, rapports, cartographie, `?coveringRiskId=`, vues 360, KRI/KPI, `ActionPlanService.dashboard` non filtrés), V0-04 (KPI `requireKpi` et validations de liens), V0-06/07 INFO ; retest A10 avant de livrer V1. | 2026-10-29 | **Ouvert** |
 | HUMAN @dev-backend @risk-manager | **q204 (cockpit)** — notifier le Risk Manager à chaque élargissement par le propriétaire (A, construit ainsi en V1) ou seulement si la restriction venait du RM (B). | 2026-11-01 | **Fermé** (DECISION-105) |
 | HUMAN @privacy @security @dev-backend | **q205 (cockpit)** — annuaire pour nommer des personnes à la création d'un risque : ouvrir à tout créateur/modificateur de risque après avis Privacy (A, recommandé) ou réserver au RM et détenteurs actuels (B). | 2026-11-01 | **Décidé** (DECISION-105) — avis Privacy puis code dans V1 |
+| HUMAN @security @dev-backend | **q206 (cockpit)** — portée de q203 : seule la lecture du journal d'audit réservée au groupe Audit (A, construit ainsi) ou aussi missions et constats (B). | 2026-11-01 | **Ouvert — HUMAN : q206** |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
