@@ -119,9 +119,10 @@ CREATE OR REPLACE FUNCTION action_plan_visible_to(p_tenant uuid, p_plan uuid, p_
       OR CASE
         WHEN ap.source_type = 'RISK' AND ap.source_id IS NOT NULL THEN risk_visible_to(p_tenant, ap.source_id, p_user)
         WHEN ap.source_type = 'CONTROL' AND ap.source_id IS NOT NULL THEN control_visible_to(p_tenant, ap.source_id, p_user)
+        -- Codex P2 : KRI introuvable = refus (fermé) ; KRI sans risque principal = aucune restriction héritée.
         WHEN ap.source_type = 'KRI' AND ap.source_id IS NOT NULL THEN COALESCE(
-          (SELECT risk_visible_to(p_tenant, k.risk_id, p_user) FROM kris k
-           WHERE k.tenant_id = p_tenant AND k.id = ap.source_id AND k.risk_id IS NOT NULL), true)
+          (SELECT k.risk_id IS NULL OR risk_visible_to(p_tenant, k.risk_id, p_user) FROM kris k
+           WHERE k.tenant_id = p_tenant AND k.id = ap.source_id), false)
         ELSE (
           ap.visibility = 'CLIENT'
           OR visibility_sees_everything(p_tenant, p_user)

@@ -212,6 +212,14 @@ describe.skipIf(!hasLocalPg)("lot V2 on real PostgreSQL (local only)", () => {
     expect(await sees("anomaly_visible_to", an, decl!)).toBe(true); // the executor of the execution
   });
 
+  it("Codex P2: a plan whose KRI source is missing is readable only by its responsible (fail closed); a KRI without risk restricts nothing", async () => {
+    const [resp, x] = await Promise.all(["resp", "x"].map(user));
+    const missing = (await one(`INSERT INTO action_plans (tenant_id, title, source_type, source_id, responsible_user_id, due_date, created_by)
+                                VALUES ($1, 't', 'KRI', gen_random_uuid(), $2, now(), $2) RETURNING id`, [ctx.tenant, resp])).id as string;
+    expect(await sees("action_plan_visible_to", missing, x!)).toBe(false);
+    expect(await sees("action_plan_visible_to", missing, resp!)).toBe(true);
+  });
+
   it("kpi_visible_to: department group and process owner in PERIMETRE, list only in NOMINATIF", async () => {
     const [dm, x, rm] = await Promise.all(["dm", "x", "rm"].map(user));
     const d = await dept();
@@ -292,5 +300,23 @@ describe("lot V2 — wiring guard (SEC V2 recommendation: the fake-repository co
     expect(server).toContain("new EvidenceService(evidenceRepository, documentStorage, auditRepository, executionRepository, controlRepository)");
     expect(server).toContain("new ResourceVisibilityManager(new PostgresResourceAccessRepository(pool)");
     expect((server.match(/visibilityResolver, resourceVisibilityManager/g) ?? []).length).toBe(4);
+  });
+});
+
+describe("Codex P2 — a plan readable by its responsible does not name a hidden CONTROL / KRI source", () => {
+  it("sourceId of a hidden control or of a KRI whose risk is hidden becomes null; a readable source stays", async () => {
+    const { ActionPlanService } = await import("../src/services/ActionPlanService.js");
+    const plan = (id: string, sourceType: string, sourceId: string) => ({ id, tenantId: T, title: "t", description: null, sourceType, sourceId,
+      responsibleUserId: OWNER, departmentId: null, dueDate: new Date("2030-01-01"), status: "PLANIFIEE", progressPercent: 0, visibility: "CLIENT" });
+    const rows = [plan("p1", "CONTROL", "c-hidden"), plan("p2", "KRI", "k1"), plan("p3", "CONTROL", "c-ok")];
+    const access = { hidden: async (_a: unknown, type: string, ids: Array<string | null>) => new Set(type === "CONTROL" ? ids.filter((i) => i === "c-hidden") as string[] : []) };
+    const svc = new ActionPlanService(
+      { list: async () => rows } as never, { record: async () => undefined } as never,
+      { hiddenIds: async (_t: string, ids: string[]) => ids.filter((i) => i === "r-hidden") } as never, undefined,
+      { getById: async () => ({ riskId: "r-hidden" }) } as never,
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, access as never,
+    );
+    const out = await svc.list(actor(OWNER, ["actionplan.read"]));
+    expect(out.map((p) => [p.id, p.sourceId])).toEqual([["p1", null], ["p2", null], ["p3", "c-ok"]]);
   });
 });

@@ -586,7 +586,14 @@ export class ActionPlanService {
 
   /** QA-VIS1-02: a readable plan born from a risk the reader may not see shows no source id. */
   private async views(actor: AuthenticatedUser, rows: ActionPlan[]): Promise<ActionPlanView[]> {
-    return (await maskRiskSource(this.risks, actor, rows)).map((row) => this.toView(row));
+    // Codex P2: a CONTROL source or a KRI source (through its risk) the reader may not see is masked like a RISK one.
+    // Without the manager (tests), no lot V2 restriction exists: only the V1 risk masking applies.
+    if (!this.access) return (await maskRiskSource(this.risks, actor, rows)).map((row) => this.toView(row));
+    const hidden = await this.hiddenLinks(actor, rows.flatMap((r) =>
+      r.sourceId && (r.sourceType === "CONTROL" || r.sourceType === "KRI") ? [{ resourceType: r.sourceType, resourceId: r.sourceId }] : []));
+    const masked = rows.map((r) => (r.sourceId && (r.sourceType === "CONTROL" || r.sourceType === "KRI")
+      && hidden({ resourceType: r.sourceType, resourceId: r.sourceId }) ? { ...r, sourceId: null } : r));
+    return (await maskRiskSource(this.risks, actor, masked)).map((row) => this.toView(row));
   }
 
   private toView(action: ActionPlan): ActionPlanView {
