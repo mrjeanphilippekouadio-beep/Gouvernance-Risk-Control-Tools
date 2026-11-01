@@ -433,7 +433,7 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
       expect((await sql("SELECT count(*)::int AS n FROM resource_access_grants WHERE resource_id = $1 AND revoked_at IS NULL", [id]))[0]).toEqual({ n: 1 });
     });
 
-    it("RM restricts with a list: one PERMISSION_CHANGE audit row (reason, before/after, widening false), no notification", async () => {
+    it("RM restricts with a list: one PERMISSION_CHANGE audit row (reason, before/after, widening TRUE since Codex P2 6: N+1 102 reads it only through the new list), no notification (RM)", async () => {
       const id = await fresh();
       await sql("DELETE FROM notifications WHERE true");
       const r = await call("rm", "PUT", `/risks/${id}/visibility`, { visibility: "NOMINATIF", addUserIds: [I("102")], reason: "Dossier sensible" });
@@ -444,7 +444,7 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
       expect(a).toHaveLength(1);
       expect(a[0]).toMatchObject({ reason: "Dossier sensible", user_id: I("109") });
       expect(a[0]!.old_value.visibility).toBe("PERIMETRE");
-      expect(a[0]!.new_value).toMatchObject({ visibility: "NOMINATIF", widening: false });
+      expect(a[0]!.new_value).toMatchObject({ visibility: "NOMINATIF", widening: true }); // 102 was outside the PERIMETRE set (no N+1 on this risk): admitted = widening
       expect(await sql("SELECT 1 FROM notifications")).toHaveLength(0);
       // N+1 (102) is now on the list: reads; RACI user 103 (PERIMETRE only) no longer reads
       expect((await get("n1", `/risks/${id}`)).status).toBe(200);

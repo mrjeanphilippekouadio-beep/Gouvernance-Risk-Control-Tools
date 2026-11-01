@@ -44,6 +44,26 @@ export async function maskHiddenRisks<T>(
   return hidden.size === 0 ? rows : rows.map((row) => mask(row, hidden));
 }
 
+/** Controls (or anything covering risks): the covered-risk ids the actor may not read are dropped. */
+export function maskCoveredRisks<T extends { coveredRiskIds: string[] }>(
+  risks: Pick<RiskRepository, "hiddenIds"> | undefined,
+  actor: AuthenticatedUser,
+  rows: T[],
+): Promise<T[]> {
+  return maskHiddenRisks(risks, actor, rows, (c) => c.coveredRiskIds ?? [],
+    (c, hidden) => ({ ...c, coveredRiskIds: c.coveredRiskIds.filter((r) => !hidden.has(r)) }));
+}
+
+/** Action plans: the source id of a RISK source the actor may not read becomes null. */
+export function maskRiskSource<T extends { sourceType: string; sourceId: string | null }>(
+  risks: Pick<RiskRepository, "hiddenIds"> | undefined,
+  actor: AuthenticatedUser,
+  rows: T[],
+): Promise<T[]> {
+  return maskHiddenRisks(risks, actor, rows, (a) => (a.sourceType === "RISK" ? [a.sourceId] : []),
+    (a, hidden) => (a.sourceType === "RISK" && a.sourceId && hidden.has(a.sourceId) ? { ...a, sourceId: null } : a));
+}
+
 /** A row of a hidden risk answers exactly like a missing one (404, no existence oracle). */
 export async function assertReadableByRisk(
   risks: Pick<RiskRepository, "hiddenIds"> | undefined,

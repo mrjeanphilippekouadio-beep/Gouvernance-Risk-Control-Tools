@@ -46,6 +46,8 @@ function toDomain(row: RiskRow): Risk {
   };
 }
 
+const CREATION_GRANT_REASON = "Accès accordé à la création du risque";
+
 export class PostgresRiskRepository implements RiskRepository {
   readonly auditsInTransaction = true;
 
@@ -165,8 +167,8 @@ export class PostgresRiskRepository implements RiskRepository {
         if (!input.grantedBy) throw new Error("Initial access grants need their author");
         await client.query(
           `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason)
-           VALUES ($1, 'RISK', $2, $3, $4, 'Accès accordé à la création du risque')`,
-          [input.tenantId, row.id, userId, input.grantedBy],
+           VALUES ($1, 'RISK', $2, $3, $4, $5)`,
+          [input.tenantId, row.id, userId, input.grantedBy, CREATION_GRANT_REASON],
         );
       }
       await client.query("COMMIT");
@@ -190,6 +192,15 @@ export class PostgresRiskRepository implements RiskRepository {
     return rows.map((r) => r.id);
   }
 
+  async listCreationAccess(tenantId: string, riskId: string): Promise<string[]> {
+    const { rows } = await this.pool.query<{ user_id: string }>(
+      `SELECT user_id FROM resource_access_grants
+       WHERE tenant_id = $1 AND resource_type = 'RISK' AND resource_id = $2 AND grant_reason = $3`,
+      [tenantId, riskId, CREATION_GRANT_REASON],
+    );
+    return rows.map((r) => r.user_id);
+  }
+
   async listAccess(tenantId: string, riskId: string): Promise<string[]> {
     const { rows } = await this.pool.query<{ user_id: string }>(
       `SELECT user_id FROM resource_access_grants
@@ -204,8 +215,8 @@ export class PostgresRiskRepository implements RiskRepository {
     tenantId: string,
     riskId: string,
     change: RiskVisibilityChange,
-    audit?: TransactionalAudit<{ before: RiskVisibilityState; after: RiskVisibilityState }>,
-  ): Promise<{ before: RiskVisibilityState; after: RiskVisibilityState }> {
+    audit?: TransactionalAudit<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }>,
+  ): Promise<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }> {
     return runAudited(this.pool, async (db) => {
       const locked = await db.query<{ visibility: Visibility }>(
         `SELECT visibility FROM risks WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
@@ -219,6 +230,12 @@ export class PostgresRiskRepository implements RiskRepository {
           [tenantId, riskId],
         )).rows.map((r) => r.user_id);
       const before: RiskVisibilityState = { visibility: locked.rows[0].visibility, accessUserIds: await list() };
+      // Codex P2: "widening" = someone reads the risk after the change who did not before (the real effective sets, by
+      // risk_visible_to, under the lock), whatever the level moved to.
+      const readersBefore = (await db.query<{ id: string }>(
+        `SELECT id FROM users WHERE tenant_id = $1 AND deleted_at IS NULL AND risk_visible_to($1, $2, id)`,
+        [tenantId, riskId],
+      )).rows.map((r) => r.id);
       // Back to CLIENT revokes the list as read UNDER the lock: a grant added concurrently cannot survive (QA concurrency).
       const revoke = change.visibility === "CLIENT" ? before.accessUserIds : change.revokeUserIds;
       for (const userId of new Set(revoke)) {
@@ -241,7 +258,12 @@ export class PostgresRiskRepository implements RiskRepository {
         `UPDATE risks SET visibility = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
         [tenantId, riskId, change.visibility],
       );
-      return { before, after: { visibility: change.visibility, accessUserIds: await list() } };
+      const { rows: [gain] } = await db.query<{ widening: boolean }>(
+        `SELECT EXISTS (SELECT 1 FROM users WHERE tenant_id = $1 AND deleted_at IS NULL AND risk_visible_to($1, $2, id)
+                          AND NOT (id = ANY($3::uuid[]))) AS widening`,
+        [tenantId, riskId, readersBefore],
+      );
+      return { before, after: { visibility: change.visibility, accessUserIds: await list() }, widening: gain?.widening ?? false };
     }, audit);
   }
 

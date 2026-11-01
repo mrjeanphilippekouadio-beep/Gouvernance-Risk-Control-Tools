@@ -211,7 +211,7 @@ describe("QA-visibility-v0 INV: reads of the 5 roots that carry no scope (V1 gap
   const all = scan();
   it("the wired reads are exactly the 11 public get/list of the 5 services", () => {
     expect(all.filter((r) => r.wired).map((r) => `${r.file}:${r.repo}.${r.method}`).sort()).toEqual([
-      "ActionPlanService.ts:actions.getById", "ActionPlanService.ts:actions.list", "AnomalyService.ts:anomalies.getById", "AnomalyService.ts:anomalies.list",
+      "ActionPlanService.ts:actions.getById", "ActionPlanService.ts:actions.list", "AnomalyService.ts:anomalies.getById", "AnomalyService.ts:anomalies.getById", "AnomalyService.ts:anomalies.list", // + updateStatus reads the stored row (V1 Codex P2: audit keeps riskId, answer masked)
       "ControlService.ts:controls.getById", "ControlService.ts:controls.list", "KpiService.ts:kpis.getById", "KpiService.ts:kpis.list",
     ]);
   });

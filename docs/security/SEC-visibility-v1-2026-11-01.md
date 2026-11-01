@@ -108,3 +108,17 @@ Méthode : analyse statique du diff `a6b01e2..8791490` et `npx vitest run` de `v
 - INFO déjà notées : écart DECISION-104 `audit.*`/`audit.read` (accord HUMAN), KRI filtrés en mémoire, perte silencieuse de liens KRI/contrôle masqués lors d'un remplacement complet, processus archivé dans `risk_visible_to`, fenêtre TOCTOU V1-02.
 
 Statut : V1-01, V1-02, V1-04 **RETEST_PASS**. V1-03 partiel (V2). V1-05 **REMEDIATION_REQUIRED** (A06, non bloquant). CLOSED ne vaut pas validation Risk, Compliance ou Privacy.
+
+## Constats Codex P2 (PR #222) et V1-05 — corrections dev-backend (2026-11-01)
+
+| Point | Statut | Correction |
+|---|---|---|
+| V1-05 | **TRAITÉ** | Vue département : `controls[].coveredRiskIds` (`maskCoveredRisks`) et `actions[].sourceId` (`maskRiskSource`) ; vue Risk Owner et plans en retard (vue exécutive, rapport comité) : `sourceId` masqué ; contexte d'évaluation et vue 360 : ids des autres risques couverts masqués. |
+| P2-1 KRI | Corrigé | Le remplacement des risques couverts conserve côté serveur les liens vers un risque que l'éditeur ne voit pas ; la réponse ne les nomme pas. Même règle pour les contrôles (`coveredRiskIds`) et les liens des plans d'action (`setLinks`). |
+| P2-3 contrôles | Corrigé | `?coveringRiskId=`, contexte d'évaluation, vue 360 : `coveredRiskIds` sans les risques masqués. |
+| P2-4 RACI revoke | Corrigé | Affectation sur un risque masqué : 404 d'une affectation inconnue, avant toute écriture. |
+| P2-5 idempotence | Corrigé | Le rejeu compare aussi la liste nommée accordée à la création (`listCreationAccess`, révoquée depuis ou non) et le niveau. |
+| P2-6 élargissement | Corrigé | `changeVisibility` calcule `widening` sur les ensembles effectifs réels (`risk_visible_to` avant/après, sous verrou) : toute personne admise qui ne lisait pas avant = élargissement (audit + notification RM si propriétaire). Repli prudent sans PostgreSQL. Le changement de département/processus (V1-02) garde la règle « nouvelle valeur non nulle sur PERIMETRE ». |
+| P2-7 mutations | Corrigé | Réponses de `ControlService.update`, `AnomalyService.updateStatus`, mutations des plans (création, progression, démarrage, escalade, clôture) et `listForRisk` masquées ; l'audit garde les valeurs réelles. |
+
+Résiduel inchangé : V1-03 (texte anomalie/plan, compteur exécutif) en V2 ; TOCTOU V1-02 ; écart DECISION-104.

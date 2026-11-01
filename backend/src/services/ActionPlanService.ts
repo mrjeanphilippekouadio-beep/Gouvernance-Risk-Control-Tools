@@ -1,4 +1,4 @@
-import { maskHiddenRisks, hiddenRiskIds } from "./riskVisibility.js";
+import { maskRiskSource, hiddenRiskIds } from "./riskVisibility.js";
 import type { ActionPlanRepository } from "../domain/repositories/ActionPlanRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -224,7 +224,7 @@ export class ActionPlanService {
       requestId,
     });
 
-    return this.toView(action);
+    return (await this.views(actor, [action]))[0]!;
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<ActionPlanView> {
@@ -251,7 +251,7 @@ export class ActionPlanService {
       if (!risk) throw new ValidationError(`Risk ${riskId} does not exist in this tenant`);
     }
     const rows = await this.actions.listForRisk(actor.tenantId, riskId);
-    return rows.map((row) => this.toView(row));
+    return this.views(actor, rows);
   }
 
   /** ACT-196: filters by statut (incl. computed EN_RETARD)/source/responsable/date/département. */
@@ -300,7 +300,7 @@ export class ActionPlanService {
       requestId,
     });
 
-    return this.toView(after);
+    return (await this.views(actor, [after]))[0]!;
   }
 
   /**
@@ -350,7 +350,7 @@ export class ActionPlanService {
       await this.persistNotification(actor, after, "ACTION_STARTED_LATE", `Action démarrée en retard (action ${after.id})`, requestId);
     }
 
-    return this.toView(after);
+    return (await this.views(actor, [after]))[0]!;
   }
 
   /**
@@ -369,7 +369,7 @@ export class ActionPlanService {
     const computedStatus = computeActionPlanStatus(action);
 
     if (computedStatus !== "EN_RETARD") {
-      return { escalated: false, action: this.toView(action) };
+      return { escalated: false, action: (await this.views(actor, [action]))[0]! };
     }
 
     this.notifier
@@ -394,7 +394,7 @@ export class ActionPlanService {
 
     await this.persistNotification(actor, action, "ACTION_OVERDUE", `Action en retard (action ${action.id})`, requestId, true);
 
-    return { escalated: true, action: this.toView(action) };
+    return { escalated: true, action: (await this.views(actor, [action]))[0]! };
   }
 
   /** ACT-194: rebuilds the full set of linked resources — pure link table, DELETE + INSERT (see CLAUDE.md's control_risks exemption). */
@@ -413,7 +413,11 @@ export class ActionPlanService {
     }
 
     const before = await this.actions.listLinks(actor.tenantId, id);
-    await this.actions.replaceLinks(actor.tenantId, id, links);
+    // Codex P2: the editor replaces only the links they see; a link to a risk they may not see is kept server-side.
+    const hidden = await hiddenRiskIds(this.risks, actor, before.filter((l) => l.resourceType === "RISK").map((l) => l.resourceId));
+    const kept = before.filter((l) => l.resourceType === "RISK" && hidden.has(l.resourceId));
+    const stored = [...links, ...kept.filter((k) => !links.some((l) => l.resourceType === k.resourceType && l.resourceId === k.resourceId))];
+    await this.actions.replaceLinks(actor.tenantId, id, stored);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -422,7 +426,7 @@ export class ActionPlanService {
       entityId: id,
       action: "UPDATE",
       oldValue: { links: before },
-      newValue: { links },
+      newValue: { links: stored },
       reason: "LINKS_CHANGE",
       requestId,
     });
@@ -503,7 +507,7 @@ export class ActionPlanService {
       ],
     );
 
-    return this.toView(after);
+    return (await this.views(actor, [after]))[0]!;
   }
 
   private async getRaw(actor: AuthenticatedUser, id: string): Promise<ActionPlan> {
@@ -514,9 +518,7 @@ export class ActionPlanService {
 
   /** QA-VIS1-02: a readable plan born from a risk the reader may not see shows no source id. */
   private async views(actor: AuthenticatedUser, rows: ActionPlan[]): Promise<ActionPlanView[]> {
-    const masked = await maskHiddenRisks(this.risks, actor, rows, (a) => (a.sourceType === "RISK" ? [a.sourceId] : []),
-      (a, hidden) => (a.sourceType === "RISK" && a.sourceId && hidden.has(a.sourceId) ? { ...a, sourceId: null } : a));
-    return masked.map((row) => this.toView(row));
+    return (await maskRiskSource(this.risks, actor, rows)).map((row) => this.toView(row));
   }
 
   private toView(action: ActionPlan): ActionPlanView {

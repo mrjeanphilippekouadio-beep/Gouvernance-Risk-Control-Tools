@@ -49,6 +49,8 @@ export interface RiskRepository {
    * refuses any restricted level when it is absent (fail-closed).
    */
   listAccess?(tenantId: string, riskId: string): Promise<string[]>;
+  /** Codex P2: the people granted WITH the creation (revoked since or not) — what an idempotent replay compares. */
+  listCreationAccess?(tenantId: string, riskId: string): Promise<string[]>;
   /**
    * Lot V1 (q194): changes level and list under a row lock, with the audit rows in the same transaction. Returns the state
    * before and after. Grants are revoked with `revoked_at` (never deleted).
@@ -57,8 +59,8 @@ export interface RiskRepository {
     tenantId: string,
     riskId: string,
     change: RiskVisibilityChange,
-    audit?: TransactionalAudit<{ before: RiskVisibilityState; after: RiskVisibilityState }>,
-  ): Promise<{ before: RiskVisibilityState; after: RiskVisibilityState }>;
+    audit?: TransactionalAudit<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }>,
+  ): Promise<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }>;
   /**
    * Lot V1 (q193): among `ids`, the risks the scope may NOT read (restricted and not admitted). Archived and deleted
    * risks are included, unlike `list`: what inherits from a risk follows its visibility whatever its status. Optional:

@@ -6,7 +6,7 @@ import type { Control, ControlStatus, CreateControlInput, UpdateControlInput } f
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
-import { hiddenRiskIds, maskHiddenRisks } from "./riskVisibility.js";
+import { hiddenRiskIds, maskCoveredRisks } from "./riskVisibility.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
 import { READER_DEFAULT_SCOPE } from "../domain/visibility.js";
 
@@ -63,15 +63,19 @@ export class ControlService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<Control> {
     requirePermission(actor, "control.read");
+    return (await this.withoutHiddenRisks(actor, [await this.getRaw(actor, id)]))[0]!;
+  }
+
+  /** The control as stored (all its covered risks): internal use only, never returned as is. */
+  private async getRaw(actor: AuthenticatedUser, id: string): Promise<Control> {
     const control = await this.controls.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!control) throw new NotFoundError("Control", id);
-    return (await this.withoutHiddenRisks(actor, [control]))[0]!;
+    return control;
   }
 
   /** QA-VIS1-02: a readable control never names a risk the reader may not see. */
   private withoutHiddenRisks(actor: AuthenticatedUser, controls: Control[]): Promise<Control[]> {
-    return maskHiddenRisks(this.risks, actor, controls, (c) => c.coveredRiskIds ?? [],
-      (c, hidden) => ({ ...c, coveredRiskIds: c.coveredRiskIds.filter((r) => !hidden.has(r)) }));
+    return maskCoveredRisks(this.risks, actor, controls);
   }
 
   async list(actor: AuthenticatedUser, includeArchived = false): Promise<Control[]> {
@@ -84,7 +88,8 @@ export class ControlService {
     // Lot V1: which controls cover a restricted risk is as restricted as the risk; a hidden risk answers like an
     // unknown one (an empty list, QA-VIS1-01 / SEC V1-04).
     if ((await hiddenRiskIds(this.risks, actor, [riskId])).size > 0) return [];
-    return this.controls.listCoveringRisk(actor.tenantId, riskId);
+    // Codex P2: the other covered risks of these controls lose the ids the reader may not see.
+    return this.withoutHiddenRisks(actor, await this.controls.listCoveringRisk(actor.tenantId, riskId));
   }
 
   async update(
@@ -94,7 +99,8 @@ export class ControlService {
     requestId: string,
   ): Promise<Control> {
     requirePermission(actor, "control.update");
-    const before = await this.get(actor, id);
+    const raw = await this.getRaw(actor, id);
+    const before = (await this.withoutHiddenRisks(actor, [raw]))[0]!;
 
     if (input.status) {
       if (input.status === "ARCHIVED") {
@@ -110,7 +116,10 @@ export class ControlService {
           "A control must cover at least one risk (a risk must have at least one control, and vice versa)",
         );
       }
-      await this.assertRisksExist(actor, input.coveredRiskIds);
+      // Lot V1 (Codex P2): the editor replaces only what they see; a link to a hidden risk is kept server-side.
+      const hiddenLinked = await hiddenRiskIds(this.risks, actor, raw.coveredRiskIds);
+      await this.assertRisksExist(actor, input.coveredRiskIds.filter((r) => !hiddenLinked.has(r)));
+      input = { ...input, coveredRiskIds: [...new Set([...input.coveredRiskIds, ...hiddenLinked])] };
     }
     await this.assertProcessExists(actor.tenantId, input.processId);
 
@@ -122,13 +131,13 @@ export class ControlService {
       entityType: "Control",
       entityId: id,
       action: input.status ? "STATUS_CHANGE" : "UPDATE",
-      oldValue: before,
+      oldValue: raw,
       newValue: after,
       reason: null,
       requestId,
     });
 
-    return after;
+    return (await this.withoutHiddenRisks(actor, [after]))[0]!;
   }
 
   async archive(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<void> {

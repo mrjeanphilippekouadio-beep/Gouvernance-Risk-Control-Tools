@@ -177,12 +177,15 @@ export class KriService {
     requirePermission(actor, "kri.update");
     const before = await this.requireKri(actor, id);
 
-    const uniqueIds = [...new Set(riskIds)].filter((rid) => rid !== before.riskId);
+    const requested = [...new Set(riskIds)].filter((rid) => rid !== before.riskId);
     // QA-F7S6-01: only the risks being ADDED must exist (not archived); a risk archived after being linked can stay
     // or be removed without blocking the change.
     const linked = new Set(await this.kris.listCoveredRiskIds(actor.tenantId, id));
-    const added = uniqueIds.filter((rid) => !linked.has(rid));
+    const added = requested.filter((rid) => !linked.has(rid));
     if (added.length > 0) await this.assertRisksExist(actor, added);
+    // Lot V1 (Codex P2): the editor replaces only what they see; a link to a risk they may not see is kept server-side.
+    const hiddenLinked = await hiddenRiskIds(this.risks, actor, [...linked]);
+    const uniqueIds = [...new Set([...requested, ...hiddenLinked])];
 
     // F7S6-01: the repository reads the previous set inside the replacing transaction (KRI row locked, still active)
     // and returns it, so the audit's oldValue is the set actually overwritten. Fakes return nothing: fall back.
@@ -193,7 +196,7 @@ export class KriService {
       (old) => [this.event(actor, id, "ASSIGN", { coveredRiskIds: old }, { coveredRiskIds: uniqueIds }, null, requestId)],
     );
 
-    return { riskId: before.riskId, coveredRiskIds: uniqueIds };
+    return { riskId: before.riskId, coveredRiskIds: uniqueIds.filter((rid) => !hiddenLinked.has(rid)) };
   }
 
   /**

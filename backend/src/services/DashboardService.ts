@@ -1,5 +1,5 @@
 import { SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
-import { keepReadableByRisk } from "./riskVisibility.js";
+import { keepReadableByRisk, maskCoveredRisks, maskRiskSource } from "./riskVisibility.js";
 import { withoutHiddenRisk } from "./AnomalyService.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
@@ -421,7 +421,7 @@ export class DashboardService {
     const kriSummaries = await Promise.all(ownedKris.map((k) => this.toKriSummary(actor.tenantId, k)));
 
     const actions = await this.actionPlans.list(actor.tenantId, { responsibleUserId: actor.userId }, SYSTEM_SCOPE);
-    const actionViews = actions.map(toActionPlanView);
+    const actionViews = await maskRiskSource(this.risks, actor, actions.map(toActionPlanView));
 
     const alerts: RiskOwnerAlert[] = [];
     for (const { risk, evaluation } of withEvaluations) {
@@ -493,12 +493,13 @@ export class DashboardService {
     const kriSummaries = await Promise.all(departmentKris.map((k) => this.toKriSummary(actor.tenantId, k)));
 
     const kpiSummaries = await Promise.all(kpis.map((kpi) => this.toKpiSummary(actor.tenantId, kpi)));
-    const actionViews = actions.map(toActionPlanView);
+    // Codex P2 / SEC V1-05: a readable control or plan never names a risk the reader may not see.
+    const actionViews = await maskRiskSource(this.risks, actor, actions.map(toActionPlanView));
 
     return {
       department,
       risks: riskSummaries,
-      controls: departmentControls,
+      controls: await maskCoveredRisks(this.risks, actor, departmentControls),
       kpis: kpiSummaries,
       kris: kriSummaries,
       actions: actionViews,
@@ -524,7 +525,7 @@ export class DashboardService {
       this.risks.list(actor.tenantId, riskListOptions, readerScope(actor)),
       this.getScoredRisks(actor.tenantId, riskListOptions, readerScope(actor)),
       this.getKriSummariesScoped(actor, scope),
-      this.getOverdueActionViewsScoped(actor.tenantId, scope),
+      this.getOverdueActionViewsScoped(actor, scope),
       this.anomalies.list(actor.tenantId, undefined, SYSTEM_SCOPE),
       this.getScopedRiskIds(actor.tenantId, scope, readerScope(actor)),
     ]);
@@ -566,7 +567,7 @@ export class DashboardService {
     const [scored, kriSummaries, overdueActions] = await Promise.all([
       this.getScoredRisks(actor.tenantId, riskListOptions, readerScope(actor)),
       this.getKriSummariesScoped(actor, scope),
-      this.getOverdueActionViewsScoped(actor.tenantId, scope),
+      this.getOverdueActionViewsScoped(actor, scope),
     ]);
 
     const topRisks = await Promise.all(
@@ -1064,12 +1065,13 @@ export class DashboardService {
   }
 
   private async getOverdueActionViewsScoped(
-    tenantId: string,
+    actor: AuthenticatedUser,
     scope: RiskScope,
     filters?: ActionPlanListFilters,
   ): Promise<ActionPlanView[]> {
     const scopedFilters = this.actionPlanFiltersForScope(scope, filters);
     if (scopedFilters === null) return [];
-    return this.getOverdueActionViews(tenantId, scopedFilters);
+    // SEC V1-05: the overdue plans of the executive view / committee report lose a hidden risk source id.
+    return maskRiskSource(this.risks, actor, await this.getOverdueActionViews(actor.tenantId, scopedFilters));
   }
 }

@@ -19,6 +19,8 @@ import { RiskEvaluationViewService } from "../src/services/RiskEvaluationViewSer
 import { UserService } from "../src/services/UserService.js";
 import { PostgresUserRepository } from "../src/infrastructure/database/postgres/PostgresUserRepository.js";
 import { corsOptions } from "../src/api/corsOptions.js";
+import { ActionPlanService } from "../src/services/ActionPlanService.js";
+import { maskCoveredRisks, maskRiskSource } from "../src/services/riskVisibility.js";
 import express from "express";
 import cors from "cors";
 import type { AddressInfo } from "node:net";
@@ -380,5 +382,117 @@ describe.skipIf(!hasLocalPg)("q205 directory search (real PostgreSQL, local only
     expect(await repo.searchActive(ctx.tenant, "_", 20)).toEqual([]);
     expect(await repo.searchActive(ctx.tenant, "zz", 20)).toHaveLength(20);
     expect(await repo.searchActive(randomUUID(), "koffi", 20)).toEqual([]);
+  });
+});
+
+// ============================================================== Codex P2 (PR #222)
+describe("Codex P2 — a hidden risk is never removed by, nor named in, what an editor sees", () => {
+  const hiddenRepo = {
+    hiddenIds: async (_t: string, ids: string[]) => ids.filter((i) => i === "hidden"),
+    getById: async (_t: string, id: string) => (id === "hidden" ? null : { id }),
+    listByIds: async (_t: string, ids: string[]) => ids.map((id) => ({ id })),
+  };
+  const auditRepo = () => ({ record: vi.fn(async () => undefined) });
+
+  it("1. KRI covered risks: replacing keeps the link to a hidden risk; the answer does not name it", async () => {
+    const replace = vi.fn(async () => undefined);
+    const kris = { getById: async () => ({ id: "k1", riskId: "primary" }), listCoveredRiskIds: async () => ["hidden", "open"], replaceCoveredRisks: replace };
+    const s = new KriService(kris as never, {} as never, hiddenRepo as never, auditRepo() as never);
+    const out = await s.addCoveredRisks(actor(OTHER, ["kri.update"]), "k1", ["open"], "req");
+    expect(replace.mock.calls[0]![2]).toEqual(["open", "hidden"]);
+    expect(out.coveredRiskIds).toEqual(["open"]);
+  });
+
+  it("2. helpers of the department / executive views: covered-risk ids and RISK sources of hidden risks are masked", async () => {
+    const a = actor(OTHER, []);
+    expect(await maskCoveredRisks(hiddenRepo as never, a, [{ coveredRiskIds: ["hidden", "open"] }])).toEqual([{ coveredRiskIds: ["open"] }]);
+    expect(await maskRiskSource(hiddenRepo as never, a, [{ sourceType: "RISK", sourceId: "hidden" }, { sourceType: "CONTROL", sourceId: "hidden" }]))
+      .toEqual([{ sourceType: "RISK", sourceId: null }, { sourceType: "CONTROL", sourceId: "hidden" }]);
+    const dash = readFileSync(join(__dirname, "..", "src", "services", "DashboardService.ts"), "utf8");
+    expect(dash).toContain("controls: await maskCoveredRisks(this.risks, actor, departmentControls)");
+    expect((dash.match(/maskRiskSource\(this\.risks, actor/g) ?? []).length).toBe(3); // department, risk-owner, overdue (executive + committee)
+  });
+
+  it("3 + 7. controls: ?coveringRiskId= masks the other covered risks; update keeps the hidden link and answers masked", async () => {
+    const update = vi.fn(async (_t: string, _id: string, input: { coveredRiskIds: string[] }) => ({ id: "c1", status: "DRAFT", coveredRiskIds: input.coveredRiskIds }));
+    const controls = {
+      listCoveringRisk: async () => [{ id: "c1", coveredRiskIds: ["open", "hidden"] }],
+      getById: async () => ({ id: "c1", status: "DRAFT", coveredRiskIds: ["open", "hidden"] }),
+      update,
+    };
+    const s = new ControlService(controls as never, hiddenRepo as never, auditRepo() as never);
+    expect((await s.listCoveringRisk(actor(OTHER, ["control.read"]), "open"))[0]!.coveredRiskIds).toEqual(["open"]);
+    const after = await s.update(actor(OTHER, ["control.read", "control.update"]), "c1", { coveredRiskIds: ["open"] }, "req");
+    expect(update.mock.calls[0]![2].coveredRiskIds).toEqual(["open", "hidden"]);
+    expect(after.coveredRiskIds).toEqual(["open"]);
+  });
+
+  it("4. RACI revoke on a hidden risk: the 404 of an unknown assignment, nothing removed", async () => {
+    const raci = { getById: async () => ({ id: "a1", entityType: "RISK", entityId: "hidden" }), remove: vi.fn() };
+    const s = new RaciAssignmentService(raci as never, auditRepo() as never, hiddenRepo as never);
+    const err = await s.revoke(actor(OTHER, ["raci.revoke"]), "RISK", "hidden", "a1", "req").catch((e: Error) => e);
+    expect(err).toBeInstanceOf(NotFoundError);
+    expect(String((err as Error).message)).toContain("RaciAssignment");
+    expect(raci.remove).not.toHaveBeenCalled();
+  });
+
+  it("5. idempotent replay compares the named people granted at creation", async () => {
+    const existing = { ...risk(), id: "r9", process: "P", description: "D", ownerDepartmentId: null, processId: null, visibility: "PERIMETRE" };
+    const repo = {
+      createIdempotent: async () => ({ risk: existing, created: false }),
+      listCreationAccess: async () => [OTHER],
+      creatorWouldSee: async () => true,
+    };
+    const users = { getById: async (_t: string, id: string) => ({ id, deletedAt: null }) };
+    const s = new RiskService(repo as never, auditRepo() as never, undefined, users as never);
+    const base = { process: "P", description: "D", visibility: "PERIMETRE" as const };
+    expect((await s.create(actor(OWNER, ["risk.create"]), { ...base, accessUserIds: [OTHER] }, "req", "key")).id).toBe("r9");
+    await expect(s.create(actor(OWNER, ["risk.create"]), { ...base, accessUserIds: [] }, "req", "key")).rejects.toThrow(/Idempotency-Key/);
+    await expect(s.create(actor(OWNER, ["risk.create"]), { ...base, accessUserIds: [RM] }, "req", "key")).rejects.toThrow(/Idempotency-Key/);
+  });
+
+  it("6. PERIMETRE -> NOMINATIF admitting someone new is a widening (fallback rule, owner): audited and notified", async () => {
+    const f = fixture({ visibility: "PERIMETRE" });
+    await f.service.setVisibility(actor(OWNER, ["risk.read"]), "r1", { visibility: "NOMINATIF", addUserIds: [OTHER], reason: "Expert externe" }, "req");
+    expect(f.audits[0]!.newValue).toMatchObject({ widening: true });
+    expect(f.notifications.create).toHaveBeenCalled();
+  });
+
+  it("7. action plans: listForRisk and mutation answers mask a hidden risk source; replacing links keeps a hidden one; anomaly status answer masked, audit not", async () => {
+    const plan = { id: "p1", sourceType: "RISK", sourceId: "hidden", status: "A_FAIRE", progressPercent: 0, dueDate: new Date("2999-01-01") };
+    const replaceLinks = vi.fn(async () => undefined);
+    const actions = {
+      listForRisk: async () => [plan],
+      getById: async () => plan,
+      updateProgress: async () => ({ ...plan, progressPercent: 10 }),
+      listLinks: async () => [{ resourceType: "RISK", resourceId: "hidden" }, { resourceType: "RISK", resourceId: "open" }],
+      replaceLinks,
+    };
+    const s = new ActionPlanService(actions as never, auditRepo() as never, hiddenRepo as never);
+    const a = actor(OTHER, ["actionplan.read", "actionplan.update"]);
+    expect((await s.listForRisk(a, "open"))[0]!.sourceId).toBeNull();
+    expect((await s.updateProgress(a, "p1", 10, null, "req")).sourceId).toBeNull();
+    await s.setLinks(a, "p1", [{ resourceType: "RISK", resourceId: "open" }] as never, "req");
+    expect(replaceLinks.mock.calls[0]![2]).toEqual([{ resourceType: "RISK", resourceId: "open" }, { resourceType: "RISK", resourceId: "hidden" }]);
+
+    const audit = auditRepo();
+    const anomalies = { getById: async () => ({ id: "an1", status: "NEW", riskId: "hidden" }), updateStatus: async () => ({ id: "an1", status: "UNDER_ANALYSIS", riskId: "hidden" }) };
+    const an = new AnomalyService(anomalies as never, audit as never, undefined, undefined, hiddenRepo as never);
+    expect((await an.updateStatus(actor(OTHER, ["anomaly.read", "anomaly.update"]), "an1", "UNDER_ANALYSIS", null, "req")).riskId).toBeNull();
+    expect(audit.record.mock.calls[0]![0]).toMatchObject({ oldValue: { riskId: "hidden" }, newValue: { riskId: "hidden" } });
+  });
+});
+
+describe.skipIf(!hasLocalPg)("Codex P2 6 — widening from the real effective sets (real PostgreSQL, local only)", () => {
+  const { ctx, one } = useMigrationTenant("v1wid");
+  it("PERIMETRE -> NOMINATIF with a new name widens; with a name already in the perimeter it does not", async () => {
+    const u = async (n: string) => (await one(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, $3) RETURNING id`, [ctx.tenant, `${n}-${Math.random()}@v1`, n])).id as string;
+    const [o, s, x] = [await u("o"), await u("s"), await u("x")];
+    const mk = async () => (await one(`INSERT INTO risks (tenant_id, process, description, owner_id, superior_owner_id, visibility) VALUES ($1, 'w', 'w', $2, $3, 'PERIMETRE') RETURNING id`, [ctx.tenant, o, s])).id as string;
+    const repo = new PostgresRiskRepository(ctx.pool);
+    const r1 = await mk();
+    expect((await repo.changeVisibility(ctx.tenant, r1, { visibility: "NOMINATIF", addUserIds: [x], revokeUserIds: [], reason: "w", changedBy: o })).widening).toBe(true);
+    const r2 = await mk();
+    expect((await repo.changeVisibility(ctx.tenant, r2, { visibility: "NOMINATIF", addUserIds: [s], revokeUserIds: [], reason: "w", changedBy: o })).widening).toBe(false);
   });
 });

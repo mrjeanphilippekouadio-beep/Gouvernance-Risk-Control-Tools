@@ -1,3 +1,4 @@
+import { maskCoveredRisks } from "./riskVisibility.js";
 import { readerScope } from "../domain/visibility.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -71,7 +72,8 @@ export class RiskEvaluationViewService {
     // QA-VIS1-03: an evaluation of a hidden risk answers exactly like an unknown evaluation (never the risk id).
     if (!risk) throw new NotFoundError("RiskEvaluation", riskEvaluationId);
 
-    const controls = await this.controls.listCoveringRisk(actor.tenantId, evaluation.riskId);
+    // Codex P2: the other covered risks of these controls lose the ids the reader may not see.
+    const controls = await maskCoveredRisks(this.risks, actor, await this.controls.listCoveringRisk(actor.tenantId, evaluation.riskId));
     // ponytail: one effectiveness query per covering control (a risk carries a
     // handful, not hundreds). Add a batched listForControls() to the repository
     // if a real risk ever covers enough controls for this to show up.

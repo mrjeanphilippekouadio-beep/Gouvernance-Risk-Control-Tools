@@ -104,7 +104,10 @@ export class AnomalyService {
     requestId: string,
   ): Promise<Anomaly> {
     requirePermission(actor, "anomaly.update");
-    const before = await this.get(actor, id);
+    requirePermission(actor, "anomaly.read");
+    // The audit keeps the stored row (its real riskId); only the answer is masked.
+    const before = await this.anomalies.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    if (!before) throw new NotFoundError("Anomaly", id);
 
     if (newStatus !== before.status && !VALID_TRANSITIONS[before.status].includes(newStatus)) {
       throw new ValidationError(
@@ -129,7 +132,8 @@ export class AnomalyService {
       requestId,
     });
 
-    return after;
+    // Codex P2: the mutation answer is masked like the reads.
+    return (await withoutHiddenRisk(this.risks, actor, [after]))[0]!;
   }
 }
 

@@ -77,12 +77,16 @@ export class RiskService {
 
     if (!result.created) {
       const existing = result.risk;
+      // Codex P2: the replay compares the named people too (as granted at creation, whatever happened since).
+      const initial = this.risks.listCreationAccess ? await this.risks.listCreationAccess(actor.tenantId, existing.id) : accessUserIds;
+      const sameList = initial.length === accessUserIds.length && accessUserIds.every((u) => initial.some((x) => sameUserId(x, u)));
       if (
         existing.process !== input.process ||
         existing.description !== input.description ||
         existing.ownerDepartmentId !== (input.ownerDepartmentId ?? null) ||
         existing.processId !== (input.processId ?? null) ||
-        (existing.visibility ?? "CLIENT") !== visibility
+        (existing.visibility ?? "CLIENT") !== visibility ||
+        !sameList
       ) {
         throw new ValidationError("Idempotency-Key was already used with a different risk payload");
       }
@@ -149,23 +153,23 @@ export class RiskService {
     for (const userId of addUserIds) await this.assertActiveAccessUser(actor.tenantId, userId);
     const change = { visibility: input.visibility, addUserIds, revokeUserIds, reason, changedBy: actor.userId };
     const changeVisibility = repo.changeVisibility.bind(repo);
-    const result = await writeAudited<{ before: RiskVisibilityState; after: RiskVisibilityState }>(
+    const result = await writeAudited<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }>(
       repo.auditsInTransaction,
       this.audit,
       (audit) => changeVisibility(actor.tenantId, id, change, audit),
-      ({ before: b, after: a }) => [{
+      ({ before: b, after: a, widening }) => [{
         tenantId: actor.tenantId,
         userId: actor.userId,
         entityType: "Risk",
         entityId: id,
         action: "PERMISSION_CHANGE",
         oldValue: b,
-        newValue: { ...a, widening: isWidening(b, a) },
+        newValue: { ...a, widening: widening ?? isWidening(b, a) },
         reason,
         requestId,
       }],
     );
-    if (!holdsRight && isWidening(result.before, result.after)) {
+    if (!holdsRight && (result.widening ?? isWidening(result.before, result.after))) {
       await this.notifyVisibilityWidened(actor, id, requestId);
     }
     return this.withNames(actor.tenantId, result.after);
@@ -545,11 +549,16 @@ export function newRequestId(): string {
  * without dashes, so a plain string comparison with actor.userId could be
  * bypassed. Compare the normalised forms instead.
  */
-/** Openness order: NOMINATIF < PERIMETRE < CLIENT. Widening = a more open level, or new people in the list. */
+/**
+ * Fallback only (a repository that cannot compute the real effective sets, e.g. test fakes): the PostgreSQL repository
+ * answers `widening` itself from risk_visible_to. Conservative: from CLIENT nothing widens (everyone already reads it);
+ * otherwise a more open level, or any person added to the list (who may be outside the previous effective set,
+ * e.g. PERIMETRE -> NOMINATIF with a new name), widens.
+ */
 const OPENNESS: Record<Visibility, number> = { NOMINATIF: 0, PERIMETRE: 1, CLIENT: 2 };
 function isWidening(before: RiskVisibilityState, after: RiskVisibilityState): boolean {
-  // A more open level widens; a more closed level never does (even with names added); same level: widens if someone is added.
-  if (OPENNESS[after.visibility] !== OPENNESS[before.visibility]) return OPENNESS[after.visibility] > OPENNESS[before.visibility];
+  if (before.visibility === "CLIENT") return false;
+  if (OPENNESS[after.visibility] > OPENNESS[before.visibility]) return true;
   return after.accessUserIds.some((u) => !before.accessUserIds.includes(u));
 }
 

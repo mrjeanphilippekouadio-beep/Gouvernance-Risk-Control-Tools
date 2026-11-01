@@ -121,6 +121,10 @@ export class RaciAssignmentService {
 
     const before = await this.raci.getById(actor.tenantId, assignmentId);
     if (!before) throw new NotFoundError("RaciAssignment", assignmentId);
+    // Codex P2: an assignment on a risk the actor may not see answers like an unknown assignment, before any write.
+    if (before.entityType === "RISK" && (await hiddenRiskIds(this.risks, actor, [before.entityId])).size > 0) {
+      throw new NotFoundError("RaciAssignment", assignmentId);
+    }
     if (before.entityType !== entityType || before.entityId !== entityId) {
       throw new ValidationError("assignmentId does not belong to the given entityType/entityId");
     }

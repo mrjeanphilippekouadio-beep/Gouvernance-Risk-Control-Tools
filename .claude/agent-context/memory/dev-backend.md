@@ -509,3 +509,7 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Revocation « retour à CLIENT » : lire la liste SOUS le verrou, jamais celle calculée avant la transaction (course).
 - q205 : `searchActive` (ILIKE échappé, filtre avant LIMIT) ; `GET /visibility` renvoie `accessUsers` (noms).
 - CORS : tout en-tête exigé par une route (Idempotency-Key) doit être dans `api/corsOptions.ts`.
+- Codex P2 (PR #222) : un remplacement d'ensemble (KRI couverts, contrôle, liens de plan) conserve côté serveur les liens
+  masqués à l'éditeur ; toute réponse (lecture ET mutation) passe par `maskCoveredRisks`/`maskRiskSource`/`withoutHiddenRisk`,
+  l'audit garde la vérité. « Élargir » = ensembles effectifs réels (`risk_visible_to` avant/après sous verrou), pas un ordre
+  de niveaux. Rejeu idempotent : comparer aussi la liste accordée à la création.
