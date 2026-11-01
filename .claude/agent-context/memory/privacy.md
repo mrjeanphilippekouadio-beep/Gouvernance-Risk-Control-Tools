@@ -197,3 +197,24 @@ Principe ajouté :
     est une revue Privacy même si le champ de l'annuaire ne change pas : la
     sensibilité vient de ce que l'écran en aval révèle (fonction, position dans
     le dispositif de contrôle), pas du seul contrat d'API.
+
+## Avis q205 — annuaire ouvert à `risk.create` / `risk.update` (2026-11-01, PRIV-REV-Q205-001)
+
+Statut : **OK AVEC RÉSERVES** (non bloquant). Document :
+`docs/privacy/review-q205-directory-risk-creators-2026-11-01.md`. DECISION-105.
+
+- Données inchangées (id + nom) ; la population de lecteurs devient la
+  première ligne. Finalité (choisir des personnes nommées d'un risque
+  restreint) légitime ; liste complète plus large que le besoin.
+- Recommandation : recherche par nom (min 2-3 caractères, plafond 20-25,
+  filtre en base avant limite, débit limité) pour ces nouveaux appelants ;
+  nommés validés côté serveur. Non imposée si le PO garde la liste.
+- Pas de journal de consultation (cohérent q183, F7-S3) ; audit à l'écriture
+  de la désignation. R5 : phrase proposée dans le document.
+- Troncature 500 (q183 R1) toujours ouverte.
+
+Principe ajouté :
+13. Quand un annuaire s'ouvre à une large population (première ligne), le
+    contenu peut rester identique mais l'échelle change : préférer une
+    recherche (minimum de caractères, plafond bas) à la liste complète, sans
+    l'imposer si les champs restent id + nom.
