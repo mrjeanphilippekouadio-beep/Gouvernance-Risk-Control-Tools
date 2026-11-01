@@ -195,6 +195,9 @@ function scan() {
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".ts")).sort()) {
     const src = readFileSync(join(dir, file), "utf8");
     for (let m = re.exec(src); m; m = re.exec(src)) {
+      // QA-V1: risk reads left this inventory. They are scoped through readerScope()/SYSTEM_SCOPE (no "visibility" word in the call),
+      // so this text heuristic counted them as gaps; they are inventoried by QA-visibility-v1 INV with the right oracle.
+      if (m[1] === "risks") continue;
       let depth = 1;
       let i = re.lastIndex;
       while (depth > 0 && i < src.length) { const ch = src[i++]; if (ch === "(") depth++; else if (ch === ")") depth--; }
@@ -210,25 +213,25 @@ describe("QA-visibility-v0 INV: reads of the 5 roots that carry no scope (V1 gap
     expect(all.filter((r) => r.wired).map((r) => `${r.file}:${r.repo}.${r.method}`).sort()).toEqual([
       "ActionPlanService.ts:actions.getById", "ActionPlanService.ts:actions.list", "AnomalyService.ts:anomalies.getById", "AnomalyService.ts:anomalies.list",
       "ControlService.ts:controls.getById", "ControlService.ts:controls.list", "KpiService.ts:kpis.getById", "KpiService.ts:kpis.list",
-      "RiskService.ts:risks.getById", "RiskService.ts:risks.list",
     ]);
   });
 
   it("snapshot of the UNWIRED reads per service file (a new unwired read, or a newly wired one, must update this list AND the report)", () => {
     const perFile: Record<string, number> = {};
     for (const r of all.filter((x) => !x.wired)) perFile[r.file] = (perFile[r.file] ?? 0) + 1;
+    // QA-V1: risk reads are no longer counted here (see scan()); what is left are the controls / anomalies / action plans / KPIs
+    // reads, restricted from lot V2. Counts re-derived from the code, not tuned: before V1 = the same list + the risk reads.
     expect(perFile).toEqual({
-      "ActionPlanService.ts": 9, "AnomalyService.ts": 2, "CartographyService.ts": 1, "ControlEffectivenessService.ts": 1, "ControlExecutionService.ts": 1,
-      "ControlService.ts": 2, "DashboardScopeResolver.ts": 3, "DashboardService.ts": 14, "FindingService.ts": 3, "KpiMeasureService.ts": 2,
-      "KpiService.ts": 1, "KriMeasureService.ts": 1, "KriService.ts": 4, /* +1: PR #203 coveredRiskIds liveness (listByIds) */ "ProcessEvaluationModeRequestService.ts": 1, "ProcessService.ts": 2,
-      "RaciAssignmentService.ts": 3, "RiskDeviceViewService.ts": 3, "RiskEvaluationService.ts": 3, "RiskEvaluationViewService.ts": 2,
-      "RiskFrameworkService.ts": 1, "RiskOwnershipService.ts": 1, "TreatmentDecisionService.ts": 1,
+      "ActionPlanService.ts": 5, "AnomalyService.ts": 1, "ControlEffectivenessService.ts": 1, "ControlExecutionService.ts": 1,
+      "ControlService.ts": 1, "DashboardService.ts": 8, "FindingService.ts": 2, "KpiMeasureService.ts": 2, "KpiService.ts": 1,
+      "ProcessService.ts": 1, "RaciAssignmentService.ts": 2, "RiskDeviceViewService.ts": 2, "RiskEvaluationViewService.ts": 1,
     });
+
   });
 
   it("user-facing reads of restricted roots still without scope (gap list for V1): listForRisk, dashboard, listCoveringRisk, dashboards", () => {
     const unwired = all.filter((r) => !r.wired).map((r) => `${r.file}:${r.method}`);
-    for (const g of ["ActionPlanService.ts:listForRisk", "ActionPlanService.ts:list", "ControlService.ts:listCoveringRisk", "DashboardService.ts:list", "CartographyService.ts:list", "RiskDeviceViewService.ts:getById"]) {
+    for (const g of ["ActionPlanService.ts:listForRisk", "ActionPlanService.ts:list", "ControlService.ts:listCoveringRisk", "DashboardService.ts:list"]) {
       expect(unwired, g).toContain(g);
     }
   });
@@ -262,7 +265,7 @@ describe.skipIf(!live)("QA-visibility-v0 on real PostgreSQL 16 (QA_VIS_PGHOST so
     }
     psql(TPL, ["-c", "CREATE TABLE schema_migrations (filename text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"]);
     for (const f of readdirSync(MIG).filter((x) => x.endsWith(".sql") && !x.endsWith(".down.sql")).sort()) {
-      if (f.startsWith("080_")) continue;
+      if (Number(f.slice(0, 3)) >= 80) continue; // template = 001..079 (V1 added 081/082, which need the column 080 adds: they are not part of the pre-080 state)
       psql(TPL, ["-1", "-f", sqlOf(f)]);
     }
   }, 240_000);
@@ -526,6 +529,8 @@ describe.skipIf(!live)("QA-visibility-v0 on real PostgreSQL 16 (QA_VIS_PGHOST so
       const db = await mkdb("grc_qa_visv0_vis");
       p = pool(db);
       up(db);
+      // QA-V1: the services now call risk_visible_to for an ordinary reader (readerScope): the database needs 081 and 082 on top of 080.
+      for (const f of ["081_audit_read_audit_group_only.sql", "082_risk_visibility.sql"]) psql(db, ["-1", "-f", sqlOf(f)]);
       t = (await q<{ id: string }>(p, `INSERT INTO tenants (name) VALUES ('vis') RETURNING id`))[0]!.id;
       t2 = (await q<{ id: string }>(p, `INSERT INTO tenants (name) VALUES ('vis2') RETURNING id`))[0]!.id;
       const grp = async (tn: string, name: string, g: SystemGroup | null, extra = "") =>
