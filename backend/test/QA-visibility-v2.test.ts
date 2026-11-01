@@ -686,12 +686,12 @@ describe.skipIf(!live)("QA-visibility-v2 on the REAL server + LOCAL PostgreSQL 1
       // RM changes: nothing
       expect((await setVis("rm", `${plan.route}/${plan.id}`, "PERIMETRE", [], [], "RM elargit")).status).toBe(200);
       expect((await notifs("rm", plan.id))).toEqual([]);
-      // owner narrows: nothing
+      // owner narrows: since V2bis (q208, DECISION-107) the RM is told of a restriction too (see QA-visibility-v2bis for the detail)
       expect((await setVis("own", `${plan.route}/${plan.id}`, "NOMINATIF", [], [], "Owner restreint")).status).toBe(200);
-      expect(await notifs("rm", plan.id)).toEqual([]);
-      // owner widens: one per RM member
+      expect((await notifs("rm", plan.id)).map((x) => x.event_type)).toEqual(["ACTION_PLAN_VISIBILITY_RESTRICTED"]);
+      // owner widens: one more, per RM member
       expect((await setVis("own", `${plan.route}/${plan.id}`, "CLIENT", [], [], "Owner elargit")).status).toBe(200);
-      const n = await notifs("rm", plan.id);
+      const n = (await notifs("rm", plan.id)).filter((x) => x.event_type.endsWith("_WIDENED"));
       expect(n).toHaveLength(1);
       expect(n[0]!.event_type).toBe("ACTION_PLAN_VISIBILITY_WIDENED");
       expect(n[0]!.message).not.toMatch(/CANARY|TITRE/);
