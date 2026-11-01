@@ -76,6 +76,11 @@ export type Permission =
    * for its dedicated maker-checker circuit — until then nobody holds it (fail closed).
    */
   | "role.read.sensitive"
+  /**
+   * DECISION-102 (q194): changes the visibility (level + named people) of a risk after its creation. Carried by the
+   * Risk Manager group only (assertRolePermissionRules); the resource's owner may also change it, by relation.
+   */
+  | "resourcevisibility.set"
   | "role.create"
   | "role.update"
   | "role.delete"
@@ -278,6 +283,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "audit.read",
   "role.read",
   "role.read.sensitive",
+  "resourcevisibility.set",
   "role.create",
   "role.update",
   "role.delete",

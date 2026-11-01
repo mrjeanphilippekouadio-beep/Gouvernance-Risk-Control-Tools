@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { ValidationError } from "../../domain/errors/DomainErrors.js";
 import { z } from "zod";
-import { reasonText } from "../validation.js";
+import { boundedArray, reasonText } from "../validation.js";
 import type { RiskService } from "../../services/RiskService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
 import type { RiskDeviceViewService } from "../../services/RiskDeviceViewService.js";
@@ -11,6 +11,17 @@ const CreateRiskBody = z.object({
   description: z.string().min(1),
   ownerDepartmentId: z.string().nullish(),
   processId: z.string().nullish(),
+  // Lot V1 (DECISION-102): level and initial named-people list; the author of the grants is forced server-side.
+  visibility: z.enum(["CLIENT", "PERIMETRE", "NOMINATIF"]).optional(),
+  accessUserIds: boundedArray(z.guid(), 50).optional(),
+});
+
+const MAX_ACCESS_CHANGE = 50;
+const RiskVisibilityBody = z.object({
+  visibility: z.enum(["CLIENT", "PERIMETRE", "NOMINATIF"]),
+  addUserIds: boundedArray(z.guid(), MAX_ACCESS_CHANGE).optional(),
+  revokeUserIds: boundedArray(z.guid(), MAX_ACCESS_CHANGE).optional(),
+  reason: reasonText(500),
 });
 
 const UpdateRiskBody = z.object({
@@ -19,6 +30,8 @@ const UpdateRiskBody = z.object({
   ownerDepartmentId: z.string().nullish(),
   status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]).optional(),
   processId: z.string().nullish(),
+  /** SEC V1-02: required by the service when the perimeter of a restricted risk changes. */
+  reason: reasonText(500).optional(),
 });
 
 const ArchiveRiskBody = z.object({
@@ -91,6 +104,26 @@ export function risksRouter(
     try {
       const device = await riskDeviceViewService.getDevice(req.user, req.params["id"] as string);
       res.json({ data: device });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Lot V1 (q192, q194): level and named-people list of a risk; changed by the Risk Manager group or the owner.
+  router.get("/:id/visibility", async (req, res, next) => {
+    try {
+      const state = await riskService.getAccess(req.user, z.guid().parse(req.params["id"]));
+      res.json({ data: state });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/:id/visibility", async (req, res, next) => {
+    try {
+      const body = RiskVisibilityBody.parse(req.body);
+      const state = await riskService.setVisibility(req.user, z.guid().parse(req.params["id"]), body, req.requestId);
+      res.json({ data: state });
     } catch (err) {
       next(err);
     }

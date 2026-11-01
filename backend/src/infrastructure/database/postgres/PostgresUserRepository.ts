@@ -64,6 +64,18 @@ export class PostgresUserRepository implements UserRepository {
     return rows.map(toDomain);
   }
 
+  async searchActive(tenantId: string, text: string, limit: number): Promise<Array<{ id: string; displayName: string }>> {
+    // LIKE wildcards in the text are literal: escaped, never a pattern supplied by the caller.
+    const pattern = `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const { rows } = await this.pool.query<{ id: string; display_name: string }>(
+      `SELECT id, display_name FROM users
+       WHERE tenant_id = $1 AND deleted_at IS NULL AND display_name ILIKE $2 ESCAPE '\\'
+       ORDER BY display_name, id LIMIT $3`,
+      [tenantId, pattern, limit],
+    );
+    return rows.map((r) => ({ id: r.id, displayName: r.display_name }));
+  }
+
   async count(tenantId: string, options?: { includeSuspended?: boolean }): Promise<number> {
     const suspendedFilter = options?.includeSuspended ? "" : "AND deleted_at IS NULL";
     const { rows } = await this.pool.query<{ count: string }>(

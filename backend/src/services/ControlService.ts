@@ -6,6 +6,7 @@ import type { Control, ControlStatus, CreateControlInput, UpdateControlInput } f
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { hiddenRiskIds, maskCoveredRisks } from "./riskVisibility.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
 import { READER_DEFAULT_SCOPE } from "../domain/visibility.js";
 
@@ -40,7 +41,7 @@ export class ControlService {
     requestId: string,
   ): Promise<Control> {
     requirePermission(actor, "control.create");
-    await this.validate(actor.tenantId, input);
+    await this.validate(actor, input);
     await this.assertProcessExists(actor.tenantId, input.processId);
 
     const control = await this.controls.create({ ...input, tenantId: actor.tenantId });
@@ -62,19 +63,33 @@ export class ControlService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<Control> {
     requirePermission(actor, "control.read");
+    return (await this.withoutHiddenRisks(actor, [await this.getRaw(actor, id)]))[0]!;
+  }
+
+  /** The control as stored (all its covered risks): internal use only, never returned as is. */
+  private async getRaw(actor: AuthenticatedUser, id: string): Promise<Control> {
     const control = await this.controls.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!control) throw new NotFoundError("Control", id);
     return control;
   }
 
+  /** QA-VIS1-02: a readable control never names a risk the reader may not see. */
+  private withoutHiddenRisks(actor: AuthenticatedUser, controls: Control[]): Promise<Control[]> {
+    return maskCoveredRisks(this.risks, actor, controls);
+  }
+
   async list(actor: AuthenticatedUser, includeArchived = false): Promise<Control[]> {
     requirePermission(actor, "control.read");
-    return this.controls.list(actor.tenantId, { includeArchived }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    return this.withoutHiddenRisks(actor, await this.controls.list(actor.tenantId, { includeArchived }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE));
   }
 
   async listCoveringRisk(actor: AuthenticatedUser, riskId: string): Promise<Control[]> {
     requirePermission(actor, "control.read");
-    return this.controls.listCoveringRisk(actor.tenantId, riskId);
+    // Lot V1: which controls cover a restricted risk is as restricted as the risk; a hidden risk answers like an
+    // unknown one (an empty list, QA-VIS1-01 / SEC V1-04).
+    if ((await hiddenRiskIds(this.risks, actor, [riskId])).size > 0) return [];
+    // Codex P2: the other covered risks of these controls lose the ids the reader may not see.
+    return this.withoutHiddenRisks(actor, await this.controls.listCoveringRisk(actor.tenantId, riskId));
   }
 
   async update(
@@ -84,7 +99,8 @@ export class ControlService {
     requestId: string,
   ): Promise<Control> {
     requirePermission(actor, "control.update");
-    const before = await this.get(actor, id);
+    const raw = await this.getRaw(actor, id);
+    const before = (await this.withoutHiddenRisks(actor, [raw]))[0]!;
 
     if (input.status) {
       if (input.status === "ARCHIVED") {
@@ -100,7 +116,10 @@ export class ControlService {
           "A control must cover at least one risk (a risk must have at least one control, and vice versa)",
         );
       }
-      await this.assertRisksExist(actor.tenantId, input.coveredRiskIds);
+      // Lot V1 (Codex P2): the editor replaces only what they see; a link to a hidden risk is kept server-side.
+      const hiddenLinked = await hiddenRiskIds(this.risks, actor, raw.coveredRiskIds);
+      await this.assertRisksExist(actor, input.coveredRiskIds.filter((r) => !hiddenLinked.has(r)));
+      input = { ...input, coveredRiskIds: [...new Set([...input.coveredRiskIds, ...hiddenLinked])] };
     }
     await this.assertProcessExists(actor.tenantId, input.processId);
 
@@ -112,13 +131,13 @@ export class ControlService {
       entityType: "Control",
       entityId: id,
       action: input.status ? "STATUS_CHANGE" : "UPDATE",
-      oldValue: before,
+      oldValue: raw,
       newValue: after,
       reason: null,
       requestId,
     });
 
-    return after;
+    return (await this.withoutHiddenRisks(actor, [after]))[0]!;
   }
 
   async archive(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<void> {
@@ -141,7 +160,7 @@ export class ControlService {
     });
   }
 
-  private async validate(tenantId: string, input: Omit<CreateControlInput, "tenantId">): Promise<void> {
+  private async validate(actor: AuthenticatedUser, input: Omit<CreateControlInput, "tenantId">): Promise<void> {
     if (!input.label.trim()) throw new ValidationError("label is required");
     if (input.coveredRiskIds.length === 0) {
       throw new ValidationError(
@@ -152,12 +171,14 @@ export class ControlService {
     if (!input.executor.trim()) throw new ValidationError("executor is required");
     if (!input.complianceCriteria.trim()) throw new ValidationError("complianceCriteria is required");
 
-    await this.assertRisksExist(tenantId, input.coveredRiskIds);
+    await this.assertRisksExist(actor, input.coveredRiskIds);
   }
 
-  private async assertRisksExist(tenantId: string, riskIds: string[]): Promise<void> {
-    const found = await this.risks.listByIds(tenantId, riskIds);
-    const foundIds = new Set(found.map((r) => r.id));
+  /** Lot V1: covering a risk one does not see answers like covering a missing one. */
+  private async assertRisksExist(actor: AuthenticatedUser, riskIds: string[]): Promise<void> {
+    const found = await this.risks.listByIds(actor.tenantId, riskIds);
+    const hidden = await hiddenRiskIds(this.risks, actor, riskIds);
+    const foundIds = new Set(found.map((r) => r.id).filter((id) => !hidden.has(id)));
     const missing = riskIds.filter((id) => !foundIds.has(id));
     if (missing.length > 0) {
       throw new ValidationError(`Risk(s) do not exist in this tenant: ${missing.join(", ")}`);

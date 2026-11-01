@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import express from "express";
 import cors from "cors";
+import { corsOptions } from "./api/corsOptions.js";
 import { env, getLocalAuthUsers } from "./config/env.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { pool } from "./infrastructure/database/pool.js";
@@ -187,7 +188,7 @@ app.use(securityHeadersMiddleware());
 // Must run before authMiddleware: the browser's CORS preflight (OPTIONS)
 // never carries the Authorization header, so if auth ran first it would
 // reject the preflight and the real request would never be sent.
-app.use(cors({ origin: env.CORS_ALLOWED_ORIGINS, allowedHeaders: ["Authorization", "Content-Type"] }));
+app.use(cors(corsOptions(env.CORS_ALLOWED_ORIGINS)));
 app.use(express.json({ limit: "1mb" }));
 app.use(requestIdMiddleware);
 app.use(canonicalIdsMiddleware);
@@ -250,6 +251,7 @@ const riskService = new RiskService(
   riskEscalationRepository,
   processRepository,
   visibilityResolver,
+  notificationRepository,
 );
 const departmentService = new DepartmentService(departmentRepository, auditRepository, processRepository);
 // DECISION-074 D4: one gate for every self-validation guard, one query object for validators / third parties / markers.

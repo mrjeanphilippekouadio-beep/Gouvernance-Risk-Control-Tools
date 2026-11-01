@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { reasonText } from "../validation.js";
 import type { UserService } from "../../services/UserService.js";
+import { ValidationError } from "../../domain/errors/DomainErrors.js";
 
 const CreateUserBody = z.object({
   email: z.string().email(),
@@ -49,6 +50,13 @@ export function usersRouter(userService: UserService): Router {
   // Lot F4: account picker for the designation screens (id + name of active accounts).
   router.get("/directory", async (req, res, next) => {
     try {
+      // q205: `?q=` is the name search (also open to risk.create / risk.update); without it, the full list.
+      const q = req.query["q"];
+      if (q !== undefined) {
+        if (typeof q !== "string") throw new ValidationError("q must be a single string");
+        res.json({ data: await userService.searchDirectory(req.user, q) });
+        return;
+      }
       res.json({ data: await userService.directory(req.user) });
     } catch (err) {
       next(err);

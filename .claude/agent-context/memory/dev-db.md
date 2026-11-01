@@ -171,3 +171,12 @@
   `resource_access_grants` ajout seul (garde trigger : pas de DELETE, contenu immuable, révocation une seule fois, TRUNCATE
   refusé, `search_path` épinglé), CHECK anti auto-attribution. Down : supprime table + colonnes. up/down/up vérifié sur
   PG16 local jetable (/var/tmp/pgv0), jamais Neon.
+
+## 2026-10-31 — Migrations 081 (q203) et 082 (visibilité V1)
+- 081 : retire `audit.read` des rôles hors groupe AUDIT et de `users.roles`, audit par `migration-081@system.invalid`
+  suspendu ; down = ligne schema_migrations seulement (ne ré-ouvre pas un accès au journal).
+- 082 : `risk_visible_to(tenant, risk, user)` LANGUAGE sql STABLE, `search_path` épinglé (+ ALTER FUNCTION) ; inclut les
+  groupes RM/Comité/Audit via `user_roles` actifs (jamais `users.roles`) ; ajoute `resourcevisibility.set` aux groupes RM
+  (audit `migration:082`, down limité aux groupes audités). Épingle QA-panel : compteur de fonctions 19 → 20.
+- Cluster PG16 jetable : `initdb` sous `su postgres`, serveur lancé en tâche de fond (un `pg_ctl start` dans une commande
+  courte meurt avec elle / perd sa socket), tests live avec `QA_SWP_PGHOST=/var/tmp/v1sock`, cluster supprimé après.

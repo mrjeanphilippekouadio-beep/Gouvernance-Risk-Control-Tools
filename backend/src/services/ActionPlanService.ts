@@ -1,3 +1,4 @@
+import { maskRiskSource, hiddenRiskIds } from "./riskVisibility.js";
 import type { ActionPlanRepository } from "../domain/repositories/ActionPlanRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -25,7 +26,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
-import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE } from "../domain/visibility.js";
+import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 import type { NotificationService } from "./NotificationService.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
@@ -141,7 +142,7 @@ export class ActionPlanService {
         if (kri?.riskId) riskIds.add(kri.riskId);
       }
       for (const riskId of riskIds) {
-        const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
+        const risk = await this.risks.getById(actor.tenantId, riskId, readerScope(actor));
         if (!risk || risk.status === "ARCHIVED" || risk.deletedAt) continue;
         for (const id of [risk.ownerId, risk.superiorOwnerId]) if (id) recipients.add(id);
       }
@@ -192,7 +193,7 @@ export class ActionPlanService {
       throw new ValidationError(`sourceId must be omitted when sourceType is ${input.sourceType} (not tied to an existing entity row)`);
     }
     if (isEntityBacked && input.sourceId) {
-      await this.assertSourceExists(actor.tenantId, input.sourceType, input.sourceId);
+      await this.assertSourceExists(actor.tenantId, input.sourceType, input.sourceId, readerScope(actor));
     }
     await this.assertActiveUser(actor.tenantId, input.responsibleUserId);
     await this.assertDepartmentExists(actor.tenantId, input.departmentId);
@@ -223,18 +224,18 @@ export class ActionPlanService {
       requestId,
     });
 
-    return this.toView(action);
+    return (await this.views(actor, [action]))[0]!;
   }
 
   async get(actor: AuthenticatedUser, id: string): Promise<ActionPlanView> {
     requirePermission(actor, "actionplan.read");
-    return this.toView(await this.getRaw(actor, id));
+    return (await this.views(actor, [await this.getRaw(actor, id)]))[0]!;
   }
 
   async list(actor: AuthenticatedUser, filters?: ActionPlanListFilters): Promise<ActionPlanView[]> {
     requirePermission(actor, "actionplan.read");
     const rows = await this.actions.list(actor.tenantId, filters, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
-    return rows.map((row) => this.toView(row));
+    return this.views(actor, rows);
   }
 
   /**
@@ -246,11 +247,11 @@ export class ActionPlanService {
   async listForRisk(actor: AuthenticatedUser, riskId: string): Promise<ActionPlanView[]> {
     requirePermission(actor, "actionplan.read");
     if (this.risks) {
-      const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(actor.tenantId, riskId, readerScope(actor));
       if (!risk) throw new ValidationError(`Risk ${riskId} does not exist in this tenant`);
     }
     const rows = await this.actions.listForRisk(actor.tenantId, riskId);
-    return rows.map((row) => this.toView(row));
+    return this.views(actor, rows);
   }
 
   /** ACT-196: filters by statut (incl. computed EN_RETARD)/source/responsable/date/département. */
@@ -263,7 +264,7 @@ export class ActionPlanService {
     const repoFilters: ActionPlanListFilters = { ...filters, status: storedStatusFilter };
 
     const rows = await this.actions.list(actor.tenantId, repoFilters, SYSTEM_SCOPE);
-    const views = rows.map((row) => this.toView(row));
+    const views = await this.views(actor, rows);
     return wantsOverdueOnly ? views.filter((v) => v.computedStatus === "EN_RETARD") : views;
   }
 
@@ -299,7 +300,7 @@ export class ActionPlanService {
       requestId,
     });
 
-    return this.toView(after);
+    return (await this.views(actor, [after]))[0]!;
   }
 
   /**
@@ -349,7 +350,7 @@ export class ActionPlanService {
       await this.persistNotification(actor, after, "ACTION_STARTED_LATE", `Action démarrée en retard (action ${after.id})`, requestId);
     }
 
-    return this.toView(after);
+    return (await this.views(actor, [after]))[0]!;
   }
 
   /**
@@ -368,7 +369,7 @@ export class ActionPlanService {
     const computedStatus = computeActionPlanStatus(action);
 
     if (computedStatus !== "EN_RETARD") {
-      return { escalated: false, action: this.toView(action) };
+      return { escalated: false, action: (await this.views(actor, [action]))[0]! };
     }
 
     this.notifier
@@ -393,7 +394,7 @@ export class ActionPlanService {
 
     await this.persistNotification(actor, action, "ACTION_OVERDUE", `Action en retard (action ${action.id})`, requestId, true);
 
-    return { escalated: true, action: this.toView(action) };
+    return { escalated: true, action: (await this.views(actor, [action]))[0]! };
   }
 
   /** ACT-194: rebuilds the full set of linked resources — pure link table, DELETE + INSERT (see CLAUDE.md's control_risks exemption). */
@@ -408,11 +409,15 @@ export class ActionPlanService {
       if (!link.resourceId?.trim()) {
         throw new ValidationError("Each link requires a non-empty resourceId");
       }
-      await this.assertLinkTargetExists(actor.tenantId, link.resourceType, link.resourceId);
+      await this.assertLinkTargetExists(actor.tenantId, link.resourceType, link.resourceId, readerScope(actor));
     }
 
     const before = await this.actions.listLinks(actor.tenantId, id);
-    await this.actions.replaceLinks(actor.tenantId, id, links);
+    // Codex P2: the editor replaces only the links they see; a link to a risk they may not see is kept server-side.
+    const hidden = await hiddenRiskIds(this.risks, actor, before.filter((l) => l.resourceType === "RISK").map((l) => l.resourceId));
+    const kept = before.filter((l) => l.resourceType === "RISK" && hidden.has(l.resourceId));
+    const stored = [...links, ...kept.filter((k) => !links.some((l) => l.resourceType === k.resourceType && l.resourceId === k.resourceId))];
+    await this.actions.replaceLinks(actor.tenantId, id, stored);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -421,7 +426,7 @@ export class ActionPlanService {
       entityId: id,
       action: "UPDATE",
       oldValue: { links: before },
-      newValue: { links },
+      newValue: { links: stored },
       reason: "LINKS_CHANGE",
       requestId,
     });
@@ -432,7 +437,10 @@ export class ActionPlanService {
   async listLinks(actor: AuthenticatedUser, id: string): Promise<ActionLink[]> {
     requirePermission(actor, "actionplan.read");
     await this.getRaw(actor, id);
-    return this.actions.listLinks(actor.tenantId, id);
+    // QA-VIS1-02: a link to a risk the reader may not see is not listed.
+    const links = await this.actions.listLinks(actor.tenantId, id);
+    const hidden = await hiddenRiskIds(this.risks, actor, links.filter((l) => l.resourceType === "RISK").map((l) => l.resourceId));
+    return links.filter((l) => !(l.resourceType === "RISK" && hidden.has(l.resourceId)));
   }
 
   /**
@@ -499,7 +507,7 @@ export class ActionPlanService {
       ],
     );
 
-    return this.toView(after);
+    return (await this.views(actor, [after]))[0]!;
   }
 
   private async getRaw(actor: AuthenticatedUser, id: string): Promise<ActionPlan> {
@@ -508,14 +516,20 @@ export class ActionPlanService {
     return action;
   }
 
+  /** QA-VIS1-02: a readable plan born from a risk the reader may not see shows no source id. */
+  private async views(actor: AuthenticatedUser, rows: ActionPlan[]): Promise<ActionPlanView[]> {
+    return (await maskRiskSource(this.risks, actor, rows)).map((row) => this.toView(row));
+  }
+
   private toView(action: ActionPlan): ActionPlanView {
     const computedStatus = computeActionPlanStatus(action);
     return { ...action, computedStatus, priority: computeActionPlanPriority(computedStatus) };
   }
 
-  private async assertSourceExists(tenantId: string, sourceType: ActionPlanSourceType, sourceId: string): Promise<void> {
+  /** Lot V1: one cannot attach a plan to a risk one does not see (same answer as a missing risk). */
+  private async assertSourceExists(tenantId: string, sourceType: ActionPlanSourceType, sourceId: string, scope: ReadScope): Promise<void> {
     if (sourceType === "RISK" && this.risks) {
-      const risk = await this.risks.getById(tenantId, sourceId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(tenantId, sourceId, scope);
       if (!risk) throw new ValidationError(`Risk ${sourceId} does not exist in this tenant`);
     } else if (sourceType === "CONTROL" && this.controls) {
       const control = await this.controls.getById(tenantId, sourceId, SYSTEM_SCOPE);
@@ -544,9 +558,9 @@ export class ActionPlanService {
     if (!department) throw new ValidationError(`Department ${departmentId} does not exist in this tenant`);
   }
 
-  private async assertLinkTargetExists(tenantId: string, resourceType: ActionLinkResourceType, resourceId: string): Promise<void> {
+  private async assertLinkTargetExists(tenantId: string, resourceType: ActionLinkResourceType, resourceId: string, scope: ReadScope): Promise<void> {
     if (resourceType === "RISK" && this.risks) {
-      const risk = await this.risks.getById(tenantId, resourceId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(tenantId, resourceId, scope);
       if (!risk) throw new ValidationError(`Risk ${resourceId} does not exist in this tenant`);
     } else if (resourceType === "CONTROL" && this.controls) {
       const control = await this.controls.getById(tenantId, resourceId, SYSTEM_SCOPE);

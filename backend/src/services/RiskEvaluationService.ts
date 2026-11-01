@@ -1,4 +1,5 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { SYSTEM_SCOPE, readerScope } from "../domain/visibility.js";
+import { assertReadableByRisk } from "./riskVisibility.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -202,7 +203,8 @@ export class RiskEvaluationService {
 
     let risk = null;
     if (this.risks) {
-      risk = await this.risks.getById(actor.tenantId, input.riskId, SYSTEM_SCOPE);
+      // Lot V1: one cannot evaluate a risk one does not see (same answer as a missing risk).
+      risk = await this.risks.getById(actor.tenantId, input.riskId, readerScope(actor));
       if (!risk) throw new ValidationError(`Risk ${input.riskId} does not exist in this tenant`);
     }
 
@@ -288,6 +290,8 @@ export class RiskEvaluationService {
     requirePermission(actor, "riskevaluation.read");
     const evaluation = await this.evaluations.getById(actor.tenantId, id);
     if (!evaluation) throw new NotFoundError("RiskEvaluation", id);
+    // Lot V1 (q193): an evaluation follows the visibility of its risk (every write below goes through get()).
+    await assertReadableByRisk(this.risks, actor, evaluation.riskId, "RiskEvaluation", id);
     return evaluation;
   }
 
@@ -299,7 +303,7 @@ export class RiskEvaluationService {
   ): Promise<RiskEvaluation[]> {
     requirePermission(actor, "riskevaluation.read");
     if (this.risks) {
-      const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(actor.tenantId, riskId, readerScope(actor));
       if (!risk) throw new ValidationError(`Risk ${riskId} does not exist in this tenant`);
     }
     return this.evaluations.listForRisk(actor.tenantId, riskId, options);

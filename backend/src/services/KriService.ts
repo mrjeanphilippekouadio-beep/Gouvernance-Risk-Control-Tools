@@ -1,4 +1,5 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { readerScope } from "../domain/visibility.js";
+import { assertReadableByRisk, hiddenRiskIds, keepReadableByRisk } from "./riskVisibility.js";
 import type { KriListFilters, KriRepository } from "../domain/repositories/KriRepository.js";
 import type { KriMeasureRepository } from "../domain/repositories/KriMeasureRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -66,7 +67,7 @@ export class KriService {
       throw new ValidationError("riskId is required (ACT-130: lien risque obligatoire)");
     }
     this.assertThresholdOrder(input.thresholdGreen, input.thresholdOrange, input.thresholdRed);
-    await this.assertRiskExists(actor.tenantId, input.riskId);
+    await this.assertRiskExists(actor, input.riskId);
 
     // F7S6-01 (DECISION-079): the write and its audit row in one transaction.
     return writeAudited<Kri>(
@@ -80,16 +81,22 @@ export class KriService {
   /** F7-S6: the detail also carries the additional covered risks (ACT-136), so the screen can show and edit them. */
   async get(actor: AuthenticatedUser, id: string): Promise<KriWithStatus & { coveredRiskIds: string[] }> {
     requirePermission(actor, "kri.read");
-    const kri = await this.requireKri(actor.tenantId, id);
+    const kri = await this.requireKri(actor, id);
     // QA-F7S6-01/03: only covered risks that still exist (not archived) — the screen never shows a raw id.
+    // Lot V1: nor a covered risk the reader may not see.
     const linked = await this.kris.listCoveredRiskIds(actor.tenantId, id);
     const live = new Set(linked.length > 0 ? (await this.risks.listByIds(actor.tenantId, linked)).map((r) => r.id) : []);
-    return { ...(await this.withStatus(actor.tenantId, kri)), coveredRiskIds: linked.filter((rid) => live.has(rid)) };
+    const hidden = await hiddenRiskIds(this.risks, actor, linked);
+    return {
+      ...(await this.withStatus(actor.tenantId, kri)),
+      coveredRiskIds: linked.filter((rid) => live.has(rid) && !hidden.has(rid)),
+    };
   }
 
   async list(actor: AuthenticatedUser, filters?: KriListFilters): Promise<KriWithStatus[]> {
     requirePermission(actor, "kri.read");
-    const kris = await this.kris.list(actor.tenantId, filters);
+    // Lot V1 (q193): a KRI follows the visibility of its primary risk.
+    const kris = await keepReadableByRisk(this.risks, actor, await this.kris.list(actor.tenantId, filters), (k) => k.riskId);
     return Promise.all(kris.map((kri) => this.withStatus(actor.tenantId, kri)));
   }
 
@@ -100,7 +107,7 @@ export class KriService {
    */
   async dashboard(actor: AuthenticatedUser, filters?: KriDashboardFilters): Promise<KriDashboardRow[]> {
     requirePermission(actor, "kri.read");
-    const kris = await this.kris.list(actor.tenantId, { entity: filters?.entity });
+    const kris = await keepReadableByRisk(this.risks, actor, await this.kris.list(actor.tenantId, { entity: filters?.entity }), (k) => k.riskId);
 
     const riskIds = [...new Set(kris.map((k) => k.riskId))];
     const linkedRisks = riskIds.length > 0 ? await this.risks.listByIds(actor.tenantId, riskIds) : [];
@@ -134,7 +141,7 @@ export class KriService {
     if (input.active !== undefined) {
       throw new ValidationError("active cannot be changed through update — use PATCH /kris/:id/disable (kri.delete)");
     }
-    const before = await this.requireKri(actor.tenantId, id);
+    const before = await this.requireKri(actor, id);
 
     if (input.label !== undefined && !input.label.trim()) throw new ValidationError("label cannot be empty");
     if (input.formula !== undefined && !input.formula.trim()) throw new ValidationError("formula cannot be empty");
@@ -168,14 +175,17 @@ export class KriService {
     requestId: string,
   ): Promise<{ riskId: string; coveredRiskIds: string[] }> {
     requirePermission(actor, "kri.update");
-    const before = await this.requireKri(actor.tenantId, id);
+    const before = await this.requireKri(actor, id);
 
-    const uniqueIds = [...new Set(riskIds)].filter((rid) => rid !== before.riskId);
+    const requested = [...new Set(riskIds)].filter((rid) => rid !== before.riskId);
     // QA-F7S6-01: only the risks being ADDED must exist (not archived); a risk archived after being linked can stay
     // or be removed without blocking the change.
     const linked = new Set(await this.kris.listCoveredRiskIds(actor.tenantId, id));
-    const added = uniqueIds.filter((rid) => !linked.has(rid));
-    if (added.length > 0) await this.assertRisksExist(actor.tenantId, added);
+    const added = requested.filter((rid) => !linked.has(rid));
+    if (added.length > 0) await this.assertRisksExist(actor, added);
+    // Lot V1 (Codex P2): the editor replaces only what they see; a link to a risk they may not see is kept server-side.
+    const hiddenLinked = await hiddenRiskIds(this.risks, actor, [...linked]);
+    const uniqueIds = [...new Set([...requested, ...hiddenLinked])];
 
     // F7S6-01: the repository reads the previous set inside the replacing transaction (KRI row locked, still active)
     // and returns it, so the audit's oldValue is the set actually overwritten. Fakes return nothing: fall back.
@@ -186,7 +196,7 @@ export class KriService {
       (old) => [this.event(actor, id, "ASSIGN", { coveredRiskIds: old }, { coveredRiskIds: uniqueIds }, null, requestId)],
     );
 
-    return { riskId: before.riskId, coveredRiskIds: uniqueIds };
+    return { riskId: before.riskId, coveredRiskIds: uniqueIds.filter((rid) => !hiddenLinked.has(rid)) };
   }
 
   /**
@@ -200,7 +210,7 @@ export class KriService {
   async disable(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<void> {
     requirePermission(actor, "kri.delete");
     if (!reason.trim()) throw new ValidationError("A reason is required to disable a KRI");
-    const before = await this.requireKri(actor.tenantId, id);
+    const before = await this.requireKri(actor, id);
 
     await writeAudited<void>(
       this.kris.auditsInTransaction,
@@ -222,9 +232,11 @@ export class KriService {
     return { tenantId: actor.tenantId, userId: actor.userId, entityType: "Kri", entityId, action, oldValue, newValue, reason, requestId };
   }
 
-  private async requireKri(tenantId: string, id: string): Promise<Kri> {
-    const kri = await this.kris.getById(tenantId, id);
+  /** Lot V1 (q193): a KRI of a risk the actor may not read answers like a missing one. */
+  private async requireKri(actor: AuthenticatedUser, id: string): Promise<Kri> {
+    const kri = await this.kris.getById(actor.tenantId, id);
     if (!kri) throw new NotFoundError("Kri", id);
+    await assertReadableByRisk(this.risks, actor, kri.riskId, "Kri", id);
     return kri;
   }
 
@@ -240,14 +252,16 @@ export class KriService {
     }
   }
 
-  private async assertRiskExists(tenantId: string, riskId: string): Promise<void> {
-    const risk = await this.risks.getById(tenantId, riskId, SYSTEM_SCOPE);
+  /** Lot V1: one cannot attach a KRI to a risk one does not see (same answer as a missing risk). */
+  private async assertRiskExists(actor: AuthenticatedUser, riskId: string): Promise<void> {
+    const risk = await this.risks.getById(actor.tenantId, riskId, readerScope(actor));
     if (!risk) throw new ValidationError(`Risk ${riskId} does not exist in this tenant`);
   }
 
-  private async assertRisksExist(tenantId: string, riskIds: string[]): Promise<void> {
-    const found = await this.risks.listByIds(tenantId, riskIds);
-    const foundIds = new Set(found.map((r) => r.id));
+  private async assertRisksExist(actor: AuthenticatedUser, riskIds: string[]): Promise<void> {
+    const found = await this.risks.listByIds(actor.tenantId, riskIds);
+    const hidden = await hiddenRiskIds(this.risks, actor, riskIds);
+    const foundIds = new Set(found.map((r) => r.id).filter((rid) => !hidden.has(rid)));
     const missing = riskIds.filter((rid) => !foundIds.has(rid));
     if (missing.length > 0) {
       throw new ValidationError(`Risk(s) do not exist in this tenant: ${missing.join(", ")}`);

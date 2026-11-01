@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button, Card, MessageBanner, StatusBadge, Table, Tabs, type StatusTone } from "@djamo/design-system";
-import type { Risk, RiskStatus } from "../../api/risks";
+import type { Risk, RiskStatus, RiskVisibility } from "../../api/risks";
+import { RiskVisibilityBadge, RiskVisibilityCard } from "./RiskVisibility";
 import { auditLogApi, type AuditEvent } from "../../api/auditLog";
 import { ApiError } from "../../api/client";
 import { RaciPanel } from "../../design-system";
@@ -29,6 +30,8 @@ interface Props {
   superiorOwnerLabel: string | null;
   departmentLabel: string;
   shortcuts: RiskSheetShortcuts;
+  /** Lot V1: the registry keeps its badge in step after a change on the sheet. */
+  onVisibilityChanged?: (visibility: RiskVisibility) => void;
 }
 
 /**
@@ -36,13 +39,13 @@ interface Props {
  * Presentation only. The Évaluation tab is the existing EvaluationPage (one screen, two
  * entries); shortcuts navigate to Administration and write nothing.
  */
-export function RiskSheet({ token, risk, tab, onTab, onBack, ownerLabel, superiorOwnerLabel, departmentLabel, shortcuts }: Props) {
+export function RiskSheet({ token, risk, tab, onTab, onBack, ownerLabel, superiorOwnerLabel, departmentLabel, shortcuts, onVisibilityChanged }: Props) {
   return <section className="core-page" aria-label={`Fiche du risque ${risk.description}`}>
     <div className="core-page__heading">
       <div>
         <p className="core-page__eyebrow">RISQUES · FICHE RISQUE</p>
         <h1>{risk.description}</h1>
-        <p className="core-page__subtitle">Processus {risk.process} · <StatusBadge label={STATUS_LABELS[risk.status]} tone={STATUS_TONES[risk.status]} /></p>
+        <p className="core-page__subtitle">Processus {risk.process} · <StatusBadge label={STATUS_LABELS[risk.status]} tone={STATUS_TONES[risk.status]} /> <RiskVisibilityBadge visibility={risk.visibility} /></p>
       </div>
       <Button onClick={onBack}>Retour au registre</Button>
     </div>
@@ -66,6 +69,7 @@ export function RiskSheet({ token, risk, tab, onTab, onBack, ownerLabel, superio
         </dl>
         <Button variant="secondary" size="sm" onClick={shortcuts.onOpenProcesses}>Voir le Processus</Button>
       </Card>
+      <RiskVisibilityCard token={token} riskId={risk.id} onChanged={(v) => onVisibilityChanged?.(v)} />
       <RaciPanel token={token} entityType="RISK" entityId={risk.id} />
     </>}
     {tab === "analysis" && <>

@@ -162,11 +162,11 @@ describe("QA notifications / subscriptions", () => {
     expect(subs).toHaveLength(0);
   });
 
-  it("catalog is coherent: unique pairs, valid resource types, all 24 types mandatory (21 MANAGEMENT, 2 ACTION_PLAN, 1 KRI)", () => {
+  it("catalog is coherent: unique pairs, valid resource types, all 25 types mandatory (21 MANAGEMENT, 2 ACTION_PLAN, 1 KRI, 1 RISK)", () => {
     const keys = NOTIFICATION_CATALOG.map((t) => `${t.resourceType}/${t.eventType}`);
     expect(new Set(keys).size).toBe(keys.length);
     expect(NOTIFICATION_CATALOG.every((t) => (NOTIFICATION_RESOURCE_TYPES as readonly string[]).includes(t.resourceType) && t.label.length > 0)).toBe(true);
-    expect(MANDATORY).toHaveLength(24);
+    expect(MANDATORY).toHaveLength(25);
     expect(MANDATORY.filter((t) => t.resourceType === "MANAGEMENT")).toHaveLength(21);
   });
 });
@@ -204,7 +204,7 @@ describe("QA notifications / HTTP routes", () => {
       expect((await s.call("/api/v1/notifications/unread-count")).json).toEqual({ data: 0 });
       const types = (await s.call("/api/v1/notifications/types")).json!.data as Array<{ eventType: string; mandatory: boolean; label: string; resourceType: string }>;
       expect(types).toHaveLength(NOTIFICATION_CATALOG.length);
-      expect(types.filter((t) => t.mandatory)).toHaveLength(24);
+      expect(types.filter((t) => t.mandatory)).toHaveLength(25);
       expect(w.rows.find((n) => n.recipientUserId === "u2")!.readAt).toBeNull();
     } finally { s.close(); }
   });

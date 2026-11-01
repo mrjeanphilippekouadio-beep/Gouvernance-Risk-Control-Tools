@@ -1,4 +1,5 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { maskCoveredRisks } from "./riskVisibility.js";
+import { readerScope } from "../domain/visibility.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
@@ -190,7 +191,7 @@ export class RiskDeviceViewService {
     requirePermission(actor, "actionplan.read");
     requirePermission(actor, "riskappetite.read");
 
-    const risk = await this.risks.getById(actor.tenantId, riskId, SYSTEM_SCOPE);
+    const risk = await this.risks.getById(actor.tenantId, riskId, readerScope(actor));
     if (!risk) throw new NotFoundError("Risk", riskId);
 
     const evaluationHistory = await this.evaluations.listForRisk(actor.tenantId, riskId);
@@ -199,7 +200,8 @@ export class RiskDeviceViewService {
     const latestAuthoritativeEvaluation =
       evaluationHistory.find((e) => AUTHORITATIVE_EVALUATION_STATUSES.includes(e.status)) ?? null;
 
-    const controls = await this.controls.listCoveringRisk(actor.tenantId, riskId);
+    // Codex P2: the other covered risks of these controls lose the ids the reader may not see.
+    const controls = await maskCoveredRisks(this.risks, actor, await this.controls.listCoveringRisk(actor.tenantId, riskId));
     // ponytail: one effectiveness query per covering control, same call as
     // RiskEvaluationViewService.getEvaluationContext — a risk carries a
     // handful of controls, not hundreds.

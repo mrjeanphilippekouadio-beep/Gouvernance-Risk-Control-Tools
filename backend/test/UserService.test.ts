@@ -238,7 +238,7 @@ function makeServices(departmentRepo?: DepartmentRepository) {
 }
 
 async function seedRole(roleService: RoleService, actor: AuthenticatedUser, name = "Auditeur"): Promise<Role> {
-  return roleService.create({ ...actor, roles: [...actor.roles, "role.create"] }, { name, permissions: ["audit.read"] }, "REQ-ROLE");
+  return roleService.create({ ...actor, roles: [...actor.roles, "role.create"] }, { name, permissions: ["audit.mission.read"] }, "REQ-ROLE");
 }
 
 describe("UserService", () => {

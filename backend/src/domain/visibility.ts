@@ -12,10 +12,11 @@ export const VISIBILITIES: readonly Visibility[] = ["CLIENT", "PERIMETRE", "NOMI
 export const SEES_EVERYTHING: readonly SystemGroup[] = ["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"];
 
 /**
- * What a reader may see, resolved once per request (`VisibilityResolver`). Lot V0: `{ all: true }` for the groups above,
- * otherwise `{ all: false }` = CLIENT rows only. Lot V1 widens `{ all: false }` with the reader's perimeter and grants.
+ * What a reader may see, resolved once per request (`VisibilityResolver`): `{ all: true }` for the groups above;
+ * otherwise CLIENT rows, plus — lot V1, risks and what inherits from them — the restricted risks whose perimeter or list
+ * includes `userId` (SQL `risk_visible_to`, migration 082). Without `userId` (READER_DEFAULT_SCOPE): CLIENT rows only.
  */
-export type ReadScope = { all: true } | { all: false };
+export type ReadScope = { all: true } | { all: false; userId?: string };
 
 /**
  * SEC V0-01 (fail-closed): the scope is mandatory on every root read. A server-internal read that legitimately needs
@@ -26,4 +27,11 @@ export type ReadScope = { all: true } | { all: false };
 export const SYSTEM_SCOPE: ReadScope = Object.freeze({ all: true });
 export const READER_DEFAULT_SCOPE: ReadScope = Object.freeze({ all: false });
 
-export const isVisible = (visibility: Visibility, scope: ReadScope): boolean => scope.all || visibility === "CLIENT";
+/**
+ * Lot V1: the scope of a read made on behalf of `actor` without the resolver at hand. The SQL (`risk_visible_to`) also
+ * admits the fixed groups that see everything, so the result is the same as the resolver's — only one query cheaper
+ * to build. Never use it for a server-internal read that must see every row (that is SYSTEM_SCOPE).
+ */
+export const readerScope = (actor: { userId: string }): ReadScope => ({ all: false, userId: actor.userId });
+
+export const isVisible =(visibility: Visibility, scope: ReadScope): boolean => scope.all || visibility === "CLIENT";

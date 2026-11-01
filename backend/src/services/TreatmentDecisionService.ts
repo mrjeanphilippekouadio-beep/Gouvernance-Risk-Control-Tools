@@ -1,4 +1,5 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { readerScope } from "../domain/visibility.js";
+import { assertReadableByRisk, keepReadableByRisk } from "./riskVisibility.js";
 import type { TreatmentDecisionRepository } from "../domain/repositories/TreatmentDecisionRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -46,6 +47,7 @@ export class TreatmentDecisionService {
 
     const evaluation = await this.evaluations.getById(actor.tenantId, input.riskEvaluationId);
     if (!evaluation) throw new NotFoundError("RiskEvaluation", input.riskEvaluationId);
+    await assertReadableByRisk(this.risks, actor, evaluation.riskId, "RiskEvaluation", input.riskEvaluationId);
 
     // G1
     if (!AUTHORITATIVE_EVALUATION_STATUSES.includes(evaluation.status)) {
@@ -58,7 +60,7 @@ export class TreatmentDecisionService {
       throw new ForbiddenError("Only the designated evaluator of the parent evaluation can propose a treatment decision");
     }
 
-    const risk = await this.risks.getById(actor.tenantId, evaluation.riskId, SYSTEM_SCOPE);
+    const risk = await this.risks.getById(actor.tenantId, evaluation.riskId, readerScope(actor));
     if (!risk) throw new ValidationError(`Risk ${evaluation.riskId} does not exist in this tenant`);
 
     // G3 — fail-closed, mirrors RiskService.escalate.
@@ -99,25 +101,26 @@ export class TreatmentDecisionService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<TreatmentDecision> {
     requirePermission(actor, "treatmentdecision.read");
-    return this.getOrThrow(actor.tenantId, id);
+    return this.getOrThrow(actor, id);
   }
 
   async getForEvaluation(actor: AuthenticatedUser, riskEvaluationId: string): Promise<TreatmentDecision> {
     requirePermission(actor, "treatmentdecision.read");
     const decision = await this.treatmentDecisions.getForEvaluation(actor.tenantId, riskEvaluationId);
     if (!decision) throw new NotFoundError("TreatmentDecision", riskEvaluationId);
+    await assertReadableByRisk(this.risks, actor, decision.riskId, "TreatmentDecision", riskEvaluationId);
     return decision;
   }
 
   async listForRisk(actor: AuthenticatedUser, riskId: string, options?: ListTreatmentDecisionsOptions): Promise<TreatmentDecision[]> {
     requirePermission(actor, "treatmentdecision.read");
-    return this.treatmentDecisions.listForRisk(actor.tenantId, riskId, options);
+    return keepReadableByRisk(this.risks, actor, await this.treatmentDecisions.listForRisk(actor.tenantId, riskId, options), (d) => d.riskId);
   }
 
   /** Ordinary maker-checker outcome: the snapshotted validator confirms the proposed option. Terminal. */
   async confirm(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string): Promise<TreatmentDecision> {
     requirePermission(actor, "treatmentdecision.validate");
-    const before = await this.getOrThrow(actor.tenantId, id);
+    const before = await this.getOrThrow(actor, id);
     this.assertIsValidator(actor, before);
     this.assertProposed(before);
 
@@ -129,7 +132,7 @@ export class TreatmentDecisionService {
   /** Ordinary maker-checker outcome: the snapshotted validator rejects the proposed option. Terminal, mandatory comment (G7). */
   async invalidate(actor: AuthenticatedUser, id: string, comment: string, requestId: string): Promise<TreatmentDecision> {
     requirePermission(actor, "treatmentdecision.validate");
-    const before = await this.getOrThrow(actor.tenantId, id);
+    const before = await this.getOrThrow(actor, id);
     this.assertIsValidator(actor, before);
     this.assertProposed(before);
     if (!comment?.trim()) throw new ValidationError("A comment is required to invalidate a treatment decision");
@@ -147,7 +150,7 @@ export class TreatmentDecisionService {
    */
   async validateByCommittee(actor: AuthenticatedUser, id: string, comment: string | null, requestId: string): Promise<TreatmentDecision> {
     requirePermission(actor, "treatmentdecision.validate.committee");
-    const before = await this.getOrThrow(actor.tenantId, id);
+    const before = await this.getOrThrow(actor, id);
     this.assertProposed(before);
     // G4-bis (E-11): the proposer can never validate their own decision
     // through the committee path either — same maker-checker invariant
@@ -187,9 +190,11 @@ export class TreatmentDecisionService {
     return after;
   }
 
-  private async getOrThrow(tenantId: string, id: string): Promise<TreatmentDecision> {
-    const decision = await this.treatmentDecisions.getById(tenantId, id);
+  /** Lot V1 (q193): a decision follows the visibility of its risk — hidden answers like missing. */
+  private async getOrThrow(actor: AuthenticatedUser, id: string): Promise<TreatmentDecision> {
+    const decision = await this.treatmentDecisions.getById(actor.tenantId, id);
     if (!decision) throw new NotFoundError("TreatmentDecision", id);
+    await assertReadableByRisk(this.risks, actor, decision.riskId, "TreatmentDecision", id);
     return decision;
   }
 

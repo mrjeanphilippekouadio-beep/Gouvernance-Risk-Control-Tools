@@ -29,6 +29,8 @@ export const FIXED_GROUP_PERMISSIONS: Record<SystemGroup, Permission[]> = {
     "governanceprinciple.acceptance.revoke",
     // q187 (DECISION-097, migration 078): read-only rights matrix, also without an internal audit department.
     "role.read",
+    // DECISION-102 (q194, migration 082): changes a resource's visibility after its creation.
+    "resourcevisibility.set",
   ],
   RISK_COMMITTEE: [
     "risk.read", "riskevaluation.read", "kri.read", "actionplan.read", "control.read", "execution.read",

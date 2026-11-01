@@ -12,6 +12,8 @@ export class VisibilityResolver {
 
   async resolve(actor: AuthenticatedUser): Promise<ReadScope> {
     const held = await this.roles.listForUser(actor.tenantId, actor.userId);
-    return held.some((r) => r.systemGroup && SEES_EVERYTHING.includes(r.systemGroup)) ? { all: true } : { all: false };
+    return held.some((r) => r.systemGroup && SEES_EVERYTHING.includes(r.systemGroup))
+      ? { all: true }
+      : { all: false, userId: actor.userId };
   }
 }

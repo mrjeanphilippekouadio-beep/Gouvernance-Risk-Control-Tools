@@ -132,7 +132,7 @@ describe("QA-D044 q94: widening a role (cumul replayed for each holder)", () => 
     await expect(w.service.update(assigner, "rm", { permissions: ["risk.read", "kri.read"] }, "r")).rejects.toThrow(ValidationError);
     await expect(w.service.update(assigner, "co", { permissions: ["risk.read", "rolegroup.audit.validate", "kri.read"] }, "r")).rejects.toThrow(ValidationError);
     await expect(w.service.update(assigner, "plain", { permissions: ["risk.read", "kri.read"] }, "r")).resolves.toBeTruthy();
-    await expect(w.service.update(assigner, "plain", { permissions: ["risk.read", "audit.read"] }, "r")).rejects.toThrow(ValidationError);
+    await expect(w.service.update(assigner, "plain", { permissions: ["risk.read", "audit.mission.read"] }, "r")).rejects.toThrow(ValidationError);
   });
 });
 
@@ -335,7 +335,7 @@ describe("QA-D044 q84: ActionPlanService.resolveRecipients", () => {
 });
 
 describe("QA-D044 q85/q95: catalog and subscriptions", () => {
-  it("the 24 types are all mandatory: subscribe(enabled:false) refused for each, also space-padded, nothing stored", async () => {
+  it("the 25 types are all mandatory: subscribe(enabled:false) refused for each, also space-padded, nothing stored", async () => {
     for (const t of NOTIFICATION_CATALOG) {
       const upsert = vi.fn();
       const svc = new NotificationService({} as never, { getByKey: async () => null, upsert } as never, { record: async () => undefined } as never);
@@ -344,7 +344,7 @@ describe("QA-D044 q85/q95: catalog and subscriptions", () => {
       await expect(svc.subscribe(u, { resourceType: t.resourceType, eventType: ` ${t.eventType} `, enabled: false }, "r")).rejects.toBeInstanceOf(ValidationError);
       expect(upsert).not.toHaveBeenCalled();
     }
-    expect(NOTIFICATION_CATALOG).toHaveLength(24); // D5: + 8 governance types; q170: + PRINCIPLE_ACCEPTANCE_REVOKED; q182 + q178: + 2; q200: + SENSITIVE_VIEW_GRANT_PENDING
+    expect(NOTIFICATION_CATALOG).toHaveLength(25); // D5: + 8 governance types; q170: + PRINCIPLE_ACCEPTANCE_REVOKED; q182 + q178: + 2; q200: + SENSITIVE_VIEW_GRANT_PENDING; q199: + RISK_VISIBILITY_WIDENED
   });
 
   it("the Dispositif event types used by RiskFrameworkService exist in the catalog under MANAGEMENT, mandatory (no drift)", async () => {

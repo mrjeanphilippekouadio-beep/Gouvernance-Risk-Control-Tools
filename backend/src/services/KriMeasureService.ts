@@ -10,6 +10,7 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
 import type { NotificationService } from "./NotificationService.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
+import { hiddenRiskIds } from "./riskVisibility.js";
 
 /**
  * ACT-133: append-only, like KpiMeasureService/ControlExecutionService —
@@ -49,7 +50,10 @@ export class KriMeasureService {
     requirePermission(actor, "kri.create");
 
     const kri = await this.kris.getById(actor.tenantId, input.kriId);
-    if (!kri) throw new ValidationError(`Kri ${input.kriId} does not exist in this tenant`);
+    // Lot V1 (q193): a KRI of a risk the actor may not see answers like a missing one.
+    if (!kri || (await hiddenRiskIds(this.risks, actor, [kri.riskId])).size > 0) {
+      throw new ValidationError(`Kri ${input.kriId} does not exist in this tenant`);
+    }
 
     if (!Number.isFinite(input.value)) {
       throw new ValidationError("value must be a finite number");
@@ -126,7 +130,9 @@ export class KriMeasureService {
   async listForKri(actor: AuthenticatedUser, kriId: string, filters?: KriMeasureListFilters): Promise<KriMeasureListResult> {
     requirePermission(actor, "kri.read");
     const kri = await this.kris.getById(actor.tenantId, kriId);
-    if (!kri) throw new ValidationError(`Kri ${kriId} does not exist in this tenant`);
+    if (!kri || (await hiddenRiskIds(this.risks, actor, [kri.riskId])).size > 0) {
+      throw new ValidationError(`Kri ${kriId} does not exist in this tenant`);
+    }
     return this.measures.listForKri(actor.tenantId, kriId, filters);
   }
 }

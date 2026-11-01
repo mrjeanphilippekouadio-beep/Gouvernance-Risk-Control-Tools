@@ -90,6 +90,14 @@ function assertRolePermissionRules(group: SystemGroup | null, permissions: Permi
       throw new ValidationError(`The Risk Manager group cannot carry Committee validation permissions (${committee.join(", ")}): Risk Manager and Committee never cumulate`);
     }
   }
+  // DECISION-102 (q194): changing a resource's visibility is the Risk Manager group's (and the owner's, by relation).
+  if (group !== "RISK_MANAGER" && permissions.includes("resourcevisibility.set")) {
+    throw new ValidationError("resourcevisibility.set is carried by the Risk Manager group only");
+  }
+  // q203 (DECISION-104): the audit log returns whole resources (restricted ones too) — reading it is the Audit group's alone.
+  if (group !== "AUDIT" && permissions.includes("audit.read")) {
+    throw new ValidationError("audit.read (reading the audit log) is carried by the Audit group only (q203)");
+  }
   if (group === "RISK_MANAGER" || group === "RISK_COMMITTEE") {
     const audit = permissions.filter(isAuditPermission);
     if (audit.length > 0) {
@@ -417,11 +425,16 @@ export class RoleService {
     const before = await this.get(actor, id);
     id = before.id; // SEC-ID-01: every comparison below uses the id read from the database
 
-    if (input.permissions !== undefined) {
+    // SEC V1-01: the department link opens the PERIMETRE risks of that department (risk_visible_to), so it is guarded
+    // like the permissions — linking or unlinking a role one holds goes through another administrator.
+    const departmentChanges = input.departmentId !== undefined && (input.departmentId ?? null) !== (before.departmentId ?? null);
+    if (input.permissions !== undefined || departmentChanges) {
       const held = await this.roles.listForUser(actor.tenantId, actor.userId);
       if (held.some((r) => r.id === id)) {
         throw new ForbiddenError(
-          "You cannot change the permissions of a role you hold yourself — ask another admin",
+          input.permissions !== undefined
+            ? "You cannot change the permissions of a role you hold yourself — ask another admin"
+            : "You cannot change the department of a role you hold yourself — ask another admin",
         );
       }
     }

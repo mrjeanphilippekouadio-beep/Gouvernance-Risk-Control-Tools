@@ -1,3 +1,4 @@
+import { maskHiddenRisks } from "./riskVisibility.js";
 import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
@@ -8,7 +9,7 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
-import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE } from "../domain/visibility.js";
+import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE, readerScope } from "../domain/visibility.js";
 
 /**
  * Rules ported from apps-script-legacy/14_Anomalies.gs: unlike
@@ -58,7 +59,7 @@ export class AnomalyService {
       }
     }
     if (input.riskId && this.risks) {
-      const risk = await this.risks.getById(actor.tenantId, input.riskId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(actor.tenantId, input.riskId, readerScope(actor));
       if (!risk) throw new ValidationError(`Risk ${input.riskId} does not exist in this tenant`);
     }
 
@@ -87,12 +88,12 @@ export class AnomalyService {
     requirePermission(actor, "anomaly.read");
     const anomaly = await this.anomalies.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!anomaly) throw new NotFoundError("Anomaly", id);
-    return anomaly;
+    return (await withoutHiddenRisk(this.risks, actor, [anomaly]))[0]!;
   }
 
   async list(actor: AuthenticatedUser, status?: AnomalyStatus): Promise<Anomaly[]> {
     requirePermission(actor, "anomaly.read");
-    return this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    return withoutHiddenRisk(this.risks, actor, await this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE));
   }
 
   async updateStatus(
@@ -103,7 +104,10 @@ export class AnomalyService {
     requestId: string,
   ): Promise<Anomaly> {
     requirePermission(actor, "anomaly.update");
-    const before = await this.get(actor, id);
+    requirePermission(actor, "anomaly.read");
+    // The audit keeps the stored row (its real riskId); only the answer is masked.
+    const before = await this.anomalies.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    if (!before) throw new NotFoundError("Anomaly", id);
 
     if (newStatus !== before.status && !VALID_TRANSITIONS[before.status].includes(newStatus)) {
       throw new ValidationError(
@@ -128,7 +132,8 @@ export class AnomalyService {
       requestId,
     });
 
-    return after;
+    // Codex P2: the mutation answer is masked like the reads.
+    return (await withoutHiddenRisk(this.risks, actor, [after]))[0]!;
   }
 }
 
@@ -138,3 +143,8 @@ const VALID_TRANSITIONS: Record<AnomalyStatus, AnomalyStatus[]> = {
   ACTION_IN_PROGRESS: ["CLOSED"],
   CLOSED: [],
 };
+
+/** QA-VIS1-02: a readable anomaly linked to a risk the reader may not see shows no risk (riskId null). */
+export function withoutHiddenRisk(risks: Pick<RiskRepository, "hiddenIds"> | undefined, actor: AuthenticatedUser, rows: Anomaly[]): Promise<Anomaly[]> {
+  return maskHiddenRisks(risks, actor, rows, (a) => [a.riskId], (a, hidden) => (a.riskId && hidden.has(a.riskId) ? { ...a, riskId: null } : a));
+}

@@ -1,4 +1,5 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
+import { hiddenRiskIds } from "./riskVisibility.js";
 import type { RaciAssignmentRepository } from "../domain/repositories/RaciAssignmentRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -64,7 +65,7 @@ export class RaciAssignmentService {
       throw new ValidationError(`role must be one of: ${ROLES.join(", ")}`);
     }
 
-    await this.assertEntityExists(actor.tenantId, entityType, entityId);
+    await this.assertEntityExists(actor.tenantId, entityType, entityId, readerScope(actor));
     // Fail closed: only assign business responsibility to an active user in this tenant.
     if (!this.users) throw new ValidationError("RACI target-user validation is not configured");
     const targetUser = await this.users.getById(actor.tenantId, userId);
@@ -120,6 +121,10 @@ export class RaciAssignmentService {
 
     const before = await this.raci.getById(actor.tenantId, assignmentId);
     if (!before) throw new NotFoundError("RaciAssignment", assignmentId);
+    // Codex P2: an assignment on a risk the actor may not see answers like an unknown assignment, before any write.
+    if (before.entityType === "RISK" && (await hiddenRiskIds(this.risks, actor, [before.entityId])).size > 0) {
+      throw new NotFoundError("RaciAssignment", assignmentId);
+    }
     if (before.entityType !== entityType || before.entityId !== entityId) {
       throw new ValidationError("assignmentId does not belong to the given entityType/entityId");
     }
@@ -158,13 +163,16 @@ export class RaciAssignmentService {
     if (!ENTITY_TYPES.includes(entityType)) {
       throw new ValidationError(`entityType must be one of: ${ENTITY_TYPES.join(", ")}`);
     }
+    // Lot V1: who works on a restricted risk is as restricted as the risk itself; a hidden risk answers like an
+    // unknown id (an empty list, QA-VIS1-01 / SEC V1-04).
+    if (entityType === "RISK" && (await hiddenRiskIds(this.risks, actor, [entityId])).size > 0) return [];
     return this.raci.listForEntity(actor.tenantId, entityType, entityId);
   }
 
   /** Never trust entityId blindly (EvidenceService pattern, CLAUDE.md) — resolve the target row in the actor's tenant before any write. */
-  private async assertEntityExists(tenantId: string, entityType: RaciEntityType, entityId: string): Promise<void> {
+  private async assertEntityExists(tenantId: string, entityType: RaciEntityType, entityId: string, scope: ReadScope): Promise<void> {
     if (entityType === "RISK" && this.risks) {
-      const risk = await this.risks.getById(tenantId, entityId, SYSTEM_SCOPE);
+      const risk = await this.risks.getById(tenantId, entityId, scope);
       if (!risk) throw new ValidationError(`Risk ${entityId} does not exist in this tenant`);
     } else if (entityType === "CONTROL" && this.controls) {
       const control = await this.controls.getById(tenantId, entityId, SYSTEM_SCOPE);
