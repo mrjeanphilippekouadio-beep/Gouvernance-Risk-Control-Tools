@@ -1,9 +1,12 @@
+import type { RiskVisibility } from "./risks";
 import { apiRequest } from "./client";
 
 export type AnomalySeverity = "LOW" | "MODERATE" | "HIGH" | "MAJOR" | "CRITICAL";
 export type AnomalyStatus = "NEW" | "UNDER_ANALYSIS" | "ACTION_IN_PROGRESS" | "CLOSED";
 
 export interface Anomaly {
+  /** Lot V2: absent on an older server = CLIENT. */
+  visibility?: RiskVisibility;
   id: string;
   controlId: string | null;
   controlExecutionId: string | null;

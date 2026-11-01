@@ -73,7 +73,7 @@ export class RiskEvaluationViewService {
     if (!risk) throw new NotFoundError("RiskEvaluation", riskEvaluationId);
 
     // Codex P2: the other covered risks of these controls lose the ids the reader may not see.
-    const controls = await maskCoveredRisks(this.risks, actor, await this.controls.listCoveringRisk(actor.tenantId, evaluation.riskId));
+    const controls = await maskCoveredRisks(this.risks, actor, await this.controls.listCoveringRisk(actor.tenantId, evaluation.riskId, readerScope(actor)));
     // ponytail: one effectiveness query per covering control (a risk carries a
     // handful, not hundreds). Add a batched listForControls() to the repository
     // if a real risk ever covers enough controls for this to show up.

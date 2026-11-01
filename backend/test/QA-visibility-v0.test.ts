@@ -174,12 +174,13 @@ describe("QA-visibility-v0 NR: services hand the right scope to the repository (
     expect(visibilityClause({ all: true })).toBe("");
     expect(visibilityClause({ all: false })).toBe("AND visibility = 'CLIENT'");
     const infra = join(__dirname, "..", "src", "infrastructure", "database", "postgres");
-    const users = readdirSync(infra).filter((f) => f.endsWith(".ts") && f !== "visibilityFilter.ts" && /visibilityClause\(/.test(readFileSync(join(infra, f), "utf8")));
-    // Lot V1: risks moved to riskVisibilityClause (risk_visible_to), still 2 call sites (get + list).
-    expect(users.sort()).toEqual(["PostgresActionPlanRepository.ts", "PostgresAnomalyRepository.ts", "PostgresControlRepository.ts", "PostgresKpiRepository.ts"]);
-    for (const f of users) {
+    // Lot V1: risks moved to riskVisibilityClause (risk_visible_to); lot V2: the 4 other roots to resourceVisibilityClause
+    // (<root>_visible_to, migration 083). The V0 clause has no caller left.
+    const users = readdirSync(infra).filter((f) => f.endsWith(".ts") && f !== "visibilityFilter.ts" && /[^a-zA-Z]visibilityClause\(/.test(readFileSync(join(infra, f), "utf8")));
+    expect(users).toEqual([]);
+    for (const [f, root, sites] of [["PostgresActionPlanRepository.ts", "ACTION_PLAN", 3], ["PostgresAnomalyRepository.ts", "ANOMALY", 2], ["PostgresControlRepository.ts", "CONTROL", 3], ["PostgresKpiRepository.ts", "KPI", 2]] as const) {
       const src = readFileSync(join(infra, f), "utf8");
-      expect((src.match(/\$\{visibilityClause\(scope\)\}/g) ?? []).length, f).toBe(2);
+      expect((src.match(new RegExp(`\\$\\{resourceVisibilityClause\\("${root}", scope`, "g")) ?? []).length, f).toBe(sites);
     }
     const riskSrc = readFileSync(join(infra, "PostgresRiskRepository.ts"), "utf8");
     expect((riskSrc.match(/\$\{riskVisibilityClause\(scope\)\}/g) ?? []).length).toBe(2);
@@ -201,7 +202,7 @@ function scan() {
       let depth = 1;
       let i = re.lastIndex;
       while (depth > 0 && i < src.length) { const ch = src[i++]; if (ch === "(") depth++; else if (ch === ")") depth--; }
-      out.push({ file, line: src.slice(0, m.index).split("\n").length, repo: m[1]!, method: m[2]!, wired: /visibility/.test(src.slice(re.lastIndex, i)) });
+      out.push({ file, line: src.slice(0, m.index).split("\n").length, repo: m[1]!, method: m[2]!, wired: !/SYSTEM_SCOPE/.test(src.slice(re.lastIndex, i)) });
     }
   }
   return out;
@@ -209,31 +210,24 @@ function scan() {
 
 describe("QA-visibility-v0 INV: reads of the 5 roots that carry no scope (V1 gap, documented in docs/qa/qa-visibility-v0-2026-10-29.md)", () => {
   const all = scan();
-  it("the wired reads are exactly the 11 public get/list of the 5 services", () => {
-    expect(all.filter((r) => r.wired).map((r) => `${r.file}:${r.repo}.${r.method}`).sort()).toEqual([
-      "ActionPlanService.ts:actions.getById", "ActionPlanService.ts:actions.list", "AnomalyService.ts:anomalies.getById", "AnomalyService.ts:anomalies.getById", "AnomalyService.ts:anomalies.list", // + updateStatus reads the stored row (V1 Codex P2: audit keeps riskId, answer masked)
-      "ControlService.ts:controls.getById", "ControlService.ts:controls.list", "KpiService.ts:kpis.getById", "KpiService.ts:kpis.list",
+  // Lot V2: every read of a control / anomaly / action plan / KPI now carries the reader's scope (resolver or readerScope);
+  // "unwired" = an explicit SYSTEM_SCOPE. What is left are internal reads, each justified below.
+  it("the only SYSTEM_SCOPE reads left are the internal ones (no content returned to a reader)", () => {
+    expect(all.filter((r) => !r.wired).map((r) => `${r.file}:${r.repo}.${r.method}`).sort()).toEqual([
+      "FindingService.ts:anomalies.getById", // audit domain (I-1): link validation by the AUDIT group, which sees everything
+      "FindingService.ts:controls.getById",
+      "ProcessService.ts:controls.list", // refusal to archive a process still referenced (message without ids)
+      "RaciAssignmentService.ts:actionPlans.getById", // existence half of the "hidden" test (an archived entity is not "hidden")
+      "RaciAssignmentService.ts:controls.getById",
     ]);
   });
 
-  it("snapshot of the UNWIRED reads per service file (a new unwired read, or a newly wired one, must update this list AND the report)", () => {
-    const perFile: Record<string, number> = {};
-    for (const r of all.filter((x) => !x.wired)) perFile[r.file] = (perFile[r.file] ?? 0) + 1;
-    // QA-V1: risk reads are no longer counted here (see scan()); what is left are the controls / anomalies / action plans / KPIs
-    // reads, restricted from lot V2. Counts re-derived from the code, not tuned: before V1 = the same list + the risk reads.
-    expect(perFile).toEqual({
-      "ActionPlanService.ts": 5, "AnomalyService.ts": 1, "ControlEffectivenessService.ts": 1, "ControlExecutionService.ts": 1,
-      "ControlService.ts": 1, "DashboardService.ts": 8, "FindingService.ts": 2, "KpiMeasureService.ts": 2, "KpiService.ts": 1,
-      "ProcessService.ts": 1, "RaciAssignmentService.ts": 2, "RiskDeviceViewService.ts": 2, "RiskEvaluationViewService.ts": 1,
-    });
-
-  });
-
-  it("user-facing reads of restricted roots still without scope (gap list for V1): listForRisk, dashboard, listCoveringRisk, dashboards", () => {
-    const unwired = all.filter((r) => !r.wired).map((r) => `${r.file}:${r.method}`);
+  it("the V1 gap list is closed: listForRisk, dashboard, listCoveringRisk and the dashboards carry the reader's scope", () => {
+    const wired = all.filter((r) => r.wired).map((r) => `${r.file}:${r.method}`);
     for (const g of ["ActionPlanService.ts:listForRisk", "ActionPlanService.ts:list", "ControlService.ts:listCoveringRisk", "DashboardService.ts:list"]) {
-      expect(unwired, g).toContain(g);
+      expect(wired, g).toContain(g);
     }
+    expect(all.filter((r) => r.file === "DashboardService.ts" && !r.wired)).toEqual([]);
   });
 });
 
@@ -530,7 +524,8 @@ describe.skipIf(!live)("QA-visibility-v0 on real PostgreSQL 16 (QA_VIS_PGHOST so
       p = pool(db);
       up(db);
       // QA-V1: the services now call risk_visible_to for an ordinary reader (readerScope): the database needs 081 and 082 on top of 080.
-      for (const f of ["081_audit_read_audit_group_only.sql", "082_risk_visibility.sql"]) psql(db, ["-1", "-f", sqlOf(f)]);
+      // Lot V2: the four other roots call <root>_visible_to (083) too.
+      for (const f of ["081_audit_read_audit_group_only.sql", "082_risk_visibility.sql", "083_resource_visibility_v2.sql"]) psql(db, ["-1", "-f", sqlOf(f)]);
       t = (await q<{ id: string }>(p, `INSERT INTO tenants (name) VALUES ('vis') RETURNING id`))[0]!.id;
       t2 = (await q<{ id: string }>(p, `INSERT INTO tenants (name) VALUES ('vis2') RETURNING id`))[0]!.id;
       const grp = async (tn: string, name: string, g: SystemGroup | null, extra = "") =>
@@ -577,6 +572,12 @@ describe.skipIf(!live)("QA-visibility-v0 on real PostgreSQL 16 (QA_VIS_PGHOST so
         const a = actor(u[who]!, t);
         const l = await listIds(who, a);
         for (const k of Object.keys(ids) as Array<keyof typeof ids>) {
+          // Lot V2 (spec §1, I-3): the declarer of an anomaly and the responsible of a plan (here the same "creator") stand
+          // for the owner of a resource with its own level, and always read it ("ce qui m'est assigné").
+          if (who === "creator" && (k === "anomalies" || k === "action_plans")) {
+            expect(l[k], `${who} ${k}`).toEqual([ids[k].open, ids[k].perimetre, ids[k].nominatif].sort());
+            continue;
+          }
           expect(l[k], `${who} ${k}`).toEqual([ids[k].open]);
           for (const hidden of [ids[k].perimetre, ids[k].nominatif]) {
             const e = await getErr(k, hidden, a);

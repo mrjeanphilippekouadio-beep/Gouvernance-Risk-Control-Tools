@@ -8,7 +8,9 @@ import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import { hiddenRiskIds, maskCoveredRisks } from "./riskVisibility.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
-import { READER_DEFAULT_SCOPE } from "../domain/visibility.js";
+import { READER_DEFAULT_SCOPE, type Visibility } from "../domain/visibility.js";
+import type { ResourceVisibilityManager, VisibilityTarget } from "./resourceVisibility.js";
+import type { ResourceVisibilityState } from "../domain/repositories/ResourceAccessRepository.js";
 
 /**
  * Rules ported from apps-script-legacy/11_Controles.gs (validateControle_):
@@ -33,7 +35,35 @@ export class ControlService {
     private readonly processes?: ProcessRepository,
     /** DECISION-100 (lot V0): optional for existing tests — absent, a reader sees CLIENT rows only (fail-closed, SEC V0-01). Wired in server.ts. */
     private readonly visibility?: VisibilityResolver,
+    /** Lot V2: level and named-people list of a control. Optional: absent, every control stays CLIENT (restriction refused). */
+    private readonly access?: ResourceVisibilityManager,
   ) {}
+
+  private target(control: Control): VisibilityTarget {
+    // A control has no owner account (`executor` is a text): only the Risk Manager group changes its level (spec §1).
+    return { type: "CONTROL", entity: "Control", id: control.id, visibility: control.visibility ?? "CLIENT", ownerId: null, inheritsFrom: null };
+  }
+
+  /** Lot V2 (q192): level and active named-people list of a control the caller can read. */
+  async getAccess(actor: AuthenticatedUser, id: string): Promise<ResourceVisibilityState> {
+    requirePermission(actor, "control.read");
+    const control = await this.getRaw(actor, id);
+    if (!this.access) return { visibility: control.visibility ?? "CLIENT", accessUserIds: [] };
+    return this.access.get(actor, this.target(control));
+  }
+
+  /** Lot V2 (q194): change a control's level and list (Risk Manager group), reason mandatory, audited in one transaction. */
+  async setVisibility(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { visibility: Visibility; addUserIds?: string[]; revokeUserIds?: string[]; reason: string },
+    requestId: string,
+  ): Promise<ResourceVisibilityState> {
+    requirePermission(actor, "control.read");
+    const control = await this.getRaw(actor, id);
+    if (!this.access) throw new ValidationError("Changing a control's visibility is not available");
+    return this.access.set(actor, this.target(control), input, requestId);
+  }
 
   async create(
     actor: AuthenticatedUser,
@@ -43,8 +73,14 @@ export class ControlService {
     requirePermission(actor, "control.create");
     await this.validate(actor, input);
     await this.assertProcessExists(actor.tenantId, input.processId);
+    const visibility: Visibility = input.visibility ?? "CLIENT";
+    if (visibility !== "CLIENT") {
+      if (!this.access) throw new ValidationError("Restricted visibility is not available");
+      const seesEverything = (await this.visibility?.resolve(actor))?.all === true;
+      await this.access.assertCreation(actor, { visibility, inheritsFrom: null, isOwner: false, departmentId: input.departmentId ?? null, processId: input.processId ?? null }, seesEverything);
+    }
 
-    const control = await this.controls.create({ ...input, tenantId: actor.tenantId });
+    const control = await this.controls.create({ ...input, visibility, tenantId: actor.tenantId });
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -88,17 +124,20 @@ export class ControlService {
     // Lot V1: which controls cover a restricted risk is as restricted as the risk; a hidden risk answers like an
     // unknown one (an empty list, QA-VIS1-01 / SEC V1-04).
     if ((await hiddenRiskIds(this.risks, actor, [riskId])).size > 0) return [];
-    // Codex P2: the other covered risks of these controls lose the ids the reader may not see.
-    return this.withoutHiddenRisks(actor, await this.controls.listCoveringRisk(actor.tenantId, riskId));
+    // Lot V2: only the controls the reader sees. Codex P2: their other covered risks lose the ids the reader may not see.
+    const scope = (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE;
+    return this.withoutHiddenRisks(actor, await this.controls.listCoveringRisk(actor.tenantId, riskId, scope));
   }
 
   async update(
     actor: AuthenticatedUser,
     id: string,
-    input: UpdateControlInput,
+    rawInput: UpdateControlInput & { reason?: string },
     requestId: string,
   ): Promise<Control> {
     requirePermission(actor, "control.update");
+    const { reason, ...fields } = rawInput;
+    let input: UpdateControlInput = fields;
     const raw = await this.getRaw(actor, id);
     const before = (await this.withoutHiddenRisks(actor, [raw]))[0]!;
 
@@ -123,19 +162,33 @@ export class ControlService {
     }
     await this.assertProcessExists(actor.tenantId, input.processId);
 
-    const after = await this.controls.update(actor.tenantId, id, input);
+    // Lot V2 (SEC V1-02 extended): on a restricted control, department and process decide who reads it.
+    const perimeterChanged = (input.departmentId !== undefined && (input.departmentId ?? null) !== raw.departmentId)
+      || (input.processId !== undefined && (input.processId ?? null) !== raw.processId);
+    const guard = this.access?.guardPerimeterChange(actor, this.target(raw), perimeterChanged, reason) ?? null;
+    if (guard) {
+      // SEC V2-04 / CMP-V2-01: the perimeter part is written first, locked and audited in its own transaction.
+      await this.access!.applyPerimeterChange(actor, { ...this.target(raw), type: "CONTROL" },
+        guard, { departmentId: input.departmentId, processId: input.processId }, requestId);
+      const { departmentId: _d, processId: _p, ...rest } = input;
+      input = rest;
+    }
 
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Control",
-      entityId: id,
-      action: input.status ? "STATUS_CHANGE" : "UPDATE",
-      oldValue: raw,
-      newValue: after,
-      reason: null,
-      requestId,
-    });
+    const hasOtherFields = Object.values(input).some((v) => v !== undefined);
+    const after = hasOtherFields ? await this.controls.update(actor.tenantId, id, input) : await this.getRaw(actor, id);
+    if (hasOtherFields) {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Control",
+        entityId: id,
+        action: input.status ? "STATUS_CHANGE" : "UPDATE",
+        oldValue: raw,
+        newValue: after,
+        reason: null,
+        requestId,
+      });
+    }
 
     return (await this.withoutHiddenRisks(actor, [after]))[0]!;
   }

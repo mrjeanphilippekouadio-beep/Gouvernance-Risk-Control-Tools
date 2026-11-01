@@ -1,3 +1,4 @@
+import type { RiskVisibility } from "./risks";
 import { apiRequest } from "./client";
 
 export type IndicatorFrequency = "DAILY" | "WEEKLY" | "MONTHLY" | "QUARTERLY" | "ANNUAL";
@@ -75,6 +76,8 @@ export interface KriMeasureInput {
 }
 
 export interface Kpi {
+  /** Lot V2: absent on an older server = CLIENT. */
+  visibility?: RiskVisibility;
   id: string;
   label: string;
   targetValue: number;

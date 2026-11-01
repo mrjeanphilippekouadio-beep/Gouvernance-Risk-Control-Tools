@@ -58,6 +58,8 @@ import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.
 import { RiskService } from "./services/RiskService.js";
 import { VisibilityResolver } from "./services/VisibilityResolver.js";
 import { EvidenceService } from "./services/EvidenceService.js";
+import { ResourceVisibilityManager } from "./services/resourceVisibility.js";
+import { PostgresResourceAccessRepository } from "./infrastructure/database/postgres/PostgresResourceAccessRepository.js";
 import { ControlService } from "./services/ControlService.js";
 import { ControlExecutionService } from "./services/ControlExecutionService.js";
 import { ControlEffectivenessService } from "./services/ControlEffectivenessService.js";
@@ -279,7 +281,9 @@ const organizationProfileService = new OrganizationProfileService(
   auditRepository,
 );
 const auditLogService = new AuditLogService(auditRepository);
-const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository, visibilityResolver);
+// Lot V2 (DECISION-100/102): level and named-people list of controls, anomalies, action plans and KPIs.
+const resourceVisibilityManager = new ResourceVisibilityManager(new PostgresResourceAccessRepository(pool), auditRepository, userRepository, notificationRepository);
+const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository, visibilityResolver, resourceVisibilityManager);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository, selfValidationGate);
 const effectivenessService = new ControlEffectivenessService(
   effectivenessRepository,
@@ -294,6 +298,7 @@ const anomalyService = new AnomalyService(
   executionRepository,
   riskRepository,
   visibilityResolver,
+  resourceVisibilityManager,
 );
 const auditMissionService = new AuditMissionService(auditMissionRepository, auditRepository, userRepository);
 const findingService = new FindingService(
@@ -321,7 +326,7 @@ const governancePrincipleAcceptanceService = new GovernancePrincipleAcceptanceSe
 );
 const governanceNotifier = new GovernanceNotifier(notificationService, governanceQueries);
 const feedbackService = new FeedbackService(feedbackRepository, auditRepository, notifier);
-const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository, visibilityResolver);
+const kpiService = new KpiService(kpiRepository, kpiMeasureRepository, departmentRepository, processRepository, auditRepository, visibilityResolver, resourceVisibilityManager);
 const kpiMeasureService = new KpiMeasureService(kpiMeasureRepository, kpiRepository, auditRepository);
 // B-6b: the Dispositif is wired into the services that read or used to own the methodology parameters.
 const riskAppetiteService = new RiskAppetiteService(riskAppetiteRepository, auditRepository, riskCategoryRepository, ratingScaleRepository, riskFrameworkRepository);
@@ -382,6 +387,7 @@ const actionPlanService = new ActionPlanService(
   notificationService,
   selfValidationGate,
   visibilityResolver,
+  resourceVisibilityManager,
 );
 const cartographyService = new CartographyService(riskRepository, riskEvaluationRepository, ratingScaleRepository, processRepository, riskFrameworkRepository);
 const raciAssignmentService = new RaciAssignmentService(raciAssignmentRepository, auditRepository, riskRepository, controlRepository, actionPlanRepository, userRepository);
@@ -424,7 +430,7 @@ function createDocumentStorage(): DocumentStorage {
   }
 }
 const documentStorage = createDocumentStorage();
-const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository, executionRepository);
+const evidenceService = new EvidenceService(evidenceRepository, documentStorage, auditRepository, executionRepository, controlRepository);
 
 const dashboardScopeResolver = new DashboardScopeResolver(raciAssignmentRepository, riskRepository);
 
@@ -446,6 +452,7 @@ const dashboardService = new DashboardService(
   dashboardScopeResolver,
   ratingScaleRepository,
   riskFrameworkRepository,
+  resourceVisibilityManager,
 );
 const brandingService = new BrandingService(brandingRepository, documentStorage, auditRepository);
 const configService = new ConfigService(

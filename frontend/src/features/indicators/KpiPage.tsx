@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, useRef } from "react";
+import { ResourceVisibilityCard, RiskVisibilityBadge } from "../risks/RiskVisibility";
+import { kpiVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { Button, Card, FormField, LineChart, MessageBanner, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
 import {
   kpisApi,
@@ -131,6 +133,7 @@ export function KpiPage({ token }: { token: string }) {
     { key: "latest", header: "Dernière mesure", render: (row) => row.latestMeasureValue === null ? "—" : <><strong>{fmt(row.latestMeasureValue)} {row.unit}</strong><div className="muted">{dateOnly(row.latestMeasurePeriod)}</div></> },
     { key: "rate", header: "Atteinte", render: (row) => row.achievementRate === null ? "—" : percent.format(row.achievementRate) },
     { key: "owner", header: "Responsable", render: (row) => row.owner },
+    { key: "visibility", header: "Visibilité", render: (row) => <RiskVisibilityBadge visibility={row.visibility} /> },
     { key: "open", header: "", render: (row) => <Button onClick={() => setSelectedId(row.id)} aria-label={`Voir le détail de ${row.label}`}>Détail</Button> },
   ];
 
@@ -172,6 +175,8 @@ export function KpiPage({ token }: { token: string }) {
       />}
       <Table columns={measureColumns} rows={measures} rowKey={(m) => m.id} loading={measuresLoading} emptyMessage="Aucune mesure enregistrée pour ce KPI." />
     </Card>}
+    {selected && <ResourceVisibilityCard token={token} resourceId={selected.id} idPrefix="kpi-visibility" perimeterHelp={PERIMETER_HELP.KPI}
+      load={kpiVisibilityApi.get} save={kpiVisibilityApi.set} />}
 
     <FormModal open={formOpen !== null} onClose={() => setFormOpen(null)} title={formOpen === "edit" ? "Modifier le KPI" : "Nouveau KPI"} formId="kpi-form" saving={saving} submitLabel={formOpen === "edit" ? "Enregistrer" : "Créer"}>
       <form id="kpi-form" onSubmit={submitKpi}>

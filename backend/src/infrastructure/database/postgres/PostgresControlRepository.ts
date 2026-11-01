@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from "pg";
-import { visibilityClause } from "./visibilityFilter.js";
-import type { ReadScope } from "../../../domain/visibility.js";
+import { resourceVisibilityClause } from "./visibilityFilter.js";
+import type { ReadScope, Visibility } from "../../../domain/visibility.js";
 import type { ControlRepository } from "../../../domain/repositories/ControlRepository.js";
 import type {
   Control,
@@ -11,6 +11,7 @@ import type {
 } from "../../../domain/entities/Control.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
+import { unknownDepartmentAsValidation } from "./foreignKey.js";
 
 interface ControlRow {
   id: string;
@@ -32,6 +33,7 @@ interface ControlRow {
   status: ControlStatus;
   created_at: Date;
   updated_at: Date;
+  visibility?: Visibility;
   deleted_at: Date | null;
   deleted_by: string | null;
   deletion_reason: string | null;
@@ -59,6 +61,7 @@ function toDomain(row: ControlRow, coveredRiskIds: string[]): Control {
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    visibility: row.visibility ?? "CLIENT",
     deletedAt: row.deleted_at,
     deletedBy: row.deleted_by,
     deletionReason: row.deletion_reason,
@@ -117,7 +120,7 @@ export class PostgresControlRepository implements ControlRepository {
 
   async getById(tenantId: string, id: string, scope: ReadScope): Promise<Control | null> {
     const { rows } = await this.pool.query<ControlRow>(
-      `SELECT * FROM controls WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL ${visibilityClause(scope)}`,
+      `SELECT * FROM controls WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL ${resourceVisibilityClause("CONTROL", scope)}`,
       [tenantId, id],
     );
     const row = rows[0];
@@ -129,7 +132,7 @@ export class PostgresControlRepository implements ControlRepository {
     const statusFilter = options?.includeArchived ? "" : "AND status <> 'ARCHIVED'";
     const { rows } = await this.pool.query<ControlRow>(
       `SELECT * FROM controls
-       WHERE tenant_id = $1 AND deleted_at IS NULL ${statusFilter} ${visibilityClause(scope)}
+       WHERE tenant_id = $1 AND deleted_at IS NULL ${statusFilter} ${resourceVisibilityClause("CONTROL", scope)}
        ORDER BY created_at DESC`,
       [tenantId],
     );
@@ -137,11 +140,11 @@ export class PostgresControlRepository implements ControlRepository {
     return rows.map((row) => toDomain(row, byControl.get(row.id) ?? []));
   }
 
-  async listCoveringRisk(tenantId: string, riskId: string): Promise<Control[]> {
+  async listCoveringRisk(tenantId: string, riskId: string, scope: ReadScope): Promise<Control[]> {
     const { rows } = await this.pool.query<ControlRow>(
       `SELECT c.* FROM controls c
        JOIN control_risks cr ON cr.control_id = c.id
-       WHERE c.tenant_id = $1 AND cr.risk_id = $2 AND c.deleted_at IS NULL`,
+       WHERE c.tenant_id = $1 AND cr.risk_id = $2 AND c.deleted_at IS NULL ${resourceVisibilityClause("CONTROL", scope, "c.")}`,
       [tenantId, riskId],
     );
     const byControl = await coveredRiskIdsForMany(this.pool, rows.map((r) => r.id));
@@ -156,8 +159,8 @@ export class PostgresControlRepository implements ControlRepository {
         `INSERT INTO controls
            (tenant_id, label, objective, process, process_id, department_id, procedure_description,
             control_type, nature, defense_line, frequency, executor, validator,
-            expected_evidence, compliance_criteria, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'DRAFT')
+            expected_evidence, compliance_criteria, status, visibility)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'DRAFT', $16)
          RETURNING *`,
         [
           input.tenantId,
@@ -175,6 +178,7 @@ export class PostgresControlRepository implements ControlRepository {
           input.validator ?? null,
           input.expectedEvidence ?? null,
           input.complianceCriteria,
+          input.visibility ?? "CLIENT",
         ],
       );
       const row = rows[0];
@@ -185,7 +189,7 @@ export class PostgresControlRepository implements ControlRepository {
       return toDomain(row, input.coveredRiskIds);
     } catch (err) {
       await client.query("ROLLBACK");
-      throw err;
+      unknownDepartmentAsValidation(err, input.departmentId);
     } finally {
       client.release();
     }
@@ -254,7 +258,7 @@ export class PostgresControlRepository implements ControlRepository {
       return toDomain(row, coveredRiskIds);
     } catch (err) {
       await client.query("ROLLBACK");
-      throw err;
+      unknownDepartmentAsValidation(err, input.departmentId);
     } finally {
       client.release();
     }

@@ -1,4 +1,4 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { readerScope } from "../domain/visibility.js";
 import type { ControlExecutionRepository } from "../domain/repositories/ControlExecutionRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
@@ -33,7 +33,8 @@ export class ControlExecutionService {
   ): Promise<ControlExecution> {
     requirePermission(actor, "execution.create");
 
-    const control = await this.controls.getById(actor.tenantId, input.controlId, SYSTEM_SCOPE);
+    // Lot V2: executing a control one does not see answers like a missing control.
+    const control = await this.controls.getById(actor.tenantId, input.controlId, readerScope(actor));
     if (!control) throw new ValidationError(`Control ${input.controlId} does not exist in this tenant`);
 
     if (input.status !== "DONE" && !input.justificationIfNotDone?.trim()) {
@@ -70,13 +71,25 @@ export class ControlExecutionService {
   async get(actor: AuthenticatedUser, id: string): Promise<ControlExecution> {
     requirePermission(actor, "execution.read");
     const execution = await this.executions.getById(actor.tenantId, id);
-    if (!execution) throw new NotFoundError("ControlExecution", id);
+    // Lot V2 (spec §1): an execution follows its control, except for its executor ("ce qui m'est assigné").
+    if (!execution || !(isExecutor(execution, actor) || (await this.controlReadable(actor, execution.controlId)))) {
+      throw new NotFoundError("ControlExecution", id);
+    }
     return execution;
   }
 
   async listForControl(actor: AuthenticatedUser, controlId: string): Promise<ControlExecution[]> {
     requirePermission(actor, "execution.read");
-    return this.executions.listForControl(actor.tenantId, controlId);
+    const rows = await this.executions.listForControl(actor.tenantId, controlId);
+    // A hidden control answers like an unknown one (an empty list), except the executor's own executions.
+    if (rows.length === 0 || (await this.controlReadable(actor, controlId))) return rows;
+    return rows.filter((e) => isExecutor(e, actor));
+  }
+
+  private async controlReadable(actor: AuthenticatedUser, controlId: string): Promise<boolean> {
+    // A fake repository without lookups holds no restricted control (same convention as RiskRepository.hiddenIds).
+    if (typeof this.controls.getById !== "function") return true;
+    return (await this.controls.getById(actor.tenantId, controlId, readerScope(actor))) !== null;
   }
 
   async validate(
@@ -122,4 +135,8 @@ export class ControlExecutionService {
       ],
     );
   }
+}
+
+function isExecutor(execution: ControlExecution, actor: AuthenticatedUser): boolean {
+  return execution.executedBy.toLowerCase() === actor.userId.toLowerCase();
 }

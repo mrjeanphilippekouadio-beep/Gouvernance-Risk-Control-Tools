@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { mountVisibilityRoutes, VisibilityLevel } from "./resourceVisibility.routes.js";
 import { boundedArray, optionalComment } from "../validation.js";
 import { perUserRateLimiter } from "../middleware/rateLimit.js";
 import type { ActionPlanService } from "../../services/ActionPlanService.js";
@@ -27,6 +28,7 @@ const CreateActionPlanBody = z.object({
   responsibleUserId: z.string().min(1),
   departmentId: z.string().nullish(),
   dueDate: z.coerce.date(),
+  visibility: VisibilityLevel.optional(),
 });
 
 const ProgressBody = z.object({
@@ -125,6 +127,8 @@ export function actionPlansRouter(
   });
 
   // ACT-191: narrow — progressPercent + comment only, never a generic field-by-field update.
+  mountVisibilityRoutes(router, actionPlanService);
+
   router.patch("/:id/progress", async (req, res, next) => {
     try {
       const body = ProgressBody.parse(req.body);

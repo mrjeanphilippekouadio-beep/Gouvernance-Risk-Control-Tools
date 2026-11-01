@@ -1,9 +1,12 @@
+import type { RiskVisibility } from "./risks";
 import { apiRequest } from "./client";
 
 export type ControlType = "PREVENTIVE" | "DETECTIVE" | "CORRECTIVE";
 export type ControlStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
 
 export interface Control {
+  /** Lot V2: absent on an older server = CLIENT. */
+  visibility?: RiskVisibility;
   id: string;
   label: string;
   objective: string | null;

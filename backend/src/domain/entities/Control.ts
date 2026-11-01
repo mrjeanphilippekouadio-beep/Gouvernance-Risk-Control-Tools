@@ -1,3 +1,4 @@
+import type { Visibility } from "../visibility.js";
 export type ControlType = "PREVENTIVE" | "DETECTIVE" | "CORRECTIVE";
 export type ControlStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
 
@@ -7,6 +8,8 @@ export type ControlStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
  * not yet ported), same separation the legacy sheet already had.
  */
 export interface Control {
+  /** Lot V2 (DECISION-100/102): who may read it. Set at creation, then only through PUT /:id/visibility. Absent = CLIENT. */
+  visibility?: Visibility;
   id: string;
   tenantId: string;
   label: string;
@@ -41,6 +44,8 @@ export interface Control {
 }
 
 export interface CreateControlInput {
+  /** Lot V2: level at creation (default CLIENT); the named-people list is set afterwards (PUT /:id/visibility). */
+  visibility?: Visibility;
   tenantId: string;
   label: string;
   objective?: string | null;

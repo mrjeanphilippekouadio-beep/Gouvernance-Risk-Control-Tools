@@ -1,3 +1,4 @@
+import type { Visibility } from "../visibility.js";
 export type KpiFrequency = "DAILY" | "WEEKLY" | "MONTHLY" | "QUARTERLY" | "ANNUAL";
 
 /**
@@ -9,6 +10,8 @@ export type KpiFrequency = "DAILY" | "WEEKLY" | "MONTHLY" | "QUARTERLY" | "ANNUA
  * stale status can never be persisted.
  */
 export interface Kpi {
+  /** Lot V2 (DECISION-100/102): who may read it. Set at creation, then only through PUT /:id/visibility. Absent = CLIENT. */
+  visibility?: Visibility;
   id: string;
   tenantId: string;
   label: string;
@@ -28,6 +31,8 @@ export interface Kpi {
 }
 
 export interface CreateKpiInput {
+  /** Lot V2: level at creation (default CLIENT); the named-people list is set afterwards (PUT /:id/visibility). */
+  visibility?: Visibility;
   tenantId: string;
   label: string;
   targetValue: number;

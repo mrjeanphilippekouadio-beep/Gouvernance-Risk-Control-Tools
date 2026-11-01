@@ -6,8 +6,8 @@ import type { ReadScope } from "../../../domain/visibility.js";
  * Applied in the WHERE clause, never after the fetch. `column` / aliases are fixed identifiers chosen by the repository,
  * never user input.
  *
- * Roots other than risks (controls, anomalies, action plans, KPIs) cannot be restricted before lot V2: a non-"all"
- * reader sees their CLIENT rows only.
+ * Kept for a root without its own `*_visible_to` function: a non-"all" reader sees its CLIENT rows only. Since lot V2,
+ * controls, anomalies, action plans and KPIs use `resourceVisibilityClause`.
  */
 export function visibilityClause(scope: ReadScope, column = "visibility"): string {
   if (scope.all) return "";
@@ -43,4 +43,38 @@ export function riskChildVisibilityClause(scope: ReadScope, riskIdExpr: string, 
     ? `(vr.visibility = 'CLIENT' OR risk_visible_to(vr.tenant_id, vr.id, ${readerLiteral(scope.userId)}))`
     : `vr.visibility = 'CLIENT'`;
   return `AND (${riskIdExpr} IS NULL OR EXISTS (SELECT 1 FROM risks vr WHERE vr.tenant_id = ${tenantExpr} AND vr.id = ${riskIdExpr} AND ${readable}))`;
+}
+
+/** Lot V2: the roots restrictable besides risks, with their SQL function (migration 083). */
+export type RestrictableRoot = "CONTROL" | "ANOMALY" | "ACTION_PLAN" | "KPI";
+const VISIBLE_TO: Record<RestrictableRoot, string> = {
+  CONTROL: "control_visible_to",
+  ANOMALY: "anomaly_visible_to",
+  ACTION_PLAN: "action_plan_visible_to",
+  KPI: "kpi_visible_to",
+};
+
+/**
+ * Lot V2: the row (alias `a`, e.g. "c." or "") is readable when `<root>_visible_to` (migration 083) admits the reader.
+ * Anomalies and action plans inherit from their risk / control / KRI, so their own `visibility = 'CLIENT'` is not enough:
+ * the function decides for every row. Without a reader id, the function is called with NULL: only rows that are CLIENT
+ * all the way up are readable.
+ */
+export function resourceVisibilityClause(root: RestrictableRoot, scope: ReadScope, alias = ""): string {
+  if (scope.all) return "";
+  const reader = scope.userId ? readerLiteral(scope.userId) : "NULL::uuid";
+  const call = `${VISIBLE_TO[root]}(${alias}tenant_id, ${alias}id, ${reader})`;
+  return root === "CONTROL" || root === "KPI" ? `AND (${alias}visibility = 'CLIENT' OR ${call})` : `AND ${call}`;
+}
+
+/** Lot V2: SQL expression `<root>_visible_to(tenant, id, reader)` for fixed column expressions (children, counts). */
+export function resourceVisibleExpr(root: RestrictableRoot, scope: ReadScope, tenantExpr: string, idExpr: string): string {
+  if (scope.all) return "true";
+  const reader = scope.userId ? readerLiteral(scope.userId) : "NULL::uuid";
+  return `${VISIBLE_TO[root]}(${tenantExpr}, ${idExpr}, ${reader})`;
+}
+
+/** The SQL function name of a root (used by the access repository for its effective-reader sets). */
+export function visibleToFunction(root: RestrictableRoot | "RISK"): string {
+  return root === "RISK" ? "risk_visible_to" : VISIBLE_TO[root];
 }

@@ -41,3 +41,7 @@ Le PO a constaté que le frontend n'avançait plus : 13 écrans pour 43 modules 
 
 - État complet, reste à faire et erreurs commises : `.claude/agent-context/HANDOFF-2026-10-17.md` (à lire en premier).
 - Leçons : tenir les 4 collections du cockpit (status, deliveries, agents, releases) à chaque livraison, pas seulement le bandeau ; relire les questions `answered` à chaque reprise ; formuler l'invariant dans un dispatch, pas l'implémentation ; un correctif fait par l'orchestrateur après une revue appelle un retest explicite.
+
+## 2026-11-01 — lot V2 visibilité
+- Passages QA/Sécurité/Compliance lancés en parallèle sur le même répertoire (fichiers distincts) : fonctionne ; les trois ont buté sur la limite d'API 5 h, reprise par SendMessage sans perte.
+- Relire l'état des questions du cockpit à chaque transition (q206 avait été répondue sans que le Decision Log le sache).

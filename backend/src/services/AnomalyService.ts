@@ -9,7 +9,10 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
-import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE, readerScope } from "../domain/visibility.js";
+import { READER_DEFAULT_SCOPE, readerScope, type Visibility } from "../domain/visibility.js";
+import type { ResourceVisibilityManager, VisibilityTarget } from "./resourceVisibility.js";
+import { sameUserId } from "./resourceVisibility.js";
+import type { ResourceVisibilityState } from "../domain/repositories/ResourceAccessRepository.js";
 
 /**
  * Rules ported from apps-script-legacy/14_Anomalies.gs: unlike
@@ -33,7 +36,53 @@ export class AnomalyService {
     private readonly risks?: RiskRepository,
     /** DECISION-100 (lot V0): optional for existing tests — absent, a reader sees CLIENT rows only (fail-closed, SEC V0-01). Wired in server.ts. */
     private readonly visibility?: VisibilityResolver,
+    /** Lot V2: own level and list of an anomaly without risk or control. Optional: absent, restriction refused. */
+    private readonly access?: ResourceVisibilityManager,
   ) {}
+
+  /** Spec §1: an anomaly follows its risk, else its control, else its own level; the declarer stands for the owner. */
+  private target(a: Anomaly): VisibilityTarget {
+    return {
+      type: "ANOMALY",
+      entity: "Anomaly",
+      id: a.id,
+      visibility: a.visibility ?? "CLIENT",
+      ownerId: a.detectedBy,
+      inheritsFrom: a.riskId ? "RISK" : a.controlId || a.controlExecutionId ? "CONTROL" : null,
+    };
+  }
+
+  /** QA-VIS1-02 / QA-VIS2-02: hidden risk, control and execution ids are removed from a readable anomaly. */
+  private async masked(actor: AuthenticatedUser, rows: Anomaly[]): Promise<Anomaly[]> {
+    const withoutRisk = await withoutHiddenRisk(this.risks, actor, rows);
+    return this.access ? this.access.maskAnomalyParents(actor, withoutRisk) : withoutRisk;
+  }
+
+  private async getRaw(actor: AuthenticatedUser, id: string): Promise<Anomaly> {
+    const anomaly = await this.anomalies.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    if (!anomaly) throw new NotFoundError("Anomaly", id);
+    return anomaly;
+  }
+
+  async getAccess(actor: AuthenticatedUser, id: string): Promise<ResourceVisibilityState & { inheritsFrom: string | null }> {
+    requirePermission(actor, "anomaly.read");
+    const anomaly = await this.getRaw(actor, id);
+    const target = this.target(anomaly);
+    const state = this.access ? await this.access.get(actor, target) : { visibility: target.visibility, accessUserIds: [] };
+    return { ...state, inheritsFrom: target.inheritsFrom };
+  }
+
+  async setVisibility(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { visibility: Visibility; addUserIds?: string[]; revokeUserIds?: string[]; reason: string },
+    requestId: string,
+  ): Promise<ResourceVisibilityState> {
+    requirePermission(actor, "anomaly.read");
+    const anomaly = await this.getRaw(actor, id);
+    if (!this.access) throw new ValidationError("Changing an anomaly's visibility is not available");
+    return this.access.set(actor, this.target(anomaly), input, requestId);
+  }
 
   async create(
     actor: AuthenticatedUser,
@@ -48,13 +97,16 @@ export class AnomalyService {
     // belong to the caller's tenant — otherwise an anomaly can point at
     // another tenant's control/execution/risk (latent today, single
     // tenant; a real cross-tenant leak the moment that changes).
+    // Lot V2: a link to a control, execution or risk the declarer does not see answers like a missing one.
     if (input.controlId && this.controls) {
-      const control = await this.controls.getById(actor.tenantId, input.controlId, SYSTEM_SCOPE);
+      const control = await this.controls.getById(actor.tenantId, input.controlId, readerScope(actor));
       if (!control) throw new ValidationError(`Control ${input.controlId} does not exist in this tenant`);
     }
     if (input.controlExecutionId && this.controlExecutions) {
       const execution = await this.controlExecutions.getById(actor.tenantId, input.controlExecutionId);
-      if (!execution) {
+      const readable = execution && (sameUserId(execution.executedBy, actor.userId)
+        || !this.controls || (await this.controls.getById(actor.tenantId, execution.controlId, readerScope(actor))) !== null);
+      if (!readable) {
         throw new ValidationError(`ControlExecution ${input.controlExecutionId} does not exist in this tenant`);
       }
     }
@@ -63,8 +115,22 @@ export class AnomalyService {
       if (!risk) throw new ValidationError(`Risk ${input.riskId} does not exist in this tenant`);
     }
 
+    const visibility: Visibility = input.visibility ?? "CLIENT";
+    if (visibility !== "CLIENT") {
+      if (!this.access) throw new ValidationError("Restricted visibility is not available");
+      // The declarer is the owner account of the anomaly: they always see it.
+      await this.access.assertCreation(actor, {
+        visibility,
+        inheritsFrom: input.riskId ? "RISK" : input.controlId || input.controlExecutionId ? "CONTROL" : null,
+        isOwner: true,
+        departmentId: null,
+        processId: null,
+      }, false);
+    }
+
     const anomaly = await this.anomalies.create({
       ...input,
+      visibility,
       tenantId: actor.tenantId,
       detectedBy: actor.userId,
     });
@@ -86,14 +152,13 @@ export class AnomalyService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<Anomaly> {
     requirePermission(actor, "anomaly.read");
-    const anomaly = await this.anomalies.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
-    if (!anomaly) throw new NotFoundError("Anomaly", id);
-    return (await withoutHiddenRisk(this.risks, actor, [anomaly]))[0]!;
+    const anomaly = await this.getRaw(actor, id);
+    return (await this.masked(actor, [anomaly]))[0]!;
   }
 
   async list(actor: AuthenticatedUser, status?: AnomalyStatus): Promise<Anomaly[]> {
     requirePermission(actor, "anomaly.read");
-    return withoutHiddenRisk(this.risks, actor, await this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE));
+    return this.masked(actor, await this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE));
   }
 
   async updateStatus(
@@ -133,7 +198,7 @@ export class AnomalyService {
     });
 
     // Codex P2: the mutation answer is masked like the reads.
-    return (await withoutHiddenRisk(this.risks, actor, [after]))[0]!;
+    return (await this.masked(actor, [after]))[0]!;
   }
 }
 

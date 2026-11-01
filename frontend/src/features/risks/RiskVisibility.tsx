@@ -8,6 +8,7 @@ import {
   type RiskVisibilityState,
 } from "../../api/risks";
 import { usersApi, type DirectoryEntry } from "../../api/users";
+import { INHERITS_LABEL, type ResourceVisibilityState, type VisibilityChange } from "../../api/visibility";
 import { ApiError } from "../../api/client";
 
 /**
@@ -27,8 +28,15 @@ function describe(err: unknown): string {
   return err instanceof Error ? err.message : "Une erreur inattendue est survenue.";
 }
 
-export function VisibilityLevelField({ id, value, onChange }: Readonly<{ id: string; value: RiskVisibility; onChange: (v: RiskVisibility) => void }>) {
-  return <FormField label="Visibilité" htmlFor={id} help={RISK_VISIBILITY_HELP[value]}>
+export function VisibilityLevelField({ id, value, onChange, perimeterHelp }: Readonly<{
+  id: string;
+  value: RiskVisibility;
+  onChange: (v: RiskVisibility) => void;
+  /** Lot V2: who "Restreint au périmètre" admits for this kind of resource (default: a risk's perimeter). */
+  perimeterHelp?: string;
+}>) {
+  const help = value === "PERIMETRE" && perimeterHelp ? perimeterHelp : RISK_VISIBILITY_HELP[value];
+  return <FormField label="Visibilité" htmlFor={id} help={help}>
     <select id={id} value={value} onChange={(e) => onChange(e.target.value as RiskVisibility)}>
       {LEVELS.map((l) => <option key={l} value={l}>{RISK_VISIBILITY_LABELS[l]}</option>)}
     </select>
@@ -89,7 +97,25 @@ export function AccessPeopleField({ id, token, value, onChange, label = "Personn
 
 /** Fiche risque: current level and list, and the change form (level, people to add or revoke, mandatory reason). */
 export function RiskVisibilityCard({ token, riskId, onChanged }: Readonly<{ token: string; riskId: string; onChanged: (v: RiskVisibility) => void }>) {
-  const [state, setState] = useState<RiskVisibilityState | null>(null);
+  return <ResourceVisibilityCard token={token} resourceId={riskId} idPrefix="risk-visibility" onChanged={onChanged}
+    load={(t, id) => risksApi.getVisibility(t, id)} save={(t, id, input) => risksApi.setVisibility(t, id, input)} />;
+}
+
+/**
+ * Lot V2: the same card for a control, an anomaly, an action plan or a KPI. A resource that follows its risk / control /
+ * KRI shows it and offers no change (the server would refuse it anyway).
+ */
+export function ResourceVisibilityCard({ token, resourceId, idPrefix, load, save, onChanged, perimeterHelp }: Readonly<{
+  token: string;
+  resourceId: string;
+  idPrefix: string;
+  load: (token: string, id: string) => Promise<ResourceVisibilityState | RiskVisibilityState>;
+  save: (token: string, id: string, input: VisibilityChange) => Promise<ResourceVisibilityState | RiskVisibilityState>;
+  onChanged?: (v: RiskVisibility) => void;
+  perimeterHelp?: string;
+}>) {
+  const riskId = resourceId;
+  const [state, setState] = useState<ResourceVisibilityState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [level, setLevel] = useState<RiskVisibility>("CLIENT");
@@ -102,10 +128,12 @@ export function RiskVisibilityCard({ token, riskId, onChanged }: Readonly<{ toke
   useEffect(() => {
     let live = true;
     setState(null); setLoadError(null);
-    risksApi.getVisibility(token, riskId)
+    load(token, riskId)
       .then((s) => { if (live) setState(s); })
       .catch((err: unknown) => { if (live) setLoadError(describe(err)); });
     return () => { live = false; };
+    // `load` is a stable call to the resource's API: reloaded when the resource changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, riskId]);
 
   function startEdit() {
@@ -118,12 +146,12 @@ export function RiskVisibilityCard({ token, riskId, onChanged }: Readonly<{ toke
     if (saving) return;
     setSaving(true); setError(null);
     try {
-      const next = await risksApi.setVisibility(token, riskId, {
+      const next = await save(token, riskId, {
         visibility: level,
         ...(level === "CLIENT" ? {} : { addUserIds: add.map((p) => p.id), revokeUserIds: revoke }),
         reason: reason.trim(),
       });
-      setState(next); setEditing(false); onChanged(next.visibility);
+      setState({ ...next, inheritsFrom: state?.inheritsFrom ?? null }); setEditing(false); onChanged?.(next.visibility);
     } catch (err) {
       setError(describe(err));
     } finally {
@@ -136,18 +164,19 @@ export function RiskVisibilityCard({ token, riskId, onChanged }: Readonly<{ toke
 
   return <Card header={<h2>Visibilité</h2>}>
     {loadError && <MessageBanner tone="danger">{loadError}</MessageBanner>}
-    {state && <dl className="risk-sheet-facts">
+    {state?.inheritsFrom && <p className="risk-access-empty">{INHERITS_LABEL[state.inheritsFrom]}</p>}
+    {state && !state.inheritsFrom && <dl className="risk-sheet-facts">
       <div><dt>Niveau</dt><dd><RiskVisibilityBadge visibility={state.visibility} /></dd></div>
       <div><dt>Personnes nommées</dt><dd>{state.accessUserIds.length ? names(state.accessUserIds) : "Aucune"}</dd></div>
     </dl>}
-    {state && !editing && <Button variant="secondary" size="sm" onClick={startEdit}>Modifier la visibilité</Button>}
+    {state && !state.inheritsFrom && !editing && <Button variant="secondary" size="sm" onClick={startEdit}>Modifier la visibilité</Button>}
     {state && editing && <form className="core-form" onSubmit={submit}>
-      <VisibilityLevelField id="risk-visibility-level" value={level} onChange={setLevel} />
+      <VisibilityLevelField id={`${idPrefix}-level`} value={level} onChange={setLevel} perimeterHelp={perimeterHelp} />
       {level === "CLIENT" && state.accessUserIds.length > 0 && (
         <MessageBanner tone="warning">Revenir à « {RISK_VISIBILITY_LABELS.CLIENT} » retire toute la liste des personnes nommées.</MessageBanner>
       )}
       {level !== "CLIENT" && <>
-        <AccessPeopleField id="risk-visibility-add" token={token} value={add} onChange={setAdd} />
+        <AccessPeopleField id={`${idPrefix}-add`} token={token} value={add} onChange={setAdd} />
         {state.accessUserIds.length > 0 && <fieldset className="risk-access-revoke">
           <legend>Retirer de la liste</legend>
           {state.accessUserIds.map((u) => <label key={u}>
@@ -157,8 +186,8 @@ export function RiskVisibilityCard({ token, riskId, onChanged }: Readonly<{ toke
           </label>)}
         </fieldset>}
       </>}
-      <FormField label="Motif *" htmlFor="risk-visibility-reason">
-        <textarea id="risk-visibility-reason" value={reason} maxLength={500} required onChange={(e) => setReason(e.target.value)} />
+      <FormField label="Motif *" htmlFor={`${idPrefix}-reason`}>
+        <textarea id={`${idPrefix}-reason`} value={reason} maxLength={500} required onChange={(e) => setReason(e.target.value)} />
       </FormField>
       {error && <MessageBanner tone="danger">{error}</MessageBanner>}
       <div className="core-form-actions">

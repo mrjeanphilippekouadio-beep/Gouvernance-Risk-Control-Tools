@@ -14,7 +14,9 @@ import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { VisibilityResolver } from "./VisibilityResolver.js";
-import { READER_DEFAULT_SCOPE, SYSTEM_SCOPE } from "../domain/visibility.js";
+import { READER_DEFAULT_SCOPE, type Visibility } from "../domain/visibility.js";
+import type { ResourceVisibilityManager, VisibilityTarget } from "./resourceVisibility.js";
+import type { ResourceVisibilityState } from "../domain/repositories/ResourceAccessRepository.js";
 
 export interface KpiWithStatus extends Kpi {
   status: KpiStatus;
@@ -41,7 +43,54 @@ export class KpiService {
     private readonly audit: AuditRepository,
     /** DECISION-100 (lot V0): optional for existing tests — absent, a reader sees CLIENT rows only (fail-closed, SEC V0-01). Wired in server.ts. */
     private readonly visibility?: VisibilityResolver,
+    /** Lot V2: level and named-people list of a KPI. Optional: absent, every KPI stays CLIENT (restriction refused). */
+    private readonly access?: ResourceVisibilityManager,
   ) {}
+
+  /** I-4: `owner` is a free text, not an account — only the Risk Manager group changes a KPI's level. */
+  private target(kpi: Kpi): VisibilityTarget {
+    return { type: "KPI", entity: "Kpi", id: kpi.id, visibility: kpi.visibility ?? "CLIENT", ownerId: null, inheritsFrom: null };
+  }
+
+  async getAccess(actor: AuthenticatedUser, id: string): Promise<ResourceVisibilityState> {
+    requirePermission(actor, "kpi.read");
+    const kpi = await this.requireKpi(actor, id);
+    if (!this.access) return { visibility: kpi.visibility ?? "CLIENT", accessUserIds: [] };
+    return this.access.get(actor, this.target(kpi));
+  }
+
+  async setVisibility(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { visibility: Visibility; addUserIds?: string[]; revokeUserIds?: string[]; reason: string },
+    requestId: string,
+  ): Promise<ResourceVisibilityState> {
+    requirePermission(actor, "kpi.read");
+    const kpi = await this.requireKpi(actor, id);
+    if (!this.access) throw new ValidationError("Changing a KPI's visibility is not available");
+    return this.access.set(actor, this.target(kpi), input, requestId);
+  }
+
+  /**
+   * Lot V2 (SEC V1-02 extended, SEC V2-04 / CMP-V2-01): department / process of a restricted KPI decide who reads it. The
+   * perimeter part is written locked and audited in its own transaction; returns the fields left for the generic update.
+   */
+  private async applyPerimeter<T extends { departmentId?: string | null; processId?: string | null }>(
+    actor: AuthenticatedUser,
+    before: Kpi,
+    input: T,
+    reason: string | undefined,
+    requestId: string,
+  ): Promise<{ rest: Omit<T, "departmentId" | "processId"> | T; applied: boolean }> {
+    const changed = (input.departmentId !== undefined && (input.departmentId ?? null) !== before.departmentId)
+      || (input.processId !== undefined && (input.processId ?? null) !== before.processId);
+    const guard = this.access?.guardPerimeterChange(actor, this.target(before), changed, reason) ?? null;
+    if (!guard) return { rest: input, applied: false };
+    await this.access!.applyPerimeterChange(actor, { ...this.target(before), type: "KPI" },
+      guard, { departmentId: input.departmentId, processId: input.processId }, requestId);
+    const { departmentId: _d, processId: _p, ...rest } = input;
+    return { rest, applied: true };
+  }
 
   async create(
     actor: AuthenticatedUser,
@@ -56,8 +105,14 @@ export class KpiService {
       throw new ValidationError("targetValue must be a finite number (ACT-140: cible chiffrée obligatoire)");
     }
     await this.validateLinkage(actor.tenantId, input.departmentId ?? null, input.processId ?? null);
+    const visibility: Visibility = input.visibility ?? "CLIENT";
+    if (visibility !== "CLIENT") {
+      if (!this.access) throw new ValidationError("Restricted visibility is not available");
+      const seesEverything = (await this.visibility?.resolve(actor))?.all === true;
+      await this.access.assertCreation(actor, { visibility, inheritsFrom: null, isOwner: false, departmentId: input.departmentId ?? null, processId: input.processId ?? null }, seesEverything);
+    }
 
-    const kpi = await this.kpis.create({ ...input, tenantId: actor.tenantId });
+    const kpi = await this.kpis.create({ ...input, visibility, tenantId: actor.tenantId });
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -96,11 +151,12 @@ export class KpiService {
   async update(
     actor: AuthenticatedUser,
     id: string,
-    input: UpdateKpiInput,
+    rawInput: UpdateKpiInput & { reason?: string },
     requestId: string,
   ): Promise<Kpi> {
     requirePermission(actor, "kpi.update");
-    const before = await this.requireKpi(actor.tenantId, id);
+    const { reason: rawReason, ...input } = rawInput;
+    const before = await this.requireKpi(actor, id);
 
     if (input.label !== undefined && !input.label.trim()) throw new ValidationError("label cannot be empty");
     if (input.unit !== undefined && !input.unit.trim()) throw new ValidationError("unit cannot be empty");
@@ -115,7 +171,9 @@ export class KpiService {
       await this.validateLinkage(actor.tenantId, departmentId, processId);
     }
 
-    const after = await this.kpis.update(actor.tenantId, id, input);
+    const { rest } = await this.applyPerimeter(actor, before, input, rawReason, requestId);
+    if (!Object.values(rest).some((v) => v !== undefined)) return this.requireKpi(actor, id);
+    const after = await this.kpis.update(actor.tenantId, id, rest);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -141,16 +199,18 @@ export class KpiService {
   async link(
     actor: AuthenticatedUser,
     id: string,
-    input: { departmentId?: string | null; processId?: string | null },
+    input: { departmentId?: string | null; processId?: string | null; reason?: string },
     requestId: string,
   ): Promise<Kpi> {
     requirePermission(actor, "kpi.update");
-    const before = await this.requireKpi(actor.tenantId, id);
+    const before = await this.requireKpi(actor, id);
 
     const departmentId = input.departmentId !== undefined ? input.departmentId : before.departmentId;
     const processId = input.processId !== undefined ? input.processId : before.processId;
     await this.validateLinkage(actor.tenantId, departmentId, processId);
 
+    // A restricted KPI: the link is a perimeter change (locked, audited PERMISSION_CHANGE, same transaction).
+    if ((await this.applyPerimeter(actor, before, input, input.reason, requestId)).applied) return this.requireKpi(actor, id);
     const after = await this.kpis.update(actor.tenantId, id, {
       departmentId: input.departmentId,
       processId: input.processId,
@@ -181,7 +241,7 @@ export class KpiService {
   async archive(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<void> {
     requirePermission(actor, "kpi.delete");
     if (!reason.trim()) throw new ValidationError("A reason is required to archive a KPI");
-    const before = await this.requireKpi(actor.tenantId, id);
+    const before = await this.requireKpi(actor, id);
 
     await this.kpis.softDelete(actor.tenantId, id, actor.userId, reason);
 
@@ -198,8 +258,9 @@ export class KpiService {
     });
   }
 
-  private async requireKpi(tenantId: string, id: string): Promise<Kpi> {
-    const kpi = await this.kpis.getById(tenantId, id, SYSTEM_SCOPE);
+  /** SEC V0-04 (lot V2): a KPI the actor may not read answers like a missing one, for every write too. */
+  private async requireKpi(actor: AuthenticatedUser, id: string): Promise<Kpi> {
+    const kpi = await this.kpis.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!kpi) throw new NotFoundError("Kpi", id);
     return kpi;
   }

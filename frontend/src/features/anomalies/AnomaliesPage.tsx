@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { ResourceVisibilityCard, RiskVisibilityBadge } from "../risks/RiskVisibility";
+import { anomalyVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { describeError } from "../indicators/shared";
 import { Button, Card, FormField, MessageBanner, Modal, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
 import { anomaliesApi, type Anomaly, type AnomalySeverity, type AnomalyStatus } from "../../api/anomalies";
@@ -77,6 +79,7 @@ export function AnomaliesPage({ token }: Props) {
     { key: "description", header: "Anomalie", render: (row) => <div className="workflow-cell-stack"><strong>{row.description}</strong>{row.origin && <small>Origine : {row.origin}</small>}</div> },
     { key: "severity", header: "Gravité", render: (row) => <StatusBadge label={severityLabels[row.severity]} tone={toneForSeverity(row.severity)} /> },
     { key: "status", header: "Statut", render: (row) => <StatusBadge label={statusLabels[row.status]} tone={toneForStatus(row.status)} /> },
+    { key: "visibility", header: "Visibilité", render: (row) => <RiskVisibilityBadge visibility={row.visibility} /> },
     { key: "observed", header: "Observée le", render: (row) => dateLabel(row.observedAt) },
     { key: "actions", header: "Actions", render: (row) => <Button onClick={() => open(row)}>Ouvrir</Button> },
   ], []);
@@ -123,6 +126,8 @@ export function AnomaliesPage({ token }: Props) {
         <FormField label="Nouveau statut" htmlFor="anomaly-target"><select id="anomaly-target" value={targetStatus} onChange={(e) => { setTargetStatus(e.target.value as "" | AnomalyStatus); setTransitionError(null); }}><option value="">Choisir…</option>{transitionTargets.map((s) => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></FormField>
         <FormField label="Commentaire" htmlFor="anomaly-comment"><textarea id="anomaly-comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} /></FormField>
         <div className="workflow-actions"><Button variant="primary" disabled={saving || !targetStatus} onClick={() => void transition()}>{saving ? "Enregistrement…" : "Appliquer"}</Button></div>
+        <ResourceVisibilityCard token={token} resourceId={selected.id} idPrefix="anomaly-visibility" perimeterHelp={PERIMETER_HELP.ANOMALY}
+          load={anomalyVisibilityApi.get} save={anomalyVisibilityApi.set} />
       </div>}
     </Modal>
   </section>;

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { mountVisibilityRoutes, VisibilityLevel } from "./resourceVisibility.routes.js";
 import { reasonText } from "../validation.js";
 import type { KpiService } from "../../services/KpiService.js";
 
@@ -14,13 +15,16 @@ const CreateKpiBody = z.object({
   departmentId: z.string().nullish(),
   processId: z.string().nullish(),
   active: z.boolean().optional(),
+  visibility: VisibilityLevel.optional(),
 });
 
-const UpdateKpiBody = CreateKpiBody.partial();
+/** Lot V2: `reason` required by the service when the department or process of a restricted KPI changes. */
+const UpdateKpiBody = CreateKpiBody.omit({ visibility: true }).partial().extend({ reason: reasonText(500).optional() });
 
 const LinkKpiBody = z.object({
   departmentId: z.string().nullish(),
   processId: z.string().nullish(),
+  reason: reasonText(500).optional(),
 });
 
 const ArchiveKpiBody = z.object({ reason: reasonText(2000) });
@@ -61,6 +65,8 @@ export function kpisRouter(kpiService: KpiService): Router {
       next(err);
     }
   });
+
+  mountVisibilityRoutes(router, kpiService);
 
   router.patch("/:id", async (req, res, next) => {
     try {
