@@ -241,14 +241,17 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       expect((await notifs("rm", I("a06"))).length - n0).toBe(1);
     });
 
-    it("OBSERVATION (other openings of PERIMETRE are not covered by q207): a department group assigned to a person opens the department's restricted resources with no reason, no PERMISSION_CHANGE and no notification", async () => {
+    it("q212 (V3, was an OBSERVATION in V2bis): a department group assigned to a person now needs a reason outside the RM group (see QA-visibility-v3 for the full rule)", async () => {
       await sql("UPDATE users SET roles = roles || ARRAY['role.assign','role.read']::text[] WHERE email = 'adm@vv1.test'");
-      const n0 = (await notifs("rm", I("c02"))).length;
-      const r = await post("adm", `/roles/${I("301")}/assign`, { userId: UID.out });
+      const n0 = (await notifs("rm", I("301"))).length;
+      const refused = await post("adm", `/roles/${I("301")}/assign`, { userId: UID.out });
+      expect(refused.status, refused.text).toBe(400);
+      expect(await sees("out", `/controls/${I("c02")}`)).toBe(false);
+      const r = await post("adm", `/roles/${I("301")}/assign`, { userId: UID.out, reason: "Motif V2bis" });
       expect([200, 201], r.text).toContain(r.status);
       expect(await sees("out", `/controls/${I("c02")}`)).toBe(true);
-      expect((await permChanges(I("c02"))).filter((p) => p.user_id === UID.adm)).toEqual([]);
-      expect((await notifs("rm", I("c02"))).length).toBe(n0);
+      expect((await permChanges(I("301"))).filter((p) => p.user_id === UID.adm)).toHaveLength(1);
+      expect((await notifs("rm", I("301"))).length - n0).toBe(1);
       // the last role of an account cannot be revoked through the API: restore the state by SQL
       await sql("UPDATE user_roles SET revoked_at = now() WHERE user_id = $1 AND role_id = $2 AND revoked_at IS NULL", [UID.out, I("301")]);
       expect(await sees("out", `/controls/${I("c02")}`)).toBe(false);
@@ -417,11 +420,11 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
 
   // ---------------------------------------------------------------------------------------------- LIST (q208)
   describe("LIST: GET /restricted-resources", () => {
-    it("401 anonymous; 200 for the Risk Manager group only; 403 for Committee, Audit and every ordinary profile", async () => {
+    it("401 anonymous; 200 for the groups that see everything (RM, Committee, Audit since q209); 403 for every ordinary profile", async () => {
       expect((await call(null, "GET", "/restricted-resources")).status).toBe(401);
       const codes: Record<string, number> = {};
       for (const w of WHO) codes[w] = (await get(w, "/restricted-resources")).status;
-      expect(codes).toEqual({ own: 403, n1: 403, raci: 403, pown: 403, dept: 403, named: 403, out: 403, out2: 403, rm: 200, com: 403, aud: 403, adm: 403 });
+      expect(codes).toEqual({ own: 403, n1: 403, raci: 403, pown: 403, dept: 403, named: 403, out: 403, out2: 403, rm: 200, com: 200, aud: 200, adm: 403 });
     });
     it("content = exactly the restricted rows of the tenant in the database (type, id, level, active access count), no CLIENT row, no foreign tenant, ordered by update date desc", async () => {
       await sql("INSERT INTO tenants (id, name) VALUES ($1, 'Autre tenant V2bis') ON CONFLICT DO NOTHING", [I("f00")]);
@@ -471,13 +474,13 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       expect(ids).not.toContain(I("d01")); // anomaly following it
       expect(ids).not.toContain(I("a02")); // plan following it
     });
-    it("OBSERVATION (edge): a holder of resourcevisibility.set DIRECTLY in users.roles but outside the Risk Manager group reads the whole list (labels of restricted items he cannot read himself)", async () => {
+    it("PRIV-V3-01 (was an OBSERVATION in V2bis): a holder of resourcevisibility.set DIRECTLY in users.roles, outside the groups that see everything, gets 403 on the list", async () => {
       await sql("UPDATE users SET roles = roles || ARRAY['resourcevisibility.set']::text[] WHERE email = 'adm@vv1.test'");
       try {
         expect((await get("adm", `/risks/${I("503")}`)).status, "he cannot read the risk").toBe(404);
         const r = await get("adm", "/restricted-resources");
-        expect(r.status).toBe(200); // pinned: the gate is the permission string, not the group
-        expect(r.text).toContain("CANARY-NOMIN-DESC");
+        expect(r.status).toBe(403);
+        expect(r.text).not.toContain("CANARY");
       } finally {
         await sql("UPDATE users SET roles = array_remove(roles, 'resourcevisibility.set') WHERE email = 'adm@vv1.test'");
       }
