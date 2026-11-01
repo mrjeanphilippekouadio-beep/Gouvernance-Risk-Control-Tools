@@ -105,3 +105,17 @@ Les autres écrivains de `user_roles` (passation du dernier RM) sont internes au
 | INFO (comptes et archivage, `lastChange` au Comité, N+1 NOMINATIF) | à acter | HUMAN / A06 |
 
 Verdict : **VERT avec réserves.** CLOSED ne vaut pas validation Risk, Compliance ou Privacy.
+
+## 5. Retest (lecture de `git diff 76c80dc..HEAD -- backend/src`, commits 97889be et 0275d24)
+
+| Point | Résultat | Détail |
+|---|---|---|
+| SEC V3-01 `RoleService.update` | **RETEST_PASS** | Lier un rôle à un département déclenche maintenant la règle q212. Pour chaque membre actif, `guardDepartmentGroupOpening` est appelé : un motif est exigé hors groupe RM. Le refus a lieu avant toute écriture. La ligne d'audit porte `widening`, `through: DEPARTMENT_GROUP` et la liste `opened` par membre. Le motif (`cleanReason`) est le même texte que celui contrôlé par la garde. Le RM est notifié. Résidus INFO : (i) l'audit de `update` reste écrit après la mise à jour, hors transaction (patron historique des rôles, même classe que V2-04) ; (ii) la liste des membres est lue sans verrou. Une attribution concurrente au rôle encore non lié peut donc échapper à la trace (fenêtre étroite, même classe que q213). |
+| PRIV-V3-01 accès à la liste | **RETEST_PASS** | Le contrôle d'accès repose maintenant uniquement sur `visibility_sees_everything`, c'est-à-dire l'appartenance réelle à RM, Comité ou Audit. Détenir `resourcevisibility.set` ne suffit plus. Ce n'est pas un resserrement fonctionnel : cette permission est déjà réservée au groupe RM. |
+| PRIV-V3-05 auteur du dernier changement | **RETEST_PASS** | `userId` et `byName` ne sont rendus que si l'acteur détient `resourcevisibility.set` (groupe RM uniquement) ou `audit.read` (groupe Audit uniquement, q203). Pour le Comité, ces champs sont retirés ; il garde la date, le motif et `widening`. Le motif visible du Comité est posé au PO (q215/q216). |
+| N+1 sur un risque NOMINATIF | **RETEST_PASS** | `designationOpening` renvoie null pour `superior owner` sur un risque NOMINATIF : pas de motif exigé, pas de `PERMISSION_CHANGE`, conforme à I-3. Pour le propriétaire, la règle q212 est inchangée. |
+| QA-V3-03 attribution de rôle | **RETEST_PASS** | `PostgresRoleRepository.assignToUser` écrit `ROLE_CHANGE` et `PERMISSION_CHANGE` avant son COMMIT (`insertAuditEvent` sur le même client). Avec les faux dépôts des tests, ces lignes sont écrites juste après. La notification part après le COMMIT, en best-effort. |
+| QA-V3-04 désignation | **RETEST_PASS** | `assignOwner` et `assignSuperiorOwner` passent par `runAudited` : `ASSIGN` et `PERMISSION_CHANGE` sont écrites dans la même transaction que la mise à jour. Le filtre tenant et `deleted_at` sont conservés. |
+
+Restent ouverts : V3-02 et les INFO de comptage et de motif visible du Comité, posés au PO (q215, q216).
+**Verdict après retest : VERT.**
