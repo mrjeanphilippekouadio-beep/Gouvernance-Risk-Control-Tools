@@ -47,7 +47,7 @@ export interface RestrictedResource {
   accessCount: number;
   updatedAt: string;
   /** R-1: last visibility change (author id, date, reason, widening), when there is one. */
-  lastChange: { userId: string; at: string; reason: string | null; widening: boolean | null } | null;
+  lastChange: { userId?: string; byName?: string | null; at: string; reason: string | null; widening: boolean | null } | null;
 }
 
 /** V3 (q196, q198): one number per type the reader may list; null for the groups that see everything (no mention). */

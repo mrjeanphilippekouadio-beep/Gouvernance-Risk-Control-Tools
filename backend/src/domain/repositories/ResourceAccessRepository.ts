@@ -84,6 +84,8 @@ export interface ResourceAccessRepository {
   hiddenCounts(tenantId: string, userId: string): Promise<HiddenCounts | null>;
   /** q209: whether `userId` belongs to a fixed group that sees everything (Risk Manager, Committee, Audit). */
   seesEverything(tenantId: string, userId: string): Promise<boolean>;
+  /** Codex P2 (PR #225): active membership of the Risk Manager group (role `system_group = 'RISK_MANAGER'`). */
+  isRiskManagerMember(tenantId: string, userId: string): Promise<boolean>;
   /** q208: every restricted resource of the tenant (any root, not deleted), with its active named-people count. */
   /** V3: paginated (`limit` 1..500, default 200; `offset` >= 0), most recently changed first. */
   listRestricted(tenantId: string, page?: { limit?: number; offset?: number }): Promise<RestrictedResourceRow[]>;

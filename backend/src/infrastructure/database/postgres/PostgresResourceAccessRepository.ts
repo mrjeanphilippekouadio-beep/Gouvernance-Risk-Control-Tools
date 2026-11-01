@@ -72,6 +72,16 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
     return rows[0]?.ok === true;
   }
 
+  async isRiskManagerMember(tenantId: string, userId: string): Promise<boolean> {
+    const { rows } = await this.pool.query<{ ok: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM user_roles ur JOIN roles ro ON ro.id = ur.role_id AND ro.tenant_id = ur.tenant_id
+                      WHERE ur.tenant_id = $1 AND ur.user_id = $2 AND ur.revoked_at IS NULL
+                        AND ro.deleted_at IS NULL AND ro.system_group = 'RISK_MANAGER') AS ok`,
+      [tenantId, userId],
+    );
+    return rows[0]?.ok === true;
+  }
+
   async hiddenCounts(tenantId: string, userId: string): Promise<HiddenCounts | null> {
     if (await this.seesEverything(tenantId, userId)) return null;
     // One number per type, over the whole client, independent of any filter (spec §6). Only PERIMETRE restrictions are

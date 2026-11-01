@@ -40,7 +40,7 @@ export function RestrictedResourcesPage({ token }: Readonly<{ token: string }>) 
     { key: "access", header: "Personnes nommées", render: (r) => r.accessCount },
     { key: "updated", header: "Dernière modification", render: (r) => new Date(r.updatedAt).toLocaleDateString("fr-FR") },
     { key: "change", header: "Dernier changement de visibilité", render: (r) => r.lastChange
-      ? <>{new Date(r.lastChange.at).toLocaleDateString("fr-FR")}{r.lastChange.widening ? " · élargissement" : ""}<div className="muted">{r.lastChange.reason ?? "—"}</div></>
+      ? <>{new Date(r.lastChange.at).toLocaleDateString("fr-FR")}{r.lastChange.byName ? ` par ${r.lastChange.byName}` : ""}{r.lastChange.widening ? " · élargissement" : ""}<div className="muted">{r.lastChange.reason ?? "—"}</div></>
       : "—" },
   ];
 

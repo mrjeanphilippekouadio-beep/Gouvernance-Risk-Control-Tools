@@ -206,6 +206,15 @@ export class ResourceVisibilityManager {
   }
 
   /**
+   * Codex P2 (PR #225): no reason and no notification only for a real member of the Risk Manager group — the permission
+   * alone (e.g. carried by an identity-provider role) is not enough. Fails closed.
+   */
+  async exemptFromOpeningReason(actor: AuthenticatedUser): Promise<boolean> {
+    if (!actor.roles.includes("resourcevisibility.set")) return false;
+    return this.access.isRiskManagerMember(actor.tenantId, actor.userId);
+  }
+
+  /**
    * q207 (DECISION-107): before a RACI assignment on a risk, control or plan. Returns null when the person already reads
    * it (nothing opens); otherwise the assignment may open it: an author outside the Risk Manager group must give a reason.
    */
@@ -217,7 +226,7 @@ export class ResourceVisibilityManager {
     rawReason: string | undefined,
   ): Promise<{ reason: string | null; holdsRight: boolean } | null> {
     if (await this.access.canRead(actor.tenantId, type, id, userId)) return null;
-    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const holdsRight = await this.exemptFromOpeningReason(actor);
     const reason = rawReason?.trim() ? checkedReason(rawReason, "open a restricted resource through RACI") : null;
     if (!holdsRight && !reason) {
       throw new ValidationError("A reason (1 to 500 characters) is required: this RACI assignment gives read access to a restricted resource");
@@ -246,7 +255,7 @@ export class ResourceVisibilityManager {
   ): Promise<{ reason: string | null; holdsRight: boolean; opened: Array<{ type: string; id: string }> } | null> {
     const opened = await this.access.processOwnerGains(actor.tenantId, processId, newOwnerId);
     if (opened.length === 0) return null;
-    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const holdsRight = await this.exemptFromOpeningReason(actor);
     const reason = rawReason?.trim() ? checkedReason(rawReason, "open restricted resources through a process owner") : null;
     if (!holdsRight && !reason) {
       throw new ValidationError("A reason (1 to 500 characters) is required: the new process owner would read restricted resources");
@@ -266,7 +275,7 @@ export class ResourceVisibilityManager {
   ): Promise<{ reason: string | null; holdsRight: boolean; opened: Array<{ type: string; id: string }> } | null> {
     const opened = await this.access.departmentGroupGains(actor.tenantId, departmentId, userId);
     if (opened.length === 0) return null;
-    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const holdsRight = await this.exemptFromOpeningReason(actor);
     const reason = rawReason?.trim() ? checkedReason(rawReason, "open restricted resources through a department group") : null;
     if (!holdsRight && !reason) {
       throw new ValidationError("A reason (1 to 500 characters) is required: this role gives read access to restricted resources of its department");
@@ -282,7 +291,7 @@ export class ResourceVisibilityManager {
     rawReason: string | undefined,
   ): Promise<{ reason: string | null; holdsRight: boolean } | null> {
     if (await this.access.canRead(actor.tenantId, "RISK", riskId, userId)) return null;
-    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const holdsRight = await this.exemptFromOpeningReason(actor);
     const reason = rawReason?.trim() ? checkedReason(rawReason, "open a restricted risk through a designation") : null;
     if (!holdsRight && !reason) {
       throw new ValidationError("A reason (1 to 500 characters) is required: this designation gives read access to a restricted risk");

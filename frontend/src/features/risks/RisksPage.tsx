@@ -207,11 +207,13 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
     if (!ownerModalRisk || savingOwner) return;
     setSavingOwner(true);
     setOwnerModalError(null);
+    const ownerId = ownerDraft.trim() || null;
+    const superiorOwnerId = superiorDraft.trim() || null;
+    let ownerSaved = false;
     try {
-      const ownerId = ownerDraft.trim() || null;
-      const superiorOwnerId = superiorDraft.trim() || null;
       if (ownerId !== ownerModalRisk.ownerId) {
         await risksApi.assignOwner(token, ownerModalRisk.id, ownerId, designationReason.trim() || undefined);
+        ownerSaved = true;
       }
       if (superiorOwnerId !== ownerModalRisk.superiorOwnerId) {
         await risksApi.assignSuperiorOwner(token, ownerModalRisk.id, superiorOwnerId, designationReason.trim() || undefined);
@@ -219,7 +221,14 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
       setOwnerModalRisk(null);
       await refresh();
     } catch (err) {
-      setOwnerModalError(describeError(err));
+      if (ownerSaved) {
+        // Codex P2 (PR #225): the two designations are two calls; say what was saved and keep the modal in step with it.
+        setOwnerModalRisk({ ...ownerModalRisk, ownerId });
+        setOwnerModalError(`Le propriétaire a été enregistré ; le N+1 n'a pas pu l'être : ${describeError(err)}`);
+        await refresh();
+      } else {
+        setOwnerModalError(describeError(err));
+      }
     } finally {
       setSavingOwner(false);
     }

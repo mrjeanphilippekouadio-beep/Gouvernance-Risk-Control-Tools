@@ -21,6 +21,7 @@ function manager(over: Partial<Record<keyof ResourceAccessRepository, unknown>> 
     listRestricted: vi.fn(async () => []),
     departmentGroupGains: vi.fn(async () => []),
     canRead: vi.fn(async () => false),
+    isRiskManagerMember: vi.fn(async (_t: string, u: string) => u === RM),
     ...over,
   } as unknown as ResourceAccessRepository;
   const users = { getById: vi.fn(), listWithPermission: vi.fn(async () => [{ id: RM, displayName: "RM" }]) };
@@ -61,6 +62,9 @@ describe("V3 — q212: a department group or a risk designation that opens restr
     await expect(opens.m.guardDepartmentGroupOpening(actor(READER), "d1", "u1", "Mutation")).resolves.toMatchObject({ reason: "Mutation", holdsRight: false });
     await expect(opens.m.guardDepartmentGroupOpening(actor(RM, ["resourcevisibility.set"]), "d1", "u1", undefined)).resolves.toMatchObject({ holdsRight: true });
     await expect(manager().m.guardDepartmentGroupOpening(actor(READER), "d1", "u1", undefined)).resolves.toBeNull();
+    // Codex P2 (PR #225): the permission alone, without membership of the Risk Manager group, exempts nothing
+    await expect(opens.m.guardDepartmentGroupOpening(actor(READER, ["resourcevisibility.set"]), "d1", "u1", undefined)).rejects.toBeInstanceOf(ValidationError);
+    await expect(manager().m.guardRiskDesignationOpening(actor(READER, ["resourcevisibility.set"]), "r1", "u1", undefined)).rejects.toBeInstanceOf(ValidationError);
   });
 
   it("risk designation: null when the person already reads it; reason required otherwise outside the RM group", async () => {
@@ -89,6 +93,10 @@ describe.skipIf(!hasLocalPg)("lot V3 on real PostgreSQL (local only)", () => {
     expect(await repo.hiddenCounts(ctx.tenant, x!)).toEqual({ RISK: 1, CONTROL: 0, ANOMALY: 1, ACTION_PLAN: 0, KPI: 0 });
     expect(await repo.hiddenCounts(ctx.tenant, o!)).toEqual({ RISK: 0, CONTROL: 0, ANOMALY: 0, ACTION_PLAN: 0, KPI: 0 });
     expect(await repo.seesEverything(ctx.tenant, com!)).toBe(true);
+    expect(await repo.isRiskManagerMember(ctx.tenant, com!)).toBe(false);
+    const rmRole = (await one(`INSERT INTO roles (tenant_id, name, permissions, system_group) VALUES ($1, $2, '{resourcevisibility.set}', 'RISK_MANAGER') RETURNING id`, [ctx.tenant, `RM-${Math.random()}`])).id;
+    await one(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $4) RETURNING id`, [ctx.tenant, rmRole, x, o]);
+    expect(await repo.isRiskManagerMember(ctx.tenant, x!)).toBe(true);
     expect(await repo.hiddenCounts(ctx.tenant, com!)).toBeNull();
   });
 

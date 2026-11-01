@@ -24,6 +24,7 @@ function world(readsBefore: boolean, readsAfter = true) {
     processOwnerGains: vi.fn(async () => []),
     listRestricted: vi.fn(async () => []),
     seesEverything: vi.fn(async () => false),
+    isRiskManagerMember: vi.fn(async (_t: string, u: string) => u === RM),
   } as unknown as ResourceAccessRepository;
   const notifications = { create: vi.fn(async (n: unknown) => n) };
   const users = {
@@ -62,6 +63,12 @@ describe("q207 — a RACI assignment that opens a restricted resource", () => {
     await w.svc.assign(actor(RM, ["raci.assign", "resourcevisibility.set"]), "RISK", RISK, TARGET, "C", "req");
     expect(w.audits.map((a) => a.action)).toEqual(["CREATE", "PERMISSION_CHANGE"]);
     expect(w.notifications.create).not.toHaveBeenCalled();
+  });
+
+  it("Codex P2 (PR #225): the permission without real Risk Manager membership exempts nothing", async () => {
+    const w = world(false);
+    await expect(w.svc.assign(actor(EDITOR, ["raci.assign", "resourcevisibility.set"]), "RISK", RISK, TARGET, "C", "r")).rejects.toBeInstanceOf(ValidationError);
+    expect(w.raci.create).not.toHaveBeenCalled();
   });
 
   it("nothing opens (the person already reads it, or the level ignores RACI): no reason, no trace, no notification", async () => {
