@@ -28,7 +28,7 @@ export interface RestrictedResourceRow {
   accessCount: number;
   updatedAt: Date;
   /** R-1 (CMP V2bis): the last visibility change of the resource (author, date, reason, widening), when there is one. */
-  lastChange: { userId: string; at: Date; reason: string | null; widening: boolean | null } | null;
+  lastChange: { userId?: string; byName?: string | null; at: Date; reason: string | null; widening: boolean | null } | null;
 }
 
 /** V3 (q196, q198): per root type, how many PERIMETRE resources the reader cannot see (NOMINATIF never counted). */

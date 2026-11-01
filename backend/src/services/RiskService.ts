@@ -58,8 +58,10 @@ export class RiskService {
   ) {}
 
   /** q212: before a designation, whether it opens the restricted risk (reason required outside the RM group). */
-  private async designationOpening(actor: AuthenticatedUser, risk: Risk, userId: string | null, reason: string | undefined) {
+  private async designationOpening(actor: AuthenticatedUser, risk: Risk, userId: string | null, reason: string | undefined, role: "owner" | "superior owner" = "owner") {
     if (!userId || !this.access || (risk.visibility ?? "CLIENT") === "CLIENT") return null;
+    // SEC V3 INFO: the N+1 reads a PERIMETRE risk only; designating them on a NOMINATIF risk opens nothing (I-3).
+    if (role === "superior owner" && risk.visibility === "NOMINATIF") return null;
     return this.access.guardRiskDesignationOpening(actor, risk.id, userId, reason);
   }
 
@@ -410,7 +412,7 @@ export class RiskService {
         throw new ValidationError("The superior owner (N+1) cannot be the same person as the risk owner");
       }
     }
-    const opening = await this.designationOpening(actor, before, superiorOwnerId, reason);
+    const opening = await this.designationOpening(actor, before, superiorOwnerId, reason, "superior owner");
 
     const after = await this.risks.assignSuperiorOwner(actor.tenantId, id, superiorOwnerId);
 

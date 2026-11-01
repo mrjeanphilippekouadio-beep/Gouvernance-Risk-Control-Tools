@@ -500,6 +500,17 @@ export class RoleService {
       }
     }
 
+    // SEC V3-01 (q212): linking a role to a department opens that department's PERIMETRE resources to every holder.
+    const openings: Array<{ userId: string; opened: Array<{ type: string; id: string }> }> = [];
+    let openingHoldsRight = false;
+    if (departmentChanges && input.departmentId && this.access) {
+      for (const a of await this.roles.listAssignments(actor.tenantId, id)) {
+        if (a.revokedAt) continue;
+        const guard = await this.access.guardDepartmentGroupOpening(actor, input.departmentId, a.userId, reason);
+        if (guard) { openings.push({ userId: a.userId, opened: guard.opened }); openingHoldsRight = guard.holdsRight; }
+      }
+    }
+
     const after = await this.roles.update(actor.tenantId, id, input, recheck);
 
     await this.audit.record({
@@ -509,10 +520,13 @@ export class RoleService {
       entityId: id,
       action: "PERMISSION_CHANGE",
       oldValue: before,
-      newValue: after,
+      newValue: openings.length > 0
+        ? { ...after, widening: true, through: "DEPARTMENT_GROUP", opened: openings }
+        : after,
       reason: cleanReason,
       requestId,
     });
+    if (openings.length > 0 && !openingHoldsRight) await this.access!.notifyDepartmentGroupOpening(actor, id, requestId);
 
     for (const userId of cumulUsers) await this.notifyAdminCumul(actor, userId, "Risk Manager", requestId);
     for (const userId of committeeCumulUsers) await this.notifyAdminCumul(actor, userId, "Comité des risques", requestId);

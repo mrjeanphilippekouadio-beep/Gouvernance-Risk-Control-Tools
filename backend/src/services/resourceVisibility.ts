@@ -319,10 +319,24 @@ export class ResourceVisibilityManager {
    * Manager group (`resourcevisibility.set`) and the Committee and Audit groups (who see everything anyway).
    */
   async listRestricted(actor: AuthenticatedUser, page?: { limit?: number; offset?: number }): Promise<RestrictedResourceRow[]> {
-    if (!actor.roles.includes("resourcevisibility.set") && !(await this.access.seesEverything(actor.tenantId, actor.userId))) {
+    // PRIV-V3-01: real membership of a group that sees everything (Risk Manager, Committee, Audit), never a permission alone.
+    if (!(await this.access.seesEverything(actor.tenantId, actor.userId))) {
       throw new ForbiddenError("Only the Risk Manager, Committee and Audit groups can list the restricted resources");
     }
-    return this.access.listRestricted(actor.tenantId, page);
+    const rows = await this.access.listRestricted(actor.tenantId, page);
+    // PRIV-V3-05 / R-1: the author of the last change, by name, for the Risk Manager group and Audit only (not the Committee).
+    const seesAuthor = actor.roles.includes("resourcevisibility.set") || actor.roles.includes("audit.read");
+    const names = new Map<string, string | null>();
+    if (seesAuthor && this.users) {
+      for (const id of new Set(rows.flatMap((r) => (r.lastChange?.userId ? [r.lastChange.userId] : [])))) {
+        names.set(id, (await this.users.getById(actor.tenantId, id))?.displayName ?? null);
+      }
+    }
+    return rows.map((r) => {
+      if (!r.lastChange) return r;
+      const { userId, ...rest } = r.lastChange;
+      return { ...r, lastChange: seesAuthor && userId ? { ...rest, userId, byName: names.get(userId) ?? null } : rest };
+    });
   }
 
   /**
