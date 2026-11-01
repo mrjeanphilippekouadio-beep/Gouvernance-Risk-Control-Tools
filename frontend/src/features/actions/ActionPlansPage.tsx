@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { ResourceVisibilityCard } from "../risks/RiskVisibility";
+import { actionPlanVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { Button, Card, DatePicker, FileUpload, FormField, Grid, GridItem, MessageBanner, Modal, ProgressBar, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
 import { useGovernanceConfirm, WithoutReviewBadge } from "../../design-system";
 import { ApiError } from "../../api/client";
@@ -47,6 +49,7 @@ export function ActionPlansPage({ token }: Props) {
   const [progressComment, setProgressComment] = useState("");
   const [closeTarget, setCloseTarget] = useState<ActionPlan | null>(null);
   const [raciTarget, setRaciTarget] = useState<ActionPlan | null>(null);
+  const [visibilityTarget, setVisibilityTarget] = useState<ActionPlan | null>(null);
   const [closureFile, setClosureFile] = useState<File | null>(null);
   const [evidenceId, setEvidenceId] = useState("");
   const [closureComment, setClosureComment] = useState("");
@@ -158,6 +161,7 @@ export function ActionPlansPage({ token }: Props) {
     { key: "progress", header: "Avancement", render: (action) => <div className="action-plan-progress"><ProgressBar value={action.progressPercent} label={`Avancement de ${action.title}`} /><small>{action.progressComment || "Aucun commentaire récent"}</small></div> },
     { key: "actions", header: "Actions", render: (action) => <div className="action-plan-row-actions">
       <Button onClick={() => setRaciTarget(action)}>RACI</Button>
+      <Button onClick={() => setVisibilityTarget(action)}>Visibilité</Button>
       {action.status === "PLANIFIEE" && <Button disabled={busyId === action.id} onClick={() => void startAction(action)}>Démarrer</Button>}
       {action.computedStatus !== "TERMINEE" && <Button disabled={busyId === action.id} onClick={() => { setProgressTarget({ action }); setProgressPercent(action.progressPercent); setProgressComment(action.progressComment ?? ""); }}>Avancement</Button>}
       {action.computedStatus === "EN_RETARD" && <Button disabled={busyId === action.id} onClick={() => void escalateAction(action)}>Escalader</Button>}
@@ -205,6 +209,11 @@ export function ActionPlansPage({ token }: Props) {
       <Table columns={columns} rows={actions} rowKey={(action) => action.id} loading={loading} emptyMessage="Aucun plan d'action ne correspond aux filtres." />
     </Card>
 
+    {visibilityTarget && <section className="action-plan-raci">
+      <div className="action-plan-raci-heading"><div><h2>Visibilité — {visibilityTarget.title}</h2></div><Button onClick={() => setVisibilityTarget(null)}>Fermer</Button></div>
+      <ResourceVisibilityCard token={token} resourceId={visibilityTarget.id} idPrefix="action-visibility" perimeterHelp={PERIMETER_HELP.ACTION_PLAN}
+        load={actionPlanVisibilityApi.get} save={actionPlanVisibilityApi.set} />
+    </section>}
     {raciTarget && <section className="action-plan-raci">
       <div className="action-plan-raci-heading"><div><h2>RACI — {raciTarget.title}</h2><p>Les attributions sont chargées et modifiées par le composant métier existant.</p></div><Button onClick={() => setRaciTarget(null)}>Fermer</Button></div>
       <RaciPanel token={token} entityType="ACTION_PLAN" entityId={raciTarget.id} />

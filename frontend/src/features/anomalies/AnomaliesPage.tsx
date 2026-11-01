@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { ResourceVisibilityCard } from "../risks/RiskVisibility";
+import { anomalyVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { describeError } from "../indicators/shared";
 import { Button, Card, FormField, MessageBanner, Modal, StatusBadge, Table, type StatusTone, type TableColumn } from "@djamo/design-system";
 import { anomaliesApi, type Anomaly, type AnomalySeverity, type AnomalyStatus } from "../../api/anomalies";
@@ -123,6 +125,8 @@ export function AnomaliesPage({ token }: Props) {
         <FormField label="Nouveau statut" htmlFor="anomaly-target"><select id="anomaly-target" value={targetStatus} onChange={(e) => { setTargetStatus(e.target.value as "" | AnomalyStatus); setTransitionError(null); }}><option value="">Choisir…</option>{transitionTargets.map((s) => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></FormField>
         <FormField label="Commentaire" htmlFor="anomaly-comment"><textarea id="anomaly-comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} /></FormField>
         <div className="workflow-actions"><Button variant="primary" disabled={saving || !targetStatus} onClick={() => void transition()}>{saving ? "Enregistrement…" : "Appliquer"}</Button></div>
+        <ResourceVisibilityCard token={token} resourceId={selected.id} idPrefix="anomaly-visibility" perimeterHelp={PERIMETER_HELP.ANOMALY}
+          load={anomalyVisibilityApi.get} save={anomalyVisibilityApi.set} />
       </div>}
     </Modal>
   </section>;

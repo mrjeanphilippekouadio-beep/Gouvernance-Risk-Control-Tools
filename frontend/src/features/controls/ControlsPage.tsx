@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { ResourceVisibilityCard } from "../risks/RiskVisibility";
+import { controlVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { Button } from "@djamo/design-system";
 import { ApiError } from "../../api/client";
 import { controlsApi, type Control, type ControlType } from "../../api/controls";
@@ -17,6 +19,7 @@ export function ControlsPage({ token }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [query, setQuery] = useState("");
+  const [visibilityTarget, setVisibilityTarget] = useState<Control | null>(null);
   const [label, setLabel] = useState("");
   const [objective, setObjective] = useState("");
   const [coveredRiskIds, setCoveredRiskIds] = useState<string[]>([]);
@@ -89,7 +92,11 @@ export function ControlsPage({ token }: Props) {
     <section className="core-panel"><div className="core-panel__head"><div><h2>Référentiel des contrôles</h2><p>Les exécutions et tests d’efficacité sont gérés dans des modules distincts.</p></div><label className="core-filter"><input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} /> Inclure les archivés</label></div>
       <div className="core-panel__body"><div className="core-filter"><input aria-label="Rechercher un contrôle" placeholder="Rechercher un contrôle…" value={query} onChange={(e) => setQuery(e.target.value)} /></div></div>
       {loading ? <div className="core-empty">Chargement des contrôles…</div> : filtered.length === 0 ? <div className="core-empty">Aucun contrôle correspondant.</div> :
-      <div className="core-table-wrap"><table className="core-table"><thead><tr><th>Contrôle</th><th>Risques couverts</th><th>Type</th><th>Fréquence</th><th>Exécutant</th><th>Statut</th><th>Action</th></tr></thead><tbody>{filtered.map((row) => <tr key={row.id}><td><strong>{row.label}</strong>{row.objective && <div className="muted">{row.objective}</div>}<div className="muted">{row.process || "Processus non renseigné"}</div></td><td>{row.coveredRiskIds.length}</td><td>{typeLabels[row.controlType]}</td><td>{row.frequency}</td><td>{row.executor}</td><td><span className={`core-badge ${row.status === "ACTIVE" ? "core-badge--success" : row.status === "DRAFT" ? "core-badge--warning" : ""}`}>{row.status === "ACTIVE" ? "Actif" : row.status === "DRAFT" ? "Brouillon" : "Archivé"}</span></td><td>{row.status !== "ARCHIVED" && <Button variant="destructive" onClick={() => void archive(row)}>Archiver</Button>}</td></tr>)}</tbody></table></div>}
+      <div className="core-table-wrap"><table className="core-table"><thead><tr><th>Contrôle</th><th>Risques couverts</th><th>Type</th><th>Fréquence</th><th>Exécutant</th><th>Statut</th><th>Action</th></tr></thead><tbody>{filtered.map((row) => <tr key={row.id}><td><strong>{row.label}</strong>{row.objective && <div className="muted">{row.objective}</div>}<div className="muted">{row.process || "Processus non renseigné"}</div></td><td>{row.coveredRiskIds.length}</td><td>{typeLabels[row.controlType]}</td><td>{row.frequency}</td><td>{row.executor}</td><td><span className={`core-badge ${row.status === "ACTIVE" ? "core-badge--success" : row.status === "DRAFT" ? "core-badge--warning" : ""}`}>{row.status === "ACTIVE" ? "Actif" : row.status === "DRAFT" ? "Brouillon" : "Archivé"}</span></td><td><Button onClick={() => setVisibilityTarget(row)}>Visibilité</Button> {row.status !== "ARCHIVED" && <Button variant="destructive" onClick={() => void archive(row)}>Archiver</Button>}</td></tr>)}</tbody></table></div>}
     </section>
+    {visibilityTarget && <section className="core-panel"><div className="core-panel__head"><div><h2>Visibilité — {visibilityTarget.label}</h2></div><Button onClick={() => setVisibilityTarget(null)}>Fermer</Button></div>
+      <div className="core-panel__body"><ResourceVisibilityCard token={token} resourceId={visibilityTarget.id} idPrefix="control-visibility" perimeterHelp={PERIMETER_HELP.CONTROL}
+        load={controlVisibilityApi.get} save={controlVisibilityApi.set} /></div>
+    </section>}
   </section>;
 }
