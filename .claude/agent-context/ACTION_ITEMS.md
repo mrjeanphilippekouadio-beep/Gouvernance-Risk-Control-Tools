@@ -432,8 +432,8 @@ pour l'usage.
 | @dev-backend | **SEC-RL-02/05 + INFO (revue A10 feat/r1-rights-lines)** : 404 cohérent sur `/roles/users/:userId` ; vue élargie invalide après sortie du groupe ou suspension (pas de réactivation au retour) ; demande expirée ne bloque plus ; id canonique (casse). À corriger dans la branche avant PR. | 2026-10-28 | **En cours** |
 | HUMAN @security @architect @privacy | **q203 (cockpit)** — SEC V0-03 : le journal d'audit restitue le contenu des ressources restreintes ; réserver `audit.read` au groupe Audit (A, recommandé) ou masquer le contenu non visible (B). Bloque V1. V0-05 rattaché à q202. | 2026-10-29 | **Fermé** (DECISION-104) |
 | @dev-backend @dev-db | **Visibilité — à lever avant V1 (SEC-visibility-v0)** : V0-01 (scope absent = pas de filtre → fail-closed), V0-02 (tableaux de bord, rapports, cartographie, `?coveringRiskId=`, vues 360, KRI/KPI, `ActionPlanService.dashboard` non filtrés), V0-04 (KPI `requireKpi` et validations de liens), V0-06/07 INFO ; retest A10 avant de livrer V1. | 2026-10-29 | **Ouvert** |
-| HUMAN @dev-backend @risk-manager | **q204 (cockpit)** — notifier le Risk Manager à chaque élargissement par le propriétaire (A, construit ainsi en V1) ou seulement si la restriction venait du RM (B). | 2026-11-01 | **Ouvert — HUMAN : q204** |
-| HUMAN @privacy @security @dev-backend | **q205 (cockpit)** — annuaire pour nommer des personnes à la création d'un risque : ouvrir à tout créateur/modificateur de risque après avis Privacy (A, recommandé) ou réserver au RM et détenteurs actuels (B). | 2026-11-01 | **Ouvert — HUMAN : q205** |
+| HUMAN @dev-backend @risk-manager | **q204 (cockpit)** — notifier le Risk Manager à chaque élargissement par le propriétaire (A, construit ainsi en V1) ou seulement si la restriction venait du RM (B). | 2026-11-01 | **Fermé** (DECISION-105) |
+| HUMAN @privacy @security @dev-backend | **q205 (cockpit)** — annuaire pour nommer des personnes à la création d'un risque : ouvrir à tout créateur/modificateur de risque après avis Privacy (A, recommandé) ou réserver au RM et détenteurs actuels (B). | 2026-11-01 | **Décidé** (DECISION-105) — avis Privacy puis code dans V1 |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
@@ -2513,4 +2513,16 @@ DECISION (PO, cockpit) : q201 B — on cache au Risk Manager restreint les
 RELATED: q201-q203, SEC-rights-lines, SEC-visibility-v0, DECISION-102/103.
 OWNER: @orchestrator @dev-backend @dev-db @security
 STATUS: DÉCIDÉ — q201/q202 sans code ; q203 à construire avec V1.
+
+DECISION-105
+DATE: 2026-11-01
+DECISION (PO, cockpit) : q204 A — le Risk Manager est prévenu à chaque
+  élargissement de visibilité par le propriétaire (déjà construit en V1) ;
+  q205 A — l'annuaire des comptes (identifiant et nom des comptes actifs)
+  s'ouvre à tout compte qui peut créer ou modifier un risque, après avis
+  Privacy, pour permettre de nommer des personnes ; mention à ajouter au
+  texte d'information R5.
+RELATED: q199, q204, q205, DECISION-097 (annuaire élargi à role.read), D6/R5.
+OWNER: @orchestrator @privacy @dev-backend
+STATUS: DÉCIDÉ — q204 fait ; q205 après avis Privacy, dans la PR V1.
 ```
