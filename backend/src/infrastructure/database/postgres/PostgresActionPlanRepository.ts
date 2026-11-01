@@ -125,8 +125,8 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
     const { rows } = await this.pool.query<ActionPlanRow>(
       `INSERT INTO action_plans
          (tenant_id, title, description, source_type, source_id, responsible_user_id,
-          department_id, due_date, created_by, status, progress_percent)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PLANIFIEE', 0)
+          department_id, due_date, created_by, status, progress_percent, visibility)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PLANIFIEE', 0, $10)
        RETURNING *`,
       [
         input.tenantId,
@@ -138,6 +138,7 @@ export class PostgresActionPlanRepository implements ActionPlanRepository {
         input.departmentId ?? null,
         input.dueDate,
         input.createdBy,
+        input.visibility ?? "CLIENT",
       ],
     );
     const row = rows[0];

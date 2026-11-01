@@ -2,6 +2,8 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type {
+  PerimeterChange,
+  PerimeterChangeResult,
   ResourceAccessRepository,
   ResourceVisibilityState,
   RestrictableResource,
@@ -146,34 +148,36 @@ export class ResourceVisibilityManager {
     return { reason: checkedReason(rawReason, "change the department or process of a restricted resource"), holdsRight };
   }
 
-  /** Effective readers now (SQL `<root>_visible_to`): measured before and after a perimeter change. */
-  readers(actor: AuthenticatedUser, type: RestrictableResource, id: string): Promise<string[]> {
-    return this.access.readers(actor.tenantId, type, id);
-  }
-
-  /** After a perimeter change: the PERMISSION_CHANGE row (with `widening` from the effective sets) and the notification. */
-  async recordPerimeterChange(
+  /**
+   * SEC V2-04 / CMP-V2-01: applies the department / process change of a restricted control or KPI under a row lock, with
+   * `widening` measured on the effective readers and the PERMISSION_CHANGE row in the same transaction; then notifies.
+   */
+  async applyPerimeterChange(
     actor: AuthenticatedUser,
-    target: VisibilityTarget,
+    target: VisibilityTarget & { type: "CONTROL" | "KPI" },
     guard: { reason: string; holdsRight: boolean },
-    readersBefore: string[],
-    values: { before: Record<string, unknown>; after: Record<string, unknown> },
+    change: PerimeterChange,
     requestId: string,
-  ): Promise<void> {
-    const readersAfter = await this.access.readers(actor.tenantId, target.type, target.id);
-    const widening = readersAfter.some((u) => !readersBefore.includes(u));
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: target.entity,
-      entityId: target.id,
-      action: "PERMISSION_CHANGE",
-      oldValue: { visibility: target.visibility, ...values.before },
-      newValue: { visibility: target.visibility, ...values.after, widening },
-      reason: guard.reason,
-      requestId,
-    });
-    if (widening && !guard.holdsRight) await this.notifyWidened(actor, target, requestId);
+  ): Promise<PerimeterChangeResult> {
+    const access = this.access;
+    const result = await writeAudited<PerimeterChangeResult>(
+      access.auditsInTransaction,
+      this.audit,
+      (audit) => access.changePerimeter(actor.tenantId, target.type, target.id, change, audit),
+      ({ before, after, widening }) => [{
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: target.entity,
+        entityId: target.id,
+        action: "PERMISSION_CHANGE",
+        oldValue: { visibility: target.visibility, ...before },
+        newValue: { visibility: target.visibility, ...after, widening },
+        reason: guard.reason,
+        requestId,
+      }],
+    );
+    if (result.widening && !guard.holdsRight) await this.notifyWidened(actor, target, requestId);
+    return result;
   }
 
   /** Among `ids`, those the actor may NOT read (one query). */

@@ -71,22 +71,25 @@ export class KpiService {
     return this.access.set(actor, this.target(kpi), input, requestId);
   }
 
-  /** Lot V2 (SEC V1-02 extended): department / process of a restricted KPI decide who reads it. */
-  private async perimeterGuard(actor: AuthenticatedUser, before: Kpi, input: { departmentId?: string | null; processId?: string | null }, reason: string | undefined) {
+  /**
+   * Lot V2 (SEC V1-02 extended, SEC V2-04 / CMP-V2-01): department / process of a restricted KPI decide who reads it. The
+   * perimeter part is written locked and audited in its own transaction; returns the fields left for the generic update.
+   */
+  private async applyPerimeter<T extends { departmentId?: string | null; processId?: string | null }>(
+    actor: AuthenticatedUser,
+    before: Kpi,
+    input: T,
+    reason: string | undefined,
+    requestId: string,
+  ): Promise<{ rest: Omit<T, "departmentId" | "processId"> | T; applied: boolean }> {
     const changed = (input.departmentId !== undefined && (input.departmentId ?? null) !== before.departmentId)
       || (input.processId !== undefined && (input.processId ?? null) !== before.processId);
     const guard = this.access?.guardPerimeterChange(actor, this.target(before), changed, reason) ?? null;
-    const readersBefore = guard ? await this.access!.readers(actor, "KPI", before.id) : [];
-    return {
-      reason: guard?.reason ?? null,
-      record: async (after: Kpi, requestId: string) => {
-        if (!guard) return;
-        await this.access!.recordPerimeterChange(actor, this.target(before), guard, readersBefore, {
-          before: { departmentId: before.departmentId, processId: before.processId },
-          after: { departmentId: after.departmentId, processId: after.processId },
-        }, requestId);
-      },
-    };
+    if (!guard) return { rest: input, applied: false };
+    await this.access!.applyPerimeterChange(actor, { ...this.target(before), type: "KPI" },
+      guard, { departmentId: input.departmentId, processId: input.processId }, requestId);
+    const { departmentId: _d, processId: _p, ...rest } = input;
+    return { rest, applied: true };
   }
 
   async create(
@@ -168,8 +171,9 @@ export class KpiService {
       await this.validateLinkage(actor.tenantId, departmentId, processId);
     }
 
-    const perimeter = await this.perimeterGuard(actor, before, input, rawReason);
-    const after = await this.kpis.update(actor.tenantId, id, input);
+    const { rest } = await this.applyPerimeter(actor, before, input, rawReason, requestId);
+    if (!Object.values(rest).some((v) => v !== undefined)) return this.requireKpi(actor, id);
+    const after = await this.kpis.update(actor.tenantId, id, rest);
 
     await this.audit.record({
       tenantId: actor.tenantId,
@@ -179,10 +183,9 @@ export class KpiService {
       action: "UPDATE",
       oldValue: before,
       newValue: after,
-      reason: perimeter.reason,
+      reason: null,
       requestId,
     });
-    await perimeter.record(after, requestId);
 
     return after;
   }
@@ -206,7 +209,8 @@ export class KpiService {
     const processId = input.processId !== undefined ? input.processId : before.processId;
     await this.validateLinkage(actor.tenantId, departmentId, processId);
 
-    const perimeter = await this.perimeterGuard(actor, before, input, input.reason);
+    // A restricted KPI: the link is a perimeter change (locked, audited PERMISSION_CHANGE, same transaction).
+    if ((await this.applyPerimeter(actor, before, input, input.reason, requestId)).applied) return this.requireKpi(actor, id);
     const after = await this.kpis.update(actor.tenantId, id, {
       departmentId: input.departmentId,
       processId: input.processId,
@@ -220,10 +224,9 @@ export class KpiService {
       action: "ASSIGN",
       oldValue: before,
       newValue: after,
-      reason: perimeter.reason,
+      reason: null,
       requestId,
     });
-    await perimeter.record(after, requestId);
 
     return after;
   }

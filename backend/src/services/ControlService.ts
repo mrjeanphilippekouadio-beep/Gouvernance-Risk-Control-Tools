@@ -166,26 +166,28 @@ export class ControlService {
     const perimeterChanged = (input.departmentId !== undefined && (input.departmentId ?? null) !== raw.departmentId)
       || (input.processId !== undefined && (input.processId ?? null) !== raw.processId);
     const guard = this.access?.guardPerimeterChange(actor, this.target(raw), perimeterChanged, reason) ?? null;
-    const readersBefore = guard ? await this.access!.readers(actor, "CONTROL", id) : [];
-
-    const after = await this.controls.update(actor.tenantId, id, input);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Control",
-      entityId: id,
-      action: input.status ? "STATUS_CHANGE" : "UPDATE",
-      oldValue: raw,
-      newValue: after,
-      reason: guard ? guard.reason : null,
-      requestId,
-    });
     if (guard) {
-      await this.access!.recordPerimeterChange(actor, this.target(raw), guard, readersBefore, {
-        before: { departmentId: raw.departmentId, processId: raw.processId },
-        after: { departmentId: after.departmentId, processId: after.processId },
-      }, requestId);
+      // SEC V2-04 / CMP-V2-01: the perimeter part is written first, locked and audited in its own transaction.
+      await this.access!.applyPerimeterChange(actor, { ...this.target(raw), type: "CONTROL" },
+        guard, { departmentId: input.departmentId, processId: input.processId }, requestId);
+      const { departmentId: _d, processId: _p, ...rest } = input;
+      input = rest;
+    }
+
+    const hasOtherFields = Object.values(input).some((v) => v !== undefined);
+    const after = hasOtherFields ? await this.controls.update(actor.tenantId, id, input) : await this.getRaw(actor, id);
+    if (hasOtherFields) {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Control",
+        entityId: id,
+        action: input.status ? "STATUS_CHANGE" : "UPDATE",
+        oldValue: raw,
+        newValue: after,
+        reason: null,
+        requestId,
+      });
     }
 
     return (await this.withoutHiddenRisks(actor, [after]))[0]!;

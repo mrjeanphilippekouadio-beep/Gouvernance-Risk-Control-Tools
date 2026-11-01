@@ -6,7 +6,7 @@
 --                           propriétaire qui soit un compte : `executor` est un texte).
 --   kpi_visible_to          réglage propre (I-4). PERIMETRE : groupe du département, responsable du processus + la liste.
 --                           NOMINATIF : la liste (`kpis.owner` est un texte libre, pas un compte).
---   anomaly_visible_to      suit le risque, sinon le contrôle, sinon son réglage propre ; le déclarant (`detected_by`)
+--   anomaly_visible_to      suit le risque, sinon le contrôle, sinon le contrôle de son exécution, sinon son réglage propre ; le déclarant (`detected_by`)
 --                           tient lieu de propriétaire pour le réglage propre (PERIMETRE sans département : le déclarant
 --                           et la liste).
 --   action_plan_visible_to  le responsable voit toujours son plan (règle « ce qui m'est assigné », sans voir la source) ;
@@ -94,6 +94,10 @@ CREATE OR REPLACE FUNCTION anomaly_visible_to(p_tenant uuid, p_anomaly uuid, p_u
     WHERE a.tenant_id = p_tenant AND a.id = p_anomaly AND CASE
       WHEN a.risk_id IS NOT NULL THEN risk_visible_to(p_tenant, a.risk_id, p_user)
       WHEN a.control_id IS NOT NULL THEN control_visible_to(p_tenant, a.control_id, p_user)
+      -- SEC V2-02 : une anomalie rattachée à une seule exécution suit le contrôle de cette exécution (ou son exécutant).
+      WHEN a.control_execution_id IS NOT NULL THEN COALESCE(
+        (SELECT ce.executed_by = p_user OR control_visible_to(p_tenant, ce.control_id, p_user)
+         FROM control_executions ce WHERE ce.tenant_id = p_tenant AND ce.id = a.control_execution_id), false)
       ELSE (
         a.visibility = 'CLIENT'
         OR visibility_sees_everything(p_tenant, p_user)

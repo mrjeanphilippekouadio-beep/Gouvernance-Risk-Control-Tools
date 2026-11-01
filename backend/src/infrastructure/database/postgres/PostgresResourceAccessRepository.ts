@@ -1,5 +1,7 @@
 import type { Pool } from "pg";
 import type {
+  PerimeterChange,
+  PerimeterChangeResult,
   ResourceAccessRepository,
   ResourceVisibilityChange,
   ResourceVisibilityState,
@@ -69,6 +71,39 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
       [tenantId, userId, departmentId, processId],
     );
     return rows[0]?.ok === true;
+  }
+
+  async changePerimeter(
+    tenantId: string,
+    type: "CONTROL" | "KPI",
+    id: string,
+    change: PerimeterChange,
+    audit?: TransactionalAudit<PerimeterChangeResult>,
+  ): Promise<PerimeterChangeResult> {
+    const root = ROOT[type];
+    return runAudited(this.pool, async (db) => {
+      const locked = await db.query<{ department_id: string | null; process_id: string | null }>(
+        `SELECT department_id, process_id FROM ${root.table} WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+        [tenantId, id],
+      );
+      const row = locked.rows[0];
+      if (!row) throw new NotFoundError(root.entity, id);
+      const readersBefore = await effectiveReaders(db, tenantId, type, id);
+      const after = {
+        departmentId: change.departmentId !== undefined ? change.departmentId : row.department_id,
+        processId: change.processId !== undefined ? change.processId : row.process_id,
+      };
+      await db.query(
+        `UPDATE ${root.table} SET department_id = $3, process_id = $4, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, id, after.departmentId, after.processId],
+      );
+      const readersAfter = await effectiveReaders(db, tenantId, type, id);
+      return {
+        before: { departmentId: row.department_id, processId: row.process_id },
+        after,
+        widening: readersAfter.some((u) => !readersBefore.includes(u)),
+      };
+    }, audit);
   }
 
   async changeVisibility(

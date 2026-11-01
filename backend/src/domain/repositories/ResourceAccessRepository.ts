@@ -20,6 +20,13 @@ export interface ResourceVisibilityChange {
   changedBy: string;
 }
 
+export interface PerimeterChange { departmentId?: string | null; processId?: string | null }
+export type PerimeterChangeResult = {
+  before: { departmentId: string | null; processId: string | null };
+  after: { departmentId: string | null; processId: string | null };
+  widening: boolean;
+};
+
 export type VisibilityChangeResult = { before: ResourceVisibilityState; after: ResourceVisibilityState; widening: boolean };
 
 /**
@@ -39,6 +46,17 @@ export interface ResourceAccessRepository {
     change: ResourceVisibilityChange,
     audit?: TransactionalAudit<VisibilityChangeResult>,
   ): Promise<VisibilityChangeResult>;
+  /**
+   * SEC V2-04 / CMP-V2-01: department and/or process of a restricted control or KPI changed under a row lock, with the
+   * effective readers measured before and after and the audit rows in the same transaction.
+   */
+  changePerimeter(
+    tenantId: string,
+    type: "CONTROL" | "KPI",
+    id: string,
+    change: PerimeterChange,
+    audit?: TransactionalAudit<PerimeterChangeResult>,
+  ): Promise<PerimeterChangeResult>;
   /** Active accounts of the tenant that read the resource now (SQL `<root>_visible_to`). */
   readers(tenantId: string, type: RestrictableResource | "RISK", id: string): Promise<string[]>;
   /** Among `ids`, those the scope may NOT read (any status). */

@@ -76,8 +76,8 @@ export class PostgresAnomalyRepository implements AnomalyRepository {
   async create(input: CreateAnomalyInput): Promise<Anomaly> {
     const { rows } = await this.pool.query<AnomalyRow>(
       `INSERT INTO anomalies
-         (tenant_id, control_id, control_execution_id, risk_id, description, severity, origin, detected_by, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'NEW')
+         (tenant_id, control_id, control_execution_id, risk_id, description, severity, origin, detected_by, status, visibility)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'NEW', $9)
        RETURNING *`,
       [
         input.tenantId,
@@ -88,6 +88,7 @@ export class PostgresAnomalyRepository implements AnomalyRepository {
         input.severity,
         input.origin ?? null,
         input.detectedBy,
+        input.visibility ?? "CLIENT",
       ],
     );
     const row = rows[0];

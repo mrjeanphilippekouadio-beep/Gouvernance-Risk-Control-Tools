@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { readerScope } from "../src/domain/visibility.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
@@ -192,6 +194,24 @@ describe.skipIf(!hasLocalPg)("lot V2 on real PostgreSQL (local only)", () => {
     expect((await repo.list(ctx.tenant, undefined, readerScope({ userId: resp! }))).filter((a) => ids.has(a.id))).toHaveLength(3);
   });
 
+  it("SEC V2-01: an anomaly / a plan created restricted is stored restricted; SEC V2-02: an execution-only anomaly follows its control", async () => {
+    const [decl, x] = await Promise.all(["decl", "x"].map(user));
+    const { PostgresAnomalyRepository } = await import("../src/infrastructure/database/postgres/PostgresAnomalyRepository.js");
+    const a = await new PostgresAnomalyRepository(ctx.pool).create({ tenantId: ctx.tenant, description: "d", severity: "LOW", detectedBy: decl!, visibility: "NOMINATIF" });
+    expect(a.visibility).toBe("NOMINATIF");
+    expect(await sees("anomaly_visible_to", a.id, x!)).toBe(false);
+    const p = await new PostgresActionPlanRepository(ctx.pool).create({ tenantId: ctx.tenant, title: "t", sourceType: "MANAGEMENT", sourceId: null,
+      responsibleUserId: decl!, departmentId: null, dueDate: new Date(), createdBy: decl!, visibility: "NOMINATIF" } as never);
+    expect(p.visibility).toBe("NOMINATIF");
+    expect(await sees("action_plan_visible_to", p.id, x!)).toBe(false);
+
+    const c = await control("NOMINATIF");
+    const ex = (await one(`INSERT INTO control_executions (tenant_id, control_id, executed_by, status) VALUES ($1, $2, $3, 'DONE') RETURNING id`, [ctx.tenant, c, decl])).id;
+    const an = (await one(`INSERT INTO anomalies (tenant_id, control_execution_id, description, severity, detected_by, status) VALUES ($1, $2, 't', 'LOW', $3, 'NEW') RETURNING id`, [ctx.tenant, ex, decl])).id;
+    expect(await sees("anomaly_visible_to", an, x!)).toBe(false);
+    expect(await sees("anomaly_visible_to", an, decl!)).toBe(true); // the executor of the execution
+  });
+
   it("kpi_visible_to: department group and process owner in PERIMETRE, list only in NOMINATIF", async () => {
     const [dm, x, rm] = await Promise.all(["dm", "x", "rm"].map(user));
     const d = await dept();
@@ -220,6 +240,24 @@ describe.skipIf(!hasLocalPg)("lot V2 on real PostgreSQL (local only)", () => {
       .rejects.toBeInstanceOf(NotFoundError);
   });
 
+  it("SEC V2-04 / CMP-V2-01: a restricted control's perimeter change is locked, measured and audited in one transaction", async () => {
+    const [rm, dm] = await Promise.all(["rm", "dm"].map(user));
+    const [d1, d2] = [await dept(), await dept()];
+    await member(await role(null, d2), dm!, rm!);
+    const c = await control("PERIMETRE", d1);
+    const repo = new PostgresResourceAccessRepository(ctx.pool);
+    const res = await repo.changePerimeter(ctx.tenant, "CONTROL", c, { departmentId: d2 }, (r) => [{
+      tenantId: ctx.tenant, userId: rm!, entityType: "Control", entityId: c, action: "PERMISSION_CHANGE",
+      oldValue: r.before, newValue: { ...r.after, widening: r.widening }, reason: "Réorganisation", requestId: "t-v2-04" }]);
+    expect(res).toEqual({ before: { departmentId: d1, processId: null }, after: { departmentId: d2, processId: null }, widening: true });
+    expect(await sees("control_visible_to", c, dm!)).toBe(true);
+    const audit = await one(`SELECT new_value->>'widening' AS w FROM audit_log WHERE request_id = 't-v2-04'`);
+    expect(audit?.w).toBe("true");
+    // a failing audit rolls the change back
+    await expect(repo.changePerimeter(ctx.tenant, "CONTROL", c, { departmentId: d1 }, () => [{ tenantId: ctx.tenant } as never])).rejects.toThrow();
+    expect((await one(`SELECT department_id FROM controls WHERE id = $1`, [c])).department_id).toBe(d2);
+  });
+
   it("SEC V1-02: a restricted risk's department change is measured on the effective readers (widening only if someone new reads it)", async () => {
     const [o, dm] = await Promise.all(["o", "dm"].map(user));
     const [d1, d2] = [await dept(), await dept()];
@@ -243,5 +281,16 @@ describe.skipIf(!hasLocalPg)("lot V2 on real PostgreSQL (local only)", () => {
          'visibility_sees_everything', 'visibility_in_department_group', 'visibility_granted') ORDER BY proname`);
     expect(rows).toHaveLength(7);
     for (const r of rows) expect(r.proconfig, r.proname).toEqual(["search_path=pg_catalog, public, pg_temp"]);
+  });
+});
+
+describe("lot V2 — wiring guard (SEC V2 recommendation: the fake-repository convention never applies in production)", () => {
+  const server = readFileSync(join(__dirname, "..", "src", "server.ts"), "utf8").replace(/\s+/g, " ");
+  it("server.ts gives the real control repository to executions, effectiveness and evidence, and the manager to the 4 services", () => {
+    expect(server).toContain("new ControlExecutionService(executionRepository, controlRepository,");
+    expect(server).toMatch(/new ControlEffectivenessService\( effectivenessRepository, controlRepository,/);
+    expect(server).toContain("new EvidenceService(evidenceRepository, documentStorage, auditRepository, executionRepository, controlRepository)");
+    expect(server).toContain("new ResourceVisibilityManager(new PostgresResourceAccessRepository(pool)");
+    expect((server.match(/visibilityResolver, resourceVisibilityManager/g) ?? []).length).toBe(4);
   });
 });

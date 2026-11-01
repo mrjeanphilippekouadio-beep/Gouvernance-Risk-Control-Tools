@@ -48,7 +48,7 @@ export class AnomalyService {
       id: a.id,
       visibility: a.visibility ?? "CLIENT",
       ownerId: a.detectedBy,
-      inheritsFrom: a.riskId ? "RISK" : a.controlId ? "CONTROL" : null,
+      inheritsFrom: a.riskId ? "RISK" : a.controlId || a.controlExecutionId ? "CONTROL" : null,
     };
   }
 
@@ -115,7 +115,7 @@ export class AnomalyService {
       // The declarer is the owner account of the anomaly: they always see it.
       await this.access.assertCreation(actor, {
         visibility,
-        inheritsFrom: input.riskId ? "RISK" : input.controlId ? "CONTROL" : null,
+        inheritsFrom: input.riskId ? "RISK" : input.controlId || input.controlExecutionId ? "CONTROL" : null,
         isOwner: true,
         departmentId: null,
         processId: null,
