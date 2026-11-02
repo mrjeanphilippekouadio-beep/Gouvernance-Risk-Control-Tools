@@ -443,10 +443,11 @@ pour l'usage.
 | HUMAN @security @dev-backend | **q212 (cockpit)** — ajouter quelqu'un au groupe d'un département ouvre les ressources PERIMETRE de ce département sans motif dédié ni notification RM : aligner sur q207 (A, recommandé) ou en rester là (B, attribution de rôle déjà auditée et contrôlée). Non bloquant pour V2bis. | 2026-11-01 | **Décidé** (DECISION-109) — A : à construire (groupe de département, propriétaire de risque) |
 | HUMAN @security @dev-backend | **q213 (cockpit)** — Codex P2 PR #224 : fenêtre de concurrence entre un changement de responsable de processus et une restriction simultanée par le RM. Accepter (A, recommandé) ou fermer par verrou (B). Le cas RACI est corrigé (transaction verrouillée). | 2026-11-01 | **Fermé** (DECISION-109) — A : fenêtre acceptée, fil Codex résolu |
 | HUMAN @orchestrator | **q214 (cockpit)** — fusionner la PR #224 (lot V2bis, sans migration) dans staging (A, recommandé) ou attendre (B). QA, Sécurité, Compliance verts, CI et Sonar verts, parcours navigateur rejoué (0 échec). | 2026-11-01 | **Fermé** (DECISION-109) — PR #224 fusionnée (b7121af), sans migration |
-| HUMAN @privacy @security | **q215 (cockpit)** — motif libre du dernier changement dans la liste des ressources restreintes : visible du Comité et de l'Audit avec consigne « ne nommez pas la personne » et aperçu 140 caractères (A, recommandé) ou réservé au RM et à l'Audit (B). L'auteur est déjà masqué au Comité (PRIV-V3-05). | 2026-11-01 | **Ouvert — HUMAN : q215** |
-| HUMAN @security @privacy | **q216 (cockpit)** — accepter deux résidus faibles de V3 : variation du nombre « éléments non visibles » dans le temps, refus « motif requis » qui révèle à un admin qu'un département a des ressources restreintes (A, recommandé) ou les réduire (B). | 2026-11-01 | **Ouvert — HUMAN : q216** |
-| HUMAN @privacy @compliance | **q217 (cockpit)** — durée de conservation des motifs de visibilité dans le journal d'audit (ajout seul) : à traiter avec le juriste / DPO dans l'avis D6 (A, recommandé) ou fixée maintenant (B). | 2026-11-01 | **Ouvert — HUMAN : q217** |
-| HUMAN @orchestrator | **q218 (cockpit)** — merger le lot V3 (PR #225) dans staging : QA, Sécurité, Privacy et CI vertes, 4 remarques Codex corrigées (exemption = appartenance réelle Risk Manager, auteur affiché, pagination, double désignation), parcours navigateur V3 rejoué (0 échec), aucune migration. | 2026-11-01 | **Ouvert — HUMAN : q218** |
+| HUMAN @privacy @security | **q215 (cockpit)** — motif libre du dernier changement dans la liste des ressources restreintes : visible du Comité et de l'Audit avec consigne « ne nommez pas la personne » et aperçu 140 caractères (A, recommandé) ou réservé au RM et à l'Audit (B). L'auteur est déjà masqué au Comité (PRIV-V3-05). | 2026-11-01 | **Décidé** (DECISION-110) — A : consigne « ne nommez pas la personne concernée » à la saisie + aperçu de 140 caractères dans la liste, à construire |
+| HUMAN @security @privacy | **q216 (cockpit)** — accepter deux résidus faibles de V3 : variation du nombre « éléments non visibles » dans le temps, refus « motif requis » qui révèle à un admin qu'un département a des ressources restreintes (A, recommandé) ou les réduire (B). | 2026-11-01 | **Fermé** (DECISION-110) — A : les deux résidus sont acceptés |
+| HUMAN @privacy @compliance | **q217 (cockpit)** — durée de conservation des motifs de visibilité dans le journal d'audit (ajout seul) : à traiter avec le juriste / DPO dans l'avis D6 (A, recommandé) ou fixée maintenant (B). | 2026-11-01 | **Décidé** (DECISION-110) — réponse libre : conservation d'un an, configurable ; cadrage technique ouvert (voir ligne suivante) |
+| HUMAN @orchestrator | **q218 (cockpit)** — merger le lot V3 (PR #225) dans staging : QA, Sécurité, Privacy et CI vertes, 4 remarques Codex corrigées (exemption = appartenance réelle Risk Manager, auteur affiché, pagination, double désignation), parcours navigateur V3 rejoué (0 échec), aucune migration. | 2026-11-01 | **Fermé** (DECISION-110) — PR #225 fusionnée (241433c), sans migration |
+| @architect @privacy @compliance @dev-db | **q217 — cadrage** : conserver les motifs de visibilité un an (durée configurable) alors que `audit_log` est en ajout seul (aucun `UPDATE`/`DELETE`, A23). Options à instruire avant tout code : (i) motif stocké hors du journal (table dédiée, référencée par l'audit) et effacé ou pseudonymisé à échéance ; (ii) pseudonymisation du seul champ `reason` par une fonction de purge tracée, exception explicite à l'ajout seul. Point à présenter au PO sous forme de question cockpit avec la recommandation A05/A15. | 2026-11-02 | **Ouvert — @architect** |
 | @dev-backend @security | **Lot V2 visibilité** — `feat/r1-visibility-v2` (migration 083) : QA ORANGE→corrigé (QA-VIS2-01..06, 147/147), Sécurité VERT après retest (V2-01/02/04 corrigés), Compliance conforme avec réserves (CMP-V2-01 corrigé ; CMP-V2-02 → q208). Info A10 : sur contrôle/KPI, périmètre et autres champs en deux transactions ; niveau « restreint » lu avant verrou. | 2026-11-01 | **Fait** — PR #223 fusionnée (65007ad), migrate.yml : 083 appliquée sur staging. Suite : q207/q208 (A06), V3, V4 |
 | HUMAN @dev-backend | **Résidus visibilité V1 (SEC-visibility-v1, retest vert)** : V1-05 LOW (ids de risques masqués dans la vue département, actions en retard de la vue exécutive, contrôles du contexte d'évaluation) et V1-03 (texte des anomalies/plans liés à un risque masqué, compteur d'anomalies de la vue exécutive) — acceptés jusqu'à V2, à corriger dans V2. | 2026-11-01 | **Ouvert — V2** |
 ## Decision Log
@@ -2591,4 +2592,18 @@ DECISION (PO, cockpit) : q214 A — fusion de la PR #224 (lot V2bis) dans
 RELATED: q207, q212-q214, DECISION-107/108, SEC V2bis.
 OWNER: @orchestrator @dev-backend @security
 STATUS: DÉCIDÉ — q213/q214 faits ; q212 à construire (prochain lot, avec V3).
+
+DECISION-110
+DATE: 2026-11-02
+DECISION (PO, cockpit) : q218 A — fusion de la PR #225 (lot V3) dans
+  staging (faite, 241433c, aucune migration). q215 A — le motif du dernier
+  changement reste visible du Comité et de l'Audit, avec la consigne « ne
+  nommez pas la personne concernée » à la saisie et un aperçu de 140
+  caractères dans la liste. q216 A — les deux résidus faibles de V3 sont
+  acceptés. q217 (réponse libre) — les motifs sont conservés un an, durée
+  configurable.
+RELATED: q215-q218, DECISION-108/109, PRIV-V3, SEC V3.
+OWNER: @orchestrator @dev-frontend @privacy @architect
+STATUS: DÉCIDÉ — q216/q218 faits ; q215 à construire ; q217 à cadrer
+  (conciliation avec le journal d'audit en ajout seul).
 ```
