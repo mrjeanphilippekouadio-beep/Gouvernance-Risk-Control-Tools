@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Pool } from "pg";
+import { BAD_REASONS, ROOT, qaVisibilityHarness } from "./qaVisibilityHarness.js";
 
 /**
  * QA-visibility-v2bis (level 2): DECISION-107. q207 A: a RACI assignment (`POST /raci`, `reason`) or a new process owner
@@ -21,12 +21,9 @@ import { Pool } from "pg";
  * It drops / rebuilds its own base (grc_qa_vv2bt): run with --no-file-parallelism next to the other live suites.
  * `it.fails` documents a CONFIRMED defect (turn it into `it` when fixed).
  */
-const ROOT = join(__dirname, "..", "..");
 const live = process.env["QA_VIS2B_LIVE"] === "1";
-const PGPORT = 55442;
 const DB = "grc_qa_vv2bt";
 const PORT = 8094;
-const API = `http://127.0.0.1:${PORT}/api/v1`;
 const I = (x: string) => `aaaaaaaa-0000-4000-8000-000000000${x}`;
 const K = (x: string) => `aaaaaaaa-0000-4000-8000-00000000${x}`;
 const UNKNOWN = I("9ff");
@@ -74,51 +71,20 @@ describe("QA-visibility-v2bis STATIC", () => {
 type Who = "own" | "n1" | "raci" | "pown" | "dept" | "named" | "out" | "out2" | "rm" | "com" | "aud" | "adm";
 const WHO: Who[] = ["own", "n1", "raci", "pown", "dept", "named", "out", "out2", "rm", "com", "aud", "adm"];
 const UID: Record<Who, string> = { own: I("101"), n1: I("102"), raci: I("103"), pown: I("104"), dept: I("105"), named: I("106"), out: I("107"), out2: I("108"), rm: I("109"), com: I("10a"), aud: I("10b"), adm: I("10c") };
-const TOK = {} as Record<Who, string>;
-let pg: Pool;
-const sh = (cmd: string, args: string[], env: Record<string, string> = {}) =>
-  execFileSync(cmd, args, { encoding: "utf8", env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"], timeout: 300000 });
-const sql = async <T = Record<string, unknown>>(q: string, p: unknown[] = []) => (await pg.query(q, p)).rows as T[];
-type Res = { status: number; text: string; json: any };
-async function call(who: Who | null, method: string, path: string, body?: unknown): Promise<Res> {
-  const r = await fetch(API + path, { method, headers: { "content-type": "application/json", ...(who ? { authorization: `Bearer ${TOK[who]}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
-  const text = await r.text();
-  let json: unknown = null;
-  try { json = JSON.parse(text); } catch { /* not JSON */ }
-  return { status: r.status, text, json };
-}
-const get = (w: Who, p: string) => call(w, "GET", p);
-const put = (w: Who, p: string, b: unknown) => call(w, "PUT", p, b);
-const post = (w: Who, p: string, b: unknown) => call(w, "POST", p, b);
-const audits = (id: string) => sql<{ action: string; reason: string | null; old_value: any; new_value: any; user_id: string; entity_type: string }>(
-  "SELECT action, reason, old_value, new_value, user_id, entity_type FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp, id", [id]);
-const permChanges = async (id: string) => (await audits(id)).filter((a) => a.action === "PERMISSION_CHANGE");
-const notifs = (who: Who, resourceId: string) => sql<{ event_type: string; message: string }>("SELECT event_type, message FROM notifications WHERE recipient_user_id = $1 AND resource_id = $2 ORDER BY sent_at, id", [UID[who], resourceId]);
+const H = qaVisibilityHarness({ db: DB, port: PORT, who: WHO, uid: UID });
+const { sql, call, get, put, post, audits, permChanges, notifs, sees } = H;
 const raciRows = (entityId: string, userId: string) => sql<{ id: string; role: string; deleted_at: Date | null }>("SELECT id, role, deleted_at FROM raci_assignments WHERE entity_id = $1 AND user_id = $2 ORDER BY created_at", [entityId, userId]);
-const sees = async (w: Who, path: string) => (await get(w, path)).status === 200;
 const raci = (w: Who, entityType: string, entityId: string, user: Who, role: string, reason?: unknown) =>
   post(w, "/raci", { entityType, entityId, userId: UID[user], role, ...(reason === undefined ? {} : { reason }) });
-const BAD_REASONS: unknown[] = ["", "   ", "\t\n ", "x".repeat(501), null, 5];
 
 describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQL 16", () => {
-  beforeAll(async () => {
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v2-setup.sh"), "up", DB]);
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v2-server.sh"), "start"], { QA_PORT: String(PORT), QA_DB: DB });
-    pg = new Pool({ host: "127.0.0.1", port: PGPORT, user: "postgres", database: DB, max: 4 });
+  beforeAll(() => H.start(async () => {
     await sql("UPDATE users SET roles = roles || ARRAY['execution.read','effectiveness.read','evidence.read']::text[]");
     // non-RM assigners: they read the objects (department group / owner / listed) and hold the assignment rights
     await sql("UPDATE users SET roles = roles || ARRAY['raci.assign','raci.revoke','process.responsibility.assign','anomaly.create','anomaly.update']::text[] WHERE email IN ('dept@vv1.test','own@vv1.test','named@vv1.test')");
     await sql("UPDATE users SET roles = array_remove(roles, 'resourcevisibility.set') WHERE email = 'adm@vv1.test'"); // real case: the right lives in the RM group (re-added in the dedicated test)
-    for (const w of WHO) {
-      const r = await fetch(`${API}/auth/local`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: `${w}@vv1.test`, password: "whatever" }) });
-      TOK[w] = ((await r.json()) as { accessToken: string }).accessToken;
-      expect(TOK[w], w).toBeTruthy();
-    }
-  }, 280000);
-  afterAll(async () => {
-    await pg?.end();
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v2-server.sh"), "stop"], { QA_PORT: String(PORT) });
-  });
+  }), 280000);
+  afterAll(() => H.stop());
 
   // ---------------------------------------------------------------------------------------------- RACI (q207)
   describe("RACI: a reason when the assignment opens a restricted resource", () => {

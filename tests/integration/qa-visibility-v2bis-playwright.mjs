@@ -4,7 +4,7 @@
 // ORACLES
 //  1. rm : l'entree de menu « Ressources restreintes » existe ; l'ecran liste des ressources restreintes (CANARY-V2-PLAN-PERIM, CANARY-V2-CTL-PERIM, CANARY-V2-KPI-PERIM,
 //     CANARY-PERIM-DESC) avec leur niveau, jamais une ressource CLIENT (CANARY-V2-PLAN-CLIENT) ; compteur « N ressource(s) restreinte(s) » = longueur de l'API.
-//  2. dept, out, com, aud : pas d'entree de menu ; GET /restricted-resources = 403 pour chacun.
+//  2. dept, out : pas d'entree de menu ; GET /restricted-resources = 403 pour chacun (com et aud y ont acces depuis q209, lot V3).
 //  3. dept (groupe Finance, lit le plan restreint CANARY-V2-PLAN-PERIM) ouvre « RACI », choisit `out` : « Ajouter » sans motif est REFUSE (message affiche, aucune ligne RACI) ;
 //     avec un motif il est ACCEPTE ; `out` lit alors le plan (API) ; une ligne PERMISSION_CHANGE (through RACI) porte le motif.
 //  4. rm : la cloche affiche « Une affectation RACI a ouvert la lecture d'un plan d'action restreint. » ; dept : aucune notification de ce type.
@@ -13,7 +13,7 @@
 //
 // Prerequis : qa-visibility-v2-setup.sh up grc_qa_vv2bp ; QA_PORT=8093 QA_DB=grc_qa_vv2bp QA_CORS=http://127.0.0.1:5199 qa-visibility-v2-server.sh start ;
 // vite 127.0.0.1:5199 (VITE_AUTH_PROVIDER=local, VITE_API_BASE_URL=http://127.0.0.1:8093). Variables : QA_API, QA_APP, QA_SHOTS, QA_DB.
-import { localApi, sleep, verdicts } from "./qa-helpers.mjs";
+import { checkNoErrors, finish, localApi, norm, openSession, sleep, verdicts } from "./qa-helpers.mjs";
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -31,42 +31,13 @@ const NAMES = ["dept", "out", "own", "rm", "com", "aud"];
 const EMAIL = Object.fromEntries(NAMES.map((n) => [n, `${n}@vv1.test`]));
 const { check, failures } = verdicts();
 const { login, api } = localApi(API, EMAIL);
-const norm = (s) => s.replace(/\s+/g, " ").trim();
 const PLAN = "CANARY-V2-PLAN-PERIM", PLAN_ID = I("a06"), CLIENT_PLAN = "CANARY-V2-PLAN-CLIENT", CLIENT_ID = I("a08");
 
 // dept doit pouvoir poser un RACI et lister les comptes : droits accordes par SQL (il lit deja le plan par le groupe Finance)
 sql(`update users set roles = roles || '{raci.assign,raci.revoke,user.read}' where email = 'dept@vv1.test' and not ('raci.assign' = any(roles))`);
 
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
-async function open(who) {
-  const context = await browser.newContext({ viewport: { width: 1360, height: 1000 } });
-  const page = await context.newPage();
-  const st = { page, context, consoleErrors: [], jsErrors: [] };
-  page.on("pageerror", (e) => st.jsErrors.push(String(e)));
-  page.on("console", (m) => { if (m.type() === "error") st.consoleErrors.push(m.text()); });
-  const nav = page.getByRole("navigation", { name: "Navigation principale" });
-  await page.goto(APP);
-  await page.getByLabel("Adresse e-mail QA").fill(EMAIL[who]);
-  await page.getByLabel("Mot de passe QA").fill("whatever");
-  await page.getByRole("button", { name: "Se connecter" }).click();
-  await nav.waitFor();
-  await sleep(800);
-  // le menu est un accordeon : on ouvre les groupes un a un jusqu'a trouver l'entree
-  const find = async (label) => {
-    const entry = nav.getByRole("button", { name: new RegExp(`^${label}`) });
-    if ((await entry.count()) > 0 && (await entry.first().isVisible())) return entry.first();
-    for (const g of await nav.locator("button.sidebar-group-toggle").all()) {
-      if ((await g.getAttribute("aria-expanded")) !== "true") await g.click();
-      if ((await entry.count()) > 0 && (await entry.first().isVisible())) return entry.first();
-    }
-    return null;
-  };
-  st.hasEntry = async (label) => (await find(label)) !== null;
-  st.go = async (label) => { const e = await find(label); await e.click(); await sleep(1400); };
-  st.text = async () => norm(await page.locator("main").innerText());
-  st.shot = (name) => page.screenshot({ path: `${SHOTS}/${who}-${name}.png`, fullPage: true });
-  return st;
-}
+const open = (who) => openSession(browser, { app: APP, email: EMAIL[who], shots: SHOTS, who });
 
 try {
   for (const w of NAMES) await login(w);
@@ -86,8 +57,8 @@ try {
   check("1.4 le compteur affiche la longueur de la liste de l'API", t.includes(`${apiRows.length} ressource(s) restreinte(s)`), `${apiRows.length}`);
   check("1.5 niveaux affiches (Restreint au perimetre / Personnes nommees)", /Restreint au périmètre/.test(t) && /Personnes nommées/.test(t));
 
-  // ---- 2. non RM
-  for (const w of ["dept", "out", "com", "aud"]) {
+  // ---- 2. hors des groupes qui voient tout (le Comite et l'Audit y ont acces depuis q209, lot V3)
+  for (const w of ["dept", "out"]) {
     const S = await open(w);
     check(`2.1 ${w} : pas d'entree de menu`, !(await S.hasEntry("Ressources restreintes")));
     check(`2.2 ${w} : GET /restricted-resources = 403`, (await api(w, "GET", "/restricted-resources")).status === 403);
@@ -137,15 +108,9 @@ try {
   check("5.1 plan CLIENT : RACI ajoute sans motif", sql(`select count(*) from raci_assignments where entity_id='${CLIENT_ID}' and user_id='${me.out}' and deleted_at is null`) === "1");
   check("5.2 aucun PERMISSION_CHANGE pour ce plan", sql(`select count(*) from audit_log where entity_id::text='${CLIENT_ID}' and action='PERMISSION_CHANGE'`) === "0");
 
-  const all = [R, D];
-  const js = all.flatMap((s) => s.jsErrors);
-  check("6.1 aucune erreur JS", js.length === 0, js.join(" | ").slice(0, 200));
-  const con = all.flatMap((s) => s.consoleErrors).filter((x) => !/40[0-9]|Failed to load resource/.test(x));
-  check("6.2 aucune erreur console imprevue", con.length === 0, con.join(" | ").slice(0, 300));
+  checkNoErrors(check, [R, D], "6");
 } catch (e) {
   check("exception du script", false, String(e).slice(0, 600));
 } finally {
-  await browser.close();
-  console.log(`\nECHECS : ${failures()}`);
-  process.exit(failures() ? 1 : 0);
+  await finish(browser, failures);
 }

@@ -13,7 +13,7 @@
 //
 // Prerequis : qa-visibility-v2-setup.sh up grc_qa_vv3p ; QA_PORT=8091 QA_DB=grc_qa_vv3p QA_CORS=http://127.0.0.1:5199 qa-visibility-v2-server.sh start ;
 // vite 127.0.0.1:5199 (VITE_AUTH_PROVIDER=local, VITE_API_BASE_URL=http://127.0.0.1:8091). Variables : QA_API, QA_APP, QA_SHOTS, QA_DB.
-import { localApi, sleep, verdicts } from "./qa-helpers.mjs";
+import { checkNoErrors, finish, localApi, norm, openSession, sleep, verdicts } from "./qa-helpers.mjs";
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -31,7 +31,6 @@ const NAMES = ["adm", "out", "rm", "com"];
 const EMAIL = Object.fromEntries(NAMES.map((n) => [n, `${n}@vv1.test`]));
 const { check, failures } = verdicts();
 const { login, api } = localApi(API, EMAIL);
-const norm = (s) => s.replace(/\s+/g, " ").trim();
 const plural = (n) => `${n} élément${n > 1 ? "s" : ""} non visible${n > 1 ? "s" : ""} (accès restreint).`;
 
 // adm porte les droits de gestion des roles (par SQL) ; il ne lit aucune ressource restreinte
@@ -39,34 +38,7 @@ sql(`update users set roles = array_remove(roles, 'resourcevisibility.set') wher
 sql(`update users set roles = roles || '{role.assign,role.read}' where email = 'adm@vv1.test' and not ('role.assign' = any(roles))`);
 
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
-async function open(who) {
-  const context = await browser.newContext({ viewport: { width: 1360, height: 1000 } });
-  const page = await context.newPage();
-  const st = { page, context, consoleErrors: [], jsErrors: [] };
-  page.on("pageerror", (e) => st.jsErrors.push(String(e)));
-  page.on("console", (m) => { if (m.type() === "error") st.consoleErrors.push(m.text()); });
-  const nav = page.getByRole("navigation", { name: "Navigation principale" });
-  await page.goto(APP);
-  await page.getByLabel("Adresse e-mail QA").fill(EMAIL[who]);
-  await page.getByLabel("Mot de passe QA").fill("whatever");
-  await page.getByRole("button", { name: "Se connecter" }).click();
-  await nav.waitFor();
-  await sleep(800);
-  const find = async (label) => {
-    const entry = nav.getByRole("button", { name: new RegExp(`^${label}`) });
-    if ((await entry.count()) > 0 && (await entry.first().isVisible())) return entry.first();
-    for (const g of await nav.locator("button.sidebar-group-toggle").all()) {
-      if ((await g.getAttribute("aria-expanded")) !== "true") await g.click();
-      if ((await entry.count()) > 0 && (await entry.first().isVisible())) return entry.first();
-    }
-    return null;
-  };
-  st.hasEntry = async (label) => (await find(label)) !== null;
-  st.go = async (label) => { const e = await find(label); await e.click(); await sleep(1500); };
-  st.text = async () => norm(await page.locator("main").innerText());
-  st.shot = (name) => page.screenshot({ path: `${SHOTS}/${who}-${name}.png`, fullPage: true });
-  return st;
-}
+const open = (who) => openSession(browser, { app: APP, email: EMAIL[who], shots: SHOTS, who });
 
 try {
   for (const w of NAMES) await login(w);
@@ -128,15 +100,9 @@ try {
   const c2 = (await api("out", "GET", "/hidden-counts")).json?.data;
   check("4.7 le comptage de out baisse (controles 2 -> 1, risques 1 -> 0)", c2?.CONTROL === 1 && c2?.RISK === 0, JSON.stringify(c2));
 
-  const all = [O, R, C, A];
-  const js = all.flatMap((s) => s.jsErrors);
-  check("5.1 aucune erreur JS", js.length === 0, js.join(" | ").slice(0, 200));
-  const con = all.flatMap((s) => s.consoleErrors).filter((x) => !/40[0-9]|Failed to load resource/.test(x));
-  check("5.2 aucune erreur console imprevue", con.length === 0, con.join(" | ").slice(0, 300));
+  checkNoErrors(check, [O, R, C, A], "5");
 } catch (e) {
   check("exception du script", false, String(e).slice(0, 600));
 } finally {
-  await browser.close();
-  console.log(`\nECHECS : ${failures()}`);
-  process.exit(failures() ? 1 : 0);
+  await finish(browser, failures);
 }

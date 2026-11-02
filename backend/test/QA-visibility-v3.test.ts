@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Pool } from "pg";
+import { BAD_REASONS, ROOT, qaVisibilityHarness } from "./qaVisibilityHarness.js";
 
 /**
  * QA-visibility-v3 (level 2): lot V3 (DECISION-108/109). q196/q198: `GET /hidden-counts` (« X éléments non visibles »: one number per type,
@@ -15,12 +15,9 @@ import { Pool } from "pg";
  * Live part: QA_VIS3_LIVE=1 + LOCAL cluster of tests/integration/qa-visibility-v1-setup.sh (127.0.0.1:55442, never a remote host); its own base
  * (grc_qa_vv3t) is rebuilt: run live suites with --no-file-parallelism. `it.fails` documents a CONFIRMED defect (turn it into `it` when fixed).
  */
-const ROOT = join(__dirname, "..", "..");
 const live = process.env["QA_VIS3_LIVE"] === "1";
-const PGPORT = 55442;
 const DB = "grc_qa_vv3t";
 const PORT = 8092;
-const API = `http://127.0.0.1:${PORT}/api/v1`;
 const I = (x: string) => `aaaaaaaa-0000-4000-8000-000000000${x}`;
 const K = (x: string) => `aaaaaaaa-0000-4000-8000-00000000${x}`;
 const read = (...p: string[]) => readFileSync(join(ROOT, ...p), "utf8");
@@ -89,29 +86,9 @@ const EFFECTIVE_PERIM: Record<"RISK" | "CONTROL" | "ANOMALY" | "ACTION_PLAN" | "
 };
 const expectedCounts = (who: Who) => Object.fromEntries(Object.entries(EFFECTIVE_PERIM).map(([t, items]) => [t, items.filter((i) => !i.readers.includes(who)).length]));
 
-const TOK = {} as Record<Who, string>;
-let pg: Pool;
-const sh = (cmd: string, args: string[], env: Record<string, string> = {}) =>
-  execFileSync(cmd, args, { encoding: "utf8", env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"], timeout: 300000 });
-const sql = async <T = Record<string, unknown>>(q: string, p: unknown[] = []) => (await pg.query(q, p)).rows as T[];
-type Res = { status: number; text: string; json: any };
-async function call(who: Who | null, method: string, path: string, body?: unknown): Promise<Res> {
-  const r = await fetch(API + path, { method, headers: { "content-type": "application/json", ...(who ? { authorization: `Bearer ${TOK[who]}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
-  const text = await r.text();
-  let json: unknown = null;
-  try { json = JSON.parse(text); } catch { /* not JSON */ }
-  return { status: r.status, text, json };
-}
-const get = (w: Who, p: string) => call(w, "GET", p);
-const put = (w: Who, p: string, b: unknown) => call(w, "PUT", p, b);
-const post = (w: Who, p: string, b: unknown) => call(w, "POST", p, b);
+const H = qaVisibilityHarness({ db: DB, port: PORT, who: WHO, uid: UID });
+const { sql, call, get, put, post, audits, permChanges, notifs, sees } = H;
 const counts = async (w: Who) => (await get(w, "/hidden-counts")).json?.data;
-const audits = (id: string) => sql<{ action: string; reason: string | null; old_value: any; new_value: any; user_id: string; entity_type: string }>(
-  "SELECT action, reason, old_value, new_value, user_id, entity_type FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp, id", [id]);
-const permChanges = async (id: string) => (await audits(id)).filter((a) => a.action === "PERMISSION_CHANGE");
-const notifs = (who: Who, resourceId: string) => sql<{ event_type: string; message: string }>("SELECT event_type, message FROM notifications WHERE recipient_user_id = $1 AND resource_id = $2 ORDER BY sent_at, id", [UID[who], resourceId]);
-const sees = async (w: Who, path: string) => (await get(w, path)).status === 200;
-const BAD_REASONS: unknown[] = ["", "   ", "\t\n ", "x".repeat(501), null, 5];
 const setVis = (w: Who, path: string, visibility: string, add: string[] = [], reason = "Motif QA V3") => put(w, `${path}/visibility`, { visibility, addUserIds: add, revokeUserIds: [], reason });
 const failAudit = async (entityId: string, action = "PERMISSION_CHANGE") => {
   await sql(`CREATE OR REPLACE FUNCTION qa_v3_fail_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action = '${action}' AND NEW.entity_id::text = '${entityId}' THEN RAISE EXCEPTION 'qa audit failure'; END IF; RETURN NEW; END $$`);
@@ -121,24 +98,13 @@ const failAudit = async (entityId: string, action = "PERMISSION_CHANGE") => {
 const restoreAudit = () => sql("DROP TRIGGER IF EXISTS qa_v3_fail ON audit_log");
 
 describe.skipIf(!live)("QA-visibility-v3 on the REAL server + LOCAL PostgreSQL 16", () => {
-  beforeAll(async () => {
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v2-setup.sh"), "up", DB]);
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v2-server.sh"), "start"], { QA_PORT: String(PORT), QA_DB: DB });
-    pg = new Pool({ host: "127.0.0.1", port: PGPORT, user: "postgres", database: DB, max: 4 });
+  beforeAll(() => H.start(async () => {
     await sql("UPDATE users SET roles = roles || ARRAY['execution.read','effectiveness.read','evidence.read']::text[]");
     await sql("UPDATE users SET roles = array_remove(roles, 'resourcevisibility.set') WHERE email = 'adm@vv1.test'"); // the right lives in the RM group
     await sql("UPDATE users SET roles = roles || ARRAY['role.assign','role.read','role.create','role.update']::text[] WHERE email = 'adm@vv1.test'");
     await sql("UPDATE users SET roles = roles || ARRAY['risk.owner.assign']::text[] WHERE email IN ('own@vv1.test','dept@vv1.test')");
-    for (const w of WHO) {
-      const r = await fetch(`${API}/auth/local`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: `${w}@vv1.test`, password: "whatever" }) });
-      TOK[w] = ((await r.json()) as { accessToken: string }).accessToken;
-      expect(TOK[w], w).toBeTruthy();
-    }
-  }, 280000);
-  afterAll(async () => {
-    await pg?.end();
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v2-server.sh"), "stop"], { QA_PORT: String(PORT) });
-  });
+  }), 280000);
+  afterAll(() => H.stop());
 
   // ---------------------------------------------------------------------------------------------- HIDDEN COUNTS
   describe("HIDDEN: GET /hidden-counts (q196, q198)", () => {
