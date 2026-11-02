@@ -1,9 +1,10 @@
 import type { RoleRepository, RoleUpdateRecheck } from "../domain/repositories/RoleRepository.js";
+import type { ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { RolePermissionChangeRepository } from "../domain/repositories/RolePermissionChangeRepository.js";
-import type { CreateRoleInput, Role, RolePermissionChangeStatus, SystemGroup, UpdateRoleInput } from "../domain/entities/Role.js";
+import type { CreateRoleInput, Role, RoleAssignment, RolePermissionChangeStatus, SystemGroup, UpdateRoleInput } from "../domain/entities/Role.js";
 import {
   ALL_PERMISSIONS,
   BASE_PERMISSIONS,
@@ -180,6 +181,8 @@ export class RoleService {
     private readonly designations?: Pick<GovernanceDesignationRepository, "getActive">,
     /** q200 (DECISION-103): individual grants of role.read.sensitive; absent = nobody holds it (fail closed). */
     private readonly sensitiveViews?: SensitiveViewGrantRepository,
+    /** q212 (DECISION-109): a department-group assignment that opens restricted resources is reasoned, traced, reported. */
+    private readonly access?: ResourceVisibilityManager,
   ) {}
 
   private readonly grantorsSeen = new Set<string>();
@@ -497,6 +500,17 @@ export class RoleService {
       }
     }
 
+    // SEC V3-01 (q212): linking a role to a department opens that department's PERIMETRE resources to every holder.
+    const openings: Array<{ userId: string; opened: Array<{ type: string; id: string }> }> = [];
+    let openingHoldsRight = false;
+    if (departmentChanges && input.departmentId && this.access) {
+      for (const a of await this.roles.listAssignments(actor.tenantId, id)) {
+        if (a.revokedAt) continue;
+        const guard = await this.access.guardDepartmentGroupOpening(actor, input.departmentId, a.userId, reason);
+        if (guard) { openings.push({ userId: a.userId, opened: guard.opened }); openingHoldsRight = guard.holdsRight; }
+      }
+    }
+
     const after = await this.roles.update(actor.tenantId, id, input, recheck);
 
     await this.audit.record({
@@ -506,10 +520,13 @@ export class RoleService {
       entityId: id,
       action: "PERMISSION_CHANGE",
       oldValue: before,
-      newValue: after,
+      newValue: openings.length > 0
+        ? { ...after, widening: true, through: "DEPARTMENT_GROUP", opened: openings }
+        : after,
       reason: cleanReason,
       requestId,
     });
+    if (openings.length > 0 && !openingHoldsRight) await this.access!.notifyDepartmentGroupOpening(actor, id, requestId);
 
     for (const userId of cumulUsers) await this.notifyAdminCumul(actor, userId, "Risk Manager", requestId);
     for (const userId of committeeCumulUsers) await this.notifyAdminCumul(actor, userId, "Comité des risques", requestId);
@@ -628,28 +645,49 @@ export class RoleService {
     }
     const pre = await this.assertAssignable(actor, roleId, userId, reason);
     const { role } = pre;
+    // q212: joining a department's group opens its PERIMETRE resources; outside the RM group a reason is required.
+    const opening = role.departmentId && this.access
+      ? await this.access.guardDepartmentGroupOpening(actor, role.departmentId, userId, reason)
+      : null;
     let { cleanReason, createsAdminRiskManagerCumul, createsAdminCommitteeCumul, createsAdminAuditCumul } = pre;
 
     // F-B8s-01: the check above may be stale; the repository replays it under the user + role locks.
+    // QA-V3-03: the ROLE_CHANGE row and, when the role opens restricted resources (q212), the PERMISSION_CHANGE row are
+    // written in the assignment's transaction when the repository supports it; otherwise right after (test fakes).
+    const events = (assignment: RoleAssignment) => [
+      {
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Role",
+        entityId: roleId,
+        action: "ROLE_CHANGE" as const,
+        oldValue: null,
+        newValue: { ...assignment, roleName: role.name },
+        reason: cleanReason ?? opening?.reason ?? null,
+        requestId,
+      },
+      ...(opening ? [{
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Role",
+        entityId: roleId,
+        action: "PERMISSION_CHANGE" as const,
+        oldValue: { userId, reads: [] },
+        newValue: { userId, departmentId: role.departmentId, widening: true, through: "DEPARTMENT_GROUP", opened: opening.opened },
+        reason: opening.reason,
+        requestId,
+      }] : []),
+    ];
+    const inTransaction = this.roles.assignAuditsInTransaction === true;
     const assignment = await this.roles.assignToUser(actor.tenantId, roleId, userId, actor.userId, async (lockedRole, held) => {
       const res = await this.assertCumulRules(actor.tenantId, lockedRole, held, held, reason);
       cleanReason = res.cleanReason ?? cleanReason;
       createsAdminRiskManagerCumul = res.createsAdminRiskManagerCumul;
       createsAdminCommitteeCumul = res.createsAdminCommitteeCumul;
       createsAdminAuditCumul = res.createsAdminAuditCumul;
-    });
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Role",
-      entityId: roleId,
-      action: "ROLE_CHANGE",
-      oldValue: null,
-      newValue: { ...assignment, roleName: role.name },
-      reason: cleanReason,
-      requestId,
-    });
+    }, inTransaction ? events : undefined);
+    if (!inTransaction) for (const event of events(assignment)) await this.audit.record(event);
+    if (opening && !opening.holdsRight) await this.access!.notifyDepartmentGroupOpening(actor, roleId, requestId);
 
     // q63: administrator + Risk Manager cumul -> Audit and Committee members. q65: Committee entry -> Audit members.
     if (createsAdminRiskManagerCumul) await this.notifyAdminCumul(actor, userId, "Risk Manager", requestId);

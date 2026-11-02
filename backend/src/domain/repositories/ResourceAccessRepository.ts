@@ -27,7 +27,12 @@ export interface RestrictedResourceRow {
   visibility: Visibility;
   accessCount: number;
   updatedAt: Date;
+  /** R-1 (CMP V2bis): the last visibility change of the resource (author, date, reason, widening), when there is one. */
+  lastChange: { userId?: string; byName?: string | null; at: Date; reason: string | null; widening: boolean | null } | null;
 }
+
+/** V3 (q196, q198): per root type, how many PERIMETRE resources the reader cannot see (NOMINATIF never counted). */
+export type HiddenCounts = Record<RestrictableResource | "RISK", number>;
 
 export interface PerimeterChange { departmentId?: string | null; processId?: string | null }
 export type PerimeterChangeResult = {
@@ -70,8 +75,20 @@ export interface ResourceAccessRepository {
   canRead(tenantId: string, type: RestrictableResource | "RISK", id: string, userId: string): Promise<boolean>;
   /** q207: the PERIMETRE risks, controls and KPIs of a process that `userId` does not read yet (what owning it would open). */
   processOwnerGains(tenantId: string, processId: string, userId: string): Promise<Array<{ type: string; id: string }>>;
+  /**
+   * q212 (DECISION-109): the PERIMETRE risks, controls, KPIs and own-level action plans of a department that `userId`
+   * does not read yet (what joining the department's group would open).
+   */
+  departmentGroupGains(tenantId: string, departmentId: string, userId: string): Promise<Array<{ type: string; id: string }>>;
+  /** V3 (q196, q198): hidden PERIMETRE counts for `userId`; null for a member of a fixed group that sees everything. */
+  hiddenCounts(tenantId: string, userId: string): Promise<HiddenCounts | null>;
+  /** q209: whether `userId` belongs to a fixed group that sees everything (Risk Manager, Committee, Audit). */
+  seesEverything(tenantId: string, userId: string): Promise<boolean>;
+  /** Codex P2 (PR #225): active membership of the Risk Manager group (role `system_group = 'RISK_MANAGER'`). */
+  isRiskManagerMember(tenantId: string, userId: string): Promise<boolean>;
   /** q208: every restricted resource of the tenant (any root, not deleted), with its active named-people count. */
-  listRestricted(tenantId: string): Promise<RestrictedResourceRow[]>;
+  /** V3: paginated (`limit` 1..500, default 200; `offset` >= 0), most recently changed first. */
+  listRestricted(tenantId: string, page?: { limit?: number; offset?: number }): Promise<RestrictedResourceRow[]>;
   /** Active accounts of the tenant that read the resource now (SQL `<root>_visible_to`). */
   readers(tenantId: string, type: RestrictableResource | "RISK", id: string): Promise<string[]>;
   /** QA-VIS2-02: among control execution ids, those the scope may NOT read (control hidden and not their executor). */

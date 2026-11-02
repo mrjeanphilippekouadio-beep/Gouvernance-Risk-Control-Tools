@@ -45,9 +45,10 @@ export interface RiskRepository {
    */
   update(tenantId: string, id: string, input: UpdateRiskInput, audit?: TransactionalAudit<Risk & { perimeterWidening?: boolean }>): Promise<Risk & { perimeterWidening?: boolean }>;
   /** ACT-120/121: the only way `ownerId` is ever written — never via the generic `update()`. `null` clears it. */
-  assignOwner(tenantId: string, id: string, ownerId: string | null): Promise<Risk>;
+  /** QA-V3-04: when `audit` is given, its rows are written in the same transaction as the designation. */
+  assignOwner(tenantId: string, id: string, ownerId: string | null, audit?: TransactionalAudit<Risk>): Promise<Risk>;
   /** ACT-122: the only way `superiorOwnerId` is ever written. `null` clears it. */
-  assignSuperiorOwner(tenantId: string, id: string, superiorOwnerId: string | null): Promise<Risk>;
+  assignSuperiorOwner(tenantId: string, id: string, superiorOwnerId: string | null, audit?: TransactionalAudit<Risk>): Promise<Risk>;
   softDelete(tenantId: string, id: string, deletedBy: string, reason: string): Promise<void>;
   /**
    * Lot V1 (q192): the active named-people list of a risk. Optional so the existing fakes keep compiling; the service

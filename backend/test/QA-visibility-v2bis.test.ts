@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Pool } from "pg";
+import { BAD_REASONS, ROOT, qaVisibilityHarness } from "./qaVisibilityHarness.js";
 
 /**
  * QA-visibility-v2bis (level 2): DECISION-107. q207 A: a RACI assignment (`POST /raci`, `reason`) or a new process owner
@@ -21,12 +21,9 @@ import { Pool } from "pg";
  * It drops / rebuilds its own base (grc_qa_vv2bt): run with --no-file-parallelism next to the other live suites.
  * `it.fails` documents a CONFIRMED defect (turn it into `it` when fixed).
  */
-const ROOT = join(__dirname, "..", "..");
 const live = process.env["QA_VIS2B_LIVE"] === "1";
-const PGPORT = 55442;
 const DB = "grc_qa_vv2bt";
 const PORT = 8094;
-const API = `http://127.0.0.1:${PORT}/api/v1`;
 const I = (x: string) => `aaaaaaaa-0000-4000-8000-000000000${x}`;
 const K = (x: string) => `aaaaaaaa-0000-4000-8000-00000000${x}`;
 const UNKNOWN = I("9ff");
@@ -56,10 +53,11 @@ describe("QA-visibility-v2bis STATIC", () => {
     const names = execFileSync("ls", [join(ROOT, "database", "postgresql", "migrations")], { encoding: "utf8" }).split("\n").filter((f) => f.endsWith(".sql") && !f.endsWith(".down.sql"));
     expect(names.sort((a, b) => a.localeCompare(b)).at(-1)).toBe("083_resource_visibility_v2.sql");
   });
-  it("OBSERVATION: the list query has no LIMIT / pagination (grows with the number of restricted resources)", () => {
+  it("V3: the list query is paginated (LIMIT / OFFSET, limit bounded to 500)", () => {
     const src = read("backend", "src", "infrastructure", "database", "postgres", "PostgresResourceAccessRepository.ts");
     const q = src.slice(src.indexOf("async listRestricted"));
-    expect(q).not.toMatch(/\bLIMIT\b/i);
+    expect(q).toMatch(/LIMIT \$2 OFFSET \$3/);
+    expect(q).toMatch(/500\)/);
   });
   it("frontend: menu entry gated by resourcevisibility.set, page calls the endpoint, RACI panel and process card send `reason`", () => {
     expect(read("frontend", "src", "App.tsx")).toMatch(/restricted[\s\S]{0,200}resourcevisibility\.set|resourcevisibility\.set[\s\S]{0,200}restricted/i);
@@ -73,51 +71,20 @@ describe("QA-visibility-v2bis STATIC", () => {
 type Who = "own" | "n1" | "raci" | "pown" | "dept" | "named" | "out" | "out2" | "rm" | "com" | "aud" | "adm";
 const WHO: Who[] = ["own", "n1", "raci", "pown", "dept", "named", "out", "out2", "rm", "com", "aud", "adm"];
 const UID: Record<Who, string> = { own: I("101"), n1: I("102"), raci: I("103"), pown: I("104"), dept: I("105"), named: I("106"), out: I("107"), out2: I("108"), rm: I("109"), com: I("10a"), aud: I("10b"), adm: I("10c") };
-const TOK = {} as Record<Who, string>;
-let pg: Pool;
-const sh = (cmd: string, args: string[], env: Record<string, string> = {}) =>
-  execFileSync(cmd, args, { encoding: "utf8", env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"], timeout: 300000 });
-const sql = async <T = Record<string, unknown>>(q: string, p: unknown[] = []) => (await pg.query(q, p)).rows as T[];
-type Res = { status: number; text: string; json: any };
-async function call(who: Who | null, method: string, path: string, body?: unknown): Promise<Res> {
-  const r = await fetch(API + path, { method, headers: { "content-type": "application/json", ...(who ? { authorization: `Bearer ${TOK[who]}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
-  const text = await r.text();
-  let json: unknown = null;
-  try { json = JSON.parse(text); } catch { /* not JSON */ }
-  return { status: r.status, text, json };
-}
-const get = (w: Who, p: string) => call(w, "GET", p);
-const put = (w: Who, p: string, b: unknown) => call(w, "PUT", p, b);
-const post = (w: Who, p: string, b: unknown) => call(w, "POST", p, b);
-const audits = (id: string) => sql<{ action: string; reason: string | null; old_value: any; new_value: any; user_id: string; entity_type: string }>(
-  "SELECT action, reason, old_value, new_value, user_id, entity_type FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp, id", [id]);
-const permChanges = async (id: string) => (await audits(id)).filter((a) => a.action === "PERMISSION_CHANGE");
-const notifs = (who: Who, resourceId: string) => sql<{ event_type: string; message: string }>("SELECT event_type, message FROM notifications WHERE recipient_user_id = $1 AND resource_id = $2 ORDER BY sent_at, id", [UID[who], resourceId]);
+const H = qaVisibilityHarness({ db: DB, port: PORT, who: WHO, uid: UID });
+const { sql, call, get, put, post, audits, permChanges, notifs, sees } = H;
 const raciRows = (entityId: string, userId: string) => sql<{ id: string; role: string; deleted_at: Date | null }>("SELECT id, role, deleted_at FROM raci_assignments WHERE entity_id = $1 AND user_id = $2 ORDER BY created_at", [entityId, userId]);
-const sees = async (w: Who, path: string) => (await get(w, path)).status === 200;
 const raci = (w: Who, entityType: string, entityId: string, user: Who, role: string, reason?: unknown) =>
   post(w, "/raci", { entityType, entityId, userId: UID[user], role, ...(reason === undefined ? {} : { reason }) });
-const BAD_REASONS: unknown[] = ["", "   ", "\t\n ", "x".repeat(501), null, 5];
 
 describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQL 16", () => {
-  beforeAll(async () => {
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v2-setup.sh"), "up", DB]);
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v2-server.sh"), "start"], { QA_PORT: String(PORT), QA_DB: DB });
-    pg = new Pool({ host: "127.0.0.1", port: PGPORT, user: "postgres", database: DB, max: 4 });
+  beforeAll(() => H.start(async () => {
     await sql("UPDATE users SET roles = roles || ARRAY['execution.read','effectiveness.read','evidence.read']::text[]");
     // non-RM assigners: they read the objects (department group / owner / listed) and hold the assignment rights
     await sql("UPDATE users SET roles = roles || ARRAY['raci.assign','raci.revoke','process.responsibility.assign','anomaly.create','anomaly.update']::text[] WHERE email IN ('dept@vv1.test','own@vv1.test','named@vv1.test')");
     await sql("UPDATE users SET roles = array_remove(roles, 'resourcevisibility.set') WHERE email = 'adm@vv1.test'"); // real case: the right lives in the RM group (re-added in the dedicated test)
-    for (const w of WHO) {
-      const r = await fetch(`${API}/auth/local`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: `${w}@vv1.test`, password: "whatever" }) });
-      TOK[w] = ((await r.json()) as { accessToken: string }).accessToken;
-      expect(TOK[w], w).toBeTruthy();
-    }
-  }, 280000);
-  afterAll(async () => {
-    await pg?.end();
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v2-server.sh"), "stop"], { QA_PORT: String(PORT) });
-  });
+  }), 280000);
+  afterAll(() => H.stop());
 
   // ---------------------------------------------------------------------------------------------- RACI (q207)
   describe("RACI: a reason when the assignment opens a restricted resource", () => {
@@ -240,14 +207,17 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       expect((await notifs("rm", I("a06"))).length - n0).toBe(1);
     });
 
-    it("OBSERVATION (other openings of PERIMETRE are not covered by q207): a department group assigned to a person opens the department's restricted resources with no reason, no PERMISSION_CHANGE and no notification", async () => {
+    it("q212 (V3, was an OBSERVATION in V2bis): a department group assigned to a person now needs a reason outside the RM group (see QA-visibility-v3 for the full rule)", async () => {
       await sql("UPDATE users SET roles = roles || ARRAY['role.assign','role.read']::text[] WHERE email = 'adm@vv1.test'");
-      const n0 = (await notifs("rm", I("c02"))).length;
-      const r = await post("adm", `/roles/${I("301")}/assign`, { userId: UID.out });
+      const n0 = (await notifs("rm", I("301"))).length;
+      const refused = await post("adm", `/roles/${I("301")}/assign`, { userId: UID.out });
+      expect(refused.status, refused.text).toBe(400);
+      expect(await sees("out", `/controls/${I("c02")}`)).toBe(false);
+      const r = await post("adm", `/roles/${I("301")}/assign`, { userId: UID.out, reason: "Motif V2bis" });
       expect([200, 201], r.text).toContain(r.status);
       expect(await sees("out", `/controls/${I("c02")}`)).toBe(true);
-      expect((await permChanges(I("c02"))).filter((p) => p.user_id === UID.adm)).toEqual([]);
-      expect((await notifs("rm", I("c02"))).length).toBe(n0);
+      expect((await permChanges(I("301"))).filter((p) => p.user_id === UID.adm)).toHaveLength(1);
+      expect((await notifs("rm", I("301"))).length - n0).toBe(1);
       // the last role of an account cannot be revoked through the API: restore the state by SQL
       await sql("UPDATE user_roles SET revoked_at = now() WHERE user_id = $1 AND role_id = $2 AND revoked_at IS NULL", [UID.out, I("301")]);
       expect(await sees("out", `/controls/${I("c02")}`)).toBe(false);
@@ -416,11 +386,11 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
 
   // ---------------------------------------------------------------------------------------------- LIST (q208)
   describe("LIST: GET /restricted-resources", () => {
-    it("401 anonymous; 200 for the Risk Manager group only; 403 for Committee, Audit and every ordinary profile", async () => {
+    it("401 anonymous; 200 for the groups that see everything (RM, Committee, Audit since q209); 403 for every ordinary profile", async () => {
       expect((await call(null, "GET", "/restricted-resources")).status).toBe(401);
       const codes: Record<string, number> = {};
       for (const w of WHO) codes[w] = (await get(w, "/restricted-resources")).status;
-      expect(codes).toEqual({ own: 403, n1: 403, raci: 403, pown: 403, dept: 403, named: 403, out: 403, out2: 403, rm: 200, com: 403, aud: 403, adm: 403 });
+      expect(codes).toEqual({ own: 403, n1: 403, raci: 403, pown: 403, dept: 403, named: 403, out: 403, out2: 403, rm: 200, com: 200, aud: 200, adm: 403 });
     });
     it("content = exactly the restricted rows of the tenant in the database (type, id, level, active access count), no CLIENT row, no foreign tenant, ordered by update date desc", async () => {
       await sql("INSERT INTO tenants (id, name) VALUES ($1, 'Autre tenant V2bis') ON CONFLICT DO NOTHING", [I("f00")]);
@@ -470,13 +440,13 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       expect(ids).not.toContain(I("d01")); // anomaly following it
       expect(ids).not.toContain(I("a02")); // plan following it
     });
-    it("OBSERVATION (edge): a holder of resourcevisibility.set DIRECTLY in users.roles but outside the Risk Manager group reads the whole list (labels of restricted items he cannot read himself)", async () => {
+    it("PRIV-V3-01 (was an OBSERVATION in V2bis): a holder of resourcevisibility.set DIRECTLY in users.roles, outside the groups that see everything, gets 403 on the list", async () => {
       await sql("UPDATE users SET roles = roles || ARRAY['resourcevisibility.set']::text[] WHERE email = 'adm@vv1.test'");
       try {
         expect((await get("adm", `/risks/${I("503")}`)).status, "he cannot read the risk").toBe(404);
         const r = await get("adm", "/restricted-resources");
-        expect(r.status).toBe(200); // pinned: the gate is the permission string, not the group
-        expect(r.text).toContain("CANARY-NOMIN-DESC");
+        expect(r.status).toBe(403);
+        expect(r.text).not.toContain("CANARY");
       } finally {
         await sql("UPDATE users SET roles = array_remove(roles, 'resourcevisibility.set') WHERE email = 'adm@vv1.test'");
       }

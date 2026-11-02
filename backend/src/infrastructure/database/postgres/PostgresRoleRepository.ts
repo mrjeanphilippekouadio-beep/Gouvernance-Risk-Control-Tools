@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import type { HandOverInput, RoleRepository } from "../../../domain/repositories/RoleRepository.js";
 import type { AuditEvent } from "../../../domain/entities/AuditEvent.js";
+import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { insertAuditEvent, runAudited } from "./PostgresAuditRepository.js";
 import type { CreateRoleInput, Role, RoleAssignment, SystemGroup, UpdateRoleInput } from "../../../domain/entities/Role.js";
 import type { Permission } from "../../../domain/permissions.js";
@@ -85,6 +86,7 @@ function assignmentToDomain(row: UserRoleRow): RoleAssignment {
 }
 
 export class PostgresRoleRepository implements RoleRepository {
+  readonly assignAuditsInTransaction = true;
   constructor(private readonly pool: Pool) {}
 
   async getById(tenantId: string, id: string): Promise<Role | null> {
@@ -280,6 +282,7 @@ export class PostgresRoleRepository implements RoleRepository {
     userId: string,
     grantedBy: string,
     recheck?: RoleAssignRecheck,
+    audit?: TransactionalAudit<RoleAssignment>,
   ): Promise<RoleAssignment> {
     const client = await this.pool.connect();
     try {
@@ -308,10 +311,13 @@ export class PostgresRoleRepository implements RoleRepository {
          RETURNING *`,
         [tenantId, roleId, userId, grantedBy],
       );
-      await client.query("COMMIT");
       const row = rows[0];
       if (!row) throw new Error("Insert into user_roles returned no row");
-      return assignmentToDomain(row);
+      const assignment = assignmentToDomain(row);
+      // QA-V3-03: the audit rows of the assignment (and of the access it opens) commit or roll back with it.
+      if (audit) for (const event of audit(assignment)) await insertAuditEvent(client, event);
+      await client.query("COMMIT");
+      return assignment;
     } catch (err) {
       await rollbackQuietly(client);
       // q65-02: the loser of two simultaneous assignments hits user_roles_active_idx (23505) -> 409, not 500.

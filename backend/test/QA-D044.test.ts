@@ -335,7 +335,7 @@ describe("QA-D044 q84: ActionPlanService.resolveRecipients", () => {
 });
 
 describe("QA-D044 q85/q95: catalog and subscriptions", () => {
-  it("the 32 types are all mandatory: subscribe(enabled:false) refused for each, also space-padded, nothing stored", async () => {
+  it("the 33 types are all mandatory: subscribe(enabled:false) refused for each, also space-padded, nothing stored", async () => {
     for (const t of NOTIFICATION_CATALOG) {
       const upsert = vi.fn();
       const svc = new NotificationService({} as never, { getByKey: async () => null, upsert } as never, { record: async () => undefined } as never);
@@ -344,7 +344,7 @@ describe("QA-D044 q85/q95: catalog and subscriptions", () => {
       await expect(svc.subscribe(u, { resourceType: t.resourceType, eventType: ` ${t.eventType} `, enabled: false }, "r")).rejects.toBeInstanceOf(ValidationError);
       expect(upsert).not.toHaveBeenCalled();
     }
-    expect(NOTIFICATION_CATALOG).toHaveLength(32); // q207/q208: + 3 *_VISIBILITY_RESTRICTED, CONTROL_VISIBILITY_WIDENED, PROCESS_OWNER_VISIBILITY_WIDENED; V2: + ACTION_PLAN / ANOMALY _VISIBILITY_WIDENED; D5: + 8 governance types; q170: + PRINCIPLE_ACCEPTANCE_REVOKED; q182 + q178: + 2; q200: + SENSITIVE_VIEW_GRANT_PENDING; q199: + RISK_VISIBILITY_WIDENED
+    expect(NOTIFICATION_CATALOG).toHaveLength(33); // q212: + DEPARTMENT_GROUP_VISIBILITY_WIDENED; q207/q208: + 3 *_VISIBILITY_RESTRICTED, CONTROL_VISIBILITY_WIDENED, PROCESS_OWNER_VISIBILITY_WIDENED; V2: + ACTION_PLAN / ANOMALY _VISIBILITY_WIDENED; D5: + 8 governance types; q170: + PRINCIPLE_ACCEPTANCE_REVOKED; q182 + q178: + 2; q200: + SENSITIVE_VIEW_GRANT_PENDING; q199: + RISK_VISIBILITY_WIDENED
   });
 
   it("the Dispositif event types used by RiskFrameworkService exist in the catalog under MANAGEMENT, mandatory (no drift)", async () => {

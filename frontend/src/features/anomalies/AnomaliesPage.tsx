@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { HiddenCountNotice } from "../risks/HiddenCountNotice";
 import { ResourceVisibilityCard, RiskVisibilityBadge } from "../risks/RiskVisibility";
 import { anomalyVisibilityApi, PERIMETER_HELP } from "../../api/visibility";
 import { describeError } from "../indicators/shared";
@@ -109,6 +110,7 @@ export function AnomaliesPage({ token }: Props) {
         <FormField label="Statut" htmlFor="anomaly-filter-status"><select id="anomaly-filter-status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "" | AnomalyStatus)}><option value="">Tous les statuts</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FormField>
       </div>
       <Table columns={columns} rows={anomalies} rowKey={(row) => row.id} loading={loading} emptyMessage={statusFilter ? "Aucune anomalie ne correspond au filtre." : "Aucune anomalie enregistrée."} />
+      <HiddenCountNotice token={token} type="ANOMALY" />
     </Card>
     <Modal open={!!selected} onClose={() => setSelected(null)} title="Fiche anomalie" actions={<Button onClick={() => setSelected(null)}>Fermer</Button>}>
       {selected && <div className="workflow-cell-stack">

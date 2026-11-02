@@ -185,7 +185,7 @@ describe("QA-panel routes / server wiring (static)", () => {
     const uses = server.match(/\bselfValidationGate\b/g) ?? [];
     expect(uses.length).toBeGreaterThanOrEqual(9); // declaration + 8 services
     expect(server).toMatch(/new ConfigService\([^;]*governanceQueries/);
-    expect(server).toMatch(/new RoleService\([^;]*governanceDesignationRepository, new PostgresSensitiveViewGrantRepository\(pool\)\);/);
+    expect(server).toMatch(/new RoleService\([^;]*governanceDesignationRepository, new PostgresSensitiveViewGrantRepository\(pool\), resourceVisibilityManager\);/);
   });
   it("services with a tenant-scoped permission gate call requirePermission first in every public method of the new services", () => {
     for (const f of ["GovernanceDesignationService.ts", "OrganizationProfileService.ts"]) {

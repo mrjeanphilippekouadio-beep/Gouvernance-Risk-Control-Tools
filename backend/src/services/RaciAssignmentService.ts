@@ -83,7 +83,7 @@ export class RaciAssignmentService {
     // Codex P2 (PR #224): with the real repository, the q207 check, the assignment and its audit rows are one
     // transaction under a lock of the entity row (no visibility change can slip in between, no compensation needed).
     if (this.access && this.raci.createChecked) {
-      const holdsRight = actor.roles.includes("resourcevisibility.set");
+      const holdsRight = await this.access.exemptFromOpeningReason(actor);
       const givenReason = reason?.trim() ? checkedReason(reason, "open a restricted resource through RACI") : null;
       const { assignment, opened } = await this.raci.createChecked(input, !holdsRight && !givenReason, ({ assignment: a, opened: o }) => [
         {

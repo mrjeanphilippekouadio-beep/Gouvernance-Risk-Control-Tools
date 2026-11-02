@@ -82,12 +82,13 @@ export const risksApi = {
 
   // ACT-120/121: designate or reassign the individual Risk Owner. `null`
   // clears it. Never folded into a generic update — see RiskService.assignOwner.
-  assignOwner: (token: string, id: string, ownerId: string | null) =>
-    apiRequest<Risk>(`/api/v1/risks/${id}/owner`, { method: "POST", body: { ownerId }, token }),
+  // q212: `reason` is required by the server when the designation opens a restricted risk (outside the RM group).
+  assignOwner: (token: string, id: string, ownerId: string | null, reason?: string) =>
+    apiRequest<Risk>(`/api/v1/risks/${id}/owner`, { method: "POST", body: { ownerId, ...(reason ? { reason } : {}) }, token }),
 
   // ACT-122: designate the owner's N+1 (superior owner).
-  assignSuperiorOwner: (token: string, id: string, superiorOwnerId: string | null) =>
-    apiRequest<Risk>(`/api/v1/risks/${id}/superior-owner`, { method: "POST", body: { superiorOwnerId }, token }),
+  assignSuperiorOwner: (token: string, id: string, superiorOwnerId: string | null, reason?: string) =>
+    apiRequest<Risk>(`/api/v1/risks/${id}/superior-owner`, { method: "POST", body: { superiorOwnerId, ...(reason ? { reason } : {}) }, token }),
 
   // Lot V1: visibility level and named-people list of a risk.
   getVisibility: (token: string, id: string) =>
