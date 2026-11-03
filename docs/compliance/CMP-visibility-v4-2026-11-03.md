@@ -58,6 +58,27 @@ Revalidation A14 requise après correction : oui (REVALIDATION_REQUIRED).
 3. L'Audit (3e ligne) doit-il confirmer les octrois, ou ce rôle revient-il au Comité seul ?
 4. Que se passe-t-il s'il n'existe aucun confirmeur éligible, et existe-t-il un besoin d'accès d'urgence ?
 
+## 8. Revalidation (2026-11-03, après DECISION-111)
+
+Mode : résumé déclaré exact, code non consulté (preuve niveau 2) ; la levée porte sur la conception décrite, l'exécution reste à prouver par les tests annoncés.
+
+| Condition / constat | Résultat | Motif |
+|---|---|---|
+| Cond. 1 / V4-01 | LEVÉE | Perte du dernier droit d'administration = fin définitive, test de régression annoncé. Vérifier que le test couvre aussi le retrait de permissions d'un rôle. |
+| Cond. 2 / V4-05 | LEVÉE SOUS RÉSERVE | Audit READ par ressource et par liste, écrit avant la réponse, échec = refus (fail-closed) : conforme. Réserve : lectures d'éléments enfants (exécutions, preuves, mesures) non journalisées. |
+| Cond. 4 / V4-02 | LEVÉE | 90 jours fixés à la confirmation, puis nouvelle demande et confirmation : équivaut à une recertification. |
+| V4-04 | FERMÉ SOUS RÉSERVE | Exclusion des dossiers « personnes nommées » (q219) ; dépend de l'exactitude de leur qualification. |
+| V4-08 | PARTIELLEMENT FERMÉ | Révocation par Comité/Audit (q222) et absence d'accès d'urgence assumée ; le cas « aucun confirmeur éligible » reste un refus, sans risque de contournement. |
+| V4-03, 06, 07, 09 | OUVERTS | Inchangés (non traités par DECISION-111). |
+| Cond. 3 (Privacy A15) | RESTE OUVERTE | Non mentionnée comme réalisée. |
+
+Limites connues :
+- Tableaux de bord (agrégats) : acceptable, pas de contenu restreint exposé, sous réserve qu'aucun agrégat ne permette d'identifier un dossier restreint.
+- Lecture d'une ressource qui journalise aussi une lecture lors d'une modification de risque : acceptable (sur-journalisation, pas de perte de trace).
+- Éléments enfants non journalisés : NON acceptable de façon permanente, car les preuves peuvent porter le contenu le plus sensible. Acceptable pour la production uniquement si (a) l'équipe démontre que `resource.readall` n'ouvre pas ces éléments au-delà de ce que voit l'administrateur sans le droit, ou (b) une action tracée avec échéance (CMP-V4-10) ajoute leur journalisation.
+
+Reste avant production : (i) Privacy A15 consignée ; (ii) décision sur CMP-V4-10 (a ou b) ; (iii) paramètre de gouvernance des 90 jours : bornes min/max, modification réservée et journalisée (qui, avant/après, motif), sans effet rétroactif sur les droits déjà confirmés ; (iv) preuve d'exécution des tests (régression V4-01, échec d'audit = lecture refusée). Aucun COMPLIANCE_BLOCK tant que (i) à (iv) ne sont pas contredits. Revalidation finale A14 sur preuves après ces points.
+
 ## 7. Statut
 
 PARTIALLY_COMPLIANT, EVIDENCE_REQUIRED sur l'exécution ; Operating Effectiveness NOT_ASSESSED ; pas de COMPLIANCE_BLOCK émis tant que le lot n'est pas déclaré prêt pour la production — les conditions 1 à 4 deviennent un COMPLIANCE_BLOCK si la mise en production est demandée sans elles.

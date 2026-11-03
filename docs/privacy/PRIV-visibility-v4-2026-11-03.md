@@ -129,3 +129,33 @@ Pour le périmètre de conception revu (2026-11-03), la visibilité A1 par défa
 Niveau de confiance : CONFIRMED pour l'absence d'implémentation (vérifiée dans le worktree) ; PROBABLE pour les conséquences sur les personnes (dépend de la nature réelle des dossiers nommés) ; OPEN pour l'applicabilité BCEAO des dossiers fraude.
 
 STATUS: BLOCKED (portée `readall`) ; ESCALATED vers PO pour Q1, Q3, Q4 ; Compliance consultée pour Q2 et qualification BCEAO.
+
+## 8. Revalidation (DECISION-111)
+
+Décisions reçues : q219 (dossiers « personnes nommées » exclus de `readall`), q220 (audit par ressource ouverte et par liste, avant réponse, échec = refus), q221 (90 jours réglables, pas de prolongation automatique), q223 (date seule AAAA-MM-JJ, identifiants UUID opaques).
+
+| Point | Décision | Statut revalidé | Reste à prouver / à trancher |
+| --- | --- | --- | --- |
+| Q1 Dossiers nommés | Exclus de `readall` ; seul l'ajout nominatif les ouvre | PARTIELLEMENT SATISFAIT | Le chemin nominatif doit porter motif, confirmation par Comité/Audit non auteur ni bénéficiaire, journalisation et expiration (clôture du dossier, 30 jours max). Ces trois points ne figurent pas dans DECISION-111. |
+| Q2 Journalisation | Une ligne par ressource ouverte (type, id, référence d'attribution, sans titre ni contenu), une par liste (nombre) ; échec = refus | SATISFAIT pour `readall`, sous réserve de preuve | Preuve d'implémentation : écriture avant réponse, refus si échec. |
+| Q3 Durée | 90 jours réglables, puis nouvelle demande et confirmation | SATISFAIT partiellement | (a) Plafond de 90 jours à faire respecter côté configuration. (b) La recertification trimestrielle recommandée n'apparaît pas dans DECISION-111 : à confirmer ou écarter par le PO. |
+| Q4 `updatedAt` | Date seule AAAA-MM-JJ ; identifiants UUID opaques | SATISFAIT sous réserve de preuve | Preuve dans la vue métadonnées (format et absence d'heure dans les réponses API). |
+| Motif | Non tranché | OUVERT | Recommandation de liste codifiée (non bloquant). |
+
+### Limites connues
+
+- Tableaux de bord (agrégats) non journalisés : ACCEPTABLE sous conditions : pas de champ nominatif dans les agrégats et seuil minimal de cellule (valeur à fixer par le PO, par exemple 5) ; sinon non acceptable.
+- Lectures d'éléments enfants (exécutions, preuves, mesures) non journalisées : NON ACCEPTABLE en l'état pour les preuves ou exécutions pouvant contenir des données personnelles. ACCEPTABLE uniquement si la classification prouve l'absence de donnée personnelle dans ces éléments, ou si la ligne d'audit du parent est écrite et couvre explicitement les enfants (comptage des enfants lus).
+
+### Verdict
+
+- PRIV-BLK-V4-001 : LEVÉ EN CONCEPTION pour `readall` (portée Q1 exclue, Q2 et Q4 retenus). Le blocage reste en vigueur pour la mise en production jusqu'à la preuve d'implémentation (Q2 écriture avant réponse, Q3 plafond, Q4 format) et jusqu'à la clôture des deux points ouverts (chemin nominatif, limite enfants).
+- Conditions Q1 à Q4 : satisfaites en conception ; non satisfaites en production (preuves manquantes, cf. tableau).
+- Limites : tableaux de bord acceptables avec seuil minimal ; lectures enfants non acceptables en l'état.
+
+Questions PO :
+- Confirmer le chemin nominatif : motif, confirmation, journalisation et expiration (recommandation : expiration à la clôture, 30 jours max).
+- Trancher la recertification trimestrielle (recommandée : oui).
+- Fixer le seuil minimal de cellule des agrégats (recommandation : 5).
+
+STATUS: CONDITIONAL (conception levée ; production non revalidée, preuves requises)
