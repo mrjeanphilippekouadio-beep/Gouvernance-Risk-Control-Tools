@@ -218,3 +218,32 @@ Principe ajouté :
     contenu peut rester identique mais l'échelle change : préférer une
     recherche (minimum de caractères, plafond bas) à la liste complète, sans
     l'imposer si les champs restent id + nom.
+
+
+## Revue V4 (2026-11-03) — ajout de la session A15 (worktree sans la mémoire précédente)
+
+# Mémoire — A15 Privacy / Data Protection
+
+Créée le 2026-11-03 (fichier absent jusqu'ici dans le worktree ; à fusionner avec la mémoire existante si elle est retrouvée).
+
+## Positions tenues
+
+- Visibilité A1 par défaut (métadonnées sans titre ni motif) : acceptable en conception.
+- `resource.readall` (DECISION-103) : bloqué en portée tant que les dossiers « personnes nommées » (fraude, RH) y sont inclus sans confirmation distincte, sans durée maximale et sans journalisation par ressource ouverte (PRIV-BLK-V4-001, revue `docs/privacy/PRIV-visibility-v4-2026-11-03.md`).
+- Recommandations chiffrées : durée 90 jours non automatiquement prolongeable ; recertification trimestrielle ; dossiers nommés expirés à la clôture (au plus 30 jours renouvelables).
+- Journalisation au grain de la ressource ouverte, sans contenu ni titre ; une consultation de liste = un événement avec comptage.
+- `updatedAt` : acceptable au jour seulement, identifiants opaques vérifiés ; exclu pour les dossiers nommés.
+- Motif d'octroi : liste codifiée de préférence, pas de texte libre.
+
+## Points ouverts
+
+- Q1, Q3, Q4 : arbitrage PO (HUMAN) requis.
+- Qualification BCEAO / confidentialité des déclarations liées à la LBC-FT et des dossiers fraude : Compliance.
+- Modèle v3 (`docs/privacy/PRIV-visibility-v3-2026-11-01.md`) et mémoire antérieure absents du worktree : à recaler.
+
+## Règles de travail retenues
+
+- Ne pas trancher à la place du PO ; formuler en question avec recommandation.
+- Distinguer condition de production et recommandation non bloquante.
+- Ne pas confondre sécurité (A10) et privacy : les correctifs A10 ne couvrent pas la nécessité ni la minimisation.
+- RGPD : NOT_ESTABLISHED par défaut ; ne pas le citer comme applicable sans établissement UE ou personnes UE.
