@@ -334,7 +334,9 @@ export class RoleService {
     }
     if (seats.includes("RISK_MANAGER")) throw new ForbiddenError("A Risk Manager cannot confirm or refuse a widened view");
     // q202 (DECISION-104), lot V4: reading every content is never confirmed by an administrator.
-    if (grantKind(before) === "RESOURCE_READALL" && isAdministrator(await this.roles.listForUser(actor.tenantId, actor.userId))) {
+    // SEC V4-02: an exclusion rule takes the widest definition of an administrator (role or direct permission).
+    if (grantKind(before) === "RESOURCE_READALL" && (actor.roles.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p))
+        || isAdministrator(await this.roles.listForUser(actor.tenantId, actor.userId)))) {
       throw new ForbiddenError("An administrator cannot confirm or refuse the reading of every restricted content");
     }
     if (!approve && !reason) throw new ValidationError("A reason is required to refuse");
@@ -374,11 +376,18 @@ export class RoleService {
   /** Lot V4: the beneficiaries of resource.readall — active administrators outside the three fixed groups, never the caller. */
   private async readallCandidates(actor: AuthenticatedUser): Promise<Array<{ id: string; displayName: string }>> {
     if (!this.users) return [];
+    // INFO-07: one read per role (not per account) — the held roles of every account, from the active assignments.
+    const held = new Map<string, Role[]>();
+    for (const r of await this.roles.list(actor.tenantId)) {
+      for (const a of await this.roles.listAssignments(actor.tenantId, r.id)) {
+        if (!a.revokedAt) held.set(a.userId, [...(held.get(a.userId) ?? []), r]);
+      }
+    }
     const out: Array<{ id: string; displayName: string }> = [];
     for (const u of await this.users.list(actor.tenantId)) {
       if (u.deletedAt || canonicalId(u.id) === canonicalId(actor.userId)) continue;
-      const held = await this.roles.listForUser(actor.tenantId, u.id);
-      if (isAdministrator(held) && !held.some((r) => r.systemGroup)) out.push({ id: u.id, displayName: u.displayName });
+      const roles = held.get(u.id) ?? [];
+      if (isAdministrator(roles) && !roles.some((r) => r.systemGroup)) out.push({ id: u.id, displayName: u.displayName });
     }
     return out.sort((x, y) => x.displayName.localeCompare(y.displayName, "fr"));
   }
@@ -570,6 +579,13 @@ export class RoleService {
       requestId,
     });
     if (openings.length > 0 && !openingHoldsRight) await this.access!.notifyDepartmentGroupOpening(actor, id, requestId);
+    // SEC V4-01 (calque SEC-RL-05): a holder who is no longer administrator after this change loses resource.readall for good.
+    if (input.permissions !== undefined && this.sensitiveViews) {
+      for (const a of await this.roles.listAssignments(actor.tenantId, id)) {
+        if (a.revokedAt || isAdministrator(await this.roles.listForUser(actor.tenantId, a.userId))) continue;
+        await this.endSensitiveView(actor, a.userId, "Fin automatique : le compte n'est plus administrateur", requestId, "RESOURCE_READALL");
+      }
+    }
 
     for (const userId of cumulUsers) await this.notifyAdminCumul(actor, userId, "Risk Manager", requestId);
     for (const userId of committeeCumulUsers) await this.notifyAdminCumul(actor, userId, "Comité des risques", requestId);

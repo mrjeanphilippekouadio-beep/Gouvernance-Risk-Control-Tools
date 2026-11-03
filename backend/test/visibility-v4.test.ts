@@ -30,6 +30,11 @@ function world() {
       return roles.filter((r) => assignments.some((a) => a.roleId === r.id && a.userId === userId && !a.revokedAt));
     },
     async listAssignments(_t: string, roleId: string) { return assignments.filter((a) => a.roleId === roleId); },
+    async update(_t: string, id: string, input: { permissions?: string[] }) {
+      const r = roles.find((x) => x.id === id)!;
+      if (input.permissions) r.permissions = input.permissions as Role["permissions"];
+      return { ...r };
+    },
   } as unknown as RoleRepository;
   const users = ["boss", "it", "auditor", "auditadmin", "rm", "staff"].map(person);
   const userRepo = { async getById(_t: string, id: string) { return users.find((u) => u.id === id) ?? null; }, async list() { return users; } } as unknown as UserRepository;
@@ -68,9 +73,10 @@ function world() {
   };
   role("Risk Manager", "RISK_MANAGER", ["role.read"], ["rm"]);
   role("Audit", "AUDIT", ["audit.read", "rolegroup.audit.validate"], ["auditor", "auditadmin"]);
-  role("Administrateurs", null, ["role.assign"], ["boss", "it", "auditadmin"]);
+  role("Administrateurs", null, ["role.assign"], ["boss", "auditadmin"]);
+  const itRole = role("Support", null, ["role.assign"], ["it"]);
   const service = new RoleService(roleRepo, { record: async () => {} } as never, userRepo, undefined, undefined, undefined, undefined, undefined, undefined, grantRepo);
-  return { service, grants };
+  return { service, grants, itRole };
 }
 
 const admin = actor("boss", ["role.read", "role.assign"]);
@@ -109,6 +115,26 @@ describe("V4 — resource.readall through the q200 circuit (kind RESOURCE_READAL
     await service.decideSensitiveView(validator, g.id, true, null, "R2");
     await service.endSensitiveView(admin, "it", "Fin automatique : le compte n'est plus administrateur", "R3", "RESOURCE_READALL");
     expect(grants[0]!.status).toBe("REVOKED");
+  });
+});
+
+describe("V4 — corrections A10 (SEC V4-01, SEC V4-02)", () => {
+  it("SEC V4-01: a role update that removes the last administration right ends resource.readall for good (t -> f -> t does not revive it)", async () => {
+    const { service, grants, itRole } = world();
+    const g = await service.requestSensitiveView(admin, "it", "Support", "R1", "RESOURCE_READALL");
+    await service.decideSensitiveView(validator, g.id, true, null, "R2");
+    await service.update(actor("boss", ["role.update", "role.read"]), itRole.id, { permissions: ["risk.read"] } as never, "R3", "Retrait des droits d'administration");
+    expect(grants[0]!.status).toBe("REVOKED");
+    await service.update(actor("boss", ["role.update", "role.read"]), itRole.id, { permissions: ["role.assign"] } as never, "R4", "Droits rendus");
+    expect(grants[0]!.status).toBe("REVOKED");
+    const sources = await service.getEffectivePermissionSources(admin, "it");
+    expect(sources.permissions.some((p) => p.permission === "resource.readall")).toBe(false);
+  });
+
+  it("SEC V4-02: an administrator by direct permission, seated in Audit, never confirms resource.readall", async () => {
+    const { service } = world();
+    const g = await service.requestSensitiveView(admin, "it", "Support", "R1", "RESOURCE_READALL");
+    await expect(service.decideSensitiveView(actor("auditor", ["rolegroup.audit.validate", "role.assign"]), g.id, true, null, "R2")).rejects.toThrow(ForbiddenError);
   });
 });
 
