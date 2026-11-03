@@ -339,3 +339,17 @@ describe.skipIf(!hasLocalPg)("lot V4 on real PostgreSQL (local only)", () => {
     expect(await repo.revokeLiveOf(ctx.tenant, it_!, { by: boss!, reason: "Fin" }, () => [], "RESOURCE_READALL")).toBeNull(); // already closed
   });
 });
+
+describe.skipIf(!hasLocalPg)("q224 (DECISION-112) on real PostgreSQL: anyRestricted reads the effective level", () => {
+  const { ctx, one } = useMigrationTenant("v4bis");
+  it("CLIENT only -> false; a PERIMETRE risk -> true; an anomaly inheriting a NOMINATIF risk -> true", async () => {
+    const owner = (await one(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, 'o') RETURNING id`, [ctx.tenant, `o-${Math.random()}@v4b`])).id;
+    const risk = async (v: string) => (await one(`INSERT INTO risks (tenant_id, process, description, owner_id, visibility) VALUES ($1, 'p', 'd', $2, $3) RETURNING id`, [ctx.tenant, owner, v])).id as string;
+    const [c, p, n] = [await risk("CLIENT"), await risk("PERIMETRE"), await risk("NOMINATIF")];
+    const anomaly = (await one(`INSERT INTO anomalies (tenant_id, risk_id, description, severity, detected_by, status) VALUES ($1, $2, 't', 'LOW', $3, 'NEW') RETURNING id`, [ctx.tenant, n, owner])).id as string;
+    const repo = new PostgresResourceAccessRepository(ctx.pool);
+    expect(await repo.anyRestricted(ctx.tenant, "RISK", [c])).toBe(false);
+    expect(await repo.anyRestricted(ctx.tenant, "RISK", [c, p])).toBe(true);
+    expect(await repo.anyRestricted(ctx.tenant, "ANOMALY", [anomaly])).toBe(true);
+  });
+});

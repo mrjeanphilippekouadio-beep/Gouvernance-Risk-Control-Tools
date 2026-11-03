@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import { ResourceVisibilityManager, SMALL_CELL_THRESHOLD } from "../src/services/resourceVisibility.js";
 import { DashboardService } from "../src/services/DashboardService.js";
 import type { RiskRepository } from "../src/domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../src/domain/repositories/RiskEvaluationRepository.js";
@@ -453,6 +454,8 @@ function newService(fixtures: {
   withProcessRepository?: boolean;
   /** dashboard.executive scope (2026-09-30) — omit to exercise the "no resolver wired" GLOBAL degrade path. */
   scopeResolver?: DashboardScopeResolver;
+  /** q224 (DECISION-112): the visibility manager deciding the « moins de 5 » cells. */
+  access?: ConstructorParameters<typeof DashboardService>[17];
 }): DashboardService {
   return new DashboardService(
     fakeRisks(fixtures.risks ?? []),
@@ -470,6 +473,9 @@ function newService(fixtures: {
     fakeKpiMeasures(),
     fixtures.withProcessRepository === false ? undefined : fakeProcesses(fixtures.processes ?? []),
     fixtures.scopeResolver,
+    undefined,
+    undefined,
+    fixtures.access,
   );
 }
 
@@ -695,6 +701,40 @@ describe("DashboardService", () => {
     it("rejects a caller without dashboard.executive", async () => {
       const service = newService({});
       await expect(service.getAppetiteVsResidual(actorWith(["dashboard.read"]))).rejects.toThrow();
+    });
+  });
+
+  describe("q224 (DECISION-112): « moins de 5 » for a cell of fewer than 5 items holding a restricted one", () => {
+    const manager = (seesEverything: boolean, restricted: boolean) => new ResourceVisibilityManager(
+      { seesEverything: async () => seesEverything, anyRestricted: async () => restricted } as never,
+      { record: async () => {} } as never, {} as never, {} as never);
+    const risks = () => [buildRisk({ id: "r1" }), buildRisk({ id: "r2" })];
+
+    it("outside the fixed groups: the value is not sent, the cell is named; the fixed groups and an all-CLIENT cell get the value", async () => {
+      const hidden = await newService({ risks: risks(), access: manager(false, true) }).getExecutiveView(actorWith(["dashboard.executive"]));
+      expect(hidden.totalActiveRisks).toBeNull();
+      expect(hidden.belowThreshold).toEqual(["totalActiveRisks"]);
+      expect(hidden.openAnomaliesCount).toBe(0); // an empty cell holds nothing restricted
+      const rm = await newService({ risks: risks(), access: manager(true, true) }).getExecutiveView(actorWith(["dashboard.executive"]));
+      expect(rm.totalActiveRisks).toBe(2);
+      expect(rm.belowThreshold).toBeUndefined();
+      const client = await newService({ risks: risks(), access: manager(false, false) }).getExecutiveView(actorWith(["dashboard.executive"]));
+      expect(client.totalActiveRisks).toBe(2);
+    });
+
+    it("5 items or more: always the real value (SMALL_CELL_THRESHOLD)", async () => {
+      const five = ["a", "b", "c", "d", "e"].map((id) => buildRisk({ id }));
+      const r = await newService({ risks: five, access: manager(false, true) }).getExecutiveView(actorWith(["dashboard.executive"]));
+      expect(SMALL_CELL_THRESHOLD).toBe(5);
+      expect(r.totalActiveRisks).toBe(5);
+    });
+
+    it("appetite vs residual: score, exceedances, flag and ids of a small restricted group are not sent", async () => {
+      const r = buildRisk({ id: "r1" });
+      const rows = await newService({ risks: [r], evaluations: [buildEvaluation("r1", { residualScore: 20 })], access: manager(false, true) })
+        .getAppetiteVsResidual(actorWith(["dashboard.executive"]));
+      const row = rows.find((x) => x.belowThreshold)!;
+      expect(row).toMatchObject({ maxResidualScore: null, exceedanceCount: null, exceeded: null, riskIds: [] });
     });
   });
 

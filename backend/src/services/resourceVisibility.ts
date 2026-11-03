@@ -81,6 +81,10 @@ export function checkedReason(raw: string | undefined, what: string): string {
 /** Lot V4 A1 (q197): what an administrator without resource.readall sees of a restricted resource (support). */
 export type RestrictedResourceMeta = Pick<RestrictedResourceRow, "type" | "id" | "visibility" | "accessCount"> & { updatedAt: string };
 
+/** q224 (DECISION-112): below this many items, a cell holding a restricted item is shown « moins de 5 » to a reader
+ * outside the fixed groups. */
+export const SMALL_CELL_THRESHOLD = 5;
+
 /** q220 / SEC V4-03: the ids named in one list row (the count stays exact). */
 const READ_IDS_MAX = 500;
 
@@ -370,6 +374,19 @@ export class ResourceVisibilityManager {
     // Without a grant reference (none found), the list row is keyed on the reader (entityType User).
     await this.audit.record({ ...base, entityType: opened.grantId ? "SensitiveViewGrant" : "User", entityId: opened.grantId ?? userId,
       newValue: { through: "RESOURCE_READALL", list: type, count: opened.ids.length, ids: opened.ids.slice(0, READ_IDS_MAX) } });
+  }
+
+  /**
+   * q224 (DECISION-112): a dashboard / report cell computed over fewer than SMALL_CELL_THRESHOLD items, one of which at
+   * least is restricted (effective level other than CLIENT), is not sent to a reader outside the fixed groups — its value
+   * and the scores derived from it become null and the cell is named in `belowThreshold`. The fixed groups (Risk
+   * Manager, Committee, Audit) get the real values. An empty cell holds nothing restricted: never suppressed.
+   */
+  async belowThreshold(actor: AuthenticatedUser, type: RestrictableResource | "RISK", ids: string[]): Promise<boolean> {
+    const distinct = [...new Set(ids)];
+    if (distinct.length === 0 || distinct.length >= SMALL_CELL_THRESHOLD || !this.access.anyRestricted) return false;
+    if (await this.access.seesEverything(actor.tenantId, actor.userId)) return false;
+    return this.access.anyRestricted(actor.tenantId, type, distinct);
   }
 
   async listRestricted(actor: AuthenticatedUser, page?: { limit?: number; offset?: number }): Promise<Array<RestrictedResourceRow | RestrictedResourceMeta>> {

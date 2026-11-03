@@ -1,7 +1,7 @@
 import { readerScope, type ReadScope } from "../domain/visibility.js";
 import { keepReadableByRisk, maskCoveredRisks, maskRiskSource } from "./riskVisibility.js";
 import { withoutHiddenRisk } from "./AnomalyService.js";
-import type { ResourceVisibilityManager } from "./resourceVisibility.js";
+import { SMALL_CELL_THRESHOLD, type ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { RiskEvaluationRepository } from "../domain/repositories/RiskEvaluationRepository.js";
 import type { AnomalyRepository } from "../domain/repositories/AnomalyRepository.js";
@@ -147,12 +147,14 @@ export interface DashboardScopeSummary {
 }
 
 export interface ExecutiveDashboard {
-  totalActiveRisks: number;
+  totalActiveRisks: number | null;
   topRisks: DashboardRiskSummary[];
   criticalKris: DashboardKriSummary[];
   overdueActions: ActionPlanView[];
-  openAnomaliesCount: number;
+  openAnomaliesCount: number | null;
   scope: DashboardScopeSummary;
+  /** q224 (DECISION-112): the cells sent as null because they hold fewer than 5 items, one restricted (« moins de 5 »). */
+  belowThreshold?: string[];
 }
 
 export interface RiskCommitteeReport {
@@ -165,9 +167,11 @@ export interface RiskCommitteeReport {
 export interface ConsolidatedEntityBreakdown {
   /** RiskEvaluation.entity / Kri.entity free-text scope — "UNSPECIFIED" groups rows with no entity set. See getConsolidatedReport's doc comment for why this is NOT a cross-tenant view. */
   entity: string;
-  riskCount: number;
+  riskCount: number | null;
   topRisks: DashboardRiskSummary[];
-  criticalKriCount: number;
+  criticalKriCount: number | null;
+  /** q224 (DECISION-112): the cells sent as null because they hold fewer than 5 items, one restricted (« moins de 5 »). */
+  belowThreshold?: string[];
 }
 
 export interface ConsolidatedReport {
@@ -181,9 +185,12 @@ export interface AppetiteVsResidualRow {
   entity: string | null;
   threshold: number | null;
   maxResidualScore: number | null;
-  exceedanceCount: number;
-  exceeded: boolean;
+  exceedanceCount: number | null;
+  exceeded: boolean | null;
   riskIds: string[];
+  /** q224 (DECISION-112): the cells sent as null because they hold fewer than 5 items, one restricted (« moins de 5 »). */
+  belowThreshold?: string[];
+
   /** B-6b: Dispositif version the threshold comes from (present only when the Dispositif is wired; null = none applicable). */
   frameworkVersionId?: string | null;
   /** q145: category id of the row (Dispositif wired only; null for a legacy free-label evaluation with no matching entry). */
@@ -230,12 +237,20 @@ export interface ComplianceReport {
   framework: string;
   entity: string | null;
   period: { from: Date | null; to: Date | null };
-  totalControls: number;
+  totalControls: number | null;
+  /** q224 (DECISION-112): the cells sent as null because they hold fewer than 5 items, one restricted (« moins de 5 »). */
+  belowThreshold?: string[];
   /** DONE / (DONE + NOT_DONE) among matching ControlExecutions, null if there is no sample. */
   controlExecutionPassRate: number | null;
   /** EFFECTIVE / total among matching ControlEffectivenessAssessments, null if there is no sample. */
   controlEffectivenessPassRate: number | null;
-  overdueControlActions: number;
+  overdueControlActions: number | null;
+}
+
+/** q224: `{ belowThreshold: [...] }` naming the suppressed cells, or nothing when none is. */
+function belowThresholdField(cells: Array<string | false>): { belowThreshold?: string[] } {
+  const names = cells.filter((c): c is string => !!c);
+  return names.length > 0 ? { belowThreshold: names } : {};
 }
 
 // ---------------------------------------------------------------------
@@ -306,7 +321,7 @@ export class DashboardService {
      */
     private readonly frameworks?: FrameworkResolutionDeps["frameworks"],
     /** QA-VIS2-02: masks hidden control / execution ids of the open anomalies. Optional (tests): absent, nothing masked. */
-    private readonly access?: Pick<ResourceVisibilityManager, "maskAnomalyParents">,
+    private readonly access?: Pick<ResourceVisibilityManager, "maskAnomalyParents"> & Partial<Pick<ResourceVisibilityManager, "belowThreshold">>,
   ) {}
 
   // -- ACT-080 ---------------------------------------------------------
@@ -383,20 +398,23 @@ export class DashboardService {
       }
     }
 
-    const overdueControlActions = (
-      await this.getOverdueActionViews(actor, { sourceType: "CONTROL" })
-    ).length;
+    const overdueViews = await this.getOverdueActionViews(actor, { sourceType: "CONTROL" });
 
     const executionSample = doneCount + notDoneCount;
+    // q224: the control cell (count and the two rates computed over it) and the overdue-plan cell.
+    const smallControls = await this.belowThreshold(actor, "CONTROL", scopedControls.map((c) => c.id));
+    const smallActions = await this.belowThreshold(actor, "ACTION_PLAN", overdueViews.map((a) => a.id));
 
     return {
       framework: filters.framework.trim(),
       entity: filters.entity ?? null,
       period: { from: filters.from ?? null, to: filters.to ?? null },
-      totalControls: scopedControls.length,
-      controlExecutionPassRate: executionSample > 0 ? doneCount / executionSample : null,
-      controlEffectivenessPassRate: assessedCount > 0 ? effectiveCount / assessedCount : null,
-      overdueControlActions,
+      totalControls: smallControls ? null : scopedControls.length,
+      controlExecutionPassRate: smallControls ? null : executionSample > 0 ? doneCount / executionSample : null,
+      controlEffectivenessPassRate: smallControls ? null : assessedCount > 0 ? effectiveCount / assessedCount : null,
+      overdueControlActions: smallActions ? null : overdueViews.length,
+      ...belowThresholdField([smallControls && "totalControls", smallControls && "controlExecutionPassRate",
+        smallControls && "controlEffectivenessPassRate", smallActions && "overdueControlActions"]),
     };
   }
 
@@ -541,15 +559,19 @@ export class DashboardService {
         .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation, bandsCache)),
     );
     const criticalKris = kriSummaries.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
-    const openAnomaliesCount = this.countOpenAnomalies(allAnomalies, scope, scopedRiskIds);
+    const openAnomalies = this.openAnomalies(allAnomalies, scope, scopedRiskIds);
+    const activeRisks = allRisks.filter((r) => r.status !== "ARCHIVED");
+    const smallRisks = await this.belowThreshold(actor, "RISK", activeRisks.map((r) => r.id));
+    const smallAnomalies = await this.belowThreshold(actor, "ANOMALY", openAnomalies.map((a) => a.id));
 
     return {
-      totalActiveRisks: allRisks.filter((r) => r.status !== "ARCHIVED").length,
+      totalActiveRisks: smallRisks ? null : activeRisks.length,
       topRisks,
       criticalKris,
       overdueActions,
-      openAnomaliesCount,
+      openAnomaliesCount: smallAnomalies ? null : openAnomalies.length,
       scope: scopeSummary,
+      ...belowThresholdField([smallRisks && "totalActiveRisks", smallAnomalies && "openAnomaliesCount"]),
     };
   }
 
@@ -641,11 +663,16 @@ export class DashboardService {
             .slice(0, 5)
             .map((s) => this.buildRiskSummary(actor.tenantId, s.risk, s.evaluation, bandsCache)),
         );
+        const critical = entityKris.filter((k) => k.status === "ORANGE" || k.status === "ROUGE");
+        const smallRisks = await this.belowThreshold(actor, "RISK", entityScored.map((x) => x.risk.id));
+        // A KRI follows its risk: the cell is judged on the risks of the critical KRIs.
+        const smallKris = critical.length > 0 && critical.length < SMALL_CELL_THRESHOLD && await this.belowThreshold(actor, "RISK", critical.map((k) => k.kri.riskId));
         return {
           entity,
-          riskCount: entityScored.length,
+          riskCount: smallRisks ? null : entityScored.length,
           topRisks,
-          criticalKriCount: entityKris.filter((k) => k.status === "ORANGE" || k.status === "ROUGE").length,
+          criticalKriCount: smallKris ? null : critical.length,
+          ...belowThresholdField([smallRisks && "riskCount", smallKris && "criticalKriCount"]),
         };
       }),
     );
@@ -746,6 +773,16 @@ export class DashboardService {
     const rows: AppetiteVsResidualRow[] = [];
     for (const group of groups.values()) {
       const threshold = group.threshold;
+      // q224: the row's score, exceedance count and flag are computed over its risks; the ids would give the count away.
+      if (await this.belowThreshold(actor, "RISK", group.riskIds)) {
+        rows.push({
+          subCategory: group.subCategory, entity: group.entity, threshold,
+          maxResidualScore: null, exceedanceCount: null, exceeded: null, riskIds: [],
+          belowThreshold: ["maxResidualScore", "exceedanceCount", "exceeded", "riskIds"],
+          ...(this.frameworks ? { frameworkVersionId: group.versionId, subCategoryId: group.subCategoryId } : {}),
+        });
+        continue;
+      }
       const maxResidualScore = group.scores.length > 0 ? Math.max(...group.scores) : null;
       const exceedanceCount = threshold !== null ? group.scores.filter((sc) => sc > threshold).length : 0;
       rows.push({
@@ -1043,10 +1080,14 @@ export class DashboardService {
    * any scoped count (fail-closed) — they only ever show up in GLOBAL
    * mode, same as before this feature.
    */
-  private countOpenAnomalies(anomalies: Anomaly[], scope: RiskScope, scopedRiskIds: Set<string> | null): number {
-    if (scope.mode === "GLOBAL") return anomalies.filter((a) => a.status !== "CLOSED").length;
-    return anomalies.filter((a) => a.status !== "CLOSED" && a.riskId !== null && (scopedRiskIds?.has(a.riskId) ?? false))
-      .length;
+  private openAnomalies(anomalies: Anomaly[], scope: RiskScope, scopedRiskIds: Set<string> | null): Anomaly[] {
+    if (scope.mode === "GLOBAL") return anomalies.filter((a) => a.status !== "CLOSED");
+    return anomalies.filter((a) => a.status !== "CLOSED" && a.riskId !== null && (scopedRiskIds?.has(a.riskId) ?? false));
+  }
+
+  /** q224 (DECISION-112): one helper for every aggregate cell; without the manager (tests), nothing is suppressed. */
+  private belowThreshold(actor: AuthenticatedUser, type: Parameters<ResourceVisibilityManager["belowThreshold"]>[1], ids: string[]): Promise<boolean> {
+    return this.access?.belowThreshold ? this.access.belowThreshold(actor, type, ids) : Promise.resolve(false);
   }
 
   /**

@@ -184,10 +184,15 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
     it("counts: the executive dashboard counts only readable active risks (1 CLIENT + the restricted ones the profile reads)", async () => {
       for (const who of WHO) {
         const n = 1 + (SEES[who].PERIM ? 1 : 0) + (SEES[who].NOMIN ? 1 : 0);
+        // DECISION-112 (q224): outside the fixed groups, a cell of fewer than 5 items holding a restricted one is « moins de 5 »
+        const small = !["rm", "com", "aud"].includes(who) && n > 1;
         const r = await get(who, "/dashboard/executive");
-        expect(r.json.data.totalActiveRisks, who).toBe(n);
+        expect(r.json.data.totalActiveRisks, who).toBe(small ? null : n);
+        if (small) expect(r.json.data.belowThreshold, who).toContain("totalActiveRisks");
         const rc = await get(who, "/reports/consolidated");
-        expect(rc.json.data.entities.reduce((a: number, e: { riskCount: number }) => a + e.riskCount, 0), `${who} consolidated`).toBe(n);
+        const cells = rc.json.data.entities as Array<{ riskCount: number | null }>;
+        if (small) expect(cells.some((e) => e.riskCount === null), `${who} consolidated`).toBe(true);
+        else expect(cells.reduce((a, e) => a + (e.riskCount ?? 0), 0), `${who} consolidated`).toBe(n);
       }
     });
 
