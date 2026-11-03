@@ -1,0 +1,345 @@
+import type { Permission } from "../permissions.js";
+import type { Role, SystemGroup } from "../entities/Role.js";
+import {
+  ADMIN_PERMISSIONS,
+  isAdministrator,
+  isAuditGroupPermission,
+  isCommitteeMember,
+  isRiskManagerMember,
+} from "../fixedGroupPermissions.js";
+import { PRINCIPLES, type PrincipleId } from "./catalog.js";
+
+/**
+ * Lot D6 (DECISION-074 R-6, spec RM-V1-Panel-Principes-Gouvernance): what the governance panel computes, as pure
+ * functions over one read-only snapshot of the client (`GovernanceFacts`). No I/O, no clock (`now` is a fact). The
+ * frontend displays the result; it never recomputes a status.
+ *
+ * A detector returns the offending objects (none = RESPECTED) or NOT_EVALUABLE with a reason: a principle is never shown
+ * "respected" for lack of data. Only the unambiguous parts of each A13 rule are evaluated; a part that needs a threshold
+ * the PO has not fixed is left out (never invented) and the detector says which parts it covers.
+ */
+
+export interface FactRole {
+  id: string;
+  name: string;
+  systemGroup: SystemGroup | null;
+  permissions: string[];
+}
+
+export interface FactUser {
+  id: string;
+  label: string;
+  active: boolean;
+  /** Legacy permissions carried directly by the account (`users.roles`). */
+  directPermissions: string[];
+}
+
+export interface MarkedAction {
+  auditId: string;
+  at: Date;
+  userId: string;
+  rule: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  reason: string | null;
+  reviewed: boolean;
+}
+
+export interface GovernanceFacts {
+  now: Date;
+  trackedSince: Date;
+  users: FactUser[];
+  roles: FactRole[];
+  /** Active assignments only (not revoked, role not deleted). */
+  assignments: Array<{ userId: string; roleId: string; grantedBy: string }>;
+  config: { committeeAuditCumulAllowed: boolean; committeeEvaluationEnforced: boolean; committeeTreatmentMinScore: number | null } | null;
+  /** Risk framework decisions taken in FALLBACK / BOOTSTRAP whose ratification is still pending. */
+  pendingRatifications: Array<{ requestId: string; regime: string; deciderGroup: string | null; decidedAt: Date }>;
+  /** Live risks (not deleted, not archived) without an owner, or whose owner account is suspended. Label null when restricted. */
+  riskOwnerGaps: Array<{ id: string; label: string | null; issue: "NO_OWNER" | "OWNER_SUSPENDED" }>;
+  /** Active processes missing an owner account or a risk champion (D2b). */
+  processGaps: Array<{ id: string; label: string; missingOwner: boolean; missingChampion: boolean }>;
+  /** Actions marked « applied without a second validation » since trackedSince, most recent first (bounded). */
+  markedActions: MarkedAction[];
+  markedTotal: number;
+  unreviewedTotal: number;
+  oldestUnreviewedAt: Date | null;
+  /** Detective control: validations / closures by the author of the object, without the marker (bounded). */
+  selfValidatedUnmarked: Array<{ auditId: string; at: Date; userId: string; entityType: string; entityId: string; action: string }>;
+  selfValidatedUnmarkedTotal: number;
+  managerDesignated: boolean;
+  interimDesignated: boolean;
+  /** Single-person regime (D2d): declared and not lifted. */
+  singlePersonRegimeActive: boolean;
+  riskManagerVacancySince: Date | null;
+  riskManagerVacancyMaxDays: number | null;
+  exceptionReviewDelayDays: number | null;
+}
+
+export type OffenderKind = "ROLE" | "PERMISSION" | "USER" | "GROUP" | "SETTING" | "DECISION" | "RISK" | "PROCESS";
+
+export interface Offender {
+  kind: OffenderKind;
+  id: string;
+  label: string | null;
+  count?: number;
+  detail?: string;
+}
+
+export type DetectorResult = { offenders: Offender[]; covers?: string } | { notEvaluable: string };
+
+const DAY = 86_400_000;
+const NOT_BUILT = "Donnée appartenant à une fonction non livrée (R-Q3, DECISION-075) : évaluable à sa livraison";
+
+function rolesByUser(f: GovernanceFacts): Map<string, FactRole[]> {
+  const byId = new Map(f.roles.map((r) => [r.id, r]));
+  const out = new Map<string, FactRole[]>();
+  for (const a of f.assignments) {
+    const role = byId.get(a.roleId);
+    if (!role) continue;
+    out.set(a.userId, [...(out.get(a.userId) ?? []), role]);
+  }
+  return out;
+}
+
+const activeUsers = (f: GovernanceFacts): FactUser[] => f.users.filter((u) => u.active);
+const asRoles = (rs: FactRole[]): Role[] => rs as unknown as Role[];
+
+/** Active members of a fixed group (a person counts once). */
+export function groupMembers(f: GovernanceFacts, group: SystemGroup): FactUser[] {
+  const by = rolesByUser(f);
+  return activeUsers(f).filter((u) => (by.get(u.id) ?? []).some((r) => r.systemGroup === group));
+}
+
+const userOffender = (u: FactUser, detail?: string): Offender => ({ kind: "USER", id: u.id, label: u.label, ...(detail ? { detail } : {}) });
+const groupOffender = (group: SystemGroup, count: number, detail: string): Offender => ({ kind: "GROUP", id: group, label: group, count, detail });
+
+function isAdminUser(roles: FactRole[], u: FactUser): boolean {
+  return isAdministrator(asRoles(roles)) || u.directPermissions.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p));
+}
+
+const decision = (a: { auditId: string; entityType: string; entityId: string; action: string; at: Date }, detail?: string): Offender => ({
+  kind: "DECISION",
+  id: a.auditId,
+  label: `${a.entityType} ${a.entityId}`,
+  detail: detail ?? `${a.action} — ${a.at.toISOString().slice(0, 10)}`,
+});
+
+export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResult> = {
+  // Self-validation: marked noSelfValidation acts, and (detective control) validations by the author left unmarked.
+  "GOV-SOD-01": (f) => ({
+    covers: "actes marqués « sans validation indépendante » et validations par l'auteur sans marqueur, depuis le début du suivi",
+    offenders: [
+      ...f.markedActions.filter((m) => m.rule === "noSelfValidation").map((m) => decision(m, "validé par son auteur (marqué)")),
+      ...f.selfValidatedUnmarked.map((m) => decision(m, "validé par son auteur sans marqueur (contrôle détectif)")),
+    ],
+  }),
+  "GOV-SOD-02": (f) => ({
+    offenders: f.pendingRatifications.map((r) => ({
+      kind: "DECISION" as const,
+      id: r.requestId,
+      label: `Dispositif — décision ${r.regime}`,
+      detail: `ratification en attente depuis ${Math.floor((f.now.getTime() - r.decidedAt.getTime()) / DAY)} jour(s)`,
+    })),
+  }),
+  "GOV-SOD-03": (f) => {
+    const users = new Map(f.users.map((u) => [u.id, u]));
+    const roles = new Map(f.roles.map((r) => [r.id, r]));
+    return {
+      covers: "attributions de rôle actives faites par le bénéficiaire",
+      offenders: f.assignments
+        .filter((a) => a.grantedBy === a.userId && users.get(a.userId)?.active)
+        .map((a) => userOffender(users.get(a.userId)!, `s'est attribué le rôle ${roles.get(a.roleId)?.name ?? a.roleId}`)),
+    };
+  },
+  "GOV-SOD-04": (f) => {
+    const by = rolesByUser(f);
+    const offenders: Offender[] = [];
+    for (const u of activeUsers(f)) {
+      const rs = by.get(u.id) ?? [];
+      const admin = isAdminUser(rs, u);
+      const rm = isRiskManagerMember(asRoles(rs));
+      const committee = isCommitteeMember(asRoles(rs));
+      const audit = rs.some((r) => r.systemGroup === "AUDIT");
+      const cumuls: string[] = [];
+      if (admin && rm) cumuls.push("administrateur + Risk Manager");
+      if (admin && audit) cumuls.push("administrateur + Audit");
+      if (rm && committee) cumuls.push("Risk Manager + Comité");
+      if (rm && audit) cumuls.push("Risk Manager + Audit (anomalie)");
+      if (committee && audit) {
+        cumuls.push(f.config?.committeeAuditCumulAllowed ? "Comité + Audit (autorisé par le paramètre)" : "Comité + Audit");
+      }
+      if (cumuls.length > 0) offenders.push(userOffender(u, cumuls.join(" ; ")));
+    }
+    return { offenders };
+  },
+  "GOV-SOD-05": () => ({ notEvaluable: "Croisement par dossier (exécution, efficacité, validation de l'évaluation) non construit dans ce lot" }),
+  "GOV-RISK-01": (f) => {
+    const n = groupMembers(f, "RISK_MANAGER").length;
+    return {
+      covers: "effectif du groupe Risk Manager (la part de risques portés par le Risk Manager attend un seuil PO)",
+      offenders: n <= 1 ? [groupOffender("RISK_MANAGER", n, n === 0 ? "fonction risque vacante" : "dépendance à une seule personne")] : [],
+    };
+  },
+  "GOV-RISK-02": (f) => {
+    const offenders: Offender[] = [];
+    const rm = groupMembers(f, "RISK_MANAGER").length;
+    if (rm === 0) offenders.push(groupOffender("RISK_MANAGER", 0, "vacance"));
+    else if (rm === 1 && !f.interimDesignated) offenders.push(groupOffender("RISK_MANAGER", 1, "un seul membre, ni suppléant ni intérimaire désigné"));
+    if (f.riskManagerVacancySince && f.riskManagerVacancyMaxDays !== null) {
+      const days = Math.floor((f.now.getTime() - f.riskManagerVacancySince.getTime()) / DAY);
+      if (days > f.riskManagerVacancyMaxDays) {
+        offenders.push({ kind: "SETTING", id: "riskManagerVacancyMaxDays", label: "Vacance du Risk Manager", detail: `${days} jours, au-delà de ${f.riskManagerVacancyMaxDays}` });
+      }
+    }
+    const committee = groupMembers(f, "RISK_COMMITTEE").length;
+    if (committee < 2) offenders.push(groupOffender("RISK_COMMITTEE", committee, "moins de deux membres actifs"));
+    return { offenders };
+  },
+  "GOV-AUD-01": (f) => {
+    const by = rolesByUser(f);
+    const offenders: Offender[] = [];
+    for (const u of groupMembers(f, "AUDIT")) {
+      if ((by.get(u.id) ?? []).some((r) => r.systemGroup === "RISK_MANAGER")) offenders.push(userOffender(u, "membre d'Audit et Risk Manager"));
+    }
+    for (const r of f.roles.filter((r) => r.systemGroup === "AUDIT")) {
+      for (const p of r.permissions.filter((p) => !isAuditGroupPermission(p as Permission))) {
+        offenders.push({ kind: "PERMISSION", id: p, label: p, detail: `porté par le rôle Audit ${r.name}` });
+      }
+    }
+    return { covers: "cumul Audit + Risk Manager et droits hors lecture du rôle Audit", offenders };
+  },
+  "GOV-AUD-02": (f) => {
+    const n = groupMembers(f, "AUDIT").length;
+    return { covers: "effectif du groupe Audit", offenders: n === 0 ? [groupOffender("AUDIT", 0, "aucune 3e ligne")] : [] };
+  },
+  "GOV-COM-01": (f) => {
+    if (!f.config) return { notEvaluable: "Paramètres du client absents" };
+    const offenders: Offender[] = [];
+    const n = groupMembers(f, "RISK_COMMITTEE").length;
+    if (n <= 1) offenders.push(groupOffender("RISK_COMMITTEE", n, n === 0 ? "aucun Comité" : "un seul membre"));
+    if (!f.config.committeeEvaluationEnforced) {
+      offenders.push({ kind: "SETTING", id: "committeeEvaluationEnforced", label: "Passage obligatoire au Comité", detail: "désactivé" });
+    }
+    if (f.config.committeeTreatmentMinScore === null) {
+      offenders.push({ kind: "SETTING", id: "committeeTreatmentMinScore", label: "Seuil de traitement au Comité", detail: "non fixé : aucune décision n'atteint le Comité" });
+    }
+    return { covers: "effectif du Comité et réglages de passage au Comité", offenders };
+  },
+  "GOV-COM-02": () => ({ notEvaluable: `${NOT_BUILT} (votes nominatifs du Comité, B-12)` }),
+  "GOV-APP-01": (f) => ({
+    covers: "changements d'appétence marqués « sans seconde validation »",
+    offenders: f.markedActions.filter((m) => m.rule.startsWith("riskappetite")).map((m) => decision(m)),
+  }),
+  "GOV-OWN-01": (f) => ({
+    covers: "risques sans propriétaire ou à propriétaire suspendu",
+    offenders: f.riskOwnerGaps.map((r) => ({
+      kind: "RISK" as const,
+      id: r.id,
+      label: r.label,
+      detail: r.issue === "NO_OWNER" ? "sans propriétaire" : "propriétaire suspendu",
+    })),
+  }),
+  "GOV-OWN-02": (f) => ({
+    covers: "processus actifs sans propriétaire rattaché à un compte ou sans champion de risque",
+    offenders: f.processGaps.map((p) => ({
+      kind: "PROCESS" as const,
+      id: p.id,
+      label: p.label,
+      detail: [p.missingOwner ? "sans propriétaire (compte)" : null, p.missingChampion ? "sans champion de risque" : null].filter(Boolean).join(" ; "),
+    })),
+  }),
+  "GOV-OWN-03": () => ({ notEvaluable: `${NOT_BUILT} (étape Analyse)` }),
+  "GOV-ACC-01": (f) => ({
+    covers: "rôles portant rolegroup.audit.update (le nombre d'administrateurs et la largeur des rôles attendent un seuil PO)",
+    offenders: f.roles
+      .filter((r) => r.systemGroup === null && r.permissions.includes("rolegroup.audit.update"))
+      .map((r) => ({ kind: "ROLE" as const, id: r.id, label: r.name, detail: "porte rolegroup.audit.update" })),
+  }),
+  "GOV-TRC-01": (f) => {
+    if (f.unreviewedTotal === 0) return { offenders: [] };
+    const days = f.oldestUnreviewedAt ? Math.floor((f.now.getTime() - f.oldestUnreviewedAt.getTime()) / DAY) : 0;
+    return {
+      covers: "décisions marquées « sans seconde validation » non revues par un tiers",
+      offenders: [{ kind: "DECISION", id: "unreviewed", label: "Décisions non revues", count: f.unreviewedTotal, detail: `la plus ancienne date de ${days} jour(s)` }],
+    };
+  },
+  // Depends on the other results: computed by computePanel once the high-severity statuses are known.
+  "GOV-TRC-02": () => ({ offenders: [] }),
+  "GOV-REG-01": (f) => {
+    const governancePeople = new Set(
+      f.assignments.filter((a) => f.users.find((u) => u.id === a.userId)?.active).map((a) => a.userId),
+    ).size;
+    if (f.singlePersonRegimeActive && governancePeople > 1) {
+      return { offenders: [{ kind: "SETTING", id: "singlePersonRegime", label: "Régime « structure à une personne »", count: governancePeople, detail: "déclaré alors que plusieurs personnes ont un rôle" }] };
+    }
+    const selfValidations = f.markedActions.filter((m) => m.rule === "noSelfValidation").length + f.selfValidatedUnmarkedTotal;
+    if (!f.singlePersonRegimeActive && governancePeople <= 1 && selfValidations > 0) {
+      return { offenders: [{ kind: "SETTING", id: "singlePersonRegime", label: "Régime « structure à une personne »", count: governancePeople, detail: "non déclaré alors qu'une seule personne valide ses propres actes" }] };
+    }
+    return { offenders: [] };
+  },
+};
+
+export type PrincipleStatus = "NOT_RESPECTED" | "RESPECTED" | "NOT_EVALUABLE" | "ACCEPTED";
+
+export interface ActiveAcceptance {
+  id: string;
+  principleId: string;
+  expiresAt: Date;
+  reason: string;
+  regime: string | null;
+  acceptedBy: string;
+  confirmedBy: string | null;
+  offendersSnapshot: unknown[];
+}
+
+export interface PrincipleResult {
+  id: PrincipleId;
+  status: PrincipleStatus;
+  notEvaluableReason: string | null;
+  covers: string | null;
+  offenders: Offender[];
+  acceptance: ActiveAcceptance | null;
+}
+
+export const offenderKey = (o: { kind?: unknown; id?: unknown }): string => `${String(o.kind)}:${String(o.id)}`;
+
+/**
+ * R-5: an ACTIVE, unexpired acceptance turns NOT_RESPECTED into ACCEPTED only while every current offender was already in
+ * its snapshot (a new offender makes the principle NOT_RESPECTED again: fail-closed).
+ */
+function applyAcceptance(offenders: Offender[], acceptance: ActiveAcceptance | undefined, now: Date): ActiveAcceptance | null {
+  if (!acceptance || acceptance.expiresAt.getTime() <= now.getTime()) return null;
+  const covered = new Set(acceptance.offendersSnapshot.map((o) => offenderKey(o as Offender)));
+  return offenders.every((o) => covered.has(offenderKey(o))) ? acceptance : null;
+}
+
+export function computePanel(f: GovernanceFacts, acceptances: ActiveAcceptance[]): PrincipleResult[] {
+  const accByPrinciple = new Map(acceptances.map((a) => [a.principleId, a]));
+  const results = PRINCIPLES.map((p): PrincipleResult => {
+    const r = DETECTORS[p.id](f);
+    if ("notEvaluable" in r) return { id: p.id, status: "NOT_EVALUABLE", notEvaluableReason: r.notEvaluable, covers: null, offenders: [], acceptance: null };
+    if (r.offenders.length === 0) return { id: p.id, status: "RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: [], acceptance: null };
+    const accepted = applyAcceptance(r.offenders, accByPrinciple.get(p.id), f.now);
+    return { id: p.id, status: accepted ? "ACCEPTED" : "NOT_RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: r.offenders, acceptance: accepted };
+  });
+  // GOV-TRC-02: a high-severity principle not respected and nobody designated as manager.
+  const severe = results.filter((r) => r.status === "NOT_RESPECTED" && PRINCIPLES.find((p) => p.id === r.id)?.severity === "elevee");
+  const trc02 = results.find((r) => r.id === "GOV-TRC-02")!;
+  if (severe.length > 0 && !f.managerDesignated) {
+    trc02.offenders = [{ kind: "SETTING", id: "manager", label: "Gérant désigné", count: severe.length, detail: "absent alors que des principes de gravité élevée ne sont pas respectés" }];
+    trc02.covers = "gérant désigné face aux principes de gravité élevée non respectés";
+    const accepted = applyAcceptance(trc02.offenders, accByPrinciple.get("GOV-TRC-02"), f.now);
+    trc02.status = accepted ? "ACCEPTED" : "NOT_RESPECTED";
+    trc02.acceptance = accepted;
+  }
+  return results;
+}
+
+/** Offenders of one principle now, for the acceptance snapshot (R-5 « portée »). Unknown id or not evaluable: none. */
+export function offendersOf(f: GovernanceFacts, principleId: string): Offender[] {
+  const result = computePanel(f, []).find((r) => r.id === principleId);
+  return result?.offenders ?? [];
+}
