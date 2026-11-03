@@ -482,3 +482,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Ajouter une migration casse les tests de référence (QA-panel*-migrations : NUMBERS, max, nombre de fonctions ; QA-visibility-v2bis/v3 « 083 est la dernière ») : les mettre à jour sans les affaiblir.
 - A1 : un administrateur (permission d'ADMIN_PERMISSIONS dans `actor.roles`) reçoit la liste des ressources restreintes en métadonnées seules ; les oracles QA « adm = 403 » ont été réalignés.
 - q215 : l'aperçu de 140 caractères du motif est coupé côté serveur (`reasonPreview`), pas seulement à l'écran.
+
+## 2026-11-03 — DECISION-111 (q219-q223) sur le lot V4 (feat/r1-visibility-v4, 87d3796)
+- Distinguer « voit tout » (groupes fixes) d'un droit de lecture partiel : séparer en SQL `<ressource>_visible_core` (règles sans le droit) et `<ressource>_visible_to` (core OU condition du droit). Le core sert aussi à savoir ce qu'une lecture doit au seul droit (q220), sans dupliquer les règles. Les ressources héritées (anomalie, plan) appellent les `_core` du parent ; leur niveau effectif vient de fonctions dédiées.
+- Journal de lecture (q220) : un seul assistant (`recordReadallReads`) appelé par get/list des 5 services, pré-filtre TS gratuit (administrateur sinon rien), écriture avant la réponse, échec = échec de la lecture. Appel en `?.()` pour ne pas casser les faux de test.
+- Échéance fixée à la confirmation (q221) : colonne posée par l'UPDATE de décision seulement, garde « posée à la confirmation, puis immuable » ; une attribution échue bloque l'index vivant, donc la nouvelle demande la remplace (REVOKED audité), comme une demande expirée.
+- Un nouveau délai réglable = calque exact de `riskManagerVacancyMaxDays` (colonne DEFAULT, Config optionnel, repo, ConfigService, route, GOVERNANCE_DELAY_KEYS, écran) ; B6bFollowups compte les lecteurs de `configs.getByTenant(` par fichier.
+- Sonde QA d'un droit de lecture : choisir une ressource qu'aucun autre profil du jeu ne lit déjà (vérifié en SQL avec le `_core`), sinon le test réussit pour une mauvaise raison.
