@@ -247,3 +247,25 @@ Créée le 2026-11-03 (fichier absent jusqu'ici dans le worktree ; à fusionner 
 - Distinguer condition de production et recommandation non bloquante.
 - Ne pas confondre sécurité (A10) et privacy : les correctifs A10 ne couvrent pas la nécessité ni la minimisation.
 - RGPD : NOT_ESTABLISHED par défaut ; ne pas le citer comme applicable sans établissement UE ou personnes UE.
+
+
+## Revalidation V4 (2026-11-03)
+
+
+- PRIV-BLK-V4-001 levé en conception pour `readall` ; production non revalidée tant que les preuves ne sont pas fournies.
+- Décisions retenues : q219 exclusion des dossiers nommés ; q220 audit par ressource et par liste, avant réponse, échec = refus ; q221 90 jours réglables sans prolongation automatique ; q223 date seule et UUID opaques.
+- Limites : agrégats acceptables avec seuil minimal de cellule (recommandation 5) ; lectures enfants (preuves, exécutions, mesures) non acceptables en l'état si données personnelles.
+- Points ouverts : chemin nominatif (motif, confirmation, journalisation, expiration non documentés dans DECISION-111) ; recertification trimestrielle non confirmée ; motif codifié ; seuil de cellule.
+
+## Points ouverts
+
+- Q1, Q3, Q4 : arbitrage PO (HUMAN) requis.
+- Qualification BCEAO / confidentialité des déclarations liées à la LBC-FT et des dossiers fraude : Compliance.
+- Modèle v3 (`docs/privacy/PRIV-visibility-v3-2026-11-01.md`) et mémoire antérieure absents du worktree : à recaler.
+
+## Règles de travail retenues
+
+- Ne pas trancher à la place du PO ; formuler en question avec recommandation.
+- Distinguer condition de production et recommandation non bloquante.
+- Ne pas confondre sécurité (A10) et privacy : les correctifs A10 ne couvrent pas la nécessité ni la minimisation.
+- RGPD : NOT_ESTABLISHED par défaut ; ne pas le citer comme applicable sans établissement UE ou personnes UE.
