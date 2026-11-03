@@ -120,3 +120,21 @@
 | INFO-01, INFO-02 | Clos par DECISION-111 (q222, q221) ; INFO-08 ouvert (A06/PO) |
 | V4-03 | REMEDIATION_REQUIRED (A06) ou acceptation explicite HUMAN avant la production |
 | V4-04 | REVIEW_REQUIRED (A07/A09 : état des bases) |
+
+## Retest 2 A10 — SEC V4-03 (2026-11-03, HEAD `2090954`)
+
+- Méthode : analyse statique, `npx vitest run` de `visibility-v4`, `QA-visibility-v4` et `q200-sensitive-view` (30 verts, 48 ignorés car il faut une base), `tsc --noEmit` propre. Aucun code modifié.
+- **Verdict final du lot V4 : VERT.** Aucune escalade HUMAN.
+
+| Contrôle | Résultat | Analyse |
+|---|---|---|
+| Couverture de l'enveloppe | **PASS** | Les 5 dépôts restreignables ne sont construits que dans `server.ts`, tous enveloppés par `withReadallAudit` (test d'inventaire). Le seul autre `new PostgresRiskRepository` est dans `scripts/backfillRiskProcessId.ts` (hors ligne, sans lecteur). Aucun autre dépôt, service ou route ne lit `risks`, `controls`, `anomalies`, `action_plans` ou `kpis` en SQL direct. Le seul autre point qui appelle `*_visible_to`, `PostgresRaciAssignmentRepository`, ne fait qu'un contrôle d'écriture, et `canRead` porte sur l'accès d'un AUTRE compte (RACI, désignation), sans restituer de contenu. Les enfants (KRI, mesures, évaluations, décisions, exécutions, efficacité, preuves, RACI) et les vues (tableaux de bord, dispositif, 360, cartographie, `listCoveringRisk`) obtiennent leur racine par `getById`, `list`, `listForRisk`, `listCoveringRisk` ou `hiddenIds` en scope lecteur (`readerScope(actor)`, `riskVisibility.ts`), donc par l'enveloppe. |
+| Signatures | **PASS** | Toutes les méthodes en scope lecteur des 5 dépôts ont le scope en DERNIER argument et renvoient des lignes racines portant `id`, ou des ids pour `hiddenIds`. La détection de l'enveloppe (`all === false` + `userId`) ne peut donc pas les manquer. Les appels internes au dépôt passent par la cible, sans double trace. SYSTEM_SCOPE et les groupes fixes ne sont pas journalisés, comme voulu. |
+| Échec fermé | **PASS** | La ligne READ est écrite (`await`) avant de rendre le résultat. `readOnlyThroughReadall` ou `audit.record` en échec rejette la promesse, donc la requête échoue sans contenu (test `a failed write fails the read`). |
+| Ligne de liste | **PASS** | Ids (500 au plus, la liste étant elle-même bornée) + nombre exact, sans titre ni contenu. |
+| Preuves | **Acceptable** | Un téléchargement écrit déjà DOWNLOAD par preuve, plus READ sur le contrôle via l'enveloppe : c'est imputable. |
+| Plafond de 90 jours (q221) | **PASS, réserve** | Route (`max(90)`), service et CHECK `BETWEEN 1 AND 90`. Réserve dans la classe V4-04 : le CHECK n'est posé que si la colonne n'existe pas encore (`ADD COLUMN IF NOT EXISTS`). Une base qui a appliqué une version antérieure de 084 garde le CHECK à 3650 et peut conserver une valeur > 90, que `decideSensitiveView` appliquerait sans borne. Proposé : `Math.min(valeur, 90)` au moment de la décision (une ligne). |
+
+- **SEC V4-03 : RETEST_PASS → CLOSED.**
+- INFO-09 : sur-journalisation. `maskCoveredRisks`/`maskRiskSource` passent par `hiddenIds`, si bien qu'un risque dont seul l'id apparaît (couverture d'un contrôle) est journalisé comme lu. De plus, `readOnlyThroughReadall` (`NOT *_core`) compte comme « ouverte » un id qui n'est pas une racine du type. C'est conservateur, sans perte de trace, mais à garder en tête pour lire le journal.
+- V4-04 reste REVIEW_REQUIRED (état des bases déjà migrées, `sees_everything` et CHECK).
