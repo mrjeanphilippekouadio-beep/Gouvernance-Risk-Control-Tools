@@ -79,6 +79,8 @@ export function SensitiveViewsCard({ token, canRequest, canDecide, kind = "ROLE_
       : <>
         <StatusBadge label={STATUS[g.status].label} tone={STATUS[g.status].tone} />
         {g.status === "APPROVED" && g.accessExpiresAt && <div className="muted">jusqu'au {new Date(g.accessExpiresAt).toLocaleDateString("fr-FR")}</div>}
+        {g.status === "PENDING" && g.accessDaysOnConfirmation && <div className="muted">
+          si confirmée aujourd'hui : jusqu'au {new Date(Date.now() + g.accessDaysOnConfirmation * 86_400_000).toLocaleDateString("fr-FR")} ({g.accessDaysOnConfirmation} jours, sans prolongation)</div>}
       </> },
     { key: "reason", header: "Motif", render: (g) => g.revokeReason ?? g.decisionReason ?? g.reason },
     { key: "actions", header: "Actions", render: (g) => <>

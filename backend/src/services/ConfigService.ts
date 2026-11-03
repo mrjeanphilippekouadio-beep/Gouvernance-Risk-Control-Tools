@@ -308,8 +308,10 @@ export class ConfigService {
     for (const key of GOVERNANCE_DELAY_KEYS) {
       const v = delays[key];
       if (v === undefined) continue;
-      if (v !== null && (!Number.isInteger(v) || v < 1 || v > MAX_GOVERNANCE_DELAY_DAYS)) {
-        throw new ValidationError(`${key} must be a whole number of days between 1 and ${MAX_GOVERNANCE_DELAY_DAYS}, or null`);
+      // q221 (DECISION-111): the reading of every content is capped at 90 days (adjustable downwards only).
+      const max = key === "resourceReadallMaxDays" ? DEFAULT_RESOURCE_READALL_MAX_DAYS : MAX_GOVERNANCE_DELAY_DAYS;
+      if (v !== null && (!Number.isInteger(v) || v < 1 || v > max)) {
+        throw new ValidationError(`${key} must be a whole number of days between 1 and ${max}, or null`);
       }
       patch[key] = v;
     }

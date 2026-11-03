@@ -57,6 +57,7 @@ import type { DocumentStorage } from "./infrastructure/storage/DocumentStorage.j
 import { GoogleDriveStorage } from "./infrastructure/storage/GoogleDriveStorage.js";
 import { RiskService } from "./services/RiskService.js";
 import { VisibilityResolver } from "./services/VisibilityResolver.js";
+import { withReadallAudit } from "./services/readallAudit.js";
 import { EvidenceService } from "./services/EvidenceService.js";
 import { ResourceVisibilityManager } from "./services/resourceVisibility.js";
 import { PostgresResourceAccessRepository } from "./infrastructure/database/postgres/PostgresResourceAccessRepository.js";
@@ -203,14 +204,17 @@ app.use(canonicalIdsMiddleware);
 app.use("/api/v1", authAttemptRateLimiter());
 
 // --- Wiring: infrastructure implementations behind their interfaces ---
-const riskRepository = new PostgresRiskRepository(pool);
+// q220 (DECISION-111) / SEC V4-03: every reader-scoped read of a restrictable root records what only resource.readall
+// opened (services, children, dashboards, views). Lazy: the manager is built below, the reads happen per request.
+const readallRecorder = { recordReadallFor: (...a: Parameters<ResourceVisibilityManager["recordReadallFor"]>) => resourceVisibilityManager.recordReadallFor(...a) };
+const riskRepository = withReadallAudit(new PostgresRiskRepository(pool), "RISK", readallRecorder);
 const auditRepository = new PostgresAuditRepository(pool);
 const evidenceRepository = new PostgresEvidenceRepository(pool);
 const tenantRepository = new PostgresTenantRepository(pool);
-const controlRepository = new PostgresControlRepository(pool);
+const controlRepository = withReadallAudit(new PostgresControlRepository(pool), "CONTROL", readallRecorder);
 const executionRepository = new PostgresControlExecutionRepository(pool);
 const effectivenessRepository = new PostgresControlEffectivenessRepository(pool);
-const anomalyRepository = new PostgresAnomalyRepository(pool);
+const anomalyRepository = withReadallAudit(new PostgresAnomalyRepository(pool), "ANOMALY", readallRecorder);
 const auditMissionRepository = new PostgresAuditMissionRepository(pool);
 const findingRepository = new PostgresFindingRepository(pool);
 const departmentRepository = new PostgresDepartmentRepository(pool);
@@ -219,7 +223,7 @@ const roleRepository = new PostgresRoleRepository(pool);
 // DECISION-100 (lot V0): one resolver for the read scope of risks, controls, anomalies, action plans and KPIs.
 const visibilityResolver = new VisibilityResolver(roleRepository);
 const feedbackRepository = new PostgresFeedbackRepository(pool);
-const kpiRepository = new PostgresKpiRepository(pool);
+const kpiRepository = withReadallAudit(new PostgresKpiRepository(pool), "KPI", readallRecorder);
 const kpiMeasureRepository = new PostgresKpiMeasureRepository(pool);
 const riskAppetiteRepository = new PostgresRiskAppetiteRepository(pool);
 const ratingScaleRepository = new PostgresRatingScaleRepository(pool);
@@ -229,7 +233,7 @@ const kriRepository = new PostgresKriRepository(pool);
 const kriMeasureRepository = new PostgresKriMeasureRepository(pool);
 const userRepository = new PostgresUserRepository(pool);
 const riskEscalationRepository = new PostgresRiskEscalationRepository(pool);
-const actionPlanRepository = new PostgresActionPlanRepository(pool);
+const actionPlanRepository = withReadallAudit(new PostgresActionPlanRepository(pool), "ACTION_PLAN", readallRecorder);
 const raciAssignmentRepository = new PostgresRaciAssignmentRepository(pool);
 const brandingRepository = new PostgresBrandingRepository(pool);
 const configRepository = new PostgresConfigRepository(pool);

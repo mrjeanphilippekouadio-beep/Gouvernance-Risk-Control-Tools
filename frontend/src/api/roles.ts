@@ -42,6 +42,8 @@ export interface SensitiveViewGrant {
   expiresAt: string | null;
   /** q221 (DECISION-111): end of a confirmed resource.readall, fixed at the confirmation. */
   accessExpiresAt?: string | null;
+  /** q221 / SEC INFO-08: on a pending RESOURCE_READALL request, the days a confirmation would grant now. */
+  accessDaysOnConfirmation?: number;
   decisionReason: string | null;
   revokeReason: string | null;
 }

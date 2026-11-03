@@ -26,9 +26,10 @@ DO $$ BEGIN
   END IF;
 END $$;
 ALTER TABLE sensitive_view_grants ADD COLUMN IF NOT EXISTS access_expires_at timestamptz NULL;
--- q221 (DECISION-111) : durée d'une attribution RESOURCE_READALL confirmée ; NULL = non configuré, le service applique 90.
+-- q221 (DECISION-111) : durée d'une attribution RESOURCE_READALL confirmée, plafonnée à 90 jours (réglable vers le bas
+-- seulement, Privacy Q3) ; NULL = non configuré, le service applique 90.
 ALTER TABLE configs ADD COLUMN IF NOT EXISTS resource_readall_max_days integer DEFAULT 90
-  CHECK (resource_readall_max_days BETWEEN 1 AND 3650);
+  CHECK (resource_readall_max_days BETWEEN 1 AND 90);
 
 CREATE OR REPLACE FUNCTION sensitive_view_grants_guard() RETURNS trigger LANGUAGE plpgsql
   SET search_path = pg_catalog, public, pg_temp AS $$

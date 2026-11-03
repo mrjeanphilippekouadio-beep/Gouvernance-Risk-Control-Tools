@@ -275,14 +275,12 @@ export class ActionPlanService {
   async get(actor: AuthenticatedUser, id: string): Promise<ActionPlanView> {
     requirePermission(actor, "actionplan.read");
     const plan = await this.getRaw(actor, id);
-    await this.access?.recordReadallReads?.(actor, "ACTION_PLAN", [plan.id], "ONE"); // q220
     return (await this.views(actor, [plan]))[0]!;
   }
 
   async list(actor: AuthenticatedUser, filters?: ActionPlanListFilters): Promise<ActionPlanView[]> {
     requirePermission(actor, "actionplan.read");
     const rows = await this.actions.list(actor.tenantId, filters, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
-    await this.access?.recordReadallReads?.(actor, "ACTION_PLAN", rows.map((r) => r.id), "LIST"); // q220
     return this.views(actor, rows);
   }
 

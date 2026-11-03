@@ -345,8 +345,10 @@ describe.skipIf(!live)("QA-visibility-v4 on the REAL server + LOCAL PostgreSQL 1
       const listRows = async () => (await audits(gid)).filter((a) => a.action === "READ");
       const n = (await listRows()).length;
       expect((await get("out", "/controls")).status).toBe(200);
-      expect((await listRows()).length).toBe(n + 1);
-      expect((await listRows()).at(-1)!.new_value).toMatchObject({ through: "RESOURCE_READALL", list: "CONTROL" });
+      // SEC V4-03: one list row per restrictable root the response names (the controls, and the covered risks it opens), with the ids
+      const added = (await listRows()).slice(n);
+      expect(added.filter((r) => r.new_value.list === "CONTROL")).toHaveLength(1);
+      expect(added.find((r) => r.new_value.list === "CONTROL")!.new_value.ids).toContain(I("c04"));
       expect(await probe("rm")).toBe(200);
       expect((await audits(I("c04"))).filter((a) => a.action === "READ").length).toBe(before + 1);
     });

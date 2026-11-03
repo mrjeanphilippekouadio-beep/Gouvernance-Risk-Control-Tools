@@ -133,7 +133,6 @@ export class KpiService {
     requirePermission(actor, "kpi.read");
     const kpi = await this.kpis.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!kpi) throw new NotFoundError("Kpi", id);
-    await this.access?.recordReadallReads?.(actor, "KPI", [kpi.id], "ONE"); // q220
     return this.withStatus(actor.tenantId, kpi);
   }
 
@@ -146,7 +145,6 @@ export class KpiService {
   async list(actor: AuthenticatedUser, filters?: KpiListFilters): Promise<KpiWithStatus[]> {
     requirePermission(actor, "kpi.read");
     const kpis = await this.kpis.list(actor.tenantId, filters, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
-    await this.access?.recordReadallReads?.(actor, "KPI", kpis.map((k) => k.id), "LIST"); // q220
     return Promise.all(kpis.map((kpi) => this.withStatus(actor.tenantId, kpi)));
   }
 

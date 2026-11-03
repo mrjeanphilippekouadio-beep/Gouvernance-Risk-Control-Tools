@@ -290,7 +290,11 @@ export class RoleService {
     if (!actor.roles.includes("role.assign") && !actor.roles.includes("rolegroup.audit.validate")) {
       requirePermission(actor, "role.assign");
     }
-    return this.sensitiveViews ? (await this.sensitiveViews.list(actor.tenantId)).filter((g) => grantKind(g) === kind) : [];
+    const grants = this.sensitiveViews ? (await this.sensitiveViews.list(actor.tenantId)).filter((g) => grantKind(g) === kind) : [];
+    if (kind !== "RESOURCE_READALL") return grants;
+    // q221 / SEC INFO-08: the confirmer sees the end a confirmation would fix now (never recalculated afterwards).
+    const accessDaysOnConfirmation = (await this.configs?.getByTenant(actor.tenantId))?.resourceReadallMaxDays ?? DEFAULT_RESOURCE_READALL_MAX_DAYS;
+    return grants.map((g) => (g.status === "PENDING" ? { ...g, accessDaysOnConfirmation } : g));
   }
 
   /** An administrator asks for ONE Risk Manager member (never themself) to see the Audit and administrators. */

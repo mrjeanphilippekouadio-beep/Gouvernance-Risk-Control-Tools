@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { RoleService } from "../src/services/RoleService.js";
 import { ResourceVisibilityManager } from "../src/services/resourceVisibility.js";
+import { withReadallAudit } from "../src/services/readallAudit.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ADMIN_PERMISSIONS } from "../src/domain/fixedGroupPermissions.js";
 import type { RoleRepository } from "../src/domain/repositories/RoleRepository.js";
 import type { UserRepository } from "../src/domain/repositories/UserRepository.js";
@@ -165,7 +168,7 @@ describe("DECISION-111 — q221 end of the access, q222 revocation by a confirme
   });
 });
 
-describe("q220 — reads allowed only by resource.readall are audited (helper)", () => {
+describe("q220 / SEC V4-03 — reads allowed only by resource.readall are audited (helper + repository wrapper)", () => {
   const make = (opened: { grantId: string; ids: string[] } | null, fail = false) => {
     const audits: Array<Record<string, unknown>> = [];
     const readOnlyThroughReadall = vi.fn(async () => opened);
@@ -173,22 +176,58 @@ describe("q220 — reads allowed only by resource.readall are audited (helper)",
       { record: async (e: Record<string, unknown>) => { if (fail) throw new Error("audit down"); audits.push(e); } } as never, {} as never, {} as never);
     return { m, audits, readOnlyThroughReadall };
   };
-  it("ONE: a READ row per resource (type, id, grant, no content); LIST: a single row with the count", async () => {
+  it("ONE: a READ row per resource (type, id, grant, no content); LIST: a single row with the ids and the count", async () => {
     const one = make({ grantId: "g1", ids: ["r1"] });
-    await one.m.recordReadallReads(actor("it", ["role.assign"]), "RISK", ["r1"], "ONE");
+    await one.m.recordReadallFor(T, "it", "RISK", ["r1"], "ONE");
     expect(one.audits).toEqual([expect.objectContaining({ action: "READ", entityType: "Risk", entityId: "r1", newValue: { through: "RESOURCE_READALL", grantId: "g1" } })]);
     const list = make({ grantId: "g1", ids: ["c1", "c2"] });
-    await list.m.recordReadallReads(actor("it", ["role.assign"]), "CONTROL", ["c0", "c1", "c2"], "LIST");
-    expect(list.audits).toEqual([expect.objectContaining({ action: "READ", entityType: "SensitiveViewGrant", entityId: "g1", newValue: { through: "RESOURCE_READALL", list: "CONTROL", count: 2 } })]);
+    await list.m.recordReadallFor(T, "it", "CONTROL", ["c0", "c1", "c2"], "LIST");
+    expect(list.audits).toEqual([expect.objectContaining({ action: "READ", entityType: "SensitiveViewGrant", entityId: "g1",
+      newValue: { through: "RESOURCE_READALL", list: "CONTROL", count: 2, ids: ["c1", "c2"] } })]);
   });
-  it("nothing for a non-administrator nor for a read owing nothing to the right; a failed write fails the read", async () => {
-    const non = make({ grantId: "g1", ids: ["r1"] });
-    await non.m.recordReadallReads(actor("rm", ["risk.read"]), "RISK", ["r1"], "ONE");
-    expect(non.readOnlyThroughReadall).not.toHaveBeenCalled();
+  it("nothing for a read owing nothing to the right; a failed write fails the read", async () => {
     const none = make({ grantId: "g1", ids: [] });
-    await none.m.recordReadallReads(actor("it", ["role.assign"]), "RISK", ["r1"], "LIST");
+    await none.m.recordReadallFor(T, "it", "RISK", ["r1"], "LIST");
     expect(none.audits).toEqual([]);
-    await expect(make({ grantId: "g1", ids: ["r1"] }, true).m.recordReadallReads(actor("it", ["role.assign"]), "RISK", ["r1"], "ONE")).rejects.toThrow("audit down");
+    await expect(make({ grantId: "g1", ids: ["r1"] }, true).m.recordReadallFor(T, "it", "RISK", ["r1"], "ONE")).rejects.toThrow("audit down");
+  });
+  it("withReadallAudit: every reader-scoped read is recorded (one row, a list, hiddenIds' complement); SYSTEM_SCOPE and writes untouched", async () => {
+    const calls: unknown[][] = [];
+    const recorder = { recordReadallFor: vi.fn(async (...a: unknown[]) => { calls.push(a); }) };
+    const repo = withReadallAudit({
+      async getById(_t: string, id: string) { return { id }; },
+      async list() { return [{ id: "a" }, { id: "b" }]; },
+      async hiddenIds(_t: string, ids: string[]) { return ids.filter((x) => x === "h"); },
+      async update(_t: string, id: string) { return { id }; },
+    }, "RISK", recorder as never);
+    const reader = { all: false as const, userId: "u1" };
+    await repo.getById(T, "r1", reader);
+    await repo.list(T, undefined, reader);
+    await repo.hiddenIds(T, ["h", "v"], reader);
+    await repo.getById(T, "r2", { all: true });
+    await repo.update(T, "r3");
+    expect(calls).toEqual([[T, "u1", "RISK", ["r1"], "ONE"], [T, "u1", "RISK", ["a", "b"], "LIST"], [T, "u1", "RISK", ["v"], "LIST"]]);
+  });
+  it("inventory (SEC V4-03 / CMP-V4-10): the five restrictable roots are built only through withReadallAudit in server.ts", () => {
+    const server = readFileSync(join(__dirname, "..", "src", "server.ts"), "utf8");
+    for (const cls of ["PostgresRiskRepository", "PostgresControlRepository", "PostgresAnomalyRepository", "PostgresKpiRepository", "PostgresActionPlanRepository"]) {
+      const built = [...server.matchAll(new RegExp(`new ${cls}\\(`, "g"))].length;
+      const wrapped = [...server.matchAll(new RegExp(`withReadallAudit\\(new ${cls}\\(`, "g"))].length;
+      expect(built, cls).toBeGreaterThan(0);
+      expect(wrapped, cls).toBe(built);
+    }
+  });
+});
+
+describe("q221 cap (CMP (iii), Privacy Q3, SEC INFO-08): the life of a reading of every content is 1 to 90 days", () => {
+  it("91 days is refused before any write; 90 is accepted as a value; the migration CHECK says the same", async () => {
+    const { ConfigService } = await import("../src/services/ConfigService.js");
+    const configs = { getByTenant: vi.fn(async () => null) };
+    const svc = new ConfigService(configs as never, { record: async () => {} } as never);
+    const who = actor("boss", ["config.governancedelays.set"]);
+    await expect(svc.setGovernanceDelays(who, { resourceReadallMaxDays: 91 } as never, "Durée", "R1")).rejects.toThrow(ValidationError);
+    expect(configs.getByTenant).not.toHaveBeenCalled();
+    expect(migrationSql("084_resource_readall.sql")).toMatch(/CHECK \(resource_readall_max_days BETWEEN 1 AND 90\)/);
   });
 });
 
@@ -238,6 +277,13 @@ describe.skipIf(!hasLocalPg)("lot V4 on real PostgreSQL (local only)", () => {
     expect(await sees(nomin)).toBe(false); // q219: never NOMINATIF
     const access = new PostgresResourceAccessRepository(ctx.pool);
     expect(await access.readOnlyThroughReadall(ctx.tenant, it_!, "RISK", [perim])).toEqual({ grantId: g.id, ids: [perim] }); // q220
+    // SEC V4-03: a child path (here `hiddenIds`, as KRIs, evaluations, decisions use it) through the wrapped repository writes the row
+    const { PostgresRiskRepository } = await import("../src/infrastructure/database/postgres/PostgresRiskRepository.js");
+    const { PostgresAuditRepository } = await import("../src/infrastructure/database/postgres/PostgresAuditRepository.js");
+    const manager = new ResourceVisibilityManager(access, new PostgresAuditRepository(ctx.pool), {} as never, {} as never);
+    await withReadallAudit(new PostgresRiskRepository(ctx.pool), "RISK", manager).hiddenIds!(ctx.tenant, [perim, nomin], { all: false, userId: it_! });
+    const row = await one(`SELECT new_value FROM audit_log WHERE tenant_id = $1 AND entity_id::text = $2 AND action = 'READ' ORDER BY timestamp DESC LIMIT 1`, [ctx.tenant, g.id]);
+    expect(row.new_value).toEqual({ through: "RESOURCE_READALL", list: "RISK", count: 1, ids: [perim] });
     expect(await access.seesEverything(ctx.tenant, it_!)).toBe(false); // the fixed groups only
     expect(await repo.isApproved(ctx.tenant, it_!)).toBe(false); // not a role.read.sensitive grant
     expect(await repo.isApproved(ctx.tenant, it_!, "RESOURCE_READALL")).toBe(true);

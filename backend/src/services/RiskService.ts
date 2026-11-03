@@ -235,7 +235,6 @@ export class RiskService {
     requirePermission(actor, "risk.read");
     const risk = await this.risks.getById(actor.tenantId, id, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
     if (!risk) throw new NotFoundError("Risk", id);
-    await this.access?.recordReadallReads?.(actor, "RISK", [risk.id], "ONE"); // q220
     return risk;
   }
 
@@ -243,7 +242,6 @@ export class RiskService {
   async list(actor: AuthenticatedUser, includeArchived = false, ownerId?: string): Promise<Risk[]> {
     requirePermission(actor, "risk.read");
     const risks = await this.risks.list(actor.tenantId, { includeArchived, ownerId }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
-    await this.access?.recordReadallReads?.(actor, "RISK", risks.map((r) => r.id), "LIST"); // q220
     return risks;
   }
 

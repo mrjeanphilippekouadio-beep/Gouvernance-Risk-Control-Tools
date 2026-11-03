@@ -81,6 +81,9 @@ export function checkedReason(raw: string | undefined, what: string): string {
 /** Lot V4 A1 (q197): what an administrator without resource.readall sees of a restricted resource (support). */
 export type RestrictedResourceMeta = Pick<RestrictedResourceRow, "type" | "id" | "visibility" | "accessCount"> & { updatedAt: string };
 
+/** q220 / SEC V4-03: the ids named in one list row (the count stays exact). */
+const READ_IDS_MAX = 500;
+
 /** q220: the audit entity of each root, as written by the visibility changes. */
 const READ_ENTITY: Record<RestrictableResource | "RISK", string> = { RISK: "Risk", CONTROL: "Control", ANOMALY: "Anomaly", ACTION_PLAN: "ActionPlan", KPI: "Kpi" };
 
@@ -348,15 +351,16 @@ export class ResourceVisibilityManager {
    * q220 (DECISION-111): every read that only resource.readall allows is audited BEFORE the response — one READ row per
    * resource for a unitary read (type, id, grant; no title, no content), one READ row per list holding at least one such
    * item (its count). Nothing for the fixed groups nor for a read that owes nothing to the right. A failed write fails the
-   * request (fail closed). Called by the read services, never copied into the routes.
+   * request (fail closed). Called from every reader-scoped repository read (`withReadallAudit`, server.ts): services,
+   * children, dashboards, views — no read path can skip the trace, nothing is copied into the routes. A list row
+   * carries the ids (at most READ_IDS_MAX) and their count, never a title or a content (SEC V4-03).
    */
-  async recordReadallReads(actor: AuthenticatedUser, type: RestrictableResource | "RISK", ids: string[], mode: "ONE" | "LIST"): Promise<void> {
-    // resource.readall is effective for an administrator only: anyone else costs nothing here.
-    if (ids.length === 0 || !this.access.readOnlyThroughReadall || !actor.roles.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p))) return;
-    const opened = await this.access.readOnlyThroughReadall(actor.tenantId, actor.userId, type, ids);
+  async recordReadallFor(tenantId: string, userId: string, type: RestrictableResource | "RISK", ids: string[], mode: "ONE" | "LIST"): Promise<void> {
+    if (ids.length === 0 || !this.access.readOnlyThroughReadall) return;
+    const opened = await this.access.readOnlyThroughReadall(tenantId, userId, type, [...new Set(ids)]);
     if (!opened || opened.ids.length === 0) return;
     const requestId = `readall-${randomUUID()}`;
-    const base = { tenantId: actor.tenantId, userId: actor.userId, action: "READ" as const, oldValue: null, reason: null, requestId };
+    const base = { tenantId, userId, action: "READ" as const, oldValue: null, reason: null, requestId };
     if (mode === "ONE") {
       for (const id of opened.ids) {
         await this.audit.record({ ...base, entityType: READ_ENTITY[type], entityId: id, newValue: { through: "RESOURCE_READALL", grantId: opened.grantId } });
@@ -364,7 +368,7 @@ export class ResourceVisibilityManager {
       return;
     }
     await this.audit.record({ ...base, entityType: "SensitiveViewGrant", entityId: opened.grantId,
-      newValue: { through: "RESOURCE_READALL", list: type, count: opened.ids.length } });
+      newValue: { through: "RESOURCE_READALL", list: type, count: opened.ids.length, ids: opened.ids.slice(0, READ_IDS_MAX) } });
   }
 
   async listRestricted(actor: AuthenticatedUser, page?: { limit?: number; offset?: number }): Promise<Array<RestrictedResourceRow | RestrictedResourceMeta>> {
