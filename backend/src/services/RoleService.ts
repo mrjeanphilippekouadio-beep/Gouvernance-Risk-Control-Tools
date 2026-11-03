@@ -293,7 +293,7 @@ export class RoleService {
     const grants = this.sensitiveViews ? (await this.sensitiveViews.list(actor.tenantId)).filter((g) => grantKind(g) === kind) : [];
     if (kind !== "RESOURCE_READALL") return grants;
     // q221 / SEC INFO-08: the confirmer sees the end a confirmation would fix now (never recalculated afterwards).
-    const accessDaysOnConfirmation = (await this.configs?.getByTenant(actor.tenantId))?.resourceReadallMaxDays ?? DEFAULT_RESOURCE_READALL_MAX_DAYS;
+    const accessDaysOnConfirmation = await this.readallAccessDays(actor.tenantId);
     return grants.map((g) => (g.status === "PENDING" ? { ...g, accessDaysOnConfirmation } : g));
   }
 
@@ -350,9 +350,7 @@ export class RoleService {
     if (!approve && !reason) throw new ValidationError("A reason is required to refuse");
     if (approve) await this.assertBeneficiary(actor.tenantId, before.userId, grantKind(before));
     // q221 (DECISION-111): a confirmed resource.readall ends after N days (default 90), fixed now, never extended.
-    const accessDays = grantKind(before) === "RESOURCE_READALL"
-      ? (await this.configs?.getByTenant(actor.tenantId))?.resourceReadallMaxDays ?? DEFAULT_RESOURCE_READALL_MAX_DAYS
-      : undefined;
+    const accessDays = grantKind(before) === "RESOURCE_READALL" ? await this.readallAccessDays(actor.tenantId) : undefined;
     return grants.decide(actor.tenantId, id, { status: approve ? "APPROVED" : "REJECTED", by: actor.userId, reason, accessDays },
       (g) => [this.grantAuditEvent(actor, g, approve ? "APPROVE" : "REJECT", before, reason, requestId)]);
   }
@@ -433,6 +431,12 @@ export class RoleService {
     // Codex PR #207: the audit is built from the row locked and updated in the transaction, not from the read above.
     return grants.revoke(actor.tenantId, id, { by: actor.userId, reason },
       (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, reason, requestId)]);
+  }
+
+  /** q221: the configured duration, capped at 90 days even on a base that stored a larger value before the CHECK (SEC V4 retest 2). */
+  private async readallAccessDays(tenantId: string): Promise<number> {
+    const configured = (await this.configs?.getByTenant(tenantId))?.resourceReadallMaxDays ?? DEFAULT_RESOURCE_READALL_MAX_DAYS;
+    return Math.min(configured, DEFAULT_RESOURCE_READALL_MAX_DAYS);
   }
 
   private requireSensitiveViews(): SensitiveViewGrantRepository {

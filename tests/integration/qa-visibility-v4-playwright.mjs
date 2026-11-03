@@ -6,8 +6,9 @@
 //     l'API ne rend que type, id, visibility, accessCount, updatedAt. out (administrateur par role) : meme chose, et la liste « Controles » affiche « non visibles ».
 //  2. Circuit dans « Matrice des droits » > onglet « Vue elargie du Risk Manager » > carte « Lecture de tous les contenus » : adm demande pour « QA out » avec motif
 //     (ligne « En attente de confirmation »), com (Comite) confirme (ligne « Active »). Avant confirmation out ne lit toujours rien (API 404).
-//  3. out apres confirmation : « Ressources restreintes » affiche les libelles (CANARY-V2-CTL-PERIM), plus aucun « Contenu non consultable » ; la liste « Controles »
-//     n'affiche plus aucune mention « non visible » ; GET /hidden-counts = null ; le badge GRANT (resource.readall) apparait dans « Droits d'un compte » pour adm.
+//  3. out apres confirmation (DECISION-111) : « Ressources restreintes » reste en metadonnees (q219 : liste complete reservee aux groupes fixes) ; la liste
+//     « Controles » n'affiche plus aucune mention « non visible » ; GET /hidden-counts reste numerique ; le PERIMETRE c02 se lit, le NOMINATIF c03 non (404) ;
+//     la lecture de c02 ecrit une ligne READ (q220) ; le badge GRANT (resource.readall) apparait dans « Droits d'un compte » pour adm.
 //  4. adm retire le droit avec motif : ligne « Retirée », out revient aux metadonnees (API) et la mention « non visible » reapparait.
 //  5. q215 : la consigne « Ne nommez pas la personne concernée » est VISIBLE (texte de page, pas seulement une infobulle) sur « IAM · Rôles » (champ Motif de l'attribution) .
 //  6. zero erreur JS, aucune erreur console imprevue (hors 4xx attendus).
@@ -90,10 +91,12 @@ try {
   await O.go("Ressources restreintes");
   await O.shot("out-after");
   const t3 = await O.text();
-  check("3.1 out : les libelles apparaissent (CANARY-V2-CTL-PERIM), plus de « Contenu non consultable »", t3.includes("CANARY-V2-CTL-PERIM") && !t3.includes("Contenu non consultable"), t3.slice(0, 200));
+  check("3.1 out : la liste reste en metadonnees (q219), aucun libelle", !t3.includes("CANARY") && t3.includes("Contenu non consultable"), t3.slice(0, 200));
   await O.go("Contrôles");
   check("3.2 out : plus aucune mention « non visible » sous les controles", !/non visibles?\b/.test(await O.text()));
-  check("3.3 out : hidden-counts = null et le controle NOMINATIF c03 se lit (API 200)", (await api("out", "GET", "/hidden-counts")).json?.data === null && (await api("out", "GET", `/controls/${I("c03")}`)).status === 200);
+  check("3.3 out : hidden-counts numerique, PERIMETRE c02 lisible, NOMINATIF c03 ferme (q219)", (await api("out", "GET", "/hidden-counts")).json?.data !== null
+    && (await api("out", "GET", `/controls/${I("c02")}`)).status === 200 && (await api("out", "GET", `/controls/${I("c03")}`)).status === 404);
+  check("3.3b la lecture de c02 grace au droit ecrit une ligne READ (q220)", Number(sql(`select count(*) from audit_log where action = 'READ' and user_id = '${I("107")}' and entity_id::text = '${I("c02")}'`)) > 0);
   await A.go("Matrice des droits");
   await A.page.getByRole("button", { name: "Droits d'un compte" }).click();
   await sleep(800);
