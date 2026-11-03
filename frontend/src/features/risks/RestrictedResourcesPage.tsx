@@ -35,7 +35,7 @@ export function RestrictedResourcesPage({ token }: Readonly<{ token: string }>) 
 
   const columns: TableColumn<RestrictedResource>[] = [
     { key: "type", header: "Type", render: (r) => TYPE_LABELS[r.type] },
-    { key: "label", header: "Ressource", render: (r) => r.label },
+    { key: "label", header: "Ressource", render: (r) => r.label ?? <span className="muted" title={r.id}>Contenu non consultable ({r.id.slice(0, 8)}…)</span> },
     { key: "visibility", header: "Niveau", render: (r) => <RiskVisibilityBadge visibility={r.visibility} /> },
     { key: "access", header: "Personnes nommées", render: (r) => r.accessCount },
     { key: "updated", header: "Dernière modification", render: (r) => new Date(r.updatedAt).toLocaleDateString("fr-FR") },

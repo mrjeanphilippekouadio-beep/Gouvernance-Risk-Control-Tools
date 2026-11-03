@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { REASON_NO_NAME_HINT } from "../api/visibility";
 import { raciApi, type RaciAssignment, type RaciEntityType, type RaciRole } from "../api/raci";
 import { usersApi, type UserSummary } from "../api/users";
 import { ApiError } from "../api/client";
@@ -177,7 +178,7 @@ export function RaciPanel({ token, entityType, entityId }: RaciPanelProps) {
               />
             )}
           </FormField>
-          <FormField label="Motif" htmlFor="raci-reason" help="Demandé si cette personne ne voit pas encore une ressource restreinte.">
+          <FormField label="Motif" htmlFor="raci-reason" help={`Demandé si cette personne ne voit pas encore une ressource restreinte. ${REASON_NO_NAME_HINT}`}>
             <input id="raci-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
           </FormField>
           <Button type="submit" variant="primary">

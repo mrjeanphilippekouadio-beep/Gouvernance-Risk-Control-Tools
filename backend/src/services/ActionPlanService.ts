@@ -274,7 +274,8 @@ export class ActionPlanService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<ActionPlanView> {
     requirePermission(actor, "actionplan.read");
-    return (await this.views(actor, [await this.getRaw(actor, id)]))[0]!;
+    const plan = await this.getRaw(actor, id);
+    return (await this.views(actor, [plan]))[0]!;
   }
 
   async list(actor: AuthenticatedUser, filters?: ActionPlanListFilters): Promise<ActionPlanView[]> {

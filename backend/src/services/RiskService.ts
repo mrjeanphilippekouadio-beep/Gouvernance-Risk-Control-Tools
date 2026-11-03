@@ -241,7 +241,8 @@ export class RiskService {
   /** ACT-124: `ownerId` (resolved by the route layer — "me" -> actor.userId) filters to that owner's risks. */
   async list(actor: AuthenticatedUser, includeArchived = false, ownerId?: string): Promise<Risk[]> {
     requirePermission(actor, "risk.read");
-    return this.risks.list(actor.tenantId, { includeArchived, ownerId }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    const risks = await this.risks.list(actor.tenantId, { includeArchived, ownerId }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    return risks;
   }
 
   async update(actor: AuthenticatedUser, id: string, input: UpdateRiskInput, requestId: string): Promise<Risk> {

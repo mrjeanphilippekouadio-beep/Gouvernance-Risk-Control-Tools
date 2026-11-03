@@ -93,7 +93,9 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "users", label: "Comptes", icon: "user", available: true },
     { id: "roles", label: "IAM · Rôles", icon: "user", available: true },
     { id: "rightsmatrix", label: "Matrice des droits", icon: "table", available: true, requires: ["role.read", "rolegroup.audit.validate", "role.assign"] },
-    { id: "restricted", label: "Ressources restreintes", icon: "shield", available: true, requires: ["resourcevisibility.set", "riskevaluation.validate.committee", "audit.read"] },
+    { id: "restricted", label: "Ressources restreintes", icon: "shield", available: true, requires: ["resourcevisibility.set", "riskevaluation.validate.committee", "audit.read",
+      // Lot V4 A1 (q197): an administrator lists the metadata (support); the content needs resource.readall (server side).
+      "role.assign", "user.update", "config.manage"] },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
   ] },

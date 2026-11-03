@@ -158,7 +158,8 @@ export class AnomalyService {
 
   async list(actor: AuthenticatedUser, status?: AnomalyStatus): Promise<Anomaly[]> {
     requirePermission(actor, "anomaly.read");
-    return this.masked(actor, await this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE));
+    const anomalies = await this.anomalies.list(actor.tenantId, { status }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    return this.masked(actor, anomalies);
   }
 
   async updateStatus(

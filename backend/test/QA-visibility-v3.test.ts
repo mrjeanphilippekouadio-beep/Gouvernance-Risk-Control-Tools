@@ -49,7 +49,8 @@ describe("QA-visibility-v3 STATIC", () => {
   });
   it("no migration: 083 is still the last one (V3 adds no schema)", () => {
     const names = execFileSync("ls", [join(ROOT, "database", "postgresql", "migrations")], { encoding: "utf8" }).split("\n").filter((f) => f.endsWith(".sql") && !f.endsWith(".down.sql"));
-    expect(names.sort((a, b) => a.localeCompare(b)).at(-1)).toBe("083_resource_visibility_v2.sql");
+    // the only schema after 083 is lot V4 (084, resource.readall), never this batch
+    expect(names.sort((a, b) => a.localeCompare(b)).filter((n) => n > "083_resource_visibility_v2.sql")).toEqual(["084_resource_readall.sql"]);
   });
   it("frontend: the notice sits under the 5 lists, the role admin screen offers the reason, the restricted screen is open to RM / Committee / Audit", () => {
     for (const [f, t] of [["risks/RisksPage", "RISK"], ["controls/ControlsPage", "CONTROL"], ["anomalies/AnomaliesPage", "ANOMALY"], ["actions/ActionPlansPage", "ACTION_PLAN"], ["indicators/KpiPage", "KPI"]]) {
@@ -186,7 +187,8 @@ describe.skipIf(!live)("QA-visibility-v3 on the REAL server + LOCAL PostgreSQL 1
       expect((await call(null, "GET", "/restricted-resources")).status).toBe(401);
       const codes: Record<string, number> = {};
       for (const w of WHO) codes[w] = (await get(w, "/restricted-resources")).status;
-      expect(codes).toEqual({ own: 403, n1: 403, raci: 403, pown: 403, dept: 403, named: 403, out: 403, out2: 403, rm: 200, com: 200, aud: 200, adm: 403 });
+      expect(codes).toEqual({ own: 403, n1: 403, raci: 403, pown: 403, dept: 403, named: 403, out: 403, out2: 403, rm: 200, com: 200, aud: 200, adm: 200 }); // adm: lot V4 A1, metadata only (no title, no last change)
+      expect(((await get("adm", "/restricted-resources")).json.data as Array<Record<string, unknown>>).every((x) => !("label" in x) && !("lastChange" in x))).toBe(true);
     });
     it("Committee and Audit get exactly the Risk Manager's list", async () => {
       const ids = async (w: Who) => ((await get(w, "/restricted-resources")).json.data as Array<{ type: string; id: string }>).map((x) => `${x.type}:${x.id}`);

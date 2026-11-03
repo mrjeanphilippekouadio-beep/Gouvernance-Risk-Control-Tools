@@ -40,9 +40,16 @@ export interface SensitiveViewGrant {
   requestedBy: string;
   requestedAt: string;
   expiresAt: string | null;
+  /** q221 (DECISION-111): end of a confirmed resource.readall, fixed at the confirmation. */
+  accessExpiresAt?: string | null;
+  /** q221 / SEC INFO-08: on a pending RESOURCE_READALL request, the days a confirmation would grant now. */
+  accessDaysOnConfirmation?: number;
   decisionReason: string | null;
   revokeReason: string | null;
 }
+
+/** q200: role.read.sensitive for a Risk Manager member; lot V4: resource.readall for an administrator (q197 A3). */
+export type GrantKind = "ROLE_READ_SENSITIVE" | "RESOURCE_READALL";
 
 /** F7-S3: where an effective permission comes from, as the server computes it. */
 export type PermissionSource =
@@ -70,12 +77,14 @@ export const rolesApi = {
   /** q188/q189: the matrix rows and the accounts it can open, cut by the server to the reader's lines. */
   matrix: (token: string) => apiRequest<MatrixRole[]>("/api/v1/roles/matrix", { token }),
   accounts: (token: string) => apiRequest<MatrixAccount[]>("/api/v1/roles/accounts", { token }),
-  sensitiveViews: (token: string) => apiRequest<SensitiveViewGrant[]>("/api/v1/roles/sensitive-view-grants", { token }),
+  /** Lot V4: `kind` RESOURCE_READALL = reading every restricted content, given to one administrator (q197 A3). */
+  sensitiveViews: (token: string, kind: GrantKind = "ROLE_READ_SENSITIVE") =>
+    apiRequest<SensitiveViewGrant[]>(`/api/v1/roles/sensitive-view-grants?kind=${kind}`, { token }),
   /** QA-RL-04: the active Risk Manager members an administrator may pick (role.assign). */
-  sensitiveViewCandidates: (token: string) =>
-    apiRequest<Array<{ id: string; displayName: string }>>("/api/v1/roles/sensitive-view-grants/candidates", { token }),
-  requestSensitiveView: (token: string, userId: string, reason: string) =>
-    apiRequest<SensitiveViewGrant>("/api/v1/roles/sensitive-view-grants", { method: "POST", body: { userId, reason }, token }),
+  sensitiveViewCandidates: (token: string, kind: GrantKind = "ROLE_READ_SENSITIVE") =>
+    apiRequest<Array<{ id: string; displayName: string }>>(`/api/v1/roles/sensitive-view-grants/candidates?kind=${kind}`, { token }),
+  requestSensitiveView: (token: string, userId: string, reason: string, kind: GrantKind = "ROLE_READ_SENSITIVE") =>
+    apiRequest<SensitiveViewGrant>("/api/v1/roles/sensitive-view-grants", { method: "POST", body: { userId, reason, kind }, token }),
   decideSensitiveView: (token: string, id: string, approve: boolean, reason: string) =>
     apiRequest<SensitiveViewGrant>(`/api/v1/roles/sensitive-view-grants/${encodeURIComponent(id)}/${approve ? "approve" : "reject"}`,
       { method: "POST", body: reason ? { reason } : {}, token }),

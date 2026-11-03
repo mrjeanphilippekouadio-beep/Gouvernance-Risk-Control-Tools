@@ -1,3 +1,4 @@
+import { DEFAULT_RESOURCE_READALL_MAX_DAYS } from "../domain/entities/Config.js";
 import type { RoleRepository, RoleUpdateRecheck } from "../domain/repositories/RoleRepository.js";
 import type { ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
@@ -43,7 +44,7 @@ import type { GovernanceDesignationRepository } from "../domain/repositories/Gov
 import type { AuditEvent } from "../domain/entities/AuditEvent.js";
 import type { GovernanceDesignation } from "../domain/entities/GovernanceDesignation.js";
 import { canonicalId } from "../domain/ids.js";
-import type { SensitiveViewGrant, SensitiveViewGrantRepository } from "../domain/repositories/SensitiveViewGrantRepository.js";
+import type { SensitiveViewGrant, SensitiveViewGrantKind, SensitiveViewGrantRepository } from "../domain/repositories/SensitiveViewGrantRepository.js";
 
 const MAX_GROUP_REASON_LENGTH = 500;
 /** q188: same bound as the account directory (UserService MAX_DIRECTORY). */
@@ -71,6 +72,10 @@ function assertRolePermissionRules(group: SystemGroup | null, permissions: Permi
   // q188/q189: the widened view of the rights matrix waits for its own maker-checker circuit; no role carries it.
   if (permissions.includes("role.read.sensitive")) {
     throw new ValidationError("role.read.sensitive is granted individually through its dedicated circuit only, never on a role");
+  }
+  // q197 A3 (DECISION-103, lot V4): reading every restricted content is given to one administrator, never on a role.
+  if (permissions.includes("resource.readall")) {
+    throw new ValidationError("resource.readall is granted individually through its dedicated circuit only, never on a role");
   }
   const misplaced = permissions.filter((p) => !rolegroupAuditPermissionAllowedOn(p, group));
   if (misplaced.length > 0) {
@@ -273,35 +278,53 @@ export class RoleService {
     return Boolean(this.sensitiveViews) && groups.includes("RISK_MANAGER") && (await this.sensitiveViews!.isApproved(tenantId, userId));
   }
 
+  /** Lot V4: an APPROVED resource.readall counts only while its holder is an administrator (same rule as the SQL). */
+  private async holdsReadallGrant(tenantId: string, userId: string, roles: Role[]): Promise<boolean> {
+    return Boolean(this.sensitiveViews) && isAdministrator(roles) && (await this.sensitiveViews!.isApproved(tenantId, userId, "RESOURCE_READALL"));
+  }
+
   // -- q200 (DECISION-103): individual grants of role.read.sensitive ------------------------------------------
 
   /** Administrators (role.assign) and the confirmers (rolegroup.audit.validate: Committee, Audit) see the grants. */
-  async listSensitiveViewGrants(actor: AuthenticatedUser): Promise<SensitiveViewGrant[]> {
+  async listSensitiveViewGrants(actor: AuthenticatedUser, kind: SensitiveViewGrantKind = "ROLE_READ_SENSITIVE"): Promise<SensitiveViewGrant[]> {
     if (!actor.roles.includes("role.assign") && !actor.roles.includes("rolegroup.audit.validate")) {
       requirePermission(actor, "role.assign");
     }
-    return this.sensitiveViews ? this.sensitiveViews.list(actor.tenantId) : [];
+    const grants = this.sensitiveViews ? (await this.sensitiveViews.list(actor.tenantId)).filter((g) => grantKind(g) === kind) : [];
+    if (kind !== "RESOURCE_READALL") return grants;
+    // q221 / SEC INFO-08: the confirmer sees the end a confirmation would fix now (never recalculated afterwards).
+    const accessDaysOnConfirmation = await this.readallAccessDays(actor.tenantId);
+    return grants.map((g) => (g.status === "PENDING" ? { ...g, accessDaysOnConfirmation } : g));
   }
 
   /** An administrator asks for ONE Risk Manager member (never themself) to see the Audit and administrators. */
-  async requestSensitiveView(actor: AuthenticatedUser, userId: string, reason: string, requestId: string): Promise<SensitiveViewGrant> {
+  async requestSensitiveView(
+    actor: AuthenticatedUser, userId: string, reason: string, requestId: string, kind: SensitiveViewGrantKind = "ROLE_READ_SENSITIVE",
+  ): Promise<SensitiveViewGrant> {
     requirePermission(actor, "role.assign");
     const grants = this.requireSensitiveViews();
     userId = canonicalId(userId); // INFO: the self check never depends on the case of the id
     if (userId === canonicalId(actor.userId)) throw new ForbiddenError("You cannot ask a widened view for yourself — ask another administrator");
-    await this.assertRiskManagerMember(actor.tenantId, userId);
-    // INFO (QA-RL): an expired pending request no longer blocks a new one: it is withdrawn (REVOKED, audited) first.
-    const stale = (await grants.list(actor.tenantId)).find((g) => g.userId === userId && g.status === "PENDING" && g.expiresAt && g.expiresAt.getTime() <= Date.now());
-    if (stale) {
-      await grants.revoke(actor.tenantId, stale.id, { by: actor.userId, reason: "Demande expirée, remplacée par une nouvelle demande" },
-        (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, "Demande expirée, remplacée par une nouvelle demande", requestId)]);
+    await this.assertBeneficiary(actor.tenantId, userId, kind);
+    // INFO (QA-RL) / q221: a live grant past its term (expired request, or ended resource.readall) no longer blocks a new
+    // one: it is closed (REVOKED, audited) first. Codex P2 (PR #226): a targeted, locked lookup, never a bounded list.
+    const staleReason = "Demande ou attribution échue, remplacée par une nouvelle demande";
+    const closeStale = (r: { before: SensitiveViewGrant; after: SensitiveViewGrant }) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, staleReason, requestId)];
+    if (grants.closeStaleLive) {
+      await grants.closeStaleLive(actor.tenantId, userId, kind, { by: actor.userId, reason: staleReason }, closeStale);
+    } else {
+      const stale = (await grants.list(actor.tenantId)).find((g) => g.userId === userId && grantKind(g) === kind && (
+        (g.status === "PENDING" && g.expiresAt && g.expiresAt.getTime() <= Date.now())
+        || (g.status === "APPROVED" && kind === "RESOURCE_READALL" && g.accessExpiresAt && g.accessExpiresAt.getTime() <= Date.now())));
+      if (stale) await grants.revoke(actor.tenantId, stale.id, { by: actor.userId, reason: staleReason }, closeStale);
     }
     const days = (await this.configs?.getByTenant(actor.tenantId))?.policyRequestExpiryDays ?? null;
     const expiresAt = days ? new Date(Date.now() + days * 86_400_000) : null;
-    const grant = await grants.create({ tenantId: actor.tenantId, userId, reason, requestedBy: actor.userId, expiresAt },
+    const grant = await grants.create({ tenantId: actor.tenantId, userId, reason, requestedBy: actor.userId, expiresAt, kind },
       (g) => [this.grantAuditEvent(actor, g, "SUBMIT", null, reason, requestId)]);
-    await this.notifyMembers(actor, "rolegroup.audit.validate", userId, grant.id, "SENSITIVE_VIEW_GRANT_PENDING",
-      "Un administrateur demande qu'un membre du Risk Manager voie les droits de l'Audit et des administrateurs : à confirmer ou refuser.", requestId);
+    await this.notifyMembers(actor, "rolegroup.audit.validate", userId, grant.id, "SENSITIVE_VIEW_GRANT_PENDING", kind === "RESOURCE_READALL"
+      ? "Un administrateur demande qu'un autre administrateur lise tous les contenus restreints : à confirmer ou refuser."
+      : "Un administrateur demande qu'un membre du Risk Manager voie les droits de l'Audit et des administrateurs : à confirmer ou refuser.", requestId);
     return grant;
   }
 
@@ -321,15 +344,24 @@ export class RoleService {
       throw new ForbiddenError("Only a member of the Audit group or of the Committee can confirm or refuse a widened view");
     }
     if (seats.includes("RISK_MANAGER")) throw new ForbiddenError("A Risk Manager cannot confirm or refuse a widened view");
+    // q202 (DECISION-104), lot V4: reading every content is never confirmed by an administrator.
+    // SEC V4-02: an exclusion rule takes the widest definition of an administrator (role or direct permission).
+    if (grantKind(before) === "RESOURCE_READALL" && (actor.roles.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p))
+        || isAdministrator(await this.roles.listForUser(actor.tenantId, actor.userId)))) {
+      throw new ForbiddenError("An administrator cannot confirm or refuse the reading of every restricted content");
+    }
     if (!approve && !reason) throw new ValidationError("A reason is required to refuse");
-    if (approve) await this.assertRiskManagerMember(actor.tenantId, before.userId);
-    return grants.decide(actor.tenantId, id, { status: approve ? "APPROVED" : "REJECTED", by: actor.userId, reason },
+    if (approve) await this.assertBeneficiary(actor.tenantId, before.userId, grantKind(before));
+    // q221 (DECISION-111): a confirmed resource.readall ends after N days (default 90), fixed now, never extended.
+    const accessDays = grantKind(before) === "RESOURCE_READALL" ? await this.readallAccessDays(actor.tenantId) : undefined;
+    return grants.decide(actor.tenantId, id, { status: approve ? "APPROVED" : "REJECTED", by: actor.userId, reason, accessDays },
       (g) => [this.grantAuditEvent(actor, g, approve ? "APPROVE" : "REJECT", before, reason, requestId)]);
   }
 
   /** QA-RL-04: who can receive a widened view — the active members of the Risk Manager group, chosen by the server. */
-  async sensitiveViewCandidates(actor: AuthenticatedUser): Promise<Array<{ id: string; displayName: string }>> {
+  async sensitiveViewCandidates(actor: AuthenticatedUser, kind: SensitiveViewGrantKind = "ROLE_READ_SENSITIVE"): Promise<Array<{ id: string; displayName: string }>> {
     requirePermission(actor, "role.assign");
+    if (kind === "RESOURCE_READALL") return this.readallCandidates(actor);
     const rm = (await this.roles.list(actor.tenantId)).find((r) => r.systemGroup === "RISK_MANAGER");
     if (!rm || !this.users) return [];
     const out: Array<{ id: string; displayName: string }> = [];
@@ -345,22 +377,69 @@ export class RoleService {
    * SEC-RL-05: a widened view ends for good when its holder leaves the Risk Manager group or is suspended
    * (REVOKED, audited, by the actor of that change); coming back needs a new request. No-op without a live grant.
    */
-  async endSensitiveView(actor: AuthenticatedUser, userId: string, reason: string, requestId: string): Promise<void> {
+  async endSensitiveView(
+    actor: AuthenticatedUser, userId: string, reason: string, requestId: string, kind: SensitiveViewGrantKind = "ROLE_READ_SENSITIVE",
+  ): Promise<void> {
     if (!this.sensitiveViews) return;
     // Codex PR #207: a targeted, locked lookup of this account's live grant (never a bounded list).
     await this.sensitiveViews.revokeLiveOf(actor.tenantId, userId, { by: actor.userId, reason },
-      (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, reason, requestId)]);
+      (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, reason, requestId)], kind);
+  }
+
+  /** Lot V4: the beneficiaries of resource.readall — active administrators outside the three fixed groups, never the caller. */
+  private async readallCandidates(actor: AuthenticatedUser): Promise<Array<{ id: string; displayName: string }>> {
+    if (!this.users) return [];
+    // INFO-07: one read per role (not per account) — the held roles of every account, from the active assignments.
+    const held = new Map<string, Role[]>();
+    for (const r of await this.roles.list(actor.tenantId)) {
+      for (const a of await this.roles.listAssignments(actor.tenantId, r.id)) {
+        if (!a.revokedAt) held.set(a.userId, [...(held.get(a.userId) ?? []), r]);
+      }
+    }
+    const out: Array<{ id: string; displayName: string }> = [];
+    for (const u of await this.users.list(actor.tenantId)) {
+      if (u.deletedAt || canonicalId(u.id) === canonicalId(actor.userId)) continue;
+      const roles = held.get(u.id) ?? [];
+      if (isAdministrator(roles) && !roles.some((r) => r.systemGroup)) out.push({ id: u.id, displayName: u.displayName });
+    }
+    return out.sort((x, y) => x.displayName.localeCompare(y.displayName, "fr"));
+  }
+
+  /** q200: a Risk Manager member; lot V4 (q197 A3): an active administrator who is not in a fixed group (they see everything already). */
+  private async assertBeneficiary(tenantId: string, userId: string, kind: SensitiveViewGrantKind): Promise<void> {
+    if (kind === "ROLE_READ_SENSITIVE") return this.assertRiskManagerMember(tenantId, userId);
+    const user = await this.users?.getById(tenantId, userId);
+    if (!user || user.deletedAt) throw new NotFoundError("User", userId);
+    const held = await this.roles.listForUser(tenantId, userId);
+    if (!isAdministrator(held)) throw new ValidationError("Reading every restricted content is given to an administrator only");
+    if (held.some((r) => r.systemGroup)) {
+      throw new ValidationError("A member of the Risk Manager, Committee or Audit group already reads every restricted content");
+    }
   }
 
   /** Terminal: an administrator withdraws a pending request or ends an active grant, with a reason. */
   async revokeSensitiveView(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<SensitiveViewGrant> {
-    requirePermission(actor, "role.assign");
+    // q222 (DECISION-111): a Committee or Audit member may also end a resource.readall (a narrowing), never a q200 view.
+    const confirmer = !actor.roles.includes("role.assign") && actor.roles.includes("rolegroup.audit.validate");
+    if (!confirmer) requirePermission(actor, "role.assign");
     const grants = this.requireSensitiveViews();
     const before = await grants.getById(actor.tenantId, id);
     if (!before) throw new NotFoundError("SensitiveViewGrant", id);
+    if (confirmer) {
+      const seats = await this.fixedGroupsOf(actor.tenantId, actor.userId);
+      if (grantKind(before) !== "RESOURCE_READALL" || (!seats.includes("AUDIT") && !seats.includes("RISK_COMMITTEE"))) {
+        throw new ForbiddenError("Only an administrator, or a Committee or Audit member for the reading of every content, can revoke");
+      }
+    }
     // Codex PR #207: the audit is built from the row locked and updated in the transaction, not from the read above.
     return grants.revoke(actor.tenantId, id, { by: actor.userId, reason },
       (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, reason, requestId)]);
+  }
+
+  /** q221: the configured duration, capped at 90 days even on a base that stored a larger value before the CHECK (SEC V4 retest 2). */
+  private async readallAccessDays(tenantId: string): Promise<number> {
+    const configured = (await this.configs?.getByTenant(tenantId))?.resourceReadallMaxDays ?? DEFAULT_RESOURCE_READALL_MAX_DAYS;
+    return Math.min(configured, DEFAULT_RESOURCE_READALL_MAX_DAYS);
   }
 
   private requireSensitiveViews(): SensitiveViewGrantRepository {
@@ -527,6 +606,13 @@ export class RoleService {
       requestId,
     });
     if (openings.length > 0 && !openingHoldsRight) await this.access!.notifyDepartmentGroupOpening(actor, id, requestId);
+    // SEC V4-01 (calque SEC-RL-05): a holder who is no longer administrator after this change loses resource.readall for good.
+    if (input.permissions !== undefined && this.sensitiveViews) {
+      for (const a of await this.roles.listAssignments(actor.tenantId, id)) {
+        if (a.revokedAt || isAdministrator(await this.roles.listForUser(actor.tenantId, a.userId))) continue;
+        await this.endSensitiveView(actor, a.userId, "Fin automatique : le compte n'est plus administrateur", requestId, "RESOURCE_READALL");
+      }
+    }
 
     for (const userId of cumulUsers) await this.notifyAdminCumul(actor, userId, "Risk Manager", requestId);
     for (const userId of committeeCumulUsers) await this.notifyAdminCumul(actor, userId, "Comité des risques", requestId);
@@ -745,6 +831,10 @@ export class RoleService {
     if (role.systemGroup === "RISK_MANAGER") {
       await this.endSensitiveView(actor, canonicalId(userId), "Fin automatique : le compte a quitté le groupe Risk Manager", requestId);
     }
+    // Lot V4 (calque SEC-RL-05): losing the last administration right ends resource.readall for good.
+    if (this.sensitiveViews && !isAdministrator(await this.roles.listForUser(actor.tenantId, canonicalId(userId)))) {
+      await this.endSensitiveView(actor, canonicalId(userId), "Fin automatique : le compte n'est plus administrateur", requestId, "RESOURCE_READALL");
+    }
   }
 
   private async revokeAssignment(
@@ -945,6 +1035,7 @@ export class RoleService {
 
     const rolePermissions = roles.flatMap((r) => r.permissions);
     const granted: Permission[] = (await this.holdsSensitiveGrant(actor.tenantId, userId, systemGroupsOf(roles))) ? ["role.read.sensitive"] : [];
+    if (await this.holdsReadallGrant(actor.tenantId, userId, roles)) granted.push("resource.readall");
 
     return Array.from(new Set([...BASE_PERMISSIONS, ...legacyPermissions, ...rolePermissions, ...granted]));
   }
@@ -972,6 +1063,7 @@ export class RoleService {
     for (const p of direct) add(p, { kind: "DIRECT" });
     for (const r of roles) for (const p of r.permissions) add(p, { kind: "ROLE", roleId: r.id, roleName: r.name, systemGroup: r.systemGroup });
     if (await this.holdsSensitiveGrant(actor.tenantId, userId, systemGroupsOf(roles))) add("role.read.sensitive", { kind: "GRANT" });
+    if (await this.holdsReadallGrant(actor.tenantId, userId, roles)) add("resource.readall", { kind: "GRANT" });
     return { suspended: false, permissions: [...sources].map(([permission, from]) => ({ permission, sources: from })) };
   }
 
@@ -1412,6 +1504,9 @@ export class RoleService {
     return { permission, grantors: found.map((u) => ({ displayName: u.displayName })) };
   }
 }
+
+/** Rows written before 084 (and test fakes) carry no kind: they are role.read.sensitive grants. */
+const grantKind = (g: SensitiveViewGrant): SensitiveViewGrantKind => g.kind ?? "ROLE_READ_SENSITIVE";
 
 /** G1 (DECISION-044): an administrator who is also a Risk Manager or a Committee member never changes the Audit alone. */
 function auditChangeNeedsValidation(held: Role[]): boolean {

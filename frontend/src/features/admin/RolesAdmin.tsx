@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { REASON_NO_NAME_HINT } from "../../api/visibility";
 import { rolesApi, type Role } from "../../api/roles";
 import { permissionsApi } from "../../api/permissions";
 import { ApiError } from "../../api/client";
@@ -134,6 +135,8 @@ export function RolesAdmin({ token }: RolesAdminProps) {
 
       {error && <MessageBanner tone="danger">{error}</MessageBanner>}
 
+      <p className="muted" id="assign-reason-help">Motif d'attribution : demandé si le rôle ouvre la lecture de ressources restreintes. {REASON_NO_NAME_HINT}</p>
+
       <Table
         loading={loading}
         emptyMessage="Aucun rôle défini."
@@ -175,6 +178,7 @@ export function RolesAdmin({ token }: RolesAdminProps) {
                 <input
                   aria-label={`Motif de l'attribution du rôle ${role.name}`}
                   placeholder="motif (si demandé)"
+                  aria-describedby="assign-reason-help"
                   maxLength={500}
                   value={assignReason[role.id] ?? ""}
                   onChange={(e) => setAssignReason((prev) => ({ ...prev, [role.id]: e.target.value }))}

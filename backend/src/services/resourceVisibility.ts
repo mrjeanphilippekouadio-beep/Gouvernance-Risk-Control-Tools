@@ -16,7 +16,9 @@ import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 import { readerScope, type Visibility } from "../domain/visibility.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { NotificationResourceType } from "../domain/entities/Notification.js";
+import { randomUUID } from "node:crypto";
 import { writeAudited } from "./auditedWrite.js";
+import { ADMIN_PERMISSIONS } from "../domain/fixedGroupPermissions.js";
 
 /** A root resource as the visibility rules see it (lot V2, spec §1 and §5). */
 export interface VisibilityTarget {
@@ -76,6 +78,24 @@ export function checkedReason(raw: string | undefined, what: string): string {
  * the owner account, with a mandatory reason and the audit row in the same transaction. Nobody adds themselves. The Risk
  * Manager group is notified whenever the owner widens (q204 A). A resource that follows its parent has no own level.
  */
+/** Lot V4 A1 (q197): what an administrator without resource.readall sees of a restricted resource (support). */
+export type RestrictedResourceMeta = Pick<RestrictedResourceRow, "type" | "id" | "visibility" | "accessCount"> & { updatedAt: string };
+
+/** q220 / SEC V4-03: the ids named in one list row (the count stays exact). */
+const READ_IDS_MAX = 500;
+
+/** q220: the audit entity of each root, as written by the visibility changes. */
+const READ_ENTITY: Record<RestrictableResource | "RISK", string> = { RISK: "Risk", CONTROL: "Control", ANOMALY: "Anomaly", ACTION_PLAN: "ActionPlan", KPI: "Kpi" };
+
+/** q215 A: at most 140 characters of a reason in a list (an ellipsis marks the cut). */
+export const REASON_PREVIEW_LENGTH = 140;
+export function reasonPreview(reason: string | null): string | null {
+  // QA-V4-02: counted in characters (code points), never cut inside a surrogate pair.
+  const chars = reason === null ? [] : Array.from(reason);
+  if (reason === null || chars.length <= REASON_PREVIEW_LENGTH) return reason;
+  return `${chars.slice(0, REASON_PREVIEW_LENGTH - 1).join("")}…`;
+}
+
 export class ResourceVisibilityManager {
   constructor(
     private readonly access: ResourceAccessRepository,
@@ -327,9 +347,41 @@ export class ResourceVisibilityManager {
    * q208 / q209 (DECISION-107): every restricted resource of the client, with its last change (R-1), for the Risk
    * Manager group (`resourcevisibility.set`) and the Committee and Audit groups (who see everything anyway).
    */
-  async listRestricted(actor: AuthenticatedUser, page?: { limit?: number; offset?: number }): Promise<RestrictedResourceRow[]> {
-    // PRIV-V3-01: real membership of a group that sees everything (Risk Manager, Committee, Audit), never a permission alone.
+  /**
+   * q220 (DECISION-111): every read that only resource.readall allows is audited BEFORE the response — one READ row per
+   * resource for a unitary read (type, id, grant; no title, no content), one READ row per list holding at least one such
+   * item (its count). Nothing for the fixed groups nor for a read that owes nothing to the right. A failed write fails the
+   * request (fail closed). Called from every reader-scoped repository read (`withReadallAudit`, server.ts): services,
+   * children, dashboards, views — no read path can skip the trace, nothing is copied into the routes. A list row
+   * carries the ids (at most READ_IDS_MAX) and their count, never a title or a content (SEC V4-03).
+   */
+  async recordReadallFor(tenantId: string, userId: string, type: RestrictableResource | "RISK", ids: string[], mode: "ONE" | "LIST"): Promise<void> {
+    if (ids.length === 0 || !this.access.readOnlyThroughReadall) return;
+    const opened = await this.access.readOnlyThroughReadall(tenantId, userId, type, [...new Set(ids)]);
+    if (opened.ids.length === 0) return;
+    const requestId = `readall-${randomUUID()}`;
+    const base = { tenantId, userId, action: "READ" as const, oldValue: null, reason: null, requestId };
+    if (mode === "ONE") {
+      for (const id of opened.ids) {
+        await this.audit.record({ ...base, entityType: READ_ENTITY[type], entityId: id, newValue: { through: "RESOURCE_READALL", grantId: opened.grantId } });
+      }
+      return;
+    }
+    // Without a grant reference (none found), the list row is keyed on the reader (entityType User).
+    await this.audit.record({ ...base, entityType: opened.grantId ? "SensitiveViewGrant" : "User", entityId: opened.grantId ?? userId,
+      newValue: { through: "RESOURCE_READALL", list: type, count: opened.ids.length, ids: opened.ids.slice(0, READ_IDS_MAX) } });
+  }
+
+  async listRestricted(actor: AuthenticatedUser, page?: { limit?: number; offset?: number }): Promise<Array<RestrictedResourceRow | RestrictedResourceMeta>> {
+    // PRIV-V3-01: real membership of a group that sees everything (Risk Manager, Committee, Audit) or resource.readall
+    // (lot V4, in SQL), never a permission alone.
     if (!(await this.access.seesEverything(actor.tenantId, actor.userId))) {
+      // Lot V4 A1 (q197): an administrator without resource.readall gets the metadata only (support): no title, no change.
+      if (actor.roles.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p))) {
+        // q223 (DECISION-111): the date only (YYYY-MM-DD), never the time of the last change.
+        return (await this.access.listRestricted(actor.tenantId, page)).map(({ type, id, visibility, accessCount, updatedAt }) =>
+          ({ type, id, visibility, accessCount, updatedAt: new Date(updatedAt).toISOString().slice(0, 10) }));
+      }
       throw new ForbiddenError("Only the Risk Manager, Committee and Audit groups can list the restricted resources");
     }
     const rows = await this.access.listRestricted(actor.tenantId, page);
@@ -343,7 +395,9 @@ export class ResourceVisibilityManager {
     }
     return rows.map((r) => {
       if (!r.lastChange) return r;
-      const { userId, ...rest } = r.lastChange;
+      const { userId, reason, ...base } = r.lastChange;
+      // q215 A (DECISION-110): the list shows a 140-character preview of the reason; the full text stays in the audit log.
+      const rest = { ...base, reason: reasonPreview(reason) };
       return { ...r, lastChange: seesAuthor && userId ? { ...rest, userId, byName: names.get(userId) ?? null } : rest };
     });
   }

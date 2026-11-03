@@ -51,7 +51,8 @@ describe("QA-visibility-v2bis STATIC", () => {
   });
   it("no migration: 083 is still the last one (DECISION-107 adds no schema)", () => {
     const names = execFileSync("ls", [join(ROOT, "database", "postgresql", "migrations")], { encoding: "utf8" }).split("\n").filter((f) => f.endsWith(".sql") && !f.endsWith(".down.sql"));
-    expect(names.sort((a, b) => a.localeCompare(b)).at(-1)).toBe("083_resource_visibility_v2.sql");
+    // the only schema after 083 is lot V4 (084, resource.readall), never this batch
+    expect(names.sort((a, b) => a.localeCompare(b)).filter((n) => n > "083_resource_visibility_v2.sql")).toEqual(["084_resource_readall.sql"]);
   });
   it("V3: the list query is paginated (LIMIT / OFFSET, limit bounded to 500)", () => {
     const src = read("backend", "src", "infrastructure", "database", "postgres", "PostgresResourceAccessRepository.ts");
@@ -390,7 +391,8 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       expect((await call(null, "GET", "/restricted-resources")).status).toBe(401);
       const codes: Record<string, number> = {};
       for (const w of WHO) codes[w] = (await get(w, "/restricted-resources")).status;
-      expect(codes).toEqual({ own: 403, n1: 403, raci: 403, pown: 403, dept: 403, named: 403, out: 403, out2: 403, rm: 200, com: 200, aud: 200, adm: 403 });
+      expect(codes).toEqual({ own: 403, n1: 403, raci: 403, pown: 403, dept: 403, named: 403, out: 403, out2: 403, rm: 200, com: 200, aud: 200, adm: 200 }); // adm: lot V4 A1, metadata only (no title, no last change)
+      expect(((await get("adm", "/restricted-resources")).json.data as Array<Record<string, unknown>>).every((x) => !("label" in x) && !("lastChange" in x))).toBe(true);
     });
     it("content = exactly the restricted rows of the tenant in the database (type, id, level, active access count), no CLIENT row, no foreign tenant, ordered by update date desc", async () => {
       await sql("INSERT INTO tenants (id, name) VALUES ($1, 'Autre tenant V2bis') ON CONFLICT DO NOTHING", [I("f00")]);
@@ -445,8 +447,10 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       try {
         expect((await get("adm", `/risks/${I("503")}`)).status, "he cannot read the risk").toBe(404);
         const r = await get("adm", "/restricted-resources");
-        expect(r.status).toBe(403);
+        // lot V4 A1: adm is an administrator — metadata only, the permission still opens no content
+        expect(r.status).toBe(200);
         expect(r.text).not.toContain("CANARY");
+        expect((r.json.data as Array<Record<string, unknown>>).every((x) => !("label" in x) && !("lastChange" in x))).toBe(true);
       } finally {
         await sql("UPDATE users SET roles = array_remove(roles, 'resourcevisibility.set') WHERE email = 'adm@vv1.test'");
       }

@@ -99,7 +99,8 @@ export class ControlService {
 
   async get(actor: AuthenticatedUser, id: string): Promise<Control> {
     requirePermission(actor, "control.read");
-    return (await this.withoutHiddenRisks(actor, [await this.getRaw(actor, id)]))[0]!;
+    const control = await this.getRaw(actor, id);
+    return (await this.withoutHiddenRisks(actor, [control]))[0]!;
   }
 
   /** The control as stored (all its covered risks): internal use only, never returned as is. */
@@ -116,7 +117,8 @@ export class ControlService {
 
   async list(actor: AuthenticatedUser, includeArchived = false): Promise<Control[]> {
     requirePermission(actor, "control.read");
-    return this.withoutHiddenRisks(actor, await this.controls.list(actor.tenantId, { includeArchived }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE));
+    const controls = await this.controls.list(actor.tenantId, { includeArchived }, (await this.visibility?.resolve(actor)) ?? READER_DEFAULT_SCOPE);
+    return this.withoutHiddenRisks(actor, controls);
   }
 
   async listCoveringRisk(actor: AuthenticatedUser, riskId: string): Promise<Control[]> {

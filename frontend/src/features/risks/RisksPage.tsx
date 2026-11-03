@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { REASON_NO_NAME_HINT } from "../../api/visibility";
 import { HiddenCountNotice } from "./HiddenCountNotice";
 import { risksApi, type Risk, type RiskStatus, type RiskVisibility } from "../../api/risks";
 import { AccessPeopleField, RiskVisibilityBadge, VisibilityLevelField, type NamedPerson } from "./RiskVisibility";
@@ -490,7 +491,7 @@ export function RisksPage({ token, shortcuts = NO_SHORTCUTS }: RisksPageProps) {
                 />
               )}
             </FormField>
-            <FormField label="Motif" htmlFor="designation-reason" help="Demandé si la personne désignée ne voit pas encore ce risque restreint.">
+            <FormField label="Motif" htmlFor="designation-reason" help={`Demandé si la personne désignée ne voit pas encore ce risque restreint. ${REASON_NO_NAME_HINT}`}>
               <input id="designation-reason" value={designationReason} maxLength={500} onChange={(e) => setDesignationReason(e.target.value)} />
             </FormField>
           </>
