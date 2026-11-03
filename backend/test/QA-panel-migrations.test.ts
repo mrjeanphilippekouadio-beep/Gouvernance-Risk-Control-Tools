@@ -59,7 +59,7 @@ describe("QA-panel migrations 066-071 (static)", () => {
         expect(header, `${up(n)} ${m[1]}`).toMatch(/SET\s+search_path\s*=\s*pg_catalog,\s*public,\s*pg_temp\b/i);
       }
     }
-    expect(functions).toBe(31); // 068 x3, 070 x2 (guard + truncate guard), 071 x2, 072 x2, 073 x4, 076 x2, 079 x2, 080 x2, 082 x1 (risk_visible_to), 083 x7 (V2 *_visible_to + 3 helpers), 084 x4 (guard, is_administrator, sees_everything, risk_visible_to)
+    expect(functions).toBe(42); // 068 x3, 070 x2 (guard + truncate guard), 071 x2, 072 x2, 073 x4, 076 x2, 079 x2, 080 x2, 082 x1 (risk_visible_to), 083 x7 (V2 *_visible_to + 3 helpers), 084 x15 (guard, is_administrator, reads_all, 5 *_visible_core, 2 effective levels, 5 *_visible_to — DECISION-111 q219)
   });
 
   it("066 adds the audit column without touching existing audit rows (no UPDATE/DELETE on audit_log)", () => {

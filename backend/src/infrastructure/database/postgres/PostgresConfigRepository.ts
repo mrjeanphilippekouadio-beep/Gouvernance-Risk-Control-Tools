@@ -31,6 +31,7 @@ interface ConfigRow {
   acceptance_max_days: number | null;
   policy_request_expiry_days: number | null;
   risk_manager_vacancy_max_days: number | null;
+  resource_readall_max_days: number | null;
   version: number;
   updated_by: string | null;
   created_at: Date;
@@ -56,6 +57,8 @@ function toDomain(row: ConfigRow): Config {
     policyRequestExpiryDays: row.policy_request_expiry_days ?? null,
     // q178: the column DEFAULT (60, migration 076) also fills a row created by the upsert below.
     riskManagerVacancyMaxDays: row.risk_manager_vacancy_max_days ?? null,
+    // q221: the column DEFAULT (90, migration 084) also fills a row created by the upsert.
+    resourceReadallMaxDays: row.resource_readall_max_days ?? null,
     version: row.version,
     updatedBy: row.updated_by,
     createdAt: row.created_at,
@@ -97,6 +100,7 @@ export async function upsertConfigRow(db: Pick<Pool, "query">, tenantId: string,
       acceptance_max_days: patch.acceptanceMaxDays,
       policy_request_expiry_days: patch.policyRequestExpiryDays,
       risk_manager_vacancy_max_days: patch.riskManagerVacancyMaxDays,
+      resource_readall_max_days: patch.resourceReadallMaxDays,
     },
     3,
   );

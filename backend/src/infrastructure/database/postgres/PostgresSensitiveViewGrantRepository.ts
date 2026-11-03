@@ -20,6 +20,7 @@ interface Row {
   requested_by: string;
   requested_at: Date;
   expires_at: Date | null;
+  access_expires_at: Date | null;
   decided_by: string | null;
   decided_at: Date | null;
   decision_reason: string | null;
@@ -38,6 +39,7 @@ const toDomain = (r: Row): SensitiveViewGrant => ({
   requestedBy: r.requested_by,
   requestedAt: r.requested_at,
   expiresAt: r.expires_at,
+  accessExpiresAt: r.access_expires_at,
   decidedBy: r.decided_by,
   decidedAt: r.decided_at,
   decisionReason: r.decision_reason,
@@ -47,6 +49,8 @@ const toDomain = (r: Row): SensitiveViewGrant => ({
 });
 
 const MAX_LISTED = 200;
+/** q221 (DECISION-111): the PO's default, same as the column DEFAULT of migration 084. */
+const DEFAULT_READALL_DAYS = 90;
 
 /** q200 (DECISION-103): individual grants of role.read.sensitive (migration 079). */
 export class PostgresSensitiveViewGrantRepository implements SensitiveViewGrantRepository {
@@ -65,7 +69,8 @@ export class PostgresSensitiveViewGrantRepository implements SensitiveViewGrantR
 
   async isApproved(tenantId: string, userId: string, kind: SensitiveViewGrantKind = "ROLE_READ_SENSITIVE"): Promise<boolean> {
     const { rows } = await this.pool.query(
-      `SELECT 1 FROM sensitive_view_grants WHERE tenant_id = $1 AND user_id = $2 AND kind = $3 AND status = 'APPROVED'`, [tenantId, userId, kind]);
+      `SELECT 1 FROM sensitive_view_grants WHERE tenant_id = $1 AND user_id = $2 AND kind = $3 AND status = 'APPROVED'
+         AND (kind <> 'RESOURCE_READALL' OR access_expires_at > now())`, [tenantId, userId, kind]); // q221: an expired grant holds nothing
     return rows.length > 0;
   }
 
@@ -90,17 +95,19 @@ export class PostgresSensitiveViewGrantRepository implements SensitiveViewGrantR
   async decide(
     tenantId: string,
     id: string,
-    change: { status: "APPROVED" | "REJECTED"; by: string; reason: string | null },
+    change: { status: "APPROVED" | "REJECTED"; by: string; reason: string | null; accessDays?: number },
     audit: TransactionalAudit<SensitiveViewGrant>,
   ): Promise<SensitiveViewGrant> {
     return runAudited(this.pool, async (db) => {
       const { rows } = await db.query<Row>(
-        `UPDATE sensitive_view_grants SET status = $3, decided_by = $4, decided_at = now(), decision_reason = $5
+        `UPDATE sensitive_view_grants SET status = $3, decided_by = $4, decided_at = now(), decision_reason = $5,
+           -- q221: the end of a RESOURCE_READALL access is fixed here, at the confirmation, and never recalculated.
+           access_expires_at = CASE WHEN $3 = 'APPROVED' AND kind = 'RESOURCE_READALL' THEN now() + make_interval(days => $6::int) END
          WHERE tenant_id = $1 AND id = $2 AND status = 'PENDING'
            -- q174: a confirmation never applies an expired request (rechecked inside the transaction).
            AND ($3 <> 'APPROVED' OR expires_at IS NULL OR expires_at > now())
          RETURNING *`,
-        [tenantId, id, change.status, change.by, change.reason],
+        [tenantId, id, change.status, change.by, change.reason, change.accessDays ?? DEFAULT_READALL_DAYS],
       );
       if (!rows[0]) throw new ConflictError("This request has already been decided or has expired");
       return toDomain(rows[0]);

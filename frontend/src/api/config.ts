@@ -12,6 +12,8 @@ export interface GovernanceConfig {
   policyRequestExpiryDays: number | null;
   /** q178 (DECISION-095): longest Risk Manager vacancy; 60 days by default (PO). */
   riskManagerVacancyMaxDays: number | null;
+  /** q221 (DECISION-111): life of a confirmed resource.readall; 90 days by default (PO). */
+  resourceReadallMaxDays?: number | null;
   version: number;
   updatedAt: string;
 }
@@ -33,7 +35,7 @@ export interface SelfValidationPolicyRequest {
   expiresAt?: string | null;
 }
 
-export type GovernanceDelays = Pick<GovernanceConfig, "exceptionReviewDelayDays" | "acceptanceMaxDays" | "policyRequestExpiryDays" | "riskManagerVacancyMaxDays">;
+export type GovernanceDelays = Pick<GovernanceConfig, "exceptionReviewDelayDays" | "acceptanceMaxDays" | "policyRequestExpiryDays" | "riskManagerVacancyMaxDays" | "resourceReadallMaxDays">;
 
 /** q182: mirrors backend `GovernanceDelayRequest` — a lengthening of the delays waiting for a second person. */
 export interface GovernanceDelayRequest {

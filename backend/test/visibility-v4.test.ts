@@ -8,6 +8,7 @@ import type { UserRepository } from "../src/domain/repositories/UserRepository.j
 import type { ResourceAccessRepository } from "../src/domain/repositories/ResourceAccessRepository.js";
 import type { SensitiveViewGrant, SensitiveViewGrantRepository } from "../src/domain/repositories/SensitiveViewGrantRepository.js";
 import { PostgresSensitiveViewGrantRepository } from "../src/infrastructure/database/postgres/PostgresSensitiveViewGrantRepository.js";
+import { PostgresResourceAccessRepository } from "../src/infrastructure/database/postgres/PostgresResourceAccessRepository.js";
 import type { Role, RoleAssignment } from "../src/domain/entities/Role.js";
 import type { User } from "../src/domain/entities/User.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
@@ -54,10 +55,16 @@ function world() {
     async decide(_t, id, change) {
       const g = grants.find((x) => x.id === id && x.status === "PENDING");
       if (!g) throw new ConflictError("decided");
-      Object.assign(g, { status: change.status, decidedBy: change.by, decidedAt: new Date(), decisionReason: change.reason });
+      Object.assign(g, { status: change.status, decidedBy: change.by, decidedAt: new Date(), decisionReason: change.reason,
+        accessExpiresAt: change.accessDays ? new Date(Date.now() + change.accessDays * 86_400_000) : null });
       return { ...g };
     },
-    async revoke() { throw new Error("unused"); },
+    async revoke(_t, id, change) {
+      const g = grants.find((x) => x.id === id && live(x));
+      if (!g) throw new ConflictError("final");
+      Object.assign(g, { status: "REVOKED", revokedBy: change.by, revokedAt: new Date(), revokeReason: change.reason });
+      return { ...g };
+    },
     async revokeLiveOf(_t, userId, change, _events, kind = "ROLE_READ_SENSITIVE") {
       const g = grants.find((x) => x.userId === userId && x.kind === kind && live(x));
       if (!g) return null;
@@ -138,6 +145,53 @@ describe("V4 — corrections A10 (SEC V4-01, SEC V4-02)", () => {
   });
 });
 
+describe("DECISION-111 — q221 end of the access, q222 revocation by a confirmer", () => {
+  it("q221: the confirmation fixes the end at 90 days by default (no extension)", async () => {
+    const { service, grants } = world();
+    const g = await service.requestSensitiveView(admin, "it", "Support", "R1", "RESOURCE_READALL");
+    await service.decideSensitiveView(validator, g.id, true, null, "R2");
+    expect(Math.round((grants[0]!.accessExpiresAt!.getTime() - Date.now()) / 86_400_000)).toBe(90);
+  });
+
+  it("q222: an Audit member may revoke a resource.readall, never a q200 view; anyone else is refused", async () => {
+    const { service, grants } = world();
+    const g = await service.requestSensitiveView(admin, "it", "Support", "R1", "RESOURCE_READALL");
+    await service.decideSensitiveView(validator, g.id, true, null, "R2");
+    await expect(service.revokeSensitiveView(actor("staff", ["risk.read"]), g.id, "Fin", "R3")).rejects.toThrow(ForbiddenError);
+    expect((await service.revokeSensitiveView(validator, g.id, "Fin de l'enquête", "R4")).status).toBe("REVOKED");
+    const view = await service.requestSensitiveView(admin, "rm", "Contrôle", "R5");
+    await expect(service.revokeSensitiveView(validator, view.id, "Fin", "R6")).rejects.toThrow(ForbiddenError);
+    expect(grants.find((x) => x.id === view.id)!.status).toBe("PENDING");
+  });
+});
+
+describe("q220 — reads allowed only by resource.readall are audited (helper)", () => {
+  const make = (opened: { grantId: string; ids: string[] } | null, fail = false) => {
+    const audits: Array<Record<string, unknown>> = [];
+    const readOnlyThroughReadall = vi.fn(async () => opened);
+    const m = new ResourceVisibilityManager({ readOnlyThroughReadall } as unknown as ResourceAccessRepository,
+      { record: async (e: Record<string, unknown>) => { if (fail) throw new Error("audit down"); audits.push(e); } } as never, {} as never, {} as never);
+    return { m, audits, readOnlyThroughReadall };
+  };
+  it("ONE: a READ row per resource (type, id, grant, no content); LIST: a single row with the count", async () => {
+    const one = make({ grantId: "g1", ids: ["r1"] });
+    await one.m.recordReadallReads(actor("it", ["role.assign"]), "RISK", ["r1"], "ONE");
+    expect(one.audits).toEqual([expect.objectContaining({ action: "READ", entityType: "Risk", entityId: "r1", newValue: { through: "RESOURCE_READALL", grantId: "g1" } })]);
+    const list = make({ grantId: "g1", ids: ["c1", "c2"] });
+    await list.m.recordReadallReads(actor("it", ["role.assign"]), "CONTROL", ["c0", "c1", "c2"], "LIST");
+    expect(list.audits).toEqual([expect.objectContaining({ action: "READ", entityType: "SensitiveViewGrant", entityId: "g1", newValue: { through: "RESOURCE_READALL", list: "CONTROL", count: 2 } })]);
+  });
+  it("nothing for a non-administrator nor for a read owing nothing to the right; a failed write fails the read", async () => {
+    const non = make({ grantId: "g1", ids: ["r1"] });
+    await non.m.recordReadallReads(actor("rm", ["risk.read"]), "RISK", ["r1"], "ONE");
+    expect(non.readOnlyThroughReadall).not.toHaveBeenCalled();
+    const none = make({ grantId: "g1", ids: [] });
+    await none.m.recordReadallReads(actor("it", ["role.assign"]), "RISK", ["r1"], "LIST");
+    expect(none.audits).toEqual([]);
+    await expect(make({ grantId: "g1", ids: ["r1"] }, true).m.recordReadallReads(actor("it", ["role.assign"]), "RISK", ["r1"], "ONE")).rejects.toThrow("audit down");
+  });
+});
+
 describe("V4 A1 — an administrator without resource.readall lists the metadata only", () => {
   const row = { type: "RISK", id: "r1", label: "Fraude interne", visibility: "NOMINATIF", accessCount: 2, updatedAt: new Date(),
     lastChange: { userId: "rm", at: new Date(), reason: "Enquête", widening: false } };
@@ -146,7 +200,7 @@ describe("V4 A1 — an administrator without resource.readall lists the metadata
   } as unknown as ResourceAccessRepository, { record: async () => {} } as never, { getById: vi.fn() } as never, { create: vi.fn() } as never);
 
   it("no title, no last change; a non-administrator still gets 403", async () => {
-    expect(await manager(false).listRestricted(actor("boss", ["role.assign"]))).toEqual([{ type: "RISK", id: "r1", visibility: "NOMINATIF", accessCount: 2, updatedAt: row.updatedAt }]);
+    expect(await manager(false).listRestricted(actor("boss", ["role.assign"]))).toEqual([{ type: "RISK", id: "r1", visibility: "NOMINATIF", accessCount: 2, updatedAt: row.updatedAt.toISOString().slice(0, 10) }]); // q223: the date only
     await expect(manager(false).listRestricted(actor("staff", ["risk.read"]))).rejects.toThrow(ForbiddenError);
     expect((await manager(true).listRestricted(actor("it", ["role.assign"])))[0]).toMatchObject({ label: "Fraude interne" });
   });
@@ -165,26 +219,38 @@ describe.skipIf(!hasLocalPg)("lot V4 on real PostgreSQL (local only)", () => {
   const user = async (name: string) =>
     (await one(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, $3) RETURNING id`, [ctx.tenant, `${name}-${Math.random()}@v4`, name])).id as string;
 
-  it("an APPROVED RESOURCE_READALL opens every content while the holder is administrator; kind is immutable", async () => {
+  it("q219/q221: an APPROVED, unexpired RESOURCE_READALL opens PERIMETRE (never NOMINATIF) while the holder is administrator; kind and end are immutable", async () => {
     // Older idempotency tests re-run 082/083 on this shared base: put back the latest definitions first (idempotent).
     await ctx.pool.query(migrationSql("084_resource_readall.sql"));
     const [boss, it_, aud, owner] = await Promise.all(["boss", "it", "aud", "owner"].map(user));
     const adminRole = (await one(`INSERT INTO roles (tenant_id, name, permissions) VALUES ($1, $2, '{role.assign}') RETURNING id`, [ctx.tenant, `A-${Math.random()}`])).id;
     const held = (await one(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $4) RETURNING id`, [ctx.tenant, adminRole, it_, boss])).id;
-    const risk = (await one(`INSERT INTO risks (tenant_id, process, description, owner_id, visibility) VALUES ($1, 'p', 'd', $2, 'NOMINATIF') RETURNING id`, [ctx.tenant, owner])).id;
-    const sees = async () => (await one(`SELECT risk_visible_to($1, $2, $3) AS ok`, [ctx.tenant, risk, it_])).ok;
-    expect(await sees()).toBe(false);
+    const risk = async (v: string) => (await one(`INSERT INTO risks (tenant_id, process, description, owner_id, visibility) VALUES ($1, 'p', 'd', $2, $3) RETURNING id`, [ctx.tenant, owner, v])).id as string;
+    const [perim, nomin] = [await risk("PERIMETRE"), await risk("NOMINATIF")];
+    const sees = async (r: string) => (await one(`SELECT risk_visible_to($1, $2, $3) AS ok`, [ctx.tenant, r, it_])).ok;
+    expect(await sees(perim)).toBe(false);
     const repo = new PostgresSensitiveViewGrantRepository(ctx.pool);
     const g = await repo.create({ tenantId: ctx.tenant, userId: it_!, reason: "Support", requestedBy: boss!, expiresAt: null, kind: "RESOURCE_READALL" }, () => []);
-    expect(g.kind).toBe("RESOURCE_READALL");
-    expect(await sees()).toBe(false); // pending
-    await repo.decide(ctx.tenant, g.id, { status: "APPROVED", by: aud!, reason: null }, () => []);
-    expect(await sees()).toBe(true);
+    expect(await sees(perim)).toBe(false); // pending
+    const approved = await repo.decide(ctx.tenant, g.id, { status: "APPROVED", by: aud!, reason: null, accessDays: 90 }, () => []);
+    expect(Math.round((approved.accessExpiresAt!.getTime() - Date.now()) / 86_400_000)).toBe(90); // q221: fixed at the confirmation
+    expect(await sees(perim)).toBe(true);
+    expect(await sees(nomin)).toBe(false); // q219: never NOMINATIF
+    const access = new PostgresResourceAccessRepository(ctx.pool);
+    expect(await access.readOnlyThroughReadall(ctx.tenant, it_!, "RISK", [perim])).toEqual({ grantId: g.id, ids: [perim] }); // q220
+    expect(await access.seesEverything(ctx.tenant, it_!)).toBe(false); // the fixed groups only
     expect(await repo.isApproved(ctx.tenant, it_!)).toBe(false); // not a role.read.sensitive grant
     expect(await repo.isApproved(ctx.tenant, it_!, "RESOURCE_READALL")).toBe(true);
     await expect(one(`UPDATE sensitive_view_grants SET kind = 'ROLE_READ_SENSITIVE' WHERE id = $1 RETURNING id`, [g.id])).rejects.toThrow(/immutable/);
+    await expect(one(`UPDATE sensitive_view_grants SET access_expires_at = now() + interval '1 year' WHERE id = $1 RETURNING id`, [g.id])).rejects.toThrow(/confirmation only/);
+    // q221: past its end the grant opens nothing (the guard is bypassed here only to age the row)
+    await ctx.pool.query(`ALTER TABLE sensitive_view_grants DISABLE TRIGGER sensitive_view_grants_guard`);
+    try { await ctx.pool.query(`UPDATE sensitive_view_grants SET access_expires_at = now() - interval '1 day' WHERE id = $1`, [g.id]); }
+    finally { await ctx.pool.query(`ALTER TABLE sensitive_view_grants ENABLE TRIGGER sensitive_view_grants_guard`); }
+    expect(await sees(perim)).toBe(false);
+    expect(await repo.isApproved(ctx.tenant, it_!, "RESOURCE_READALL")).toBe(false);
+    expect(await access.readOnlyThroughReadall(ctx.tenant, it_!, "RISK", [perim])).toBeNull();
     await one(`UPDATE user_roles SET revoked_at = now() WHERE id = $1 RETURNING id`, [held]);
-    expect(await sees()).toBe(false); // no longer administrator: no effect, without waiting for the revocation
     expect((await repo.revokeLiveOf(ctx.tenant, it_!, { by: boss!, reason: "Fin" }, () => [], "RESOURCE_READALL"))?.status).toBe("REVOKED");
   });
 });

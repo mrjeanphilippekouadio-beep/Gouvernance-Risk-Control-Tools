@@ -1,6 +1,6 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
-import { DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
+import { DEFAULT_RESOURCE_READALL_MAX_DAYS, DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
 import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -54,6 +54,7 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     acceptanceMaxDays: null,
     policyRequestExpiryDays: null,
     riskManagerVacancyMaxDays: DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS,
+    resourceReadallMaxDays: DEFAULT_RESOURCE_READALL_MAX_DAYS,
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),
@@ -315,7 +316,7 @@ export class ConfigService {
     if (Object.keys(patch).length === 0) throw new ValidationError("No governance delay to change");
     // The audit's "before" must not need config.read on top of config.governancedelays.set (revue Codex PR #195).
     const before = await this.readConfig(actor.tenantId);
-    const relaxing = GOVERNANCE_DELAY_KEYS.some((k) => patch[k] !== undefined && isLengthening(before[k], patch[k]!));
+    const relaxing = GOVERNANCE_DELAY_KEYS.some((k) => patch[k] !== undefined && isLengthening(before[k] ?? null, patch[k]!));
     const configEvent = (after: Config, marked: boolean) => ({
       ...this.configAuditEvent(actor, before, after, why, requestId),
       ...(marked ? { governanceException: "config.governancedelays.adminAlone" } : {}),

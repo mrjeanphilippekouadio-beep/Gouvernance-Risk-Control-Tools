@@ -21,6 +21,8 @@ export interface SensitiveViewGrant {
   requestedAt: Date;
   /** Fixed at the request from policyRequestExpiryDays (q174); an expired PENDING grant can no longer be confirmed. */
   expiresAt: Date | null;
+  /** q221 (DECISION-111): end of an APPROVED RESOURCE_READALL, fixed at the confirmation, never recalculated. */
+  accessExpiresAt?: Date | null;
   decidedBy: string | null;
   decidedAt: Date | null;
   decisionReason: string | null;
@@ -44,7 +46,8 @@ export interface SensitiveViewGrantRepository {
   decide(
     tenantId: string,
     id: string,
-    change: { status: "APPROVED" | "REJECTED"; by: string; reason: string | null },
+    /** `accessDays`: q221, set on the approval of a RESOURCE_READALL grant only. */
+    change: { status: "APPROVED" | "REJECTED"; by: string; reason: string | null; accessDays?: number },
     audit: TransactionalAudit<SensitiveViewGrant>,
   ): Promise<SensitiveViewGrant>;
   /** Locks the live grant, revokes it; the audit sees the locked row and the updated one. ConflictError when not live. */

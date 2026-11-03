@@ -1,3 +1,4 @@
+import { DEFAULT_RESOURCE_READALL_MAX_DAYS } from "../domain/entities/Config.js";
 import type { RoleRepository, RoleUpdateRecheck } from "../domain/repositories/RoleRepository.js";
 import type { ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
@@ -302,7 +303,10 @@ export class RoleService {
     if (userId === canonicalId(actor.userId)) throw new ForbiddenError("You cannot ask a widened view for yourself — ask another administrator");
     await this.assertBeneficiary(actor.tenantId, userId, kind);
     // INFO (QA-RL): an expired pending request no longer blocks a new one: it is withdrawn (REVOKED, audited) first.
-    const stale = (await grants.list(actor.tenantId)).find((g) => g.userId === userId && grantKind(g) === kind && g.status === "PENDING" && g.expiresAt && g.expiresAt.getTime() <= Date.now());
+    // q221: an APPROVED resource.readall past its end is also replaced (no extension: a new request and confirmation).
+    const stale = (await grants.list(actor.tenantId)).find((g) => g.userId === userId && grantKind(g) === kind && (
+      (g.status === "PENDING" && g.expiresAt && g.expiresAt.getTime() <= Date.now())
+      || (g.status === "APPROVED" && kind === "RESOURCE_READALL" && g.accessExpiresAt && g.accessExpiresAt.getTime() <= Date.now())));
     if (stale) {
       await grants.revoke(actor.tenantId, stale.id, { by: actor.userId, reason: "Demande expirée, remplacée par une nouvelle demande" },
         (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, "Demande expirée, remplacée par une nouvelle demande", requestId)]);
@@ -341,7 +345,11 @@ export class RoleService {
     }
     if (!approve && !reason) throw new ValidationError("A reason is required to refuse");
     if (approve) await this.assertBeneficiary(actor.tenantId, before.userId, grantKind(before));
-    return grants.decide(actor.tenantId, id, { status: approve ? "APPROVED" : "REJECTED", by: actor.userId, reason },
+    // q221 (DECISION-111): a confirmed resource.readall ends after N days (default 90), fixed now, never extended.
+    const accessDays = grantKind(before) === "RESOURCE_READALL"
+      ? (await this.configs?.getByTenant(actor.tenantId))?.resourceReadallMaxDays ?? DEFAULT_RESOURCE_READALL_MAX_DAYS
+      : undefined;
+    return grants.decide(actor.tenantId, id, { status: approve ? "APPROVED" : "REJECTED", by: actor.userId, reason, accessDays },
       (g) => [this.grantAuditEvent(actor, g, approve ? "APPROVE" : "REJECT", before, reason, requestId)]);
   }
 
@@ -406,10 +414,18 @@ export class RoleService {
 
   /** Terminal: an administrator withdraws a pending request or ends an active grant, with a reason. */
   async revokeSensitiveView(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<SensitiveViewGrant> {
-    requirePermission(actor, "role.assign");
+    // q222 (DECISION-111): a Committee or Audit member may also end a resource.readall (a narrowing), never a q200 view.
+    const confirmer = !actor.roles.includes("role.assign") && actor.roles.includes("rolegroup.audit.validate");
+    if (!confirmer) requirePermission(actor, "role.assign");
     const grants = this.requireSensitiveViews();
     const before = await grants.getById(actor.tenantId, id);
     if (!before) throw new NotFoundError("SensitiveViewGrant", id);
+    if (confirmer) {
+      const seats = await this.fixedGroupsOf(actor.tenantId, actor.userId);
+      if (grantKind(before) !== "RESOURCE_READALL" || (!seats.includes("AUDIT") && !seats.includes("RISK_COMMITTEE"))) {
+        throw new ForbiddenError("Only an administrator, or a Committee or Audit member for the reading of every content, can revoke");
+      }
+    }
     // Codex PR #207: the audit is built from the row locked and updated in the transaction, not from the read above.
     return grants.revoke(actor.tenantId, id, { by: actor.userId, reason },
       (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, reason, requestId)]);

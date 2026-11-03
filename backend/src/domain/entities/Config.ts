@@ -49,6 +49,8 @@ export type EvaluationMode = "CLASSIQUE" | "PARTICIPATIF";
 
 /** q178 (DECISION-095): the PO's default for `riskManagerVacancyMaxDays`, same as the column DEFAULT of migration 076. */
 export const DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS = 60;
+/** q221 (DECISION-111): the PO's default for `resourceReadallMaxDays`, same as the column DEFAULT of migration 084. */
+export const DEFAULT_RESOURCE_READALL_MAX_DAYS = 90;
 
 /** One band of the SEUILS_NIVEAU (score -> level label) mapping, e.g. { label: "Critique", min: 16, max: 25 }. */
 export interface LevelThreshold {
@@ -90,6 +92,8 @@ export interface Config {
   policyRequestExpiryDays: number | null;
   /** q178 (DECISION-095): longest Risk Manager vacancy (last member gone, no interim). Default 60 days, decided by the PO (migration 076). */
   riskManagerVacancyMaxDays: number | null;
+  /** q221 (DECISION-111): life of a confirmed resource.readall grant (days); null = default 90. Optional for older fakes. */
+  resourceReadallMaxDays?: number | null;
   /** 0 means "default, never explicitly saved" — see DEFAULT_CONFIG in ConfigService. */
   version: number;
   updatedBy: string | null;
@@ -120,4 +124,5 @@ export interface ConfigPatch {
   acceptanceMaxDays?: number | null;
   policyRequestExpiryDays?: number | null;
   riskManagerVacancyMaxDays?: number | null;
+  resourceReadallMaxDays?: number | null;
 }

@@ -86,6 +86,11 @@ export interface ResourceAccessRepository {
   seesEverything(tenantId: string, userId: string): Promise<boolean>;
   /** Codex P2 (PR #225): active membership of the Risk Manager group (role `system_group = 'RISK_MANAGER'`). */
   isRiskManagerMember(tenantId: string, userId: string): Promise<boolean>;
+  /**
+   * q220 (DECISION-111): among `ids` (already readable), those `userId` reads ONLY through resource.readall, with the
+   * grant that opens them; null when the account holds no effective resource.readall.
+   */
+  readOnlyThroughReadall?(tenantId: string, userId: string, type: RestrictableResource | "RISK", ids: string[]): Promise<{ grantId: string; ids: string[] } | null>;
   /** q208: every restricted resource of the tenant (any root, not deleted), with its active named-people count. */
   /** V3: paginated (`limit` 1..500, default 200; `offset` >= 0), most recently changed first. */
   listRestricted(tenantId: string, page?: { limit?: number; offset?: number }): Promise<RestrictedResourceRow[]>;

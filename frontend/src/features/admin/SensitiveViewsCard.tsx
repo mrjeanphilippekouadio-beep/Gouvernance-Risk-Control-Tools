@@ -38,6 +38,9 @@ const STATUS: Record<SensitiveViewGrant["status"], { label: string; tone: Status
   REVOKED: { label: "Retirée", tone: "neutral" },
 };
 
+/** q221: a confirmed resource.readall past its end holds nothing — shown « Expirée » (the server ignores it). */
+const expired = (g: SensitiveViewGrant) => g.status === "APPROVED" && !!g.accessExpiresAt && new Date(g.accessExpiresAt).getTime() <= Date.now();
+
 /**
  * q200 (DECISION-103): a Risk Manager member's widened view of the rights matrix (Audit and administrators).
  * An administrator asks (reason), a Committee or Audit member confirms or refuses (never the author nor the
@@ -71,14 +74,20 @@ export function SensitiveViewsCard({ token, canRequest, canDecide, kind = "ROLE_
 
   const columns: TableColumn<SensitiveViewGrant>[] = [
     { key: "user", header: text.who, render: (g) => nameOf(g.userId) },
-    { key: "status", header: "État", render: (g) => <StatusBadge label={STATUS[g.status].label} tone={STATUS[g.status].tone} /> },
+    { key: "status", header: "État", render: (g) => expired(g)
+      ? <StatusBadge label="Expirée" tone="neutral" />
+      : <>
+        <StatusBadge label={STATUS[g.status].label} tone={STATUS[g.status].tone} />
+        {g.status === "APPROVED" && g.accessExpiresAt && <div className="muted">jusqu'au {new Date(g.accessExpiresAt).toLocaleDateString("fr-FR")}</div>}
+      </> },
     { key: "reason", header: "Motif", render: (g) => g.revokeReason ?? g.decisionReason ?? g.reason },
     { key: "actions", header: "Actions", render: (g) => <>
       {canDecide && g.status === "PENDING" && <>
         <Button disabled={busy} onClick={() => run(() => rolesApi.decideSensitiveView(token, g.id, true, reason.trim()))}>Confirmer</Button>{" "}
         <Button disabled={busy || !reason.trim()} variant="destructive" onClick={() => run(() => rolesApi.decideSensitiveView(token, g.id, false, reason.trim()))}>Refuser</Button>{" "}
       </>}
-      {canRequest && (g.status === "PENDING" || g.status === "APPROVED") &&
+      {/* q222: a Committee or Audit member may also end a reading of every content (the server checks the seat). */}
+      {(canRequest || (canDecide && kind === "RESOURCE_READALL")) && (g.status === "PENDING" || g.status === "APPROVED") && !expired(g) &&
         <Button disabled={busy || !reason.trim()} variant="destructive" onClick={() => run(() => rolesApi.revokeSensitiveView(token, g.id, reason.trim()))}>Retirer</Button>}
     </> },
   ];

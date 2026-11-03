@@ -16,6 +16,7 @@ import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 import { readerScope, type Visibility } from "../domain/visibility.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { NotificationResourceType } from "../domain/entities/Notification.js";
+import { randomUUID } from "node:crypto";
 import { writeAudited } from "./auditedWrite.js";
 import { ADMIN_PERMISSIONS } from "../domain/fixedGroupPermissions.js";
 
@@ -78,7 +79,10 @@ export function checkedReason(raw: string | undefined, what: string): string {
  * Manager group is notified whenever the owner widens (q204 A). A resource that follows its parent has no own level.
  */
 /** Lot V4 A1 (q197): what an administrator without resource.readall sees of a restricted resource (support). */
-export type RestrictedResourceMeta = Pick<RestrictedResourceRow, "type" | "id" | "visibility" | "accessCount" | "updatedAt">;
+export type RestrictedResourceMeta = Pick<RestrictedResourceRow, "type" | "id" | "visibility" | "accessCount"> & { updatedAt: string };
+
+/** q220: the audit entity of each root, as written by the visibility changes. */
+const READ_ENTITY: Record<RestrictableResource | "RISK", string> = { RISK: "Risk", CONTROL: "Control", ANOMALY: "Anomaly", ACTION_PLAN: "ActionPlan", KPI: "Kpi" };
 
 /** q215 A: at most 140 characters of a reason in a list (an ellipsis marks the cut). */
 export const REASON_PREVIEW_LENGTH = 140;
@@ -340,13 +344,38 @@ export class ResourceVisibilityManager {
    * q208 / q209 (DECISION-107): every restricted resource of the client, with its last change (R-1), for the Risk
    * Manager group (`resourcevisibility.set`) and the Committee and Audit groups (who see everything anyway).
    */
+  /**
+   * q220 (DECISION-111): every read that only resource.readall allows is audited BEFORE the response — one READ row per
+   * resource for a unitary read (type, id, grant; no title, no content), one READ row per list holding at least one such
+   * item (its count). Nothing for the fixed groups nor for a read that owes nothing to the right. A failed write fails the
+   * request (fail closed). Called by the read services, never copied into the routes.
+   */
+  async recordReadallReads(actor: AuthenticatedUser, type: RestrictableResource | "RISK", ids: string[], mode: "ONE" | "LIST"): Promise<void> {
+    // resource.readall is effective for an administrator only: anyone else costs nothing here.
+    if (ids.length === 0 || !this.access.readOnlyThroughReadall || !actor.roles.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p))) return;
+    const opened = await this.access.readOnlyThroughReadall(actor.tenantId, actor.userId, type, ids);
+    if (!opened || opened.ids.length === 0) return;
+    const requestId = `readall-${randomUUID()}`;
+    const base = { tenantId: actor.tenantId, userId: actor.userId, action: "READ" as const, oldValue: null, reason: null, requestId };
+    if (mode === "ONE") {
+      for (const id of opened.ids) {
+        await this.audit.record({ ...base, entityType: READ_ENTITY[type], entityId: id, newValue: { through: "RESOURCE_READALL", grantId: opened.grantId } });
+      }
+      return;
+    }
+    await this.audit.record({ ...base, entityType: "SensitiveViewGrant", entityId: opened.grantId,
+      newValue: { through: "RESOURCE_READALL", list: type, count: opened.ids.length } });
+  }
+
   async listRestricted(actor: AuthenticatedUser, page?: { limit?: number; offset?: number }): Promise<Array<RestrictedResourceRow | RestrictedResourceMeta>> {
     // PRIV-V3-01: real membership of a group that sees everything (Risk Manager, Committee, Audit) or resource.readall
     // (lot V4, in SQL), never a permission alone.
     if (!(await this.access.seesEverything(actor.tenantId, actor.userId))) {
       // Lot V4 A1 (q197): an administrator without resource.readall gets the metadata only (support): no title, no change.
       if (actor.roles.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p))) {
-        return (await this.access.listRestricted(actor.tenantId, page)).map(({ type, id, visibility, accessCount, updatedAt }) => ({ type, id, visibility, accessCount, updatedAt }));
+        // q223 (DECISION-111): the date only (YYYY-MM-DD), never the time of the last change.
+        return (await this.access.listRestricted(actor.tenantId, page)).map(({ type, id, visibility, accessCount, updatedAt }) =>
+          ({ type, id, visibility, accessCount, updatedAt: new Date(updatedAt).toISOString().slice(0, 10) }));
       }
       throw new ForbiddenError("Only the Risk Manager, Committee and Audit groups can list the restricted resources");
     }

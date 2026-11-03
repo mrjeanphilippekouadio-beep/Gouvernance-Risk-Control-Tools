@@ -31,8 +31,9 @@ describe("QA-visibility-v4 STATIC", () => {
     const sql = read("database", "postgresql", "migrations", "084_resource_readall.sql");
     expect(sql).toMatch(/CHECK \(kind IN \('ROLE_READ_SENSITIVE', 'RESOURCE_READALL'\)\)/);
     expect(sql).toMatch(/NEW\.kind IS DISTINCT FROM OLD\.kind/);
-    expect((sql.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length).toBe(4);
-    expect((sql.match(/SET search_path = pg_catalog, public, pg_temp/g) ?? []).length).toBeGreaterThanOrEqual(8); // 4 inline + 4 ALTER FUNCTION
+    // DECISION-111 (q219): 15 functions — guard, is_administrator, reads_all, 5 *_visible_core, 2 effective levels, 5 *_visible_to
+    expect((sql.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length).toBe(15);
+    expect((sql.match(/SET search_path = pg_catalog, public, pg_temp/g) ?? []).length).toBeGreaterThanOrEqual(30); // 15 inline + 15 ALTER FUNCTION
     expect(sql).not.toMatch(/DELETE FROM/i);
     expect(sql).toContain("ADD COLUMN IF NOT EXISTS kind");
   });
@@ -75,7 +76,13 @@ const live_ = async (user: Who) => (await grantRows(user)).find((g) => g.status 
 const assign = (roleId: string, user: Who) => sql("INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $4)", [I("001"), roleId, UID[user], UID.adm]);
 const unassign = (roleId: string, user: Who) => sql("UPDATE user_roles SET revoked_at = now() WHERE role_id = $1 AND user_id = $2 AND revoked_at IS NULL", [roleId, UID[user]]);
 const idsOf = (r: { json: any }): string[] => ((r.json?.data ?? []) as Array<{ id: string }>).map((x) => x.id).sort((a, b) => a.localeCompare(b));
-const probe = async (w: Who) => (await get(w, `/controls/${I("c03")}`)).status; // NOMINATIF, named = `named` only
+// DECISION-111 (q219): resource.readall never opens NOMINATIF — the probe is c04 (PERIMETRE, read by none of the
+// administrators of this data set: out, n1, raci, own, adm).
+const probe = async (w: Who) => (await get(w, `/controls/${I("c04")}`)).status;
+const EFFECTIVE: Record<(typeof BASES)[number], string> = {
+  risks: "(SELECT visibility FROM risks WHERE id = $1 AND tenant_id = $2)", controls: "(SELECT visibility FROM controls WHERE id = $1 AND tenant_id = $2)",
+  kpis: "(SELECT visibility FROM kpis WHERE id = $1 AND tenant_id = $2)", anomalies: "anomaly_effective_visibility($2, $1)", actions: "action_plan_effective_visibility($2, $1)",
+};
 const sources = async (user: Who) => ((await get("adm", `/roles/users/${UID[user]}/permission-sources`)).json?.data ?? []) as Array<{ permission: string; sources: Array<{ kind: string }> }>;
 const hasBadge = async (user: Who) => (await sources(user)).find((p) => p.permission === "resource.readall")?.sources.map((s) => s.kind);
 const failAudit = async (action: string) => {
@@ -114,7 +121,7 @@ describe.skipIf(!live)("QA-visibility-v4 on the REAL server + LOCAL PostgreSQL 1
   describe("A1: an administrator without resource.readall (q197)", () => {
     it("the data set is what the oracles assume: out is administrator by role, cannot read c03 (404), no grant exists", async () => {
       expect(await probe("out")).toBe(404);
-      expect(await probe("named")).toBe(200);
+      expect(await probe("rm")).toBe(200);
       expect((await sql("SELECT count(*)::int AS n FROM sensitive_view_grants"))[0]).toEqual({ n: 0 });
     });
     it("GET /restricted-resources: 401 anonymous; 403 for a non-administrator (dept); 200 metadata only for administrators (adm direct rights, out by role)", async () => {
@@ -306,29 +313,42 @@ describe.skipIf(!live)("QA-visibility-v4 on the REAL server + LOCAL PostgreSQL 1
       expect(matrix.some((r) => r.permissions.includes("resource.readall"))).toBe(false);
       expect(JSON.stringify((await get("adm", `/roles/users/${UID.out}/permissions`)).json.data)).toContain("resource.readall");
     });
-    it("reads everything: the five lists equal the Risk Manager's (NOMINATIF included), every item opens (200), c03 NOMINATIF reads", async () => {
+    it("DECISION-111 q219: reads every PERIMETRE content, never NOMINATIF — what the Risk Manager lists and out does not is NOMINATIF (effective level), c03 stays 404", async () => {
       expect(await probe("out")).toBe(200);
+      expect((await get("out", `/controls/${I("c03")}`)).status).toBe(404); // NOMINATIF, listed to `named` only
       for (const b of BASES) {
         const rm = idsOf(await get("rm", `/${b}`));
         const out = idsOf(await get("out", `/${b}`));
         expect(rm.length, b).toBeGreaterThan(0);
-        expect(out, b).toEqual(rm);
-        for (const id of rm) expect((await get("out", `/${b}/${id}`)).status, `${b}/${id}`).toBe(200);
+        expect(out.every((id) => rm.includes(id)), b).toBe(true);
+        for (const id of rm.filter((x) => !out.includes(x))) {
+          expect((await sql<{ v: string }>(`SELECT ${EFFECTIVE[b]} AS v`, [id, I("001")]))[0]!.v, `${b}/${id}`).toBe("NOMINATIF");
+        }
+        for (const id of out) expect((await get("out", `/${b}/${id}`)).status, `${b}/${id}`).toBe(200);
       }
     });
-    it("hidden count = null (no mention) and the restricted list is the full one: label and lastChange back, same rows as the Risk Manager", async () => {
-      expect((await get("out", "/hidden-counts")).json.data).toBeNull();
-      const rm = (await get("rm", "/restricted-resources?limit=500")).json.data as Array<{ type: string; id: string; label?: string }>;
-      const out = (await get("out", "/restricted-resources?limit=500")).json.data as Array<{ type: string; id: string; label?: string }>;
-      expect(out.map((x) => `${x.type}:${x.id}`)).toEqual(rm.map((x) => `${x.type}:${x.id}`));
-      expect(out.every((x) => typeof x.label === "string")).toBe(true);
+    it("DECISION-111 q219: hidden counts are normal numbers (no PERIMETRE hidden left), and the restricted list stays the A1 metadata view (fixed groups only)", async () => {
+      const counts = (await get("out", "/hidden-counts")).json.data as Record<string, number>;
+      expect(counts).not.toBeNull();
+      expect(Object.values(counts).every((n) => n === 0)).toBe(true);
+      const out = (await get("out", "/restricted-resources?limit=500")).json.data as Array<Record<string, unknown>>;
+      for (const row of out) expect(Object.keys(row).sort((a, b) => a.localeCompare(b))).toEqual(["accessCount", "id", "type", "updatedAt", "visibility"]);
+      expect(out.every((x) => /^\d{4}-\d{2}-\d{2}$/.test(String(x.updatedAt)))).toBe(true); // q223: the date only
     });
-    it("the author of the last change stays masked for this reader (only Risk Manager and Audit name it, PRIV-V3-05)", async () => {
-      expect((await put("rm", `/controls/${I("c03")}/visibility`, { visibility: "NOMINATIF", addUserIds: [UID.named], revokeUserIds: [], reason: "QA V4 auteur" })).status).toBe(200);
-      const row = ((await get("out", "/restricted-resources?limit=500")).json.data as Array<{ id: string; lastChange: Record<string, unknown> | null }>).find((x) => x.id === I("c03"))!;
-      expect(row.lastChange).toMatchObject({ reason: "QA V4 auteur" });
-      expect(row.lastChange).not.toHaveProperty("userId");
-      expect(row.lastChange).not.toHaveProperty("byName");
+    it("DECISION-111 q220: a unitary read owed to the right writes one READ row (grant, no content); a list writes one row with the count; RM reads write nothing", async () => {
+      const gid = (await live_("out"))!.id;
+      const before = (await audits(I("c04"))).filter((a) => a.action === "READ").length;
+      expect(await probe("out")).toBe(200);
+      const rows = (await audits(I("c04"))).filter((a) => a.action === "READ");
+      expect(rows.length).toBe(before + 1);
+      expect(rows.at(-1)).toMatchObject({ entity_type: "Control", user_id: UID.out, new_value: { through: "RESOURCE_READALL", grantId: gid } });
+      const listRows = async () => (await audits(gid)).filter((a) => a.action === "READ");
+      const n = (await listRows()).length;
+      expect((await get("out", "/controls")).status).toBe(200);
+      expect((await listRows()).length).toBe(n + 1);
+      expect((await listRows()).at(-1)!.new_value).toMatchObject({ through: "RESOURCE_READALL", list: "CONTROL" });
+      expect(await probe("rm")).toBe(200);
+      expect((await audits(I("c04"))).filter((a) => a.action === "READ").length).toBe(before + 1);
     });
     it("it is a reading right only: the beneficiary still cannot change a visibility (403/404) nor read the Audit log", async () => {
       expect([403, 404]).toContain((await put("out", `/controls/${I("c03")}/visibility`, { visibility: "CLIENT", addUserIds: [], revokeUserIds: [], reason: "QA" })).status);
@@ -512,9 +532,10 @@ describe.skipIf(!live)("QA-visibility-v4 on the REAL server + LOCAL PostgreSQL 1
       const full = (await audits(I("c01"))).filter((a) => a.action === "PERMISSION_CHANGE" || a.reason?.startsWith("g")).map((a) => a.reason);
       expect(full).toContain("g".repeat(500));
     });
-    it("the same preview for every reader of the full list (Committee, Audit, beneficiary of resource.readall), never the raw 500 characters", async () => {
+    it("the same preview for every reader of the full list (Risk Manager, Committee, Audit), never the raw 500 characters; the readall beneficiary gets no reason (DECISION-111 q219, A1 view)", async () => {
       const id = await grant("out");
-      for (const w of ["rm", "com", "aud", "out"] as const) {
+      expect(JSON.stringify((await get("out", "/restricted-resources?limit=500")).json.data)).not.toContain("lastChange");
+      for (const w of ["rm", "com", "aud"] as const) {
         const row = ((await get(w, "/restricted-resources?limit=500")).json.data as Array<{ id: string; lastChange: { reason: string } | null }>).find((x) => x.id === I("c01"))!;
         expect(row.lastChange!.reason.length, w).toBe(140);
       }

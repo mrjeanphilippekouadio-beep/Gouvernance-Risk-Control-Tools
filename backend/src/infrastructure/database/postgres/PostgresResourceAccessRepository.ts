@@ -44,6 +44,12 @@ async function effectiveReaders(db: Db, tenantId: string, type: RestrictableReso
   return rows.map((r) => r.id);
 }
 
+/** q220: the readall-free visibility of each root (migration 084). */
+const CORE_FUNCTION: Record<RestrictableResource | "RISK", string> = {
+  RISK: "risk_visible_core", CONTROL: "control_visible_core", ANOMALY: "anomaly_visible_core",
+  ACTION_PLAN: "action_plan_visible_core", KPI: "kpi_visible_core",
+};
+
 export class PostgresResourceAccessRepository implements ResourceAccessRepository {
   readonly auditsInTransaction = true;
 
@@ -70,6 +76,18 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
   async seesEverything(tenantId: string, userId: string): Promise<boolean> {
     const { rows } = await this.pool.query<{ ok: boolean }>(`SELECT visibility_sees_everything($1, $2) AS ok`, [tenantId, userId]);
     return rows[0]?.ok === true;
+  }
+
+  async readOnlyThroughReadall(tenantId: string, userId: string, type: RestrictableResource | "RISK", ids: string[]): Promise<{ grantId: string; ids: string[] } | null> {
+    const core = CORE_FUNCTION[type]; // whitelisted name, never client text
+    const { rows } = await this.pool.query<{ grant_id: string; ids: string[] }>(
+      `SELECT g.id AS grant_id, ARRAY(SELECT x::text FROM unnest($3::uuid[]) x WHERE NOT ${core}($1, x, $2)) AS ids
+       FROM sensitive_view_grants g
+       WHERE g.tenant_id = $1 AND g.user_id = $2 AND g.kind = 'RESOURCE_READALL' AND g.status = 'APPROVED'
+         AND g.access_expires_at > now() AND visibility_reads_all($1, $2)`,
+      [tenantId, userId, ids],
+    );
+    return rows[0] ? { grantId: rows[0].grant_id, ids: rows[0].ids } : null;
   }
 
   async isRiskManagerMember(tenantId: string, userId: string): Promise<boolean> {

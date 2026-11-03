@@ -29,6 +29,7 @@ const DELAYS: { key: keyof GovernanceDelays; label: string; help: string }[] = [
   { key: "acceptanceMaxDays", label: "Durée maximale d'une acceptation de principe faite seul", help: "q169 : une acceptation faite sans tiers pour la confirmer ne peut pas durer plus longtemps." },
   { key: "policyRequestExpiryDays", label: "Expiration d'une demande d'assouplissement", help: "q174 : passé ce délai, la demande ne peut plus être approuvée." },
   { key: "riskManagerVacancyMaxDays", label: "Durée maximale d'une vacance du groupe Risk Manager", help: "q178 : 60 jours par défaut ; au-delà, la vacance est signalée comme dépassée." },
+  { key: "resourceReadallMaxDays", label: "Durée d'une lecture de tous les contenus confirmée", help: "q221 : 90 jours par défaut, fixée à la confirmation, sans prolongation : à l'échéance, nouvelle demande et nouvelle confirmation." },
 ];
 const GROUP_LABELS = FIXED_GROUP_LABELS;
 const RIGHT_LABELS: Record<string, string> = {
@@ -79,7 +80,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
   const [reason, setReason] = useState("");
   const [policy, setPolicy] = useState<SelfValidationPolicy>("REFUSE");
   const [flag, setFlag] = useState(false);
-  const [delays, setDelays] = useState<Record<keyof GovernanceDelays, string>>({ exceptionReviewDelayDays: "", acceptanceMaxDays: "", policyRequestExpiryDays: "", riskManagerVacancyMaxDays: "" });
+  const [delays, setDelays] = useState<Record<keyof GovernanceDelays, string>>({ exceptionReviewDelayDays: "", acceptanceMaxDays: "", policyRequestExpiryDays: "", riskManagerVacancyMaxDays: "", resourceReadallMaxDays: "" });
   const [delayPending, setDelayPending] = useState<GovernanceDelayRequest | null>(null);
   const [rights, setRights] = useState<GovernanceRight[] | null>(null);
   const [right, setRight] = useState<GovernanceRight | null>(null);
@@ -127,6 +128,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       acceptanceMaxDays: config.acceptanceMaxDays?.toString() ?? "",
       policyRequestExpiryDays: config.policyRequestExpiryDays?.toString() ?? "",
       riskManagerVacancyMaxDays: config.riskManagerVacancyMaxDays?.toString() ?? "",
+      resourceReadallMaxDays: config.resourceReadallMaxDays?.toString() ?? "",
     });
     setEditing(setting);
   }

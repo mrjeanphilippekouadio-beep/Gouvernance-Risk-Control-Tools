@@ -40,6 +40,8 @@ export interface SensitiveViewGrant {
   requestedBy: string;
   requestedAt: string;
   expiresAt: string | null;
+  /** q221 (DECISION-111): end of a confirmed resource.readall, fixed at the confirmation. */
+  accessExpiresAt?: string | null;
   decisionReason: string | null;
   revokeReason: string | null;
 }
