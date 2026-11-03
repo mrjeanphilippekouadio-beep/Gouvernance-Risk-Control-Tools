@@ -70,3 +70,6 @@ export const restrictedResourcesApi = {
 export const hiddenCountsApi = {
   get: (token: string) => apiRequest<HiddenCounts>("/api/v1/hidden-counts", { token }),
 };
+
+/** q215 A (DECISION-110): hint shown wherever a reason may open or restrict a resource; the reason is shown to the Committee and Audit. */
+export const REASON_NO_NAME_HINT = "Ne nommez pas la personne concernée : ce motif est visible du Comité et de l'Audit.";

@@ -113,3 +113,18 @@ describe.skipIf(!hasLocalPg)("lot V3 on real PostgreSQL (local only)", () => {
     expect(await repo.departmentGroupGains(ctx.tenant, dept, x!)).toEqual([{ type: "KPI", id: kpi }]);
   });
 });
+
+describe("q215 A (DECISION-110) — 140-character preview of the reason in the restricted list", () => {
+  it("cuts a long reason with an ellipsis, keeps a short one, for every reader of the list", async () => {
+    const long = "x".repeat(300);
+    const row = { type: "RISK", id: "r1", label: "l", visibility: "PERIMETRE", accessCount: 0, updatedAt: new Date(),
+      lastChange: { userId: RM, at: new Date(), reason: long, widening: false } };
+    const over = { seesEverything: vi.fn(async () => true), listRestricted: vi.fn(async () => [row]) };
+    const [committee] = await manager(over).m.listRestricted(actor(READER, ["riskevaluation.validate.committee"]));
+    expect(committee!.lastChange!.reason).toHaveLength(140);
+    expect(committee!.lastChange!.reason!.endsWith("…")).toBe(true);
+    const short = { ...row, lastChange: { ...row.lastChange, reason: "Motif court" } };
+    const [audit] = await manager({ ...over, listRestricted: vi.fn(async () => [short]) }).m.listRestricted(actor(READER, ["audit.read"]));
+    expect(audit!.lastChange!.reason).toBe("Motif court");
+  });
+});

@@ -76,6 +76,13 @@ export function checkedReason(raw: string | undefined, what: string): string {
  * the owner account, with a mandatory reason and the audit row in the same transaction. Nobody adds themselves. The Risk
  * Manager group is notified whenever the owner widens (q204 A). A resource that follows its parent has no own level.
  */
+/** q215 A: at most 140 characters of a reason in a list (an ellipsis marks the cut). */
+export const REASON_PREVIEW_LENGTH = 140;
+export function reasonPreview(reason: string | null): string | null {
+  if (reason === null || reason.length <= REASON_PREVIEW_LENGTH) return reason;
+  return `${reason.slice(0, REASON_PREVIEW_LENGTH - 1)}…`;
+}
+
 export class ResourceVisibilityManager {
   constructor(
     private readonly access: ResourceAccessRepository,
@@ -343,7 +350,9 @@ export class ResourceVisibilityManager {
     }
     return rows.map((r) => {
       if (!r.lastChange) return r;
-      const { userId, ...rest } = r.lastChange;
+      const { userId, reason, ...base } = r.lastChange;
+      // q215 A (DECISION-110): the list shows a 140-character preview of the reason; the full text stays in the audit log.
+      const rest = { ...base, reason: reasonPreview(reason) };
       return { ...r, lastChange: seesAuthor && userId ? { ...rest, userId, byName: names.get(userId) ?? null } : rest };
     });
   }

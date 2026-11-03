@@ -8,7 +8,7 @@ import {
   type RiskVisibilityState,
 } from "../../api/risks";
 import { usersApi, type DirectoryEntry } from "../../api/users";
-import { INHERITS_LABEL, type ResourceVisibilityState, type VisibilityChange } from "../../api/visibility";
+import { INHERITS_LABEL, type ResourceVisibilityState, type VisibilityChange, REASON_NO_NAME_HINT } from "../../api/visibility";
 import { ApiError } from "../../api/client";
 
 /**
@@ -186,7 +186,7 @@ export function ResourceVisibilityCard({ token, resourceId, idPrefix, load, save
           </label>)}
         </fieldset>}
       </>}
-      <FormField label="Motif *" htmlFor={`${idPrefix}-reason`}>
+      <FormField label="Motif *" htmlFor={`${idPrefix}-reason`} help={REASON_NO_NAME_HINT}>
         <textarea id={`${idPrefix}-reason`} value={reason} maxLength={500} required onChange={(e) => setReason(e.target.value)} />
       </FormField>
       {error && <MessageBanner tone="danger">{error}</MessageBanner>}

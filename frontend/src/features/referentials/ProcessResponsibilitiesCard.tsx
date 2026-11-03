@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { REASON_NO_NAME_HINT } from "../../api/visibility";
 import { Button, Card, FormField, MessageBanner, StatusBadge } from "@djamo/design-system";
 import { processesApi, type ProcessResponsibilities, type ResponsibilitiesInput } from "../../api/processes";
 import type { DirectoryEntry } from "../../api/users";
@@ -97,7 +98,7 @@ export function ProcessResponsibilitiesCard({ token, processId, accounts, canAss
           accounts={accounts}
         />)}
         <p className="muted">Seuls des comptes actifs peuvent être désignés. Personne ne se désigne soi-même, sauf le champion dans une structure à une personne : le serveur demande alors une double confirmation avec motif.</p>
-        <FormField label="Motif" htmlFor="resp-reason" help="Demandé si le nouveau responsable lirait des ressources restreintes au périmètre.">
+        <FormField label="Motif" htmlFor="resp-reason" help={`Demandé si le nouveau responsable lirait des ressources restreintes au périmètre. ${REASON_NO_NAME_HINT}`}>
           <input id="resp-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
         </FormField>
         <Button type="submit" variant="primary" disabled={saving}>{saving ? "Envoi…" : "Enregistrer les responsabilités"}</Button>
