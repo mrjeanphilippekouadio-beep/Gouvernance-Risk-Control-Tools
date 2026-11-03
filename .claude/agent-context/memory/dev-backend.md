@@ -489,3 +489,9 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Échéance fixée à la confirmation (q221) : colonne posée par l'UPDATE de décision seulement, garde « posée à la confirmation, puis immuable » ; une attribution échue bloque l'index vivant, donc la nouvelle demande la remplace (REVOKED audité), comme une demande expirée.
 - Un nouveau délai réglable = calque exact de `riskManagerVacancyMaxDays` (colonne DEFAULT, Config optionnel, repo, ConfigService, route, GOVERNANCE_DELAY_KEYS, écran) ; B6bFollowups compte les lecteurs de `configs.getByTenant(` par fichier.
 - Sonde QA d'un droit de lecture : choisir une ressource qu'aucun autre profil du jeu ne lit déjà (vérifié en SQL avec le `_core`), sinon le test réussit pour une mauvaise raison.
+
+## 2026-11-03 — SEC V4-03 / CMP-V4-10 / q221 plafond (feat/r1-visibility-v4, 2090954)
+- « Chaque lecture » = un point de passage unique, pas 40 appels : un Proxy sur les dépôts des racines (`withReadallAudit`, services/readallAudit.ts) intercepte toute méthode dont le dernier argument est un scope lecteur (`{ all: false, userId }`) ; tableaux de bord, enfants, vues et cartographie sont couverts sans les toucher. Ne pas rendre async une méthode non scopée (on renvoie la valeur d'origine). Le recorder est passé en closure paresseuse dans server.ts (le manager est construit après les dépôts).
+- Test d'inventaire = server.ts ne construit ces dépôts qu'au travers de l'enveloppe (comptage `new X(` vs `withReadallAudit(new X(`).
+- Plafond d'un délai réglable : CHECK SQL + zod de route + garde service (la boucle générique des délais a un max par clé).
+- L'id présent dans `/controls` déclenche aussi la ligne des risques couverts (hiddenIds) : les oracles QA comptent par `list`, pas un nombre total de lignes.
