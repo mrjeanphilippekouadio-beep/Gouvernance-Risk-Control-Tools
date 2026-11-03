@@ -473,3 +473,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Identifiant en paramètre de route : `z.guid().parse(req.params[...])` (ZodError → 400 via errorHandler), sinon PostgreSQL renvoie 22P02 → 500.
 - Un champ hors `data` dans une réponse (ex. `suspended`) doit être ajouté à `apiRequestFull`/`ApiResponse` côté front, qui ne recopie que les champs connus.
 - `DIRECTORY_PERMISSIONS` (UserService) : tout droit qui doit désigner ou consulter un compte précis y entre (q183 `audit.mission.create`, q187 `role.read`) ; chaque ajout repasse Privacy.
+
+## 2026-11-03 — Visibilité lot V4 (q197 A3, DECISION-103) + q215 (feat/r1-visibility-v4, a1bcbe6)
+- Réutiliser un circuit maker-checker existant plutôt qu'en créer un : `sensitive_view_grants` + colonne `kind` (084), paramètre `kind` optionnel partout (défaut = l'ancien comportement) ; les faux de test sans `kind` sont lus comme l'ancien type (`grantKind`).
+- Un up de migration ne peut ni DROP INDEX ni DROP COLUMN (test QA-panel-migrations) : garder l'index vivant de 079 car les bénéficiaires des deux kinds sont disjoints.
+- Une condition « encore administrateur » en SQL doit copier `ADMIN_PERMISSIONS` : un test compare la liste de la migration au tableau TS (dérive détectée).
+- Les tests d'idempotence 082/083 rejouent ces migrations sur la base partagée et écrasent les redéfinitions plus récentes : un test live qui dépend d'une redéfinition postérieure rejoue d'abord sa migration (idempotente).
+- Ajouter une migration casse les tests de référence (QA-panel*-migrations : NUMBERS, max, nombre de fonctions ; QA-visibility-v2bis/v3 « 083 est la dernière ») : les mettre à jour sans les affaiblir.
+- A1 : un administrateur (permission d'ADMIN_PERMISSIONS dans `actor.roles`) reçoit la liste des ressources restreintes en métadonnées seules ; les oracles QA « adm = 403 » ont été réalignés.
+- q215 : l'aperçu de 140 caractères du motif est coupé côté serveur (`reasonPreview`), pas seulement à l'écran.
