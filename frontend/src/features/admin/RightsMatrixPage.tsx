@@ -113,7 +113,11 @@ export function RightsMatrixPage({ token }: Readonly<{ token: string }>) {
         caption="Matrice des droits par rôle" emptyMessage="Aucun droit ne correspond." />
     </Card>}
     {tab === "user" && loaded && <UserRights token={token} decisionRights={decisionRights} />}
-    {tab === "views" && loaded && (canRequestView || canDecideView) && <SensitiveViewsCard token={token} canRequest={canRequestView} canDecide={canDecideView} />}
+    {tab === "views" && loaded && (canRequestView || canDecideView) && <>
+      <SensitiveViewsCard token={token} canRequest={canRequestView} canDecide={canDecideView} />
+      {/* Lot V4 (q197 A3): the same circuit gives an administrator the reading of every restricted content. */}
+      <SensitiveViewsCard token={token} canRequest={canRequestView} canDecide={canDecideView} kind="RESOURCE_READALL" />
+    </>}
   </section>;
 }
 

@@ -3,6 +3,7 @@ import type {
   SensitiveViewGrant,
   SensitiveViewGrantRepository,
   SensitiveViewGrantStatus,
+  SensitiveViewGrantKind,
   RevokedGrant,
 } from "../../../domain/repositories/SensitiveViewGrantRepository.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
@@ -13,6 +14,7 @@ interface Row {
   id: string;
   tenant_id: string;
   user_id: string;
+  kind: SensitiveViewGrantKind;
   reason: string;
   status: SensitiveViewGrantStatus;
   requested_by: string;
@@ -30,6 +32,7 @@ const toDomain = (r: Row): SensitiveViewGrant => ({
   id: r.id,
   tenantId: r.tenant_id,
   userId: r.user_id,
+  kind: r.kind,
   reason: r.reason,
   status: r.status,
   requestedBy: r.requested_by,
@@ -60,21 +63,21 @@ export class PostgresSensitiveViewGrantRepository implements SensitiveViewGrantR
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
-  async isApproved(tenantId: string, userId: string): Promise<boolean> {
+  async isApproved(tenantId: string, userId: string, kind: SensitiveViewGrantKind = "ROLE_READ_SENSITIVE"): Promise<boolean> {
     const { rows } = await this.pool.query(
-      `SELECT 1 FROM sensitive_view_grants WHERE tenant_id = $1 AND user_id = $2 AND status = 'APPROVED'`, [tenantId, userId]);
+      `SELECT 1 FROM sensitive_view_grants WHERE tenant_id = $1 AND user_id = $2 AND kind = $3 AND status = 'APPROVED'`, [tenantId, userId, kind]);
     return rows.length > 0;
   }
 
   async create(
-    input: { tenantId: string; userId: string; reason: string; requestedBy: string; expiresAt: Date | null },
+    input: { tenantId: string; userId: string; reason: string; requestedBy: string; expiresAt: Date | null; kind?: SensitiveViewGrantKind },
     audit: TransactionalAudit<SensitiveViewGrant>,
   ): Promise<SensitiveViewGrant> {
     return runAudited(this.pool, async (db) => {
       try {
         const { rows } = await db.query<Row>(
-          `INSERT INTO sensitive_view_grants (tenant_id, user_id, reason, requested_by, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-          [input.tenantId, input.userId, input.reason, input.requestedBy, input.expiresAt],
+          `INSERT INTO sensitive_view_grants (tenant_id, user_id, reason, requested_by, expires_at, kind) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+          [input.tenantId, input.userId, input.reason, input.requestedBy, input.expiresAt, input.kind ?? "ROLE_READ_SENSITIVE"],
         );
         return toDomain(rows[0]!);
       } catch (err) {
@@ -113,8 +116,11 @@ export class PostgresSensitiveViewGrantRepository implements SensitiveViewGrantR
     return out.after;
   }
 
-  async revokeLiveOf(tenantId: string, userId: string, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>): Promise<SensitiveViewGrant | null> {
-    const out = await runAudited<RevokedGrant | null>(this.pool, (db) => revokeLocked(db, `user_id = $2`, tenantId, userId, change),
+  async revokeLiveOf(tenantId: string, userId: string, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>,
+    kind: SensitiveViewGrantKind = "ROLE_READ_SENSITIVE"): Promise<SensitiveViewGrant | null> {
+    // The kind is a literal of the union (never client text), inlined to keep revokeLocked's two parameters.
+    const match = `user_id = $2 AND kind = '${kind === "RESOURCE_READALL" ? "RESOURCE_READALL" : "ROLE_READ_SENSITIVE"}'`;
+    const out = await runAudited<RevokedGrant | null>(this.pool, (db) => revokeLocked(db, match, tenantId, userId, change),
       (r) => (r ? audit(r) : []));
     return out?.after ?? null;
   }

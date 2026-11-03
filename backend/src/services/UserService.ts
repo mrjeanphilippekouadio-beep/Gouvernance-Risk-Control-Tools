@@ -321,6 +321,7 @@ export class UserService {
     });
     // SEC-RL-05 (q200): a suspended account loses its widened view of the rights matrix for good.
     await this.roleService.endSensitiveView(actor, id, "Fin automatique : le compte a été suspendu", requestId);
+    await this.roleService.endSensitiveView(actor, id, "Fin automatique : le compte a été suspendu", requestId, "RESOURCE_READALL");
   }
 
   /**

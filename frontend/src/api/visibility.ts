@@ -42,12 +42,13 @@ export const INHERITS_LABEL: Record<"RISK" | "CONTROL" | "KRI", string> = {
 export interface RestrictedResource {
   type: "RISK" | "CONTROL" | "ANOMALY" | "ACTION_PLAN" | "KPI";
   id: string;
-  label: string;
+  /** Lot V4 A1: absent for an administrator without resource.readall (metadata only). */
+  label?: string;
   visibility: "PERIMETRE" | "NOMINATIF";
   accessCount: number;
   updatedAt: string;
   /** R-1: last visibility change (author id, date, reason, widening), when there is one. */
-  lastChange: { userId?: string; byName?: string | null; at: string; reason: string | null; widening: boolean | null } | null;
+  lastChange?: { userId?: string; byName?: string | null; at: string; reason: string | null; widening: boolean | null } | null;
 }
 
 /** V3 (q196, q198): one number per type the reader may list; null for the groups that see everything (no mention). */

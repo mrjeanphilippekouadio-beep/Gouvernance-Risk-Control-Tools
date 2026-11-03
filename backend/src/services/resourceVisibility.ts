@@ -17,6 +17,7 @@ import { readerScope, type Visibility } from "../domain/visibility.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { NotificationResourceType } from "../domain/entities/Notification.js";
 import { writeAudited } from "./auditedWrite.js";
+import { ADMIN_PERMISSIONS } from "../domain/fixedGroupPermissions.js";
 
 /** A root resource as the visibility rules see it (lot V2, spec §1 and §5). */
 export interface VisibilityTarget {
@@ -76,6 +77,9 @@ export function checkedReason(raw: string | undefined, what: string): string {
  * the owner account, with a mandatory reason and the audit row in the same transaction. Nobody adds themselves. The Risk
  * Manager group is notified whenever the owner widens (q204 A). A resource that follows its parent has no own level.
  */
+/** Lot V4 A1 (q197): what an administrator without resource.readall sees of a restricted resource (support). */
+export type RestrictedResourceMeta = Pick<RestrictedResourceRow, "type" | "id" | "visibility" | "accessCount" | "updatedAt">;
+
 /** q215 A: at most 140 characters of a reason in a list (an ellipsis marks the cut). */
 export const REASON_PREVIEW_LENGTH = 140;
 export function reasonPreview(reason: string | null): string | null {
@@ -334,9 +338,14 @@ export class ResourceVisibilityManager {
    * q208 / q209 (DECISION-107): every restricted resource of the client, with its last change (R-1), for the Risk
    * Manager group (`resourcevisibility.set`) and the Committee and Audit groups (who see everything anyway).
    */
-  async listRestricted(actor: AuthenticatedUser, page?: { limit?: number; offset?: number }): Promise<RestrictedResourceRow[]> {
-    // PRIV-V3-01: real membership of a group that sees everything (Risk Manager, Committee, Audit), never a permission alone.
+  async listRestricted(actor: AuthenticatedUser, page?: { limit?: number; offset?: number }): Promise<Array<RestrictedResourceRow | RestrictedResourceMeta>> {
+    // PRIV-V3-01: real membership of a group that sees everything (Risk Manager, Committee, Audit) or resource.readall
+    // (lot V4, in SQL), never a permission alone.
     if (!(await this.access.seesEverything(actor.tenantId, actor.userId))) {
+      // Lot V4 A1 (q197): an administrator without resource.readall gets the metadata only (support): no title, no change.
+      if (actor.roles.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p))) {
+        return (await this.access.listRestricted(actor.tenantId, page)).map(({ type, id, visibility, accessCount, updatedAt }) => ({ type, id, visibility, accessCount, updatedAt }));
+      }
       throw new ForbiddenError("Only the Risk Manager, Committee and Audit groups can list the restricted resources");
     }
     const rows = await this.access.listRestricted(actor.tenantId, page);

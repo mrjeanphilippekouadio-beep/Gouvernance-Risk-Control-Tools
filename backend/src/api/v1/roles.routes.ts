@@ -51,7 +51,10 @@ const GovernanceRightBody = z.object({
 const PermissionChangesQuery = z.object({ status: z.enum(["PENDING", "APPROVED", "REJECTED"]).default("PENDING") });
 const GrantorsQuery = z.object({ permission: PermissionEnum });
 // q200 (DECISION-103): individual widened views (role.read.sensitive). The author is always the caller.
-const SensitiveViewRequestBody = z.object({ userId: z.guid(), reason: reasonText() }).strict();
+const GrantKind = z.enum(["ROLE_READ_SENSITIVE", "RESOURCE_READALL"]);
+// Lot V4: `kind` RESOURCE_READALL = resource.readall for one administrator (q197 A3); absent = role.read.sensitive (q200).
+const SensitiveViewRequestBody = z.object({ userId: z.guid(), reason: reasonText(), kind: GrantKind.optional() }).strict();
+const GrantKindQuery = z.object({ kind: GrantKind.optional() });
 const SensitiveViewDecisionBody = z.object({ reason: reasonText().optional() }).strict();
 const SensitiveViewRevokeBody = z.object({ reason: reasonText() }).strict();
 
@@ -80,7 +83,7 @@ export function rolesRouter(roleService: RoleService): Router {
 
   router.get("/sensitive-view-grants", async (req, res, next) => {
     try {
-      res.json({ data: await roleService.listSensitiveViewGrants(req.user) });
+      res.json({ data: await roleService.listSensitiveViewGrants(req.user, GrantKindQuery.parse(req.query).kind) });
     } catch (err) {
       next(err);
     }
@@ -89,7 +92,7 @@ export function rolesRouter(roleService: RoleService): Router {
   // QA-RL-04: the beneficiaries an administrator may pick (active Risk Manager members, never themself).
   router.get("/sensitive-view-grants/candidates", async (req, res, next) => {
     try {
-      res.json({ data: await roleService.sensitiveViewCandidates(req.user) });
+      res.json({ data: await roleService.sensitiveViewCandidates(req.user, GrantKindQuery.parse(req.query).kind) });
     } catch (err) {
       next(err);
     }
@@ -98,7 +101,7 @@ export function rolesRouter(roleService: RoleService): Router {
   router.post("/sensitive-view-grants", async (req, res, next) => {
     try {
       const body = SensitiveViewRequestBody.parse(req.body);
-      res.status(201).json({ data: await roleService.requestSensitiveView(req.user, body.userId, body.reason, req.requestId) });
+      res.status(201).json({ data: await roleService.requestSensitiveView(req.user, body.userId, body.reason, req.requestId, body.kind) });
     } catch (err) {
       next(err);
     }

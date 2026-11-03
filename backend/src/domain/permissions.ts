@@ -77,6 +77,12 @@ export type Permission =
    */
   | "role.read.sensitive"
   /**
+   * DECISION-103 (q197 A3), lot V4: an administrator who is neither Risk Manager, nor Committee, nor Audit reads every
+   * restricted content. Never on a role: given to ONE administrator through the circuit of `role.read.sensitive`
+   * (migration 084, kind RESOURCE_READALL), effective in SQL (`visibility_sees_everything`) while they stay administrator.
+   */
+  | "resource.readall"
+  /**
    * DECISION-102 (q194): changes the visibility (level + named people) of a risk after its creation. Carried by the
    * Risk Manager group only (assertRolePermissionRules); the resource's owner may also change it, by relation.
    */
@@ -283,6 +289,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "audit.read",
   "role.read",
   "role.read.sensitive",
+  "resource.readall",
   "resourcevisibility.set",
   "role.create",
   "role.update",
