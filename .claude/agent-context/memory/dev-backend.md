@@ -495,3 +495,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Test d'inventaire = server.ts ne construit ces dépôts qu'au travers de l'enveloppe (comptage `new X(` vs `withReadallAudit(new X(`).
 - Plafond d'un délai réglable : CHECK SQL + zod de route + garde service (la boucle générique des délais a un max par clé).
 - L'id présent dans `/controls` déclenche aussi la ligne des risques couverts (hiddenIds) : les oracles QA comptent par `list`, pas un nombre total de lignes.
+
+## 2026-11-03 — Lot D6, panneau santé de la gouvernance (feat/r1-governance-d6, 70454eb, migration 085)
+- Catalogue A13 recopié en code par un script (`catalog.ts` généré depuis le JSON), jamais retapé ; un test compare le code au JSON et `Record<PrincipleId, Detector>` impose un détecteur par principe.
+- Détecteur = fonction pure sur une photo `GovernanceFacts` chargée en une fois (un seul dépôt, requêtes en parallèle) ; `now` est un fait, pas `new Date()` dans le domaine. N'évaluer que la partie non ambiguë d'une règle A13 ; une partie qui demande un seuil non fixé par le PO est laissée de côté et `covers` dit ce qui est évalué ; donnée absente = NOT_EVALUABLE avec raison, jamais RESPECTED.
+- Libellé d'une ressource restreignable dans un panneau transverse : seulement si `visibility = 'CLIENT'` (sinon null) — un panneau lu par un administrateur ne doit pas rouvrir le contenu des lots V1-V4.
+- Instantané d'acceptation (R-5) : clés seules `{kind, id}`, aucun nom stocké (la liste des acceptations n'est pas masquée sur ce champ).
+- Masquage R-6.1 : pseudonymes « Personne N » stables dans la seule réponse ; un test cherche l'uuid et le nom dans le JSON sérialisé.
+- Une nouvelle migration casse 4 tests de garde (listes NUMBERS de QA-panel*-migrations, max 0xx, « seules 084/085 après 083 » des QA visibilité) et QA-panel-d4 liste tout service qui compare à `actor.userId` : les mettre à jour dans le même commit.
+- Worktree isolé : `npm ci` à la racine (workspace) ET dans backend/ ; psql/sed avec des chemins littéraux (pas de variables shell : l'isolement refuse les commandes calculées).
