@@ -56,3 +56,10 @@ V1, V2, V2bis (252 PASS) et V3 (46 tests) restent verts avec 084 ; les mises à 
 - Rejouer après correctif : `QA_VIS4_LIVE=1 npx vitest run test/QA-visibility-v4.test.ts --no-file-parallelism` ; repasser en `it` les 3 `it.fails` (QA-V4-01/02/03).
 - Non couvert : durée d'expiration réelle issue de `policyRequestExpiryDays` (échéance forcée en base), charge de `visibility_sees_everything` appelée par ressource dans les listes, création d'une ressource restreinte par un administrateur titulaire du droit (`ControlService`/`KpiService` calculent `seesEverything` depuis les groupes fixes seuls, `VisibilityResolver` : à vérifier avec Security), évidences/exécutions rattachées à un contrôle NOMINATIF.
 - Captures : `/tmp/claude-0/-home-user-Gouvernance-Risk-Control-Tools/8ad96fa7-1a3e-54fe-b0db-c63b5dc23437/scratchpad/shots-v4/`.
+
+## Corrections (2026-11-03, orchestrateur)
+
+- **QA-V4-01** : corrigé par SEC V4-01 (356aedd) — la perte du dernier droit d'administration termine définitivement l'attribution ; `it.fails` passé en `it`, vert en live.
+- **QA-V4-02** : `reasonPreview` compte en caractères (points de code), jamais au milieu d'une paire de substitution ; `it.fails` passé en `it`, vert en live.
+- **QA-V4-03** : la consigne est un texte d'aide visible au-dessus de la table des rôles (`aria-describedby` sur le champ Motif) ; `it.fails` passé en `it` ; l'oracle Playwright 5.1 devient une vérification (PASS).
+- Suites live V2bis à V4 (`--no-file-parallelism`) : 152 verts ; parcours V4 : 0 échec ; `npm test` : 2769 verts ; build frontend vert.

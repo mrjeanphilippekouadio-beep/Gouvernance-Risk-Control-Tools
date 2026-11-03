@@ -9,7 +9,7 @@
 //  3. out apres confirmation : « Ressources restreintes » affiche les libelles (CANARY-V2-CTL-PERIM), plus aucun « Contenu non consultable » ; la liste « Controles »
 //     n'affiche plus aucune mention « non visible » ; GET /hidden-counts = null ; le badge GRANT (resource.readall) apparait dans « Droits d'un compte » pour adm.
 //  4. adm retire le droit avec motif : ligne « Retirée », out revient aux metadonnees (API) et la mention « non visible » reapparait.
-//  5. q215 : la consigne « Ne nommez pas la personne concernée » est VISIBLE (texte de page, pas seulement une infobulle) sur « IAM · Rôles » (champ Motif de l'attribution) : OBSERVE, defaut connu QA-V4-03.
+//  5. q215 : la consigne « Ne nommez pas la personne concernée » est VISIBLE (texte de page, pas seulement une infobulle) sur « IAM · Rôles » (champ Motif de l'attribution) .
 //  6. zero erreur JS, aucune erreur console imprevue (hors 4xx attendus).
 //
 // Prerequis : qa-visibility-v2-setup.sh up grc_qa_vv4p ; QA_PORT=8091 QA_DB=grc_qa_vv4p QA_CORS=http://127.0.0.1:5199 qa-visibility-v2-server.sh start ;
@@ -119,7 +119,7 @@ try {
   // ---- 5. q215 consigne
   await A.go("IAM · Rôles");
   const roles = await A.text();
-  console.log(`OBSERVE 5.1 « Ne nommez pas » visible sur IAM · Rôles : ${roles.includes("Ne nommez pas")} (defaut connu QA-V4-03 si faux)`);
+  check("5.1 « Ne nommez pas » visible sur IAM · Rôles (QA-V4-03)", roles.includes("Ne nommez pas"));
   await A.shot("roles-hint");
 
   checkNoErrors(check, [A, O, C], "6");

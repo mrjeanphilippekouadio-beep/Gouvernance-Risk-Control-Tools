@@ -48,7 +48,7 @@ describe("QA-visibility-v4 STATIC", () => {
     }
     expect(read("frontend", "src", "api", "visibility.ts")).toContain("Ne nommez pas la personne concernée");
   });
-  it.fails("q215 (QA-V4-03): RolesAdmin carries the hint as help text, not a `title` tooltip only", () => {
+  it("q215 (QA-V4-03): RolesAdmin carries the hint as help text, not a `title` tooltip only", () => {
     expect(read("frontend", "src", "features", "admin", "RolesAdmin.tsx")).not.toMatch(/title=\{REASON_NO_NAME_HINT\}/);
   });
 });
@@ -423,7 +423,7 @@ describe.skipIf(!live)("QA-visibility-v4 on the REAL server + LOCAL PostgreSQL 1
     });
     // QA-V4-01: the spec says the right ends at the loss of the last administrator role = ends for good (a new request and a new confirmation are needed).
     // Today only revokeFromUser / suspension end the grant: stripping the role then restoring it brings the right back, with no new confirmation.
-    it.fails("QA-V4-01: restoring the administration rights of the role must NOT revive the right confirmed earlier", async () => {
+    it("QA-V4-01: restoring the administration rights of the role must NOT revive the right confirmed earlier", async () => {
       try {
         const restore = await call("adm", "PATCH", `/roles/${R_ADMIN}`, { permissions: ["role.assign", "role.read", "user.update"] });
         expect(restore.status, restore.text).toBe(200);
@@ -523,7 +523,7 @@ describe.skipIf(!live)("QA-visibility-v4 on the REAL server + LOCAL PostgreSQL 1
     it("a null reason stays null (no « null… »), an empty list page is still []", async () => {
       expect((await get("rm", "/restricted-resources?offset=100000")).json.data).toEqual([]);
     });
-    it.fails("(QA-V4-02) the cut never splits an astral character: no lone surrogate in the preview", async () => {
+    it("(QA-V4-02) the cut never splits an astral character: no lone surrogate in the preview", async () => {
       await setReason("h".repeat(10), "CLIENT");
       const row = await setReason(`${"é".repeat(138)}😀${"x".repeat(50)}`, "PERIMETRE");
       const text = row!.lastChange!.reason!;

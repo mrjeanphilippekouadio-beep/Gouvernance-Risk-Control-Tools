@@ -83,8 +83,10 @@ export type RestrictedResourceMeta = Pick<RestrictedResourceRow, "type" | "id" |
 /** q215 A: at most 140 characters of a reason in a list (an ellipsis marks the cut). */
 export const REASON_PREVIEW_LENGTH = 140;
 export function reasonPreview(reason: string | null): string | null {
-  if (reason === null || reason.length <= REASON_PREVIEW_LENGTH) return reason;
-  return `${reason.slice(0, REASON_PREVIEW_LENGTH - 1)}…`;
+  // QA-V4-02: counted in characters (code points), never cut inside a surrogate pair.
+  const chars = reason === null ? [] : Array.from(reason);
+  if (reason === null || chars.length <= REASON_PREVIEW_LENGTH) return reason;
+  return `${chars.slice(0, REASON_PREVIEW_LENGTH - 1).join("")}…`;
 }
 
 export class ResourceVisibilityManager {
