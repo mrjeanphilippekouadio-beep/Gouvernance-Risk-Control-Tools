@@ -454,9 +454,10 @@ pour l'usage.
 | HUMAN @security @compliance | **q222 (cockpit)** — V4 : révocation aussi par le Comité et l'Audit, et pas d'accès d'urgence sans confirmeur éligible (A, reco) ; admins seuls (B) ; accès d'urgence tracé (C). Non bloquant. | 2026-11-03 | **Décidé** (DECISION-111) — A : révocation aussi par Comité/Audit, pas d'accès d'urgence, à construire |
 | HUMAN @privacy @security | **q223 (cockpit)** — V4 : vue métadonnées d'un administrateur : date de mise à jour arrondie au jour (A, reco) ou retirée (B). Non bloquant. | 2026-11-03 | **Décidé** (DECISION-111) — A : date arrondie au jour, à construire |
 | @dev-backend | **SEC V4-01 (MEDIUM 4,3, = CMP-V4-01) / SEC V4-02 (LOW 2,2)** : fin définitive du droit quand un rôle perd ses permissions d'admin ; exclusion des admins par permission directe comme confirmeurs. Correctif en cours sur `feat/r1-visibility-v4`, retest A10 + revalidation A14 ensuite. | 2026-11-03 | **Fait** — 356aedd, RETEST_PASS A10 |
-| HUMAN @privacy @security @risk-manager | **q224 (cockpit)** — tableaux de bord : remplacer par « moins de 5 » tout chiffre incluant des éléments restreints et portant sur moins de 5 éléments, pour les lecteurs hors groupes fixes (A, reco Privacy), autre seuil (B), aucun (C). Condition de production V4. | 2026-11-03 | **Ouvert — HUMAN : q224** |
-| HUMAN @privacy @compliance @risk-manager | **q225 (cockpit)** — dossiers « personnes nommées » : expiration de l'ajout nominatif à la clôture ou 30 j renouvelables (A, reco Privacy, petit lot V5) ou retrait manuel (B). Non bloquant V4. | 2026-11-03 | **Ouvert — HUMAN : q225** |
-| HUMAN @orchestrator | **q226 (cockpit)** — merger le lot V4 (PR #226, migration 084) dans staging : QA corrigée, Sécurité VERT, Compliance/Privacy levées, CI et Sonar verts, 3 Codex P2 corrigés, parcours V4 rejoué (0 échec). | 2026-11-03 | **Ouvert — HUMAN : q226** |
+| HUMAN @privacy @security @risk-manager | **q224 (cockpit)** — tableaux de bord : remplacer par « moins de 5 » tout chiffre incluant des éléments restreints et portant sur moins de 5 éléments, pour les lecteurs hors groupes fixes (A, reco Privacy), autre seuil (B), aucun (C). Condition de production V4. | 2026-11-03 | **Décidé** (DECISION-112) — A : seuil de 5, à construire (lot V4bis) |
+| HUMAN @privacy @compliance @risk-manager | **q225 (cockpit)** — dossiers « personnes nommées » : expiration de l'ajout nominatif à la clôture ou 30 j renouvelables (A, reco Privacy, petit lot V5) ou retrait manuel (B). Non bloquant V4. | 2026-11-03 | **Décidé** (DECISION-112) — A : expiration à la clôture ou 30 j renouvelables, lot V5 |
+| @orchestrator HUMAN | **D6 — avis juriste/DPO** : note prête, à transmettre par le PO ; débloque F5b et q217. | 2026-11-03 | **Ouvert — HUMAN** |
+| HUMAN @orchestrator | **q226 (cockpit)** — merger le lot V4 (PR #226, migration 084) dans staging : QA corrigée, Sécurité VERT, Compliance/Privacy levées, CI et Sonar verts, 3 Codex P2 corrigés, parcours V4 rejoué (0 échec). | 2026-11-03 | **Fermé** (DECISION-112) — PR #226 fusionnée (513d1cc), migration 084 par migrate.yml |
 | @dev-backend | **V4 dernière passe** : SEC V4-03 / CMP-V4-10 (journaliser aussi tableaux de bord avec libellé, vue dispositif, 360, cartographie, enfants, téléchargement de preuve ; ids dans la ligne de liste ; test d'inventaire) et plafond 90 j de la durée réglable. SEC V4-04 : 084 modifiée en place, jamais appliquée hors local (migrate.yml ne tourne qu'au merge) — rien à faire. | 2026-11-03 | **Fait** — 2090954, d93778c, 4cb5212 (Codex P2) ; retest A10 VERT |
 | @dev-backend @security | **Lot V2 visibilité** — `feat/r1-visibility-v2` (migration 083) : QA ORANGE→corrigé (QA-VIS2-01..06, 147/147), Sécurité VERT après retest (V2-01/02/04 corrigés), Compliance conforme avec réserves (CMP-V2-01 corrigé ; CMP-V2-02 → q208). Info A10 : sur contrôle/KPI, périmètre et autres champs en deux transactions ; niveau « restreint » lu avant verrou. | 2026-11-01 | **Fait** — PR #223 fusionnée (65007ad), migrate.yml : 083 appliquée sur staging. Suite : q207/q208 (A06), V3, V4 |
 | HUMAN @dev-backend | **Résidus visibilité V1 (SEC-visibility-v1, retest vert)** : V1-05 LOW (ids de risques masqués dans la vue département, actions en retard de la vue exécutive, contrôles du contexte d'évaluation) et V1-03 (texte des anomalies/plans liés à un risque masqué, compteur d'anomalies de la vue exécutive) — acceptés jusqu'à V2, à corriger dans V2. | 2026-11-01 | **Ouvert — V2** |
@@ -2632,4 +2633,20 @@ RELATED: q219-q223, DECISION-103, CMP-V4, PRIV-V4, SEC V4.
 OWNER: @orchestrator @dev-backend @dev-db
 STATUS: DÉCIDÉ — construction sur feat/r1-visibility-v4, puis retest A10 et
   revalidation A14/A15.
+
+DECISION-112
+DATE: 2026-11-03
+DECISION (PO, cockpit + « je suis ta reco ») : q226 A — fusion de la PR #226
+  (lot V4) dans staging (faite, 513d1cc, migration 084 par migrate.yml) ;
+  q224 A — seuil de 5 : toute case de tableau de bord qui inclut des
+  éléments restreints et porte sur moins de 5 éléments affiche « moins de
+  5 » pour les lecteurs hors groupes fixes (condition de production V4) ;
+  q225 A — l'ajout nominatif à un dossier « personnes nommées » expire à la
+  clôture du dossier ou au plus tard après 30 jours, renouvelable (lot V5).
+  Suite retenue (recommandation de l'orchestrateur) : construire q224, puis
+  balayage complet des 15 agents (règle 8bis : 5 lots V0-V4 livrés), puis
+  F8 ; D6 (note prête) à transmettre par HUMAN au juriste/DPO.
+RELATED: q224-q226, DECISION-111, PRIV-V4, SEC V4.
+OWNER: @orchestrator @dev-backend
+STATUS: DÉCIDÉ — V4 fusionné ; q224 en construction.
 ```
