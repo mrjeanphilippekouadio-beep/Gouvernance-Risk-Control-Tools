@@ -62,7 +62,7 @@ try {
   check("1.1 adm : l'ecran liste des ressources restreintes", /ressource\(s\) restreinte\(s\)/.test(t1), t1.slice(0, 160));
   check("1.2 adm : aucun libelle (« Contenu non consultable »), aucun CANARY", t1.includes("Contenu non consultable") && !t1.includes("CANARY"), t1.slice(0, 260));
   const meta = (await api("adm", "GET", "/restricted-resources?limit=500")).json?.data ?? [];
-  check("1.3 adm : l'API ne rend que type, id, visibility, accessCount, updatedAt", meta.length > 0 && meta.every((r) => Object.keys(r).sort().join() === "accessCount,id,type,updatedAt,visibility"), JSON.stringify(meta[0]));
+  check("1.3 adm : l'API ne rend que type, id, visibility, accessCount, updatedAt", meta.length > 0 && meta.every((r) => Object.keys(r).sort((x, y) => x.localeCompare(y)).join() === "accessCount,id,type,updatedAt,visibility"), JSON.stringify(meta[0]));
   check("1.4 adm : le contenu restreint reste illisible (404)", (await api("adm", "GET", `/controls/${I("c02")}`)).status === 404);
   const O = await open("out");
   await O.go("Contrôles");
