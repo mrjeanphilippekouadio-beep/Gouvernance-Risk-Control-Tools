@@ -52,6 +52,12 @@ export interface SensitiveViewGrantRepository {
   ): Promise<SensitiveViewGrant>;
   /** Locks the live grant, revokes it; the audit sees the locked row and the updated one. ConflictError when not live. */
   revoke(tenantId: string, id: string, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>): Promise<SensitiveViewGrant>;
+  /**
+   * Codex P2 (PR #226): the live grant of ONE account and kind that is past its term (PENDING past `expiresAt`, or q221
+   * RESOURCE_READALL APPROVED past `accessExpiresAt`), locked and closed (REVOKED) — frees the live index for a new
+   * request. Null when there is none. Optional for older test fakes.
+   */
+  closeStaleLive?(tenantId: string, userId: string, kind: SensitiveViewGrantKind, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>): Promise<SensitiveViewGrant | null>;
   /** SEC-RL-05: the live grant of ONE account (targeted lookup, locked), revoked; null when it has none. */
   revokeLiveOf(tenantId: string, userId: string, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>, kind?: SensitiveViewGrantKind): Promise<SensitiveViewGrant | null>;
 }

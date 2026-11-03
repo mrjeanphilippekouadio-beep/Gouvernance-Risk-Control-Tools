@@ -358,7 +358,7 @@ export class ResourceVisibilityManager {
   async recordReadallFor(tenantId: string, userId: string, type: RestrictableResource | "RISK", ids: string[], mode: "ONE" | "LIST"): Promise<void> {
     if (ids.length === 0 || !this.access.readOnlyThroughReadall) return;
     const opened = await this.access.readOnlyThroughReadall(tenantId, userId, type, [...new Set(ids)]);
-    if (!opened || opened.ids.length === 0) return;
+    if (opened.ids.length === 0) return;
     const requestId = `readall-${randomUUID()}`;
     const base = { tenantId, userId, action: "READ" as const, oldValue: null, reason: null, requestId };
     if (mode === "ONE") {
@@ -367,7 +367,8 @@ export class ResourceVisibilityManager {
       }
       return;
     }
-    await this.audit.record({ ...base, entityType: "SensitiveViewGrant", entityId: opened.grantId,
+    // Without a grant reference (none found), the list row is keyed on the reader (entityType User).
+    await this.audit.record({ ...base, entityType: opened.grantId ? "SensitiveViewGrant" : "User", entityId: opened.grantId ?? userId,
       newValue: { through: "RESOURCE_READALL", list: type, count: opened.ids.length, ids: opened.ids.slice(0, READ_IDS_MAX) } });
   }
 

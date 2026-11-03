@@ -68,6 +68,12 @@ function world() {
       Object.assign(g, { status: "REVOKED", revokedBy: change.by, revokedAt: new Date(), revokeReason: change.reason });
       return { ...g };
     },
+    async closeStaleLive(_t, userId, kind, change) {
+      const g = grants.find((x) => x.userId === userId && x.kind === kind && x.status === "APPROVED" && x.accessExpiresAt && x.accessExpiresAt.getTime() <= Date.now());
+      if (!g) return null;
+      Object.assign(g, { status: "REVOKED", revokedBy: change.by, revokedAt: new Date(), revokeReason: change.reason });
+      return { ...g };
+    },
     async revokeLiveOf(_t, userId, change, _events, kind = "ROLE_READ_SENSITIVE") {
       const g = grants.find((x) => x.userId === userId && x.kind === kind && live(x));
       if (!g) return null;
@@ -128,6 +134,20 @@ describe("V4 — resource.readall through the q200 circuit (kind RESOURCE_READAL
   });
 });
 
+describe("Codex P2 (PR #226) — reactivation ends a grant the suspension left alive", () => {
+  it("reactivate() ends every live grant of the account before reactivating", async () => {
+    const { UserService } = await import("../src/services/UserService.js");
+    const suspended = { ...person("it"), deletedAt: new Date() };
+    const users = { getById: vi.fn(async () => suspended), reactivate: vi.fn(async () => { suspended.deletedAt = null as never; }) };
+    const ended: unknown[][] = [];
+    const roleService = { assertReactivable: vi.fn(), listLostRoles: vi.fn(async () => []),
+      endSensitiveView: vi.fn(async (...a: unknown[]) => { ended.push(a); expect(users.reactivate).not.toHaveBeenCalled(); }) };
+    const svc = new UserService(users as never, { record: async () => {} } as never, roleService as never);
+    await svc.reactivate(actor("boss", ["user.reactivate"]), "it", "R1", "Retour");
+    expect(ended.map((a) => a[4] ?? "ROLE_READ_SENSITIVE")).toEqual(["ROLE_READ_SENSITIVE", "RESOURCE_READALL"]);
+  });
+});
+
 describe("V4 — corrections A10 (SEC V4-01, SEC V4-02)", () => {
   it("SEC V4-01: a role update that removes the last administration right ends resource.readall for good (t -> f -> t does not revive it)", async () => {
     const { service, grants, itRole } = world();
@@ -156,6 +176,16 @@ describe("DECISION-111 — q221 end of the access, q222 revocation by a confirme
     expect(Math.round((grants[0]!.accessExpiresAt!.getTime() - Date.now()) / 86_400_000)).toBe(90);
   });
 
+  it("Codex P2 (PR #226): an ended (expired) resource.readall is closed by the targeted lookup, then a new request is accepted", async () => {
+    const { service, grants } = world();
+    const g = await service.requestSensitiveView(admin, "it", "Support", "R1", "RESOURCE_READALL");
+    await service.decideSensitiveView(validator, g.id, true, null, "R2");
+    grants[0]!.accessExpiresAt = new Date(Date.now() - 1000);
+    const again = await service.requestSensitiveView(admin, "it", "Nouveau besoin", "R3", "RESOURCE_READALL");
+    expect(grants[0]!.status).toBe("REVOKED");
+    expect(again.status).toBe("PENDING");
+  });
+
   it("q222: an Audit member may revoke a resource.readall, never a q200 view; anyone else is refused", async () => {
     const { service, grants } = world();
     const g = await service.requestSensitiveView(admin, "it", "Support", "R1", "RESOURCE_READALL");
@@ -169,7 +199,7 @@ describe("DECISION-111 — q221 end of the access, q222 revocation by a confirme
 });
 
 describe("q220 / SEC V4-03 — reads allowed only by resource.readall are audited (helper + repository wrapper)", () => {
-  const make = (opened: { grantId: string; ids: string[] } | null, fail = false) => {
+  const make = (opened: { grantId: string | null; ids: string[] }, fail = false) => {
     const audits: Array<Record<string, unknown>> = [];
     const readOnlyThroughReadall = vi.fn(async () => opened);
     const m = new ResourceVisibilityManager({ readOnlyThroughReadall } as unknown as ResourceAccessRepository,
@@ -184,6 +214,11 @@ describe("q220 / SEC V4-03 — reads allowed only by resource.readall are audite
     await list.m.recordReadallFor(T, "it", "CONTROL", ["c0", "c1", "c2"], "LIST");
     expect(list.audits).toEqual([expect.objectContaining({ action: "READ", entityType: "SensitiveViewGrant", entityId: "g1",
       newValue: { through: "RESOURCE_READALL", list: "CONTROL", count: 2, ids: ["c1", "c2"] } })]);
+  });
+  it("Codex P2 (PR #226): an item the rules without the right do not open is logged even without a live grant (reference null, keyed on the reader)", async () => {
+    const gone = make({ grantId: null, ids: ["r1", "r2"] });
+    await gone.m.recordReadallFor(T, "it", "RISK", ["r1", "r2"], "LIST");
+    expect(gone.audits).toEqual([expect.objectContaining({ action: "READ", entityType: "User", entityId: "it", newValue: { through: "RESOURCE_READALL", list: "RISK", count: 2, ids: ["r1", "r2"] } })]);
   });
   it("nothing for a read owing nothing to the right; a failed write fails the read", async () => {
     const none = make({ grantId: "g1", ids: [] });
@@ -295,8 +330,12 @@ describe.skipIf(!hasLocalPg)("lot V4 on real PostgreSQL (local only)", () => {
     finally { await ctx.pool.query(`ALTER TABLE sensitive_view_grants ENABLE TRIGGER sensitive_view_grants_guard`); }
     expect(await sees(perim)).toBe(false);
     expect(await repo.isApproved(ctx.tenant, it_!, "RESOURCE_READALL")).toBe(false);
-    expect(await access.readOnlyThroughReadall(ctx.tenant, it_!, "RISK", [perim])).toBeNull();
+    // Codex P2 (PR #226): decided by the rules without the right, not by a live grant — the last confirmed one is the reference
+    expect(await access.readOnlyThroughReadall(ctx.tenant, it_!, "RISK", [perim])).toEqual({ grantId: g.id, ids: [perim] });
+    // Codex P2 (PR #226): the expired APPROVED grant is closed by a targeted, locked lookup (frees the live index)
+    expect((await repo.closeStaleLive(ctx.tenant, it_!, "RESOURCE_READALL", { by: boss!, reason: "Échue" }, () => []))?.status).toBe("REVOKED");
+    expect(await repo.closeStaleLive(ctx.tenant, it_!, "RESOURCE_READALL", { by: boss!, reason: "Échue" }, () => [])).toBeNull();
     await one(`UPDATE user_roles SET revoked_at = now() WHERE id = $1 RETURNING id`, [held]);
-    expect((await repo.revokeLiveOf(ctx.tenant, it_!, { by: boss!, reason: "Fin" }, () => [], "RESOURCE_READALL"))?.status).toBe("REVOKED");
+    expect(await repo.revokeLiveOf(ctx.tenant, it_!, { by: boss!, reason: "Fin" }, () => [], "RESOURCE_READALL")).toBeNull(); // already closed
   });
 });

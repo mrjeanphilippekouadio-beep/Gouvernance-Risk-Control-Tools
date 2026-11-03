@@ -87,10 +87,11 @@ export interface ResourceAccessRepository {
   /** Codex P2 (PR #225): active membership of the Risk Manager group (role `system_group = 'RISK_MANAGER'`). */
   isRiskManagerMember(tenantId: string, userId: string): Promise<boolean>;
   /**
-   * q220 (DECISION-111): among `ids` (already readable), those `userId` reads ONLY through resource.readall, with the
-   * grant that opens them; null when the account holds no effective resource.readall.
+   * q220 (DECISION-111), Codex P2 (PR #226): among `ids` (already served to `userId`), those the rules WITHOUT
+   * resource.readall (`*_visible_core`) do not open — necessarily owed to the right, whatever its state now — with the
+   * most recent confirmed RESOURCE_READALL grant of the account as reference (null when none is found).
    */
-  readOnlyThroughReadall?(tenantId: string, userId: string, type: RestrictableResource | "RISK", ids: string[]): Promise<{ grantId: string; ids: string[] } | null>;
+  readOnlyThroughReadall?(tenantId: string, userId: string, type: RestrictableResource | "RISK", ids: string[]): Promise<{ grantId: string | null; ids: string[] }>;
   /** q208: every restricted resource of the tenant (any root, not deleted), with its active named-people count. */
   /** V3: paginated (`limit` 1..500, default 200; `offset` >= 0), most recently changed first. */
   listRestricted(tenantId: string, page?: { limit?: number; offset?: number }): Promise<RestrictedResourceRow[]>;

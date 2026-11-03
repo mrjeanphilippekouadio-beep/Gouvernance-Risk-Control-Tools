@@ -78,16 +78,17 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
     return rows[0]?.ok === true;
   }
 
-  async readOnlyThroughReadall(tenantId: string, userId: string, type: RestrictableResource | "RISK", ids: string[]): Promise<{ grantId: string; ids: string[] } | null> {
+  async readOnlyThroughReadall(tenantId: string, userId: string, type: RestrictableResource | "RISK", ids: string[]): Promise<{ grantId: string | null; ids: string[] }> {
     const core = CORE_FUNCTION[type]; // whitelisted name, never client text
-    const { rows } = await this.pool.query<{ grant_id: string; ids: string[] }>(
-      `SELECT g.id AS grant_id, ARRAY(SELECT x::text FROM unnest($3::uuid[]) x WHERE NOT ${core}($1, x, $2)) AS ids
-       FROM sensitive_view_grants g
-       WHERE g.tenant_id = $1 AND g.user_id = $2 AND g.kind = 'RESOURCE_READALL' AND g.status = 'APPROVED'
-         AND g.access_expires_at > now() AND visibility_reads_all($1, $2)`,
+    const { rows } = await this.pool.query<{ grant_id: string | null; ids: string[] }>(
+      `SELECT ARRAY(SELECT x::text FROM unnest($3::uuid[]) x WHERE NOT ${core}($1, x, $2)) AS ids,
+              (SELECT g.id FROM sensitive_view_grants g
+               WHERE g.tenant_id = $1 AND g.user_id = $2 AND g.kind = 'RESOURCE_READALL' AND g.decided_by IS NOT NULL
+                 AND g.status IN ('APPROVED', 'REVOKED')
+               ORDER BY g.decided_at DESC LIMIT 1) AS grant_id`,
       [tenantId, userId, ids],
     );
-    return rows[0] ? { grantId: rows[0].grant_id, ids: rows[0].ids } : null;
+    return { grantId: rows[0]?.grant_id ?? null, ids: rows[0]?.ids ?? [] };
   }
 
   async isRiskManagerMember(tenantId: string, userId: string): Promise<boolean> {

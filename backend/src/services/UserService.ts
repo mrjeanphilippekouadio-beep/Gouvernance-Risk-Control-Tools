@@ -345,6 +345,10 @@ export class UserService {
     if (isSystemAccount(before)) throw new ForbiddenError("A technical account cannot be reactivated");
     // q94: refuse to revive a forbidden Risk Manager cumul (Committee / Audit) that predates the rule.
     await this.roleService?.assertReactivable(actor.tenantId, id);
+    // Codex P2 (PR #226) / SEC-RL-05: a grant the suspension failed to end never revives — ended before the reactivation
+    // (a failure here fails the reactivation, fail closed).
+    await this.roleService?.endSensitiveView(actor, id, "Fin automatique : le compte a été suspendu", requestId);
+    await this.roleService?.endSensitiveView(actor, id, "Fin automatique : le compte a été suspendu", requestId, "RESOURCE_READALL");
 
     await this.users.reactivate(actor.tenantId, id);
     const after = await this.users.getById(actor.tenantId, id);

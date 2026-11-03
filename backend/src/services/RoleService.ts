@@ -306,14 +306,17 @@ export class RoleService {
     userId = canonicalId(userId); // INFO: the self check never depends on the case of the id
     if (userId === canonicalId(actor.userId)) throw new ForbiddenError("You cannot ask a widened view for yourself — ask another administrator");
     await this.assertBeneficiary(actor.tenantId, userId, kind);
-    // INFO (QA-RL): an expired pending request no longer blocks a new one: it is withdrawn (REVOKED, audited) first.
-    // q221: an APPROVED resource.readall past its end is also replaced (no extension: a new request and confirmation).
-    const stale = (await grants.list(actor.tenantId)).find((g) => g.userId === userId && grantKind(g) === kind && (
-      (g.status === "PENDING" && g.expiresAt && g.expiresAt.getTime() <= Date.now())
-      || (g.status === "APPROVED" && kind === "RESOURCE_READALL" && g.accessExpiresAt && g.accessExpiresAt.getTime() <= Date.now())));
-    if (stale) {
-      await grants.revoke(actor.tenantId, stale.id, { by: actor.userId, reason: "Demande expirée, remplacée par une nouvelle demande" },
-        (r) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, "Demande expirée, remplacée par une nouvelle demande", requestId)]);
+    // INFO (QA-RL) / q221: a live grant past its term (expired request, or ended resource.readall) no longer blocks a new
+    // one: it is closed (REVOKED, audited) first. Codex P2 (PR #226): a targeted, locked lookup, never a bounded list.
+    const staleReason = "Demande ou attribution échue, remplacée par une nouvelle demande";
+    const closeStale = (r: { before: SensitiveViewGrant; after: SensitiveViewGrant }) => [this.grantAuditEvent(actor, r.after, "UNASSIGN", r.before, staleReason, requestId)];
+    if (grants.closeStaleLive) {
+      await grants.closeStaleLive(actor.tenantId, userId, kind, { by: actor.userId, reason: staleReason }, closeStale);
+    } else {
+      const stale = (await grants.list(actor.tenantId)).find((g) => g.userId === userId && grantKind(g) === kind && (
+        (g.status === "PENDING" && g.expiresAt && g.expiresAt.getTime() <= Date.now())
+        || (g.status === "APPROVED" && kind === "RESOURCE_READALL" && g.accessExpiresAt && g.accessExpiresAt.getTime() <= Date.now())));
+      if (stale) await grants.revoke(actor.tenantId, stale.id, { by: actor.userId, reason: staleReason }, closeStale);
     }
     const days = (await this.configs?.getByTenant(actor.tenantId))?.policyRequestExpiryDays ?? null;
     const expiresAt = days ? new Date(Date.now() + days * 86_400_000) : null;

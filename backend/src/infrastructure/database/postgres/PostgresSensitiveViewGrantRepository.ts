@@ -123,6 +123,14 @@ export class PostgresSensitiveViewGrantRepository implements SensitiveViewGrantR
     return out.after;
   }
 
+  async closeStaleLive(tenantId: string, userId: string, kind: SensitiveViewGrantKind, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>): Promise<SensitiveViewGrant | null> {
+    const k = kind === "RESOURCE_READALL" ? "RESOURCE_READALL" : "ROLE_READ_SENSITIVE"; // literal of the union, never client text
+    const match = `user_id = $2 AND kind = '${k}' AND ((status = 'PENDING' AND expires_at <= now())
+      OR (status = 'APPROVED' AND kind = 'RESOURCE_READALL' AND access_expires_at <= now()))`;
+    const out = await runAudited<RevokedGrant | null>(this.pool, (db) => revokeLocked(db, match, tenantId, userId, change), (r) => (r ? audit(r) : []));
+    return out?.after ?? null;
+  }
+
   async revokeLiveOf(tenantId: string, userId: string, change: { by: string; reason: string }, audit: TransactionalAudit<RevokedGrant>,
     kind: SensitiveViewGrantKind = "ROLE_READ_SENSITIVE"): Promise<SensitiveViewGrant | null> {
     // The kind is a literal of the union (never client text), inlined to keep revokeLocked's two parameters.
