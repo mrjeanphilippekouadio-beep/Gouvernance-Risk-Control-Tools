@@ -448,11 +448,11 @@ pour l'usage.
 | HUMAN @privacy @compliance | **q217 (cockpit)** — durée de conservation des motifs de visibilité dans le journal d'audit (ajout seul) : à traiter avec le juriste / DPO dans l'avis D6 (A, recommandé) ou fixée maintenant (B). | 2026-11-01 | **Décidé** (DECISION-110) — réponse libre : conservation d'un an, configurable ; cadrage technique ouvert (voir ligne suivante) |
 | HUMAN @orchestrator | **q218 (cockpit)** — merger le lot V3 (PR #225) dans staging : QA, Sécurité, Privacy et CI vertes, 4 remarques Codex corrigées (exemption = appartenance réelle Risk Manager, auteur affiché, pagination, double désignation), parcours navigateur V3 rejoué (0 échec), aucune migration. | 2026-11-01 | **Fermé** (DECISION-110) — PR #225 fusionnée (241433c), sans migration |
 | @architect @privacy @compliance @dev-db | **q217 — cadrage** : conserver les motifs de visibilité un an (durée configurable) alors que `audit_log` est en ajout seul (aucun `UPDATE`/`DELETE`, A23). Options à instruire avant tout code : (i) motif stocké hors du journal (table dédiée, référencée par l'audit) et effacé ou pseudonymisé à échéance ; (ii) pseudonymisation du seul champ `reason` par une fonction de purge tracée, exception explicite à l'ajout seul. Point à présenter au PO sous forme de question cockpit avec la recommandation A05/A15. | 2026-11-02 | **Ouvert — @architect** |
-| HUMAN @privacy @compliance @security | **q219 (cockpit)** — V4 : le droit « lecture de tous les contenus » couvre-t-il les dossiers « personnes nommées » ? Exclure (A, reco Privacy, PRIV-BLK-V4-001), confirmation distincte par dossier (B) ou inclure (C, construit). Condition de production. | 2026-11-03 | **Ouvert — HUMAN : q219** |
-| HUMAN @compliance @privacy @audit | **q220 (cockpit)** — V4 : journaliser chaque lecture faite sous ce droit (CMP-V4-05, bloquant Compliance) : une ligne par ressource ouverte et une par liste (A, reco), ressources seules (B) ou rien (C). Condition de production. | 2026-11-03 | **Ouvert — HUMAN : q220** |
-| HUMAN @compliance @privacy | **q221 (cockpit)** — V4 : durée du droit confirmé : 90 jours réglables puis nouvelle confirmation (A, reco), autre durée (B) ou sans échéance (C, construit). Condition de production. | 2026-11-03 | **Ouvert — HUMAN : q221** |
-| HUMAN @security @compliance | **q222 (cockpit)** — V4 : révocation aussi par le Comité et l'Audit, et pas d'accès d'urgence sans confirmeur éligible (A, reco) ; admins seuls (B) ; accès d'urgence tracé (C). Non bloquant. | 2026-11-03 | **Ouvert — HUMAN : q222** |
-| HUMAN @privacy @security | **q223 (cockpit)** — V4 : vue métadonnées d'un administrateur : date de mise à jour arrondie au jour (A, reco) ou retirée (B). Non bloquant. | 2026-11-03 | **Ouvert — HUMAN : q223** |
+| HUMAN @privacy @compliance @security | **q219 (cockpit)** — V4 : le droit « lecture de tous les contenus » couvre-t-il les dossiers « personnes nommées » ? Exclure (A, reco Privacy, PRIV-BLK-V4-001), confirmation distincte par dossier (B) ou inclure (C, construit). Condition de production. | 2026-11-03 | **Décidé** (DECISION-111) — A : dossiers « personnes nommées » exclus du droit, à construire |
+| HUMAN @compliance @privacy @audit | **q220 (cockpit)** — V4 : journaliser chaque lecture faite sous ce droit (CMP-V4-05, bloquant Compliance) : une ligne par ressource ouverte et une par liste (A, reco), ressources seules (B) ou rien (C). Condition de production. | 2026-11-03 | **Décidé** (DECISION-111) — A : une ligne par ressource ouverte, une par liste, à construire |
+| HUMAN @compliance @privacy | **q221 (cockpit)** — V4 : durée du droit confirmé : 90 jours réglables puis nouvelle confirmation (A, reco), autre durée (B) ou sans échéance (C, construit). Condition de production. | 2026-11-03 | **Décidé** (DECISION-111) — A : 90 jours réglables puis nouvelle demande, à construire |
+| HUMAN @security @compliance | **q222 (cockpit)** — V4 : révocation aussi par le Comité et l'Audit, et pas d'accès d'urgence sans confirmeur éligible (A, reco) ; admins seuls (B) ; accès d'urgence tracé (C). Non bloquant. | 2026-11-03 | **Décidé** (DECISION-111) — A : révocation aussi par Comité/Audit, pas d'accès d'urgence, à construire |
+| HUMAN @privacy @security | **q223 (cockpit)** — V4 : vue métadonnées d'un administrateur : date de mise à jour arrondie au jour (A, reco) ou retirée (B). Non bloquant. | 2026-11-03 | **Décidé** (DECISION-111) — A : date arrondie au jour, à construire |
 | @dev-backend | **SEC V4-01 (MEDIUM 4,3, = CMP-V4-01) / SEC V4-02 (LOW 2,2)** : fin définitive du droit quand un rôle perd ses permissions d'admin ; exclusion des admins par permission directe comme confirmeurs. Correctif en cours sur `feat/r1-visibility-v4`, retest A10 + revalidation A14 ensuite. | 2026-11-03 | **En cours** |
 | @dev-backend @security | **Lot V2 visibilité** — `feat/r1-visibility-v2` (migration 083) : QA ORANGE→corrigé (QA-VIS2-01..06, 147/147), Sécurité VERT après retest (V2-01/02/04 corrigés), Compliance conforme avec réserves (CMP-V2-01 corrigé ; CMP-V2-02 → q208). Info A10 : sur contrôle/KPI, périmètre et autres champs en deux transactions ; niveau « restreint » lu avant verrou. | 2026-11-01 | **Fait** — PR #223 fusionnée (65007ad), migrate.yml : 083 appliquée sur staging. Suite : q207/q208 (A06), V3, V4 |
 | HUMAN @dev-backend | **Résidus visibilité V1 (SEC-visibility-v1, retest vert)** : V1-05 LOW (ids de risques masqués dans la vue département, actions en retard de la vue exécutive, contrôles du contexte d'évaluation) et V1-03 (texte des anomalies/plans liés à un risque masqué, compteur d'anomalies de la vue exécutive) — acceptés jusqu'à V2, à corriger dans V2. | 2026-11-01 | **Ouvert — V2** |
@@ -2612,4 +2612,20 @@ RELATED: q215-q218, DECISION-108/109, PRIV-V3, SEC V3.
 OWNER: @orchestrator @dev-frontend @privacy @architect
 STATUS: DÉCIDÉ — q216/q218 faits ; q215 à construire ; q217 à cadrer
   (conciliation avec le journal d'audit en ajout seul).
+
+DECISION-111
+DATE: 2026-11-03
+DECISION (PO, cockpit, recommandations retenues) — lot V4, droit « lecture
+  de tous les contenus » (`resource.readall`) : q219 A — les dossiers
+  « personnes nommées » sont exclus du droit (l'ajout nominatif reste
+  possible) ; q220 A — chaque lecture permise par ce seul droit est
+  journalisée : une ligne par ressource ouverte, une par liste consultée
+  (nombre d'éléments, sans titre ni contenu) ; q221 A — durée 90 jours,
+  réglable, puis nouvelle demande et confirmation ; q222 A — le Comité et
+  l'Audit peuvent aussi révoquer, pas d'accès d'urgence ; q223 A — la vue
+  métadonnées garde la date de mise à jour, arrondie au jour.
+RELATED: q219-q223, DECISION-103, CMP-V4, PRIV-V4, SEC V4.
+OWNER: @orchestrator @dev-backend @dev-db
+STATUS: DÉCIDÉ — construction sur feat/r1-visibility-v4, puis retest A10 et
+  revalidation A14/A15.
 ```
