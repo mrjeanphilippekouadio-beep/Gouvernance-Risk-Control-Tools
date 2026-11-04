@@ -507,4 +507,8 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
 54. Le classement de taille mesure la structure visible dans l'outil, pas l'effectif ; en cas d'incertitude, montrer le calcul et la colonne voisine plutôt que trancher en silence.
 55. Un garde-fou qui force à garder actif le compte d'un salarié parti pour que l'outil fonctionne est pire que la vacance déclarée : l'accès se coupe toujours sans attendre le remplaçant.
 
+- 2026-11-04 : **DECISION-115 (q229 A), seuils de départ du panel D6** (`docs/risk/A13-seuils-panel-D6-2026-11-04.md`, **PROPOSITION non arbitrée**). RISK-01 : 20 % (plage 10-40 %, min 10 risques) ; ACC-01 : 3 administrateurs (2-5), rôle personnalisé large si plus de 25 permissions ou 4 familles et plus (premier segment de la permission ; plages 15-40 / 3-6), dormant 90 jours (45-180, NULL compté depuis `trackedSince`) ; OWN-01 (d) : 50 % de risques créés et possédés par la même personne (25-80 %). Aucune norme citée : pratique courante, références du catalogue toujours « à vérifier ». Le seuil « manquant » de OWN-01 est la partie (d).
+
+61. Un seuil de panel est un paramètre tracé du client : le baisser ne doit jamais faire disparaître une alerte en silence, et un échantillon trop petit est « non évaluable », pas « respecté ».
+
 45. Un contrôle détectif (notification) doit couvrir le chemin le plus discret (rôle ordinaire, élargissement de rôle), sinon il ne couvre que celui que personne n'emprunterait. Une information sans accès à la preuve n'est pas un contrôle : privilégier la lecture d'une décision ambiguë qui n'affaiblit aucun contrôle, et la marquer comme interprétation.
