@@ -11,5 +11,7 @@
 
 - 2026-11-03, revalidation V4 après DECISION-111 : conditions 1 et 4 levées, 2 levée sous réserve (lectures d'éléments enfants non journalisées = CMP-V4-10, à traiter), 3 Privacy toujours ouverte. Principe : un journal de lecture fail-closed est le bon pattern ; un paramètre de gouvernance (durée) exige bornes + audit des modifications.
 
+- 2026-11-04, CMP-governance-d6 : CMP-BLK-D5-01 levé pour le périmètre suivi (réserve : suivi non rétroactif). 16/19 principes évalués = acceptable seulement si non évaluables affichés NOT_ASSESSED sans score masquant. Purge sans planificateur = risque de dépassement de rétention ; exiger plancher du paramètre, maker-checker, trace d'exécution même à zéro, audit_logs intact. R5 (DPO non validé) et R6 (analyse de proportionnalité, ARTCI non vérifiée) bloquants.
+
 ## Questions PO ouvertes (à tracer en ACTION_ITEMS par l'orchestrateur, owner HUMAN)
 - Durée/recertification du droit readall ; périmètre des dossiers personnes nommées ; rôle de l'Audit dans la confirmation ; absence de confirmeur éligible / accès d'urgence.
