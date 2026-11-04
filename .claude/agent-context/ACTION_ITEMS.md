@@ -458,12 +458,12 @@ pour l'usage.
 | HUMAN @privacy @compliance @risk-manager | **q225 (cockpit)** — dossiers « personnes nommées » : expiration de l'ajout nominatif à la clôture ou 30 j renouvelables (A, reco Privacy, petit lot V5) ou retrait manuel (B). Non bloquant V4. | 2026-11-03 | **Décidé** (DECISION-112) — A : expiration à la clôture ou 30 j renouvelables, lot V5 |
 | @orchestrator HUMAN | **D6 — avis juriste/DPO** : note prête, à transmettre par le PO ; débloque F5b et q217. | 2026-11-03 | **Fermé** (DECISION-113) — accord du DPO obtenu par le PO ; précisions R3/R5/R6 en q227 |
 | HUMAN @privacy @dev-db | **q227 (cockpit)** — précisions de l'accord DPO : R3 5 ans à compter de la fin du compte, sauvegardes par rotation ; R5 texte rédigé par Privacy, page de profil, soumis au DPO ; R6 intérêt légitime, formalité ARTCI à préciser. Bloque la production de D6. | 2026-11-03 | **Décidé** (DECISION-114) — A ; formalité ARTCI non précisée (ligne suivante) |
-| HUMAN @security @privacy | **q228 (cockpit)** — SEC V4B-01/03 : le seuil de 5 de q224 (construit, d76b798, `feat/r1-visibility-v4bis`) ne protège rien (cases d'éléments déjà ouvrables, valeur lisible ailleurs, lectures journalisées depuis V4) ; seul « X éléments non visibles » porte sur de l'inaccessible. Retirer et seuiller `hidden-counts` (A, reco A10), garder comme règle d'affichage (B) ou les deux (C). Bloque la PR V4bis. | 2026-11-03 | **Ouvert — HUMAN : q228** |
-| HUMAN @risk-manager @security | **q229 (cockpit)** — D6 : seuils absents pour RISK-01 (part de risques portés par le RM), ACC-01 (nombre d'admins, largeur de rôle, comptes dormants), OWN-01 (d) ; valeurs proposées par A13 puis validées (A, reco), fixées par le PO (B) ou laissées non évaluables pour R1 (C). Non bloquant. | 2026-11-04 | **Ouvert — HUMAN : q229** |
-| HUMAN @risk-manager | **q230 (cockpit)** — catalogue A13 « 0.3-PROPOSITION » alors que D0 validé ; acceptations D5 en « 0.3 » : renommer en « 0.3 » (A, reco) ou passer en 1.0 (B). Non bloquant. | 2026-11-04 | **Ouvert — HUMAN : q230** |
-| HUMAN @privacy @devops | **q231 (cockpit)** — D6 : champ « contact du DPO » dans les réglages client + effacement R3 déclenché chaque nuit par une tâche planifiée DevOps (A, reco) ou saisie à la mise en service + effacement manuel (B). Bloque la production de D6. | 2026-11-04 | **Ouvert — HUMAN : q231** |
-| HUMAN @security @compliance | **q232 (cockpit)** — SEC D6-01/D6-02 : plancher de conservation de la dernière activité (365 j recommandé) et lecture du panneau réservée aux groupes fixes + administrateurs (A, reco). Bloque la production de D6. | 2026-11-04 | **Ouvert — HUMAN : q232** |
-| @dev-backend | **D6 corrections avant PR** : SEC D6-01 (réduction de la durée → seconde personne q182 + plancher q232), D6-02 (motif/heure exacte réservés à `audit.read`/relecteurs, id/état d'un risque restreint aux groupes fixes), CMP (afficher `trackedSince`, « non évalué » sans score global, test de sortie d'ACCEPTED, trace de chaque exécution de purge même à zéro, mode dry-run). | 2026-11-04 | **À lancer après QA** |
+| HUMAN @security @privacy | **q228 (cockpit)** — SEC V4B-01/03 : le seuil de 5 de q224 (construit, d76b798, `feat/r1-visibility-v4bis`) ne protège rien (cases d'éléments déjà ouvrables, valeur lisible ailleurs, lectures journalisées depuis V4) ; seul « X éléments non visibles » porte sur de l'inaccessible. Retirer et seuiller `hidden-counts` (A, reco A10), garder comme règle d'affichage (B) ou les deux (C). Bloque la PR V4bis. | 2026-11-03 | **Décidé** (DECISION-115) — A : seuil retiré des tableaux de bord, appliqué à « X éléments non visibles » |
+| HUMAN @risk-manager @security | **q229 (cockpit)** — D6 : seuils absents pour RISK-01 (part de risques portés par le RM), ACC-01 (nombre d'admins, largeur de rôle, comptes dormants), OWN-01 (d) ; valeurs proposées par A13 puis validées (A, reco), fixées par le PO (B) ou laissées non évaluables pour R1 (C). Non bloquant. | 2026-11-04 | **Décidé** (DECISION-115) — A : valeurs de départ proposées par A13, à valider |
+| HUMAN @risk-manager | **q230 (cockpit)** — catalogue A13 « 0.3-PROPOSITION » alors que D0 validé ; acceptations D5 en « 0.3 » : renommer en « 0.3 » (A, reco) ou passer en 1.0 (B). Non bloquant. | 2026-11-04 | **Décidé** (DECISION-115) — A : version « 0.3 » |
+| HUMAN @privacy @devops | **q231 (cockpit)** — D6 : champ « contact du DPO » dans les réglages client + effacement R3 déclenché chaque nuit par une tâche planifiée DevOps (A, reco) ou saisie à la mise en service + effacement manuel (B). Bloque la production de D6. | 2026-11-04 | **Décidé** (DECISION-115) — B : contact DPO saisi à la mise en service sans écran ; effacement lancé à la main |
+| HUMAN @security @compliance | **q232 (cockpit)** — SEC D6-01/D6-02 : plancher de conservation de la dernière activité (365 j recommandé) et lecture du panneau réservée aux groupes fixes + administrateurs (A, reco). Bloque la production de D6. | 2026-11-04 | **Décidé** (DECISION-115) — A : plancher 365 j, lecture du panneau réservée RM/Comité/Audit/admins |
+| @dev-backend | **D6 corrections avant PR** : SEC D6-01 (réduction de la durée → seconde personne q182 + plancher q232), D6-02 (motif/heure exacte réservés à `audit.read`/relecteurs, id/état d'un risque restreint aux groupes fixes), CMP (afficher `trackedSince`, « non évalué » sans score global, test de sortie d'ACCEPTED, trace de chaque exécution de purge même à zéro, mode dry-run). | 2026-11-04 | **En cours** (+ q228/q230/q231/q232) |
 | @dev-backend | **D6 — panneau santé de la gouvernance** (`GovernanceHealthService`, `GET /governance-health`, `tenants.governance_tracking_started_at`, migration 085) : serveur construit (70454eb, `feat/r1-governance-d6`, 19 détecteurs, 3002 tests verts) ; reste R3 (purge) et R5 (texte) puis QA/Sécurité/Compliance/Privacy. | 2026-11-04 | **En cours** |
 | HUMAN | **R6 — formalité ARTCI** : q227 répondue A sans préciser si le DPO juge une formalité nécessaire ni qui la fait. À indiquer avant la mise en production de D6. | 2026-11-04 | **Ouvert — HUMAN** |
 | HUMAN @privacy | **R5 — texte d'information** : projet rédigé par A15 (`docs/privacy/texte-information-R5-2026-11-04.md`, branche `feat/r1-governance-d6`), à soumettre au DPO par le PO ; points DPO : base légale par finalité, 5 ans et plafond paramétrable, mention « réglementation applicable » sans article ; contact DPO à renseigner par le client. | 2026-11-04 | **Ouvert — HUMAN** |
@@ -2686,4 +2686,22 @@ DECISION (PO, cockpit q227 A, accord du DPO) : R3 — la « dernière activité 
 RELATED: q227, DECISION-113, note D6.
 OWNER: @privacy @dev-backend @dev-db
 STATUS: DÉCIDÉ — R3 et R5 à construire sur feat/r1-governance-d6.
+
+DECISION-115
+DATE: 2026-11-04
+DECISION (PO, cockpit) : q228 A — le seuil de 5 est retiré des tableaux de
+  bord et appliqué au nombre « X éléments non visibles » (1 à 4 affiché
+  « moins de 5 ») ; q229 A — valeurs de départ réglables des seuils RISK-01,
+  ACC-01, OWN-01(d) proposées par A13 puis soumises au PO ; q230 A — le
+  catalogue des principes devient la version « 0.3 » (contenu inchangé) ;
+  q231 B — contact du DPO saisi à la mise en service, sans écran ;
+  l'effacement à 5 ans est lancé à la main par un administrateur (pas de
+  tâche planifiée : la Compliance demandait au moins mensuel — à tracer par
+  l'ancienneté de la dernière exécution affichée) ; q232 A — plancher de
+  conservation de 365 jours (toute réduction passe par la seconde personne
+  q182) et lecture du panneau réservée au Risk Manager, Comité, Audit et
+  administrateurs.
+RELATED: q224, q228-q232, SEC V4B, SEC D6-01/02, CMP-D6, PRIV-D6.
+OWNER: @orchestrator @dev-backend @risk-manager
+STATUS: DÉCIDÉ — V4bis refait, corrections D6 et proposition A13 lancées.
 ```
