@@ -81,9 +81,10 @@ export function checkedReason(raw: string | undefined, what: string): string {
 /** Lot V4 A1 (q197): what an administrator without resource.readall sees of a restricted resource (support). */
 export type RestrictedResourceMeta = Pick<RestrictedResourceRow, "type" | "id" | "visibility" | "accessCount"> & { updatedAt: string };
 
-/** q224 (DECISION-112): below this many items, a cell holding a restricted item is shown « moins de 5 » to a reader
- * outside the fixed groups. */
+/** q228 A (DECISION-115): « X éléments non visibles » — a number from 1 to 4 is shown « moins de 5 », never sent. */
 export const SMALL_CELL_THRESHOLD = 5;
+/** One type of `GET /hidden-counts`: the exact number (0, or 5 and more), or « moins de 5 ». */
+export type HiddenCount = number | { belowThreshold: true };
 
 /** q220 / SEC V4-03: the ids named in one list row (the count stays exact). */
 const READ_IDS_MAX = 500;
@@ -376,19 +377,6 @@ export class ResourceVisibilityManager {
       newValue: { through: "RESOURCE_READALL", list: type, count: opened.ids.length, ids: opened.ids.slice(0, READ_IDS_MAX) } });
   }
 
-  /**
-   * q224 (DECISION-112): a dashboard / report cell computed over fewer than SMALL_CELL_THRESHOLD items, one of which at
-   * least is restricted (effective level other than CLIENT), is not sent to a reader outside the fixed groups — its value
-   * and the scores derived from it become null and the cell is named in `belowThreshold`. The fixed groups (Risk
-   * Manager, Committee, Audit) get the real values. An empty cell holds nothing restricted: never suppressed.
-   */
-  async belowThreshold(actor: AuthenticatedUser, type: RestrictableResource | "RISK", ids: string[]): Promise<boolean> {
-    const distinct = [...new Set(ids)];
-    if (distinct.length === 0 || distinct.length >= SMALL_CELL_THRESHOLD || !this.access.anyRestricted) return false;
-    if (await this.access.seesEverything(actor.tenantId, actor.userId)) return false;
-    return this.access.anyRestricted(actor.tenantId, type, distinct);
-  }
-
   async listRestricted(actor: AuthenticatedUser, page?: { limit?: number; offset?: number }): Promise<Array<RestrictedResourceRow | RestrictedResourceMeta>> {
     // PRIV-V3-01: real membership of a group that sees everything (Risk Manager, Committee, Audit) or resource.readall
     // (lot V4, in SQL), never a permission alone.
@@ -423,14 +411,17 @@ export class ResourceVisibilityManager {
    * V3 (q196, q198): « X éléments non visibles » — one number per type, over the whole client, never broken down, never
    * linked; NOMINATIF never counted; null (no mention) for the groups that see everything.
    */
-  async hiddenCounts(actor: AuthenticatedUser): Promise<Partial<HiddenCounts> | null> {
+  async hiddenCounts(actor: AuthenticatedUser): Promise<Partial<Record<keyof HiddenCounts, HiddenCount>> | null> {
     const counts = await this.access.hiddenCounts(actor.tenantId, actor.userId);
     if (!counts) return null;
     // Only the types the reader may list at all (a reader without risk.read learns nothing about risks).
-    const out: Partial<HiddenCounts> = {};
+    const out: Partial<Record<keyof HiddenCounts, HiddenCount>> = {};
     for (const [type, permission] of [["RISK", "risk.read"], ["CONTROL", "control.read"], ["ANOMALY", "anomaly.read"],
       ["ACTION_PLAN", "actionplan.read"], ["KPI", "kpi.read"]] as const) {
-      if (actor.roles.includes(permission)) out[type] = counts[type];
+      if (!actor.roles.includes(permission)) continue;
+      const n = counts[type];
+      // q228 A (DECISION-115): 1 to 4 is never sent — « moins de 5 » ; 0 and 5 or more stay exact.
+      out[type] = n > 0 && n < SMALL_CELL_THRESHOLD ? { belowThreshold: true } : n;
     }
     return out;
   }

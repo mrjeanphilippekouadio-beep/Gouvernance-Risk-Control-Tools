@@ -44,15 +44,6 @@ async function effectiveReaders(db: Db, tenantId: string, type: RestrictableReso
   return rows.map((r) => r.id);
 }
 
-/** q224: the effective level of one row `x` of each root (migration 084 for the inherited ones). */
-const EFFECTIVE_LEVEL: Record<RestrictableResource | "RISK", string> = {
-  RISK: "(SELECT visibility FROM risks WHERE tenant_id = $1 AND id = x)",
-  CONTROL: "(SELECT visibility FROM controls WHERE tenant_id = $1 AND id = x)",
-  KPI: "(SELECT visibility FROM kpis WHERE tenant_id = $1 AND id = x)",
-  ANOMALY: "anomaly_effective_visibility($1, x)",
-  ACTION_PLAN: "action_plan_effective_visibility($1, x)",
-};
-
 /** q220: the readall-free visibility of each root (migration 084). */
 const CORE_FUNCTION: Record<RestrictableResource | "RISK", string> = {
   RISK: "risk_visible_core", CONTROL: "control_visible_core", ANOMALY: "anomaly_visible_core",
@@ -98,13 +89,6 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
       [tenantId, userId, ids],
     );
     return { grantId: rows[0]?.grant_id ?? null, ids: rows[0]?.ids ?? [] };
-  }
-
-  async anyRestricted(tenantId: string, type: RestrictableResource | "RISK", ids: string[]): Promise<boolean> {
-    const level = EFFECTIVE_LEVEL[type]; // whitelisted expression, never client text
-    const { rows } = await this.pool.query<{ ok: boolean }>(
-      `SELECT EXISTS (SELECT 1 FROM unnest($2::uuid[]) x WHERE ${level} IS DISTINCT FROM 'CLIENT') AS ok`, [tenantId, ids]);
-    return rows[0]?.ok === true;
   }
 
   async isRiskManagerMember(tenantId: string, userId: string): Promise<boolean> {

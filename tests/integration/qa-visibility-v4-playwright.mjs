@@ -68,6 +68,7 @@ try {
   await O.go("Contrôles");
   const noticeBefore = await O.text();
   check("1.5 out (administrateur par role) : mention « non visibles » sous les controles", /non visibles?\b/.test(noticeBefore), noticeBefore.slice(0, 200));
+  // DECISION-115 (q228 A): « numerique » = un nombre ou « moins de 5 » ({ belowThreshold: true }), jamais null
   check("1.6 out : hidden-counts numerique avant le droit", (await api("out", "GET", "/hidden-counts")).json?.data !== null);
 
   // ---- 2. circuit

@@ -86,8 +86,6 @@ export interface ResourceAccessRepository {
   seesEverything(tenantId: string, userId: string): Promise<boolean>;
   /** Codex P2 (PR #225): active membership of the Risk Manager group (role `system_group = 'RISK_MANAGER'`). */
   isRiskManagerMember(tenantId: string, userId: string): Promise<boolean>;
-  /** q224 (DECISION-112): whether one of `ids` has an effective level other than CLIENT. Optional for older fakes. */
-  anyRestricted?(tenantId: string, type: RestrictableResource | "RISK", ids: string[]): Promise<boolean>;
   /**
    * q220 (DECISION-111), Codex P2 (PR #226): among `ids` (already served to `userId`), those the rules WITHOUT
    * resource.readall (`*_visible_core`) do not open — necessarily owed to the right, whatever its state now — with the
