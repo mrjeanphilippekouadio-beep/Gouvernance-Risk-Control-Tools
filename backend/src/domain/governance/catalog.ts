@@ -3,7 +3,8 @@
  * validated as D0 by the PO, DECISION-076). The server never reads docs/ at run time; a test checks that this copy and
  * the JSON stay identical. Regenerate by copying the JSON fields, never by hand-editing the texts.
  */
-export const CATALOG_VERSION = "0.3-PROPOSITION";
+// q230 A (DECISION-115): the PO validated the catalog as version 0.3 (the JSON still reads « 0.3-PROPOSITION »; content identical).
+export const CATALOG_VERSION = "0.3";
 
 export type PrincipleSeverity = "elevee" | "moyenne" | "faible";
 export type RequirementLevel = "exige" | "recommande" | "informatif";

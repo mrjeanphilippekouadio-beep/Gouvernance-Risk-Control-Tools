@@ -11,7 +11,7 @@ import {
   type OrganizationSize,
   type ProfileGap,
 } from "../domain/governance/classifyOrganization.js";
-import { computePanel, offendersOf, type Offender, type OffenderKind, type PrincipleStatus } from "../domain/governance/health.js";
+import { computePanel, groupMembers, offendersOf, type Offender, type OffenderKind, type PrincipleStatus } from "../domain/governance/health.js";
 
 const DAY = 86_400_000;
 
@@ -42,11 +42,13 @@ export interface PanelPrinciple {
 
 export interface PanelException {
   auditId: string;
-  at: Date;
+  /** Exact time for `audit.read` / `governanceexception.review`; the day only (YYYY-MM-DD) otherwise (q232 A, SEC D6-02). */
+  at: Date | string;
   rule: string;
   entityType: string;
   entityId: string;
   action: string;
+  /** Free text from the journal: `audit.read` / `governanceexception.review` only (q232 A, SEC D6-02). */
   reason: string | null;
   reviewed: boolean;
   ageDays: number;
@@ -67,6 +69,8 @@ export interface GovernanceHealthView {
   profileGaps: ProfileGap[];
   principles: PanelPrinciple[];
   exceptions: { total: number; unreviewed: number; reviewDelayDays: number | null; items: PanelException[] };
+  /** q231 B: the R3 purge is manual — when it last really ran (null = never) and how long ago. */
+  lastSeenPurge: { lastRunAt: Date | null; ageDays: number | null };
 }
 
 /**
@@ -101,6 +105,15 @@ export class GovernanceHealthService {
       return pseudonyms.get(id)!;
     };
     const mask = (o: Offender): PanelOffender => (o.kind === "USER" && !showNames ? { ...o, id: null, label: person(o.id) } : o);
+    // q232 A / SEC D6-02: the id and state of a restricted resource are for the fixed groups (who see everything); others get a count.
+    const seesEverything = (["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const).some((g) => groupMembers(facts, g).some((u) => u.id === actor.userId));
+    const restrictedToCount = (offenders: Offender[]): Offender[] => {
+      if (seesEverything) return offenders;
+      const hidden = offenders.filter((o) => o.restricted);
+      if (hidden.length === 0) return offenders;
+      return [...offenders.filter((o) => !o.restricted), { kind: hidden[0]!.kind, id: "restricted", label: null, count: hidden.length, detail: "ressource(s) restreinte(s)" }];
+    };
+    const seesReasons = actor.roles.includes("audit.read") || actor.roles.includes("governanceexception.review");
 
     const classification = active ? classifyOrganization(active.answers, observed, this.rule) : null;
     const size = classification?.value ?? null;
@@ -114,7 +127,7 @@ export class GovernanceHealthService {
         notEvaluableReason: r.notEvaluableReason,
         covers: r.covers,
         consequences: entry.consequence,
-        offenders: r.offenders.map(mask),
+        offenders: restrictedToCount(r.offenders).map(mask),
         indications: entry.indications,
         highlighted: size,
         requirementLevel: size ? entry.indications[size].level : null,
@@ -136,12 +149,12 @@ export class GovernanceHealthService {
       const ageDays = Math.floor((now.getTime() - m.at.getTime()) / DAY);
       return {
         auditId: m.auditId,
-        at: m.at,
+        at: seesReasons ? m.at : m.at.toISOString().slice(0, 10),
         rule: m.rule,
         entityType: m.entityType,
         entityId: m.entityId,
         action: m.action,
-        reason: m.reason,
+        reason: seesReasons ? m.reason : null,
         reviewed: m.reviewed,
         ageDays,
         overdue: delay !== null && !m.reviewed && m.rule !== "riskManager.vacancy" && ageDays > delay,
@@ -161,6 +174,10 @@ export class GovernanceHealthService {
       profileGaps: active ? computeProfileGaps(active.answers, observed) : [],
       principles,
       exceptions: { total: facts.markedTotal, unreviewed: facts.unreviewedTotal, reviewDelayDays: delay, items },
+      lastSeenPurge: {
+        lastRunAt: facts.lastSeenPurgeAt,
+        ageDays: facts.lastSeenPurgeAt ? Math.floor((now.getTime() - facts.lastSeenPurgeAt.getTime()) / DAY) : null,
+      },
     };
   }
 

@@ -50,6 +50,7 @@ function facts(over: Partial<GovernanceFacts> = {}): GovernanceFacts {
     riskManagerVacancySince: null,
     riskManagerVacancyMaxDays: 60,
     exceptionReviewDelayDays: 5,
+    lastSeenPurgeAt: null,
     ...over,
   };
 }
@@ -58,7 +59,9 @@ const status = (f: GovernanceFacts, id: string, acc: ActiveAcceptance[] = []) =>
 describe("D6 — catalog copied from the A13 JSON", () => {
   it("same ids, titles, consequences, severities and indications as docs/governance/principes; one detector per principle", () => {
     const json = JSON.parse(readFileSync(join(__dirname, "..", "..", "docs", "governance", "principes", "principes-gouvernance.json"), "utf8"));
-    expect(CATALOG_VERSION).toBe(json.meta.version);
+    // q230 A (DECISION-115): validated as « 0.3 »; the A13 JSON still reads « 0.3-PROPOSITION », content identical.
+    expect(CATALOG_VERSION).toBe("0.3");
+    expect(json.meta.version.replace(/-PROPOSITION$/, "")).toBe(CATALOG_VERSION);
     expect(PRINCIPLES.map((p) => [p.id, p.title, p.consequence, p.severity, p.indications.TPE.action, p.indications.GRANDE_ENTREPRISE.level]))
       .toEqual(json.principes.map((p: any) => [p.id, p.titre, p.consequence, p.gravite, p.indications.tpe.action, p.indications.grande_entreprise.niveau]));
     expect(Object.keys(DETECTORS).sort()).toEqual(PRINCIPLES.map((p) => p.id).sort());
@@ -91,6 +94,18 @@ describe("D6 — detectors (pure)", () => {
     expect(status(facts(), "GOV-SOD-04", [{ ...acc, principleId: "GOV-SOD-04", offendersSnapshot: [] }]).status).toBe("NOT_RESPECTED");
   });
 
+  it("CMP: ACCEPTED leaves as soon as a new offender appears, and when the acceptance expires", () => {
+    const OTHER = "44444444-4444-4444-8444-444444444444";
+    const acc: ActiveAcceptance = { id: "acc", principleId: "GOV-SOD-04", expiresAt: new Date("2027-01-01"), reason: "TPE", regime: "ALONE", acceptedBy: ADM, confirmedBy: null, offendersSnapshot: [{ kind: "USER", id: RM }] };
+    expect(status(facts(), "GOV-SOD-04", [acc]).status).toBe("ACCEPTED");
+    const withNew = facts({
+      users: [...facts().users, { id: OTHER, label: "Dina", active: true, directPermissions: [] }],
+      assignments: [...facts().assignments, { userId: OTHER, roleId: "r-adm", grantedBy: ADM }, { userId: OTHER, roleId: "r-aud", grantedBy: ADM }],
+    });
+    expect(status(withNew, "GOV-SOD-04", [acc])).toMatchObject({ status: "NOT_RESPECTED", acceptance: null });
+    expect(status(facts({ now: new Date("2027-01-02") }), "GOV-SOD-04", [acc]).status).toBe("NOT_RESPECTED");
+  });
+
   it("TRC-02: a high-severity principle not respected and no manager designated", () => {
     expect(status(facts(), "GOV-TRC-02").status).toBe("NOT_RESPECTED");
     expect(status(facts({ managerDesignated: true }), "GOV-TRC-02").status).toBe("RESPECTED");
@@ -101,7 +116,9 @@ describe("D6 — GovernanceHealthService (masking R-6.1 / q156)", () => {
   const marked = { auditId: "m1", at: new Date(Date.now() - 2.5 * 86_400_000), userId: RM, rule: "noSelfValidation", entityType: "ControlExecution", entityId: "e1", action: "VALIDATE", reason: "seul", reviewed: false };
   const service = () =>
     new GovernanceHealthService(
-      { loadFacts: async () => facts({ markedActions: [marked], markedTotal: 1, unreviewedTotal: 1, oldestUnreviewedAt: marked.at, exceptionReviewDelayDays: 1 }), activeAcceptances: async () => [] },
+      { loadFacts: async () => facts({ markedActions: [marked], markedTotal: 1, unreviewedTotal: 1, oldestUnreviewedAt: marked.at, exceptionReviewDelayDays: 1,
+        riskOwnerGaps: [{ id: "r-pub", label: "Public", restricted: false, issue: "NO_OWNER" }, { id: "r-secret", label: null, restricted: true, issue: "OWNER_SUSPENDED" }],
+        lastSeenPurgeAt: new Date(Date.now() - 3.5 * 86_400_000) }), activeAcceptances: async () => [] },
       { getActive: async () => null, observe: async () => ({ activeAccounts: 3, riskManagers: 1, committeeMembers: 0, auditMembers: 1 }) },
     );
   const actor = (roles: string[]): AuthenticatedUser => ({ userId: ADM, tenantId: "t", email: "a@t", roles } as AuthenticatedUser);
@@ -117,8 +134,24 @@ describe("D6 — GovernanceHealthService (masking R-6.1 / q156)", () => {
     expect(text).not.toContain("Awa Risk");
     expect(view.principles.find((p) => p.id === "GOV-SOD-04")!.offenders[0]).toMatchObject({ id: null, label: "Personne 1" });
     expect(view.exceptions).toMatchObject({ total: 1, unreviewed: 1, items: [{ userId: null, userLabel: null, ageDays: 2, overdue: true, mine: false }] });
+    // q232 A / SEC D6-02: no free-text reason, the day only; a restricted risk is a count for a reader outside the fixed groups.
+    expect(view.exceptions.items[0]).toMatchObject({ reason: null, at: marked.at.toISOString().slice(0, 10) });
+    expect(text).not.toContain("r-secret");
+    expect(view.principles.find((p) => p.id === "GOV-OWN-01")!.offenders).toEqual([
+      expect.objectContaining({ id: "r-pub" }), expect.objectContaining({ id: "restricted", count: 1, label: null }),
+    ]);
+    expect(view.trackedSince).toBeInstanceOf(Date);
+    expect(view.lastSeenPurge).toMatchObject({ ageDays: 3 });
+    // CMP: no global score hides the principles that cannot be evaluated.
+    expect(Object.keys(view).sort()).toEqual(["catalogVersion", "computedAt", "exceptions", "lastSeenPurge", "organizationSize", "principles", "profileGaps", "trackedSince"]);
     expect(view.organizationSize).toBeNull();
     expect(view.principles.every((p) => p.highlighted === null)).toBe(true);
+  });
+
+  it("a fixed-group member sees the restricted risk; the exception reviewer sees reason and exact time", async () => {
+    const rmView = await service().get({ ...actor(["governancehealth.read", "governanceexception.review"]), userId: RM } as AuthenticatedUser);
+    expect(rmView.principles.find((p) => p.id === "GOV-OWN-01")!.offenders.map((o) => o.id)).toEqual(["r-pub", "r-secret"]);
+    expect(rmView.exceptions.items[0]).toMatchObject({ reason: "seul", at: marked.at, mine: true });
   });
 
   it("with audit.read: the names are shown", async () => {

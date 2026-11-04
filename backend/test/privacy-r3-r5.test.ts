@@ -12,18 +12,30 @@ const actor = (roles: string[]): AuthenticatedUser => ({ userId: "u-admin", tena
 describe("R3 — purge of the « dernière activité » date", () => {
   it("needs user.update; uses the client's retention (default 1826); audits each account without copying the erased date", async () => {
     const purge = vi.fn(async (_t: string, _d: number, audit: (ids: string[]) => unknown[]) => { audit(["u1"]); return ["u1"]; });
-    const svc = new PrivacyService({ purge } as never, { getByTenant: async () => null });
+    const svc = new PrivacyService({ purge, candidates: async () => ["u1", "u2"] } as never, { getByTenant: async () => null });
     await expect(svc.purgeLastSeen(actor([]), "r")).rejects.toBeInstanceOf(ForbiddenError);
-    expect(await svc.purgeLastSeen(actor(["user.update"]), "r")).toEqual({ retentionDays: 1826, erased: 1 });
-    const events = (purge.mock.calls[0]![2] as (ids: string[]) => Array<Record<string, unknown>>)(["u1"]);
-    expect(events[0]).toMatchObject({ entityType: "User", entityId: "u1", action: "UPDATE", oldValue: null, newValue: { lastSeenAt: null, purge: "R3" } });
+    expect(await svc.purgeLastSeen(actor(["user.update"]), "r")).toEqual({ dryRun: false, retentionDays: 1826, erased: 1 });
+    const audit = purge.mock.calls[0]![2] as (ids: string[]) => Array<Record<string, unknown>>;
+    // q231 B: one execution trace per run (even at zero), then one line per account, never the erased date.
+    expect(audit([])).toEqual([expect.objectContaining({ entityType: "LastSeenPurge", newValue: { erased: 0, retentionDays: 1826 } })]);
+    expect(audit(["u1"])[1]).toMatchObject({ entityType: "User", entityId: "u1", action: "UPDATE", oldValue: null, newValue: { lastSeenAt: null, purge: "R3" } });
+    // dryRun: the accounts concerned, nothing written.
+    expect(await svc.purgeLastSeen(actor(["user.update"]), "r", { dryRun: true })).toEqual({ dryRun: true, retentionDays: 1826, wouldErase: 2, userIds: ["u1", "u2"] });
+    expect(purge).toHaveBeenCalledTimes(1);
   });
 
-  it("a client that set no limit (null): nothing is erased", async () => {
+  it("a client that set no limit (null): nothing is erased, the run is still traced", async () => {
     const purge = vi.fn();
-    const svc = new PrivacyService({ purge } as never, { getByTenant: async () => ({ lastSeenRetentionDays: null }) as never });
-    expect(await svc.purgeLastSeen(actor(["user.update"]), "r")).toEqual({ retentionDays: null, erased: 0 });
+    const record = vi.fn(async () => undefined);
+    const svc = new PrivacyService({ purge } as never, { getByTenant: async () => ({ lastSeenRetentionDays: null }) as never }, { record });
+    expect(await svc.purgeLastSeen(actor(["user.update"]), "r")).toEqual({ dryRun: false, retentionDays: null, erased: 0 });
     expect(purge).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ entityType: "LastSeenPurge", newValue: { erased: 0, retentionDays: null } }));
+  });
+
+  it("R5 / q231 B: the notice carries the client's DPO contact when set", async () => {
+    const svc = new PrivacyService({} as never, { getByTenant: async () => ({ lastSeenRetentionDays: 730, dpoContact: " dpo@client.ci " }) as never });
+    expect(await svc.notice(actor([]))).toEqual({ lastSeenRetentionDays: 730, dpoContact: "dpo@client.ci" });
   });
 });
 
@@ -52,6 +64,7 @@ describe.skipIf(!hasLocalPg)("R3 on real PostgreSQL (local only)", () => {
     const repo = new PostgresLastSeenRetentionRepository(ctx.pool);
     const requestId = `r3-${Math.random()}`;
     const audit = (ids: string[]) => ids.map((id) => ({ tenantId: ctx.tenant, userId: active!, entityType: "User", entityId: id, action: "UPDATE" as const, oldValue: null, newValue: { purge: "R3" }, reason: "R3", requestId }));
+    expect(await repo.candidates(ctx.tenant, 30)).toEqual([old]);
     expect(await repo.purge(ctx.tenant, 30, audit)).toEqual([old]);
     expect(await repo.purge(ctx.tenant, 30, audit)).toEqual([]);
     const rows = (await ctx.pool.query(`SELECT id, last_seen_at, last_token_iat FROM users WHERE id = ANY($1)`, [[old, recent, active]])).rows;

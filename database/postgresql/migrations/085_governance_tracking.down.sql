@@ -5,6 +5,7 @@ BEGIN;
 
 ALTER TABLE tenants DROP COLUMN IF EXISTS governance_tracking_started_at;
 ALTER TABLE configs DROP COLUMN IF EXISTS last_seen_retention_days;
+ALTER TABLE configs DROP COLUMN IF EXISTS dpo_contact;
 
 DELETE FROM schema_migrations WHERE filename = '085_governance_tracking.sql';
 COMMIT;

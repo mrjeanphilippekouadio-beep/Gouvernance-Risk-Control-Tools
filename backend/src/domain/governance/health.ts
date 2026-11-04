@@ -57,7 +57,7 @@ export interface GovernanceFacts {
   /** Risk framework decisions taken in FALLBACK / BOOTSTRAP whose ratification is still pending. */
   pendingRatifications: Array<{ requestId: string; regime: string; deciderGroup: string | null; decidedAt: Date }>;
   /** Live risks (not deleted, not archived) without an owner, or whose owner account is suspended. Label null when restricted. */
-  riskOwnerGaps: Array<{ id: string; label: string | null; issue: "NO_OWNER" | "OWNER_SUSPENDED" }>;
+  riskOwnerGaps: Array<{ id: string; label: string | null; restricted: boolean; issue: "NO_OWNER" | "OWNER_SUSPENDED" }>;
   /** Active processes missing an owner account or a risk champion (D2b). */
   processGaps: Array<{ id: string; label: string; missingOwner: boolean; missingChampion: boolean }>;
   /** Actions marked « applied without a second validation » since trackedSince, most recent first (bounded). */
@@ -75,6 +75,8 @@ export interface GovernanceFacts {
   riskManagerVacancySince: Date | null;
   riskManagerVacancyMaxDays: number | null;
   exceptionReviewDelayDays: number | null;
+  /** q231 B: last real execution of the R3 purge (its execution trace), null if never run. */
+  lastSeenPurgeAt: Date | null;
 }
 
 export type OffenderKind = "ROLE" | "PERMISSION" | "USER" | "GROUP" | "SETTING" | "DECISION" | "RISK" | "PROCESS";
@@ -85,6 +87,8 @@ export interface Offender {
   label: string | null;
   count?: number;
   detail?: string;
+  /** A restricted resource (not CLIENT): its id and state are for the fixed groups only (q232 A, SEC D6-02). */
+  restricted?: boolean;
 }
 
 export type DetectorResult = { offenders: Offender[]; covers?: string } | { notEvaluable: string };
@@ -238,6 +242,7 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
       kind: "RISK" as const,
       id: r.id,
       label: r.label,
+      ...(r.restricted ? { restricted: true } : {}),
       detail: r.issue === "NO_OWNER" ? "sans propriétaire" : "propriétaire suspendu",
     })),
   }),

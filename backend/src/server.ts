@@ -299,7 +299,7 @@ const organizationProfileService = new OrganizationProfileService(
 // Lot D6: the governance panel (read-only), and the offender snapshot it gives to the D5 acceptances.
 const governanceHealthService = new GovernanceHealthService(new PostgresGovernanceHealthRepository(pool), organizationProfileRepository);
 // R3 / R5 (q227): the « dernière activité » retention and the « Vos données » notice.
-const privacyService = new PrivacyService(new PostgresLastSeenRetentionRepository(pool), configRepository);
+const privacyService = new PrivacyService(new PostgresLastSeenRetentionRepository(pool), configRepository, auditRepository);
 const auditLogService = new AuditLogService(auditRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository, visibilityResolver, resourceVisibilityManager);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository, selfValidationGate);

@@ -28,7 +28,7 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
     );
     if (!tenant) throw new Error("Tenant not found");
     const since = tenant.tracked_since;
-    const [users, roles, assignments, configRows, ratifications, riskGaps, processGaps, marked, markedTotals, unmarked, unmarkedTotal, designations, vacancy] =
+    const [users, roles, assignments, configRows, ratifications, riskGaps, processGaps, marked, markedTotals, unmarked, unmarkedTotal, designations, vacancy, purgeRuns] =
       await Promise.all([
         q<{ id: string; label: string; active: boolean; roles: string[] }>(
           `SELECT id, display_name AS label, deleted_at IS NULL AS active, coalesce(roles, '{}') AS roles FROM users WHERE tenant_id = $1`,
@@ -53,8 +53,8 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
            ORDER BY decided_at`,
         ),
         // Label only for an unrestricted risk: the panel must never show a restricted risk's content (lots V1 to V4).
-        q<{ id: string; label: string | null; issue: "NO_OWNER" | "OWNER_SUSPENDED" }>(
-          `SELECT r.id, CASE WHEN r.visibility = 'CLIENT' THEN r.description END AS label,
+        q<{ id: string; label: string | null; restricted: boolean; issue: "NO_OWNER" | "OWNER_SUSPENDED" }>(
+          `SELECT r.id, CASE WHEN r.visibility = 'CLIENT' THEN r.description END AS label, r.visibility <> 'CLIENT' AS restricted,
                   CASE WHEN r.owner_id IS NULL THEN 'NO_OWNER' ELSE 'OWNER_SUSPENDED' END AS issue
            FROM risks r LEFT JOIN users u ON u.id = r.owner_id AND u.tenant_id = r.tenant_id
            WHERE r.tenant_id = $1 AND r.deleted_at IS NULL AND r.status <> 'ARCHIVED'
@@ -113,6 +113,7 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
                              JOIN users u ON u.id = ur.user_id AND u.tenant_id = ur.tenant_id AND u.deleted_at IS NULL
                              WHERE ur.tenant_id = $1 AND ur.revoked_at IS NULL)`,
         ),
+        q<{ at: Date | null }>(`SELECT max("timestamp") AS at FROM audit_log WHERE tenant_id = $1 AND entity_type = 'LastSeenPurge'`),
       ]);
     const config = configRows[0];
     const totals = markedTotals[0];
@@ -142,6 +143,7 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
       riskManagerVacancySince: vacancy[0]?.since ?? null,
       riskManagerVacancyMaxDays: config?.vacancy_max ?? null,
       exceptionReviewDelayDays: config?.review_delay ?? null,
+      lastSeenPurgeAt: purgeRuns[0]?.at ?? null,
     };
   }
 

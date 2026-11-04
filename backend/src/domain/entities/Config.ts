@@ -53,6 +53,8 @@ export const DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS = 60;
 export const DEFAULT_RESOURCE_READALL_MAX_DAYS = 90;
 /** R3 (DECISION-099, q227 / DECISION-114): « dernière activité » kept 5 years after the end of the account, adjustable per client (migration 085). */
 export const DEFAULT_LAST_SEEN_RETENTION_DAYS = 1826;
+/** q232 A (DECISION-115, SEC D6-01): never less than a year. */
+export const MIN_LAST_SEEN_RETENTION_DAYS = 365;
 
 /** One band of the SEUILS_NIVEAU (score -> level label) mapping, e.g. { label: "Critique", min: 16, max: 25 }. */
 export interface LevelThreshold {
@@ -98,6 +100,8 @@ export interface Config {
   resourceReadallMaxDays?: number | null;
   /** R3 (q227): days after the end of an account (suspension) before its « dernière activité » date is erased; null = never. Optional for older fakes. */
   lastSeenRetentionDays?: number | null;
+  /** R5 (q231 B, DECISION-115): DPO contact shown in « Vos données »; entered at go-live (no write route). Optional for older fakes. */
+  dpoContact?: string | null;
   /** 0 means "default, never explicitly saved" — see DEFAULT_CONFIG in ConfigService. */
   version: number;
   updatedBy: string | null;

@@ -1,6 +1,6 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
-import { DEFAULT_LAST_SEEN_RETENTION_DAYS, DEFAULT_RESOURCE_READALL_MAX_DAYS, DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
+import { DEFAULT_LAST_SEEN_RETENTION_DAYS, MIN_LAST_SEEN_RETENTION_DAYS, DEFAULT_RESOURCE_READALL_MAX_DAYS, DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
 import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -311,15 +311,17 @@ export class ConfigService {
       if (v === undefined) continue;
       // q221 (DECISION-111): the reading of every content is capped at 90 days (adjustable downwards only).
       const max = key === "resourceReadallMaxDays" ? DEFAULT_RESOURCE_READALL_MAX_DAYS : MAX_GOVERNANCE_DELAY_DAYS;
-      if (v !== null && (!Number.isInteger(v) || v < 1 || v > max)) {
-        throw new ValidationError(`${key} must be a whole number of days between 1 and ${max}, or null`);
+      // q232 A / SEC D6-01: the « dernière activité » is never erased less than a year after the end of an account.
+      const min = key === "lastSeenRetentionDays" ? MIN_LAST_SEEN_RETENTION_DAYS : 1;
+      if (v !== null && (!Number.isInteger(v) || v < min || v > max)) {
+        throw new ValidationError(`${key} must be a whole number of days between ${min} and ${max}, or null`);
       }
       patch[key] = v;
     }
     if (Object.keys(patch).length === 0) throw new ValidationError("No governance delay to change");
     // The audit's "before" must not need config.read on top of config.governancedelays.set (revue Codex PR #195).
     const before = await this.readConfig(actor.tenantId);
-    const relaxing = GOVERNANCE_DELAY_KEYS.some((k) => patch[k] !== undefined && isLengthening(before[k] ?? null, patch[k]!));
+    const relaxing = GOVERNANCE_DELAY_KEYS.some((k) => patch[k] !== undefined && isRelaxation(k, before[k] ?? null, patch[k]!));
     const configEvent = (after: Config, marked: boolean) => ({
       ...this.configAuditEvent(actor, before, after, why, requestId),
       ...(marked ? { governanceException: "config.governancedelays.adminAlone" } : {}),
@@ -612,6 +614,15 @@ export class ConfigService {
 function isLengthening(current: number | null, next: number | null): boolean {
   if (next === null) return current !== null;
   return current !== null && next > current;
+}
+
+/**
+ * The change that needs a second person. For a retention period (R3, q232 A / SEC D6-01) the destructive direction is the
+ * reverse: SHORTENING it (an earlier erasure) is the relaxation; lengthening or clearing it (keeping longer) stays direct.
+ */
+function isRelaxation(key: string, current: number | null, next: number | null): boolean {
+  if (key === "lastSeenRetentionDays") return next !== null && (current === null || next < current);
+  return isLengthening(current, next);
 }
 
 export interface GovernanceDelaysOutcome {

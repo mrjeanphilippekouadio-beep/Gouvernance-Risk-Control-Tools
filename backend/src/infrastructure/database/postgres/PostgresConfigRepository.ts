@@ -33,6 +33,7 @@ interface ConfigRow {
   risk_manager_vacancy_max_days: number | null;
   resource_readall_max_days: number | null;
   last_seen_retention_days: number | null;
+  dpo_contact: string | null;
   version: number;
   updated_by: string | null;
   created_at: Date;
@@ -62,6 +63,7 @@ function toDomain(row: ConfigRow): Config {
     resourceReadallMaxDays: row.resource_readall_max_days ?? null,
     // R3 (q227): the column DEFAULT (1826, migration 085) also fills a row created by the upsert.
     lastSeenRetentionDays: row.last_seen_retention_days ?? null,
+    dpoContact: row.dpo_contact ?? null,
     version: row.version,
     updatedBy: row.updated_by,
     createdAt: row.created_at,

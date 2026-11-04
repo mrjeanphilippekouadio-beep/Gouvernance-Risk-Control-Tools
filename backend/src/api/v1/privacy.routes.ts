@@ -17,7 +17,9 @@ export function privacyRouter(service: PrivacyService): Router {
   });
   router.post("/last-seen-purge", perUserRateLimiter(), async (req, res, next) => {
     try {
-      res.json({ data: await service.purgeLastSeen(req.user, req.requestId) });
+      // q231 B: `?dryRun=true` lists the accounts concerned (count and ids) without erasing anything.
+      const dryRun = req.query["dryRun"] === "true";
+      res.json({ data: await service.purgeLastSeen(req.user, req.requestId, { dryRun }) });
     } catch (err) {
       next(err);
     }

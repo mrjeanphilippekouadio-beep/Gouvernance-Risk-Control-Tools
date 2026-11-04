@@ -8,4 +8,6 @@ export interface LastSeenRetentionRepository {
    * Returns the ids of the accounts erased.
    */
   purge(tenantId: string, days: number, audit: TransactionalAudit<string[]>): Promise<string[]>;
+  /** q231 B dry run: the accounts a purge would erase now, without writing. */
+  candidates(tenantId: string, days: number): Promise<string[]>;
 }

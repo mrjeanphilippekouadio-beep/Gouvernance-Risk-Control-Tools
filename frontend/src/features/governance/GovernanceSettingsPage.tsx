@@ -30,7 +30,7 @@ const DELAYS: { key: keyof GovernanceDelays; label: string; help: string }[] = [
   { key: "policyRequestExpiryDays", label: "Expiration d'une demande d'assouplissement", help: "q174 : passé ce délai, la demande ne peut plus être approuvée." },
   { key: "riskManagerVacancyMaxDays", label: "Durée maximale d'une vacance du groupe Risk Manager", help: "q178 : 60 jours par défaut ; au-delà, la vacance est signalée comme dépassée." },
   { key: "resourceReadallMaxDays", label: "Durée d'une lecture de tous les contenus confirmée", help: "q221 : 90 jours au plus (réglable vers le bas seulement), fixée à la confirmation, sans prolongation : à l'échéance, nouvelle demande et nouvelle confirmation." },
-  { key: "lastSeenRetentionDays", label: "Conservation de la date de dernière activité après la fin d'un compte", help: "R3 (q227) : 1826 jours (5 ans) par défaut ; au-delà, la date est effacée. Ce délai est repris dans le texte « Vos données »." },
+  { key: "lastSeenRetentionDays", label: "Conservation de la date de dernière activité après la fin d'un compte", help: "R3 (q227) : 1826 jours (5 ans) par défaut, 365 jours au moins ; au-delà, la date est effacée par la purge manuelle. Une réduction attend la confirmation d'une seconde personne (q232). Ce délai est repris dans le texte « Vos données »." },
 ];
 const GROUP_LABELS = FIXED_GROUP_LABELS;
 const RIGHT_LABELS: Record<string, string> = {
