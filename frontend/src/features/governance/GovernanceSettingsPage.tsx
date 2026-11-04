@@ -30,6 +30,7 @@ const DELAYS: { key: keyof GovernanceDelays; label: string; help: string }[] = [
   { key: "policyRequestExpiryDays", label: "Expiration d'une demande d'assouplissement", help: "q174 : passé ce délai, la demande ne peut plus être approuvée." },
   { key: "riskManagerVacancyMaxDays", label: "Durée maximale d'une vacance du groupe Risk Manager", help: "q178 : 60 jours par défaut ; au-delà, la vacance est signalée comme dépassée." },
   { key: "resourceReadallMaxDays", label: "Durée d'une lecture de tous les contenus confirmée", help: "q221 : 90 jours au plus (réglable vers le bas seulement), fixée à la confirmation, sans prolongation : à l'échéance, nouvelle demande et nouvelle confirmation." },
+  { key: "lastSeenRetentionDays", label: "Conservation de la date de dernière activité après la fin d'un compte", help: "R3 (q227) : 1826 jours (5 ans) par défaut ; au-delà, la date est effacée. Ce délai est repris dans le texte « Vos données »." },
 ];
 const GROUP_LABELS = FIXED_GROUP_LABELS;
 const RIGHT_LABELS: Record<string, string> = {
@@ -80,7 +81,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
   const [reason, setReason] = useState("");
   const [policy, setPolicy] = useState<SelfValidationPolicy>("REFUSE");
   const [flag, setFlag] = useState(false);
-  const [delays, setDelays] = useState<Record<keyof GovernanceDelays, string>>({ exceptionReviewDelayDays: "", acceptanceMaxDays: "", policyRequestExpiryDays: "", riskManagerVacancyMaxDays: "", resourceReadallMaxDays: "" });
+  const [delays, setDelays] = useState<Record<keyof GovernanceDelays, string>>({ exceptionReviewDelayDays: "", acceptanceMaxDays: "", policyRequestExpiryDays: "", riskManagerVacancyMaxDays: "", resourceReadallMaxDays: "", lastSeenRetentionDays: "" });
   const [delayPending, setDelayPending] = useState<GovernanceDelayRequest | null>(null);
   const [rights, setRights] = useState<GovernanceRight[] | null>(null);
   const [right, setRight] = useState<GovernanceRight | null>(null);
@@ -129,6 +130,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
       policyRequestExpiryDays: config.policyRequestExpiryDays?.toString() ?? "",
       riskManagerVacancyMaxDays: config.riskManagerVacancyMaxDays?.toString() ?? "",
       resourceReadallMaxDays: config.resourceReadallMaxDays?.toString() ?? "",
+      lastSeenRetentionDays: config.lastSeenRetentionDays?.toString() ?? "",
     });
     setEditing(setting);
   }

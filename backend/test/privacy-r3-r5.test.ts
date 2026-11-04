@@ -1,0 +1,63 @@
+import { describe, expect, it, vi } from "vitest";
+import { PrivacyService } from "../src/services/PrivacyService.js";
+import { PostgresLastSeenRetentionRepository } from "../src/infrastructure/database/postgres/PostgresLastSeenRetentionRepository.js";
+import { ForbiddenError } from "../src/domain/errors/DomainErrors.js";
+import { fillPrivacyNotice, retentionLabel } from "../../frontend/src/features/privacy/privacyNotice.js";
+import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
+import { hasLocalPg, useMigrationTenant } from "./migrationHarness.js";
+
+/** R3 / R5 (q227, DECISION-114) — level 1. */
+const actor = (roles: string[]): AuthenticatedUser => ({ userId: "u-admin", tenantId: "t", email: "a@t", roles } as AuthenticatedUser);
+
+describe("R3 — purge of the « dernière activité » date", () => {
+  it("needs user.update; uses the client's retention (default 1826); audits each account without copying the erased date", async () => {
+    const purge = vi.fn(async (_t: string, _d: number, audit: (ids: string[]) => unknown[]) => { audit(["u1"]); return ["u1"]; });
+    const svc = new PrivacyService({ purge } as never, { getByTenant: async () => null });
+    await expect(svc.purgeLastSeen(actor([]), "r")).rejects.toBeInstanceOf(ForbiddenError);
+    expect(await svc.purgeLastSeen(actor(["user.update"]), "r")).toEqual({ retentionDays: 1826, erased: 1 });
+    const events = (purge.mock.calls[0]![2] as (ids: string[]) => Array<Record<string, unknown>>)(["u1"]);
+    expect(events[0]).toMatchObject({ entityType: "User", entityId: "u1", action: "UPDATE", oldValue: null, newValue: { lastSeenAt: null, purge: "R3" } });
+  });
+
+  it("a client that set no limit (null): nothing is erased", async () => {
+    const purge = vi.fn();
+    const svc = new PrivacyService({ purge } as never, { getByTenant: async () => ({ lastSeenRetentionDays: null }) as never });
+    expect(await svc.purgeLastSeen(actor(["user.update"]), "r")).toEqual({ retentionDays: null, erased: 0 });
+    expect(purge).not.toHaveBeenCalled();
+  });
+});
+
+describe("R5 — information text", () => {
+  it("duration in years when it is a whole number of years (1826 = 5 ans), in days otherwise; DPO contact never invented", () => {
+    expect(retentionLabel(1826)).toBe("5 ans");
+    expect(retentionLabel(365)).toBe("1 an");
+    expect(retentionLabel(400)).toBe("400 jours");
+    const text = fillPrivacyNotice(1826, null).join("\n");
+    expect(text).toContain("conservée 5 ans après la fin");
+    expect(text).toContain("à renseigner par l'administrateur");
+    expect(text).not.toMatch(/\{(duree|contactDpo)\}/);
+  });
+});
+
+describe.skipIf(!hasLocalPg)("R3 on real PostgreSQL (local only)", () => {
+  const { ctx, one } = useMigrationTenant("r3");
+  it("erases only the dates of accounts suspended longer than the retention; idempotent; audit in the same transaction", async () => {
+    const mk = async (name: string, suspendedDaysAgo: number | null) =>
+      (await one(
+        `INSERT INTO users (tenant_id, email, display_name, last_seen_at, last_token_iat, deleted_at)
+         VALUES ($1, $2, $3, now(), 1700000000, CASE WHEN $4::int IS NULL THEN NULL ELSE now() - make_interval(days => $4::int) END) RETURNING id`,
+        [ctx.tenant, `${name}-${Math.random()}@r3`, name, suspendedDaysAgo],
+      )).id as string;
+    const [old, recent, active] = [await mk("old", 40), await mk("recent", 5), await mk("active", null)];
+    const repo = new PostgresLastSeenRetentionRepository(ctx.pool);
+    const requestId = `r3-${Math.random()}`;
+    const audit = (ids: string[]) => ids.map((id) => ({ tenantId: ctx.tenant, userId: active!, entityType: "User", entityId: id, action: "UPDATE" as const, oldValue: null, newValue: { purge: "R3" }, reason: "R3", requestId }));
+    expect(await repo.purge(ctx.tenant, 30, audit)).toEqual([old]);
+    expect(await repo.purge(ctx.tenant, 30, audit)).toEqual([]);
+    const rows = (await ctx.pool.query(`SELECT id, last_seen_at, last_token_iat FROM users WHERE id = ANY($1)`, [[old, recent, active]])).rows;
+    expect(rows.find((r) => r.id === old)).toMatchObject({ last_seen_at: null, last_token_iat: null });
+    expect(rows.find((r) => r.id === recent)?.last_seen_at).not.toBeNull();
+    expect(rows.find((r) => r.id === active)?.last_seen_at).not.toBeNull();
+    expect(Number((await one(`SELECT count(*) AS n FROM audit_log WHERE request_id = $1`, [requestId])).n)).toBe(1);
+  });
+});

@@ -14,6 +14,8 @@ export interface GovernanceConfig {
   riskManagerVacancyMaxDays: number | null;
   /** q221 (DECISION-111): life of a confirmed resource.readall; 90 days by default (PO). */
   resourceReadallMaxDays?: number | null;
+  /** R3 (q227): days the « dernière activité » date is kept after the end of an account; 1826 (5 years) by default. */
+  lastSeenRetentionDays?: number | null;
   version: number;
   updatedAt: string;
 }
@@ -35,7 +37,7 @@ export interface SelfValidationPolicyRequest {
   expiresAt?: string | null;
 }
 
-export type GovernanceDelays = Pick<GovernanceConfig, "exceptionReviewDelayDays" | "acceptanceMaxDays" | "policyRequestExpiryDays" | "riskManagerVacancyMaxDays" | "resourceReadallMaxDays">;
+export type GovernanceDelays = Pick<GovernanceConfig, "exceptionReviewDelayDays" | "acceptanceMaxDays" | "policyRequestExpiryDays" | "riskManagerVacancyMaxDays" | "resourceReadallMaxDays" | "lastSeenRetentionDays">;
 
 /** q182: mirrors backend `GovernanceDelayRequest` — a lengthening of the delays waiting for a second person. */
 export interface GovernanceDelayRequest {

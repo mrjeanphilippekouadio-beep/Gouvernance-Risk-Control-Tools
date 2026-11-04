@@ -1,6 +1,6 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
-import { DEFAULT_RESOURCE_READALL_MAX_DAYS, DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
+import { DEFAULT_LAST_SEEN_RETENTION_DAYS, DEFAULT_RESOURCE_READALL_MAX_DAYS, DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
 import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -55,6 +55,7 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     policyRequestExpiryDays: null,
     riskManagerVacancyMaxDays: DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS,
     resourceReadallMaxDays: DEFAULT_RESOURCE_READALL_MAX_DAYS,
+    lastSeenRetentionDays: DEFAULT_LAST_SEEN_RETENTION_DAYS,
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),

@@ -20,7 +20,9 @@ const Days = z.number().int().min(1).max(3650).nullable().optional();
 const GovernanceDelaysBody = z
   .object({ exceptionReviewDelayDays: Days, acceptanceMaxDays: Days, policyRequestExpiryDays: Days, riskManagerVacancyMaxDays: Days,
     // q221 (DECISION-111): a reading of every content lasts 90 days at most — adjustable downwards only (Privacy Q3).
-    resourceReadallMaxDays: z.number().int().min(1).max(DEFAULT_RESOURCE_READALL_MAX_DAYS).nullable().optional(), reason: reasonText(500) })
+    resourceReadallMaxDays: z.number().int().min(1).max(DEFAULT_RESOURCE_READALL_MAX_DAYS).nullable().optional(),
+    // R3 (q227): retention of the « dernière activité » date after the end of an account.
+    lastSeenRetentionDays: Days, reason: reasonText(500) })
   .strict();
 
 const UpdateCommitteeEnforcementBody = z.object({

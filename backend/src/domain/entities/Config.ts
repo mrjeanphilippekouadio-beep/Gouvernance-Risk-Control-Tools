@@ -51,6 +51,8 @@ export type EvaluationMode = "CLASSIQUE" | "PARTICIPATIF";
 export const DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS = 60;
 /** q221 (DECISION-111): the PO's default for `resourceReadallMaxDays`, same as the column DEFAULT of migration 084. */
 export const DEFAULT_RESOURCE_READALL_MAX_DAYS = 90;
+/** R3 (DECISION-099, q227 / DECISION-114): « dernière activité » kept 5 years after the end of the account, adjustable per client (migration 085). */
+export const DEFAULT_LAST_SEEN_RETENTION_DAYS = 1826;
 
 /** One band of the SEUILS_NIVEAU (score -> level label) mapping, e.g. { label: "Critique", min: 16, max: 25 }. */
 export interface LevelThreshold {
@@ -94,6 +96,8 @@ export interface Config {
   riskManagerVacancyMaxDays: number | null;
   /** q221 (DECISION-111): life of a confirmed resource.readall grant (days); null = default 90. Optional for older fakes. */
   resourceReadallMaxDays?: number | null;
+  /** R3 (q227): days after the end of an account (suspension) before its « dernière activité » date is erased; null = never. Optional for older fakes. */
+  lastSeenRetentionDays?: number | null;
   /** 0 means "default, never explicitly saved" — see DEFAULT_CONFIG in ConfigService. */
   version: number;
   updatedBy: string | null;
@@ -125,4 +129,5 @@ export interface ConfigPatch {
   policyRequestExpiryDays?: number | null;
   riskManagerVacancyMaxDays?: number | null;
   resourceReadallMaxDays?: number | null;
+  lastSeenRetentionDays?: number | null;
 }
