@@ -457,9 +457,10 @@ pour l'usage.
 | HUMAN @privacy @security @risk-manager | **q224 (cockpit)** — tableaux de bord : remplacer par « moins de 5 » tout chiffre incluant des éléments restreints et portant sur moins de 5 éléments, pour les lecteurs hors groupes fixes (A, reco Privacy), autre seuil (B), aucun (C). Condition de production V4. | 2026-11-03 | **Décidé** (DECISION-112) — A : seuil de 5, à construire (lot V4bis) |
 | HUMAN @privacy @compliance @risk-manager | **q225 (cockpit)** — dossiers « personnes nommées » : expiration de l'ajout nominatif à la clôture ou 30 j renouvelables (A, reco Privacy, petit lot V5) ou retrait manuel (B). Non bloquant V4. | 2026-11-03 | **Décidé** (DECISION-112) — A : expiration à la clôture ou 30 j renouvelables, lot V5 |
 | @orchestrator HUMAN | **D6 — avis juriste/DPO** : note prête, à transmettre par le PO ; débloque F5b et q217. | 2026-11-03 | **Fermé** (DECISION-113) — accord du DPO obtenu par le PO ; précisions R3/R5/R6 en q227 |
-| HUMAN @privacy @dev-db | **q227 (cockpit)** — précisions de l'accord DPO : R3 5 ans à compter de la fin du compte, sauvegardes par rotation ; R5 texte rédigé par Privacy, page de profil, soumis au DPO ; R6 intérêt légitime, formalité ARTCI à préciser. Bloque la production de D6. | 2026-11-03 | **Ouvert — HUMAN : q227** |
+| HUMAN @privacy @dev-db | **q227 (cockpit)** — précisions de l'accord DPO : R3 5 ans à compter de la fin du compte, sauvegardes par rotation ; R5 texte rédigé par Privacy, page de profil, soumis au DPO ; R6 intérêt légitime, formalité ARTCI à préciser. Bloque la production de D6. | 2026-11-03 | **Décidé** (DECISION-114) — A ; formalité ARTCI non précisée (ligne suivante) |
 | HUMAN @security @privacy | **q228 (cockpit)** — SEC V4B-01/03 : le seuil de 5 de q224 (construit, d76b798, `feat/r1-visibility-v4bis`) ne protège rien (cases d'éléments déjà ouvrables, valeur lisible ailleurs, lectures journalisées depuis V4) ; seul « X éléments non visibles » porte sur de l'inaccessible. Retirer et seuiller `hidden-counts` (A, reco A10), garder comme règle d'affichage (B) ou les deux (C). Bloque la PR V4bis. | 2026-11-03 | **Ouvert — HUMAN : q228** |
-| @dev-backend | **D6 — panneau santé de la gouvernance** (`GovernanceHealthService`, `GET /governance-health`, `tenants.governance_tracking_started_at`, migration 085) : construction lancée (`feat/r1-governance-d6`). | 2026-11-03 | **En cours** |
+| @dev-backend | **D6 — panneau santé de la gouvernance** (`GovernanceHealthService`, `GET /governance-health`, `tenants.governance_tracking_started_at`, migration 085) : serveur construit (70454eb, `feat/r1-governance-d6`, 19 détecteurs, 3002 tests verts) ; reste R3 (purge) et R5 (texte) puis QA/Sécurité/Compliance/Privacy. | 2026-11-04 | **En cours** |
+| HUMAN | **R6 — formalité ARTCI** : q227 répondue A sans préciser si le DPO juge une formalité nécessaire ni qui la fait. À indiquer avant la mise en production de D6. | 2026-11-04 | **Ouvert — HUMAN** |
 | HUMAN @orchestrator | **q226 (cockpit)** — merger le lot V4 (PR #226, migration 084) dans staging : QA corrigée, Sécurité VERT, Compliance/Privacy levées, CI et Sonar verts, 3 Codex P2 corrigés, parcours V4 rejoué (0 échec). | 2026-11-03 | **Fermé** (DECISION-112) — PR #226 fusionnée (513d1cc), migration 084 par migrate.yml |
 | @dev-backend | **V4 dernière passe** : SEC V4-03 / CMP-V4-10 (journaliser aussi tableaux de bord avec libellé, vue dispositif, 360, cartographie, enfants, téléchargement de preuve ; ids dans la ligne de liste ; test d'inventaire) et plafond 90 j de la durée réglable. SEC V4-04 : 084 modifiée en place, jamais appliquée hors local (migrate.yml ne tourne qu'au merge) — rien à faire. | 2026-11-03 | **Fait** — 2090954, d93778c, 4cb5212 (Codex P2) ; retest A10 VERT |
 | @dev-backend @security | **Lot V2 visibilité** — `feat/r1-visibility-v2` (migration 083) : QA ORANGE→corrigé (QA-VIS2-01..06, 147/147), Sécurité VERT après retest (V2-01/02/04 corrigés), Compliance conforme avec réserves (CMP-V2-01 corrigé ; CMP-V2-02 → q208). Info A10 : sur contrôle/KPI, périmètre et autres champs en deux transactions ; niveau « restreint » lu avant verrou. | 2026-11-01 | **Fait** — PR #223 fusionnée (65007ad), migrate.yml : 083 appliquée sur staging. Suite : q207/q208 (A06), V3, V4 |
@@ -2664,4 +2665,19 @@ DECISION (PO, conversation) : « j'ai déjà eu l'accord du DPO, faisons ce qui
 RELATED: note D6, q155/q156/q175, q172, q217, F5b.
 OWNER: @orchestrator @dev-backend @privacy
 STATUS: DÉCIDÉ — construction D6 lancée ; q227 ouverte.
+
+DECISION-114
+DATE: 2026-11-04
+DECISION (PO, cockpit q227 A, accord du DPO) : R3 — la « dernière activité »
+  d'un compte est conservée 5 ans (paramétrable par client) à compter de la
+  fin du compte (suspension définitive ou suppression), puis effacée ; les
+  sauvegardes ne sont pas retouchées et disparaissent avec leur rotation
+  normale. R5 — Privacy rédige le texte d'information (ce qui est enregistré,
+  finalité, durée, droits, contact du DPO, visibilité du nom et des droits),
+  affiché sur la page de profil, soumis au DPO par le PO. R6 — base légale :
+  intérêt légitime de sécurité et de gestion des habilitations ; formalité
+  ARTCI : non précisée (item ouvert).
+RELATED: q227, DECISION-113, note D6.
+OWNER: @privacy @dev-backend @dev-db
+STATUS: DÉCIDÉ — R3 et R5 à construire sur feat/r1-governance-d6.
 ```
