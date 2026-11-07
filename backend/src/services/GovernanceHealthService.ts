@@ -41,6 +41,8 @@ export interface PanelPrinciple {
   highlighted: OrganizationSize | null;
   requirementLevel: RequirementLevel | null;
   acceptance: { id: string; reason: string; expiresAt: Date; regime: string | null; acceptedBy: string | null; confirmedBy: string | null } | null;
+  /** Why an active acceptance was not applied (incomplete offender list, Codex P2 PR #235); null otherwise. */
+  acceptanceNote: string | null;
 }
 
 export interface PanelException {
@@ -141,6 +143,7 @@ export class GovernanceHealthService {
         indications: entry.indications,
         highlighted: size,
         requirementLevel: size ? entry.indications[size].level : null,
+        acceptanceNote: r.acceptanceNote,
         acceptance: r.acceptance
           ? {
               id: r.acceptance.id,

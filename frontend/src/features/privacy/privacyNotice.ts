@@ -6,10 +6,12 @@
 export const PRIVACY_NOTICE_R5 = {
   title: "Vos données de compte",
   paragraphs: [
-    "Ce qui est enregistré : la date de votre dernière activité sur le compte (une seule date, mise à jour à chaque activité), votre nom affiché, et vos rôles et droits.",
+    "Ce qui est enregistré : la date de votre dernière activité sur le compte (une seule date, mise à jour à chaque nouvelle connexion ou renouvellement de session), votre nom affiché, et vos rôles et droits.",
     "Pourquoi : repérer les comptes à privilèges restés inactifs, gérer les habilitations et assurer le contrôle interne.",
     "Qui peut voir quoi : votre nom affiché est visible des personnes qui désignent des responsables, composent des équipes de mission ou contrôlent les habilitations. Vos rôles et droits sont consultables par l'administration, l'Audit et le Risk Manager. La date de dernière activité n'est visible que par les personnes ayant le droit de consulter l'audit ; les autres ne voient que des totaux.",
     "Durée : la date de dernière activité est conservée {duree} après la fin de votre compte (durée paramétrable par votre organisation), puis effacée. Les copies de sauvegarde disparaissent au rythme normal de leur rotation.",
+    // Codex P2 (PR #235): true statement, no invented policy; the duration is a PO / DPO question.
+    "Votre nom affiché et vos rôles sont conservés avec votre compte, y compris après sa suspension, car ils servent à la traçabilité du journal d'audit ; aucune durée n'est fixée à ce jour.",
     "Base légale : intérêt légitime de sécurité et de gestion des habilitations.",
     "Vos droits : vous pouvez exercer vos droits d'accès, de rectification et d'opposition prévus par la réglementation applicable. Contact du délégué à la protection des données : {contactDpo}.",
   ],

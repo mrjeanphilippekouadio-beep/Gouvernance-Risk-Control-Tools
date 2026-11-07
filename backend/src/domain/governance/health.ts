@@ -290,7 +290,8 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
       return { offenders: [{ kind: "SETTING", id: "singlePersonRegime", label: "Régime « structure à une personne »", count: governancePeople, detail: "déclaré alors que plusieurs personnes ont un rôle" }] };
     }
     const selfValidations = (f.markedCountByRule["noSelfValidation"] ?? 0) + f.selfValidatedUnmarkedTotal;
-    if (!f.singlePersonRegimeActive && governancePeople <= 1 && selfValidations > 0) {
+    // Codex P2 (PR #235): exactly one active person with a role (0 people is a vacancy, not this signal).
+    if (!f.singlePersonRegimeActive && governancePeople === 1 && selfValidations > 0) {
       return { offenders: [{ kind: "SETTING", id: "singlePersonRegime", label: "Régime « structure à une personne »", count: governancePeople, detail: "non déclaré alors qu'une seule personne valide ses propres actes" }] };
     }
     return { offenders: [] };
@@ -319,6 +320,8 @@ export interface PrincipleResult {
   /** Exact number of offenders; larger than `offenders.length` when the list is bounded (QA-D6-02). */
   offendersTotal: number;
   acceptance: ActiveAcceptance | null;
+  /** Why an active acceptance was not applied (e.g. the offender list is incomplete); null otherwise. */
+  acceptanceNote: string | null;
 }
 
 export const offenderKey = (o: { kind?: unknown; id?: unknown }): string => `${String(o.kind)}:${String(o.id)}`;
@@ -327,8 +330,10 @@ export const offenderKey = (o: { kind?: unknown; id?: unknown }): string => `${S
  * R-5: an ACTIVE, unexpired acceptance turns NOT_RESPECTED into ACCEPTED only while every current offender was already in
  * its snapshot (a new offender makes the principle NOT_RESPECTED again: fail-closed).
  */
-function applyAcceptance(offenders: Offender[], acceptance: ActiveAcceptance | undefined, now: Date): ActiveAcceptance | null {
+function applyAcceptance(offenders: Offender[], acceptance: ActiveAcceptance | undefined, now: Date, total = offenders.length): ActiveAcceptance | null {
   if (!acceptance || acceptance.expiresAt.getTime() <= now.getTime()) return null;
+  // Codex P2 (PR #235): with a bounded list the offenders past the bound are unknown — never ACCEPTED (fail-closed).
+  if (total > offenders.length) return null;
   const covered = new Set(acceptance.offendersSnapshot.map((o) => offenderKey(o as Offender)));
   return offenders.every((o) => covered.has(offenderKey(o))) ? acceptance : null;
 }
@@ -337,10 +342,15 @@ export function computePanel(f: GovernanceFacts, acceptances: ActiveAcceptance[]
   const accByPrinciple = new Map(acceptances.map((a) => [a.principleId, a]));
   const results = PRINCIPLES.map((p): PrincipleResult => {
     const r = DETECTORS[p.id](f);
-    if ("notEvaluable" in r) return { id: p.id, status: "NOT_EVALUABLE", notEvaluableReason: r.notEvaluable, covers: null, offenders: [], offendersTotal: 0, acceptance: null };
-    if (r.offenders.length === 0) return { id: p.id, status: "RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: [], offendersTotal: 0, acceptance: null };
-    const accepted = applyAcceptance(r.offenders, accByPrinciple.get(p.id), f.now);
-    return { id: p.id, status: accepted ? "ACCEPTED" : "NOT_RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: r.offenders, offendersTotal: Math.max(r.total ?? 0, r.offenders.length), acceptance: accepted };
+    if ("notEvaluable" in r) return { id: p.id, status: "NOT_EVALUABLE", notEvaluableReason: r.notEvaluable, covers: null, offenders: [], offendersTotal: 0, acceptance: null, acceptanceNote: null };
+    if (r.offenders.length === 0) return { id: p.id, status: "RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: [], offendersTotal: 0, acceptance: null, acceptanceNote: null };
+    const total = Math.max(r.total ?? 0, r.offenders.length);
+    const acceptance = accByPrinciple.get(p.id);
+    const accepted = applyAcceptance(r.offenders, acceptance, f.now, total);
+    const acceptanceNote = acceptance && !accepted && total > r.offenders.length && acceptance.expiresAt.getTime() > f.now.getTime()
+      ? `Acceptation non appliquée : ${total} objets en cause, seuls ${r.offenders.length} sont listés ; la couverture ne peut pas être vérifiée.`
+      : null;
+    return { id: p.id, status: accepted ? "ACCEPTED" : "NOT_RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: r.offenders, offendersTotal: total, acceptance: accepted, acceptanceNote };
   });
   // GOV-TRC-02: a high-severity principle not respected and nobody designated as manager.
   const severe = results.filter((r) => r.status === "NOT_RESPECTED" && PRINCIPLES.find((p) => p.id === r.id)?.severity === "elevee");

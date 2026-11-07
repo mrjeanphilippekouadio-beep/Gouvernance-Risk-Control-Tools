@@ -48,6 +48,10 @@ describe("R5 — information text", () => {
     expect(text).toContain("conservée 5 ans après la fin");
     expect(text).toContain("à renseigner par l'administrateur");
     expect(text).not.toMatch(/\{(duree|contactDpo)\}/);
+    // Codex P2 (PR #235): the date moves on a new sign-in or session renewal, not on every activity; name and roles have no duration yet.
+    expect(text).toContain("mise à jour à chaque nouvelle connexion ou renouvellement de session");
+    expect(text).not.toContain("mise à jour à chaque activité");
+    expect(fillPrivacyNotice(null, null).join("\n")).toContain("Votre nom affiché et vos rôles sont conservés avec votre compte, y compris après sa suspension, car ils servent à la traçabilité du journal d'audit ; aucune durée n'est fixée à ce jour.");
     // QA-D6-03: no retention (null) never says « puis effacée ».
     const none = fillPrivacyNotice(null, null).join("\n");
     expect(none).toContain("conservée sans limite de durée fixée par votre organisation.");

@@ -115,6 +115,22 @@ describe("D6 — detectors (pure)", () => {
     expect(status(facts(), "GOV-RISK-01").offendersTotal).toBe(1);
   });
 
+  it("Codex P2 (PR #235): beyond the bounded list an acceptance is never applied, with an explicit note", () => {
+    const gaps = Array.from({ length: 50 }, (_, i) => ({ id: `r${i}`, label: `R${i}`, restricted: false, issue: "NO_OWNER" as const }));
+    const acc: ActiveAcceptance = { id: "acc", principleId: "GOV-OWN-01", expiresAt: new Date("2027-01-01"), reason: "x", regime: "ALONE", acceptedBy: ADM, confirmedBy: null,
+      offendersSnapshot: gaps.map((g) => ({ kind: "RISK", id: g.id })) };
+    expect(status(facts({ riskOwnerGaps: gaps, riskOwnerGapsTotal: 50 }), "GOV-OWN-01", [acc]).status).toBe("ACCEPTED");
+    const over = status(facts({ riskOwnerGaps: gaps, riskOwnerGapsTotal: 51 }), "GOV-OWN-01", [acc]);
+    expect(over).toMatchObject({ status: "NOT_RESPECTED", acceptance: null, offendersTotal: 51 });
+    expect(over.acceptanceNote).toMatch(/51 objets en cause/);
+  });
+
+  it("Codex P2 (PR #235): « régime non déclaré » needs exactly one active person with a role (0 is a vacancy)", () => {
+    const one = facts({ assignments: [{ userId: RM, roleId: "r-rm", grantedBy: ADM }], selfValidatedUnmarkedTotal: 1 });
+    expect(status(one, "GOV-REG-01").status).toBe("NOT_RESPECTED");
+    expect(status(facts({ assignments: [], selfValidatedUnmarkedTotal: 1 }), "GOV-REG-01").status).toBe("RESPECTED");
+  });
+
   it("TRC-02: a high-severity principle not respected and no manager designated", () => {
     expect(status(facts(), "GOV-TRC-02").status).toBe("NOT_RESPECTED");
     expect(status(facts({ managerDesignated: true }), "GOV-TRC-02").status).toBe("RESPECTED");
