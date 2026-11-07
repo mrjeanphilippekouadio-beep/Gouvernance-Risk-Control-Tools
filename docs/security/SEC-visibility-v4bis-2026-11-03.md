@@ -72,3 +72,15 @@ Recommandation A10 : **(b)**, ou au minimum ajouter V4B-03 à (a).
 | V4B-03 | — | — | Clos (q228 A) |
 | V4B-04 | MEDIUM 4,3 | A06 | REMEDIATION_REQUIRED (avant production), retest A10 |
 | A1 et compte exact pour les admins | INFO | HUMAN | REVIEW_REQUIRED |
+
+## Retest A10 — V4B-04 (2026-11-07, `906f9e2`, branche à `3b084c0`)
+
+| Chemin | Résultat | Analyse |
+|---|---|---|
+| `GET /…/:id` (`get`) | **RETEST_PASS** | `getRiskOwners(..., readerScope(actor))`, donc `risks.list` passe par le filtre SQL `risk_visible_to`. Un risque PERIMETRE ou NOMINATIF hors de portée n'apparaît plus (ni id ni propriétaire). Les groupes fixes gardent tout, via `visibility_sees_everything`. Test unitaire du scope passé : 20/20 verts, `tsc` propre. |
+| `validate` | **PASS** | Il lit encore en SYSTEM_SCOPE, mais la liste complète ne va que dans `audit_log.newValue`, que seuls les détenteurs de `audit.read` lisent (groupe AUDIT, V0-03). Le panel D6 n'expose pas `newValue`. La réponse HTTP n'est que le `Process`. |
+| `listForProcess`, `reject`, `propose`, `setMode` | **PASS** | Ils renvoient la demande ou le processus : aucun champ de risque. |
+| Notifications | **Sans objet** | Le service n'en émet aucune. |
+| Autres consommateurs | **PASS** | `ProcessService.assertNoActiveReferences` ne lit que les demandes en attente, et son message ne contient ni id ni nombre. |
+
+- **V4B-04 : RETEST_PASS → CLOSED.** **Verdict final du lot V4bis : VERT.** Reste l'INFO HUMAN (A1 donne aux admins le nombre exact des ressources qu'ils ne voient pas), sans effet sur la livraison.
