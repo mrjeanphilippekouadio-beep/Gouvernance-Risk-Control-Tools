@@ -41,3 +41,10 @@ Le PO a constaté que le frontend n'avançait plus : 13 écrans pour 43 modules 
 
 - État complet, reste à faire et erreurs commises : `.claude/agent-context/HANDOFF-2026-10-17.md` (à lire en premier).
 - Leçons : tenir les 4 collections du cockpit (status, deliveries, agents, releases) à chaque livraison, pas seulement le bandeau ; relire les questions `answered` à chaque reprise ; formuler l'invariant dans un dispatch, pas l'implémentation ; un correctif fait par l'orchestrateur après une revue appelle un retest explicite.
+
+## 2026-11-07 — Ne pas redemander un accord déjà donné par le PO (retour du PO)
+- Le PO a obtenu l'accord du DPO sur la note D6 entière (R3, R5, R6) : cet accord couvre le texte d'information et la
+  formalité ARTCI. Ne plus lister « validation DPO » ni « formalité ARTCI » comme conditions ouvertes (DECISION-116).
+- Règle générale : quand le PO dit avoir un accord d'un tiers (DPO, juriste…), l'inscrire une fois au Decision Log comme
+  couvrant tout le périmètre du document soumis, et ne pas le reposer sous une autre forme. Ne poser une question que
+  pour une précision réellement absente, une seule fois, puis s'arrêter.
