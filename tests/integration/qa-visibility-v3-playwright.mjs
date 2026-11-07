@@ -2,8 +2,9 @@
 // jamais Neon). Jeu : qa-visibility-v2-setup.sh (jeu V1 + V2). Oracles ecrits AVANT l'execution.
 //
 // ORACLES
-//  1. out (hors perimetre) : sous la liste des Controles « 2 éléments non visibles (accès restreint). » (c02 PERIMETRE + c04 orphelin ; le NOMINATIF c03 n'est pas compte),
-//     sous le Registre « 1 élément non visible », sous les Plans d'action et les KPI le nombre de l'API ; chaque nombre = GET /hidden-counts.
+//  1. out (hors perimetre) : 2 controles caches (c02 PERIMETRE + c04 orphelin ; le NOMINATIF c03 n'est pas compte) et 1 risque :
+//     DECISION-115 (q228 A), de 1 a 4 l'API rend { belowThreshold: true } et l'ecran « Moins de 5 éléments non visibles
+//     (accès restreint). » ; 0 = aucune mention, 5 et plus = le nombre exact ; chaque mention = GET /hidden-counts.
 //  2. rm : aucune mention « non visible » sous ces listes ; GET /hidden-counts = null.
 //  3. com : l'entree « Ressources restreintes » existe, l'ecran liste les ressources restreintes ; l'API ne rend ni userId ni byName du dernier changement ;
 //     out n'a pas l'entree et reçoit 403.
@@ -32,6 +33,9 @@ const EMAIL = Object.fromEntries(NAMES.map((n) => [n, `${n}@vv1.test`]));
 const { check, failures } = verdicts();
 const { login, api } = localApi(API, EMAIL);
 const plural = (n) => `${n} élément${n > 1 ? "s" : ""} non visible${n > 1 ? "s" : ""} (accès restreint).`;
+// DECISION-115 (q228 A): the text the notice shows for one value of GET /hidden-counts (null = no mention)
+const BELOW = (v) => typeof v === "object" && v !== null && v.belowThreshold === true;
+const notice = (v) => (BELOW(v) ? "Moins de 5 éléments non visibles (accès restreint)." : v > 0 ? plural(v) : null);
 
 // adm porte les droits de gestion des roles (par SQL) ; il ne lit aucune ressource restreinte
 sql(`update users set roles = array_remove(roles, 'resourcevisibility.set') where email = 'adm@vv1.test'`);
@@ -49,11 +53,12 @@ try {
   // ---- 1. out : mentions
   const O = await open("out");
   const c = (await api("out", "GET", "/hidden-counts")).json?.data;
-  check("1.0 API out : controles 2, risques 1 (NOMINATIF jamais compte)", c?.CONTROL === 2 && c?.RISK === 1, JSON.stringify(c));
+  check("1.0 API out : controles et risques « moins de 5 » (2 et 1, DECISION-115 ; NOMINATIF jamais compte)", BELOW(c?.CONTROL) && BELOW(c?.RISK), JSON.stringify(c));
   for (const [label, key] of [["Contrôles", "CONTROL"], ["Registre", "RISK"], ["Plans d'action", "ACTION_PLAN"], ["Anomalies", "ANOMALY"], ["KPI", "KPI"]]) {
     await O.go(label);
     const t = await O.text();
-    check(`1.${key} out : « ${plural(c[key])} » sous la liste ${label}`, t.includes(plural(c[key])), t.slice(0, 160));
+    const want = notice(c[key]);
+    check(`1.${key} out : « ${want ?? "aucune mention"} » sous la liste ${label}`, want ? t.includes(want) : !/non visibles?\b/.test(t), t.slice(0, 160));
     if (key === "CONTROL") await O.shot("controls-notice");
   }
   check("1.9 les textes ne contiennent aucun identifiant ni libelle restreint", !(await O.text()).includes("CANARY-V2-KPI-PERIM"));
@@ -98,7 +103,7 @@ try {
   const pc = sql(`select reason||'|'||(new_value->>'through')||'|'||(new_value->>'widening') from audit_log where entity_id::text='${I("301")}' and action='PERMISSION_CHANGE' order by timestamp desc limit 1`);
   check("4.6 audit PERMISSION_CHANGE avec motif, through DEPARTMENT_GROUP", pc === "Rattachement Finance QA V3|DEPARTMENT_GROUP|true", pc);
   const c2 = (await api("out", "GET", "/hidden-counts")).json?.data;
-  check("4.7 le comptage de out baisse (controles 2 -> 1, risques 1 -> 0)", c2?.CONTROL === 1 && c2?.RISK === 0, JSON.stringify(c2));
+  check("4.7 le comptage de out baisse (controles 2 -> 1 : toujours « moins de 5 » ; risques 1 -> 0, DECISION-115)", BELOW(c2?.CONTROL) && c2?.RISK === 0, JSON.stringify(c2));
 
   checkNoErrors(check, [O, R, C, A], "5");
 } catch (e) {

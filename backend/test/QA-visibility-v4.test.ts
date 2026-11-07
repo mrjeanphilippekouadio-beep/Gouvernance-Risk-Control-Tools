@@ -161,7 +161,9 @@ describe.skipIf(!live)("QA-visibility-v4 on the REAL server + LOCAL PostgreSQL 1
     it("an administrator who is not Risk Manager / Committee / Audit gets a numeric hidden count (not null), the three groups get null", async () => {
       const c = (await get("out", "/hidden-counts")).json.data;
       expect(c).not.toBeNull();
-      expect(Object.values(c).some((n) => (n as number) > 0)).toBe(true);
+      // DECISION-115 (q228 A): 1 to 4 hidden items come as « moins de 5 » ({ belowThreshold: true }), never the number
+      expect(Object.values(c).some((n) => (typeof n === "object" && n !== null) || (n as number) >= 5)).toBe(true);
+      expect(Object.values(c).every((n) => typeof n === "object" || n === 0 || (n as number) >= 5)).toBe(true);
     });
   });
 
