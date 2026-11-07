@@ -414,3 +414,10 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - Leçon : le « sens » d'un délai n'est pas universel. Pour une durée de CONSERVATION, raccourcir détruit des données ; ne pas réutiliser `isLengthening` sans vérifier quelle direction est l'assouplissement. Et avant de qualifier une purge, vérifier si la donnée purgée est la seule trace (ici, aucun `audit_log` des connexions).
 - Leçon : tout écran qui relit `audit_log` (motifs, entités, horodatages) hérite de la restriction de `audit.read`, même s'il masque les auteurs.
 - Tracker (7bis) : D6-01 (A06 + HUMAN plancher), D6-02 (A06 + HUMAN portée de `governancehealth.read`).
+
+## Revue 2 V4bis (2026-11-07, `c021d84`, q228 A / DECISION-115) : VERT pour le lot, aucune escalade — § Revue 2 de `docs/security/SEC-visibility-v4bis-2026-11-03.md`
+- PASS : seuil retiré des tableaux de bord (diff = `hiddenCounts` seul) ; `hidden-counts` 1–4 → `{belowThreshold:true}`, 0/≥5 exacts, groupes fixes `null`. Aucun en-tête ni total ni `count(*)` tenant-wide sur les racines. Inférence temporelle : seuls les passages de seuil sont visibles (0↔<5, <5↔5) ; INFO acceptable.
+- V4B-04 MEDIUM 4,3 (A06, préexistant) : `ProcessEvaluationModeRequestService.get/validate` → `getRiskOwners` en SYSTEM_SCOPE renvoie `{riskId, ownerId}` de TOUS les risques du processus (NOMINATIF compris) à un porteur de `evaluationmode.validate`, permission posable sur un rôle ordinaire. Reco : filtrer par `hiddenRiskIds`. En V1, je l'avais classé à tort « affichage sans restitution ».
+- INFO HUMAN : A1 donne aux admins la liste de toutes les ressources restreintes, donc le nombre exact de ce qu'ils ne voient pas (contredit q228 pour eux).
+- Leçon : un « SYSTEM_SCOPE pour affichage » doit être suivi jusqu'à la RÉPONSE HTTP. Si des ids ou des couples sortent vers le client, c'est une lecture en clair, pas une lecture interne. À chaque nouvelle règle de masquage, refaire le grep `SYSTEM_SCOPE` des services et suivre chaque résultat jusqu'au `res.json`.
+- Tracker (7bis) : V4B-04 (A06, retest A10), A1 vs q228 (HUMAN).
