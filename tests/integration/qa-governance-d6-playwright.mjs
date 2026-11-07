@@ -5,7 +5,7 @@
 //  1. Tout compte connecte (rm, et out sans aucun droit) ouvre « Vos données » depuis le menu de session (en haut a droite) : titre « Vos données de compte »,
 //     les six paragraphes du texte (Ce qui est enregistré, Pourquoi, Qui peut voir quoi, Durée, Base légale, Vos droits), sans accolade restante.
 //  2. Duree par defaut (1826 jours) : « conservée 5 ans après la fin de votre compte ». Le contact DPO n'est jamais invente : « à renseigner par l'administrateur ».
-//  3. La duree suit la configuration du client : 1000 => « 1000 jours », 730 => « 2 ans », 1 => « 1 jour », NULL => « sans limite fixée par votre organisation ».
+//  3. La duree suit la configuration du client : 1000 => « 1000 jours », 730 => « 2 ans », 400 => « 400 jours » (plancher 365, DECISION-115), NULL => « sans limite de durée fixée par votre organisation » sans « puis effacée » (QA-D6-03).
 //  4. L'API /privacy/notice rend la meme duree que l'ecran ; sans jeton elle refuse (401).
 //  5. zero erreur JS, aucune erreur console imprevue.
 //
@@ -58,7 +58,7 @@ try {
   const t2 = await myData(O);
   check("1.4 out (aucun droit) ouvre aussi « Vos données » avec le meme texte", t2.includes("Vos données de compte") && t2.includes("conservée 5 ans"), t2.slice(0, 120));
 
-  for (const [days, expected] of [[1000, "conservée 1000 jours après"], [730, "conservée 2 ans après"], [1, "conservée 1 jour après"], ["null", "conservée sans limite fixée par votre organisation après"]]) {
+  for (const [days, expected] of [[1000, "conservée 1000 jours après"], [730, "conservée 2 ans après"], [400, "conservée 400 jours après"], ["null", "conservée sans limite de durée fixée par votre organisation."]]) {
     setDays(days);
     const t = await myData(R);
     check(`3.${days} duree ${days} => « ${expected} »`, t.includes(expected), t.slice(t.indexOf("Durée"), t.indexOf("Durée") + 120));

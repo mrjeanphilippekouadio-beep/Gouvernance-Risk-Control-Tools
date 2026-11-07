@@ -14,6 +14,7 @@ import {
 import { computePanel, groupMembers, offendersOf, type Offender, type OffenderKind, type PrincipleStatus } from "../domain/governance/health.js";
 
 const DAY = 86_400_000;
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 export interface PanelOffender {
   kind: OffenderKind;
@@ -33,6 +34,8 @@ export interface PanelPrinciple {
   covers: string | null;
   consequences: string;
   offenders: PanelOffender[];
+  /** Exact number of offenders; larger than `offenders.length` when the list is bounded (QA-D6-02). */
+  offendersTotal: number;
   indications: PrincipleEntry["indications"];
   /** Size whose indication applies (= organizationSize.value); null when the size is unknown: nothing highlighted. */
   highlighted: OrganizationSize | null;
@@ -70,7 +73,7 @@ export interface GovernanceHealthView {
   principles: PanelPrinciple[];
   exceptions: { total: number; unreviewed: number; reviewDelayDays: number | null; items: PanelException[] };
   /** q231 B: the R3 purge is manual — when it last really ran (null = never) and how long ago. */
-  lastSeenPurge: { lastRunAt: Date | null; ageDays: number | null };
+  retentionPurge: { lastRunAt: Date | null; ageDays: number | null };
 }
 
 /**
@@ -104,7 +107,13 @@ export class GovernanceHealthService {
       if (!pseudonyms.has(id)) pseudonyms.set(id, `Personne ${pseudonyms.size + 1}`);
       return pseudonyms.get(id)!;
     };
-    const mask = (o: Offender): PanelOffender => (o.kind === "USER" && !showNames ? { ...o, id: null, label: person(o.id) } : o);
+    // QA-D6-01: without audit.read no account id appears anywhere (an exception on a User entity, a DECISION label…).
+    const hideUserIds = (text: string): string => (showNames ? text : text.replace(UUID_RE, (id) => (labels.has(id) ? person(id) : id)));
+    const mask = (o: Offender): PanelOffender => {
+      if (o.kind === "USER" && !showNames) return { ...o, id: null, label: person(o.id) };
+      if (showNames) return o;
+      return { ...o, id: hideUserIds(o.id), label: o.label === null ? null : hideUserIds(o.label), ...(o.detail ? { detail: hideUserIds(o.detail) } : {}) };
+    };
     // q232 A / SEC D6-02: the id and state of a restricted resource are for the fixed groups (who see everything); others get a count.
     const seesEverything = (["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const).some((g) => groupMembers(facts, g).some((u) => u.id === actor.userId));
     const restrictedToCount = (offenders: Offender[]): Offender[] => {
@@ -128,6 +137,7 @@ export class GovernanceHealthService {
         covers: r.covers,
         consequences: entry.consequence,
         offenders: restrictedToCount(r.offenders).map(mask),
+        offendersTotal: r.offendersTotal,
         indications: entry.indications,
         highlighted: size,
         requirementLevel: size ? entry.indications[size].level : null,
@@ -152,7 +162,7 @@ export class GovernanceHealthService {
         at: seesReasons ? m.at : m.at.toISOString().slice(0, 10),
         rule: m.rule,
         entityType: m.entityType,
-        entityId: m.entityId,
+        entityId: hideUserIds(m.entityId),
         action: m.action,
         reason: seesReasons ? m.reason : null,
         reviewed: m.reviewed,
@@ -174,7 +184,7 @@ export class GovernanceHealthService {
       profileGaps: active ? computeProfileGaps(active.answers, observed) : [],
       principles,
       exceptions: { total: facts.markedTotal, unreviewed: facts.unreviewedTotal, reviewDelayDays: delay, items },
-      lastSeenPurge: {
+      retentionPurge: {
         lastRunAt: facts.lastSeenPurgeAt,
         ageDays: facts.lastSeenPurgeAt ? Math.floor((now.getTime() - facts.lastSeenPurgeAt.getTime()) / DAY) : null,
       },

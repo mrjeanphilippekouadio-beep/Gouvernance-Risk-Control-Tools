@@ -58,8 +58,13 @@ export interface GovernanceFacts {
   pendingRatifications: Array<{ requestId: string; regime: string; deciderGroup: string | null; decidedAt: Date }>;
   /** Live risks (not deleted, not archived) without an owner, or whose owner account is suspended. Label null when restricted. */
   riskOwnerGaps: Array<{ id: string; label: string | null; restricted: boolean; issue: "NO_OWNER" | "OWNER_SUSPENDED" }>;
+  /** Exact count behind the bounded list (QA-D6-02). */
+  riskOwnerGapsTotal: number;
   /** Active processes missing an owner account or a risk champion (D2b). */
   processGaps: Array<{ id: string; label: string; missingOwner: boolean; missingChampion: boolean }>;
+  processGapsTotal: number;
+  /** Marked actions since trackedSince, exact count per rule (the list itself is bounded). */
+  markedCountByRule: Record<string, number>;
   /** Actions marked « applied without a second validation » since trackedSince, most recent first (bounded). */
   markedActions: MarkedAction[];
   markedTotal: number;
@@ -91,7 +96,8 @@ export interface Offender {
   restricted?: boolean;
 }
 
-export type DetectorResult = { offenders: Offender[]; covers?: string } | { notEvaluable: string };
+/** `total`: the exact number of offenders when the list is bounded (QA-D6-02); the list length otherwise. */
+export type DetectorResult = { offenders: Offender[]; covers?: string; total?: number } | { notEvaluable: string };
 
 const DAY = 86_400_000;
 const NOT_BUILT = "Donnée appartenant à une fonction non livrée (R-Q3, DECISION-075) : évaluable à sa livraison";
@@ -134,6 +140,7 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
   // Self-validation: marked noSelfValidation acts, and (detective control) validations by the author left unmarked.
   "GOV-SOD-01": (f) => ({
     covers: "actes marqués « sans validation indépendante » et validations par l'auteur sans marqueur, depuis le début du suivi",
+    total: (f.markedCountByRule["noSelfValidation"] ?? 0) + f.selfValidatedUnmarkedTotal,
     offenders: [
       ...f.markedActions.filter((m) => m.rule === "noSelfValidation").map((m) => decision(m, "validé par son auteur (marqué)")),
       ...f.selfValidatedUnmarked.map((m) => decision(m, "validé par son auteur sans marqueur (contrôle détectif)")),
@@ -235,9 +242,11 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
   "GOV-APP-01": (f) => ({
     covers: "changements d'appétence marqués « sans seconde validation »",
     offenders: f.markedActions.filter((m) => m.rule.startsWith("riskappetite")).map((m) => decision(m)),
+    total: Object.entries(f.markedCountByRule).filter(([rule]) => rule.startsWith("riskappetite")).reduce((n, [, c]) => n + c, 0),
   }),
   "GOV-OWN-01": (f) => ({
     covers: "risques sans propriétaire ou à propriétaire suspendu",
+    total: f.riskOwnerGapsTotal,
     offenders: f.riskOwnerGaps.map((r) => ({
       kind: "RISK" as const,
       id: r.id,
@@ -248,6 +257,7 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
   }),
   "GOV-OWN-02": (f) => ({
     covers: "processus actifs sans propriétaire rattaché à un compte ou sans champion de risque",
+    total: f.processGapsTotal,
     offenders: f.processGaps.map((p) => ({
       kind: "PROCESS" as const,
       id: p.id,
@@ -279,7 +289,7 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
     if (f.singlePersonRegimeActive && governancePeople > 1) {
       return { offenders: [{ kind: "SETTING", id: "singlePersonRegime", label: "Régime « structure à une personne »", count: governancePeople, detail: "déclaré alors que plusieurs personnes ont un rôle" }] };
     }
-    const selfValidations = f.markedActions.filter((m) => m.rule === "noSelfValidation").length + f.selfValidatedUnmarkedTotal;
+    const selfValidations = (f.markedCountByRule["noSelfValidation"] ?? 0) + f.selfValidatedUnmarkedTotal;
     if (!f.singlePersonRegimeActive && governancePeople <= 1 && selfValidations > 0) {
       return { offenders: [{ kind: "SETTING", id: "singlePersonRegime", label: "Régime « structure à une personne »", count: governancePeople, detail: "non déclaré alors qu'une seule personne valide ses propres actes" }] };
     }
@@ -306,6 +316,8 @@ export interface PrincipleResult {
   notEvaluableReason: string | null;
   covers: string | null;
   offenders: Offender[];
+  /** Exact number of offenders; larger than `offenders.length` when the list is bounded (QA-D6-02). */
+  offendersTotal: number;
   acceptance: ActiveAcceptance | null;
 }
 
@@ -325,15 +337,16 @@ export function computePanel(f: GovernanceFacts, acceptances: ActiveAcceptance[]
   const accByPrinciple = new Map(acceptances.map((a) => [a.principleId, a]));
   const results = PRINCIPLES.map((p): PrincipleResult => {
     const r = DETECTORS[p.id](f);
-    if ("notEvaluable" in r) return { id: p.id, status: "NOT_EVALUABLE", notEvaluableReason: r.notEvaluable, covers: null, offenders: [], acceptance: null };
-    if (r.offenders.length === 0) return { id: p.id, status: "RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: [], acceptance: null };
+    if ("notEvaluable" in r) return { id: p.id, status: "NOT_EVALUABLE", notEvaluableReason: r.notEvaluable, covers: null, offenders: [], offendersTotal: 0, acceptance: null };
+    if (r.offenders.length === 0) return { id: p.id, status: "RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: [], offendersTotal: 0, acceptance: null };
     const accepted = applyAcceptance(r.offenders, accByPrinciple.get(p.id), f.now);
-    return { id: p.id, status: accepted ? "ACCEPTED" : "NOT_RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: r.offenders, acceptance: accepted };
+    return { id: p.id, status: accepted ? "ACCEPTED" : "NOT_RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: r.offenders, offendersTotal: Math.max(r.total ?? 0, r.offenders.length), acceptance: accepted };
   });
   // GOV-TRC-02: a high-severity principle not respected and nobody designated as manager.
   const severe = results.filter((r) => r.status === "NOT_RESPECTED" && PRINCIPLES.find((p) => p.id === r.id)?.severity === "elevee");
   const trc02 = results.find((r) => r.id === "GOV-TRC-02")!;
   if (severe.length > 0 && !f.managerDesignated) {
+    trc02.offendersTotal = 1;
     trc02.offenders = [{ kind: "SETTING", id: "manager", label: "Gérant désigné", count: severe.length, detail: "absent alors que des principes de gravité élevée ne sont pas respectés" }];
     trc02.covers = "gérant désigné face aux principes de gravité élevée non respectés";
     const accepted = applyAcceptance(trc02.offenders, accByPrinciple.get("GOV-TRC-02"), f.now);

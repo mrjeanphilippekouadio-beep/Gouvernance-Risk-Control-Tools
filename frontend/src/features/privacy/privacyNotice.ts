@@ -26,8 +26,12 @@ export function retentionLabel(days: number | null): string {
   return `${days} jour${days > 1 ? "s" : ""}`;
 }
 
+/** QA-D6-03: with no retention set (null = never erased), the text must not say the date is « puis effacée ». */
+export const NO_RETENTION_PARAGRAPH = "Durée : la date de dernière activité est conservée sans limite de durée fixée par votre organisation.";
+
 export function fillPrivacyNotice(retentionDays: number | null, dpoContact: string | null): string[] {
-  return PRIVACY_NOTICE_R5.paragraphs.map((p) =>
-    p.replace("{duree}", retentionLabel(retentionDays)).replace("{contactDpo}", dpoContact?.trim() || DPO_CONTACT_MISSING),
-  );
+  return PRIVACY_NOTICE_R5.paragraphs.map((p) => {
+    if (retentionDays === null && p.includes("{duree}")) return NO_RETENTION_PARAGRAPH;
+    return p.replace("{duree}", retentionLabel(retentionDays)).replace("{contactDpo}", dpoContact?.trim() || DPO_CONTACT_MISSING);
+  });
 }

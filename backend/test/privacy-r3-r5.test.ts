@@ -48,6 +48,10 @@ describe("R5 — information text", () => {
     expect(text).toContain("conservée 5 ans après la fin");
     expect(text).toContain("à renseigner par l'administrateur");
     expect(text).not.toMatch(/\{(duree|contactDpo)\}/);
+    // QA-D6-03: no retention (null) never says « puis effacée ».
+    const none = fillPrivacyNotice(null, null).join("\n");
+    expect(none).toContain("conservée sans limite de durée fixée par votre organisation.");
+    expect(none).not.toContain("puis effacée");
   });
 });
 

@@ -28,7 +28,7 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
     );
     if (!tenant) throw new Error("Tenant not found");
     const since = tenant.tracked_since;
-    const [users, roles, assignments, configRows, ratifications, riskGaps, processGaps, marked, markedTotals, unmarked, unmarkedTotal, designations, vacancy, purgeRuns] =
+    const [users, roles, assignments, configRows, ratifications, riskGaps, processGaps, marked, markedTotals, unmarked, unmarkedTotal, designations, vacancy, purgeRuns, gapTotals, byRule] =
       await Promise.all([
         q<{ id: string; label: string; active: boolean; roles: string[] }>(
           `SELECT id, display_name AS label, deleted_at IS NULL AS active, coalesce(roles, '{}') AS roles FROM users WHERE tenant_id = $1`,
@@ -114,6 +114,22 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
                              WHERE ur.tenant_id = $1 AND ur.revoked_at IS NULL)`,
         ),
         q<{ at: Date | null }>(`SELECT max("timestamp") AS at FROM audit_log WHERE tenant_id = $1 AND entity_type = 'LastSeenPurge'`),
+        // QA-D6-02: the exact totals behind the bounded lists.
+        q<{ risks: string; processes: string }>(
+          `SELECT (SELECT count(*) FROM risks r LEFT JOIN users u ON u.id = r.owner_id AND u.tenant_id = r.tenant_id
+                   WHERE r.tenant_id = $1 AND r.deleted_at IS NULL AND r.status <> 'ARCHIVED'
+                     AND (r.owner_id IS NULL OR u.deleted_at IS NOT NULL)) AS risks,
+                  (SELECT count(*) FROM processes p
+                   LEFT JOIN users o ON o.id = p.owner_user_id AND o.tenant_id = p.tenant_id
+                   LEFT JOIN users c ON c.id = p.risk_champion_user_id AND c.tenant_id = p.tenant_id
+                   WHERE p.tenant_id = $1 AND p.active
+                     AND (p.owner_user_id IS NULL OR o.deleted_at IS NOT NULL OR p.risk_champion_user_id IS NULL OR c.deleted_at IS NOT NULL)) AS processes`,
+        ),
+        q<{ rule: string; n: string }>(
+          `SELECT governance_exception AS rule, count(*) AS n FROM audit_log
+           WHERE tenant_id = $1 AND governance_exception IS NOT NULL AND "timestamp" >= $2 GROUP BY governance_exception`,
+          [since],
+        ),
       ]);
     const config = configRows[0];
     const totals = markedTotals[0];
@@ -130,7 +146,10 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
       config: config ? { committeeAuditCumulAllowed: config.cumul, committeeEvaluationEnforced: config.enforced, committeeTreatmentMinScore: config.min_score } : null,
       pendingRatifications: ratifications.map((r) => ({ requestId: r.id, regime: r.regime, deciderGroup: r.decider_group, decidedAt: r.decided_at })),
       riskOwnerGaps: riskGaps,
+      riskOwnerGapsTotal: Number(gapTotals[0]?.risks ?? 0),
       processGaps: processGaps.map((p) => ({ id: p.id, label: p.label, missingOwner: p.missing_owner, missingChampion: p.missing_champion })),
+      processGapsTotal: Number(gapTotals[0]?.processes ?? 0),
+      markedCountByRule: Object.fromEntries(byRule.map((r) => [r.rule, Number(r.n)])),
       markedActions,
       markedTotal: Number(totals?.total ?? 0),
       unreviewedTotal: Number(totals?.unreviewed ?? 0),

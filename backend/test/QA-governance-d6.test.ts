@@ -23,10 +23,10 @@ const DAY = 86_400_000;
 const read = (...p: string[]) => readFileSync(join(ROOT, ...p), "utf8");
 
 describe("QA-governance-d6 STATIC", () => {
-  it("migration 085: IF NOT EXISTS, retention CHECK 1..3650 default 1826, no function or trigger, no DELETE", () => {
+  it("migration 085: IF NOT EXISTS, retention CHECK 365..3650 (DECISION-115, SEC D6-01) default 1826, no function or trigger, no DELETE", () => {
     const sql = read("database", "postgresql", "migrations", "085_governance_tracking.sql");
     expect(sql).toContain("ADD COLUMN IF NOT EXISTS governance_tracking_started_at");
-    expect(sql).toMatch(/last_seen_retention_days integer DEFAULT 1826\s+CHECK \(last_seen_retention_days BETWEEN 1 AND 3650\)/);
+    expect(sql).toMatch(/last_seen_retention_days integer DEFAULT 1826\s+CHECK \(last_seen_retention_days BETWEEN 365 AND 3650\)/);
     expect(sql).not.toMatch(/CREATE (OR REPLACE )?(FUNCTION|TRIGGER)|DELETE FROM/i);
   });
   it("routes: the panel takes no parameter and is read-only; the purge is a POST behind the per-user rate limiter, the notice a GET", () => {
@@ -42,7 +42,7 @@ describe("QA-governance-d6 STATIC", () => {
     expect(s).not.toMatch(/DELETE FROM/i);
     expect(s).toContain("tenant_id = $1 AND deleted_at IS NOT NULL");
   });
-  it.fails("QA-D6-03: with no retention (null = never erased) the notice must not still say the date is « puis effacée »", () => {
+  it("QA-D6-03: with no retention (null = never erased) the notice must not still say the date is « puis effacée »", () => {
     const t = read("frontend", "src", "features", "privacy", "privacyNotice.ts");
     const body = t.slice(t.indexOf("export function fillPrivacyNotice"));
     expect(t).toContain("puis effacée");
@@ -527,19 +527,20 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
         await sql("UPDATE user_roles SET revoked_at = now() WHERE role_id = $1", [R_PLAIN]);
       }
     });
-    it.fails("QA-D6-01: an exception on a person's account (entityType User) does not hand that person's identifier to a reader without audit.read", async () => {
+    it("QA-D6-01: an exception on a person's account (entityType User) does not hand that person's identifier to a reader without audit.read", async () => {
       const victim = UID.dept;
       await mark({ rule: "riskManager.vacancy", user: "adm", entityType: "User", entityId: victim, action: "UPDATE", reason: "Départ du dernier Risk Manager" });
       for (const w of ["rm", "com", "adm"] as const) expect((await get(w, "/governance-health")).text, w).not.toContain(victim);
       expect((await get("aud", "/governance-health")).text).toContain(victim);
     });
-    it.fails("QA-D6-02: a list cut at 50 offenders says so (a count or the full list): 55 ownerless risks must not look like 50", async () => {
+    it("QA-D6-02: a list cut at 50 offenders says so (a count or the full list): 55 ownerless risks must not look like 50", async () => {
       const ids = Array.from({ length: 55 }, () => randomUUID());
       for (const id of ids) await sql("INSERT INTO risks (id, tenant_id, process, description, status, owner_id, visibility) VALUES ($1, $2, 'QA55', 'QA55', 'ACTIVE', NULL, 'CLIENT')", [id, T]);
       try {
         const x = pr(await panel("aud"), "GOV-OWN-01");
         const shown = x.offenders.length;
-        const total = Math.max(shown, ...x.offenders.map((o) => Number(o["count"] ?? 0)));
+        // fixed: the principle carries the exact total (offendersTotal) next to the bounded list
+        const total = Math.max(shown, Number((x as Record<string, unknown>)["offendersTotal"] ?? 0), ...x.offenders.map((o) => Number(o["count"] ?? 0)));
         expect(total, `shown ${shown}`).toBe(55);
       } finally { await sql("UPDATE risks SET deleted_at = now() WHERE process = 'QA55'"); }
     });
@@ -558,7 +559,11 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
         for (const w of ["aud", "rm", "com", "adm"] as const) {
           const r = await get(w, "/governance-health");
           expect(r.text, w).not.toMatch(/SECRET-/);
-          expect(pr(r.json.data, "GOV-OWN-01").offenders.length, w).toBeGreaterThanOrEqual(2);
+          const own = pr(r.json.data, "GOV-OWN-01");
+          // DECISION-115 (q232 A, SEC D6-02): outside the fixed groups (adm) the restricted gaps are one counted line, no id.
+          const counted = own.offenders.reduce((n, o) => n + (o["id"] === "restricted" ? Number(o["count"] ?? 0) : 1), 0);
+          expect(counted, w).toBeGreaterThanOrEqual(2);
+          if (w === "adm") for (const id of ids) expect(r.text, "restricted risk id hidden from adm").not.toContain(id);
         }
       } finally { await sql("UPDATE risks SET deleted_at = now() WHERE id = ANY($1::uuid[])", [ids]); }
     });
@@ -583,33 +588,36 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
       await sql("INSERT INTO tenants (id, name) VALUES ($1, 'QA autre client') ON CONFLICT DO NOTHING", [T2]);
       await ended(U.other, T2, "r3-other", 4000, true, true);
     });
-    it("config: the default is 1826 days; the column refuses 0, 3651, negatives; 1 and 3650 are accepted; NULL means never erased", async () => {
+    it("config: the default is 1826 days; the column refuses 364 (floor of DECISION-115 / SEC D6-01), 0, 3651, negatives; 365 and 3650 are accepted; NULL means never erased", async () => {
       expect((await sql<{ d: number | null }>("SELECT last_seen_retention_days AS d FROM configs WHERE tenant_id = $1", [T]))[0]!.d).toBe(1826);
-      for (const bad of [0, -1, 3651]) await expect(sql("UPDATE configs SET last_seen_retention_days = $2 WHERE tenant_id = $1", [T, bad]), String(bad)).rejects.toThrow(/last_seen_retention_days|check/i);
-      for (const ok of [1, 3650, 1826]) await sql("UPDATE configs SET last_seen_retention_days = $2 WHERE tenant_id = $1", [T, ok]);
+      for (const bad of [0, -1, 364, 3651]) await expect(sql("UPDATE configs SET last_seen_retention_days = $2 WHERE tenant_id = $1", [T, bad]), String(bad)).rejects.toThrow(/last_seen_retention_days|check/i);
+      for (const ok of [365, 3650, 1826]) await sql("UPDATE configs SET last_seen_retention_days = $2 WHERE tenant_id = $1", [T, ok]);
     });
-    it("the governance-delays route bounds it 1..3650 as integers (400 otherwise, nothing written) and rejects unknown keys", async () => {
-      for (const bad of [0, 3651, 1.5, "5", -3]) {
+    it("the governance-delays route bounds it 365..3650 as integers (DECISION-115; 400 otherwise, nothing written) and rejects unknown keys", async () => {
+      for (const bad of [0, 364, 3651, 1.5, "5", -3]) {
         const r = await call("adm", "PUT", "/config/governance-delays", { lastSeenRetentionDays: bad, reason: "QA borne" });
         expect(r.status, JSON.stringify(bad)).toBe(400);
       }
-      expect((await call("adm", "PUT", "/config/governance-delays", { lastSeenRetentionDays: 100, reason: "" })).status, "reason mandatory").toBe(400);
+      expect((await call("adm", "PUT", "/config/governance-delays", { lastSeenRetentionDays: 400, reason: "" })).status, "reason mandatory").toBe(400);
       expect((await sql<{ d: number }>("SELECT last_seen_retention_days AS d FROM configs WHERE tenant_id = $1", [T]))[0]!.d).toBe(1826);
     });
-    it("circuit: shortening the retention applies at once (audited, with the reason); lengthening it or switching it off (null) is a request awaiting a second person, the value does not move", async () => {
+    // DECISION-115 / SEC D6-01 (q232 A): for a retention period the destructive direction is the reverse of the other
+    // delays — SHORTENING it (an earlier erasure) needs the second person; lengthening it or switching it off stays direct.
+    it("circuit (DECISION-115): lengthening the retention or switching it off (null) applies at once (audited); shortening it is a request awaiting a second person, the value does not move", async () => {
       const set = (v: number | null) => call("adm", "PUT", "/config/governance-delays", { lastSeenRetentionDays: v, reason: "QA R3 circuit" });
       const cur = async () => (await sql<{ d: number | null }>("SELECT last_seen_retention_days AS d FROM configs WHERE tenant_id = $1", [T]))[0]!.d;
-      const short = await set(1500);
-      expect(short.status, short.text.slice(0, 80)).toBeLessThan(300);
-      expect(await cur()).toBe(1500);
+      const longer = await set(2000);
+      expect(longer.status, longer.text.slice(0, 80)).toBeLessThan(300);
+      expect(await cur()).toBe(2000);
       expect((await sql<{ n: number }>("SELECT count(*)::int AS n FROM audit_log WHERE entity_type = 'Config' AND reason = 'QA R3 circuit'"))[0]!.n).toBeGreaterThanOrEqual(1);
       const never = await set(null);
-      expect(never.status, never.text.slice(0, 80)).toBe(202);
-      expect(await cur(), "null = never erased is a lengthening: not applied without a second person").toBe(1500);
-      expect(never.json.pendingRequest).toBeTruthy();
-      const longer = await set(3000);
-      expect([202, 409].includes(longer.status), longer.text.slice(0, 120)).toBe(true);
-      expect(await cur()).toBe(1500);
+      expect(never.status, never.text.slice(0, 80)).toBeLessThan(300);
+      expect(await cur(), "null = never erased keeps the data longer: direct").toBeNull();
+      // from « never » to a period = erasure starts: also a shortening; reset by SQL to test a plain shortening
+      await sql("UPDATE configs SET last_seen_retention_days = 2000 WHERE tenant_id = $1", [T]);
+      const shorter = await set(1500);
+      expect([202, 409].includes(shorter.status), shorter.text.slice(0, 120)).toBe(true);
+      expect(await cur(), "shortening = earlier erasure: not applied without a second person").toBe(2000);
       await sql("ALTER TABLE configs DISABLE TRIGGER USER");
       await sql("UPDATE configs SET last_seen_retention_days = 1826 WHERE tenant_id = $1", [T]);
       await sql("ALTER TABLE configs ENABLE TRIGGER USER");
@@ -640,30 +648,31 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
         expect(JSON.stringify(r)).not.toContain("2030-06-07");
       }
     });
-    it("idempotent: a second pass erases nothing and writes no new audit row", async () => {
-      const before = (await sql<{ n: number }>("SELECT count(*)::int AS n FROM audit_log WHERE reason LIKE 'Conservation R3%'"))[0]!.n;
+    it("idempotent: a second pass erases nothing and writes no new account row (only its execution trace, q231 B)", async () => {
+      const before = (await sql<{ n: number }>("SELECT count(*)::int AS n FROM audit_log WHERE entity_type = 'User' AND reason LIKE 'Conservation R3%'"))[0]!.n;
       const r = await purge("adm");
-      expect(r.json.data).toEqual({ retentionDays: 1826, erased: 0 });
-      expect((await sql<{ n: number }>("SELECT count(*)::int AS n FROM audit_log WHERE reason LIKE 'Conservation R3%'"))[0]!.n).toBe(before);
+      expect(r.json.data).toEqual({ dryRun: false, retentionDays: 1826, erased: 0 });
+      expect((await sql<{ n: number }>("SELECT count(*)::int AS n FROM audit_log WHERE entity_type = 'User' AND reason LIKE 'Conservation R3%'"))[0]!.n).toBe(before);
+      expect((await sql<{ n: number }>("SELECT count(*)::int AS n FROM audit_log WHERE entity_type = 'LastSeenPurge'"))[0]!.n, "every real run is traced, even at zero").toBeGreaterThanOrEqual(2);
     });
-    it("a shorter retention reaches more accounts at the next pass (1000 days => the 1825.5-day one); 1 day => anyone ended more than a day ago", async () => {
+    it("a shorter retention reaches more accounts at the next pass (1000 days => the 1825.5-day one); 365 days (the floor) => anyone ended more than a year ago", async () => {
       await sql("UPDATE configs SET last_seen_retention_days = 1000 WHERE tenant_id = $1", [T]);
       const r = await purge("adm");
-      expect(r.json.data).toEqual({ retentionDays: 1000, erased: 1 });
+      expect(r.json.data).toEqual({ dryRun: false, retentionDays: 1000, erased: 1 });
       expect((await lastSeen(U.edge2))[0]).toEqual({ last_seen_at: null, last_token_iat: null });
       const fresh = randomUUID(), recent = randomUUID();
-      await ended(fresh, T, "r3-fresh", 0, true, true); // ended 12 h ago
-      await ended(recent, T, "r3-recent", 2, true, true);
-      await sql("UPDATE configs SET last_seen_retention_days = 1 WHERE tenant_id = $1", [T]);
-      expect((await purge("adm")).json.data).toEqual({ retentionDays: 1, erased: 1 });
-      expect((await lastSeen(fresh))[0]!.last_seen_at, "ended 12 h ago, retention 1 day").not.toBeNull();
+      await ended(fresh, T, "r3-fresh", 300, true, true);
+      await ended(recent, T, "r3-recent", 400, true, true);
+      await sql("UPDATE configs SET last_seen_retention_days = 365 WHERE tenant_id = $1", [T]);
+      expect((await purge("adm")).json.data).toEqual({ dryRun: false, retentionDays: 365, erased: 1 });
+      expect((await lastSeen(fresh))[0]!.last_seen_at, "ended 300 days ago, retention 365 days").not.toBeNull();
       expect((await lastSeen(recent))[0]!.last_seen_at).toBeNull();
     });
-    it("NULL retention = never erased: nothing is touched, nothing is audited; no configuration row at all => default 1826", async () => {
+    it("NULL retention = never erased: nothing is touched, only the execution is traced (q231 B); no configuration row at all => default 1826", async () => {
       await sql("UPDATE configs SET last_seen_retention_days = NULL WHERE tenant_id = $1", [T]);
       const keep = randomUUID();
       await ended(keep, T, "r3-keep", 9000, true, true);
-      expect((await purge("adm")).json.data).toEqual({ retentionDays: null, erased: 0 });
+      expect((await purge("adm")).json.data).toEqual({ dryRun: false, retentionDays: null, erased: 0 });
       expect((await lastSeen(keep))[0]!.last_seen_at).not.toBeNull();
       await sql("UPDATE configs SET last_seen_retention_days = 1826 WHERE tenant_id = $1", [T]);
       const saved = (await sql<{ v: unknown }>("SELECT to_jsonb(c) AS v FROM configs c WHERE tenant_id = $1", [T]))[0]!.v;
