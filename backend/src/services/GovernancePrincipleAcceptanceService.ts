@@ -6,6 +6,7 @@ import {
   type GovernancePrincipleAcceptance,
 } from "../domain/entities/GovernanceReviews.js";
 import { isAcceptableReason, type EligibleValidatorQuery } from "../domain/governance/selfValidation.js";
+import { CATALOG_VERSION } from "../domain/governance/catalog.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
@@ -13,8 +14,8 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 
 export const MAX_ACCEPTANCE_REASON_LENGTH = 500;
 export const ACCEPTANCE_LIST_LIMIT = 100;
-/** Version of the A13 principles catalog the acceptance refers to (the catalog is not yet in code: D6). */
-export const PRINCIPLE_CATALOG_VERSION = "0.3";
+/** Version of the A13 principles catalog the acceptance refers to (the catalog in code since D6, q230 A). */
+export const PRINCIPLE_CATALOG_VERSION = CATALOG_VERSION;
 const PRINCIPLE_ID = /^[A-Z]+(-[A-Z0-9]+)+$/;
 
 /** What the list shows. Names (ids) only for who may read the audit trail (q140, R-6.1); `mine` replaces them otherwise. */

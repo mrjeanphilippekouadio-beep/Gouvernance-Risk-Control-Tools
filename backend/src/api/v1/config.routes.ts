@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from "express";
-import { DEFAULT_RESOURCE_READALL_MAX_DAYS } from "../../domain/entities/Config.js";
+import { DEFAULT_RESOURCE_READALL_MAX_DAYS, MIN_LAST_SEEN_RETENTION_DAYS } from "../../domain/entities/Config.js";
 import { z } from "zod";
 import { ABSOLUTE_MAX_SCORE } from "../../domain/scoring.js";
 import { reasonText } from "../validation.js";
@@ -20,7 +20,9 @@ const Days = z.number().int().min(1).max(3650).nullable().optional();
 const GovernanceDelaysBody = z
   .object({ exceptionReviewDelayDays: Days, acceptanceMaxDays: Days, policyRequestExpiryDays: Days, riskManagerVacancyMaxDays: Days,
     // q221 (DECISION-111): a reading of every content lasts 90 days at most — adjustable downwards only (Privacy Q3).
-    resourceReadallMaxDays: z.number().int().min(1).max(DEFAULT_RESOURCE_READALL_MAX_DAYS).nullable().optional(), reason: reasonText(500) })
+    resourceReadallMaxDays: z.number().int().min(1).max(DEFAULT_RESOURCE_READALL_MAX_DAYS).nullable().optional(),
+    // R3 (q227): retention of the « dernière activité » date after the end of an account.
+    lastSeenRetentionDays: z.number().int().min(MIN_LAST_SEEN_RETENTION_DAYS).max(3650).nullable().optional(), reason: reasonText(500) })
   .strict();
 
 const UpdateCommitteeEnforcementBody = z.object({

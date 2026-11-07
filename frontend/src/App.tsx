@@ -28,6 +28,7 @@ import { FrameworksPage } from "./features/frameworks/FrameworksPage";
 import { GovernanceSettingsPage } from "./features/governance/GovernanceSettingsPage";
 import { EvaluationModeRequestsPage } from "./features/governance/EvaluationModeRequestsPage";
 import { OrganizationProfilePage } from "./features/governance/OrganizationProfilePage";
+import { MyDataPage } from "./features/privacy/MyDataPage";
 import { DesignationsPage } from "./features/governance/DesignationsPage";
 import { GovernanceDecisionsPage } from "./features/governance/GovernanceDecisionsPage";
 import { UsersAdmin } from "./features/admin/UsersAdmin";
@@ -42,7 +43,7 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "auditmissions" | "rightsmatrix" | "restricted";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "auditmissions" | "rightsmatrix" | "restricted" | "mydata";
 type NavItem = { id: View; label: string; icon: string; available?: boolean; /** Hidden without this permission (display only). */ requires?: string | string[] } | { separator: string };
 const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
@@ -131,6 +132,7 @@ const PAGE_TITLES: Record<View, string> = {
   govdecisions: "Décisions de gouvernance",
   auditmissions: "Missions d'audit",
   rightsmatrix: "Matrice des droits",
+  mydata: "Vos données",
 };
 
 function App() {
@@ -227,6 +229,7 @@ function App() {
               <span className="topbar-user-chevron" aria-hidden="true">⌄</span>
             </button>
             {logoutOpen && <div className="topbar-session-popover" role="menu">
+              <button type="button" className="topbar-session-action" role="menuitem" onClick={() => { setLogoutOpen(false); go("mydata"); }}><span aria-hidden="true">ⓘ</span>Vos données</button>
               <button type="button" className="topbar-session-action" role="menuitem" onClick={() => {
                 setLogoutOpen(false);
                 if (AUTH_PROVIDER === "local") localAuth.signOut();
@@ -263,6 +266,7 @@ function App() {
             {view === "govdecisions" && <GovernanceDecisionsPage token={token} />}
             {view === "auditmissions" && <AuditMissionsPage token={token} />}
             {view === "rightsmatrix" && <RightsMatrixPage token={token} />}
+            {view === "mydata" && <MyDataPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} />}
             {view === "risks" && <RisksPage token={token} shortcuts={{ onOpenFrameworks: () => go("frameworks"), onOpenAppetite: openAppetite, onOpenScales: () => go("scales"), onOpenProcesses: () => go("processes") }} />}
             {view === "roles" && <RolesAdmin token={token} />}

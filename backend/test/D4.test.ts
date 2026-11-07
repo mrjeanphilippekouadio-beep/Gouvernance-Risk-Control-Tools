@@ -211,6 +211,18 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     expect(w.delays.request()!.status).toBe("WITHDRAWN");
   });
 
+  it("q232 A (SEC D6-01): retention of the « dernière activité » — at least 365 days; SHORTENING needs the second person, lengthening is direct", async () => {
+    const w = configWorld(true);
+    Object.assign(w.row(), { lastSeenRetentionDays: 1826 }); // the column DEFAULT of migration 085
+    const delaysAdmin = actor("u-admin", ["config.read", "config.governancedelays.set"]);
+    await expect(w.service.setGovernanceDelays(delaysAdmin, { lastSeenRetentionDays: 364 }, "r", "q")).rejects.toThrow(ValidationError);
+    const longer = await w.service.setGovernanceDelays(delaysAdmin, { lastSeenRetentionDays: 2000 }, "Plus long", "q");
+    expect(longer).toMatchObject({ config: { lastSeenRetentionDays: 2000 }, pendingRequest: null });
+    const shorter = await w.service.setGovernanceDelays(delaysAdmin, { lastSeenRetentionDays: 400 }, "Plus court", "q");
+    expect(shorter.pendingRequest).toMatchObject({ status: "PENDING", requestedDelays: { lastSeenRetentionDays: 400 } });
+    expect(shorter.config.lastSeenRetentionDays).toBe(2000);
+  });
+
   it("q182 lengthening with nobody else able to approve: applied by the administrator alone, marked and audited", async () => {
     const w = configWorld(false);
     const delaysAdmin = actor("u-admin", ["config.governancedelays.set"]);

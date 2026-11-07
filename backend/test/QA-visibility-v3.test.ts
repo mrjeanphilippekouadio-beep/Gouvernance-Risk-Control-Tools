@@ -50,8 +50,8 @@ describe("QA-visibility-v3 STATIC", () => {
   });
   it("no migration: 083 is still the last one (V3 adds no schema)", () => {
     const names = execFileSync("ls", [join(ROOT, "database", "postgresql", "migrations")], { encoding: "utf8" }).split("\n").filter((f) => f.endsWith(".sql") && !f.endsWith(".down.sql"));
-    // the only schema after 083 is lot V4 (084, resource.readall), never this batch
-    expect(names.sort((a, b) => a.localeCompare(b)).filter((n) => n > "083_resource_visibility_v2.sql")).toEqual(["084_resource_readall.sql"]);
+    // the only schemas after 083 are lot V4 (084, resource.readall) and the D6 panel (085), never this batch
+    expect(names.sort((a, b) => a.localeCompare(b)).filter((n) => n > "083_resource_visibility_v2.sql")).toEqual(["084_resource_readall.sql", "085_governance_tracking.sql"]);
   });
   it("frontend: the notice sits under the 5 lists, the role admin screen offers the reason, the restricted screen is open to RM / Committee / Audit", () => {
     for (const [f, t] of [["risks/RisksPage", "RISK"], ["controls/ControlsPage", "CONTROL"], ["anomalies/AnomaliesPage", "ANOMALY"], ["actions/ActionPlansPage", "ACTION_PLAN"], ["indicators/KpiPage", "KPI"]]) {

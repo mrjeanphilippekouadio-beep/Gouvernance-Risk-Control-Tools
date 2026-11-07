@@ -165,6 +165,12 @@ describe("RoleService", () => {
     ).rejects.toThrow(ValidationError);
   });
 
+  it("q232 A (SEC D6-02): governancehealth.read only on a fixed group or an administration role", async () => {
+    const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
+    await expect(service.create(admin, { name: "Lecteurs panel", permissions: ["governancehealth.read"] }, "REQ-GH1")).rejects.toThrow(ValidationError);
+    await expect(service.create(admin, { name: "Admins panel", permissions: ["governancehealth.read", "role.assign"] }, "REQ-GH2")).resolves.toBeTruthy();
+  });
+
   it("rejects a duplicate active role name", async () => {
     const service = new RoleService(inMemoryRoleRepository(), inMemoryAuditRepository());
     await service.create(admin, { name: "Auditeur", permissions: ["audit.mission.read"] }, "REQ-3");

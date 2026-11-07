@@ -1,7 +1,7 @@
 {
   "meta": {
     "titre": "Principes de gouvernance de la gestion des risques : catalogue, détection, indications par taille",
-    "version": "0.3-PROPOSITION",
+    "version": "0.3",
     "date": "2026-10-18",
     "auteur": "A13 Risk Manager",
     "statut": "PROPOSITION à valider par le PO (DECISION-073, mises à jour DECISION-074 et DECISION-075). Le choix des 6 questions du profil et leurs seuils repassent en cockpit (q154) avant le lot D3. Tous les seuils sont marqués « à valider PO ».",

@@ -100,6 +100,10 @@ function assertRolePermissionRules(group: SystemGroup | null, permissions: Permi
   if (group !== "RISK_MANAGER" && permissions.includes("resourcevisibility.set")) {
     throw new ValidationError("resourcevisibility.set is carried by the Risk Manager group only");
   }
+  // q232 A (DECISION-115, SEC D6-02): the governance panel reads the whole client — fixed groups and administration roles only.
+  if (group === null && permissions.includes("governancehealth.read") && !permissions.some((p) => (ADMIN_PERMISSIONS as string[]).includes(p))) {
+    throw new ValidationError("governancehealth.read is carried by the Risk Manager, Committee and Audit groups or an administration role only (q232)");
+  }
   // q203 (DECISION-104): the audit log returns whole resources (restricted ones too) — reading it is the Audit group's alone.
   if (group !== "AUDIT" && permissions.includes("audit.read")) {
     throw new ValidationError("audit.read (reading the audit log) is carried by the Audit group only (q203)");

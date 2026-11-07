@@ -51,8 +51,8 @@ describe("QA-visibility-v2bis STATIC", () => {
   });
   it("no migration: 083 is still the last one (DECISION-107 adds no schema)", () => {
     const names = execFileSync("ls", [join(ROOT, "database", "postgresql", "migrations")], { encoding: "utf8" }).split("\n").filter((f) => f.endsWith(".sql") && !f.endsWith(".down.sql"));
-    // the only schema after 083 is lot V4 (084, resource.readall), never this batch
-    expect(names.sort((a, b) => a.localeCompare(b)).filter((n) => n > "083_resource_visibility_v2.sql")).toEqual(["084_resource_readall.sql"]);
+    // the only schemas after 083 are lot V4 (084, resource.readall) and the D6 panel (085), never this batch
+    expect(names.sort((a, b) => a.localeCompare(b)).filter((n) => n > "083_resource_visibility_v2.sql")).toEqual(["084_resource_readall.sql", "085_governance_tracking.sql"]);
   });
   it("V3: the list query is paginated (LIMIT / OFFSET, limit bounded to 500)", () => {
     const src = read("backend", "src", "infrastructure", "database", "postgres", "PostgresResourceAccessRepository.ts");

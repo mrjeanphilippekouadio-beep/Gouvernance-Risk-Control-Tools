@@ -380,6 +380,7 @@ describe("QA-panel D4 / no self-validation guard outside the gate (static)", () 
     "GovernancePrincipleAcceptanceService.ts": "D5: the acceptor never confirms or rejects their own acceptance",
     "ConfigService.ts": "own maker-checker (q158 policy requests: requestedBy)",
     "DashboardScopeResolver.ts": "comment only",
+    "GovernanceHealthService.ts": "D6: `mine` flag on a listed exception (display only, not a validation)",
     "EvidenceService.ts": "lot V2 visibility: the executor reads the evidence of their own execution (not a validation)",
     "ControlEffectivenessService.ts": "gate", "ControlExecutionService.ts": "gate", "FindingService.ts": "gate", "GovernanceService.ts": "gate", "ActionPlanService.ts": "gate",
   };
