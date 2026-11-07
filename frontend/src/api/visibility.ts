@@ -52,7 +52,8 @@ export interface RestrictedResource {
 }
 
 /** V3 (q196, q198): one number per type the reader may list; null for the groups that see everything (no mention). */
-export type HiddenCounts = Partial<Record<RestrictedResource["type"], number>> | null;
+/** q228 A (DECISION-115): from 1 to 4, the server sends `{ belowThreshold: true }` instead of the number. */
+export type HiddenCounts = Partial<Record<RestrictedResource["type"], number | { belowThreshold: true }>> | null;
 
 const RESTRICTED_PAGE = 500;
 

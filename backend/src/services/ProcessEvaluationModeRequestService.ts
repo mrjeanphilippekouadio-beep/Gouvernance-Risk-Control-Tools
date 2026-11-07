@@ -1,4 +1,4 @@
-import { SYSTEM_SCOPE } from "../domain/visibility.js";
+import { SYSTEM_SCOPE, readerScope, type ReadScope } from "../domain/visibility.js";
 import type { ProcessEvaluationModeRequestRepository } from "../domain/repositories/ProcessEvaluationModeRequestRepository.js";
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
@@ -134,7 +134,8 @@ export class ProcessEvaluationModeRequestService {
     const request = await this.requests.getById(actor.tenantId, id);
     if (!request) throw new NotFoundError("ProcessEvaluationModeRequest", id);
 
-    const riskOwners = await this.getRiskOwners(actor.tenantId, request.processId);
+    // SEC V4B-04: only the risks the reader may see (a NOMINATIF/PERIMETRE risk never shows its id or owner here).
+    const riskOwners = await this.getRiskOwners(actor.tenantId, request.processId, readerScope(actor));
     return { ...request, riskOwners };
   }
 
@@ -281,8 +282,9 @@ export class ProcessEvaluationModeRequestService {
    * reasoning as RiskOwnershipService). Display/audit data only — never
    * consulted for authorization.
    */
-  private async getRiskOwners(tenantId: string, processId: string): Promise<RiskOwnerRef[]> {
-    const risks = await this.risks.list(tenantId, undefined, SYSTEM_SCOPE);
+  /** The audit record (validate) keeps every owner (SYSTEM_SCOPE); a reader's view is scoped (SEC V4B-04). */
+  private async getRiskOwners(tenantId: string, processId: string, scope: ReadScope = SYSTEM_SCOPE): Promise<RiskOwnerRef[]> {
+    const risks = await this.risks.list(tenantId, undefined, scope);
     return risks
       .filter((r): r is typeof r & { ownerId: string } => r.processId === processId && r.ownerId !== null)
       .map((r) => ({ riskId: r.id, ownerId: r.ownerId }));

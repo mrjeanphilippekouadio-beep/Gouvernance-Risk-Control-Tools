@@ -32,7 +32,11 @@ function manager(over: Partial<Record<keyof ResourceAccessRepository, unknown>> 
 
 describe("V3 — « X éléments non visibles » (q196, q198)", () => {
   it("only the types the reader may list; null (no mention) for a group that sees everything", async () => {
-    expect(await manager().m.hiddenCounts(actor(READER, ["risk.read", "kpi.read"]))).toEqual({ RISK: 2, KPI: 4 });
+    // q228 A (DECISION-115): 1 to 4 is « moins de 5 », never the number; 0 and 5+ stay exact
+    expect(await manager().m.hiddenCounts(actor(READER, ["risk.read", "kpi.read"]))).toEqual({ RISK: { belowThreshold: true }, KPI: { belowThreshold: true } });
+    const exact = manager({ hiddenCounts: vi.fn(async () => ({ RISK: 0, CONTROL: 5, ANOMALY: 4, ACTION_PLAN: 1, KPI: 12 })) });
+    expect(await exact.m.hiddenCounts(actor(READER, ["risk.read", "control.read", "anomaly.read", "actionplan.read", "kpi.read"])))
+      .toEqual({ RISK: 0, CONTROL: 5, ANOMALY: { belowThreshold: true }, ACTION_PLAN: { belowThreshold: true }, KPI: 12 });
     expect(await manager({ hiddenCounts: vi.fn(async () => null) }).m.hiddenCounts(actor(RM, ["risk.read"]))).toBeNull();
   });
 });

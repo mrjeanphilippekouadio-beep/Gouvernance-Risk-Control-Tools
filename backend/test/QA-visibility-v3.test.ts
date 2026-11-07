@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BAD_REASONS, ROOT, qaVisibilityHarness } from "./qaVisibilityHarness.js";
+import { PostgresResourceAccessRepository } from "../src/infrastructure/database/postgres/PostgresResourceAccessRepository.js";
 
 /**
  * QA-visibility-v3 (level 2): lot V3 (DECISION-108/109). q196/q198: `GET /hidden-counts` (« X éléments non visibles »: one number per type,
@@ -89,7 +90,12 @@ const expectedCounts = (who: Who) => Object.fromEntries(Object.entries(EFFECTIVE
 
 const H = qaVisibilityHarness({ db: DB, port: PORT, who: WHO, uid: UID });
 const { sql, call, get, put, post, audits, permChanges, notifs, sees } = H;
-const counts = async (w: Who) => (await get(w, "/hidden-counts")).json?.data;
+// DECISION-115 (q228 A): the API sends a number from 1 to 4 as « moins de 5 » ({ belowThreshold: true }). The exact
+// oracles below read the server's own count (the repository the API calls); the API shape is checked against `shape`.
+const accessRepo = new PostgresResourceAccessRepository({ query: async (q: string, p: unknown[]) => ({ rows: await sql(q, p) }) } as never);
+const counts = async (w: Who) => accessRepo.hiddenCounts(I("001"), UID[w]) as Promise<Record<string, number>>;
+const apiCounts = async (w: Who) => (await get(w, "/hidden-counts")).json?.data;
+const shape = (n: number) => (n > 0 && n < 5 ? { belowThreshold: true } : n);
 const setVis = (w: Who, path: string, visibility: string, add: string[] = [], reason = "Motif QA V3") => put(w, `${path}/visibility`, { visibility, addUserIds: add, revokeUserIds: [], reason });
 const failAudit = async (entityId: string, action = "PERMISSION_CHANGE") => {
   await sql(`CREATE OR REPLACE FUNCTION qa_v3_fail_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action = '${action}' AND NEW.entity_id::text = '${entityId}' THEN RAISE EXCEPTION 'qa audit failure'; END IF; RETURN NEW; END $$`);
@@ -120,6 +126,7 @@ describe.skipIf(!live)("QA-visibility-v3 on the REAL server + LOCAL PostgreSQL 1
     for (const who of WHO.filter((w) => !SEE_ALL.includes(w))) {
       it(`${who}: one number per type = the PERIMETRE items (effective level) the profile does not read; NOMINATIF, CLIENT and own-level-ignored never counted`, async () => {
         expect(await counts(who)).toEqual(expectedCounts(who));
+        expect(await apiCounts(who)).toEqual(Object.fromEntries(Object.entries(expectedCounts(who)).map(([t, n]) => [t, shape(n)])));
       });
     }
     it("the answer is only numbers per type: no id, no label, no canary, no breakdown", async () => {
@@ -127,18 +134,20 @@ describe.skipIf(!live)("QA-visibility-v3 on the REAL server + LOCAL PostgreSQL 1
         const r = await get(who, "/hidden-counts");
         expect(r.text).not.toMatch(/CANARY|[0-9a-f]{8}-[0-9a-f]{4}-/);
         expect(Object.keys(r.json.data).sort((a, b) => a.localeCompare(b))).toEqual(["ACTION_PLAN", "ANOMALY", "CONTROL", "KPI", "RISK"]);
-        expect(Object.values(r.json.data).every((n) => Number.isInteger(n) && (n as number) >= 0)).toBe(true);
+        // DECISION-115: 0 or 5+ as a number, 1 to 4 as « moins de 5 » (never the number)
+        expect(Object.values(r.json.data).every((n) => (Number.isInteger(n) && ((n as number) === 0 || (n as number) >= 5))
+          || JSON.stringify(n) === '{"belowThreshold":true}')).toBe(true);
       }
     });
     it("limited to the types the reader may read: no risk.read => no RISK key; no kpi.read => no KPI key; nothing at all without any read right", async () => {
       await sql("UPDATE users SET roles = array_remove(array_remove(roles, 'risk.read'), 'kpi.read') WHERE email = 'out@vv1.test'");
       try {
-        const c = await counts("out");
+        const c = await apiCounts("out");
         expect(Object.keys(c).sort((a, b) => a.localeCompare(b))).toEqual(["ACTION_PLAN", "ANOMALY", "CONTROL"]);
-        expect(c.CONTROL).toBe(expectedCounts("out")["CONTROL"]);
+        expect(c.CONTROL).toEqual(shape(expectedCounts("out")["CONTROL"] as number));
       } finally { await sql("UPDATE users SET roles = roles || ARRAY['risk.read','kpi.read']::text[] WHERE email = 'out@vv1.test'"); }
       await sql("UPDATE users SET roles = ARRAY['notification.read']::text[] WHERE email = 'n1@vv1.test'");
-      expect(await counts("n1")).toEqual({});
+      expect(await apiCounts("n1")).toEqual({});
     });
     it("the count follows the data at once: restricting a CLIENT control to PERIMETRE adds 1 for an outsider; naming the outsider removes it; NOMINATIF never counts; opening again removes it", async () => {
       const before = (await counts("out")).CONTROL as number;
