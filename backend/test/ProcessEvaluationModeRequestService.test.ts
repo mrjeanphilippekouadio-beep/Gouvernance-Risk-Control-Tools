@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { ProcessEvaluationModeRequestService } from "../src/services/ProcessEvaluationModeRequestService.js";
 import type { ProcessEvaluationModeRequestRepository } from "../src/domain/repositories/ProcessEvaluationModeRequestRepository.js";
@@ -356,6 +356,16 @@ describe("ProcessEvaluationModeRequestService", () => {
       // ownership is visible/audited, never authoritative (DECISION-006).
       const riskOwnerActor: AuthenticatedUser = { ...proposerActor, userId: owner1, roles: ["process.read"] };
       await expect(service.validate(riskOwnerActor, request.id, "REQ-2")).rejects.toThrow(ForbiddenError);
+    });
+
+    it("SEC V4B-04: get() lists the risk owners in the reader's scope, never the system scope", async () => {
+      const process = makeProcess();
+      const { service, risks } = newService({ processes: [process], risks: [makeRisk({ processId: process.id, ownerId: "o" })] });
+      const request = await service.propose(proposerActor, process.id, "PARTICIPATIF", "REQ-1");
+      const spy = vi.spyOn(risks, "list");
+      await service.get(validatorActor, request.id);
+      const scope = spy.mock.calls[0]![2] as { userId?: string } | undefined;
+      expect(scope).toEqual({ all: false, userId: validatorActor.userId });
     });
 
     it("audits the validation with the process's risk owners attached", async () => {
