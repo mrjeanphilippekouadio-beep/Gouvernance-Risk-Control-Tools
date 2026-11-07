@@ -44,3 +44,31 @@ Recommandation A10 : **(b)**, ou au minimum ajouter V4B-03 à (a).
 |---|---|---|---|
 | V4B-01, V4B-02 | INFO | PO / Privacy | REVIEW_REQUIRED (objectif de la règle à reformuler) |
 | V4B-03 | INFO | HUMAN / Privacy, puis A06 | REVIEW_REQUIRED (à porter dans ACTION_ITEMS) |
+
+## Revue 2 A10 (2026-11-07, HEAD `c021d84`, q228 A / DECISION-115)
+
+- Méthode : analyse statique du diff `origin/staging...c021d84` et recherche de tous les chemins qui restituent un nombre d'éléments que le lecteur ne voit pas. Vitest `visibility-v3`, `QA-visibility-v3` et `DashboardService` : 41 verts (42 ignorés car il faut une base). `tsc` propre. Aucun code modifié.
+- **Verdict : VERT pour le lot.** Un constat **préexistant** remonte (V4B-04 MEDIUM 4,3, hors diff) : il contourne q228 et doit être traité avant la production. Aucune escalade.
+
+| Point | Résultat | Analyse |
+|---|---|---|
+| `GET /hidden-counts` | **PASS** | 1 à 4 → `{ belowThreshold: true }` ; 0 et ≥ 5 → nombre exact ; groupes fixes → `null` ; un type n'est servi qu'avec sa permission `*.read`. NOMINATIF n'est jamais compté (inchangé). Calculé côté serveur : le nombre exact ne quitte pas `ResourceVisibilityManager`. |
+| Résidus du seuil retiré | **PASS** | Le diff contre staging ne touche plus que `hiddenCounts` et son affichage. `DashboardService`, `anyRestricted` et `belowThreshold` des agrégats ont disparu. Les tableaux de bord sont identiques à staging, et calculés en scope lecteur (Revue 1). |
+| Pagination, en-têtes, autres compteurs | **PASS** | Aucun en-tête de total. Il existe deux `total`, mais ils ne portent pas sur les racines restreintes : mesures d'un KRI déjà lisible et annuaire. Aucun dépôt racine ne fait de `count(*)` sur tout le client. `observe` (profil d'organisation) ne compte que des comptes et des groupes. Les listes sont filtrées dans le SQL avant la limite. |
+| Inférence dans le temps | **INFO (résidu inhérent, acceptable)** | Un observateur régulier repère les passages de seuil : 0 → « moins de 5 » (première ressource masquée), « moins de 5 » → 5 (exactement 5 à cet instant), 5 → « moins de 5 » (exactement 4). Les variations entre 1 et 4 restent invisibles. Le seuil ne sert qu'à ça ; un arrondi (par exemple par tranches de 5) ne ferait que déplacer les bornes. Acceptable. |
+| Liste des ressources restreintes (A1) | **INFO (HUMAN)** | Un administrateur hors groupes fixes reçoit `type`/`id`/niveau de **toutes** les ressources restreintes, y compris NOMINATIF (DECISION-103, q223). Il en déduit le nombre exact de ce qu'il ne voit pas, ce qui contredit q228 pour cette population. C'est voulu par A1 (support) : à acter explicitement par HUMAN, ou appliquer la même règle aux admins (ne servir que le nombre). Le panel D6 (`feat/r1-governance-d6`, D6-02) donne aussi des ids de risques restreints aux admins. |
+
+### V4B-04 — `GET /process-evaluation-mode-requests/:id` renvoie id et propriétaire de TOUS les risques du processus, masqués compris (MEDIUM, CVSS 4,3 `AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N`, CONFIRMED par lecture, préexistant)
+
+- `ProcessEvaluationModeRequestService.get` (et la validation) appelle `getRiskOwners`, qui lit `risks.list(..., SYSTEM_SCOPE)` puis renvoie `riskOwners: [{ riskId, ownerId }]` pour chaque risque du processus, PERIMETRE et NOMINATIF compris. Le seul garde est `evaluationmode.validate`.
+- Cette permission n'est pas réservée aux groupes fixes (033 : permission dédiée, posable sur un rôle ordinaire). Son porteur obtient le nombre exact, les ids et les propriétaires des risques qu'il ne voit pas. Cela contourne q228, et V1-05 (ids masqués).
+- En V1, ce chemin avait été classé « affichage, sans restitution ». Il restitue bien des ids au client.
+- **Correctif attendu (A06)** : filtrer `riskOwners` par `hiddenRiskIds` (scope lecteur) avant la réponse ; la ligne d'audit garde la liste complète, réservée à l'Audit. Test : un risque NOMINATIF du processus est absent de la réponse d'un validateur hors liste.
+
+| Constat | Sévérité | Owner | Statut |
+|---|---|---|---|
+| q228 `hidden-counts` | — | — | PASS |
+| V4B-01/02 | — | — | Clos (seuil des agrégats retiré) |
+| V4B-03 | — | — | Clos (q228 A) |
+| V4B-04 | MEDIUM 4,3 | A06 | REMEDIATION_REQUIRED (avant production), retest A10 |
+| A1 et compte exact pour les admins | INFO | HUMAN | REVIEW_REQUIRED |
