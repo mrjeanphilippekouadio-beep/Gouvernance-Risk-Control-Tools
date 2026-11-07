@@ -421,3 +421,4 @@ Mémoire persistante du rôle Security sur GRC Tools. À lire en premier par tou
 - INFO HUMAN : A1 donne aux admins la liste de toutes les ressources restreintes, donc le nombre exact de ce qu'ils ne voient pas (contredit q228 pour eux).
 - Leçon : un « SYSTEM_SCOPE pour affichage » doit être suivi jusqu'à la RÉPONSE HTTP. Si des ids ou des couples sortent vers le client, c'est une lecture en clair, pas une lecture interne. À chaque nouvelle règle de masquage, refaire le grep `SYSTEM_SCOPE` des services et suivre chaque résultat jusqu'au `res.json`.
 - Tracker (7bis) : V4B-04 (A06, retest A10), A1 vs q228 (HUMAN).
+- Retest V4B-04 (906f9e2, 2026-11-07) : RETEST_PASS, lot V4bis VERT. `get` en `readerScope` ; `validate` garde SYSTEM_SCOPE seulement pour `audit_log.newValue` (AUDIT seul), sa réponse = Process ; list/reject/propose/setMode sans champ de risque ; aucune notification. Reste l'INFO HUMAN A1 vs q228.
