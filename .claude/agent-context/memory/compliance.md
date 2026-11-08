@@ -15,5 +15,7 @@
 
 - 2026-11-08, CMP-f5b (écran santé gouvernance) : présentation conforme en conception (pas de faux vert, en attente = non respecté, masquage Personne N). q169 introuvable dans mon worktree : ne jamais conclure sur un plafond non lu ; demander la valeur. Exiger côté serveur : demandeur ≠ confirmeur, auteur ≠ relecteur, durées en liste fermée.
 
+- 2026-11-08, CMP-q217-q237-conservation (q245) : DECISION-038 n° 8 ne nomme pas son objet ; seule autre mention de 10 ans = EVD §33 n° 5 (évidences), donc lecture « évidences » probable mais non prouvée. Plancher 10 ans piste d'audit = Instruction 017-12-2010 (SFD) reprise dans compliance.md §13 ; applicabilité à Djamo (SFD vs EME/paiement) et objet visé (journal d'un outil GRC interne ≠ piste transactionnelle) non établis : à confirmer par le juriste. Conflit possible : q217 si le motif est élément de la piste ; q237 si D < plancher et identité exigée (pseudonymisation irréversible). Aucune purge de motif/identité avant avis juriste + DPO. Reco : une question PO (durée du journal, option A 10 ans plancher configurable).
+
 ## Questions PO ouvertes (à tracer en ACTION_ITEMS par l'orchestrateur, owner HUMAN)
 - Durée/recertification du droit readall ; périmètre des dossiers personnes nommées ; rôle de l'Audit dans la confirmation ; absence de confirmeur éligible / accès d'urgence.
