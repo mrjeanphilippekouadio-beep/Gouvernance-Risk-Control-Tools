@@ -1,4 +1,6 @@
 import type {
+  AssignmentResult,
+  CreateAssignmentRequestInput,
   BootstrapFacts,
   ChangeRequestStatus,
   DecisionRegime,
@@ -82,6 +84,17 @@ export interface RiskFrameworkRepository {
   ): Promise<DecisionResult>;
   /** B-6d (q77): the latest BOOTSTRAP decision of the tenant, or null (arrival notices). */
   latestBootstrapRequest?(tenantId: string): Promise<RiskFrameworkChangeRequest | null>;
+  /**
+   * B-6c (q89), one transaction. Locks the Dispositif of arrival (not archived, has an ACTIVE version) and the process
+   * (PROCESS level, not already attached to it, no other PENDING assignment), inserts the ASSIGN_PROCESS request.
+   * Optional on the interface (fakes); the service fails closed without it.
+   */
+  createAssignmentRequest?(input: CreateAssignmentRequestInput): Promise<RiskFrameworkChangeRequest>;
+  /**
+   * B-6c, one transaction. Reserves the PENDING ASSIGN_PROCESS request (FOR UPDATE) and records the decision;
+   * APPROVED also writes `processes.risk_framework_id` (effect on the evaluations created from then on only).
+   */
+  decideAssignment?(tenantId: string, requestId: string, decision: RecordDecisionInput, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult>;
   /** Requester's own retraction; version back to DRAFT. The service checks who may call it. */
   withdraw(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult>;
 }

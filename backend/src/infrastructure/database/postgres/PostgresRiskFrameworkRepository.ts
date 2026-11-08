@@ -2,6 +2,8 @@ import type { Pool, PoolClient } from "pg";
 import type { RiskFrameworkRepository } from "../../../domain/repositories/RiskFrameworkRepository.js";
 import type {
   AppetiteThresholdEntry,
+  AssignmentResult,
+  CreateAssignmentRequestInput,
   ApproverGroup,
   ChangeApprover,
   ChangeRequestKind,
@@ -553,10 +555,8 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     }
     const ceiling = scale.probability_levels * scale.impact_levels;
     const over: string[] = [];
-    const all: Array<[string, number]> = [];
     const check = (label: string, value: number | null) => {
       if (value === null) return;
-      all.push([label, value]);
       if (value > ceiling) over.push(`${label} (${value})`);
     };
     check("seuil Comité évaluation de la version", v.committeeEvaluationMinScore);
@@ -580,18 +580,10 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
                          WHERE x.tenant_id = $1 AND x.rating_scale_id = rating_scales.id AND x.status = 'ACTIVE')`,
       [tenantId, v.ratingScaleId],
     );
-    // F-B6a-10. Scales kept ACTIVE (referenced by another ACTIVE version) can be the one the legacy readers
-    // pick (newest ACTIVE wins): every threshold must also fit the smallest ceiling among ALL scales left ACTIVE.
-    const left = await c.query<{ ceiling: number | null }>(
-      `SELECT min(probability_levels * impact_levels)::int AS ceiling FROM rating_scales
-       WHERE tenant_id = $1 AND status = 'ACTIVE' AND deleted_at IS NULL`,
-      [tenantId],
-    );
-    const min = left.rows[0]?.ceiling ?? ceiling;
-    const tooHigh = all.filter(([, value]) => value > min).map(([label, value]) => `${label} (${value})`);
-    if (tooHigh.length > 0) {
-      throw new ValidationError(`Cannot activate: these thresholds exceed the smallest maximum score (${min}) among the rating scales that stay ACTIVE: ${tooHigh.join(", ")}. Lower them first.`);
-    }
+    // B-6c (spec §2.3, I-C1 confirmed by A13): the F-B6a-10 check against the smallest ceiling of the OTHER
+    // Dispositifs' scales is gone. Each version is compared to its own scale only (above), so a 6x6 Dispositif
+    // (Committee threshold 21) and a 3x3 one can both be ACTIVE. Precondition: the legacy-reader inventory is closed
+    // (B6bFollowups.test.ts), i.e. no guard reads "the newest ACTIVE scale" any more.
   }
 
   async recordDecision(tenantId: string, requestId: string, d: RecordDecisionInput, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult> {
@@ -739,6 +731,89 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
       [tenantId],
     );
     return rows[0] ? requestOf(rows[0]) : null;
+  }
+
+  /** B-6c: Dispositif of arrival must be open (not archived) and carry an ACTIVE version; read under a share lock. */
+  private async assertTargetOpen(c: PoolClient, tenantId: string, frameworkId: string): Promise<void> {
+    const f = await c.query(
+      `SELECT 1 FROM risk_frameworks WHERE tenant_id = $1 AND id = $2 AND archived_at IS NULL FOR SHARE`,
+      [tenantId, frameworkId],
+    );
+    if (f.rowCount !== 1) throw new ValidationError("Le Dispositif d'arrivée n'existe pas ou est archivé");
+    const v = await c.query(
+      `SELECT 1 FROM risk_framework_versions WHERE tenant_id = $1 AND framework_id = $2 AND status = 'ACTIVE'`,
+      [tenantId, frameworkId],
+    );
+    if (v.rowCount !== 1) throw new ValidationError("Le Dispositif d'arrivée n'a pas de version active : activez-en une d'abord");
+  }
+
+  /** B-6c: the process row under lock; only a live PROCESS-level process can carry a Dispositif (CHECK in 055). */
+  private async lockProcess(c: PoolClient, tenantId: string, processId: string): Promise<string | null> {
+    const { rows } = await c.query<{ level: string; risk_framework_id: string | null }>(
+      `SELECT level, risk_framework_id FROM processes WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+      [tenantId, processId],
+    );
+    const p = rows[0];
+    if (!p) throw new ValidationError(`Process ${processId} does not exist in this tenant`);
+    if (p.level !== "PROCESS") throw new ValidationError("Seul un processus de niveau PROCESS peut être rattaché à un Dispositif");
+    return p.risk_framework_id;
+  }
+
+  async createAssignmentRequest(input: CreateAssignmentRequestInput): Promise<RiskFrameworkChangeRequest> {
+    return this.tx(async (c) => {
+      await this.assertTargetOpen(c, input.tenantId, input.frameworkId);
+      const previous = await this.lockProcess(c, input.tenantId, input.processId);
+      if (previous === input.frameworkId) throw new ValidationError("Ce processus est déjà rattaché à ce Dispositif");
+      const pending = await c.query(
+        `SELECT 1 FROM risk_framework_change_requests
+         WHERE tenant_id = $1 AND kind = 'ASSIGN_PROCESS' AND process_id = $2 AND status = 'PENDING'`,
+        [input.tenantId, input.processId],
+      );
+      if ((pending.rowCount ?? 0) > 0) throw new ConflictError("Une demande de rattachement est déjà en attente pour ce processus");
+      const { rows } = await c.query<RequestRow>(
+        `INSERT INTO risk_framework_change_requests
+           (tenant_id, kind, framework_id, process_id, previous_value, reason, requested_by)
+         VALUES ($1, 'ASSIGN_PROCESS', $2, $3, $4, $5, $6) RETURNING *`,
+        [input.tenantId, input.frameworkId, input.processId, JSON.stringify({ frameworkId: previous }), input.reason, input.requestedBy],
+      );
+      return this.audited(c, requestOf(rows[0]!), input.audit);
+    });
+  }
+
+  async decideAssignment(tenantId: string, requestId: string, d: RecordDecisionInput, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult> {
+    return this.tx(async (c) => {
+      const locked = await c.query<RequestRow>(
+        `SELECT * FROM risk_framework_change_requests WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, requestId],
+      );
+      const req = locked.rows[0];
+      if (!req) throw new NotFoundError("RiskFrameworkChangeRequest", requestId);
+      if (req.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${req.status})`);
+      if (req.kind !== "ASSIGN_PROCESS" || !req.process_id) throw new ValidationError(`Request kind ${req.kind} is not an assignment`);
+
+      const decided = await c.query<RequestRow>(
+        `UPDATE risk_framework_change_requests
+         SET status = $3, decided_by = $4, decided_at = now(), decision_comment = $5,
+             decision_regime = $6, decider_group = $7, ratification_status = $8, fallback_cause = $9
+         WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+        [tenantId, requestId, d.outcome, d.decidedBy, d.comment, d.decisionRegime, d.deciderGroup, d.ratificationStatus, d.fallbackCause ?? null],
+      );
+      const request = requestOf(decided.rows[0]!);
+      const processId = req.process_id;
+      if (d.outcome === "REJECTED") {
+        // A refusal never needs the process or the target to still be usable; nothing is written on the process.
+        const asked = (req.previous_value as { frameworkId?: string | null } | null)?.frameworkId ?? null;
+        return this.audited(c, { request, processId, previousFrameworkId: asked, frameworkId: null }, audit);
+      }
+      const previous = await this.lockProcess(c, tenantId, processId);
+      // The target may have been archived or lost its ACTIVE version since the request: replayed under lock.
+      await this.assertTargetOpen(c, tenantId, req.framework_id);
+      await c.query(
+        `UPDATE processes SET risk_framework_id = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, processId, req.framework_id],
+      );
+      return this.audited(c, { request, processId, previousFrameworkId: previous, frameworkId: req.framework_id }, audit);
+    });
   }
 
   async withdraw(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult> {

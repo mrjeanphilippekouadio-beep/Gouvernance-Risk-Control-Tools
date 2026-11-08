@@ -693,5 +693,26 @@ describe("RiskService", () => {
         ),
       ).rejects.toThrow(ValidationError);
     });
+
+    // F-B6b-04: changing a risk's process may change its Dispositif; the audit keeps both.
+    it("audits the Dispositif before and after when the process changes", async () => {
+      const audit = inMemoryAuditRepository();
+      const pOld = stubProcess();
+      const pNew = stubProcess();
+      const frameworks = {
+        async getDefaultFramework() { return { id: "fw-default" } as never; },
+        async getProcessFrameworkId(_t: string, pid: string) { return pid === pNew.id ? "fw-b" : null; },
+      };
+      const service = new RiskService(inMemoryRiskRepository(), audit, undefined, undefined, undefined, undefined,
+        inMemoryProcessRepository([pOld, pNew]), undefined, undefined, undefined, frameworks);
+      const risk = await service.create(actor, { process: "P", description: "D", processId: pOld.id }, "R1");
+      await service.update(actor, risk.id, { processId: pNew.id }, "R2");
+      type Ev = { entityType: string; action: string; oldValue: { riskFrameworkId?: string }; newValue: { riskFrameworkId?: string; frameworkChanged?: boolean }; userId: string };
+      const ev = (audit.events as Ev[]).find((e) => e.entityType === "Risk" && e.newValue?.frameworkChanged !== undefined)!;
+      expect(ev.oldValue.riskFrameworkId).toBe("fw-default");
+      expect(ev.newValue.riskFrameworkId).toBe("fw-b");
+      expect(ev.newValue.frameworkChanged).toBe(true);
+      expect(ev.userId).toBe(actor.userId);
+    });
   });
 });

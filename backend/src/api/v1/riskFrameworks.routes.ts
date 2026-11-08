@@ -57,6 +57,7 @@ const IdentityBody = z
 const DraftBody = z.object({ fromVersionId: Id.optional() }).strict();
 const PatchVersionBody = z.object({ ratingScaleId: Id.optional(), ...ParamsShape }).partial().strict();
 const ReasonBody = z.object({ reason: Reason }).strict();
+const AssignBody = z.object({ processId: Id, reason: Reason }).strict();
 const ApproveBody = z.object({ comment: Comment.optional() }).strict();
 const RejectBody = z.object({ comment: Comment.min(1) }).strict();
 const WithdrawBody = z.object({ reason: Comment.optional() }).strict();
@@ -220,6 +221,17 @@ export function riskFrameworksRouter(service: RiskFrameworkService): Router {
     try {
       const body = ReasonBody.parse(req.body);
       const request = await service.requestActivation(req.user, id(req.params["id"]), id(req.params["vid"]), body.reason, req.requestId);
+      res.status(201).json({ data: request });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // B-6c (q89): request the attachment of a process to this Dispositif (decided via /change-requests/:rid/approve|reject).
+  router.post("/:id/process-assignments", async (req, res, next) => {
+    try {
+      const body = AssignBody.parse(req.body);
+      const request = await service.requestProcessAssignment(req.user, id(req.params["id"]), body, req.requestId);
       res.status(201).json({ data: request });
     } catch (err) {
       next(err);

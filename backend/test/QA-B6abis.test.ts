@@ -966,7 +966,7 @@ describe("QA-B6abis mirrorScale through recordDecision (F-B6a-01)", () => {
     const f = statefulPool(seedDb());
     await new PostgresRiskFrameworkRepository(f.pool).recordDecision(T1, "r1", approve);
     const scaleSql = f.log.filter((q) => /rating_scales/.test(q));
-    expect(scaleSql.length).toBeGreaterThanOrEqual(4);
+    expect(scaleSql.length).toBeGreaterThanOrEqual(3); // B-6c: the inter-Dispositif min query is gone
     for (const q of scaleSql) {
       expect(q).toMatch(/tenant_id = \$1/);
       expect(q).not.toMatch(/'(sNew|sOld|t1|u2)'/);

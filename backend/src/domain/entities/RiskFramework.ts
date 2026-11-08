@@ -204,6 +204,25 @@ export interface RecordBootstrapDecisionInput {
   justification: BootstrapJustification;
 }
 
+/** B-6c (q89): request to attach a PROCESS-level Process to a Dispositif; `requestedBy` is set by the service. */
+export interface CreateAssignmentRequestInput {
+  tenantId: string;
+  frameworkId: string;
+  processId: string;
+  reason: string;
+  requestedBy: string;
+  audit?: TransactionalAudit<RiskFrameworkChangeRequest>;
+}
+
+/** B-6c: outcome of an ASSIGN_PROCESS decision. `previousFrameworkId` null = the process followed the tenant default. */
+export interface AssignmentResult {
+  request: RiskFrameworkChangeRequest;
+  processId: string;
+  previousFrameworkId: string | null;
+  /** The Dispositif now attached (APPROVED) or null (REJECTED: nothing written on the process). */
+  frameworkId: string | null;
+}
+
 export interface DecisionResult {
   request: RiskFrameworkChangeRequest;
   version: RiskFrameworkVersion;

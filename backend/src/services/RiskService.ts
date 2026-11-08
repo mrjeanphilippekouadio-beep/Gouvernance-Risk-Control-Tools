@@ -7,6 +7,8 @@ import type { RiskEscalationRepository } from "../domain/repositories/RiskEscala
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
 import type { CreateRiskInput, Risk, RiskVisibilityState, UpdateRiskInput } from "../domain/entities/Risk.js";
 import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
+import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
+import { resolveApplicableFrameworkId } from "./riskFrameworkResolution.js";
 import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 import { writeAudited } from "./auditedWrite.js";
 import { sameVisibilityState, type ResourceVisibilityManager } from "./resourceVisibility.js";
@@ -55,7 +57,19 @@ export class RiskService {
     private readonly notifications?: Pick<NotificationRepository, "create">,
     /** q212 (DECISION-109): a designation that opens a restricted risk is reasoned, traced and reported. Wired in server.ts. */
     private readonly access?: ResourceVisibilityManager,
+    /** F-B6b-04: optional. Absent, a process change of a risk is audited without the Dispositif before/after. */
+    private readonly frameworks?: Pick<RiskFrameworkRepository, "getDefaultFramework" | "getProcessFrameworkId">,
   ) {}
+
+  /** F-B6b-04: the Dispositif id that applies to a risk placed on `processId` (spec §7); null if none. Best effort: a read failure never blocks the update. */
+  private async applicableFrameworkId(tenantId: string, processId: string | null): Promise<string | null> {
+    if (!this.frameworks) return null;
+    try {
+      return await resolveApplicableFrameworkId({ frameworks: this.frameworks, processes: this.processes }, tenantId, processId);
+    } catch {
+      return null;
+    }
+  }
 
   /** q212: before a designation, whether it opens the restricted risk (reason required outside the RM group). */
   private async designationOpening(actor: AuthenticatedUser, risk: Risk, userId: string | null, reason: string | undefined, role: "owner" | "superior owner" = "owner") {
@@ -275,6 +289,12 @@ export class RiskService {
       }
     }
 
+    // F-B6b-04: moving a risk to another process may move it to another Dispositif (a methodological act): the audit
+    // keeps the Dispositif that applied before and the one that applies after (spec §7), whether or not it changed.
+    const processMoved = input.processId !== undefined && (input.processId ?? null) !== (before.processId ?? null);
+    const frameworkBefore = processMoved ? await this.applicableFrameworkId(actor.tenantId, before.processId ?? null) : null;
+    const frameworkAfter = processMoved ? await this.applicableFrameworkId(actor.tenantId, input.processId ?? null) : null;
+
     const repo = this.risks;
     // Lot V2: the repository measures the real effective readers (`perimeterWidening`); the rule below is the fallback.
     const widened = (updated: Risk & { perimeterWidening?: boolean }) => updated.perimeterWidening ?? perimeter?.widening ?? false;
@@ -294,6 +314,17 @@ export class RiskService {
           reason: perimeter ? reason : null,
           requestId,
         },
+        ...(processMoved && this.frameworks ? [{
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Risk",
+          entityId: id,
+          action: "UPDATE" as const,
+          oldValue: { processId: before.processId ?? null, riskFrameworkId: frameworkBefore },
+          newValue: { processId: updated.processId ?? null, riskFrameworkId: frameworkAfter, frameworkChanged: frameworkBefore !== frameworkAfter },
+          reason: reason || null,
+          requestId,
+        }] : []),
         ...(perimeter ? [{
           tenantId: actor.tenantId,
           userId: actor.userId,
