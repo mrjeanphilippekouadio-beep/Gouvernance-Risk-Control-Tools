@@ -43,7 +43,7 @@ export type GovernanceDelays = Pick<GovernanceConfig, "exceptionReviewDelayDays"
 export interface GovernanceDelayRequest {
   id: string;
   /** D6B-01: may also carry `committeeAuditCumulAllowed: true` (allowing the cumul waits for a second person). */
-  requestedDelays: Partial<GovernanceDelays> & { committeeAuditCumulAllowed?: boolean };
+  requestedDelays: Partial<GovernanceDelays> & { committeeAuditCumulAllowed?: boolean } & Record<string, number | boolean | null | undefined>;
   reason: string;
   status: PolicyRequestStatus;
   requestedBy: string;

@@ -146,6 +146,8 @@ describe.skipIf(!live)("QA-governance-d6bis on the REAL server + LOCAL PostgreSQ
       const cfg = (await sql<{ d: number; p: number }>("SELECT gov_dormant_days AS d, gov_role_max_permissions AS p FROM configs WHERE tenant_id = $1", [T]))[0]!;
       expect(cfg, "a mixed request must not apply its lowering half before the second person decides").toEqual({ d: 90, p: 25 });
       const pending = (await call("adm", "GET", "/config/governance-delays/request")).json.data;
+      // Codex P2 (PR #236): the pending request carries EVERY requested key with its value, for the approver's screen
+      expect(pending.requestedDelays).toEqual({ govDormantDays: 60, govRoleMaxPermissions: 30 });
       if (pending?.id) await call("com", "POST", `/config/governance-delays/requests/${pending.id}/reject`, { reason: "QA6B nettoyage" });
     });
   });

@@ -7,6 +7,7 @@ import { GovernanceHealthService } from "../src/services/GovernanceHealthService
 import { PostgresGovernanceHealthRepository } from "../src/infrastructure/database/postgres/PostgresGovernanceHealthRepository.js";
 import { ForbiddenError } from "../src/domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
+import { GOVERNANCE_THRESHOLDS } from "../src/domain/entities/Config.js";
 import { hasLocalPg, migrationSql, useMigrationTenant } from "./migrationHarness.js";
 
 /** Lot D6 (DECISION-074 R-6, DECISION-113) — level 1. */
@@ -261,6 +262,18 @@ describe("D6 — GovernanceHealthService (masking R-6.1 / q156)", () => {
     const view = await service().get(actor(["governancehealth.read", "audit.read"]));
     expect(view.exceptions.items[0]).toMatchObject({ userId: RM, userLabel: "Awa Risk" });
     expect(view.principles.find((p) => p.id === "GOV-SOD-04")!.offenders[0]).toMatchObject({ id: RM, label: "Awa Risk" });
+  });
+});
+
+describe("Codex P2 (PR #236): the settings screen shows every key of a pending request", () => {
+  const page = readFileSync(new URL("../../frontend/src/features/governance/GovernanceSettingsPage.tsx", import.meta.url), "utf8");
+  it("renders the pending request from all its keys (never filtered by a known list), current → requested", () => {
+    expect(page).toMatch(/Object\.keys\(requested\)\.map/);
+    expect(page).toMatch(/pendingChanges\(delayPending\.requestedDelays/);
+    expect(page).not.toMatch(/\.filter\(\(d\) => d\.key in delayPending\.requestedDelays\)/);
+  });
+  it("has a readable label for every A13 threshold (an unknown key would still show by its name)", () => {
+    for (const key of Object.keys(GOVERNANCE_THRESHOLDS)) expect(page, key).toMatch(new RegExp(`${key}: \\{ label: "`));
   });
 });
 

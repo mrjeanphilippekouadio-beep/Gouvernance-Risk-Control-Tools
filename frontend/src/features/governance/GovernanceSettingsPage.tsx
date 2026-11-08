@@ -56,6 +56,32 @@ function changedDelays(form: Record<keyof GovernanceDelays, string>, config: Gov
 
 const fmtDate = (iso: string | null) => (iso ? iso.slice(0, 10) : "—");
 
+/** q233 A (DECISION-116): panel thresholds, labels and units for the pending request (adjusted through the same circuit). */
+const THRESHOLD_LABELS: Record<string, { label: string; unit: string }> = {
+  govRmRiskShareMaxPct: { label: "Part maximale des risques possédés par un Risk Manager", unit: " %" },
+  govMaxAdmins: { label: "Nombre maximal d'administrateurs actifs", unit: "" },
+  govRoleMaxPermissions: { label: "Permissions au-delà desquelles un rôle personnalisé est trop large", unit: "" },
+  govRoleMaxFamilies: { label: "Familles de permissions à partir desquelles un rôle personnalisé est trop large", unit: "" },
+  govDormantDays: { label: "Inactivité d'un compte à privilèges avant signalement", unit: " jours" },
+  govOwnerCreatorShareMaxPct: { label: "Part maximale des risques créés et possédés par la même personne", unit: " %" },
+};
+
+/**
+ * Codex P2 (PR #236): EVERY key of a pending request is shown, « current → requested », so an approver never approves a
+ * value they cannot see. Known keys get a readable label; an unknown key is shown by its name, never hidden.
+ */
+function pendingChanges(requested: Record<string, unknown>, config: Record<string, unknown>): { key: string; label: string; from: string; to: string }[] {
+  const value = (key: string, v: unknown): string => {
+    if (key === "committeeAuditCumulAllowed") return v === true ? "Autorisé" : "Interdit";
+    if (DELAYS.some((d) => d.key === key)) return dayLabel(v as number | null | undefined);
+    if (v === null || v === undefined) return "Non configuré";
+    return `${String(v)}${THRESHOLD_LABELS[key]?.unit ?? ""}`;
+  };
+  const label = (key: string): string =>
+    key === "committeeAuditCumulAllowed" ? TITLES.cumul : DELAYS.find((d) => d.key === key)?.label ?? THRESHOLD_LABELS[key]?.label ?? key;
+  return Object.keys(requested).map((key) => ({ key, label: label(key), from: value(key, config[key]), to: value(key, requested[key]) }));
+}
+
 /** QA-SUITES2-FR-01: the server refusals of PUT /roles/governance-rights, said in French; the server still decides. */
 const RIGHT_REFUSALS: Array<[RegExp, string]> = [
   [/q157/, "L'Audit ne confirme ni n'approuve jamais (q157) : il ne peut porter que la revue des exceptions."],
@@ -278,8 +304,7 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
         <p className="muted">Fixés par vous au paramétrage, en jours. « Non configuré » : aucun délai ne s'applique. Raccourcir un délai s'applique aussitôt ; l'allonger ou le retirer est confirmé par une seconde personne lorsqu'elle existe (le serveur décide).</p>
         <ul>{DELAYS.map((d) => <li key={d.key}>{d.label} : <strong>{dayLabel(config[d.key])}</strong></li>)}</ul>
         {delayPending && <MessageBanner tone="warning" title="Demande en attente d'approbation : le changement n'est pas appliqué">
-          <ul>{DELAYS.filter((d) => d.key in delayPending.requestedDelays).map((d) => <li key={d.key}>{d.label} : {dayLabel(config[d.key])} → <strong>{dayLabel(delayPending.requestedDelays[d.key])}</strong></li>)}
-            {delayPending.requestedDelays.committeeAuditCumulAllowed !== undefined && <li>{TITLES.cumul} : Interdit → <strong>Autorisé</strong></li>}</ul>
+          <ul>{pendingChanges(delayPending.requestedDelays, config as unknown as Record<string, unknown>).map((c) => <li key={c.key}>{c.label} : {c.from} → <strong>{c.to}</strong></li>)}</ul>
           <p>Motif : {delayPending.reason}</p>
           {delayPending.expiresAt && <p className="muted">Expire le {fmtDate(delayPending.expiresAt)} : passé cette date, elle ne peut plus être approuvée.</p>}
           <p className="muted">Demandée le {fmtDate(delayPending.requestedAt)} par {delayPending.requestedBy}. L'auteur ne peut pas approuver sa propre demande : le serveur refuse.</p>
