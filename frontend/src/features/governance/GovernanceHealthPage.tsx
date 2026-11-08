@@ -115,7 +115,7 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
     </> },
     { key: "consequences", header: "Conséquence", render: (p) => p.consequences },
     { key: "offenders", header: "Objets en cause", render: (p) => <Offenders p={p} /> },
-    { key: "actions", header: "", render: (p) => <Button onClick={() => openDetail(p)}>Détail<span className="gs-visually-hidden"> {p.id}</span></Button> },
+    { key: "actions", header: "", render: (p) => <Button aria-label={`Détail ${p.id}`} onClick={() => openDetail(p)}>Détail</Button> },
   ];
 
   const exceptionColumns: TableColumn<PanelException>[] = [
@@ -124,7 +124,7 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
     { key: "who", header: "Par", render: (e) => e.mine ? "Vous" : (e.userLabel ?? "Masqué (droit d'audit requis)") },
     { key: "state", header: "État", render: (e) => <StatusBadge label={e.reviewed ? "Revue" : "À revoir"} tone={e.reviewed ? "success" : "warning"} /> },
     { key: "actions", header: "", render: (e) => !e.reviewed && !e.mine && can("governanceexception.review")
-      ? <Button onClick={() => openReview(e)}>Revoir<span className="gs-visually-hidden"> {e.rule}</span></Button> : null },
+      ? <Button aria-label={`Revoir ${e.rule}`} onClick={() => openReview(e)}>Revoir</Button> : null },
   ];
 
   const rmEmpty = data?.principles.some((p) => p.offenders.some((o) => o.kind === "GROUP" && o.id === "RISK_MANAGER" && o.count === 0)) ?? false;
