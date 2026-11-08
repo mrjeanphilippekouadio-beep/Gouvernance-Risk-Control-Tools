@@ -120,14 +120,16 @@ async function serve(mount: (app: express.Express) => void, user: AuthenticatedU
 
 // ---------------------------------------------------------------- q58
 describe("q58 Committee + Audit cumul setting: edge cases", () => {
-  it("setting true -> false -> true on the same tenant: refused, then allowed again (real ConfigService + RoleService)", async () => {
+  it("setting true -> false -> true on the same tenant: refused, then allowing again needs the second person (D6B-01) (real ConfigService + RoleService)", async () => {
     const w = world({ cumul: null });
+    w.stored.push({ id: "c1", committeeAuditCumulAllowed: true, version: 1 } as Config);
     const cfgActor = actor("cfg", ["config.read", "config.cumul.set"]);
     await w.service.assignToUser(assigner, "co", "u1", "r", "motif");
     await w.configService.setCommitteeAuditCumul(cfgActor, false, "politique", "r");
     await expect(w.service.assignToUser(assigner, "au", "u1", "r", "motif")).rejects.toThrow(ValidationError);
-    await w.configService.setCommitteeAuditCumul(cfgActor, true, "revue", "r");
-    await expect(w.service.assignToUser(assigner, "au", "u1", "r", "motif")).resolves.toBeUndefined();
+    // without the q182 circuit wired, allowing fails closed; the cumul stays refused
+    await expect(w.configService.setCommitteeAuditCumul(cfgActor, true, "revue", "r")).rejects.toThrow(ValidationError);
+    await expect(w.service.assignToUser(assigner, "au", "u1", "r", "motif")).rejects.toThrow(ValidationError);
   });
 
   it("a refusal leaves no assignment, no audit row, no notification", async () => {
@@ -224,6 +226,8 @@ describe("PUT /config/committee-audit-cumul over HTTP", () => {
 
   it("accepts a 500-char reason, stores before/after in the audit, returns the new flag", async () => {
     const w = world({ cumul: null });
+    // DECISION-061 / D6B-01: forbidding an allowed cumul is the direct write, audited before/after.
+    w.stored.push({ id: "c1", committeeAuditCumulAllowed: true, version: 1 } as Config);
     const res = await put(w, cfg, { allowed: false, reason: "x".repeat(500), unexpected: 1 });
     expect(res.status).toBe(200);
     expect(res.json?.data.committeeAuditCumulAllowed).toBe(false);
@@ -266,8 +270,9 @@ describe("PUT /config/committee-audit-cumul over HTTP", () => {
 
   it("setting the same value twice is not a no-op: two audit rows (pinned, no idempotence short-circuit)", async () => {
     const w = world({ cumul: null });
-    await put(w, cfg, { allowed: true, reason: "a" });
-    await put(w, cfg, { allowed: true, reason: "b" });
+    // D6B-01: allowing goes through the second person; the direct write is forbidding
+    await put(w, cfg, { allowed: false, reason: "a" });
+    await put(w, cfg, { allowed: false, reason: "b" });
     expect(w.events).toHaveLength(2);
   });
 });
@@ -427,10 +432,10 @@ describe("q63 administrator + Risk Manager cumul: edge cases", () => {
 // ---------------------------------------------------------------- q65 + duplicates
 describe("q65 Committee entry notification: edge cases", () => {
   it("recipients are audit.read holders minus the target and the actor; none when nobody reads audit", async () => {
-    const w = world();
+    const w = world({ cumul: true }); // DECISION-061 / D6B-03: the cumul must be allowed explicitly (no row = forbidden)
     w.held.set("aud", ["au"]);
     w.held.set("admin", ["au"]);
-    w.held.set("u1", ["au"]); // the target is also an auditor (Committee + Audit allowed by default)
+    w.held.set("u1", ["au"]); // the target is also an auditor (Committee + Audit allowed by this tenant's setting)
     await w.service.assignToUser(assigner, "co", "u1", "r", "motif");
     expect(w.sent.map((s) => s.recipientUserId)).toEqual(["aud"]);
     expect(w.sent[0]).toMatchObject({ eventType: "COMMITTEE_MEMBER_ADDED", resourceId: "u1" });
