@@ -47,3 +47,21 @@
 | D6B-02 | LOW 2,2 | A06 | REMEDIATION_REQUIRED |
 | D6B-03 | LOW 2,2 | A06/A07 (+ état de Djamo) | REMEDIATION_REQUIRED |
 | INFO | — | HUMAN / Privacy | Ouverts |
+
+## Retest A10 (2026-11-08, HEAD `67029ca`)
+
+- Méthode : analyse statique du delta `368937a..67029ca`. Vitest `governance-health`, `ConfigService` et `RoleService` : 70 verts (3 ignorés car il faut une base). `tsc` propre. Aucun code modifié.
+- **Verdict final du lot D6bis : VERT.** Aucune escalade.
+
+| Point | Résultat | Analyse |
+|---|---|---|
+| D6B-01 | **RETEST_PASS** | Autoriser le cumul (`false → true`) passe par `relaxThroughSecondPerson`, le circuit q182 commun aux délais et aux seuils : demande PENDING pour une seconde personne (`config.selfvalidation.approve`, jamais l'auteur), ou application seule marquée `config.cumul.adminAlone` quand personne d'autre ne peut approuver, visible dans le panneau. Interdire, ou confirmer une valeur déjà vraie, reste direct. Échec fermé sans le circuit câblé. **Écrivains de `committee_audit_cumul_allowed`** : seulement `setCommitteeAuditCumul` (direct pour interdire, circuit pour autoriser) et l'application d'une demande approuvée (`RequestedSettings`, construite uniquement par le service). Les autres `upsertConfig` (mode, seuils Comité, passage obligatoire, délais) construisent un patch clé par clé, sans ce champ. Les corps de route ne l'acceptent que sur `PUT /config/committee-audit-cumul`. Dans la base : 054 (DEFAULT), 086 (DEFAULT + INSERT des lignes manquantes). Aucun autre chemin. |
+| D6B-02 | **RETEST_PASS** | `selfValidators` vient d'une requête dédiée, sans LIMIT et tenant-scopée depuis `trackedSince` : marquées `noSelfValidation` UNION auto-validations non marquées. Les listes d'affichage ne servent plus à la décision. |
+| D6B-03 | **RETEST_PASS** | 086 crée une ligne `configs` pour chaque client qui n'en avait pas, avec le cumul `true` (la valeur appliquée jusqu'ici) et le seuil Comité calculé comme `ConfigService` ; idempotent (`NOT EXISTS`). `RoleService` lit désormais « pas de ligne = interdit » (échec fermé), ce qui concorde avec `defaultConfig` et le panneau. Rien n'est révoqué : les clients existants gardent le comportement appliqué. Le down laisse ces lignes (sans effet). INFO : cette création n'écrit pas de ligne d'audit. Acceptable, car elle ne fait que matérialiser le comportement existant. |
+| QA-D6B-01 | **PASS** | Tous les textes libres d'un principe (`detail` des offenders USER compris, `covers`, `notEvaluableReason`, `acceptanceNote`, motif d'acceptation) passent par `freeText`. Sans `audit.read`, un uuid de compte devient « Personne N » ; avec `audit.read`, le nom. INFO : le motif d'une exception, servi aux relecteurs (`governanceexception.review`) sans `audit.read`, ne passe pas par `freeText`. C'est un texte saisi, qui contient rarement un uuid. |
+| Résidu INFO | — | Le circuit q182 n'a qu'une demande en attente par client : une nouvelle demande d'assouplissement (délai, seuil ou cumul) retire la précédente (WITHDRAWN, audité). C'est une gêne fonctionnelle possible, sans gain de droit. |
+
+| Constat | Statut |
+|---|---|
+| D6B-01, D6B-02, D6B-03 | **RETEST_PASS → CLOSED** (côté Security) |
+| INFO du § 2 (parts sur tous les risques, encadrement de la dormance) | Inchangés, HUMAN / Privacy |
