@@ -3,15 +3,19 @@ import type { TransactionalAudit } from "../entities/RiskFramework.js";
 import type { SelfValidationPolicyRequestStatus } from "./SelfValidationPolicyRequestRepository.js";
 
 /** The governance delays (days, null = not configured) that setGovernanceDelays writes. */
-export const GOVERNANCE_DELAY_KEYS = ["exceptionReviewDelayDays", "acceptanceMaxDays", "policyRequestExpiryDays", "riskManagerVacancyMaxDays", "resourceReadallMaxDays", "lastSeenRetentionDays"] as const;
+export const GOVERNANCE_DELAY_KEYS = ["exceptionReviewDelayDays", "acceptanceMaxDays", "policyRequestExpiryDays", "riskManagerVacancyMaxDays", "resourceReadallMaxDays", "lastSeenRetentionDays",
+  // q233 A (DECISION-116): the panel thresholds go through the same audited circuit.
+  "govRmRiskShareMaxPct", "govMaxAdmins", "govRoleMaxPermissions", "govRoleMaxFamilies", "govDormantDays", "govOwnerCreatorShareMaxPct"] as const;
 export type GovernanceDelayKey = (typeof GOVERNANCE_DELAY_KEYS)[number];
 export type GovernanceDelays = Pick<ConfigPatch, GovernanceDelayKey>;
+/** What a request may carry: the delays/thresholds, or allowing the Committee + Audit cumul (D6B-01, q234 C). */
+export type RequestedSettings = GovernanceDelays & Pick<ConfigPatch, "committeeAuditCumulAllowed">;
 
 /** q182 (DECISION-095): a request to lengthen (or clear) governance delays, waiting for a second person (q158 circuit). */
 export interface GovernanceDelayRequest {
   id: string;
   tenantId: string;
-  requestedDelays: GovernanceDelays;
+  requestedDelays: RequestedSettings;
   reason: string;
   status: SelfValidationPolicyRequestStatus;
   requestedBy: string;
@@ -28,7 +32,7 @@ export interface DelayChange {
   /** 1. Claim a PENDING request (0 row = already decided or, for APPLIED, expired -> ConflictError, nothing written). */
   decide?: { id: string; status: Exclude<SelfValidationPolicyRequestStatus, "PENDING">; by: string; reason: string | null };
   /** 2a. Open a new PENDING request. */
-  submit?: { delays: GovernanceDelays; reason: string; by: string; expiresAt: Date | null };
+  submit?: { delays: RequestedSettings; reason: string; by: string; expiresAt: Date | null };
   /** 2b. Write the delays on the tenant's config row. */
   setDelays?: { patch: ConfigPatch; updatedBy: string };
 }

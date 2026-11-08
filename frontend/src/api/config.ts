@@ -42,7 +42,8 @@ export type GovernanceDelays = Pick<GovernanceConfig, "exceptionReviewDelayDays"
 /** q182: mirrors backend `GovernanceDelayRequest` — a lengthening of the delays waiting for a second person. */
 export interface GovernanceDelayRequest {
   id: string;
-  requestedDelays: Partial<GovernanceDelays>;
+  /** D6B-01: may also carry `committeeAuditCumulAllowed: true` (allowing the cumul waits for a second person). */
+  requestedDelays: Partial<GovernanceDelays> & { committeeAuditCumulAllowed?: boolean } & Record<string, number | boolean | null | undefined>;
   reason: string;
   status: PolicyRequestStatus;
   requestedBy: string;
@@ -54,7 +55,6 @@ export interface GovernanceDelayRequest {
 }
 
 const BASE = "/api/v1/config";
-const put = <T>(path: string, token: string, body: unknown) => apiRequest<T>(`${BASE}${path}`, { method: "PUT", body, token });
 
 export const configApi = {
   get: (token: string) => apiRequest<GovernanceConfig>(BASE, { token }),
@@ -66,7 +66,9 @@ export const configApi = {
     apiRequest<GovernanceConfig>(`${BASE}/governance-delays/requests/${encodeURIComponent(id)}/approve`, { method: "POST", body: { reason }, token }),
   rejectDelayRequest: (token: string, id: string, reason: string) =>
     apiRequest<GovernanceDelayRequest>(`${BASE}/governance-delays/requests/${encodeURIComponent(id)}/reject`, { method: "POST", body: { reason }, token }),
-  setCommitteeAuditCumul: (token: string, allowed: boolean, reason: string) => put<GovernanceConfig>("/committee-audit-cumul", token, { allowed, reason }),
+  /** 200 = applied; 202 = allowing the cumul waits for a second person (D6B-01), `data` is the UNCHANGED config. */
+  setCommitteeAuditCumul: (token: string, allowed: boolean, reason: string): Promise<ApiResponse<GovernanceConfig>> =>
+    apiRequestFull<GovernanceConfig>(`${BASE}/committee-audit-cumul`, { method: "PUT", body: { allowed, reason }, token }),
   /** 200 = applied; 202 = `pendingRequest` set, `data` is the UNCHANGED config. Callers must look at `status`. */
   setSelfValidationPolicy: (token: string, policy: SelfValidationPolicy, reason: string): Promise<ApiResponse<GovernanceConfig>> =>
     apiRequestFull<GovernanceConfig>(`${BASE}/self-validation-policy`, { method: "PUT", body: { policy, reason }, token }),

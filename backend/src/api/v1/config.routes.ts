@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from "express";
-import { DEFAULT_RESOURCE_READALL_MAX_DAYS, MIN_LAST_SEEN_RETENTION_DAYS } from "../../domain/entities/Config.js";
+import { DEFAULT_RESOURCE_READALL_MAX_DAYS, GOVERNANCE_THRESHOLDS, MIN_LAST_SEEN_RETENTION_DAYS } from "../../domain/entities/Config.js";
 import { z } from "zod";
 import { ABSOLUTE_MAX_SCORE } from "../../domain/scoring.js";
 import { reasonText } from "../validation.js";
@@ -22,7 +22,15 @@ const GovernanceDelaysBody = z
     // q221 (DECISION-111): a reading of every content lasts 90 days at most — adjustable downwards only (Privacy Q3).
     resourceReadallMaxDays: z.number().int().min(1).max(DEFAULT_RESOURCE_READALL_MAX_DAYS).nullable().optional(),
     // R3 (q227): retention of the « dernière activité » date after the end of an account.
-    lastSeenRetentionDays: z.number().int().min(MIN_LAST_SEEN_RETENTION_DAYS).max(3650).nullable().optional(), reason: reasonText(500) })
+    lastSeenRetentionDays: z.number().int().min(MIN_LAST_SEEN_RETENTION_DAYS).max(3650).nullable().optional(),
+    // q233 A (DECISION-116): panel thresholds, never null, in the A13 ranges.
+    govRmRiskShareMaxPct: z.number().int().min(GOVERNANCE_THRESHOLDS.govRmRiskShareMaxPct.min).max(GOVERNANCE_THRESHOLDS.govRmRiskShareMaxPct.max).optional(),
+    govMaxAdmins: z.number().int().min(GOVERNANCE_THRESHOLDS.govMaxAdmins.min).max(GOVERNANCE_THRESHOLDS.govMaxAdmins.max).optional(),
+    govRoleMaxPermissions: z.number().int().min(GOVERNANCE_THRESHOLDS.govRoleMaxPermissions.min).max(GOVERNANCE_THRESHOLDS.govRoleMaxPermissions.max).optional(),
+    govRoleMaxFamilies: z.number().int().min(GOVERNANCE_THRESHOLDS.govRoleMaxFamilies.min).max(GOVERNANCE_THRESHOLDS.govRoleMaxFamilies.max).optional(),
+    govDormantDays: z.number().int().min(GOVERNANCE_THRESHOLDS.govDormantDays.min).max(GOVERNANCE_THRESHOLDS.govDormantDays.max).optional(),
+    govOwnerCreatorShareMaxPct: z.number().int().min(GOVERNANCE_THRESHOLDS.govOwnerCreatorShareMaxPct.min).max(GOVERNANCE_THRESHOLDS.govOwnerCreatorShareMaxPct.max).optional(),
+    reason: reasonText(500) })
   .strict();
 
 const UpdateCommitteeEnforcementBody = z.object({
@@ -104,8 +112,10 @@ export function configRouter(configService: ConfigService): Router {
   router.put("/committee-audit-cumul", async (req, res, next) => {
     try {
       const body = UpdateCommitteeAuditCumulBody.parse(req.body);
-      const config = await configService.setCommitteeAuditCumul(req.user, body.allowed, body.reason, req.requestId);
-      res.json({ data: config });
+      const { config, pendingRequest } = await configService.setCommitteeAuditCumul(req.user, body.allowed, body.reason, req.requestId);
+      // D6B-01: 202 = allowing the cumul waits for a second person; `data` is the unchanged config.
+      if (pendingRequest) res.status(202).json({ data: config, pendingRequest });
+      else res.json({ data: config });
     } catch (err) {
       next(err);
     }

@@ -4,7 +4,7 @@ import type {
   DelayChangeResult,
   GovernanceDelayRequest,
   GovernanceDelayRequestRepository,
-  GovernanceDelays,
+  RequestedSettings,
 } from "../../../domain/repositories/GovernanceDelayRequestRepository.js";
 import type { SelfValidationPolicyRequestStatus } from "../../../domain/repositories/SelfValidationPolicyRequestRepository.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
@@ -15,7 +15,7 @@ import { upsertConfigRow } from "./PostgresConfigRepository.js";
 interface Row {
   id: string;
   tenant_id: string;
-  requested_delays: GovernanceDelays;
+  requested_delays: RequestedSettings;
   reason: string;
   status: SelfValidationPolicyRequestStatus;
   requested_by: string;
