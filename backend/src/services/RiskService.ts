@@ -163,7 +163,7 @@ export class RiskService {
   async getAccess(actor: AuthenticatedUser, id: string): Promise<RiskVisibilityState> {
     const risk = await this.get(actor, id);
     const accessUserIds = this.risks.listAccess ? await this.risks.listAccess(actor.tenantId, id) : [];
-    return this.withNames(actor.tenantId, { visibility: risk.visibility ?? "CLIENT", accessUserIds }, id);
+    return this.withNames(actor.tenantId, { visibility: risk.visibility ?? "CLIENT", accessUserIds }, actor.roles.includes("resourcevisibility.set") || (risk.ownerId != null && sameUserId(risk.ownerId, actor.userId)) ? id : undefined);
   }
 
   /**
@@ -238,7 +238,6 @@ export class RiskService {
     if (!holdsRight && !isOwner) {
       throw new ForbiddenError("Only the Risk Manager group or the risk owner can renew a named access");
     }
-    if ((before.visibility ?? "CLIENT") !== "NOMINATIF") throw new ValidationError("Only the access to a named-people dossier expires and can be renewed");
     const { userIds, reason } = checkedRenewal(actor, input.userIds, input.reason);
     const repo = this.risks;
     if (!repo.renewAccess) throw new ValidationError("Renewing a risk's named access is not available");

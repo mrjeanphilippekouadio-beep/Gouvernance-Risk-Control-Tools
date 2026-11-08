@@ -82,8 +82,19 @@ const nominatif = async (type: Type, user: string = UID.named, extra: Parameters
   await grant(type, id, user);
   return id;
 };
-const expire = (type: string, id: string, user = UID.named) =>
-  sql("UPDATE resource_access_grants SET expires_at = now() - interval '1 minute' WHERE resource_type = $1 AND resource_id = $2 AND user_id = $3 AND revoked_at IS NULL", [type, id, user]);
+// SEC-V5-03: the guard refuses to shorten an expiry, so the tests that backdate one switch the guard off for the statement.
+const expire = async (type: string, id: string, user = UID.named) => {
+  await sql("ALTER TABLE resource_access_grants DISABLE TRIGGER resource_access_grants_guard");
+  try {
+    await sql("UPDATE resource_access_grants SET expires_at = now() - interval '1 minute' WHERE resource_type = $1 AND resource_id = $2 AND user_id = $3 AND revoked_at IS NULL", [type, id, user]);
+  } finally {
+    await sql("ALTER TABLE resource_access_grants ENABLE TRIGGER resource_access_grants_guard");
+  }
+};
+const shorten = async (query: string, params: unknown[]) => {
+  await sql("ALTER TABLE resource_access_grants DISABLE TRIGGER resource_access_grants_guard");
+  try { await sql(query, params); } finally { await sql("ALTER TABLE resource_access_grants ENABLE TRIGGER resource_access_grants_guard"); }
+};
 const expiryOf = async (type: string, id: string, user = UID.named) =>
   (await sql<{ expires_at: Date | null }>("SELECT expires_at FROM resource_access_grants WHERE resource_type = $1 AND resource_id = $2 AND user_id = $3 AND revoked_at IS NULL", [type, id, user]))[0]?.expires_at ?? null;
 const daysFromNow = (d: Date | string | null) => (new Date(d as string).getTime() - Date.now()) / DAY;
@@ -224,7 +235,7 @@ describe.skipIf(!live)("QA-visibility-v5 on the REAL server + LOCAL PostgreSQL 1
       expect((await H.audits(id)).length).toBe(audits);
       expect(daysFromNow(await expiryOf("CONTROL", id))).toBeLessThan(10.01);
     });
-    it.fails("a JSON body that is not an object (a bare string) is a 400, not a 500 [QA-V5-04, inherited: same on PUT /visibility]", async () => {
+    it("a JSON body that is not an object (a bare string) is a 400, not a 500 [QA-V5-04, inherited: same on PUT /visibility]", async () => {
       const id = await nominatif("CONTROL");
       expect((await call("rm", "POST", `/controls/${id}/visibility/renew`, "not json")).status).toBe(400);
     });
@@ -262,7 +273,7 @@ describe.skipIf(!live)("QA-visibility-v5 on the REAL server + LOCAL PostgreSQL 1
       expect((await H.permChanges(id)).length).toBe(before + 1);
       const second = randomUUID();
       await sql("INSERT INTO users (id, tenant_id, email, display_name, roles) VALUES ($1, $2, $3, 'Second', '{}')", [second, T, `second-${second}@v5.test`]);
-      await sql("UPDATE resource_access_grants SET expires_at = now() + interval '3 days' WHERE resource_id = $1", [id]);
+      await shorten("UPDATE resource_access_grants SET expires_at = now() + interval '3 days' WHERE resource_id = $1", [id]);
       const stranger = randomUUID();
       await sql("INSERT INTO users (id, tenant_id, email, display_name, roles) VALUES ($1, $2, $3, 'Stranger', '{}')", [stranger, T, `stranger-${stranger}@v5.test`]);
       const r = await renew("rm", "CONTROL", id, [UID.named, stranger]);
@@ -438,7 +449,7 @@ describe.skipIf(!live)("QA-visibility-v5 on the REAL server + LOCAL PostgreSQL 1
       expect((await renew("rm", "CONTROL", id, [UID.out])).status).toBe(200);
       expect((await row("CONTROL", id))!.accessCount).toBe(3);
     });
-    it.fails("[QA-V5-02] a CLOSED dossier no longer counts the named accesses that ended with it (3 listed, 0 can read)", async () => {
+    it("[QA-V5-02] a CLOSED dossier no longer counts the named accesses that ended with it (3 listed, 0 can read)", async () => {
       const id = await nominatif("CONTROL");
       await grant("CONTROL", id, UID.out);
       await sql(CLOSE.CONTROL, [id]);
@@ -462,7 +473,7 @@ describe.skipIf(!live)("QA-visibility-v5 on the REAL server + LOCAL PostgreSQL 1
       expect(await attempt(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1,'CONTROL',$2,$3,$4,'x', now() + interval '30 days')`, [T, id, UID.named, UID.rm])).toBeNull();
       expect(await attempt("UPDATE resource_access_grants SET expires_at = now() + interval '31 days' WHERE resource_id = $1", [id])).toMatch(/30 days/);
       expect(await attempt("UPDATE resource_access_grants SET expires_at = NULL WHERE resource_id = $1", [id])).not.toBeNull();
-      expect(await attempt("UPDATE resource_access_grants SET expires_at = now() - interval '1 day' WHERE resource_id = $1", [id])).toBeNull();
+      expect(await attempt("UPDATE resource_access_grants SET expires_at = now() - interval '1 day' WHERE resource_id = $1", [id]), "SEC-V5-03: never shortened or backdated").toMatch(/lengthened/);
       expect(await attempt("DELETE FROM resource_access_grants WHERE resource_id = $1", [id])).toMatch(/never deleted/);
       expect(await attempt("UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $2, revoke_reason = 'x', expires_at = now() WHERE resource_id = $1", [id, UID.rm])).toMatch(/does not change the expiry/);
       expect(await attempt("UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $2, revoke_reason = 'x' WHERE resource_id = $1", [id, UID.rm])).toBeNull();
@@ -485,7 +496,7 @@ describe.skipIf(!live)("QA-visibility-v5 on the REAL server + LOCAL PostgreSQL 1
     it("expiry vs renewal at the boundary: an access that lapses 1.5 s from now is renewed after the lapse => reads again; renewed just before the lapse => still reads after it", async () => {
       const a = await nominatif("CONTROL");
       const b = await nominatif("CONTROL");
-      await sql("UPDATE resource_access_grants SET expires_at = now() + interval '1500 milliseconds' WHERE resource_id = ANY($1::uuid[])", [[a, b]]);
+      await shorten("UPDATE resource_access_grants SET expires_at = now() + interval '1500 milliseconds' WHERE resource_id = ANY($1::uuid[])", [[a, b]]);
       expect(await reads("named", "CONTROL", b)).toBe(true);
       expect((await renew("rm", "CONTROL", b, [UID.named])).status).toBe(200);
       await new Promise((r) => setTimeout(r, 1800));
@@ -594,8 +605,8 @@ describe.skipIf(!live)("QA-visibility-v5 MIGRATION 087 (own base, no server)", (
   it("replaying 087 is idempotent: same function definitions, same column, no expiry moved (a lapsed one is not extended)", () => {
     const afterUp = defs();
     expect(afterUp.filter((d) => !baseline.includes(d)).map((d) => d.split("=")[0]).sort((a, b) => a.localeCompare(b)))
-      .toEqual(["resource_access_grants_guard", "risk_visible_core", "visibility_granted", "visibility_resource_closed"].sort((a, b) => a.localeCompare(b)));
-    psql(MIG_DB, ["-c", `UPDATE resource_access_grants SET expires_at = now() - interval '2 days' WHERE resource_id = '${ids.rN}' AND user_id = '${U[1]}'`]);
+      .toEqual(["resource_access_grants_guard", "risk_visible_core", "visibility_granted", "visibility_own_level", "visibility_resource_closed"].sort((a, b) => a.localeCompare(b)));
+    psql(MIG_DB, ["-c", `ALTER TABLE resource_access_grants DISABLE TRIGGER resource_access_grants_guard; UPDATE resource_access_grants SET expires_at = now() - interval '2 days' WHERE resource_id = '${ids.rN}' AND user_id = '${U[1]}'; ALTER TABLE resource_access_grants ENABLE TRIGGER resource_access_grants_guard`]);
     const e1 = expiries();
     up();
     up();
@@ -619,12 +630,13 @@ describe.skipIf(!live)("QA-visibility-v5 MIGRATION 087 (own base, no server)", (
     down();
     up();
     expect(defs()).toEqual(afterUp);
-    expect(rowsOf(MIG_DB, "SELECT count(*) FROM resource_access_grants WHERE expires_at IS NOT NULL")[0]![0]).toBe("4");
+    // SEC-V5-01: the down revoked (soft) the 2 accesses that no longer read; only the 2 live ones are stamped again.
+    expect(rowsOf(MIG_DB, "SELECT count(*) FROM resource_access_grants WHERE expires_at IS NOT NULL")[0]![0]).toBe("2");
   }, 60000);
 
   it("every function created or redefined by 087 pins search_path (pg_temp last) and the guard still has its trigger", () => {
-    const cfg = rowsOf(MIG_DB, "SELECT proname, COALESCE(proconfig::text, 'NONE') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND proname IN ('visibility_granted','risk_visible_core','resource_access_grants_guard','visibility_resource_closed')");
-    expect(cfg).toHaveLength(4);
+    const cfg = rowsOf(MIG_DB, "SELECT proname, COALESCE(proconfig::text, 'NONE') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND proname IN ('visibility_own_level','visibility_granted','risk_visible_core','resource_access_grants_guard','visibility_resource_closed')");
+    expect(cfg).toHaveLength(5);
     for (const c of cfg) expect(c[1], c[0]).toMatch(/search_path=pg_catalog, public, pg_temp/);
     expect(rowsOf(MIG_DB, "SELECT count(*) FROM pg_trigger WHERE tgrelid = 'resource_access_grants'::regclass AND NOT tgisinternal")[0]![0]).not.toBe("0");
   });

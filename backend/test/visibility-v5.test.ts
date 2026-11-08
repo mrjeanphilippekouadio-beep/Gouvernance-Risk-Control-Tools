@@ -26,14 +26,15 @@ function manager() {
   const audits: Array<Omit<AuditEvent, "id" | "timestamp">> = [];
   const renewAccess = vi.fn(async (_t: string, _type: string, _id: string, userIds: string[]) =>
     ({ visibility: "NOMINATIF", before: userIds.map((userId) => ({ userId, expiresAt: new Date(0) })), after: userIds.map((userId) => ({ userId, expiresAt: new Date(2e12) })), widening: true }) as AccessRenewalResult);
-  const access = { listAccess: vi.fn(async () => [NAMED]), renewAccess } as unknown as ResourceAccessRepository;
+  const accessExpiries = vi.fn(async () => [{ userId: NAMED, expiresAt: new Date(2e12) }]);
+  const access = { listAccess: vi.fn(async () => [NAMED]), renewAccess, accessExpiries } as unknown as ResourceAccessRepository;
   const users = {
     getById: vi.fn(async (_t: string, id: string) => ({ id, displayName: id, deletedAt: id === OTHER ? new Date() : null })),
     listWithPermission: vi.fn(async () => [{ id: RM, displayName: "RM" }]),
   };
   const notifications = { create: vi.fn(async (n: unknown) => n) };
   const m = new ResourceVisibilityManager(access, { record: async (e: Omit<AuditEvent, "id" | "timestamp">) => { audits.push(e); } } as never, users as never, notifications as never);
-  return { m, audits, notifications, renewAccess };
+  return { m, audits, notifications, renewAccess, accessExpiries };
 }
 
 describe("lot V5 — renewing a named access (resources)", () => {
@@ -53,10 +54,9 @@ describe("lot V5 — renewing a named access (resources)", () => {
     expect(f.renewAccess).not.toHaveBeenCalled();
   });
 
-  it("only a named-people dossier, never yourself, never nobody, never a suspended account", async () => {
+  it("never an inherited resource, never yourself, never nobody, never a suspended account", async () => {
     const f = manager();
     const rm = actor(RM, ["resourcevisibility.set"]);
-    await expect(f.m.renew(rm, target({ visibility: "PERIMETRE" }), GOOD, "r")).rejects.toBeInstanceOf(ValidationError);
     await expect(f.m.renew(rm, target({ inheritsFrom: "RISK" }), GOOD, "r")).rejects.toBeInstanceOf(ValidationError);
     await expect(f.m.renew(rm, target(), { ...GOOD, userIds: [RM] }, "r")).rejects.toBeInstanceOf(ValidationError);
     await expect(f.m.renew(rm, target(), { ...GOOD, userIds: [] }, "r")).rejects.toBeInstanceOf(ValidationError);
@@ -83,6 +83,19 @@ describe("lot V5 — renewing a named access (resources)", () => {
   });
 });
 
+describe("lot V5 — who sees the expiry (PRIV-V5-01)", () => {
+  it("only the Risk Manager group and the owner get expiresAt; any other reader gets the names without it", async () => {
+    const f = manager();
+    const reader = await f.m.get(actor(OTHER, ["control.read"]), target());
+    expect(reader.accessUsers).toEqual([{ id: NAMED, displayName: NAMED }]);
+    expect(f.accessExpiries).not.toHaveBeenCalled();
+    for (const who of [actor(RM, ["resourcevisibility.set"]), actor(OWNER)]) {
+      const s = await f.m.get(who, target());
+      expect(s.accessUsers?.[0]?.expiresAt).toBe(new Date(2e12).toISOString());
+    }
+  });
+});
+
 describe("lot V5 — renewing a named access (risk)", () => {
   function riskFixture(visibility: Risk["visibility"] = "NOMINATIF") {
     const audits: Array<Omit<AuditEvent, "id" | "timestamp">> = [];
@@ -100,11 +113,10 @@ describe("lot V5 — renewing a named access (risk)", () => {
     return { service, audits, renewAccess, notifications };
   }
 
-  it("refuses without right, without reason, on another level; renews with an audit row and notifies when the owner does", async () => {
+  it("refuses without right and without reason; renews with an audit row and notifies when the owner does", async () => {
     const f = riskFixture();
     await expect(f.service.renewAccess(actor(OTHER, ["risk.read"]), "r1", GOOD, "r")).rejects.toBeInstanceOf(ForbiddenError);
     await expect(f.service.renewAccess(actor(OWNER, ["risk.read"]), "r1", { ...GOOD, reason: " " }, "r")).rejects.toBeInstanceOf(ValidationError);
-    await expect(riskFixture("PERIMETRE").service.renewAccess(actor(OWNER, ["risk.read"]), "r1", GOOD, "r")).rejects.toBeInstanceOf(ValidationError);
     expect(f.renewAccess).not.toHaveBeenCalled();
     await f.service.renewAccess(actor(OWNER, ["risk.read"]), "r1", GOOD, "req-3");
     expect(f.audits[0]).toMatchObject({ entityType: "Risk", action: "PERMISSION_CHANGE", userId: OWNER, reason: GOOD.reason, newValue: { renewed: [NAMED] } });
@@ -156,6 +168,12 @@ describe.skipIf(!hasLocalPg)("lot V5 on real PostgreSQL (local only)", () => {
                 VALUES ($1, 'c', 'PREVENTIVE', 'M', 'x', 'y', $2) RETURNING id`, [ctx.tenant, visibility])).id as string;
   const risk = async (ownerId: string | null = null, visibility = "NOMINATIF") =>
     (await one(`INSERT INTO risks (tenant_id, process, description, owner_id, visibility) VALUES ($1, 'p', 'd', $2, $3) RETURNING id`, [ctx.tenant, ownerId, visibility])).id as string;
+  // SEC-V5-03: the guard refuses to shorten an expiry; a test that backdates one switches it off for the statement.
+  const backdate = async (resourceId: string) => {
+    await q("ALTER TABLE resource_access_grants DISABLE TRIGGER resource_access_grants_guard");
+    try { await q(`UPDATE resource_access_grants SET expires_at = now() - interval '1 hour' WHERE resource_id = $1`, [resourceId]); }
+    finally { await q("ALTER TABLE resource_access_grants ENABLE TRIGGER resource_access_grants_guard"); }
+  };
   const expiresAt = async (grantId: string) => (await one(`SELECT expires_at FROM resource_access_grants WHERE id = $1`, [grantId])).expires_at as Date | null;
 
   it("an expired access reads nothing; the row stays (no deletion, no revocation); a live one reads", async () => {
@@ -253,9 +271,65 @@ describe.skipIf(!hasLocalPg)("lot V5 on real PostgreSQL (local only)", () => {
     const days = (e!.expiresAt!.getTime() - Date.now()) / 86_400_000;
     expect(days).toBeGreaterThan(29.9);
     expect(days).toBeLessThanOrEqual(30);
-    await q(`UPDATE resource_access_grants SET expires_at = now() - interval '1 hour' WHERE resource_id = $1`, [r]);
+    await backdate(r);
     expect(await sees("risk_visible_to", r, g!)).toBe(false);
     await repo.renewAccess(ctx.tenant, r, [g!]);
     expect(await sees("risk_visible_to", r, g!)).toBe(true);
+  });
+
+  it("fail closed (SEC-V5-02): a NOMINATIF dossier whose access carries no expiry reads nothing", async () => {
+    const [by, g] = await Promise.all(["by", "g"].map(user));
+    const c = await control();
+    await grant("CONTROL", c, g!, by!, null);
+    expect(await sees("control_visible_to", c, g!)).toBe(false);
+    const r = await risk(by);
+    await grant("RISK", r, g!, by!, null);
+    expect(await sees("risk_visible_to", r, g!)).toBe(false);
+  });
+
+  it("the guard only lengthens the expiry of a live access (SEC-V5-03)", async () => {
+    const [by, g] = await Promise.all(["by", "g"].map(user));
+    const c = await control();
+    const id = await grant("CONTROL", c, g!, by!, "now() + interval '10 days'");
+    await expect(q(`UPDATE resource_access_grants SET expires_at = now() + interval '5 days' WHERE id = $1`, [id])).rejects.toThrow(/lengthened/);
+    await expect(q(`UPDATE resource_access_grants SET expires_at = now() - interval '1 day' WHERE id = $1`, [id])).rejects.toThrow(/lengthened/);
+    await q(`UPDATE resource_access_grants SET expires_at = now() + interval '20 days' WHERE id = $1`, [id]);
+  });
+
+  it("an access that carries an expiry is renewable whatever the level (back to PERIMETRE too); a re-addition renews an expired one", async () => {
+    const [by, g] = await Promise.all(["by", "g"].map(user));
+    const repo = new PostgresResourceAccessRepository(ctx.pool);
+    const c = await control();
+    const id = await grant("CONTROL", c, g!, by!, "now() + interval '1 day'");
+    await q(`UPDATE controls SET visibility = 'PERIMETRE' WHERE id = $1`, [c]);
+    await repo.renewAccess(ctx.tenant, "CONTROL", c, [g!]);
+    expect(((await expiresAt(id))!.getTime() - Date.now()) / 86_400_000).toBeGreaterThan(29.9);
+    // Re-adding someone whose access ended renews it: never a silent no-op, never a second live row.
+    const c2 = await control();
+    const id2 = await grant("CONTROL", c2, g!, by!, "now() - interval '1 minute'");
+    const res = await repo.changeVisibility(ctx.tenant, "CONTROL", c2, { visibility: "NOMINATIF", addUserIds: [g!], revokeUserIds: [], reason: "r", changedBy: by! });
+    expect(await sees("control_visible_to", c2, g!)).toBe(true);
+    expect(res.after.accessUserIds).toEqual([g!]);
+    expect((await q(`SELECT count(*)::int AS n FROM resource_access_grants WHERE resource_id = $1 AND revoked_at IS NULL`, [c2])).rows[0].n).toBe(1);
+    expect(((await expiresAt(id2))!.getTime() - Date.now()) / 86_400_000).toBeGreaterThan(29.9);
+    // On a closed dossier the re-addition answers a clear 400.
+    const c3 = await control();
+    await grant("CONTROL", c3, g!, by!, "now() - interval '1 minute'");
+    await q(`UPDATE controls SET status = 'ARCHIVED' WHERE id = $1`, [c3]);
+    await expect(repo.changeVisibility(ctx.tenant, "CONTROL", c3, { visibility: "NOMINATIF", addUserIds: [g!], revokeUserIds: [], reason: "r", changedBy: by! })).rejects.toThrow(/closed/);
+  });
+
+  it("the audit snapshot and the access count leave out the people whose access ended (SEC-V5-04)", async () => {
+    const [by, g, h] = await Promise.all(["by", "g", "h"].map(user));
+    const repo = new PostgresResourceAccessRepository(ctx.pool);
+    const c = await control();
+    await grant("CONTROL", c, g!, by!, "now() - interval '1 minute'");
+    await grant("CONTROL", c, h!, by!);
+    const res = await repo.changeVisibility(ctx.tenant, "CONTROL", c, { visibility: "NOMINATIF", addUserIds: [], revokeUserIds: [], reason: "r", changedBy: by! });
+    expect(res.before.accessUserIds).toEqual([h!]);
+    const row = (await repo.listRestricted(ctx.tenant, { limit: 500 })).find((x) => x.id === c);
+    expect(row?.accessCount).toBe(1);
+    await q(`UPDATE controls SET status = 'ARCHIVED' WHERE id = $1`, [c]);
+    expect((await repo.listRestricted(ctx.tenant, { limit: 500 })).find((x) => x.id === c)?.accessCount).toBe(0);
   });
 });

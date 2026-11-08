@@ -28,7 +28,7 @@ export async function isClosed(db: Db, tenantId: string, type: string, id: strin
 export async function renewGrants(db: Db, tenantId: string, type: string, id: string, userIds: string[]): Promise<void> {
   for (const userId of new Set(userIds)) {
     const { rowCount } = await db.query(
-      `UPDATE resource_access_grants SET expires_at = now() + interval '30 days'
+      `UPDATE resource_access_grants SET expires_at = clock_timestamp() + interval '30 days'
        WHERE tenant_id = $1 AND resource_type = $2 AND resource_id = $3 AND user_id = $4 AND revoked_at IS NULL AND expires_at IS NOT NULL`,
       [tenantId, type, id, userId],
     );
@@ -43,4 +43,32 @@ export async function listExpiries(db: Db, tenantId: string, type: string, id: s
     [tenantId, type, id],
   );
   return rows.map((r) => ({ userId: r.user_id, expiresAt: r.expires_at }));
+}
+
+/** The people whose access reads now (SQL `visibility_granted`): not expired, not closed. For audit snapshots and counts. */
+export async function validList(db: Db, tenantId: string, type: string, id: string): Promise<string[]> {
+  const { rows } = await db.query<{ user_id: string }>(
+    `SELECT user_id FROM resource_access_grants g
+     WHERE g.tenant_id = $1 AND g.resource_type = $2 AND g.resource_id = $3 AND g.revoked_at IS NULL
+       AND visibility_granted(g.tenant_id, g.resource_type, g.resource_id, g.user_id) ORDER BY g.granted_at`,
+    [tenantId, type, id],
+  );
+  return rows.map((r) => r.user_id);
+}
+
+/**
+ * Adding someone whose live access has ended (expired): the addition renews it (30 days from now) — never a silent no-op.
+ * A closed dossier refuses with a clear 400.
+ */
+export async function reviveExpired(db: Db, tenantId: string, type: string, id: string, userId: string): Promise<void> {
+  const { rows } = await db.query<{ expires_at: Date | null; valid: boolean }>(
+    `SELECT g.expires_at, visibility_granted(g.tenant_id, g.resource_type, g.resource_id, g.user_id) AS valid
+     FROM resource_access_grants g
+     WHERE g.tenant_id = $1 AND g.resource_type = $2 AND g.resource_id = $3 AND g.user_id = $4 AND g.revoked_at IS NULL`,
+    [tenantId, type, id, userId],
+  );
+  const row = rows[0];
+  if (!row || row.valid || row.expires_at === null) return;
+  if (await isClosed(db, tenantId, type, id)) throw new ValidationError("This dossier is closed: the named access has ended");
+  await renewGrants(db, tenantId, type, id, [userId]);
 }

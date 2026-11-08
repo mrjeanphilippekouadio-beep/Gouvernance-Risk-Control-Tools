@@ -125,9 +125,15 @@ export class ResourceVisibilityManager {
     private readonly notifications?: Pick<NotificationRepository, "create">,
   ) {}
 
+  /** PRIV-V5-01: the expiry of a named access is shown to who manages the visibility (Risk Manager group, owner) only. */
+  private expiryScope(actor: AuthenticatedUser, target: VisibilityTarget): VisibilityTarget | undefined {
+    const manages = actor.roles.includes("resourcevisibility.set") || (target.ownerId !== null && sameUserId(target.ownerId, actor.userId));
+    return manages ? target : undefined;
+  }
+
   async get(actor: AuthenticatedUser, target: VisibilityTarget): Promise<ResourceVisibilityState> {
     const accessUserIds = await this.access.listAccess(actor.tenantId, target.type, target.id);
-    return this.withNames(actor.tenantId, { visibility: target.visibility, accessUserIds }, target);
+    return this.withNames(actor.tenantId, { visibility: target.visibility, accessUserIds }, this.expiryScope(actor, target));
   }
 
   /**
@@ -149,7 +155,6 @@ export class ResourceVisibilityManager {
     if (target.inheritsFrom) {
       throw new ValidationError(`This resource follows the visibility of its ${target.inheritsFrom.toLowerCase()}: renew there`);
     }
-    if (target.visibility !== "NOMINATIF") throw new ValidationError("Only the access to a named-people dossier expires and can be renewed");
     const { userIds, reason } = checkedRenewal(actor, input.userIds, input.reason);
     for (const userId of userIds) await this.assertActiveUser(actor.tenantId, userId);
     const access = this.access;
@@ -216,7 +221,7 @@ export class ResourceVisibilityManager {
     // q208 (DECISION-107): every change by the owner reaches the Risk Manager group, widening or restricting.
     // QA-V2B-02: a request that changes nothing (same level, same list) does not wake the group.
     if (!holdsRight && !sameVisibilityState(result.before, result.after)) await this.notifyOwnerChange(actor, target, result.widening, requestId);
-    return this.withNames(actor.tenantId, result.after, target);
+    return this.withNames(actor.tenantId, result.after, this.expiryScope(actor, target));
   }
 
   /**

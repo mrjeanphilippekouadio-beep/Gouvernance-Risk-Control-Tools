@@ -29,6 +29,12 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     res.status(403).json({ error: err.message, requestId: req.requestId });
     return;
   }
+  // QA-V5-04: body-parser failures (malformed or non-object JSON, too large) are the caller's error, never a 500.
+  const parsed = err as { type?: unknown; status?: unknown } | null;
+  if (typeof parsed?.type === "string" && parsed.type.startsWith("entity.")) {
+    res.status(parsed.status === 413 ? 413 : 400).json({ error: "Requête invalide.", requestId: req.requestId });
+    return;
+  }
   // QA-RL-01: a malformed identifier that reached the database (invalid_text_representation, e.g. "not-a-uuid" on a
   // `/:id` route) is the caller's input error — a 400 on every route, never a 500.
   if ((err as { code?: unknown } | null)?.code === "22P02") {

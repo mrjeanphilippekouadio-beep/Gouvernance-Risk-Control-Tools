@@ -7,7 +7,7 @@ import type { RiskRepository } from "../../../domain/repositories/RiskRepository
 import type { CreateRiskInput, Risk, RiskVisibilityChange, RiskVisibilityState, UpdateRiskInput } from "../../../domain/entities/Risk.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
-import { isClosed, listExpiries, renewGrants, stampNamedExpiry } from "./namedAccess.js";
+import { isClosed, listExpiries, renewGrants, reviveExpired, stampNamedExpiry, validList } from "./namedAccess.js";
 import type { AccessExpiry, AccessRenewalResult } from "../../../domain/repositories/ResourceAccessRepository.js";
 
 interface RiskRow {
@@ -233,7 +233,9 @@ export class PostgresRiskRepository implements RiskRepository {
            WHERE tenant_id = $1 AND resource_type = 'RISK' AND resource_id = $2 AND revoked_at IS NULL ORDER BY granted_at`,
           [tenantId, riskId],
         )).rows.map((r) => r.user_id);
-      const before: RiskVisibilityState = { visibility: locked.rows[0].visibility, accessUserIds: await list() };
+      // Every live row (expired ones too: they can be revoked or revived); the audit snapshot lists those who read now.
+      const rawBefore = await list();
+      const before: RiskVisibilityState = { visibility: locked.rows[0].visibility, accessUserIds: await validList(db, tenantId, "RISK", riskId) };
       // Codex P2: "widening" = someone reads the risk after the change who did not before (the real effective sets, by
       // risk_visible_to, under the lock), whatever the level moved to.
       const readersBefore = (await db.query<{ id: string }>(
@@ -241,7 +243,7 @@ export class PostgresRiskRepository implements RiskRepository {
         [tenantId, riskId],
       )).rows.map((r) => r.id);
       // Back to CLIENT revokes the list as read UNDER the lock: a grant added concurrently cannot survive (QA concurrency).
-      const revoke = change.visibility === "CLIENT" ? before.accessUserIds : change.revokeUserIds;
+      const revoke = change.visibility === "CLIENT" ? rawBefore : change.revokeUserIds;
       for (const userId of new Set(revoke)) {
         const { rowCount } = await db.query(
           `UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $4, revoke_reason = $5
@@ -251,7 +253,7 @@ export class PostgresRiskRepository implements RiskRepository {
         if (!rowCount) throw new ValidationError(`No active access to revoke for user ${userId}`);
       }
       for (const userId of new Set(change.addUserIds)) {
-        if (before.accessUserIds.includes(userId)) continue;
+        if (rawBefore.includes(userId)) { await reviveExpired(db, tenantId, "RISK", riskId, userId); continue; }
         await db.query(
           `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason)
            VALUES ($1, 'RISK', $2, $3, $4, $5)`,
@@ -269,7 +271,7 @@ export class PostgresRiskRepository implements RiskRepository {
                           AND NOT (id = ANY($3::uuid[]))) AS widening`,
         [tenantId, riskId, readersBefore],
       );
-      return { before, after: { visibility: change.visibility, accessUserIds: await list() }, widening: gain?.widening ?? false };
+      return { before, after: { visibility: change.visibility, accessUserIds: await validList(db, tenantId, "RISK", riskId) }, widening: gain?.widening ?? false };
     }, audit);
   }
 
@@ -285,7 +287,6 @@ export class PostgresRiskRepository implements RiskRepository {
       );
       const visibility = locked.rows[0]?.visibility;
       if (!visibility) throw new NotFoundError("Risk", riskId);
-      if (visibility !== "NOMINATIF") throw new ValidationError("Only the access to a named-people dossier expires and can be renewed");
       if (await isClosed(db, tenantId, "RISK", riskId)) throw new ValidationError("This dossier is closed: the named access has ended");
       const before = await listExpiries(db, tenantId, "RISK", riskId);
       await renewGrants(db, tenantId, "RISK", riskId, userIds);

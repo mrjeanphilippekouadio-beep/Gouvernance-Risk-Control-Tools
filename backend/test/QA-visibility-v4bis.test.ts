@@ -61,7 +61,7 @@ async function seed(n: Partial<Record<Type, number>>, level: Level = "PERIMETRE"
   await sql("DELETE FROM action_plans");
   const ids: Record<Type, string[]> = { RISK: [], CONTROL: [], KPI: [], ANOMALY: [], ACTION_PLAN: [] };
   const grant = (type: string, id: string, who: Who) =>
-    sql("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason) VALUES ($1, $2, $3, $4, $5, 'QA')", [T, type, id, UID[who], UID.own]);
+    sql("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, $2, $3, $4, $5, 'QA', now() + interval '10 days')", [T, type, id, UID[who], UID.own]);
   for (const type of TYPES) {
     const all = [...Array.from({ length: n[type] ?? 0 }, () => ({ level })), ...(extra[type] ?? [])] as Array<{ level: Level; grantTo?: Who }>;
     for (const [i, item] of all.entries()) {
@@ -179,7 +179,7 @@ describe.skipIf(!live)("QA-visibility-v4bis on the REAL server + LOCAL PostgreSQ
         await sql("INSERT INTO risks (id, tenant_id, process, description, status, owner_id, visibility) VALUES ($1, $2, $3, 'QA4B', 'ACTIVE', $4, $5)", [id, T, `QA4B-${i}`, UID.own, level]);
         await sql(`INSERT INTO risk_evaluations (tenant_id, risk_id, evaluation_type, status, evaluator_id, sub_category, entity, inherent_probability, inherent_impact_retained, inherent_score,
           residual_probability, residual_impact_retained, residual_score) VALUES ($1, $2, 'AD_HOC', 'VALIDATED', $3, 'QA4B-SC', $4, 4, 4, 16, 3, 3, $5)`, [T, id, UID.own, entities[i] ?? "QA4B-A", scores[i] ?? 9]);
-        if (level !== "CLIENT") await sql("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason) VALUES ($1, 'RISK', $2, $3, $4, 'QA')", [T, id, UID[READER], UID.own]);
+        if (level !== "CLIENT") await sql("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, 'RISK', $2, $3, $4, 'QA', now() + interval '10 days')", [T, id, UID[READER], UID.own]);
         await sql("INSERT INTO anomalies (tenant_id, risk_id, description, severity, detected_by) VALUES ($1, $2, 'QA4B', 'LOW', $3)", [T, id, UID.own]);
       }
     }
@@ -218,7 +218,7 @@ describe.skipIf(!live)("QA-visibility-v4bis on the REAL server + LOCAL PostgreSQ
         await sql("INSERT INTO controls (id, tenant_id, label, control_type, frequency, executor, compliance_criteria, visibility) VALUES ($1, $2, $3, 'PREVENTIVE', 'MONTHLY', 'x', 'y', $4)", [id, T, `QA4B-C${i}`, level]);
         await sql("INSERT INTO control_executions (tenant_id, control_id, planned_date, executed_by, status) VALUES ($1, $2, current_date, $3, 'DONE')", [T, id, UID.own]);
         await sql("INSERT INTO control_effectiveness_assessments (tenant_id, control_id, evaluated_by, operational_effectiveness, justification) VALUES ($1, $2, $3, 'EFFECTIVE', 'j')", [T, id, UID.own]);
-        if (level !== "CLIENT") await sql("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason) VALUES ($1, 'CONTROL', $2, $3, $4, 'QA')", [T, id, UID[READER], UID.own]);
+        if (level !== "CLIENT") await sql("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, 'CONTROL', $2, $3, $4, 'QA', now() + interval '10 days')", [T, id, UID[READER], UID.own]);
       }
       await sql("INSERT INTO action_plans (tenant_id, title, source_type, source_id, responsible_user_id, due_date, created_by) VALUES ($1, 'QA4B', 'CONTROL', $2, $3, current_date - 10, $3)", [T, restricted, UID.own]);
       for (const path of ["/dashboard/compliance?framework=ISO27001", "/reports/compliance?framework=ISO27001"]) {

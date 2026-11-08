@@ -7,6 +7,7 @@
 --   visibility_resource_closed          « clôture » par type : RISK et CONTROL = status ARCHIVED ou supprimé logiquement ;
 --                                       KPI = supprimé logiquement (archivage, pas de statut) ; ANOMALY = status CLOSED ;
 --                                       ACTION_PLAN = status TERMINEE. Ressource introuvable = close (ferme).
+--   visibility_own_level                niveau propre du dossier (introuvable = NOMINATIF).
 --   visibility_granted                  ignore un accès échu, et un accès à échéance dont le dossier est clos. Aucune ligne
 --                                       n'est supprimée ni révoquée : c'est la lecture qui retire l'accès.
 --   risk_visible_core                   passe par visibility_granted (son EXISTS en ligne ignorait l'échéance).
@@ -26,7 +27,7 @@ BEGIN
     IF NEW.revoked_at IS NOT NULL OR NEW.revoked_by IS NOT NULL OR NEW.revoke_reason IS NOT NULL THEN
       RAISE EXCEPTION 'resource_access_grants: an access is inserted active' USING ERRCODE = '42501';
     END IF;
-    IF NEW.expires_at IS NOT NULL AND NEW.expires_at > now() + interval '30 days' THEN
+    IF NEW.expires_at IS NOT NULL AND NEW.expires_at > clock_timestamp() + interval '30 days' THEN
       RAISE EXCEPTION 'resource_access_grants: an access lasts 30 days at most' USING ERRCODE = '42501';
     END IF;
     RETURN NEW;
@@ -42,9 +43,11 @@ BEGIN
   END IF;
   IF NEW.revoked_at IS NULL THEN
     -- Echéance posée ou renouvelée sur un accès vivant : jamais retirée, jamais au-delà de 30 jours.
-    IF NEW.expires_at IS NULL OR NEW.expires_at > now() + interval '30 days'
+    -- SEC-V5-03 : l'échéance d'un accès vivant ne peut que s'allonger (raccourcir = révoquer, avec auteur et motif).
+    IF NEW.expires_at IS NULL OR NEW.expires_at > clock_timestamp() + interval '30 days'
+       OR (OLD.expires_at IS NOT NULL AND NEW.expires_at < OLD.expires_at)
        OR NEW.revoked_by IS NOT NULL OR NEW.revoke_reason IS NOT NULL THEN
-      RAISE EXCEPTION 'resource_access_grants: an access is revoked once, never restored; its expiry is never removed nor beyond 30 days' USING ERRCODE = '42501';
+      RAISE EXCEPTION 'resource_access_grants: an access is revoked once, never restored; its expiry is only lengthened, never removed nor beyond 30 days' USING ERRCODE = '42501';
     END IF;
     RETURN NEW;
   END IF;
@@ -80,15 +83,30 @@ CREATE OR REPLACE FUNCTION visibility_resource_closed(p_tenant uuid, p_type text
 $$;
 ALTER FUNCTION visibility_resource_closed(uuid, text, uuid) SET search_path = pg_catalog, public, pg_temp;
 
+-- Niveau propre du dossier ; introuvable = NOMINATIF (ferme).
+CREATE OR REPLACE FUNCTION visibility_own_level(p_tenant uuid, p_type text, p_id uuid) RETURNS text
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public, pg_temp AS $$
+  SELECT COALESCE(CASE p_type
+    WHEN 'RISK' THEN (SELECT x.visibility FROM risks x WHERE x.tenant_id = p_tenant AND x.id = p_id)
+    WHEN 'CONTROL' THEN (SELECT x.visibility FROM controls x WHERE x.tenant_id = p_tenant AND x.id = p_id)
+    WHEN 'KPI' THEN (SELECT x.visibility FROM kpis x WHERE x.tenant_id = p_tenant AND x.id = p_id)
+    WHEN 'ANOMALY' THEN (SELECT x.visibility FROM anomalies x WHERE x.tenant_id = p_tenant AND x.id = p_id)
+    WHEN 'ACTION_PLAN' THEN (SELECT x.visibility FROM action_plans x WHERE x.tenant_id = p_tenant AND x.id = p_id)
+  END, 'NOMINATIF');
+$$;
+ALTER FUNCTION visibility_own_level(uuid, text, uuid) SET search_path = pg_catalog, public, pg_temp;
+
 CREATE OR REPLACE FUNCTION visibility_granted(p_tenant uuid, p_type text, p_id uuid, p_user uuid) RETURNS boolean
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public, pg_temp AS $$
   SELECT EXISTS (SELECT 1 FROM resource_access_grants g
                  WHERE g.tenant_id = p_tenant AND g.resource_type = p_type AND g.resource_id = p_id
                    AND g.user_id = p_user AND g.revoked_at IS NULL
-                   -- q225 : un accès à échéance tombe à l'échéance, ou à la clôture du dossier.
-                   AND (g.expires_at IS NULL
-                        OR (g.expires_at > now() AND NOT visibility_resource_closed(p_tenant, p_type, p_id))));
+                   -- q225 : un accès à échéance tombe à l'échéance, ou à la clôture du dossier. SEC-V5-02, échec
+                   -- fermé : un accès sans échéance ne compte que sur un dossier qui n'est pas NOMINATIF.
+                   AND (CASE WHEN g.expires_at IS NULL THEN visibility_own_level(p_tenant, p_type, p_id) <> 'NOMINATIF'
+                             ELSE g.expires_at > now() AND NOT visibility_resource_closed(p_tenant, p_type, p_id) END));
 $$;
 ALTER FUNCTION visibility_granted(uuid, text, uuid, uuid) SET search_path = pg_catalog, public, pg_temp;
 
