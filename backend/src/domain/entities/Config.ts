@@ -106,7 +106,7 @@ export interface Config {
   committeeTreatmentMinScore: number | null;
   /** Default true — the Committee pass-through obligation on riskevaluation.validate() is on by default. */
   committeeEvaluationEnforced: boolean;
-  /** DECISION-042 §1 (q58): may a user be in both the Committee and Audit groups? Default true. Risk Manager + Audit is always refused, whatever this says. */
+  /** DECISION-042 §1 (q58): may a user be in both the Committee and Audit groups? Default false (DECISION-061, migration 086: new rows only, an existing setting is never changed). Risk Manager + Audit is always refused, whatever this says. */
   committeeAuditCumulAllowed: boolean;
   /** DECISION-074 q141: what happens when someone validates their own input. Default REFUSE. */
   selfValidationPolicy: SelfValidationPolicy;

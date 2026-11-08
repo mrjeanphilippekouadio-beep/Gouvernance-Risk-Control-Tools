@@ -87,9 +87,10 @@ describe("q58 Committee + Audit cumul setting", () => {
     await expect(svc.setCommitteeAuditCumul(actor("u", ["config.update"]), false, "x", "r")).rejects.toThrow(ForbiddenError);
     const adminCfg = actor("u", ["config.read", "config.cumul.set"]);
     await expect(svc.setCommitteeAuditCumul(adminCfg, false, "  ", "r")).rejects.toThrow(ValidationError);
-    expect((await svc.get(adminCfg)).committeeAuditCumulAllowed).toBe(true);
-    const after = await svc.setCommitteeAuditCumul(adminCfg, false, "politique interne", "r");
-    expect(after.committeeAuditCumulAllowed).toBe(false);
+    // DECISION-061 (q119): without a configuration row the cumul is forbidden by default; the client may allow it.
+    expect((await svc.get(adminCfg)).committeeAuditCumulAllowed).toBe(false);
+    const after = await svc.setCommitteeAuditCumul(adminCfg, true, "politique interne", "r");
+    expect(after.committeeAuditCumulAllowed).toBe(true);
     expect(recorded).toHaveLength(1);
     expect(recorded[0]!.reason).toBe("politique interne");
   });

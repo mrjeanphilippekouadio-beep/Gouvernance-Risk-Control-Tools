@@ -307,4 +307,18 @@ describe.skipIf(!hasLocalPg)("D6 on real PostgreSQL (local only)", () => {
     expect(g.cumulSetting).toEqual({ userId: a, at: expect.any(Date) });
     expect([g.risksTotal, g.risksCreatorIsOwner]).toEqual([3, 1]);
   });
+
+  it("DECISION-061 (q119): a tenant created without an explicit setting forbids the Committee + Audit cumul; a cumul is then NOT_RESPECTED", async () => {
+    await one(`INSERT INTO configs (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id RETURNING tenant_id`, [ctx.tenant]);
+    const f = await new PostgresGovernanceHealthRepository(ctx.pool).loadFacts(ctx.tenant, new Date());
+    expect(f.config?.committeeAuditCumulAllowed).toBe(false);
+    const com = "77777777-7777-4777-8777-777777777777";
+    const x = computePanel({
+      ...f,
+      users: [{ id: com, label: "Gaby", active: true, directPermissions: [] }],
+      roles: [{ id: "r-com", name: "Comité", systemGroup: "RISK_COMMITTEE", permissions: [] }, { id: "r-aud", name: "Audit", systemGroup: "AUDIT", permissions: ["audit.read"] }],
+      assignments: [{ userId: com, roleId: "r-com", grantedBy: com }, { userId: com, roleId: "r-aud", grantedBy: com }],
+    }, []).find((r) => r.id === "GOV-SOD-04")!;
+    expect(x).toMatchObject({ status: "NOT_RESPECTED", offenders: [{ id: com, detail: "Comité + Audit (paramètre : interdit)" }] });
+  });
 });

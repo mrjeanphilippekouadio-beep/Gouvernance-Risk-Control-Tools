@@ -224,13 +224,14 @@ describe("PUT /config/committee-audit-cumul over HTTP", () => {
 
   it("accepts a 500-char reason, stores before/after in the audit, returns the new flag", async () => {
     const w = world({ cumul: null });
-    const res = await put(w, cfg, { allowed: false, reason: "x".repeat(500), unexpected: 1 });
+    // DECISION-061 (q119): no configuration row = forbidden by default; allowing it is audited before/after.
+    const res = await put(w, cfg, { allowed: true, reason: "x".repeat(500), unexpected: 1 });
     expect(res.status).toBe(200);
-    expect(res.json?.data.committeeAuditCumulAllowed).toBe(false);
+    expect(res.json?.data.committeeAuditCumulAllowed).toBe(true);
     expect(w.events).toHaveLength(1);
     expect(w.events[0]).toMatchObject({ entityType: "Config", action: "UPDATE" });
-    expect((w.events[0]!.oldValue as Config).committeeAuditCumulAllowed).toBe(true);
-    expect((w.events[0]!.newValue as Config).committeeAuditCumulAllowed).toBe(false);
+    expect((w.events[0]!.oldValue as Config).committeeAuditCumulAllowed).toBe(false);
+    expect((w.events[0]!.newValue as Config).committeeAuditCumulAllowed).toBe(true);
   });
 
   it.each([

@@ -48,7 +48,8 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     committeeEvaluationMinScore: committeeMinScore,
     committeeTreatmentMinScore: null,
     committeeEvaluationEnforced: true,
-    committeeAuditCumulAllowed: true,
+    // DECISION-061 (q119): the Committee + Audit cumul is forbidden by default, the client may allow it.
+    committeeAuditCumulAllowed: false,
     selfValidationPolicy: "REFUSE",
     exceptionReviewDelayDays: null,
     acceptanceMaxDays: null,

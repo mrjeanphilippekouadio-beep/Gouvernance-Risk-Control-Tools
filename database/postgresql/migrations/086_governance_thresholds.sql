@@ -15,3 +15,7 @@ ALTER TABLE configs ADD COLUMN IF NOT EXISTS gov_dormant_days integer NOT NULL D
   CHECK (gov_dormant_days BETWEEN 45 AND 180);
 ALTER TABLE configs ADD COLUMN IF NOT EXISTS gov_owner_creator_share_max_pct integer NOT NULL DEFAULT 50
   CHECK (gov_owner_creator_share_max_pct BETWEEN 25 AND 80);
+
+-- DECISION-061 (q119, PO 2026-10-18) : cumul Comité + Audit interdit par défaut, autorisable par le client. Seul le
+-- défaut des NOUVELLES lignes change : aucun UPDATE, un cumul déjà autorisé (Djamo) n'est jamais révoqué en silence.
+ALTER TABLE configs ALTER COLUMN committee_audit_cumul_allowed SET DEFAULT false;
