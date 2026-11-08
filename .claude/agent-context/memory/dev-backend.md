@@ -518,3 +518,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
   exécution, liens). Changement de périmètre d'une ressource restreinte = verrou + lecteurs avant/après + audit dans la
   même transaction (`changePerimeter`). Piège vécu : un script d'édition qui s'arrête à mi-parcours laisse des fichiers à
   moitié modifiés (INSERT sans `visibility`, SEC V2-01) — relire le diff complet avant de pousser.
+
+## 2026-11-08 B-6c (branche feat/r1-b6c-changement-dispositif, aucune migration)
+
+- Rattachement processus -> Dispositif : `RiskFrameworkService.requestProcessAssignment` + branche `ASSIGN_PROCESS` dans `decide` (règle du Dispositif d'arrivée, q89 ; seul le demandeur est exclu, pas d'auteurs de version). Dépôt : `createAssignmentRequest` / `decideAssignment` (OPTIONNELS sur l'interface, fail closed si absents ou si le dépôt n'est pas transactionnel). `processes.risk_framework_id` n'est écrit qu'à l'approbation, audit `Process UPDATE` ancien -> nouveau dans la même transaction.
+- Retrait du contrôle F-B6a-10 (plus petit plafond inter-Dispositifs) dans `mirrorScale` : prescrit par spec 2.3, I-C1 confirmé A13 ; tests F-B6a-10 réécrits (pas supprimés en silence).
+- F-B6b-04 : audit Dispositif avant/après sur `RiskService.update` (12e paramètre optionnel `frameworks`). Pas de permission dédiée : non tranché.
+- q129 non tranché explicitement par le PO : spec appliquée telle quelle (membre RM exigé pour proposer). Retirer `assertRiskManager` dans `requestProcessAssignment` si le PO veut que l'admin propose.
+- Non fait : retrait (`withdraw`) d'une demande de rattachement, SET_DEFAULT, archivage de Dispositif (autres items de B-6c).
+- Un seul RM : rattachement bloqué en PENDING (bootstrap hors périmètre, q75) ; tension avec DECISION-066 « ne jamais bloquer ».
