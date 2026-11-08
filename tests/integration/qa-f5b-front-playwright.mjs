@@ -33,7 +33,7 @@ mkdirSync(SHOTS, { recursive: true });
 
 const { check, failures } = verdicts();
 const { login, api } = localApi(API, EMAIL);
-const STATUS = { NOT_RESPECTED: /Non respecté/, RESPECTED: /^Respecté|\bRespecté\b/, NOT_EVALUABLE: /Non évaluable/, ACCEPTED: /Accepté/, ALLOWED_BY_SETTING: /Autorisé par un réglage/ };
+const STATUS = { NOT_RESPECTED: /Non respecté/, RESPECTED: /(?:^Respecté)|(?:\bRespecté\b)/, NOT_EVALUABLE: /Non évaluable/, ACCEPTED: /Accepté/, ALLOWED_BY_SETTING: /Autorisé par un réglage/ };
 
 const db = new Client({ connectionString: DB });
 await db.connect();
@@ -93,7 +93,7 @@ try {
   await dialog.getByRole("button", { name: "Enregistrer l'acceptation" }).click();
   await A.page.getByText(/Acceptation enregistrée/).waitFor();
   const acc = posts.find((p) => p.path.endsWith("/governance-principle-acceptances"));
-  check("3.1 POST acceptation 201, corps = principleId/reason/expiresAt seulement", acc?.status === 201 && Object.keys(acc.body).sort().join() === "expiresAt,principleId,reason" && acc.body.principleId === target.id, JSON.stringify(acc));
+  check("3.1 POST acceptation 201, corps = principleId/reason/expiresAt seulement", acc?.status === 201 && Object.keys(acc.body).sort((a, b) => a.localeCompare(b)).join() === "expiresAt,principleId,reason" && acc.body.principleId === target.id, JSON.stringify(acc));
   // l'acceptation reste PENDING tant qu'un tiers ne l'a pas confirmee : le panel ne change qu'a ce moment-la (decision du serveur)
   const created = ((await api("adm", "GET", "/governance-principle-acceptances")).json.data ?? []).find((a) => a.principleId === target.id);
   check("3.2 l'API liste l'acceptation (PENDING ou ACTIVE)", created && ["PENDING", "ACTIVE"].includes(created.status), created?.status);
@@ -118,7 +118,7 @@ try {
   await rd.getByRole("button", { name: "Enregistrer" }).click();
   await A.page.getByText("Exception revue.").waitFor();
   const rev = posts.find((p) => p.path.endsWith("/reviews"));
-  check("4.2 POST /reviews 201 corps { outcome, comment }", rev?.status === 201 && Object.keys(rev.body).sort().join() === "comment,outcome" && rev.body.outcome === "REVIEWED", JSON.stringify(rev));
+  check("4.2 POST /reviews 201 corps { outcome, comment }", rev?.status === 201 && Object.keys(rev.body).sort((a, b) => a.localeCompare(b)).join() === "comment,outcome" && rev.body.outcome === "REVIEWED", JSON.stringify(rev));
   const erow2 = A.page.locator("table tbody tr").filter({ hasText: "selfValidation.qa" });
   check("4.3 la ligne passe « Revue » et plus de bouton", /Revue/.test(await erow2.innerText()) && (await erow2.getByRole("button").count()) === 0);
 
