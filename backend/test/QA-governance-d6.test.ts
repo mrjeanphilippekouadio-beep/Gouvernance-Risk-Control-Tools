@@ -117,15 +117,15 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
       expect((await sql<{ n: number }>("SELECT count(*)::int AS n FROM audit_log"))[0]!.n).toBe(before);
       for (const m of ["POST", "PUT", "PATCH", "DELETE"]) expect((await call("aud", m, "/governance-health", {})).status, m).toBeGreaterThanOrEqual(400);
     });
-    it("19 principles, 16 evaluated: GOV-SOD-05, GOV-COM-02, GOV-OWN-03 are NOT_EVALUABLE with a reason, never RESPECTED; each evaluated one says what it covers (or nothing is claimed)", async () => {
+    it("19 principles, 14 evaluated here: GOV-SOD-05, GOV-COM-02, GOV-OWN-03, and GOV-RISK-01 / GOV-OWN-01 below 10 risks (q233 A, « échantillon insuffisant »), are NOT_EVALUABLE with a reason, never RESPECTED; each evaluated one says what it covers (or nothing is claimed)", async () => {
       const p = await panel("aud");
       expect(p.principles.length).toBe(19);
       const ne = p.principles.filter((x) => x.status === "NOT_EVALUABLE").map((x) => x.id).sort((a, b) => a.localeCompare(b));
-      expect(ne).toEqual(["GOV-COM-02", "GOV-OWN-03", "GOV-SOD-05"]);
+      expect(ne).toEqual(["GOV-COM-02", "GOV-OWN-01", "GOV-OWN-03", "GOV-RISK-01", "GOV-SOD-05"]);
       for (const x of p.principles.filter((q) => q.status === "NOT_EVALUABLE")) { expect(x.notEvaluableReason, x.id).toBeTruthy(); expect(x.covers, x.id).toBeNull(); }
       expect(new Set(p.principles.map((x) => x.id)).size).toBe(19);
     });
-    it("healthy baseline: the 16 evaluated principles are RESPECTED (no offender, no acceptance)", async () => {
+    it("healthy baseline: the evaluated principles are RESPECTED (no offender, no acceptance)", async () => {
       const p = await panel("aud");
       const bad = p.principles.filter((x) => x.status !== "NOT_EVALUABLE" && x.status !== "RESPECTED").map((x) => `${x.id}=${x.status} ${JSON.stringify(x.offenders)}`);
       expect(bad).toEqual([]);
@@ -146,7 +146,7 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
       await sql("INSERT INTO risks (tenant_id, process, description, status, visibility) VALUES ($1, 'x', 'AUTRE-CLIENT', 'ACTIVE', 'CLIENT')", [T2]);
       const after = await panel("aud");
       expect(after.exceptions.total).toBe(before.exceptions.total);
-      expect(pr(after, "GOV-OWN-01").status).toBe("RESPECTED");
+      expect(pr(after, "GOV-OWN-01").status).toBe(pr(before, "GOV-OWN-01").status);
       expect(JSON.stringify(after)).not.toContain("AUTRE-CLIENT");
     });
   });
@@ -224,9 +224,11 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
       expect(pr(await panel("aud"), "GOV-SOD-04").offenders.find((o) => o["id"] === UID.n1)!["detail"]).toContain("Risk Manager + Comité");
       await leave("RISK_COMMITTEE", "n1");
       await joinGroup("AUDIT", "raci");
-      expect(pr(await panel("aud"), "GOV-SOD-04").offenders.find((o) => o["id"] === UID.raci)!["detail"]).toBe("Comité + Audit");
+      expect(pr(await panel("aud"), "GOV-SOD-04").offenders.find((o) => o["id"] === UID.raci)!["detail"]).toBe("Comité + Audit (paramètre : interdit)");
       await sql("UPDATE configs SET committee_audit_cumul_allowed = true WHERE tenant_id = $1", [T]);
-      expect(pr(await panel("aud"), "GOV-SOD-04").offenders.find((o) => o["id"] === UID.raci)!["detail"]).toContain("autorisé par le paramètre");
+      const allowed = pr(await panel("aud"), "GOV-SOD-04");
+      expect(allowed.status, "q234 C").toBe("ALLOWED_BY_SETTING");
+      expect(allowed.offenders.find((o) => o["id"] === UID.raci)!["detail"]).toContain("autorisé par le paramètre");
       await sql("UPDATE configs SET committee_audit_cumul_allowed = false WHERE tenant_id = $1", [T]);
       await leave("AUDIT", "raci");
       expect(await status("GOV-SOD-04")).toBe("RESPECTED");
@@ -253,7 +255,8 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
       expect(pr(p, "GOV-COM-01").offenders.find((o) => o["id"] === "RISK_COMMITTEE")).toMatchObject({ count: 1, detail: "un seul membre" });
       await joinGroup("RISK_COMMITTEE", "raci");
       p = await panel("aud");
-      expect([pr(p, "GOV-RISK-01").status, pr(p, "GOV-RISK-02").status, pr(p, "GOV-COM-01").status]).toEqual(["RESPECTED", "RESPECTED", "RESPECTED"]);
+      // GOV-RISK-01 back to « échantillon insuffisant » (fewer than 10 risks, q233 A), never RESPECTED
+      expect([pr(p, "GOV-RISK-01").status, pr(p, "GOV-RISK-02").status, pr(p, "GOV-COM-01").status]).toEqual(["NOT_EVALUABLE", "RESPECTED", "RESPECTED"]);
     });
     it("GOV-RISK-02 vacancy beyond the declared maximum: a vacancy trace older than the maximum with no active Risk Manager => SETTING offender; within the maximum => none", async () => {
       await freshTracking();
@@ -316,7 +319,7 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
       expect(x.offenders).toHaveLength(1);
     });
     it("GOV-OWN-01: a live risk without owner, or whose owner is suspended, is an offender (label only for a CLIENT risk); an archived or deleted one is not", async () => {
-      expect(await status("GOV-OWN-01")).toBe("RESPECTED");
+      expect(await status("GOV-OWN-01"), "fewer than 10 risks and no gap: échantillon insuffisant (q233 A)").toBe("NOT_EVALUABLE");
       const ids = { noOwner: randomUUID(), suspended: randomUUID(), restricted: randomUUID(), archived: randomUUID(), deleted: randomUUID() };
       const ins = (id: string, owner: string | null, vis: string, st = "ACTIVE", del = "NULL") =>
         sql(`INSERT INTO risks (id, tenant_id, process, description, status, owner_id, visibility, deleted_at) VALUES ($1, $2, 'QA', $3, $4, $5, $6, ${del})`, [id, T, `LIBELLE-${vis}-${id.slice(0, 4)}`, st, owner, vis]);
@@ -338,7 +341,7 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
         await sql("UPDATE risks SET deleted_at = now() WHERE description LIKE 'LIBELLE-%'");
         await setUser("dept", "deleted_at = NULL");
       }
-      expect(await status("GOV-OWN-01")).toBe("RESPECTED");
+      expect(await status("GOV-OWN-01"), "back to échantillon insuffisant (q233 A)").toBe("NOT_EVALUABLE");
     });
     it("GOV-OWN-02: an active process without owner account or without champion is an offender; an inactive one, or a complete one, is not", async () => {
       expect(await status("GOV-OWN-02")).toBe("RESPECTED");
@@ -449,7 +452,7 @@ describe.skipIf(!live)("QA-governance-d6 on the REAL server + LOCAL PostgreSQL 1
       await sql("ALTER TABLE governance_principle_acceptances ENABLE TRIGGER USER");
       expect(await status("GOV-OWN-01"), "an expired acceptance accepts nothing").toBe("NOT_RESPECTED");
       await sql("UPDATE risks SET deleted_at = now() WHERE id = $1", [first]);
-      expect(await status("GOV-OWN-01"), "no offender left: RESPECTED, not ACCEPTED").toBe("RESPECTED");
+      expect(await status("GOV-OWN-01"), "no offender left: not ACCEPTED (échantillon insuffisant under 10 risks, q233 A)").toBe("NOT_EVALUABLE");
     });
     it("masking on the acceptance: acceptedBy / confirmedBy are null without audit.read (Risk Manager, Committee), shown to Audit", async () => {
       const r = randomUUID();

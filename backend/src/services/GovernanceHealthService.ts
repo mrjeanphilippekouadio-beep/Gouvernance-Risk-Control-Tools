@@ -113,7 +113,8 @@ export class GovernanceHealthService {
     const hideUserIds = (text: string): string => (showNames ? text : text.replace(UUID_RE, (id) => (labels.has(id) ? person(id) : id)));
     const mask = (o: Offender): PanelOffender => {
       if (o.kind === "USER" && !showNames) return { ...o, id: null, label: person(o.id) };
-      if (showNames) return o;
+      // q234 C: the author of a setting is named in a detail by account id; audit readers see the name.
+      if (showNames) return o.detail ? { ...o, detail: o.detail.replace(UUID_RE, (id) => labels.get(id) ?? id) } : o;
       return { ...o, id: hideUserIds(o.id), label: o.label === null ? null : hideUserIds(o.label), ...(o.detail ? { detail: hideUserIds(o.detail) } : {}) };
     };
     // q232 A / SEC D6-02: the id and state of a restricted resource are for the fixed groups (who see everything); others get a count.

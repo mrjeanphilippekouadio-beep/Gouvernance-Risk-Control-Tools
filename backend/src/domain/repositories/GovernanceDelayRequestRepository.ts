@@ -3,7 +3,9 @@ import type { TransactionalAudit } from "../entities/RiskFramework.js";
 import type { SelfValidationPolicyRequestStatus } from "./SelfValidationPolicyRequestRepository.js";
 
 /** The governance delays (days, null = not configured) that setGovernanceDelays writes. */
-export const GOVERNANCE_DELAY_KEYS = ["exceptionReviewDelayDays", "acceptanceMaxDays", "policyRequestExpiryDays", "riskManagerVacancyMaxDays", "resourceReadallMaxDays", "lastSeenRetentionDays"] as const;
+export const GOVERNANCE_DELAY_KEYS = ["exceptionReviewDelayDays", "acceptanceMaxDays", "policyRequestExpiryDays", "riskManagerVacancyMaxDays", "resourceReadallMaxDays", "lastSeenRetentionDays",
+  // q233 A (DECISION-116): the panel thresholds go through the same audited circuit.
+  "govRmRiskShareMaxPct", "govMaxAdmins", "govRoleMaxPermissions", "govRoleMaxFamilies", "govDormantDays", "govOwnerCreatorShareMaxPct"] as const;
 export type GovernanceDelayKey = (typeof GOVERNANCE_DELAY_KEYS)[number];
 export type GovernanceDelays = Pick<ConfigPatch, GovernanceDelayKey>;
 

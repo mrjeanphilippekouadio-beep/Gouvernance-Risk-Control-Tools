@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import type { GovernanceHealthRepository } from "../../../domain/repositories/GovernanceHealthRepository.js";
 import type { ActiveAcceptance, FactRole, GovernanceFacts, MarkedAction } from "../../../domain/governance/health.js";
 import type { SystemGroup } from "../../../domain/entities/Role.js";
+import { GOVERNANCE_THRESHOLDS, type GovernanceThresholdKey, type GovernanceThresholds } from "../../../domain/entities/Config.js";
 
 /** Bound of the listed items (marked actions, unmarked self-validations); totals are always exact. */
 export const HEALTH_LIST_LIMIT = 50;
@@ -28,10 +29,10 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
     );
     if (!tenant) throw new Error("Tenant not found");
     const since = tenant.tracked_since;
-    const [users, roles, assignments, configRows, ratifications, riskGaps, processGaps, marked, markedTotals, unmarked, unmarkedTotal, designations, vacancy, purgeRuns, gapTotals, byRule] =
+    const [users, roles, assignments, configRows, ratifications, riskGaps, processGaps, marked, markedTotals, unmarked, unmarkedTotal, designations, vacancy, purgeRuns, gapTotals, byRule, riskStats, ownerCounts, cumulSetting, thresholdRows] =
       await Promise.all([
-        q<{ id: string; label: string; active: boolean; roles: string[] }>(
-          `SELECT id, display_name AS label, deleted_at IS NULL AS active, coalesce(roles, '{}') AS roles FROM users WHERE tenant_id = $1`,
+        q<{ id: string; label: string; active: boolean; roles: string[]; last_seen_at: Date | null }>(
+          `SELECT id, display_name AS label, deleted_at IS NULL AS active, coalesce(roles, '{}') AS roles, last_seen_at FROM users WHERE tenant_id = $1`,
         ),
         q<{ id: string; name: string; system_group: SystemGroup | null; permissions: string[] }>(
           `SELECT id, name, system_group, permissions FROM roles WHERE tenant_id = $1 AND deleted_at IS NULL`,
@@ -130,6 +131,32 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
            WHERE tenant_id = $1 AND governance_exception IS NOT NULL AND "timestamp" >= $2 GROUP BY governance_exception`,
           [since],
         ),
+        // q233 A: RISK-01 and OWN-01 (d) shares, over the live risks (not deleted, not archived). `risks` has no
+        // creator column: the creator is the author of the Risk CREATE entry of the audit trail.
+        q<{ total: string; creator_owner: string }>(
+          `SELECT count(*) AS total,
+                  count(*) FILTER (WHERE r.owner_id IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM audit_log a WHERE a.tenant_id = r.tenant_id AND a.entity_type = 'Risk'
+                      AND a.entity_id = r.id AND a.action = 'CREATE' AND a.user_id = r.owner_id)) AS creator_owner
+           FROM risks r WHERE r.tenant_id = $1 AND r.deleted_at IS NULL AND r.status <> 'ARCHIVED'`,
+        ),
+        q<{ owner_id: string; n: string }>(
+          `SELECT owner_id, count(*) AS n FROM risks
+           WHERE tenant_id = $1 AND deleted_at IS NULL AND status <> 'ARCHIVED' AND owner_id IS NOT NULL GROUP BY owner_id`,
+        ),
+        // q234 C: who last changed the Committee + Audit cumul setting, and when.
+        q<{ user_id: string; at: Date }>(
+          `SELECT user_id, "timestamp" AS at FROM audit_log
+           WHERE tenant_id = $1 AND entity_type = 'Config'
+             AND (old_value->>'committeeAuditCumulAllowed') IS DISTINCT FROM (new_value->>'committeeAuditCumulAllowed')
+           ORDER BY "timestamp" DESC LIMIT 1`,
+        ),
+        q<Partial<Record<string, number>>>(
+          `SELECT gov_rm_risk_share_max_pct AS "govRmRiskShareMaxPct", gov_max_admins AS "govMaxAdmins",
+                  gov_role_max_permissions AS "govRoleMaxPermissions", gov_role_max_families AS "govRoleMaxFamilies",
+                  gov_dormant_days AS "govDormantDays", gov_owner_creator_share_max_pct AS "govOwnerCreatorShareMaxPct"
+           FROM configs WHERE tenant_id = $1`,
+        ),
       ]);
     const config = configRows[0];
     const totals = markedTotals[0];
@@ -140,7 +167,7 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
     return {
       now,
       trackedSince: since,
-      users: users.map((u) => ({ id: u.id, label: u.label, active: u.active, directPermissions: u.roles })),
+      users: users.map((u) => ({ id: u.id, label: u.label, active: u.active, directPermissions: u.roles, lastSeenAt: u.last_seen_at })),
       roles: roles.map((r): FactRole => ({ id: r.id, name: r.name, systemGroup: r.system_group, permissions: r.permissions })),
       assignments: assignments.map((a) => ({ userId: a.user_id, roleId: a.role_id, grantedBy: a.granted_by })),
       config: config ? { committeeAuditCumulAllowed: config.cumul, committeeEvaluationEnforced: config.enforced, committeeTreatmentMinScore: config.min_score } : null,
@@ -163,6 +190,13 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
       riskManagerVacancyMaxDays: config?.vacancy_max ?? null,
       exceptionReviewDelayDays: config?.review_delay ?? null,
       lastSeenPurgeAt: purgeRuns[0]?.at ?? null,
+      risksTotal: Number(riskStats[0]?.total ?? 0),
+      risksCreatorIsOwner: Number(riskStats[0]?.creator_owner ?? 0),
+      risksOwnedBy: Object.fromEntries(ownerCounts.map((o) => [o.owner_id, Number(o.n)])),
+      cumulSetting: cumulSetting[0] ? { userId: cumulSetting[0].user_id, at: cumulSetting[0].at } : null,
+      thresholds: Object.fromEntries(
+        (Object.keys(GOVERNANCE_THRESHOLDS) as GovernanceThresholdKey[]).map((k) => [k, thresholdRows[0]?.[k] ?? GOVERNANCE_THRESHOLDS[k].default]),
+      ) as GovernanceThresholds,
     };
   }
 

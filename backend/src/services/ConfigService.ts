@@ -1,6 +1,6 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
-import { DEFAULT_LAST_SEEN_RETENTION_DAYS, MIN_LAST_SEEN_RETENTION_DAYS, DEFAULT_RESOURCE_READALL_MAX_DAYS, DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
+import { DEFAULT_LAST_SEEN_RETENTION_DAYS, GOVERNANCE_THRESHOLDS, isGovernanceThresholdKey, MIN_LAST_SEEN_RETENTION_DAYS, DEFAULT_RESOURCE_READALL_MAX_DAYS, DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
 import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -56,6 +56,12 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     riskManagerVacancyMaxDays: DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS,
     resourceReadallMaxDays: DEFAULT_RESOURCE_READALL_MAX_DAYS,
     lastSeenRetentionDays: DEFAULT_LAST_SEEN_RETENTION_DAYS,
+    govRmRiskShareMaxPct: GOVERNANCE_THRESHOLDS.govRmRiskShareMaxPct.default,
+    govMaxAdmins: GOVERNANCE_THRESHOLDS.govMaxAdmins.default,
+    govRoleMaxPermissions: GOVERNANCE_THRESHOLDS.govRoleMaxPermissions.default,
+    govRoleMaxFamilies: GOVERNANCE_THRESHOLDS.govRoleMaxFamilies.default,
+    govDormantDays: GOVERNANCE_THRESHOLDS.govDormantDays.default,
+    govOwnerCreatorShareMaxPct: GOVERNANCE_THRESHOLDS.govOwnerCreatorShareMaxPct.default,
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),
@@ -310,6 +316,13 @@ export class ConfigService {
       const v = delays[key];
       if (v === undefined) continue;
       // q221 (DECISION-111): the reading of every content is capped at 90 days (adjustable downwards only).
+      if (isGovernanceThresholdKey(key)) {
+        // q233 A (DECISION-116): a panel threshold is never null and stays in the A13 range.
+        const { min, max } = GOVERNANCE_THRESHOLDS[key];
+        if (v === null || !Number.isInteger(v) || v < min || v > max) throw new ValidationError(`${key} must be a whole number between ${min} and ${max}`);
+        patch[key] = v;
+        continue;
+      }
       const max = key === "resourceReadallMaxDays" ? DEFAULT_RESOURCE_READALL_MAX_DAYS : MAX_GOVERNANCE_DELAY_DAYS;
       // q232 A / SEC D6-01: the « dernière activité » is never erased less than a year after the end of an account.
       const min = key === "lastSeenRetentionDays" ? MIN_LAST_SEEN_RETENTION_DAYS : 1;
@@ -622,6 +635,8 @@ function isLengthening(current: number | null, next: number | null): boolean {
  */
 function isRelaxation(key: string, current: number | null, next: number | null): boolean {
   if (key === "lastSeenRetentionDays") return next !== null && (current === null || next < current);
+  // q233 A: raising a panel threshold makes alerts disappear — never silently: second person, as a lengthening.
+  if (isGovernanceThresholdKey(key)) return next !== null && next > (current ?? GOVERNANCE_THRESHOLDS[key].default);
   return isLengthening(current, next);
 }
 
