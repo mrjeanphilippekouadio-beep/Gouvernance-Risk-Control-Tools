@@ -6,7 +6,7 @@
 //  S2  envoi bloqué, SHUTDOWN_DRAIN_MS=2000, requête terminée avant le signal : exit 0 vers 2 s (1,6 à 3 s), journal "1 abandoned".
 //  S3  envoi bloqué, requête terminée à 0,8 x délai après le signal : une seule échéance (version db11c17) : exit <= délai + 600 ms, code 0 (oracle corrigé : abandon d'envoi seul ne donne pas 1).
 //  S8  requête qui ne se termine jamais : à l'échéance connexions coupées, exit 1, journal « connections cut ».
-//  (S2/S3 version db11c17 : envoi abandonné => exit 0 + journal ; exit 1 seulement si requêtes coupées ou pool non fermé.)
+//  (S2/S3 : depuis 6bc2228, un envoi abandonné donne exit 1 + journal ; en db11c17 c'était exit 0.)
 //  S4  second signal pendant un drain bloqué : exit 1 en moins de 1 s après le second signal.
 //  S5  SHUTDOWN_DRAIN_MS = -1 / 120001 / abc / 1.5 : le process refuse de démarrer (exit != 0, aucune écoute) ; 0 et 120000 démarrent.
 //  S6  SIGINT : même chemin que SIGTERM (exit 0).
@@ -91,7 +91,7 @@ try {
     const r = await req; const ex = await p.done; const dt = p.exitAt - t0;
     check("S1 requete en cours terminee 201", r.status === 201, JSON.stringify(r));
     check("S1 envoi attendu (marqueur)", tgDone(p) === 1);
-    check("S1 journal 2 awaited (notify Telegram + D5 processRequest) / 0 abandoned", /2 in-flight send\(s\) awaited, 0 abandoned \(budget 10000 ms\)/.test(p.log), shutdownLine(p));
+    check("S1 journal 2 awaited (notify Telegram + D5 processRequest) / 0 abandoned", /2 in-flight send\(s\) awaited, 0 abandoned, 0 request\(s\) still running \(budget 10000 ms\)/.test(p.log), shutdownLine(p));
     check("S1 exit 0", ex.code === 0, JSON.stringify(ex));
     check("S1 delai < 10 s", dt < 10000, `${dt} ms (requete finie a ${r.endAt - t0} ms ; envoi 1500 ms)`);
     console.log(`INFO S1 SIGTERM->exit = ${dt} ms ; en-tete Connection de la reponse: ${r.conn}`);
@@ -104,9 +104,9 @@ try {
     const t0 = Date.now(); p.child.kill("SIGTERM");
     const ex = await p.done; const dt = p.exitAt - t0;
     check("S2 requete 201 avant signal", r.status === 201);
-    check("S2 exit 0 (envoi abandonne = journal seulement ; seul pool/requetes coupees donnent 1) [oracle corrige : la 1re ecriture attendait 1, contraire a la regle annoncee]", ex.code === 0, JSON.stringify(ex));
+    check("S2 exit 1 (depuis 6bc2228 / SEC-IRT3-06 : un envoi abandonne donne aussi la sortie 1)", ex.code === 1, JSON.stringify(ex));
     check("S2 sortie ~ SHUTDOWN_DRAIN_MS (une seule echeance)", dt >= 1600 && dt <= 2600, `${dt} ms`);
-    check("S2 journal 1 abandoned", /1 in-flight send\(s\) awaited, 1 abandoned \(budget 2000 ms\)/.test(p.log), shutdownLine(p));
+    check("S2 journal 1 abandoned", /1 in-flight send\(s\) awaited, 1 abandoned, 0 request\(s\) still running \(budget 2000 ms\)/.test(p.log), shutdownLine(p));
     console.log(`INFO S2 SIGTERM->exit = ${dt} ms`);
   }
   { // S4
@@ -129,7 +129,7 @@ try {
     await sleep(200); const t0 = Date.now(); p.child.kill("SIGTERM");
     const r = await req; const ex = await p.done; const dt = p.exitAt - t0;
     check("S3 requete 201", r.status === 201, JSON.stringify(r));
-    check("S3 exit 0 (idem S2)", ex.code === 0, JSON.stringify(ex));
+    check("S3 exit 1 (idem S2, regle 6bc2228)", ex.code === 1, JSON.stringify(ex));
     console.log(`MESURE S3 SHUTDOWN_DRAIN_MS=${D} ; requete finie a ${r.endAt - t0} ms ; SIGTERM->exit = ${dt} ms ; ratio ${(dt / D).toFixed(2)} ; ${shutdownLine(p)}`);
     check("S3 une seule echeance : exit <= delai + 600 ms", dt <= D + 600, `${dt} ms pour un delai de ${D} ms`);
   }
