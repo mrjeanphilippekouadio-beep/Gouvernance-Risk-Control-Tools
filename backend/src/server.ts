@@ -4,6 +4,7 @@ import cors from "cors";
 import { corsOptions } from "./api/corsOptions.js";
 import { env, getLocalAuthUsers } from "./config/env.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
+import { InFlightRegistry, trackedNotifier } from "./shutdown.js";
 import { pool } from "./infrastructure/database/pool.js";
 import { createLastSeenRecorder } from "./infrastructure/identity/lastSeen.js";
 import { assertProductionDatabaseRole } from "./infrastructure/database/postgres/databaseRoleSecurity.js";
@@ -250,10 +251,14 @@ const notificationRepository = new PostgresNotificationRepository(pool);
 const notificationSubscriptionRepository = new PostgresNotificationSubscriptionRepository(pool);
 const reviewCycleRepository = new PostgresReviewCycleRepository(pool);
 const processEvaluationModeRequestRepository = new PostgresProcessEvaluationModeRequestRepository(pool);
-const notifier =
+// I-RT3-01: sends that leave after the response are tracked so SIGTERM can wait for them.
+const inFlight = new InFlightRegistry();
+const notifier = trackedNotifier(
   env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID
     ? new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID)
-    : new NoopNotifier();
+    : new NoopNotifier(),
+  inFlight,
+);
 
 // Lot V2 (DECISION-100/102): level and named-people list of controls, anomalies, action plans and KPIs.
 const resourceVisibilityManager = new ResourceVisibilityManager(new PostgresResourceAccessRepository(pool), auditRepository, userRepository, notificationRepository);
@@ -579,7 +584,7 @@ app.get("/ready", async (_req, res) => {
 
 // --- Authenticated API ---
 // Lot D5: governance notifications, after the commit of every successful mutating request.
-app.use("/api/v1", governanceNotificationsMiddleware(governanceNotifier));
+app.use("/api/v1", governanceNotificationsMiddleware(governanceNotifier, inFlight));
 // moduleGuard wired per MODULE_NAMES (ACT-221): each togglable module's main
 // resource route(s) get the same one-line treatment as /risks.
 app.use(
@@ -730,6 +735,33 @@ async function startServer(): Promise<void> {
     // eslint-disable-next-line no-console
     console.log(`GRC Tools backend listening on port ${env.PORT} (${env.NODE_ENV})`);
   });
+
+  // I-RT3-01: graceful stop. A second signal forces the exit.
+  let stopping = false;
+  const stop = (signal: string): void => {
+    if (stopping) {
+      // eslint-disable-next-line no-console
+      console.warn(`${signal} received again: forced exit.`);
+      process.exit(1);
+    }
+    stopping = true;
+    // eslint-disable-next-line no-console
+    console.log(`${signal} received: closing the server, draining in-flight notifications.`);
+    // Stops accepting; requests still running finish first (their notifications are only registered at res.end),
+    // bounded by the same deadline.
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+    server.closeIdleConnections();
+    void (async () => {
+      await Promise.race([closed, new Promise<void>((resolve) => setTimeout(resolve, env.SHUTDOWN_DRAIN_MS).unref())]);
+      const { awaited, abandoned } = await inFlight.drain(env.SHUTDOWN_DRAIN_MS);
+      // eslint-disable-next-line no-console
+      console.log(`Shutdown: ${awaited} in-flight send(s) awaited, ${abandoned} abandoned at the ${env.SHUTDOWN_DRAIN_MS} ms deadline.`);
+      await pool.end().catch(() => undefined);
+      process.exit(0);
+    })();
+  };
+  process.on("SIGTERM", () => stop("SIGTERM"));
+  process.on("SIGINT", () => stop("SIGINT"));
 
   // Best-effort Drive access check, logged once at startup; never blocks.
   if (documentStorage instanceof GoogleDriveStorage) {
