@@ -12,7 +12,7 @@ describe("InFlightRegistry (I-RT3-01)", () => {
     expect(reg.size).toBe(1);
     const res = await reg.drain(Date.now() + 1000);
     expect(done).toBe(true);
-    expect(res).toEqual({ awaited: 1, abandoned: 0 });
+    expect(res).toMatchObject({ awaited: 1, abandoned: 0 });
     expect(reg.size).toBe(0);
   });
 
@@ -22,7 +22,7 @@ describe("InFlightRegistry (I-RT3-01)", () => {
     const t0 = Date.now();
     const res = await reg.drain(Date.now() + 50);
     expect(Date.now() - t0).toBeLessThan(500);
-    expect(res).toEqual({ awaited: 1, abandoned: 1 });
+    expect(res).toMatchObject({ awaited: 1, abandoned: 1 });
   });
 
   it("un envoi en échec ne bloque pas l'arrêt", async () => {
@@ -40,7 +40,7 @@ describe("InFlightRegistry (I-RT3-01)", () => {
     setTimeout(() => reg.track(sleep(60).then(() => { late = true; })), 10);
     const res = await reg.drain(Date.now() + 1000);
     expect(late).toBe(true);
-    expect(res).toEqual({ awaited: 2, abandoned: 0 });
+    expect(res).toMatchObject({ awaited: 2, abandoned: 0 });
   });
 
   it("SEC-IRT3-02 : un envoi tardif non terminé à l'échéance est compté abandonné", async () => {
@@ -48,7 +48,7 @@ describe("InFlightRegistry (I-RT3-01)", () => {
     reg.track(sleep(40));
     setTimeout(() => reg.track(new Promise<void>(() => undefined)), 10);
     const res = await reg.drain(Date.now() + 100);
-    expect(res).toEqual({ awaited: 2, abandoned: 1 });
+    expect(res).toMatchObject({ awaited: 2, abandoned: 1 });
   });
 
   it("trackedNotifier enregistre l'envoi sans changer son résultat", async () => {
@@ -98,6 +98,42 @@ describe("gracefulShutdown (SEC-IRT3-01/03)", () => {
     const code = await gracefulShutdown({ server, registry, closePool: async () => undefined, budgetMs: 300, log: () => undefined });
     expect(code).toBe(1);
     expect(Date.now() - t0).toBeLessThan(900);
+  });
+
+  it("SEC-IRT3-06 (scénario G) : client parti avant la réponse, l'arrêt attend la requête et son envoi", async () => {
+    const registry = new InFlightRegistry();
+    const delivered: string[] = [];
+    const count = registry.requestCounter();
+    const server = http.createServer((req, res) => {
+      count(req as never, res as never, () => undefined);
+      void sleep(200).then(() => {
+        res.end("ok");
+        registry.track(sleep(100).then(() => { delivered.push("notif"); }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, r));
+    const port = (server.address() as { port: number }).port;
+    const req = http.get({ port }, () => undefined);
+    req.on("error", () => undefined);
+    await sleep(50);
+    req.destroy(); // client gone before the answer: the socket is closed, the handler keeps running
+    await sleep(30);
+    expect(registry.activeRequests).toBe(1);
+    const logs: string[] = [];
+    const code = await gracefulShutdown({ server, registry, closePool: async () => undefined, budgetMs: 2000, log: (l) => logs.push(l) });
+    expect(delivered).toEqual(["notif"]);
+    expect(code).toBe(0);
+    expect(registry.activeRequests).toBe(0);
+  });
+
+  it("SEC-IRT3-06 : requête encore active à l'échéance, comptée dans le journal, sortie 1", async () => {
+    const registry = new InFlightRegistry();
+    registry.beginRequest(); // never ends
+    const { server } = await startServer(0, registry, 0);
+    const logs: string[] = [];
+    const code = await gracefulShutdown({ server, registry, closePool: async () => undefined, budgetMs: 150, log: (l) => logs.push(l) });
+    expect(code).toBe(1);
+    expect(logs.join("\n")).toContain("1 request(s) still running");
   });
 
   it("pool.end qui échoue : journalisé (nom seul) et code 1", async () => {

@@ -584,6 +584,7 @@ app.get("/ready", async (_req, res) => {
 
 // --- Authenticated API ---
 // Lot D5: governance notifications, after the commit of every successful mutating request.
+app.use("/api/v1", inFlight.requestCounter()); // SEC-IRT3-06: shutdown waits for running requests, not only sockets
 app.use("/api/v1", governanceNotificationsMiddleware(governanceNotifier, inFlight));
 // moduleGuard wired per MODULE_NAMES (ACT-221): each togglable module's main
 // resource route(s) get the same one-line treatment as /risks.
