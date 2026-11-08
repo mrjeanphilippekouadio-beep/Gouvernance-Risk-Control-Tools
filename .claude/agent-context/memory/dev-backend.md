@@ -518,3 +518,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
   exécution, liens). Changement de périmètre d'une ressource restreinte = verrou + lecteurs avant/après + audit dans la
   même transaction (`changePerimeter`). Piège vécu : un script d'édition qui s'arrête à mi-parcours laisse des fichiers à
   moitié modifiés (INSERT sans `visibility`, SEC V2-01) — relire le diff complet avant de pousser.
+
+## 2026-11-08 Lot V5 (q225 A, branche feat/r1-visibility-v5, migration 087)
+
+- Accès nominatif : `resource_access_grants.expires_at` (NULL = pas d'échéance : listes PERIMETRE hors q225). Posée à 30 jours quand le niveau devient/est NOMINATIF (`stampNamedExpiry`, dans la même transaction que le changement de niveau et la création de risque). Le garde SQL plafonne à now()+30 j et interdit de retirer l'échéance. Lecture : `visibility_granted` (et `risk_visible_core`, qui avait un EXISTS en ligne) ignore l'accès échu ou dont le dossier est clos (`visibility_resource_closed`) ; aucune ligne supprimée ni révoquée.
+- Clôture : RISK/CONTROL = ARCHIVED ou deleted_at ; KPI = deleted_at (pas de statut) ; ANOMALY = CLOSED ; ACTION_PLAN = TERMINEE.
+- Renouvellement : `POST /:id/visibility/renew` {userIds (boundedArray 1..50), reason}, `ResourceVisibilityManager.renew` / `RiskService.renewAccess`, droit = celui de l'ajout, pas de renouvellement de soi-même, refus si dossier clos ou non NOMINATIF.
+- Piège tests live : les suites V0..V4 rejouent 080/082/083/084 sur la base partagée et restaurent d'anciennes définitions ; la suite V5 rejoue 084 puis 087 en beforeAll. Les gardes statiques de numéros de migration (QA-panel*, v2bis, v3) sont à relever à chaque nouvelle migration.
