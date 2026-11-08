@@ -1,6 +1,6 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
-import { DEFAULT_LAST_SEEN_RETENTION_DAYS, MIN_LAST_SEEN_RETENTION_DAYS, DEFAULT_RESOURCE_READALL_MAX_DAYS, DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
+import { DEFAULT_LAST_SEEN_RETENTION_DAYS, GOVERNANCE_THRESHOLDS, isGovernanceThresholdKey, MIN_LAST_SEEN_RETENTION_DAYS, DEFAULT_RESOURCE_READALL_MAX_DAYS, DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
 import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -48,7 +48,8 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     committeeEvaluationMinScore: committeeMinScore,
     committeeTreatmentMinScore: null,
     committeeEvaluationEnforced: true,
-    committeeAuditCumulAllowed: true,
+    // DECISION-061 (q119): the Committee + Audit cumul is forbidden by default, the client may allow it.
+    committeeAuditCumulAllowed: false,
     selfValidationPolicy: "REFUSE",
     exceptionReviewDelayDays: null,
     acceptanceMaxDays: null,
@@ -56,6 +57,12 @@ function defaultConfig(tenantId: string, committeeMinScore: number): Config {
     riskManagerVacancyMaxDays: DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS,
     resourceReadallMaxDays: DEFAULT_RESOURCE_READALL_MAX_DAYS,
     lastSeenRetentionDays: DEFAULT_LAST_SEEN_RETENTION_DAYS,
+    govRmRiskShareMaxPct: GOVERNANCE_THRESHOLDS.govRmRiskShareMaxPct.default,
+    govMaxAdmins: GOVERNANCE_THRESHOLDS.govMaxAdmins.default,
+    govRoleMaxPermissions: GOVERNANCE_THRESHOLDS.govRoleMaxPermissions.default,
+    govRoleMaxFamilies: GOVERNANCE_THRESHOLDS.govRoleMaxFamilies.default,
+    govDormantDays: GOVERNANCE_THRESHOLDS.govDormantDays.default,
+    govOwnerCreatorShareMaxPct: GOVERNANCE_THRESHOLDS.govOwnerCreatorShareMaxPct.default,
     version: 0,
     updatedBy: null,
     createdAt: new Date(0),
@@ -273,22 +280,30 @@ export class ConfigService {
 
   /**
    * PUT /config/committee-audit-cumul — DECISION-042 §1 (q58). Allows or forbids one user
-   * being in both the Committee and Audit groups (allowed by default). Takes effect on later
+   * being in both the Committee and Audit groups (forbidden by default, DECISION-061). Takes effect on later
    * assignments only; existing double members are not removed. Sensitive setting (Compliance):
    * dedicated permission, mandatory reason, audited. Risk Manager + Audit is not affected by it.
+   * D6B-01 (q116 « assouplir = deux personnes »): allowing it takes GOV-SOD-04 out of the alerts (q234 C), so it is a
+   * RELAXATION and follows the q182 circuit (PENDING request for a second person, or applied alone and marked
+   * `config.cumul.adminAlone` when nobody else can approve). Forbidding it stays direct.
    */
-  async setCommitteeAuditCumul(actor: AuthenticatedUser, allowed: boolean, reason: string, requestId: string): Promise<Config> {
+  async setCommitteeAuditCumul(actor: AuthenticatedUser, allowed: boolean, reason: string, requestId: string): Promise<GovernanceDelaysOutcome> {
     requirePermission(actor, "config.cumul.set");
     if (!reason.trim() || !isAcceptableReason(reason)) {
       throw new ValidationError("A reason is required to change the Committee + Audit cumul setting");
     }
     const before = await this.get(actor);
-    return writeAudited(
-      this.configs.auditsInTransaction,
-      this.audit,
-      (audit) => this.upsertConfig(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId, audit),
-      (after) => [this.configAuditEvent(actor, before, after, reason, requestId)],
-    );
+    if (!allowed || before.committeeAuditCumulAllowed) {
+      const config = await writeAudited<Config>(
+        this.configs.auditsInTransaction,
+        this.audit,
+        (audit) => this.upsertConfig(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId, audit),
+        (after) => [this.configAuditEvent(actor, before, after, reason, requestId)],
+      );
+      return { config, pendingRequest: null };
+    }
+    if (!this.delayRequests || !this.eligible) throw new ValidationError("Allowing the Committee + Audit cumul is not available");
+    return this.relaxThroughSecondPerson(actor, before, { committeeAuditCumulAllowed: true }, reason.trim(), requestId, true, "config.cumul.adminAlone");
   }
 
   /**
@@ -310,6 +325,13 @@ export class ConfigService {
       const v = delays[key];
       if (v === undefined) continue;
       // q221 (DECISION-111): the reading of every content is capped at 90 days (adjustable downwards only).
+      if (isGovernanceThresholdKey(key)) {
+        // q233 A (DECISION-116): a panel threshold is never null and stays in the A13 range.
+        const { min, max } = GOVERNANCE_THRESHOLDS[key];
+        if (v === null || !Number.isInteger(v) || v < min || v > max) throw new ValidationError(`${key} must be a whole number between ${min} and ${max}`);
+        patch[key] = v;
+        continue;
+      }
       const max = key === "resourceReadallMaxDays" ? DEFAULT_RESOURCE_READALL_MAX_DAYS : MAX_GOVERNANCE_DELAY_DAYS;
       // q232 A / SEC D6-01: the « dernière activité » is never erased less than a year after the end of an account.
       const min = key === "lastSeenRetentionDays" ? MIN_LAST_SEEN_RETENTION_DAYS : 1;
@@ -322,26 +344,44 @@ export class ConfigService {
     // The audit's "before" must not need config.read on top of config.governancedelays.set (revue Codex PR #195).
     const before = await this.readConfig(actor.tenantId);
     const relaxing = GOVERNANCE_DELAY_KEYS.some((k) => patch[k] !== undefined && isRelaxation(k, before[k] ?? null, patch[k]!));
-    const configEvent = (after: Config, marked: boolean) => ({
-      ...this.configAuditEvent(actor, before, after, why, requestId),
-      ...(marked ? { governanceException: "config.governancedelays.adminAlone" } : {}),
-    });
 
     if (!relaxing && !this.delayRequests) {
       const config = await writeAudited<Config>(
         this.configs.auditsInTransaction,
         this.audit,
         (audit) => this.upsertConfig(actor.tenantId, patch, actor.userId, audit),
-        (after) => [configEvent(after, false)],
+        (after) => [this.configAuditEvent(actor, before, after, why, requestId)],
       );
       return { config, pendingRequest: null };
     }
     // Fail closed: without the means to tell whether a second person exists, never lengthen.
     if (!this.delayRequests || (relaxing && !this.eligible)) throw new ValidationError("Lengthening a governance delay is not available");
+    return this.relaxThroughSecondPerson(actor, before, patch, why, requestId, relaxing, "config.governancedelays.adminAlone");
+  }
+
+  /**
+   * The q182 circuit shared by the governance delays, the panel thresholds and the Committee + Audit cumul (D6B-01):
+   * a relaxation becomes a PENDING request when another holder of config.selfvalidation.approve exists, otherwise it is
+   * applied alone and marked `marker`. A new call replaces (WITHDRAWN) a request still pending. Callers checked
+   * `delayRequests` (and `eligible` when relaxing).
+   */
+  private async relaxThroughSecondPerson(
+    actor: AuthenticatedUser,
+    before: Config,
+    patch: ConfigPatch,
+    why: string,
+    requestId: string,
+    relaxing: boolean,
+    marker: string,
+  ): Promise<GovernanceDelaysOutcome> {
+    const configEvent = (after: Config, marked: boolean) => ({
+      ...this.configAuditEvent(actor, before, after, why, requestId),
+      ...(marked ? { governanceException: marker } : {}),
+    });
     const approverExists = relaxing && (await this.eligible!.existsOther(actor.tenantId, actor.userId, "config.selfvalidation.approve"));
-    const pending = await this.delayRequests.getPending(actor.tenantId);
+    const pending = await this.delayRequests!.getPending(actor.tenantId);
     const expiryDays = before.policyRequestExpiryDays;
-    const result = await this.delayRequests.change(
+    const result = await this.delayRequests!.change(
       actor.tenantId,
       {
         ...(pending ? { decide: { id: pending.id, status: "WITHDRAWN" as const, by: actor.userId, reason: "Replaced by a newer change" } } : {}),
@@ -622,6 +662,8 @@ function isLengthening(current: number | null, next: number | null): boolean {
  */
 function isRelaxation(key: string, current: number | null, next: number | null): boolean {
   if (key === "lastSeenRetentionDays") return next !== null && (current === null || next < current);
+  // q233 A: raising a panel threshold makes alerts disappear — never silently: second person, as a lengthening.
+  if (isGovernanceThresholdKey(key)) return next !== null && next > (current ?? GOVERNANCE_THRESHOLDS[key].default);
   return isLengthening(current, next);
 }
 

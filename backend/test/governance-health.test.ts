@@ -7,6 +7,7 @@ import { GovernanceHealthService } from "../src/services/GovernanceHealthService
 import { PostgresGovernanceHealthRepository } from "../src/infrastructure/database/postgres/PostgresGovernanceHealthRepository.js";
 import { ForbiddenError } from "../src/domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
+import { GOVERNANCE_THRESHOLDS } from "../src/domain/entities/Config.js";
 import { hasLocalPg, migrationSql, useMigrationTenant } from "./migrationHarness.js";
 
 /** Lot D6 (DECISION-074 R-6, DECISION-113) — level 1. */
@@ -54,6 +55,12 @@ function facts(over: Partial<GovernanceFacts> = {}): GovernanceFacts {
     riskManagerVacancyMaxDays: 60,
     exceptionReviewDelayDays: 5,
     lastSeenPurgeAt: null,
+    risksTotal: 0,
+    risksCreatorIsOwner: 0,
+    risksOwnedBy: {},
+    cumulSetting: null,
+    selfValidators: [],
+    thresholds: { govRmRiskShareMaxPct: 20, govMaxAdmins: 3, govRoleMaxPermissions: 25, govRoleMaxFamilies: 4, govDormantDays: 90, govOwnerCreatorShareMaxPct: 50 },
     ...over,
   };
 }
@@ -131,6 +138,75 @@ describe("D6 — detectors (pure)", () => {
     expect(status(facts({ assignments: [], selfValidatedUnmarkedTotal: 1 }), "GOV-REG-01").status).toBe("RESPECTED");
   });
 
+  describe("D6bis — q233 A thresholds", () => {
+    const RM2 = "55555555-5555-4555-8555-555555555555";
+    const twoRms = (over: Partial<GovernanceFacts> = {}) => facts({
+      users: [...facts().users, { id: RM2, label: "Eli", active: true, directPermissions: [] }],
+      assignments: [...facts().assignments, { userId: RM2, roleId: "r-rm", grantedBy: ADM }],
+      ...over,
+    });
+
+    it("RISK-01: a Risk Manager owning more than 20 % of at least 10 risks; below 10 risks and nothing else, NOT_EVALUABLE", () => {
+      expect(status(twoRms({ risksTotal: 10, risksOwnedBy: { [RM]: 3 } }), "GOV-RISK-01").offenders).toEqual([
+        { kind: "USER", id: RM, label: "Awa Risk", detail: "propriétaire direct de 30 % des risques (seuil 20 %)" },
+      ]);
+      expect(status(twoRms({ risksTotal: 10, risksOwnedBy: { [RM]: 2 } }), "GOV-RISK-01").status).toBe("RESPECTED");
+      expect(status(twoRms({ risksTotal: 9, risksOwnedBy: { [RM]: 9 } }), "GOV-RISK-01")).toMatchObject({ status: "NOT_EVALUABLE", notEvaluableReason: expect.stringMatching(/Échantillon insuffisant/) });
+    });
+
+    it("OWN-01 (d): more than 50 % of at least 10 risks created and owned by the same person; small registry NOT_EVALUABLE", () => {
+      expect(status(facts({ risksTotal: 10, risksCreatorIsOwner: 6 }), "GOV-OWN-01").offenders).toEqual([
+        expect.objectContaining({ id: "creatorOwnerShare", count: 6, detail: "60 % des risques (seuil 50 %)" }),
+      ]);
+      expect(status(facts({ risksTotal: 10, risksCreatorIsOwner: 5 }), "GOV-OWN-01").status).toBe("RESPECTED");
+      expect(status(facts({ risksTotal: 4 }), "GOV-OWN-01").status).toBe("NOT_EVALUABLE");
+    });
+
+    it("ACC-01: too many administrators, a custom role too wide (count or families), a dormant privileged account; fixed groups excluded from width", () => {
+      const admins = ["a1", "a2", "a3"].map((id) => ({ id, label: id, active: true, directPermissions: ["user.update"] }));
+      const wide = { id: "r-wide", name: "Fourre-tout", systemGroup: null, permissions: ["risk.read", "control.read", "kpi.read", "audit.mission.read"] };
+      const big = { id: "r-big", name: "Large", systemGroup: "AUDIT" as const, permissions: Array.from({ length: 30 }, (_, i) => `audit.p${i}.read`) };
+      const f = facts({
+        users: [...facts().users.map((u) => (u.id === AUD ? { ...u, lastSeenAt: new Date(NOW.getTime() - 100 * 86_400_000) } : { ...u, lastSeenAt: NOW })), ...admins],
+        roles: [...facts().roles, wide, big],
+      });
+      const o = status(f, "GOV-ACC-01").offenders;
+      expect(o).toContainEqual(expect.objectContaining({ id: "administrators", count: 4 }));
+      expect(o).toContainEqual(expect.objectContaining({ kind: "ROLE", id: "r-wide", detail: "4 familles de permissions (seuil 4)" }));
+      expect(o.map((x) => x.id)).not.toContain("r-big");
+      expect(o).toContainEqual(expect.objectContaining({ kind: "USER", id: AUD, detail: "compte à privilèges sans activité depuis plus de 90 jours" }));
+      // NULL last activity is dormant only once the tracking itself is older than the threshold
+      const fresh = facts({ users: facts().users.map((u) => ({ ...u, lastSeenAt: null })) });
+      expect(status(fresh, "GOV-ACC-01").offenders.filter((x) => x.kind === "USER")).toEqual([]);
+      const old = facts({ users: facts().users.map((u) => ({ ...u, lastSeenAt: null })), trackedSince: new Date(NOW.getTime() - 91 * 86_400_000) });
+      expect(status(old, "GOV-ACC-01").offenders.filter((x) => x.kind === "USER").length).toBe(2);
+    });
+  });
+
+  describe("D6bis — q234 C ALLOWED_BY_SETTING (SOD-04)", () => {
+    const COM = "66666666-6666-4666-8666-666666666666";
+    const cumul = (allowed: boolean, over: Partial<GovernanceFacts> = {}) => facts({
+      users: [{ id: COM, label: "Fanta", active: true, directPermissions: [] }],
+      roles: [{ id: "r-com", name: "Comité", systemGroup: "RISK_COMMITTEE", permissions: [] }, { id: "r-aud", name: "Audit", systemGroup: "AUDIT", permissions: ["audit.read"] }],
+      assignments: [{ userId: COM, roleId: "r-com", grantedBy: ADM }, { userId: COM, roleId: "r-aud", grantedBy: ADM }],
+      config: { committeeAuditCumulAllowed: allowed, committeeEvaluationEnforced: true, committeeTreatmentMinScore: 12 },
+      cumulSetting: { userId: ADM, at: new Date("2026-10-20T10:00:00Z") },
+      ...over,
+    });
+    it("Committee + Audit allowed by the setting: out of the alerts, listed with the person and who set it, when", () => {
+      expect(status(cumul(true), "GOV-SOD-04")).toMatchObject({
+        status: "ALLOWED_BY_SETTING",
+        offenders: [{ kind: "USER", id: COM, detail: `Comité + Audit — autorisé par le paramètre (réglage du 2026-10-20 par ${ADM})` }],
+      });
+    });
+    it("stays NOT_RESPECTED when the setting forbids it, or when the person validated their own input", () => {
+      expect(status(cumul(false), "GOV-SOD-04").status).toBe("NOT_RESPECTED");
+      // D6B-02: the self-validators come from the complete query, never from the bounded display lists
+      const voted = cumul(true, { selfValidators: [COM], selfValidatedUnmarked: [] });
+      expect(status(voted, "GOV-SOD-04")).toMatchObject({ status: "NOT_RESPECTED", offenders: [{ detail: expect.stringMatching(/a validé ses propres saisies/) }] });
+    });
+  });
+
   it("TRC-02: a high-severity principle not respected and no manager designated", () => {
     expect(status(facts(), "GOV-TRC-02").status).toBe("NOT_RESPECTED");
     expect(status(facts({ managerDesignated: true }), "GOV-TRC-02").status).toBe("RESPECTED");
@@ -189,6 +265,29 @@ describe("D6 — GovernanceHealthService (masking R-6.1 / q156)", () => {
   });
 });
 
+describe("Codex P2 (PR #236): the settings screen shows every key of a pending request", () => {
+  const page = readFileSync(new URL("../../frontend/src/features/governance/GovernanceSettingsPage.tsx", import.meta.url), "utf8");
+  it("renders the pending request from all its keys (never filtered by a known list), current → requested", () => {
+    expect(page).toMatch(/Object\.keys\(requested\)\.map/);
+    expect(page).toMatch(/pendingChanges\(delayPending\.requestedDelays/);
+    expect(page).not.toMatch(/\.filter\(\(d\) => d\.key in delayPending\.requestedDelays\)/);
+  });
+  it("has a readable label for every A13 threshold (an unknown key would still show by its name)", () => {
+    for (const key of Object.keys(GOVERNANCE_THRESHOLDS)) expect(page, key).toMatch(new RegExp(`${key}: \\{ label: "`));
+  });
+});
+
+describe("D6bis — migration 086 (D6B-03, DECISION-061)", () => {
+  it("gives every client without a configs row the cumul value applied until then (true), never UPDATEs an existing row; the down keeps those rows", () => {
+    const up = migrationSql("086_governance_thresholds.sql");
+    expect(up).toMatch(/ALTER COLUMN committee_audit_cumul_allowed SET DEFAULT false/);
+    expect(up).toMatch(/INSERT INTO configs \(tenant_id, committee_audit_cumul_allowed, committee_evaluation_min_score\)\s+SELECT t\.id, true,/);
+    expect(up).toMatch(/WHERE NOT EXISTS \(SELECT 1 FROM configs c WHERE c\.tenant_id = t\.id\)/);
+    expect(up.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n")).not.toMatch(/\bUPDATE\b|\bDELETE\b/);
+    expect(migrationSql("086_governance_thresholds.down.sql")).toMatch(/SET DEFAULT true/);
+  });
+});
+
 describe("D6 — migration 085", () => {
   it("adds tenants.governance_tracking_started_at, idempotent, and its down removes it", () => {
     expect(migrationSql("085_governance_tracking.sql")).toMatch(/ADD COLUMN IF NOT EXISTS governance_tracking_started_at timestamptz NOT NULL DEFAULT now\(\)/);
@@ -220,5 +319,48 @@ describe.skipIf(!hasLocalPg)("D6 on real PostgreSQL (local only)", () => {
     expect(f.riskOwnerGaps.map((r) => [r.label, r.issue]).sort()).toEqual([["Risque public D6", "NO_OWNER"], [null, "OWNER_SUSPENDED"]].sort());
     expect(f.processGaps).toEqual([expect.objectContaining({ label: "Processus D6", missingOwner: false, missingChampion: true })]);
     expect(f.users.find((u) => u.id === b)?.active).toBe(false);
+    // q233 A / q234 C (D6bis): default thresholds of 086, live risk counts, last cumul setting change
+    expect(f.thresholds).toEqual({ govRmRiskShareMaxPct: 20, govMaxAdmins: 3, govRoleMaxPermissions: 25, govRoleMaxFamilies: 4, govDormantDays: 90, govOwnerCreatorShareMaxPct: 50 });
+    expect([f.risksTotal, f.risksCreatorIsOwner, f.risksOwnedBy]).toEqual([2, 0, { [b!]: 1 }]);
+    expect(f.cumulSetting).toBeNull();
+    await one(`INSERT INTO audit_log (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, request_id)
+               VALUES ($1, $2, 'Config', $1, 'UPDATE', '{"committeeAuditCumulAllowed": false}', '{"committeeAuditCumulAllowed": true}', 'd6bis') RETURNING id`, [ctx.tenant, a]);
+    // the creator is the author of the Risk CREATE audit entry (no creator column on risks)
+    const own = (await one(`INSERT INTO risks (tenant_id, process, description, owner_id, visibility) VALUES ($1, 'p', 'Créé et possédé', $2, 'CLIENT') RETURNING id`, [ctx.tenant, a])).id;
+    await one(`INSERT INTO audit_log (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, request_id)
+               VALUES ($1, $2, 'Risk', $3, 'CREATE', NULL, '{}', 'd6bis-r') RETURNING id`, [ctx.tenant, a, own]);
+    const g = await new PostgresGovernanceHealthRepository(ctx.pool).loadFacts(ctx.tenant, new Date());
+    expect(g.cumulSetting).toEqual({ userId: a, at: expect.any(Date) });
+    expect([g.risksTotal, g.risksCreatorIsOwner]).toEqual([3, 1]);
+  });
+
+  it("D6B-02: the self-validators come from a complete query — one old self-validation behind 51 recent ones of others still counts", async () => {
+    const [x, y] = await Promise.all(["x", "y"].map(user));
+    const selfValidate = async (u: string) => {
+      const obj = crypto.randomUUID();
+      for (const action of ["CREATE", "VALIDATE"]) {
+        await one(`INSERT INTO audit_log (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, request_id)
+                   VALUES ($1, $2, 'ControlExecution', $3, $4, '{}', '{}', 'd6b02') RETURNING id`, [ctx.tenant, u, obj, action]);
+      }
+    };
+    await selfValidate(x!);
+    for (let i = 0; i < 51; i += 1) await selfValidate(y!);
+    const f = await new PostgresGovernanceHealthRepository(ctx.pool).loadFacts(ctx.tenant, new Date());
+    expect(f.selfValidatedUnmarked.map((v) => v.userId)).not.toContain(x);
+    expect(f.selfValidators).toEqual(expect.arrayContaining([x, y]));
+  });
+
+  it("DECISION-061 (q119): a tenant created without an explicit setting forbids the Committee + Audit cumul; a cumul is then NOT_RESPECTED", async () => {
+    await one(`INSERT INTO configs (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id RETURNING tenant_id`, [ctx.tenant]);
+    const f = await new PostgresGovernanceHealthRepository(ctx.pool).loadFacts(ctx.tenant, new Date());
+    expect(f.config?.committeeAuditCumulAllowed).toBe(false);
+    const com = "77777777-7777-4777-8777-777777777777";
+    const x = computePanel({
+      ...f,
+      users: [{ id: com, label: "Gaby", active: true, directPermissions: [] }],
+      roles: [{ id: "r-com", name: "Comité", systemGroup: "RISK_COMMITTEE", permissions: [] }, { id: "r-aud", name: "Audit", systemGroup: "AUDIT", permissions: ["audit.read"] }],
+      assignments: [{ userId: com, roleId: "r-com", grantedBy: com }, { userId: com, roleId: "r-aud", grantedBy: com }],
+    }, []).find((r) => r.id === "GOV-SOD-04")!;
+    expect(x).toMatchObject({ status: "NOT_RESPECTED", offenders: [{ id: com, detail: "Comité + Audit (paramètre : interdit)" }] });
   });
 });

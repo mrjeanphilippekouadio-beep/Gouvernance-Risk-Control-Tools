@@ -8,6 +8,10 @@ import {
   isRiskManagerMember,
 } from "../fixedGroupPermissions.js";
 import { PRINCIPLES, type PrincipleId } from "./catalog.js";
+import type { GovernanceThresholds } from "../entities/Config.js";
+
+/** q233 A (A13 rule 3): RISK-01 and OWN-01 (d) need at least this many live risks; below, « échantillon insuffisant ». */
+export const MIN_RISKS_SAMPLE = 10;
 
 /**
  * Lot D6 (DECISION-074 R-6, spec RM-V1-Panel-Principes-Gouvernance): what the governance panel computes, as pure
@@ -32,6 +36,8 @@ export interface FactUser {
   active: boolean;
   /** Legacy permissions carried directly by the account (`users.roles`). */
   directPermissions: string[];
+  /** ACC-01 (c) only: never exposed by the panel (q156). Optional for older fixtures. */
+  lastSeenAt?: Date | null;
 }
 
 export interface MarkedAction {
@@ -82,6 +88,16 @@ export interface GovernanceFacts {
   exceptionReviewDelayDays: number | null;
   /** q231 B: last real execution of the R3 purge (its execution trace), null if never run. */
   lastSeenPurgeAt: Date | null;
+  /** q233 A: live risks (not deleted, not archived), those whose creator is the owner, and the count per owner. */
+  risksTotal: number;
+  risksCreatorIsOwner: number;
+  risksOwnedBy: Record<string, number>;
+  /** q234 C: last change of the Committee + Audit cumul setting (who, when), null if never changed. */
+  cumulSetting: { userId: string; at: Date } | null;
+  /** D6B-02: every account that validated its own input since trackedSince (marked or not), never a bounded list. */
+  selfValidators: string[];
+  /** q233 A: the client's panel thresholds. */
+  thresholds: GovernanceThresholds;
 }
 
 export type OffenderKind = "ROLE" | "PERMISSION" | "USER" | "GROUP" | "SETTING" | "DECISION" | "RISK" | "PROCESS";
@@ -97,7 +113,10 @@ export interface Offender {
 }
 
 /** `total`: the exact number of offenders when the list is bounded (QA-D6-02); the list length otherwise. */
-export type DetectorResult = { offenders: Offender[]; covers?: string; total?: number } | { notEvaluable: string };
+export type DetectorResult =
+  /** `allowedBySetting`: every offender is a cumul the client's setting allows (q234 C). */
+  | { offenders: Offender[]; covers?: string; total?: number; allowedBySetting?: boolean }
+  | { notEvaluable: string };
 
 const DAY = 86_400_000;
 const NOT_BUILT = "Donnée appartenant à une fonction non livrée (R-Q3, DECISION-075) : évaluable à sa livraison";
@@ -167,6 +186,10 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
   "GOV-SOD-04": (f) => {
     const by = rolesByUser(f);
     const offenders: Offender[] = [];
+    // q234 C: a Committee + Audit cumul allowed by the setting is out of the alerts — unless the person validated their own input.
+    // D6B-02: from a dedicated, complete query — the display lists are cut at 50.
+    const selfValidators = new Set(f.selfValidators);
+    let allAllowed = true;
     for (const u of activeUsers(f)) {
       const rs = by.get(u.id) ?? [];
       const admin = isAdminUser(rs, u);
@@ -178,20 +201,35 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
       if (admin && audit) cumuls.push("administrateur + Audit");
       if (rm && committee) cumuls.push("Risk Manager + Comité");
       if (rm && audit) cumuls.push("Risk Manager + Audit (anomalie)");
+      const allowedCumul = committee && audit && f.config?.committeeAuditCumulAllowed === true;
       if (committee && audit) {
-        cumuls.push(f.config?.committeeAuditCumulAllowed ? "Comité + Audit (autorisé par le paramètre)" : "Comité + Audit");
+        const setting = f.cumulSetting ? ` (réglage du ${f.cumulSetting.at.toISOString().slice(0, 10)} par ${f.cumulSetting.userId})` : "";
+        cumuls.push(allowedCumul ? `Comité + Audit — autorisé par le paramètre${setting}` : "Comité + Audit (paramètre : interdit)");
       }
-      if (cumuls.length > 0) offenders.push(userOffender(u, cumuls.join(" ; ")));
+      if (cumuls.length === 0) continue;
+      const votedOwn = selfValidators.has(u.id);
+      if (votedOwn) cumuls.push("a validé ses propres saisies");
+      if (!(allowedCumul && cumuls.length === 1)) allAllowed = false;
+      offenders.push(userOffender(u, cumuls.join(" ; ")));
     }
-    return { offenders };
+    return { offenders, allowedBySetting: offenders.length > 0 && allAllowed };
   },
   "GOV-SOD-05": () => ({ notEvaluable: "Croisement par dossier (exécution, efficacité, validation de l'évaluation) non construit dans ce lot" }),
   "GOV-RISK-01": (f) => {
-    const n = groupMembers(f, "RISK_MANAGER").length;
-    return {
-      covers: "effectif du groupe Risk Manager (la part de risques portés par le Risk Manager attend un seuil PO)",
-      offenders: n <= 1 ? [groupOffender("RISK_MANAGER", n, n === 0 ? "fonction risque vacante" : "dépendance à une seule personne")] : [],
-    };
+    const members = groupMembers(f, "RISK_MANAGER");
+    const n = members.length;
+    const offenders: Offender[] = n <= 1 ? [groupOffender("RISK_MANAGER", n, n === 0 ? "fonction risque vacante" : "dépendance à une seule personne")] : [];
+    const max = f.thresholds.govRmRiskShareMaxPct;
+    const sampled = f.risksTotal >= MIN_RISKS_SAMPLE;
+    if (sampled) {
+      for (const u of members) {
+        const pct = ((f.risksOwnedBy[u.id] ?? 0) * 100) / f.risksTotal;
+        if (pct > max) offenders.push(userOffender(u, `propriétaire direct de ${Math.round(pct)} % des risques (seuil ${max} %)`));
+      }
+    }
+    // q233 A: below the sample the share cannot be judged — never « respected » for lack of data.
+    if (!sampled && offenders.length === 0) return { notEvaluable: `Échantillon insuffisant : ${f.risksTotal} risque(s), au moins ${MIN_RISKS_SAMPLE} requis` };
+    return { covers: `effectif du groupe Risk Manager et part des risques dont un Risk Manager est propriétaire (seuil ${max} %)`, offenders };
   },
   "GOV-RISK-02": (f) => {
     const offenders: Offender[] = [];
@@ -244,17 +282,28 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
     offenders: f.markedActions.filter((m) => m.rule.startsWith("riskappetite")).map((m) => decision(m)),
     total: Object.entries(f.markedCountByRule).filter(([rule]) => rule.startsWith("riskappetite")).reduce((n, [, c]) => n + c, 0),
   }),
-  "GOV-OWN-01": (f) => ({
-    covers: "risques sans propriétaire ou à propriétaire suspendu",
-    total: f.riskOwnerGapsTotal,
-    offenders: f.riskOwnerGaps.map((r) => ({
+  "GOV-OWN-01": (f) => {
+    const offenders: Offender[] = f.riskOwnerGaps.map((r) => ({
       kind: "RISK" as const,
       id: r.id,
       label: r.label,
       ...(r.restricted ? { restricted: true } : {}),
       detail: r.issue === "NO_OWNER" ? "sans propriétaire" : "propriétaire suspendu",
-    })),
-  }),
+    }));
+    let total = f.riskOwnerGapsTotal;
+    const max = f.thresholds.govOwnerCreatorShareMaxPct;
+    const sampled = f.risksTotal >= MIN_RISKS_SAMPLE;
+    if (sampled) {
+      const pct = (f.risksCreatorIsOwner * 100) / f.risksTotal;
+      if (pct > max) {
+        offenders.push({ kind: "SETTING", id: "creatorOwnerShare", label: "Risques créés et possédés par la même personne", count: f.risksCreatorIsOwner, detail: `${Math.round(pct)} % des risques (seuil ${max} %)` });
+        total += 1;
+      }
+    }
+    // q233 A: (d) needs at least 10 risks — a small registry with no other gap is « échantillon insuffisant », never « respected ».
+    if (!sampled && offenders.length === 0) return { notEvaluable: `Échantillon insuffisant : ${f.risksTotal} risque(s), au moins ${MIN_RISKS_SAMPLE} requis` };
+    return { covers: `risques sans propriétaire ou à propriétaire suspendu, et part des risques créés et possédés par la même personne (seuil ${max} %)`, total, offenders };
+  },
   "GOV-OWN-02": (f) => ({
     covers: "processus actifs sans propriétaire rattaché à un compte ou sans champion de risque",
     total: f.processGapsTotal,
@@ -266,12 +315,36 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
     })),
   }),
   "GOV-OWN-03": () => ({ notEvaluable: `${NOT_BUILT} (étape Analyse)` }),
-  "GOV-ACC-01": (f) => ({
-    covers: "rôles portant rolegroup.audit.update (le nombre d'administrateurs et la largeur des rôles attendent un seuil PO)",
-    offenders: f.roles
-      .filter((r) => r.systemGroup === null && r.permissions.includes("rolegroup.audit.update"))
-      .map((r) => ({ kind: "ROLE" as const, id: r.id, label: r.name, detail: "porte rolegroup.audit.update" })),
-  }),
+  "GOV-ACC-01": (f) => {
+    const t = f.thresholds;
+    const by = rolesByUser(f);
+    const offenders: Offender[] = [];
+    // (a) number of active administrators
+    const admins = activeUsers(f).filter((u) => isAdminUser(by.get(u.id) ?? [], u));
+    if (admins.length > t.govMaxAdmins) {
+      offenders.push({ kind: "SETTING", id: "administrators", label: "Administrateurs actifs", count: admins.length, detail: `${admins.length} administrateurs (seuil ${t.govMaxAdmins})` });
+    }
+    // (b) custom roles too wide (fixed groups excluded), and rolegroup.audit.update on a custom role (forbidden)
+    for (const r of f.roles.filter((r) => r.systemGroup === null)) {
+      const families = new Set(r.permissions.map((p) => p.split(".")[0])).size;
+      const reasons: string[] = [];
+      if (r.permissions.length > t.govRoleMaxPermissions) reasons.push(`${r.permissions.length} permissions (seuil ${t.govRoleMaxPermissions})`);
+      if (families >= t.govRoleMaxFamilies) reasons.push(`${families} familles de permissions (seuil ${t.govRoleMaxFamilies})`);
+      if (r.permissions.includes("rolegroup.audit.update")) reasons.push("porte rolegroup.audit.update");
+      if (reasons.length > 0) offenders.push({ kind: "ROLE", id: r.id, label: r.name, detail: reasons.join(" ; ") });
+    }
+    // (c) dormant privileged accounts (administration or a fixed group): flagged, never suspended; NULL counts only once
+    // the tracking is older than the threshold (q233 A). No date is ever returned (q156).
+    const limit = f.now.getTime() - t.govDormantDays * DAY;
+    const fixed = new Set((["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const).flatMap((g) => groupMembers(f, g).map((u) => u.id)));
+    for (const u of activeUsers(f)) {
+      if (!isAdminUser(by.get(u.id) ?? [], u) && !fixed.has(u.id)) continue;
+      const seen = u.lastSeenAt ?? null;
+      const dormant = seen ? seen.getTime() < limit : f.trackedSince.getTime() < limit;
+      if (dormant) offenders.push(userOffender(u, `compte à privilèges sans activité depuis plus de ${t.govDormantDays} jours`));
+    }
+    return { covers: `administrateurs actifs (seuil ${t.govMaxAdmins}), largeur des rôles personnalisés, comptes à privilèges dormants (${t.govDormantDays} jours)`, offenders };
+  },
   "GOV-TRC-01": (f) => {
     if (f.unreviewedTotal === 0) return { offenders: [] };
     const days = f.oldestUnreviewedAt ? Math.floor((f.now.getTime() - f.oldestUnreviewedAt.getTime()) / DAY) : 0;
@@ -298,7 +371,8 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
   },
 };
 
-export type PrincipleStatus = "NOT_RESPECTED" | "RESPECTED" | "NOT_EVALUABLE" | "ACCEPTED";
+/** ALLOWED_BY_SETTING (q234 C): out of the alerts because the client's setting allows it, still listed with who set it. */
+export type PrincipleStatus = "NOT_RESPECTED" | "RESPECTED" | "NOT_EVALUABLE" | "ACCEPTED" | "ALLOWED_BY_SETTING";
 
 export interface ActiveAcceptance {
   id: string;
@@ -345,6 +419,9 @@ export function computePanel(f: GovernanceFacts, acceptances: ActiveAcceptance[]
     if ("notEvaluable" in r) return { id: p.id, status: "NOT_EVALUABLE", notEvaluableReason: r.notEvaluable, covers: null, offenders: [], offendersTotal: 0, acceptance: null, acceptanceNote: null };
     if (r.offenders.length === 0) return { id: p.id, status: "RESPECTED", notEvaluableReason: null, covers: r.covers ?? null, offenders: [], offendersTotal: 0, acceptance: null, acceptanceNote: null };
     const total = Math.max(r.total ?? 0, r.offenders.length);
+    if (r.allowedBySetting) {
+      return { id: p.id, status: "ALLOWED_BY_SETTING", notEvaluableReason: null, covers: r.covers ?? null, offenders: r.offenders, offendersTotal: total, acceptance: null, acceptanceNote: null };
+    }
     const acceptance = accByPrinciple.get(p.id);
     const accepted = applyAcceptance(r.offenders, acceptance, f.now, total);
     const acceptanceNote = acceptance && !accepted && total > r.offenders.length && acceptance.expiresAt.getTime() > f.now.getTime()

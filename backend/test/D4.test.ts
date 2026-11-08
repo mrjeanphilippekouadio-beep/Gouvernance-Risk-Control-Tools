@@ -223,6 +223,34 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     expect(shorter.config.lastSeenRetentionDays).toBe(2000);
   });
 
+  it("q233 A (DECISION-116): a panel threshold — in its A13 range, never null; RAISING it (fewer alerts) needs the second person, lowering is direct", async () => {
+    const w = configWorld(true);
+    Object.assign(w.row(), { govMaxAdmins: 3 });
+    const delaysAdmin = actor("u-admin", ["config.read", "config.governancedelays.set"]);
+    for (const bad of [1, 6, null]) await expect(w.service.setGovernanceDelays(delaysAdmin, { govMaxAdmins: bad }, "r", "q")).rejects.toThrow(ValidationError);
+    await expect(w.service.setGovernanceDelays(delaysAdmin, { govMaxAdmins: 2 }, "Plus strict", "q")).resolves.toMatchObject({ config: { govMaxAdmins: 2 }, pendingRequest: null });
+    const raised = await w.service.setGovernanceDelays(delaysAdmin, { govMaxAdmins: 5 }, "Plus large", "q");
+    expect(raised.pendingRequest).toMatchObject({ status: "PENDING", requestedDelays: { govMaxAdmins: 5 } });
+    expect(raised.config.govMaxAdmins).toBe(2);
+  });
+
+  it("D6B-01 (q116, q234 C): allowing the Committee + Audit cumul is a relaxation — second person, or alone and marked; forbidding is direct", async () => {
+    const cumulAdmin = actor("u-admin", ["config.read", "config.cumul.set"]);
+    const w = configWorld(true);
+    const asked = await w.service.setCommitteeAuditCumul(cumulAdmin, true, "Petite équipe", "q");
+    expect(asked.pendingRequest).toMatchObject({ status: "PENDING", requestedDelays: { committeeAuditCumulAllowed: true } });
+    expect(w.row().committeeAuditCumulAllowed).toBeFalsy();
+    await expect(w.service.approveGovernanceDelays(cumulAdmin, asked.pendingRequest!.id, "moi", "q")).rejects.toThrow();
+    const approver = actor("u-rm", ["config.read", "config.selfvalidation.approve"]);
+    await expect(w.service.approveGovernanceDelays(approver, asked.pendingRequest!.id, "Vu", "q")).resolves.toMatchObject({ committeeAuditCumulAllowed: true });
+    await expect(w.service.setCommitteeAuditCumul(cumulAdmin, false, "Durcir", "q")).resolves.toMatchObject({ config: { committeeAuditCumulAllowed: false }, pendingRequest: null });
+
+    const alone = configWorld(false);
+    await expect(alone.service.setCommitteeAuditCumul(cumulAdmin, true, "Seul", "q")).resolves.toMatchObject({ config: { committeeAuditCumulAllowed: true }, pendingRequest: null });
+    expect(alone.events.at(-1)).toMatchObject({ entityType: "Config", governanceException: "config.cumul.adminAlone" });
+    await expect(configWorld("unwired").service.setCommitteeAuditCumul(cumulAdmin, true, "r", "q")).rejects.toThrow(ValidationError);
+  });
+
   it("q182 lengthening with nobody else able to approve: applied by the administrator alone, marked and audited", async () => {
     const w = configWorld(false);
     const delaysAdmin = actor("u-admin", ["config.governancedelays.set"]);

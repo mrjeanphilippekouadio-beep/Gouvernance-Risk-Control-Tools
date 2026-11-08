@@ -34,6 +34,12 @@ interface ConfigRow {
   resource_readall_max_days: number | null;
   last_seen_retention_days: number | null;
   dpo_contact: string | null;
+  gov_rm_risk_share_max_pct?: number;
+  gov_max_admins?: number;
+  gov_role_max_permissions?: number;
+  gov_role_max_families?: number;
+  gov_dormant_days?: number;
+  gov_owner_creator_share_max_pct?: number;
   version: number;
   updated_by: string | null;
   created_at: Date;
@@ -64,6 +70,12 @@ function toDomain(row: ConfigRow): Config {
     // R3 (q227): the column DEFAULT (1826, migration 085) also fills a row created by the upsert.
     lastSeenRetentionDays: row.last_seen_retention_days ?? null,
     dpoContact: row.dpo_contact ?? null,
+    govRmRiskShareMaxPct: row.gov_rm_risk_share_max_pct,
+    govMaxAdmins: row.gov_max_admins,
+    govRoleMaxPermissions: row.gov_role_max_permissions,
+    govRoleMaxFamilies: row.gov_role_max_families,
+    govDormantDays: row.gov_dormant_days,
+    govOwnerCreatorShareMaxPct: row.gov_owner_creator_share_max_pct,
     version: row.version,
     updatedBy: row.updated_by,
     createdAt: row.created_at,
@@ -107,6 +119,12 @@ export async function upsertConfigRow(db: Pick<Pool, "query">, tenantId: string,
       risk_manager_vacancy_max_days: patch.riskManagerVacancyMaxDays,
       resource_readall_max_days: patch.resourceReadallMaxDays,
       last_seen_retention_days: patch.lastSeenRetentionDays,
+      gov_rm_risk_share_max_pct: patch.govRmRiskShareMaxPct,
+      gov_max_admins: patch.govMaxAdmins,
+      gov_role_max_permissions: patch.govRoleMaxPermissions,
+      gov_role_max_families: patch.govRoleMaxFamilies,
+      gov_dormant_days: patch.govDormantDays,
+      gov_owner_creator_share_max_pct: patch.govOwnerCreatorShareMaxPct,
     },
     3,
   );

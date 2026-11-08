@@ -56,6 +56,29 @@ export const DEFAULT_LAST_SEEN_RETENTION_DAYS = 1826;
 /** q232 A (DECISION-115, SEC D6-01): never less than a year. */
 export const MIN_LAST_SEEN_RETENTION_DAYS = 365;
 
+/**
+ * q233 A (DECISION-116): thresholds of the governance panel, adjustable per client within the A13 ranges
+ * (docs/risk/A13-seuils-panel-D6-2026-11-04.md). Same defaults as the column DEFAULTs of migration 086. Never null.
+ * Raising one (fewer alerts) needs the second person (q182 circuit); lowering one is direct.
+ */
+export const GOVERNANCE_THRESHOLDS = {
+  /** RISK-01: max share (%) of the live risks one Risk Manager owns directly. */
+  govRmRiskShareMaxPct: { default: 20, min: 10, max: 40 },
+  /** ACC-01 (a): max number of active administrators. */
+  govMaxAdmins: { default: 3, min: 2, max: 5 },
+  /** ACC-01 (b): a custom role is too wide above this many permissions… */
+  govRoleMaxPermissions: { default: 25, min: 15, max: 40 },
+  /** …or from this many permission families (first segment before the dot). */
+  govRoleMaxFamilies: { default: 4, min: 3, max: 6 },
+  /** ACC-01 (c): days without activity before a privileged account is « dormant » (flagged, never suspended). */
+  govDormantDays: { default: 90, min: 45, max: 180 },
+  /** OWN-01 (d): max share (%) of the live risks whose creator is also the owner. */
+  govOwnerCreatorShareMaxPct: { default: 50, min: 25, max: 80 },
+} as const;
+export type GovernanceThresholdKey = keyof typeof GOVERNANCE_THRESHOLDS;
+export type GovernanceThresholds = Record<GovernanceThresholdKey, number>;
+export const isGovernanceThresholdKey = (k: string): k is GovernanceThresholdKey => k in GOVERNANCE_THRESHOLDS;
+
 /** One band of the SEUILS_NIVEAU (score -> level label) mapping, e.g. { label: "Critique", min: 16, max: 25 }. */
 export interface LevelThreshold {
   label: string;
@@ -83,7 +106,7 @@ export interface Config {
   committeeTreatmentMinScore: number | null;
   /** Default true — the Committee pass-through obligation on riskevaluation.validate() is on by default. */
   committeeEvaluationEnforced: boolean;
-  /** DECISION-042 §1 (q58): may a user be in both the Committee and Audit groups? Default true. Risk Manager + Audit is always refused, whatever this says. */
+  /** DECISION-042 §1 (q58): may a user be in both the Committee and Audit groups? Default false (DECISION-061, migration 086: new rows only, an existing setting is never changed). Risk Manager + Audit is always refused, whatever this says. */
   committeeAuditCumulAllowed: boolean;
   /** DECISION-074 q141: what happens when someone validates their own input. Default REFUSE. */
   selfValidationPolicy: SelfValidationPolicy;
@@ -102,6 +125,12 @@ export interface Config {
   lastSeenRetentionDays?: number | null;
   /** R5 (q231 B, DECISION-115): DPO contact shown in « Vos données »; entered at go-live (no write route). Optional for older fakes. */
   dpoContact?: string | null;
+  govRmRiskShareMaxPct?: number;
+  govMaxAdmins?: number;
+  govRoleMaxPermissions?: number;
+  govRoleMaxFamilies?: number;
+  govDormantDays?: number;
+  govOwnerCreatorShareMaxPct?: number;
   /** 0 means "default, never explicitly saved" — see DEFAULT_CONFIG in ConfigService. */
   version: number;
   updatedBy: string | null;
@@ -134,4 +163,10 @@ export interface ConfigPatch {
   riskManagerVacancyMaxDays?: number | null;
   resourceReadallMaxDays?: number | null;
   lastSeenRetentionDays?: number | null;
+  govRmRiskShareMaxPct?: number | null;
+  govMaxAdmins?: number | null;
+  govRoleMaxPermissions?: number | null;
+  govRoleMaxFamilies?: number | null;
+  govDormantDays?: number | null;
+  govOwnerCreatorShareMaxPct?: number | null;
 }

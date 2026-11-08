@@ -19,7 +19,7 @@ function role(id: string, systemGroup: SystemGroup | null, permissions: Permissi
 const actor = (userId: string, perms: Permission[]): AuthenticatedUser => ({ userId, tenantId: "t1", email: "a@x", roles: perms }) as AuthenticatedUser;
 const assigner = actor("admin", ["role.assign", "role.read"]);
 
-function setupRoles(cumulAllowed: boolean | null) {
+function setupRoles(cumulAllowed: boolean | null | "noRow") {
   const roles = [
     role("rm", "RISK_MANAGER"), role("co", "RISK_COMMITTEE"), role("au", "AUDIT", ["audit.read"]),
     role("adm", null, ["role.assign", "user.update"]), role("plain", null),
@@ -43,7 +43,8 @@ function setupRoles(cumulAllowed: boolean | null) {
   };
   const notifications = { async record(i: { recipientUserId: string; eventType: string }) { sent.push(i); } };
   const audit = { async record() {} };
-  const configs = cumulAllowed === null ? undefined : { async getByTenant() { return { committeeAuditCumulAllowed: cumulAllowed } as Config; } };
+  const configs = cumulAllowed === null ? undefined
+    : { async getByTenant() { return cumulAllowed === "noRow" ? null : ({ committeeAuditCumulAllowed: cumulAllowed } as Config); } };
   const service = new RoleService(repo as never, audit as never, users as never, undefined, undefined, notifications as never, configs as never);
   return { service, held, sent, asked };
 }
@@ -55,6 +56,12 @@ describe("q58 Committee + Audit cumul setting", () => {
       await service.assignToUser(assigner, "co", "u1", "r", "motif");
       await expect(service.assignToUser(assigner, "au", "u1", "r", "motif")).resolves.toBeUndefined();
     }
+  });
+
+  it("D6B-03 (DECISION-061): closed reading — a tenant with no configuration row has the cumul refused, as the screen and the panel say", async () => {
+    const { service } = setupRoles("noRow");
+    await service.assignToUser(assigner, "co", "u1", "r", "motif");
+    await expect(service.assignToUser(assigner, "au", "u1", "r", "motif")).rejects.toThrow(ValidationError);
   });
 
   it("is refused in both directions when the tenant forbids it", async () => {
@@ -87,8 +94,12 @@ describe("q58 Committee + Audit cumul setting", () => {
     await expect(svc.setCommitteeAuditCumul(actor("u", ["config.update"]), false, "x", "r")).rejects.toThrow(ForbiddenError);
     const adminCfg = actor("u", ["config.read", "config.cumul.set"]);
     await expect(svc.setCommitteeAuditCumul(adminCfg, false, "  ", "r")).rejects.toThrow(ValidationError);
-    expect((await svc.get(adminCfg)).committeeAuditCumulAllowed).toBe(true);
-    const after = await svc.setCommitteeAuditCumul(adminCfg, false, "politique interne", "r");
+    // DECISION-061 (q119): without a configuration row the cumul is forbidden by default; the client may allow it.
+    expect((await svc.get(adminCfg)).committeeAuditCumulAllowed).toBe(false);
+    // D6B-01: allowing it is a relaxation (second person): without the q182 circuit wired, it fails closed.
+    await expect(svc.setCommitteeAuditCumul(adminCfg, true, "politique interne", "r")).rejects.toThrow(ValidationError);
+    stored[0] = { id: "c1", committeeAuditCumulAllowed: true } as Config;
+    const { config: after } = await svc.setCommitteeAuditCumul(adminCfg, false, "politique interne", "r");
     expect(after.committeeAuditCumulAllowed).toBe(false);
     expect(recorded).toHaveLength(1);
     expect(recorded[0]!.reason).toBe("politique interne");
