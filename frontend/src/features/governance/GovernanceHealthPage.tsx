@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, Modal, StatusBadge, Table, Tabs, type StatusTone, type TableColumn } from "@djamo/design-system";
 import { governanceHealthApi, type GovernanceHealth, type PanelException, type PanelOffender, type PanelPrinciple, type PrincipleStatus } from "../../api/governanceHealth";
 import { governanceAcceptancesApi, type PrincipleAcceptance } from "../../api/governanceAcceptances";
+import { configApi } from "../../api/config";
+import { REASON_NO_NAME_HINT } from "../../api/visibility";
 import { usePermissions } from "../../auth/usePermissions";
 import { describeError, isPermissionDenied } from "../indicators/shared";
 import { PrincipleComparisonColumns } from "./PrincipleComparisonColumns";
@@ -43,6 +45,7 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
   const { can } = usePermissions(token);
   const [data, setData] = useState<GovernanceHealth | null>(null);
   const [live, setLive] = useState<PrincipleAcceptance[]>([]);
+  const [maxDays, setMaxDays] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
@@ -61,6 +64,7 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
     setLoading(true); setError(null); setDenied(false);
     // the D5 list only decorates; if it fails nothing is hidden and the server still refuses a duplicate
     governanceAcceptancesApi.list(token).then((l) => setLive(l.filter((a) => a.status === "PENDING" || a.status === "ACTIVE")), () => setLive([]));
+    configApi.get(token).then((c) => setMaxDays(c.acceptanceMaxDays ?? null), () => setMaxDays(null)); // unreadable config: no filter, the server refuses
     try { setData(await governanceHealthApi.get(token)); }
     catch (err) {
       if (isPermissionDenied(err)) setDenied(true); else setError(describeError(err));
@@ -87,12 +91,14 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
   function submitAcceptance(event: FormEvent) {
     event.preventDefault();
     if (!detail) return;
-    const expiresAt = new Date(Date.now() + Number(days) * 86_400_000).toISOString();
+    const expiresAt = new Date(Date.now() + Number(dayChoice) * 86_400_000).toISOString();
     void run(() => governanceAcceptancesApi.accept(token, { principleId: detail.id, reason: reason.trim(), expiresAt }), "Acceptation enregistrée : elle apparaît dans « Décisions de gouvernance ».");
   }
   const openReview = (e: PanelException) => { setReason(""); setOutcome("REVIEWED"); setActionError(null); setReview(e); };
   const openDetail = (p: PanelPrinciple) => { setAccepting(false); setReason(""); setDays("30"); setActionError(null); setDetail(p); };
 
+  const choices = (() => { const ok = ["30", "90", "180", "365"].filter((d) => maxDays === null || Number(d) <= maxDays); return ok.length > 0 ? ok : [String(maxDays)]; })();
+  const dayChoice = choices.includes(days) ? days : choices[0]!;
   const pendingOf = (id: string) => live.find((a) => a.principleId === id && a.status === "PENDING");
   const pendingText = (a: PrincipleAcceptance) => `Acceptation en attente de confirmation par un tiers — demandée le ${day(a.acceptedAt)}`;
   const principleColumns: TableColumn<PanelPrinciple>[] = [
@@ -190,12 +196,12 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
         {actionError && <MessageBanner tone="danger">{actionError}</MessageBanner>}
         {accepting
           ? <form id="accept-form" onSubmit={submitAcceptance}>
-            <FormField label="Motif de l'acceptation (obligatoire)" htmlFor="accept-reason">
+            <FormField label="Motif de l'acceptation (obligatoire)" htmlFor="accept-reason" help={REASON_NO_NAME_HINT}>
               <textarea id="accept-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required />
             </FormField>
-            <FormField label="Durée" htmlFor="accept-days" help="Le serveur peut refuser une durée trop longue.">
-              <select id="accept-days" value={days} onChange={(e) => setDays(e.target.value)}>
-                {["30", "90", "180", "365"].map((d) => <option key={d} value={d}>{d} jours</option>)}
+            <FormField label="Durée" htmlFor="accept-days" help={maxDays === null ? "Le serveur peut refuser une durée trop longue." : `Durée maximale fixée par votre organisation : ${maxDays} jours.`}>
+              <select id="accept-days" value={dayChoice} onChange={(e) => setDays(e.target.value)}>
+                {choices.map((d) => <option key={d} value={d}>{d} jours</option>)}
               </select>
             </FormField>
           </form>
@@ -227,7 +233,7 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
             <option value="CONTESTED">Contestée</option>
           </select>
         </FormField>
-        <FormField label="Motif (obligatoire)" htmlFor="review-comment">
+        <FormField label="Motif (obligatoire)" htmlFor="review-comment" help={REASON_NO_NAME_HINT}>
           <textarea id="review-comment" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required />
         </FormField>
       </form>}

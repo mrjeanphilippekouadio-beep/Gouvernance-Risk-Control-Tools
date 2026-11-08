@@ -39,6 +39,8 @@ const db = new Client({ connectionString: DB });
 await db.connect();
 await db.query(`UPDATE users SET roles = roles || ARRAY['governancehealth.read','governanceprinciple.accept','governanceexception.review'] WHERE email = $1`, [EMAIL.adm]);
 await db.query(`UPDATE users SET roles = roles || ARRAY['governancehealth.read'] WHERE email = $1`, [EMAIL.aud]);
+await db.query(`INSERT INTO configs (tenant_id, acceptance_max_days) VALUES ($1, 45) ON CONFLICT (tenant_id) DO UPDATE SET acceptance_max_days = 45`, [T]);
+await db.query(`UPDATE users SET roles = roles || ARRAY['config.read'] WHERE email = $1`, [EMAIL.adm]); // la lecture de la config exige config.read
 await db.query(`DELETE FROM governance_exception_reviews WHERE tenant_id = $1`, [T]).catch(() => undefined);
 await db.query(
   `INSERT INTO audit_log (tenant_id, user_id, entity_type, entity_id, action, reason, request_id, governance_exception)
@@ -83,6 +85,10 @@ try {
   await A.shot("02-detail");
 
   await dialog.getByRole("button", { name: "Accepter ce principe" }).click();
+  // q169 : maximum de 45 jours (pose en SQL avant le parcours) -> seule la durée de 30 jours est proposée, aide affichée ; F5B-03 : aide « ne nommez pas »
+  const opts = await dialog.locator("#accept-days option").allInnerTexts();
+  check("3.0 durée : seules les durées ≤ maximum (45 j) sont proposées, avec l'aide", opts.join() === "30 jours" && /maximale fixée par votre organisation : 45 jours/.test(await dialog.innerText()), opts.join());
+  check("3.0b aide « Ne nommez pas la personne concernée » sur le motif", /Ne nommez pas la personne concernée/.test(await dialog.innerText()));
   await dialog.getByLabel(/Motif de l'acceptation/).fill("Acceptation QA F5b");
   await dialog.getByRole("button", { name: "Enregistrer l'acceptation" }).click();
   await A.page.getByText(/Acceptation enregistrée/).waitFor();
