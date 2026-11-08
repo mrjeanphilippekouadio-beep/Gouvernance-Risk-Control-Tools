@@ -68,3 +68,30 @@
 | SEC-V5-06 | INFO | — | A06 / PO | Non |
 
 Statut : FINDING_IDENTIFIED. Retest A10 attendu sur SEC-V5-01 à 03 après correctif. Ce verdict n'est ni une acceptation de risque (A13), ni un avis Privacy (A15) sur l'exposition de `expiresAt` aux lecteurs du dossier.
+
+## 4. Retest (2026-11-08, `origin/feat/r1-visibility-v5` @ `50be6f8`, 087 modifiée en place)
+
+- Méthode : branche fusionnée en avance rapide dans `security/visibility-v5`. Base locale recréée de zéro (001 → 087 modifiée), clone jetable pour le down. `tsc --noEmit` propre ; suite complète 2837 verts / 819 ignorés ; `visibility-v5` + `QA-visibility-v5` en live local (`QA_VIS5_LIVE=1`) : 78 verts, 2 échecs attendus (`it.fails` QA-V5-01, voir plus bas). Aucun accès Neon.
+
+**Verdict retest : VERT.** SEC-V5-01, 02 et 03 : RETEST_PASS. SEC-V5-04 : RETEST_PASS sur le périmètre corrigé, avec un résiduel INFO. Aucune escalade.
+
+| Constat | Résultat | Preuve et tentative de contournement |
+|---|---|---|
+| SEC-V5-01 (down) | **RETEST_PASS** | Clone avec 5 accès : échu, NOMINATIF sans échéance, dossier PERIMETRE archivé avec échéance, accès valide à échéance, PERIMETRE sans échéance. Après le down : les 3 premiers sont révoqués (soft, motif « q225 : échéance ou clôture, rollback 087 ») et ne lisent plus ; les 2 derniers restent et lisent. La révocation passe sous la garde 087, avant la restauration des fonctions. Le comportement est conforme à l'en-tête : un accès encore valide devient permanent après le rollback (documenté, accepté). |
+| SEC-V5-02 (invariant) | **RETEST_PASS** | `visibility_granted` : un accès sans échéance ne compte que si le niveau propre du dossier n'est pas NOMINATIF ; dossier introuvable = NOMINATIF (échec fermé). PoC : INSERT sans échéance sur un NOMINATIF → `f`. Liste PERIMETRE sans échéance → `t`, aussi après archivage (inchangé, hors q225). Le jeu de données QA pose désormais une échéance. |
+| SEC-V5-03 (garde) | **RETEST_PASS** | PoC : raccourcir d'une seconde → 42501 ; antidater (`2000-01-01`) → 42501 ; `clock_timestamp() + 30 j + 1 s` → 42501 en UPDATE comme en INSERT ; renouvellement à `clock_timestamp() + 30 j` → accepté. |
+| `clock_timestamp()` et transaction longue | **PASS** | Le plafond est recalculé à chaque écriture sur l'horloge réelle. Une transaction ouverte longtemps ne peut donc pas écrire plus de 30 jours au-delà du moment de l'écriture (PoC : `pg_sleep(2)` puis `now() + 30 j + 1 s`, accepté parce que la valeur reste ≤ `clock_timestamp() + 30 j`). Un commit tardif ne fait que raccourcir la durée réelle. Avec `now()`, la règle « allongement seul » aurait fait échouer deux renouvellements concurrents : le choix est justifié. Résiduel INFO : la lecture (`visibility_granted`) compare encore à `now()`. Une transaction de lecture longue verrait donc un accès quelques secondes après son échéance, pour la durée de la transaction seulement. Sans portée pour des requêtes HTTP courtes. |
+| `visibility_own_level` | **PASS** | `proconfig` = `pg_catalog, public, pg_temp`, répété par ALTER, STABLE, pas SECURITY DEFINER ; supprimée par le down. PoC : une table temporaire `risks` marquée CLIENT ne change pas le niveau lu (`NOMINATIF`), et l'accès sans échéance reste refusé. Inventaire `pg_proc` : `visibility_granted` reste la seule lectrice de `resource_access_grants` hors gardes. |
+| SEC-V5-04 (compte et audit) | **RETEST_PASS, résiduel INFO** | `access_count` et les snapshots d'audit de `setVisibility` (avant comme après) passent par `visibility_granted`. Le retour à CLIENT révoque toutes les lignes vivantes, échues comprises (`rawBefore`). Résiduel : `GET /visibility` liste encore, pour un lecteur non gestionnaire, une personne dont l'accès est échu, sans échéance depuis PRIV-V5-01. Il croit donc qu'elle a encore accès. À trancher par Privacy : filtrer la liste par `validList` pour les non-gestionnaires. |
+| Ré-ajout d'une personne échue | **PASS** | `reviveExpired` renouvelle la ligne existante (une seule ligne vivante, plafond de la garde), sous le verrou et les droits de l'ajout (RM ou propriétaire, pas soi-même, motif). Dossier clos → 400. Révoquer et ajouter la même personne dans une requête la laisse révoquée (échec fermé). |
+| Renouvellement quel que soit le niveau | **PASS** | Seules les lignes vivantes à échéance sont renouvelables (`expires_at IS NOT NULL`) ; dossier clos refusé ; héritage refusé ; droits et ordre de la route inchangés. Cela couvre l'accès à échéance d'un dossier passé de NOMINATIF à PERIMETRE. |
+| PRIV-V5-01 | **PASS** | `expiresAt` n'est servi qu'aux détenteurs de `resourcevisibility.set` et au propriétaire, sur le risque et sur les 4 autres ressources (`expiryScope`). |
+| Corps non objet | **PASS** | Erreurs body-parser (`entity.*`) → 400, ou 413 si le corps est trop volumineux. Message générique, sans détail du parseur. |
+
+Points restant ouverts (non bloquants) :
+- **QA-V5-01 / SEC-V5-06** (A06 / PO) : un dossier passé de NOMINATIF à PERIMETRE garde l'échéance de sa liste (2 `it.fails` QA). Échec fermé, atténué par le renouvellement désormais possible. Décision PO attendue.
+- **INFO-R1** : le down attribue la révocation à l'auteur de l'accès (`revoked_by = granted_by`), alors que c'est le rollback qui révoque, et il n'écrit aucune ligne d'audit. Un compte technique dédié serait plus juste. Sans impact d'accès.
+- **INFO-R2** : `GET /visibility` présente les personnes échues comme présentes aux lecteurs non gestionnaires (ci-dessus, Privacy).
+- SEC-V5-05 (garde-fou pour une future réouverture) : inchangé.
+
+Statut : SEC-V5-01/02/03 **CLOSED** côté Security ; SEC-V5-04 RETEST_PASS (résiduel INFO-R2) ; SEC-V5-05/06 ouverts INFO. CLOSED ne vaut ni acceptation de risque ni avis Privacy.
