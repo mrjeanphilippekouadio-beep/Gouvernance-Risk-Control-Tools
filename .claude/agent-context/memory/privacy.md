@@ -269,3 +269,17 @@ Créée le 2026-11-03 (fichier absent jusqu'ici dans le worktree ; à fusionner 
 - Distinguer condition de production et recommandation non bloquante.
 - Ne pas confondre sécurité (A10) et privacy : les correctifs A10 ne couvrent pas la nécessité ni la minimisation.
 - RGPD : NOT_ESTABLISHED par défaut ; ne pas le citer comme applicable sans établissement UE ou personnes UE.
+
+## Entrée 2026-11-08 — challenge q217 / q237 (PRIVACY_CHALLENGE, cadrage A05 section 6)
+
+Document : `docs/privacy/privacy-q217-q237-cadrage-2026-11-08.md`. Statut global GAP_IDENTIFIED.
+
+- Verdicts : équivalence (1), périmètre (2), historique (4), identité (5), e-mail (6), exports (8) : À CORRIGER ; point de départ fin d'effet (3) : OK avec réserve ; autres textes libres (7) : ouvrir un point séparé.
+- **Constat nouveau, bloquant pour toute promesse d'effacement du nom et de l'e-mail** : `UserService` écrit l'objet utilisateur complet (email, displayName) dans `audit_log.new_value` (création l. 161-171, updates et suspensions l. 279-368). Pseudonymiser `users` ne retire pas ces copies. Le motif de rôle (`input.reason`, l. 159) reste aussi dans le journal, sans durée.
+- Règle retenue : pseudonymisation n'est pas anonymisation ; rôles + dates + actions d'un pseudonyme restent personnels, réidentifiables en petite structure.
+- Périmètre motifs : les demandes `resource.readall` entrent dans la durée d'un an par défaut (exception seulement si Compliance documente une obligation de preuve).
+- Plancher et réduction : la seconde personne vaut dans les deux sens (allongement compris).
+- H1 : non vérifiable par A15 ; à prouver par requête de lecture versée en preuve avant tout motif en production. H3 : staging à confirmer sans données réelles.
+- Compliance (CMP-q217-q237, 2026-11-08) : le plancher de 10 ans est une hypothèse du dépôt (Instruction BCEAO 017-12-2010, applicabilité à Djamo non établie) ; le dépôt ne dit pas si DECISION-038 n° 8 vise le journal. Position A15 : ne pas accepter ce plancher comme acquis ; le nom et l'e-mail doivent sortir du journal (Q-F) avant d'en faire une durée longue. Aucune purge avant avis juriste et DPO.
+- Texte R5 : e-mail absent, copies dans le journal non mentionnées. Correction C1 à faire, phrase soumise au DPO (accord global déjà donné). Statut « projet » de l'en-tête à mettre à jour.
+- Principe ajouté : 14. Une donnée d'identité écrite dans un journal append-only reste personnelle tant que le journal existe : la dissociation se décide à l'écriture (rappel principe 2), et une durée longue de journal n'est pas une raison de garder le nom.
