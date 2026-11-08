@@ -283,3 +283,12 @@ Document : `docs/privacy/privacy-q217-q237-cadrage-2026-11-08.md`. Statut global
 - Compliance (CMP-q217-q237, 2026-11-08) : le plancher de 10 ans est une hypothèse du dépôt (Instruction BCEAO 017-12-2010, applicabilité à Djamo non établie) ; le dépôt ne dit pas si DECISION-038 n° 8 vise le journal. Position A15 : ne pas accepter ce plancher comme acquis ; le nom et l'e-mail doivent sortir du journal (Q-F) avant d'en faire une durée longue. Aucune purge avant avis juriste et DPO.
 - Texte R5 : e-mail absent, copies dans le journal non mentionnées. Correction C1 à faire, phrase soumise au DPO (accord global déjà donné). Statut « projet » de l'en-tête à mettre à jour.
 - Principe ajouté : 14. Une donnée d'identité écrite dans un journal append-only reste personnelle tant que le journal existe : la dissociation se décide à l'écriture (rappel principe 2), et une durée longue de journal n'est pas une raison de garder le nom.
+
+## Revue V5 — expiration des accès nommés (2026-11-08, PRIV-REV-V5-2026-11-08)
+
+Statut : **SOUS CONDITIONS** (périmètre dossiers « personnes nommées »). Document : `docs/privacy/privacy-visibility-v5-2026-11-08.md`. Statut global GAP_IDENTIFIED.
+
+- Constats : PRIV-V5-01 `expiresAt` visible de tout lecteur du dossier (à réserver aux gestionnaires et au propriétaire, condition) ; PRIV-V5-02 listes PERIMETRE nominatives sans échéance (Q1, PO) ; PRIV-V5-03 réouverture qui fait revivre l'accès sans renouvellement, écart avec le texte de q225 (Q3, PO) ; PRIV-V5-04 la base n'impose pas l'échéance d'un accès NOMINATIF (défense en profondeur, non bloquant) ; PRIV-V5-05 motif de renouvellement en texte libre dans le journal append-only (lié à q246, reco : liste codifiée) ; PRIV-V5-06 tests manquants (exposition, réouverture, PostgreSQL réel).
+- Q2 (échéances conservées si repassage en PERIMETRE) et Q4 (pas d'audit ni notification à l'échéance) : aucune décision PO nécessaire pour Privacy ; conditions de vérification (QA ; Audit accepte la table comme preuve).
+- Principe ajouté :
+15. Une échéance d'accès est une information sur la personne (depuis quand, jusqu'à quand elle lit) : elle suit les mêmes règles de visibilité que son identité, et une réouverture ne vaut pas renouvellement tant que le texte de la décision n'autorise pas la reprise.
