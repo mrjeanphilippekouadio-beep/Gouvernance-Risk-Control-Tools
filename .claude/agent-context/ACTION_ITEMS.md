@@ -374,7 +374,7 @@ pour l'usage.
 | @dev-backend @security | **DECISION-058 (q116)** : assouplir un réglage = un administrateur seul, mais toujours avec motif obligatoire et audit avant/après. À aligner : `PATCH /modules/:name/toggle` (aucun motif aujourd'hui), `setCommitteeAuditCumul`. Correction A13 : `setCommitteeEnforcement` est déjà fermé quand le Dispositif est branché (`ConfigService.ts` l.89-91) — hors périmètre ; portée Dispositif/hors Dispositif posée en q130. Dispatché à A06 (DECISION-062). | 2026-10-18 | Ouvert |
 | @risk-manager @dev-backend @security | **DECISION-059 (q117)** : régime « structure à une personne », déclaré par l'éditeur seul à l'ouverture du compte, affiché partout, levé définitivement à l'arrivée d'une 2e personne. Spec A13 puis lot A06. | 2026-10-18 | Ouvert |
 | @architect @risk-manager | **DECISION-060 (q118)** : l'administrateur peut aussi modifier la méthodologie — amender le contrat ; confirmer que le circuit d'approbation des changements de Dispositif reste inchangé. | 2026-10-18 | Ouvert |
-| @dev-backend @dev-db | **DECISION-061 (q119)** : cumul Comité + Audit interdit par défaut, autorisable par le client — sans révoquer silencieusement un cumul existant (Djamo). | 2026-10-18 | **En cours** — implémenté dans le lot D6bis (migration 086 : défaut false pour les nouvelles lignes seulement, aucune ligne existante modifiée) ; trouvé non fait le 2026-11-08 |
+| @dev-backend @dev-db | **DECISION-061 (q119)** : cumul Comité + Audit interdit par défaut, autorisable par le client — sans révoquer silencieusement un cumul existant (Djamo). | 2026-10-18 | **Fait** — PR #236 (7268b9c), migration 086 : défaut false pour les nouveaux clients, lignes manquantes créées à true, rien révoqué |
 | @dev-frontend | **DECISION-056 (q114)** : écran « décisions prises en votre absence » avant l'arrivée du premier membre Audit ou Comité en production. | 2026-10-18 | Ouvert |
 | @dev-backend @security | **Assouplissements à un seul administrateur (A10, A05)** : `ConfigService.setCommitteeEnforcement(false)` et `setCommitteeAuditCumul(true)` sans second approbateur ; `PATCH /modules/:name/toggle` sans motif ni tiers (un admin seul peut désactiver le module AUDIT). À aligner après q116. | 2026-10-18 | Ouvert (attend q116) |
 | @qa-engineer @security | **Revues B-6d : QA PASS_WITH_RESERVES (A08, `QA-B6d.test.ts` + `QA-B6d-pg.test.ts`, 1999 passed + 4 `it.fails` témoins) ; Sécurité feu vert staging, CVSS max 2,7 (A10, `docs/security/review-B6d-2026-10-18.md`).** Tests adaptés par A06 relus : aucune assertion affaiblie. Comme 062 s'applique sur staging à la fusion, les correctifs touchant 062 passent **avant** la PR. | 2026-10-18 | Revues faites, correctifs dispatchés |
@@ -469,8 +469,8 @@ pour l'usage.
 | HUMAN @orchestrator | **q236 (cockpit)** — merger le lot V4bis (PR #234, sans migration) : QA et Sécurité vertes, CI, Sonar verts, Codex sans remarque. | 2026-11-07 | **Fermé** (DECISION-116) — PR #234 fusionnée (0bfd215) |
 | HUMAN @privacy @compliance | **q237 (cockpit)** — durée de conservation du nom affiché et des rôles d'un compte suspendu (jamais effacés, servent à relire le journal d'audit) : aligner sur la durée du journal d'audit avec le DPO (A, reco ; texte R5 provisoire véridique en attendant) ou fixer maintenant (B). Bloque la production de D6. | 2026-11-07 | **Décidé** (DECISION-116) — A : aligné sur la durée du journal d'audit (avec q217), texte provisoire |
 | HUMAN @orchestrator | **q238 (cockpit)** — merger le lot D6 (PR #235, migration 085) : QA corrigée, Sécurité VERT, Compliance/Privacy levées, CI et Sonar verts, 4 Codex P2 corrigés. | 2026-11-07 | **Fermé** (DECISION-116) — PR #235 fusionnée (d10b07f), migration 085 appliquée par migrate.yml |
-| @dev-backend | **Lot D6bis** : seuils A13 validés (q233 : RISK-01 20 %, ACC-01 3 / 25 permissions ou 4 familles / 90 j, OWN-01(d) 50 %, plancher 10 risques, réglables par client) et statut « autorisé par paramètre » pour GOV-SOD-04 (q234 C). Branche `feat/r1-governance-d6bis`. | 2026-11-07 | **PR #236 ouverte** — QA/Sécurité vertes, CI/Sonar verts, Codex P2 corrigé (6de5be5) |
-| HUMAN @orchestrator | **q239 (cockpit)** — merger le lot D6bis (PR #236, migration 086). | 2026-11-08 | **Ouvert — HUMAN : q239** |
+| @dev-backend | **Lot D6bis** : seuils A13 validés (q233 : RISK-01 20 %, ACC-01 3 / 25 permissions ou 4 familles / 90 j, OWN-01(d) 50 %, plancher 10 risques, réglables par client) et statut « autorisé par paramètre » pour GOV-SOD-04 (q234 C). Branche `feat/r1-governance-d6bis`. | 2026-11-07 | **Fusionné** — PR #236 (7268b9c) |
+| HUMAN @orchestrator | **q239 (cockpit)** — merger le lot D6bis (PR #236, migration 086). | 2026-11-08 | **Fermé** (DECISION-117) — PR #236 fusionnée (7268b9c), migration 086 |
 | @dev-frontend | **Lot F5b** — page « Santé de la gouvernance » (19 principes, 3 colonnes TPE/PME/GE, total réel des listes tronquées, non évaluable jamais « respecté »), revue des exceptions, création d'une acceptation ; sans pastille « Exemple » (catalogue validé D0/q230). Branche `feat/f5b-panel-gouvernance`. | 2026-11-08 | **En cours** |
 | @dev-backend | **SEC V4B-04 (MEDIUM 4,3, défaut ancien)** : `GET /process-evaluation-mode-requests/:id` renvoyait id et propriétaire de tous les risques du processus, NOMINATIF compris → corrigé (lecture en scope lecteur), 906f9e2 sur `feat/r1-visibility-v4bis`, test ajouté. | 2026-11-07 | **Corrigé — retest A10 à faire** |
 | @dev-backend | **D6 corrections avant PR** : SEC D6-01 (réduction de la durée → seconde personne q182 + plancher q232), D6-02 (motif/heure exacte réservés à `audit.read`/relecteurs, id/état d'un risque restreint aux groupes fixes), CMP (afficher `trackedSince`, « non évalué » sans score global, test de sortie d'ACCEPTED, trace de chaque exécution de purge même à zéro, mode dry-run). | 2026-11-04 | **En cours** (+ q228/q230/q231/q232) |
@@ -2731,4 +2731,13 @@ DECISION (PO, cockpit + conversation) : l'accord du DPO déjà obtenu couvre
 RELATED: q233-q238, DECISION-113 à 115, note D6.
 OWNER: @orchestrator @dev-backend
 STATUS: DÉCIDÉ — V4bis fusionné ; D6 en merge ; D6bis (q233, q234) à construire.
+
+DECISION-117
+DATE: 2026-11-08
+DECISION (PO, cockpit q239 A) : fusion de la PR #236 (lot D6bis : seuils A13
+  réglables, statut « autorisé par paramètre », DECISION-061 appliquée) dans
+  staging (faite, 7268b9c, migration 086 par migrate.yml).
+RELATED: q233, q234, q239, DECISION-061, DECISION-116.
+OWNER: @orchestrator
+STATUS: FAIT — suite : F5b (écran) en QA/Sécurité/Compliance.
 ```
