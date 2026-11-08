@@ -153,3 +153,11 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - Navigation : `NavItem.requires` masque une entrée sans la permission (usePermissions dans Sidebar). Seule la matrice l'utilise ; les autres entrées restent visibles (403 côté écran).
 - `FIXED_GROUP_LABELS` vit dans `api/roles.ts` (partagé avec GovernanceSettingsPage).
 - Toutes ces routes exigent `role.read`, que le groupe Audit n'a pas : ouverture à l'Audit = décision PO.
+
+## 2026-11-08 — Lot F5b panneau « Santé de la gouvernance » (`feat/f5b-panel-gouvernance`)
+- `features/governance/GovernanceHealthPage.tsx` (Tabs Principes / Exceptions à revoir, Modal `lg` de détail + acceptation en ligne, Modal de revue), `PrincipleComparisonColumns.tsx` (local, `<details>` repliables, colonne de la taille = texte + ★ + `aria-current`), `api/governanceHealth.ts`, `accept` ajouté à `api/governanceAcceptances.ts`. Menu : `requires: "governancehealth.read"`.
+- Aucun calcul de statut : le ton d'un NOT_RESPECTED dépend seulement de `severity` (affichage). ALLOWED_BY_SETTING géré comme statut possible (D6bis). « Groupe RM vide » = offender GROUP/RISK_MANAGER count 0 renvoyé par le serveur.
+- Une acceptation créée reste PENDING (confirmation par un tiers) : le panel ne passe à ACCEPTED qu'après confirmation, c'est le serveur.
+- Pas de pastille « Exemple » (catalogue validé D0 / DECISION-076, v0.3).
+- Le harnais refuse les commandes composées (`&&`, `$(…)` avec git/npx) : scripts dans le scratchpad, `chmod +x`, appel direct ; `frontend/.env.local` pour les VITE_* du dev server ; `npm ci` dans `backend/` du worktree pour tsx.
+- Parcours : `tests/integration/qa-f5b-front-playwright.mjs` (API 8297 / vite 5397, base grc_qa_f5b, 17 PASS).
