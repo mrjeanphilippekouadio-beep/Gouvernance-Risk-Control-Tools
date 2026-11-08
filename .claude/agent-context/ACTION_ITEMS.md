@@ -475,14 +475,14 @@ pour l'usage.
 | @dev-backend | **SEC F5B-01 (INFO)** : le serveur accepte une acceptation sur un principe déjà respecté (seul l'écran masque le bouton) ; aucun droit en plus, mais bloque une vraie acceptation jusqu'à son échéance. À traiter en suite : refuser côté serveur une acceptation d'un principe qui n'est pas NOT_RESPECTED. Non bloquant. | 2026-11-08 | Ouvert |
 | @dev-backend @dev-frontend | **F5b suite** : afficher l'issue « Contestée » de la dernière revue d'une exception (la réponse de `GET /governance-health` ne porte que `reviewed`, vrai pour REVIEWED seulement) — ajouter l'issue et la date de la dernière revue côté serveur, puis l'afficher. Non bloquant. | 2026-11-08 | Ouvert |
 | @dev-backend | **SEC V4B-04 (MEDIUM 4,3, défaut ancien)** : `GET /process-evaluation-mode-requests/:id` renvoyait id et propriétaire de tous les risques du processus, NOMINATIF compris → corrigé (lecture en scope lecteur), 906f9e2 sur `feat/r1-visibility-v4bis`, test ajouté. | 2026-11-07 | **Corrigé — retest A10 à faire** |
-| @dev-backend | **D6 corrections avant PR** : SEC D6-01 (réduction de la durée → seconde personne q182 + plancher q232), D6-02 (motif/heure exacte réservés à `audit.read`/relecteurs, id/état d'un risque restreint aux groupes fixes), CMP (afficher `trackedSince`, « non évalué » sans score global, test de sortie d'ACCEPTED, trace de chaque exécution de purge même à zéro, mode dry-run). | 2026-11-04 | **En cours** (+ q228/q230/q231/q232) |
-| @dev-backend | **D6 — panneau santé de la gouvernance** [FUSIONNÉ, PR #235] (`GovernanceHealthService`, `GET /governance-health`, `tenants.governance_tracking_started_at`, migration 085) : serveur construit (70454eb, `feat/r1-governance-d6`, 19 détecteurs, 3002 tests verts) ; reste R3 (purge) et R5 (texte) puis QA/Sécurité/Compliance/Privacy. | 2026-11-04 | **En cours** |
+| @dev-backend | **D6 corrections avant PR** : SEC D6-01 (réduction de la durée → seconde personne q182 + plancher q232), D6-02 (motif/heure exacte réservés à `audit.read`/relecteurs, id/état d'un risque restreint aux groupes fixes), CMP (afficher `trackedSince`, « non évalué » sans score global, test de sortie d'ACCEPTED, trace de chaque exécution de purge même à zéro, mode dry-run). | 2026-11-04 | **Fermé** — D6 fusionné (PR #235, 70454eb, migration 085) |
+| @dev-backend | **D6 — panneau santé de la gouvernance** [FUSIONNÉ, PR #235] (`GovernanceHealthService`, `GET /governance-health`, `tenants.governance_tracking_started_at`, migration 085) : serveur construit (70454eb, `feat/r1-governance-d6`, 19 détecteurs, 3002 tests verts) ; reste R3 (purge) et R5 (texte) puis QA/Sécurité/Compliance/Privacy. | 2026-11-04 | **Fermé** — D6 fusionné (PR #235) puis D6bis (PR #236, migration 086) |
 | HUMAN | **R6 — formalité ARTCI** : q227 répondue A sans préciser si le DPO juge une formalité nécessaire ni qui la fait. À indiquer avant la mise en production de D6. | 2026-11-04 | **Fermé** (DECISION-116) — couvert par l'accord du DPO déjà obtenu par le PO (note D6 entière) |
 | HUMAN @privacy | **R5 — texte d'information** : projet rédigé par A15 (`docs/privacy/texte-information-R5-2026-11-04.md`, branche `feat/r1-governance-d6`), à soumettre au DPO par le PO ; points DPO : base légale par finalité, 5 ans et plafond paramétrable, mention « réglementation applicable » sans article ; contact DPO à renseigner par le client. | 2026-11-04 | **Fermé** (DECISION-116) — couvert par l'accord du DPO déjà obtenu par le PO (note D6 entière) |
 | HUMAN @orchestrator | **q226 (cockpit)** — merger le lot V4 (PR #226, migration 084) dans staging : QA corrigée, Sécurité VERT, Compliance/Privacy levées, CI et Sonar verts, 3 Codex P2 corrigés, parcours V4 rejoué (0 échec). | 2026-11-03 | **Fermé** (DECISION-112) — PR #226 fusionnée (513d1cc), migration 084 par migrate.yml |
 | @dev-backend | **V4 dernière passe** : SEC V4-03 / CMP-V4-10 (journaliser aussi tableaux de bord avec libellé, vue dispositif, 360, cartographie, enfants, téléchargement de preuve ; ids dans la ligne de liste ; test d'inventaire) et plafond 90 j de la durée réglable. SEC V4-04 : 084 modifiée en place, jamais appliquée hors local (migrate.yml ne tourne qu'au merge) — rien à faire. | 2026-11-03 | **Fait** — 2090954, d93778c, 4cb5212 (Codex P2) ; retest A10 VERT |
 | @dev-backend @security | **Lot V2 visibilité** — `feat/r1-visibility-v2` (migration 083) : QA ORANGE→corrigé (QA-VIS2-01..06, 147/147), Sécurité VERT après retest (V2-01/02/04 corrigés), Compliance conforme avec réserves (CMP-V2-01 corrigé ; CMP-V2-02 → q208). Info A10 : sur contrôle/KPI, périmètre et autres champs en deux transactions ; niveau « restreint » lu avant verrou. | 2026-11-01 | **Fait** — PR #223 fusionnée (65007ad), migrate.yml : 083 appliquée sur staging. Suite : q207/q208 (A06), V3, V4 |
-| HUMAN @dev-backend | **Résidus visibilité V1 (SEC-visibility-v1, retest vert)** : V1-05 LOW (ids de risques masqués dans la vue département, actions en retard de la vue exécutive, contrôles du contexte d'évaluation) et V1-03 (texte des anomalies/plans liés à un risque masqué, compteur d'anomalies de la vue exécutive) — acceptés jusqu'à V2, à corriger dans V2. | 2026-11-01 | **Ouvert — V2** |
+| HUMAN @dev-backend | **Résidus visibilité V1 (SEC-visibility-v1, retest vert)** : V1-05 LOW (ids de risques masqués dans la vue département, actions en retard de la vue exécutive, contrôles du contexte d'évaluation) et V1-03 (texte des anomalies/plans liés à un risque masqué, compteur d'anomalies de la vue exécutive) — acceptés jusqu'à V2, à corriger dans V2. | 2026-11-01 | **Fermé** — V1-05 corrigé (efa5d8e, PR #222), V1-03 corrigé dans le lot V2 (b649fab) |
 | HUMAN @orchestrator | **q240 (cockpit)** — merger l'écran F5b (PR #237, sans migration) : CI, Sonar, QA, Sécurité verts ; 2 remarques Codex corrigées (5416e00). | 2026-11-08 | **Ouvert — HUMAN** |
 ## Decision Log
 
@@ -2744,3 +2744,21 @@ RELATED: q233, q234, q239, DECISION-061, DECISION-116.
 OWNER: @orchestrator
 STATUS: FAIT — suite : F5b (écran) en QA/Sécurité/Compliance.
 ```
+
+DECISION-118
+DATE: 2026-11-08
+DECISION (PO, conversation, tracé q241 à q244 dans le cockpit) : séquence de
+  clôture de R1.
+  (1) q241 A — « R1 clôturé » = tout le périmètre R1 fusionné dans staging
+  (reco orchestrateur : mise en production, non retenue). La mise en
+  production est une étape distincte : requêtes de contrôle PO n° 8, 9, 10,
+  q145, 063 ; OD-8 ; Drive sur Render ; Privacy R7.
+  (2) q242 A — F6, F7-S4, F7-S5, F7-S7, F7-S8 et la maquette UX reportés en R2.
+  (3) q243 A — F8 : écrans de mise en service (q165) en R1 ; six tableaux de
+  bord et six rapports (q162) en R2.
+  (4) q244 A — B-11 notifications e-mail reporté en R2.
+  Reste en R1 : F5b (q240), I-RT3-01 (arrêt propre), V5 (q225), B-6c (q89),
+  B-13, F8 mise en service, cadrage q217/q237 (question cockpit après A05/A15).
+RELATED: q89, q162, q165, q217, q225, q237, q240-q244, I-RT3-01, OD-8.
+OWNER: @orchestrator
+STATUS: DÉCIDÉ — cockpit releases/r1 et r2 mis à jour (r1 v36, r2 v3).
