@@ -511,4 +511,8 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
 
 61. Un seuil de panel est un paramètre tracé du client : le baisser ne doit jamais faire disparaître une alerte en silence, et un échantillon trop petit est « non évaluable », pas « respecté ».
 
+- 2026-11-08 : **SEC-B6C-02** (`docs/risk/A13-B6c-comparaison-seuils-2026-11-08.md`, position A13, pas de question PO). Constat fondé : `DashboardService.getAppetiteVsResidual` compare le score de l'évaluation au seuil de la version applicable aujourd'hui (dépassement masqué après rattachement 5x5 -> 6x6). Risk 360 : seul `currentThreshold` est concerné (`exceeded` vient de l'instantané). Règle : seuil de la version de l'évaluation (instantané F-8, spec §8.1 l.439), jamais de normalisation, version sans entrée d'appétence = « non évaluable », signal d'information « réévaluation requise » si version différente de l'applicable. Règle déjà décidée : correctif A06. I-C2 : pas de gel par campagne, mais aucune agrégation de campagne entre échelles différentes ; prérequis du futur lien évaluation / campagne.
+
+62. Un score ne se compare qu'au seuil de sa propre échelle : en cas de changement de Dispositif, lire l'instantané de l'évaluation, ne jamais normaliser (ce serait inventer une méthode) ni masquer l'écart.
+
 45. Un contrôle détectif (notification) doit couvrir le chemin le plus discret (rôle ordinaire, élargissement de rôle), sinon il ne couvre que celui que personne n'emprunterait. Une information sans accès à la preuve n'est pas un contrôle : privilégier la lecture d'une décision ambiguë qui n'affaiblit aucun contrôle, et la marquer comme interprétation.
