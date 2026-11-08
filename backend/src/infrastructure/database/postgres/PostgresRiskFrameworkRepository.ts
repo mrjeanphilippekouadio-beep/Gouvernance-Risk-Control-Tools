@@ -816,6 +816,28 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     });
   }
 
+  /** B-6c: requester's retraction of a PENDING assignment; nothing was written on the process, so nothing to undo. */
+  async withdrawAssignment(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult> {
+    return this.tx(async (c) => {
+      const locked = await c.query<RequestRow>(
+        `SELECT * FROM risk_framework_change_requests WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, requestId],
+      );
+      const req = locked.rows[0];
+      if (!req) throw new NotFoundError("RiskFrameworkChangeRequest", requestId);
+      if (req.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${req.status})`);
+      if (req.kind !== "ASSIGN_PROCESS" || !req.process_id) throw new ValidationError(`Request kind ${req.kind} is not an assignment`);
+      const done = await c.query<RequestRow>(
+        `UPDATE risk_framework_change_requests
+         SET status = 'WITHDRAWN', decided_at = now(), decision_comment = $3
+         WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+        [tenantId, requestId, comment],
+      );
+      const asked = (req.previous_value as { frameworkId?: string | null } | null)?.frameworkId ?? null;
+      return this.audited(c, { request: requestOf(done.rows[0]!), processId: req.process_id, previousFrameworkId: asked, frameworkId: null }, audit);
+    });
+  }
+
   async withdraw(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult> {
     return this.tx(async (c) => {
       const req = await this.lockPending(c, tenantId, requestId);

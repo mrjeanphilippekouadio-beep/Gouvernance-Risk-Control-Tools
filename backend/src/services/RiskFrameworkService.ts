@@ -462,6 +462,14 @@ export class RiskFrameworkService {
     if (request.requestedBy !== actor.userId) throw new ForbiddenError("Seul le demandeur peut retirer sa demande");
     if (request.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${request.status})`);
     const comment = cleanText(reason, "reason", MAX_REASON, true);
+    if (request.kind === "ASSIGN_PROCESS") {
+      requirePermission(actor, "riskframework.process.assign");
+      const withdrawAssignment = this.frameworks.withdrawAssignment?.bind(this.frameworks);
+      if (!withdrawAssignment || !this.inTx) throw new ValidationError("Process assignment is not available");
+      return withdrawAssignment(actor.tenantId, id, comment, (r) => [
+        this.event(actor, "RiskFrameworkChangeRequest", id, "STATUS_CHANGE", request, r.request, comment, requestId),
+      ]);
+    }
     return this.audited<DecisionResult>(
       (result) => [this.event(actor, "RiskFrameworkChangeRequest", id, "STATUS_CHANGE", request, result.request, comment, requestId)],
       (audit) => this.frameworks.withdraw(actor.tenantId, id, comment, audit),

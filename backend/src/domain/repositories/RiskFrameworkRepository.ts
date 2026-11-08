@@ -95,6 +95,8 @@ export interface RiskFrameworkRepository {
    * APPROVED also writes `processes.risk_framework_id` (effect on the evaluations created from then on only).
    */
   decideAssignment?(tenantId: string, requestId: string, decision: RecordDecisionInput, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult>;
+  /** B-6c: requester's retraction of a PENDING ASSIGN_PROCESS request (nothing written on the process). Optional (fakes). */
+  withdrawAssignment?(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult>;
   /** Requester's own retraction; version back to DRAFT. The service checks who may call it. */
   withdraw(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult>;
 }

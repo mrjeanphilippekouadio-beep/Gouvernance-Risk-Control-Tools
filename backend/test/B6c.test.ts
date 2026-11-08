@@ -63,6 +63,14 @@ function setup(opts: { rm?: string[]; targetActive?: boolean } = {}) {
       for (const e of a?.(result) ?? []) audit.push(e);
       return result;
     },
+    async withdrawAssignment(_t: string, id: string, comment: string | null, a?: TransactionalAudit<AssignmentResult>) {
+      const req = requests.find((r) => r.id === id)!;
+      if (req.status !== "PENDING") throw new Error("already decided");
+      Object.assign(req, { status: "WITHDRAWN", decisionComment: comment });
+      const result = { request: { ...req }, processId: req.processId!, previousFrameworkId: null, frameworkId: null };
+      for (const e of a?.(result) ?? []) audit.push(e);
+      return result;
+    },
   };
   const roles = {
     async list() { return [role("RISK_MANAGER"), role("AUDIT"), role("RISK_COMMITTEE")]; },
@@ -167,6 +175,34 @@ describe("B-6c decision of an assignment", () => {
     s.repo.getActiveVersion = async () => null;
     await expect(s.service.approve(actor("u2"), r.id, undefined, "r")).rejects.toThrow(/version active/);
     expect(s.attached.get("p1")).toBeNull();
+  });
+});
+
+describe("B-6c withdrawal of an assignment request by its requester", () => {
+  const ask = (s: ReturnType<typeof setup>) => s.service.requestProcessAssignment(actor("u1"), "fwB", { processId: "p1", reason: "Motif" }, "r1");
+
+  it("the requester withdraws a PENDING request: WITHDRAWN, audited, nothing written on the process", async () => {
+    const s = setup();
+    const r = await ask(s);
+    await s.service.withdraw(actor("u1"), r.id, "Plus nécessaire", "r2");
+    expect(s.requests[0]!.status).toBe("WITHDRAWN");
+    expect(s.attached.get("p1")).toBeNull();
+    expect(s.audit.at(-1)).toMatchObject({ entityType: "RiskFrameworkChangeRequest", action: "STATUS_CHANGE", userId: "u1", reason: "Plus nécessaire" });
+  });
+
+  it("only the requester can withdraw, a reason is mandatory, a decided request cannot be withdrawn", async () => {
+    const s = setup();
+    const r = await ask(s);
+    await expect(s.service.withdraw(actor("u2"), r.id, "x", "r")).rejects.toThrow(ForbiddenError);
+    await expect(s.service.withdraw(actor("u1"), r.id, " ", "r")).rejects.toThrow(ValidationError);
+    await s.service.reject(actor("u2"), r.id, "Non", "r");
+    await expect(s.service.withdraw(actor("u1"), r.id, "x", "r")).rejects.toThrow(/déjà traitée/);
+  });
+
+  it("withdrawing needs riskframework.process.assign", async () => {
+    const s = setup();
+    const r = await ask(s);
+    await expect(s.service.withdraw(actor("u1", ["riskframework.update"]), r.id, "x", "r")).rejects.toThrow(ForbiddenError);
   });
 });
 
