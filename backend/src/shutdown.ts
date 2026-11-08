@@ -1,3 +1,4 @@
+import type { NextFunction, Request, Response } from "express";
 import type { Notifier } from "./infrastructure/notifications/Notifier.js";
 
 /**
@@ -22,19 +23,58 @@ export class InFlightRegistry {
     return this.pending.size;
   }
 
+  private active = 0;
+
+  get activeRequests(): number {
+    return this.active;
+  }
+
+  /**
+   * SEC-IRT3-06: `server.close` waits for sockets, not for requests: when the client drops the socket, the handler
+   * still runs. Counts a request until its `res.end` (reached even on a destroyed socket); returns the idempotent
+   * "done" callback.
+   */
+  beginRequest(): () => void {
+    this.active++;
+    let done = false;
+    return () => {
+      if (!done) {
+        done = true;
+        this.active--;
+      }
+    };
+  }
+
+  /** Express middleware: counts the request until `res.end` is called. */
+  requestCounter() {
+    return (_req: Request, res: Response, next: NextFunction): void => {
+      const done = this.beginRequest();
+      const end = res.end;
+      res.end = function (this: Response, ...args: unknown[]) {
+        try {
+          return Reflect.apply(end, this, args);
+        } finally {
+          done();
+        }
+      } as typeof res.end;
+      next();
+    };
+  }
+
   /**
    * Waits for the sends in flight until `deadline` (epoch ms). Loops so that sends registered AFTER it started
    * (slow request ending during the stop) are awaited too (SEC-IRT3-02). `abandoned` = still pending at the end.
    */
-  async drain(deadline: number): Promise<{ awaited: number; abandoned: number }> {
+  async drain(deadline: number): Promise<{ awaited: number; abandoned: number; activeRequests: number }> {
     const seen = new Set<Promise<unknown>>();
-    while (this.pending.size > 0 && Date.now() < deadline) {
+    while ((this.pending.size > 0 || this.active > 0) && Date.now() < deadline) {
       const snapshot = [...this.pending];
       snapshot.forEach((p) => seen.add(p));
-      await raceDeadline(Promise.allSettled(snapshot), deadline);
+      // Nothing to await but a request still running: poll until it ends (it may register a send at its end).
+      await raceDeadline(snapshot.length > 0 ? Promise.allSettled(snapshot) : new Promise((r) => setTimeout(r, 20)), deadline);
     }
     this.pending.forEach((p) => seen.add(p));
-    return { awaited: seen.size, abandoned: this.pending.size };
+    return { awaited: seen.size, abandoned: this.pending.size, activeRequests: this.active };
   }
 }
 
@@ -89,8 +129,11 @@ export async function gracefulShutdown(opts: {
     code = 1;
   }
 
-  const { awaited, abandoned } = await opts.registry.drain(deadline);
-  opts.log(`Shutdown: ${awaited} in-flight send(s) awaited, ${abandoned} abandoned (budget ${opts.budgetMs} ms).`);
+  const { awaited, abandoned, activeRequests } = await opts.registry.drain(deadline);
+  opts.log(
+    `Shutdown: ${awaited} in-flight send(s) awaited, ${abandoned} abandoned, ${activeRequests} request(s) still running (budget ${opts.budgetMs} ms).`,
+  );
+  if (abandoned > 0 || activeRequests > 0) code = 1;
 
   let poolClosed = false;
   try {
