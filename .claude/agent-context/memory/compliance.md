@@ -13,5 +13,7 @@
 
 - 2026-11-04, CMP-governance-d6 : CMP-BLK-D5-01 levé pour le périmètre suivi (réserve : suivi non rétroactif). 16/19 principes évalués = acceptable seulement si non évaluables affichés NOT_ASSESSED sans score masquant. Purge sans planificateur = risque de dépassement de rétention ; exiger plancher du paramètre, maker-checker, trace d'exécution même à zéro, audit_logs intact. R5 (DPO non validé) et R6 (analyse de proportionnalité, ARTCI non vérifiée) bloquants.
 
+- 2026-11-08, CMP-f5b (écran santé gouvernance) : présentation conforme en conception (pas de faux vert, en attente = non respecté, masquage Personne N). q169 introuvable dans mon worktree : ne jamais conclure sur un plafond non lu ; demander la valeur. Exiger côté serveur : demandeur ≠ confirmeur, auteur ≠ relecteur, durées en liste fermée.
+
 ## Questions PO ouvertes (à tracer en ACTION_ITEMS par l'orchestrateur, owner HUMAN)
 - Durée/recertification du droit readall ; périmètre des dossiers personnes nommées ; rôle de l'Audit dans la confirmation ; absence de confirmeur éligible / accès d'urgence.
