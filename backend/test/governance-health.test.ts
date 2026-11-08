@@ -58,6 +58,7 @@ function facts(over: Partial<GovernanceFacts> = {}): GovernanceFacts {
     risksCreatorIsOwner: 0,
     risksOwnedBy: {},
     cumulSetting: null,
+    selfValidators: [],
     thresholds: { govRmRiskShareMaxPct: 20, govMaxAdmins: 3, govRoleMaxPermissions: 25, govRoleMaxFamilies: 4, govDormantDays: 90, govOwnerCreatorShareMaxPct: 50 },
     ...over,
   };
@@ -199,7 +200,8 @@ describe("D6 — detectors (pure)", () => {
     });
     it("stays NOT_RESPECTED when the setting forbids it, or when the person validated their own input", () => {
       expect(status(cumul(false), "GOV-SOD-04").status).toBe("NOT_RESPECTED");
-      const voted = cumul(true, { selfValidatedUnmarked: [{ auditId: "v", at: NOW, userId: COM, entityType: "RiskEvaluation", entityId: "e", action: "VALIDATE" }], selfValidatedUnmarkedTotal: 1 });
+      // D6B-02: the self-validators come from the complete query, never from the bounded display lists
+      const voted = cumul(true, { selfValidators: [COM], selfValidatedUnmarked: [] });
       expect(status(voted, "GOV-SOD-04")).toMatchObject({ status: "NOT_RESPECTED", offenders: [{ detail: expect.stringMatching(/a validé ses propres saisies/) }] });
     });
   });
@@ -262,6 +264,17 @@ describe("D6 — GovernanceHealthService (masking R-6.1 / q156)", () => {
   });
 });
 
+describe("D6bis — migration 086 (D6B-03, DECISION-061)", () => {
+  it("gives every client without a configs row the cumul value applied until then (true), never UPDATEs an existing row; the down keeps those rows", () => {
+    const up = migrationSql("086_governance_thresholds.sql");
+    expect(up).toMatch(/ALTER COLUMN committee_audit_cumul_allowed SET DEFAULT false/);
+    expect(up).toMatch(/INSERT INTO configs \(tenant_id, committee_audit_cumul_allowed, committee_evaluation_min_score\)\s+SELECT t\.id, true,/);
+    expect(up).toMatch(/WHERE NOT EXISTS \(SELECT 1 FROM configs c WHERE c\.tenant_id = t\.id\)/);
+    expect(up.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n")).not.toMatch(/\bUPDATE\b|\bDELETE\b/);
+    expect(migrationSql("086_governance_thresholds.down.sql")).toMatch(/SET DEFAULT true/);
+  });
+});
+
 describe("D6 — migration 085", () => {
   it("adds tenants.governance_tracking_started_at, idempotent, and its down removes it", () => {
     expect(migrationSql("085_governance_tracking.sql")).toMatch(/ADD COLUMN IF NOT EXISTS governance_tracking_started_at timestamptz NOT NULL DEFAULT now\(\)/);
@@ -306,6 +319,22 @@ describe.skipIf(!hasLocalPg)("D6 on real PostgreSQL (local only)", () => {
     const g = await new PostgresGovernanceHealthRepository(ctx.pool).loadFacts(ctx.tenant, new Date());
     expect(g.cumulSetting).toEqual({ userId: a, at: expect.any(Date) });
     expect([g.risksTotal, g.risksCreatorIsOwner]).toEqual([3, 1]);
+  });
+
+  it("D6B-02: the self-validators come from a complete query — one old self-validation behind 51 recent ones of others still counts", async () => {
+    const [x, y] = await Promise.all(["x", "y"].map(user));
+    const selfValidate = async (u: string) => {
+      const obj = crypto.randomUUID();
+      for (const action of ["CREATE", "VALIDATE"]) {
+        await one(`INSERT INTO audit_log (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, request_id)
+                   VALUES ($1, $2, 'ControlExecution', $3, $4, '{}', '{}', 'd6b02') RETURNING id`, [ctx.tenant, u, obj, action]);
+      }
+    };
+    await selfValidate(x!);
+    for (let i = 0; i < 51; i += 1) await selfValidate(y!);
+    const f = await new PostgresGovernanceHealthRepository(ctx.pool).loadFacts(ctx.tenant, new Date());
+    expect(f.selfValidatedUnmarked.map((v) => v.userId)).not.toContain(x);
+    expect(f.selfValidators).toEqual(expect.arrayContaining([x, y]));
   });
 
   it("DECISION-061 (q119): a tenant created without an explicit setting forbids the Committee + Audit cumul; a cumul is then NOT_RESPECTED", async () => {

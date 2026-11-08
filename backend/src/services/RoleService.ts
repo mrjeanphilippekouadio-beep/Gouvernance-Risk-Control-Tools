@@ -689,8 +689,10 @@ export class RoleService {
     const isCommittee = (r: Role) => r.systemGroup === "RISK_COMMITTEE";
     const isAuditMember = (r: Role) => r.systemGroup === "AUDIT" || r.permissions.some(isAuditPermission);
     if ((isCommittee(role) && others.some(isAuditMember)) || (isAuditMember(role) && others.some(isCommittee))) {
-      const cfg = await this.configs?.getByTenant(tenantId);
-      if (cfg && !cfg.committeeAuditCumulAllowed) {
+      // DECISION-061 / D6B-03: closed reading — no configuration row = forbidden (086 gave every existing client a row
+      // carrying the value applied until then). Without the optional dependency (old tests), nothing is checked.
+      const cfg = this.configs ? await this.configs.getByTenant(tenantId) : undefined;
+      if (cfg !== undefined && !cfg?.committeeAuditCumulAllowed) {
         throw new ValidationError("A user cannot be both in the Committee group and in the Audit group or hold audit permissions (setting of this tenant)");
       }
     }

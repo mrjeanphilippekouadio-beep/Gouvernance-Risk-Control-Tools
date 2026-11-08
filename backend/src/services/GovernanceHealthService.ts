@@ -111,11 +111,17 @@ export class GovernanceHealthService {
     };
     // QA-D6-01: without audit.read no account id appears anywhere (an exception on a User entity, a DECISION label…).
     const hideUserIds = (text: string): string => (showNames ? text : text.replace(UUID_RE, (id) => (labels.has(id) ? person(id) : id)));
+    /**
+     * QA-D6B-01: EVERY free text of a principle (offender detail, reasons, notes) goes through here: an account id becomes
+     * the person's name for audit readers (q234 C: who set the cumul), « Personne N » for the others — never the id.
+     */
+    const freeText = (text: string): string => (showNames ? text.replace(UUID_RE, (id) => labels.get(id) ?? id) : hideUserIds(text));
+    const freeTextOrNull = (text: string | null): string | null => (text === null ? null : freeText(text));
     const mask = (o: Offender): PanelOffender => {
-      if (o.kind === "USER" && !showNames) return { ...o, id: null, label: person(o.id) };
-      // q234 C: the author of a setting is named in a detail by account id; audit readers see the name.
-      if (showNames) return o.detail ? { ...o, detail: o.detail.replace(UUID_RE, (id) => labels.get(id) ?? id) } : o;
-      return { ...o, id: hideUserIds(o.id), label: o.label === null ? null : hideUserIds(o.label), ...(o.detail ? { detail: hideUserIds(o.detail) } : {}) };
+      const detail = o.detail ? { detail: freeText(o.detail) } : {};
+      if (showNames) return { ...o, ...detail };
+      if (o.kind === "USER") return { ...o, id: null, label: person(o.id), ...detail };
+      return { ...o, id: hideUserIds(o.id), label: o.label === null ? null : hideUserIds(o.label), ...detail };
     };
     // q232 A / SEC D6-02: the id and state of a restricted resource are for the fixed groups (who see everything); others get a count.
     const seesEverything = (["RISK_MANAGER", "RISK_COMMITTEE", "AUDIT"] as const).some((g) => groupMembers(facts, g).some((u) => u.id === actor.userId));
@@ -136,19 +142,19 @@ export class GovernanceHealthService {
         title: entry.title,
         severity: entry.severity,
         status: r.status,
-        notEvaluableReason: r.notEvaluableReason,
-        covers: r.covers,
+        notEvaluableReason: freeTextOrNull(r.notEvaluableReason),
+        covers: freeTextOrNull(r.covers),
         consequences: entry.consequence,
         offenders: restrictedToCount(r.offenders).map(mask),
         offendersTotal: r.offendersTotal,
         indications: entry.indications,
         highlighted: size,
         requirementLevel: size ? entry.indications[size].level : null,
-        acceptanceNote: r.acceptanceNote,
+        acceptanceNote: freeTextOrNull(r.acceptanceNote),
         acceptance: r.acceptance
           ? {
               id: r.acceptance.id,
-              reason: r.acceptance.reason,
+              reason: freeText(r.acceptance.reason),
               expiresAt: r.acceptance.expiresAt,
               regime: r.acceptance.regime,
               acceptedBy: showNames ? r.acceptance.acceptedBy : null,

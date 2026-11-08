@@ -112,8 +112,10 @@ export function configRouter(configService: ConfigService): Router {
   router.put("/committee-audit-cumul", async (req, res, next) => {
     try {
       const body = UpdateCommitteeAuditCumulBody.parse(req.body);
-      const config = await configService.setCommitteeAuditCumul(req.user, body.allowed, body.reason, req.requestId);
-      res.json({ data: config });
+      const { config, pendingRequest } = await configService.setCommitteeAuditCumul(req.user, body.allowed, body.reason, req.requestId);
+      // D6B-01: 202 = allowing the cumul waits for a second person; `data` is the unchanged config.
+      if (pendingRequest) res.status(202).json({ data: config, pendingRequest });
+      else res.json({ data: config });
     } catch (err) {
       next(err);
     }

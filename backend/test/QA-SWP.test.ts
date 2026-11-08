@@ -163,12 +163,15 @@ describe("QA-SWP B. no other path writes Process.evaluationMode or the Config me
     const user = actorOf(["config.cumul.set", "config.read"]);
     const mount = (app: express.Express) => app.use("/config", configRouter(svc));
     expect((await http(mount, user, "PUT", "/config/committee-audit-cumul", { allowed: false, reason: "   " })).status).toBe(400);
-    // DECISION-061 (q119): forbidden by default, so the one-admin write here is the client allowing it.
-    expect((await http(mount, user, "PUT", "/config/committee-audit-cumul", { allowed: true, reason: "assouplissement" })).status).toBe(200);
+    // DECISION-061 (q119): forbidden by default. D6B-01: allowing it needs the q182 circuit (fails closed here, unwired);
+    // forbidding an allowed cumul stays a one-admin write, reason mandatory, before/after audited.
+    expect((await http(mount, user, "PUT", "/config/committee-audit-cumul", { allowed: true, reason: "assouplissement" })).status).toBe(400);
+    row = { id: "c", committeeAuditCumulAllowed: true };
+    expect((await http(mount, user, "PUT", "/config/committee-audit-cumul", { allowed: false, reason: "durcissement" })).status).toBe(200);
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ reason: "assouplissement" });
-    expect((events[0]!.oldValue as { committeeAuditCumulAllowed: boolean }).committeeAuditCumulAllowed).toBe(false);
-    expect((events[0]!.newValue as { committeeAuditCumulAllowed: boolean }).committeeAuditCumulAllowed).toBe(true);
+    expect(events[0]).toMatchObject({ reason: "durcissement" });
+    expect((events[0]!.oldValue as { committeeAuditCumulAllowed: boolean }).committeeAuditCumulAllowed).toBe(true);
+    expect((events[0]!.newValue as { committeeAuditCumulAllowed: boolean }).committeeAuditCumulAllowed).toBe(false);
   });
 });
 

@@ -19,3 +19,16 @@ ALTER TABLE configs ADD COLUMN IF NOT EXISTS gov_owner_creator_share_max_pct int
 -- DECISION-061 (q119, PO 2026-10-18) : cumul Comité + Audit interdit par défaut, autorisable par le client. Seul le
 -- défaut des NOUVELLES lignes change : aucun UPDATE, un cumul déjà autorisé (Djamo) n'est jamais révoqué en silence.
 ALTER TABLE configs ALTER COLUMN committee_audit_cumul_allowed SET DEFAULT false;
+
+-- D6B-03 (revue A10) : un client sans ligne configs avait le cumul AUTORISÉ à l'application (RoleService) mais affiché
+-- « interdit ». On lui crée sa ligne avec la valeur réellement appliquée jusqu'ici (true) : rien n'est révoqué en
+-- silence, et l'application lit désormais « pas de ligne = interdit » (nouveaux clients seulement). Les autres colonnes
+-- prennent leur défaut, sauf le seuil Comité, calculé comme ConfigService (bande « Élevé » de l'échelle active, 15 en 5x5)
+-- pour ne pas changer la valeur affichée. Idempotent (NOT EXISTS).
+INSERT INTO configs (tenant_id, committee_audit_cumul_allowed, committee_evaluation_min_score)
+SELECT t.id, true,
+       COALESCE((SELECT (rs.probability_levels * rs.impact_levels * 15) / 25 FROM rating_scales rs
+                 WHERE rs.tenant_id = t.id AND rs.status = 'ACTIVE' AND rs.deleted_at IS NULL
+                 ORDER BY rs.activated_at DESC NULLS LAST LIMIT 1), 15)
+FROM tenants t
+WHERE NOT EXISTS (SELECT 1 FROM configs c WHERE c.tenant_id = t.id);

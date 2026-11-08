@@ -280,22 +280,30 @@ export class ConfigService {
 
   /**
    * PUT /config/committee-audit-cumul — DECISION-042 §1 (q58). Allows or forbids one user
-   * being in both the Committee and Audit groups (allowed by default). Takes effect on later
+   * being in both the Committee and Audit groups (forbidden by default, DECISION-061). Takes effect on later
    * assignments only; existing double members are not removed. Sensitive setting (Compliance):
    * dedicated permission, mandatory reason, audited. Risk Manager + Audit is not affected by it.
+   * D6B-01 (q116 « assouplir = deux personnes »): allowing it takes GOV-SOD-04 out of the alerts (q234 C), so it is a
+   * RELAXATION and follows the q182 circuit (PENDING request for a second person, or applied alone and marked
+   * `config.cumul.adminAlone` when nobody else can approve). Forbidding it stays direct.
    */
-  async setCommitteeAuditCumul(actor: AuthenticatedUser, allowed: boolean, reason: string, requestId: string): Promise<Config> {
+  async setCommitteeAuditCumul(actor: AuthenticatedUser, allowed: boolean, reason: string, requestId: string): Promise<GovernanceDelaysOutcome> {
     requirePermission(actor, "config.cumul.set");
     if (!reason.trim() || !isAcceptableReason(reason)) {
       throw new ValidationError("A reason is required to change the Committee + Audit cumul setting");
     }
     const before = await this.get(actor);
-    return writeAudited(
-      this.configs.auditsInTransaction,
-      this.audit,
-      (audit) => this.upsertConfig(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId, audit),
-      (after) => [this.configAuditEvent(actor, before, after, reason, requestId)],
-    );
+    if (!allowed || before.committeeAuditCumulAllowed) {
+      const config = await writeAudited<Config>(
+        this.configs.auditsInTransaction,
+        this.audit,
+        (audit) => this.upsertConfig(actor.tenantId, { committeeAuditCumulAllowed: allowed }, actor.userId, audit),
+        (after) => [this.configAuditEvent(actor, before, after, reason, requestId)],
+      );
+      return { config, pendingRequest: null };
+    }
+    if (!this.delayRequests || !this.eligible) throw new ValidationError("Allowing the Committee + Audit cumul is not available");
+    return this.relaxThroughSecondPerson(actor, before, { committeeAuditCumulAllowed: true }, reason.trim(), requestId, true, "config.cumul.adminAlone");
   }
 
   /**
@@ -336,26 +344,44 @@ export class ConfigService {
     // The audit's "before" must not need config.read on top of config.governancedelays.set (revue Codex PR #195).
     const before = await this.readConfig(actor.tenantId);
     const relaxing = GOVERNANCE_DELAY_KEYS.some((k) => patch[k] !== undefined && isRelaxation(k, before[k] ?? null, patch[k]!));
-    const configEvent = (after: Config, marked: boolean) => ({
-      ...this.configAuditEvent(actor, before, after, why, requestId),
-      ...(marked ? { governanceException: "config.governancedelays.adminAlone" } : {}),
-    });
 
     if (!relaxing && !this.delayRequests) {
       const config = await writeAudited<Config>(
         this.configs.auditsInTransaction,
         this.audit,
         (audit) => this.upsertConfig(actor.tenantId, patch, actor.userId, audit),
-        (after) => [configEvent(after, false)],
+        (after) => [this.configAuditEvent(actor, before, after, why, requestId)],
       );
       return { config, pendingRequest: null };
     }
     // Fail closed: without the means to tell whether a second person exists, never lengthen.
     if (!this.delayRequests || (relaxing && !this.eligible)) throw new ValidationError("Lengthening a governance delay is not available");
+    return this.relaxThroughSecondPerson(actor, before, patch, why, requestId, relaxing, "config.governancedelays.adminAlone");
+  }
+
+  /**
+   * The q182 circuit shared by the governance delays, the panel thresholds and the Committee + Audit cumul (D6B-01):
+   * a relaxation becomes a PENDING request when another holder of config.selfvalidation.approve exists, otherwise it is
+   * applied alone and marked `marker`. A new call replaces (WITHDRAWN) a request still pending. Callers checked
+   * `delayRequests` (and `eligible` when relaxing).
+   */
+  private async relaxThroughSecondPerson(
+    actor: AuthenticatedUser,
+    before: Config,
+    patch: ConfigPatch,
+    why: string,
+    requestId: string,
+    relaxing: boolean,
+    marker: string,
+  ): Promise<GovernanceDelaysOutcome> {
+    const configEvent = (after: Config, marked: boolean) => ({
+      ...this.configAuditEvent(actor, before, after, why, requestId),
+      ...(marked ? { governanceException: marker } : {}),
+    });
     const approverExists = relaxing && (await this.eligible!.existsOther(actor.tenantId, actor.userId, "config.selfvalidation.approve"));
-    const pending = await this.delayRequests.getPending(actor.tenantId);
+    const pending = await this.delayRequests!.getPending(actor.tenantId);
     const expiryDays = before.policyRequestExpiryDays;
-    const result = await this.delayRequests.change(
+    const result = await this.delayRequests!.change(
       actor.tenantId,
       {
         ...(pending ? { decide: { id: pending.id, status: "WITHDRAWN" as const, by: actor.userId, reason: "Replaced by a newer change" } } : {}),

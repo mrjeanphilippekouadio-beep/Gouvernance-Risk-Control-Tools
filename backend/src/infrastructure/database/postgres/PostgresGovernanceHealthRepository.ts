@@ -29,7 +29,7 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
     );
     if (!tenant) throw new Error("Tenant not found");
     const since = tenant.tracked_since;
-    const [users, roles, assignments, configRows, ratifications, riskGaps, processGaps, marked, markedTotals, unmarked, unmarkedTotal, designations, vacancy, purgeRuns, gapTotals, byRule, riskStats, ownerCounts, cumulSetting, thresholdRows] =
+    const [users, roles, assignments, configRows, ratifications, riskGaps, processGaps, marked, markedTotals, unmarked, unmarkedTotal, designations, vacancy, purgeRuns, gapTotals, byRule, riskStats, ownerCounts, cumulSetting, thresholdRows, selfValidators] =
       await Promise.all([
         q<{ id: string; label: string; active: boolean; roles: string[]; last_seen_at: Date | null }>(
           `SELECT id, display_name AS label, deleted_at IS NULL AS active, coalesce(roles, '{}') AS roles, last_seen_at FROM users WHERE tenant_id = $1`,
@@ -157,6 +157,13 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
                   gov_dormant_days AS "govDormantDays", gov_owner_creator_share_max_pct AS "govOwnerCreatorShareMaxPct"
            FROM configs WHERE tenant_id = $1`,
         ),
+        // D6B-02: every self-validator since the start of the tracking (marked or not), not the bounded display lists.
+        q<{ user_id: string }>(
+          `SELECT a.user_id FROM audit_log a
+           WHERE a.tenant_id = $1 AND a."timestamp" >= $2 AND a.governance_exception = 'noSelfValidation'
+           UNION ${unmarkedSelfValidations("v.user_id")}`,
+          [since],
+        ),
       ]);
     const config = configRows[0];
     const totals = markedTotals[0];
@@ -194,6 +201,7 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
       risksCreatorIsOwner: Number(riskStats[0]?.creator_owner ?? 0),
       risksOwnedBy: Object.fromEntries(ownerCounts.map((o) => [o.owner_id, Number(o.n)])),
       cumulSetting: cumulSetting[0] ? { userId: cumulSetting[0].user_id, at: cumulSetting[0].at } : null,
+      selfValidators: selfValidators.map((s) => s.user_id),
       thresholds: Object.fromEntries(
         (Object.keys(GOVERNANCE_THRESHOLDS) as GovernanceThresholdKey[]).map((k) => [k, thresholdRows[0]?.[k] ?? GOVERNANCE_THRESHOLDS[k].default]),
       ) as GovernanceThresholds,

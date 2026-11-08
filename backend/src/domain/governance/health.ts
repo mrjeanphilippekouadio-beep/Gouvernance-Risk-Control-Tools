@@ -94,6 +94,8 @@ export interface GovernanceFacts {
   risksOwnedBy: Record<string, number>;
   /** q234 C: last change of the Committee + Audit cumul setting (who, when), null if never changed. */
   cumulSetting: { userId: string; at: Date } | null;
+  /** D6B-02: every account that validated its own input since trackedSince (marked or not), never a bounded list. */
+  selfValidators: string[];
   /** q233 A: the client's panel thresholds. */
   thresholds: GovernanceThresholds;
 }
@@ -185,10 +187,8 @@ export const DETECTORS: Record<PrincipleId, (f: GovernanceFacts) => DetectorResu
     const by = rolesByUser(f);
     const offenders: Offender[] = [];
     // q234 C: a Committee + Audit cumul allowed by the setting is out of the alerts — unless the person validated their own input.
-    const selfValidators = new Set([
-      ...f.markedActions.filter((m) => m.rule === "noSelfValidation").map((m) => m.userId),
-      ...f.selfValidatedUnmarked.map((m) => m.userId),
-    ]);
+    // D6B-02: from a dedicated, complete query — the display lists are cut at 50.
+    const selfValidators = new Set(f.selfValidators);
     let allAllowed = true;
     for (const u of activeUsers(f)) {
       const rs = by.get(u.id) ?? [];

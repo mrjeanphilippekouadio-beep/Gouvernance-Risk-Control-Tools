@@ -382,7 +382,7 @@ describe.skipIf(!live)("QA-governance-d6bis on the REAL server + LOCAL PostgreSQ
         expect(r.text, w).not.toContain("QA raci");
       }
     });
-    it.fails("QA-D6B-01: without audit.read the author of the setting is not named either: the detail of a USER offender carries « par <account id> » unmasked", async () => {
+    it("QA-D6B-01: without audit.read the author of the setting is not named either: the detail of a USER offender carries « par <account id> » unmasked", async () => {
       const r = await maskedRead("rm");
       expect(r.text).not.toContain(UID.adm);
       expect(r.text).not.toContain("QA adm");

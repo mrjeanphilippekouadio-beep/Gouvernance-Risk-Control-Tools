@@ -182,10 +182,13 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
         await refresh();
         return;
       }
-      const next = await configApi.setCommitteeAuditCumul(token, flag, why);
-      setConfig(next);
-      setNotice({ tone: "success", title: "Changement appliqué", text: `${TITLES[editing]} mis à jour.` });
+      const res = await configApi.setCommitteeAuditCumul(token, flag, why);
+      setConfig(res.data);
+      setNotice(res.status === 202
+        ? { tone: "warning", title: "Changement NON appliqué : en attente d'approbation", text: "Autoriser le cumul Comité et Audit est un assouplissement : il attend qu'une seconde personne habilitée approuve la demande." }
+        : { tone: "success", title: "Changement appliqué", text: `${TITLES[editing]} mis à jour.` });
       setEditing(null);
+      await refresh();
     } catch (err) {
       setFormError(editing === "right" ? describeRightError(err) : describeError(err));
       if (isForbidden(err)) setEditing(null); // the global permission dialog explains it
@@ -275,7 +278,8 @@ export function GovernanceSettingsPage({ token, onOpenFrameworks }: { token: str
         <p className="muted">Fixés par vous au paramétrage, en jours. « Non configuré » : aucun délai ne s'applique. Raccourcir un délai s'applique aussitôt ; l'allonger ou le retirer est confirmé par une seconde personne lorsqu'elle existe (le serveur décide).</p>
         <ul>{DELAYS.map((d) => <li key={d.key}>{d.label} : <strong>{dayLabel(config[d.key])}</strong></li>)}</ul>
         {delayPending && <MessageBanner tone="warning" title="Demande en attente d'approbation : le changement n'est pas appliqué">
-          <ul>{DELAYS.filter((d) => d.key in delayPending.requestedDelays).map((d) => <li key={d.key}>{d.label} : {dayLabel(config[d.key])} → <strong>{dayLabel(delayPending.requestedDelays[d.key])}</strong></li>)}</ul>
+          <ul>{DELAYS.filter((d) => d.key in delayPending.requestedDelays).map((d) => <li key={d.key}>{d.label} : {dayLabel(config[d.key])} → <strong>{dayLabel(delayPending.requestedDelays[d.key])}</strong></li>)}
+            {delayPending.requestedDelays.committeeAuditCumulAllowed !== undefined && <li>{TITLES.cumul} : Interdit → <strong>Autorisé</strong></li>}</ul>
           <p>Motif : {delayPending.reason}</p>
           {delayPending.expiresAt && <p className="muted">Expire le {fmtDate(delayPending.expiresAt)} : passé cette date, elle ne peut plus être approuvée.</p>}
           <p className="muted">Demandée le {fmtDate(delayPending.requestedAt)} par {delayPending.requestedBy}. L'auteur ne peut pas approuver sa propre demande : le serveur refuse.</p>
