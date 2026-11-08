@@ -45,5 +45,4 @@
 .gs-modal-lg {
   width: 800px;
   box-sizing: border-box;
-  max-width: calc(100vw - 32px);
 }
