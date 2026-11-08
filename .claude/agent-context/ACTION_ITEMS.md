@@ -471,7 +471,7 @@ pour l'usage.
 | HUMAN @orchestrator | **q238 (cockpit)** — merger le lot D6 (PR #235, migration 085) : QA corrigée, Sécurité VERT, Compliance/Privacy levées, CI et Sonar verts, 4 Codex P2 corrigés. | 2026-11-07 | **Fermé** (DECISION-116) — PR #235 fusionnée (d10b07f), migration 085 appliquée par migrate.yml |
 | @dev-backend | **Lot D6bis** : seuils A13 validés (q233 : RISK-01 20 %, ACC-01 3 / 25 permissions ou 4 familles / 90 j, OWN-01(d) 50 %, plancher 10 risques, réglables par client) et statut « autorisé par paramètre » pour GOV-SOD-04 (q234 C). Branche `feat/r1-governance-d6bis`. | 2026-11-07 | **Fusionné** — PR #236 (7268b9c) |
 | HUMAN @orchestrator | **q239 (cockpit)** — merger le lot D6bis (PR #236, migration 086). | 2026-11-08 | **Fermé** (DECISION-117) — PR #236 fusionnée (7268b9c), migration 086 |
-| @dev-frontend | **Lot F5b** — page « Santé de la gouvernance » (19 principes, 3 colonnes TPE/PME/GE, total réel des listes tronquées, non évaluable jamais « respecté »), revue des exceptions, création d'une acceptation ; sans pastille « Exemple » (catalogue validé D0/q230). Branche `feat/f5b-panel-gouvernance`. | 2026-11-08 | **En cours** |
+| @dev-frontend | **Lot F5b** — page « Santé de la gouvernance » (19 principes, 3 colonnes TPE/PME/GE, total réel des listes tronquées, non évaluable jamais « respecté »), revue des exceptions, création d'une acceptation ; sans pastille « Exemple » (catalogue validé D0/q230). Branche `feat/f5b-panel-gouvernance`. | 2026-11-08 | **Fermé** — PR #237 fusionnée (57591fa) |
 | @dev-backend | **SEC F5B-01 (INFO)** : le serveur accepte une acceptation sur un principe déjà respecté (seul l'écran masque le bouton) ; aucun droit en plus, mais bloque une vraie acceptation jusqu'à son échéance. À traiter en suite : refuser côté serveur une acceptation d'un principe qui n'est pas NOT_RESPECTED. Non bloquant. | 2026-11-08 | Ouvert |
 | @dev-backend @dev-frontend | **F5b suite** : afficher l'issue « Contestée » de la dernière revue d'une exception (la réponse de `GET /governance-health` ne porte que `reviewed`, vrai pour REVIEWED seulement) — ajouter l'issue et la date de la dernière revue côté serveur, puis l'afficher. Non bloquant. | 2026-11-08 | Ouvert |
 | @dev-backend | **SEC V4B-04 (MEDIUM 4,3, défaut ancien)** : `GET /process-evaluation-mode-requests/:id` renvoyait id et propriétaire de tous les risques du processus, NOMINATIF compris → corrigé (lecture en scope lecteur), 906f9e2 sur `feat/r1-visibility-v4bis`, test ajouté. | 2026-11-07 | **Corrigé — retest A10 à faire** |
@@ -483,7 +483,7 @@ pour l'usage.
 | @dev-backend | **V4 dernière passe** : SEC V4-03 / CMP-V4-10 (journaliser aussi tableaux de bord avec libellé, vue dispositif, 360, cartographie, enfants, téléchargement de preuve ; ids dans la ligne de liste ; test d'inventaire) et plafond 90 j de la durée réglable. SEC V4-04 : 084 modifiée en place, jamais appliquée hors local (migrate.yml ne tourne qu'au merge) — rien à faire. | 2026-11-03 | **Fait** — 2090954, d93778c, 4cb5212 (Codex P2) ; retest A10 VERT |
 | @dev-backend @security | **Lot V2 visibilité** — `feat/r1-visibility-v2` (migration 083) : QA ORANGE→corrigé (QA-VIS2-01..06, 147/147), Sécurité VERT après retest (V2-01/02/04 corrigés), Compliance conforme avec réserves (CMP-V2-01 corrigé ; CMP-V2-02 → q208). Info A10 : sur contrôle/KPI, périmètre et autres champs en deux transactions ; niveau « restreint » lu avant verrou. | 2026-11-01 | **Fait** — PR #223 fusionnée (65007ad), migrate.yml : 083 appliquée sur staging. Suite : q207/q208 (A06), V3, V4 |
 | HUMAN @dev-backend | **Résidus visibilité V1 (SEC-visibility-v1, retest vert)** : V1-05 LOW (ids de risques masqués dans la vue département, actions en retard de la vue exécutive, contrôles du contexte d'évaluation) et V1-03 (texte des anomalies/plans liés à un risque masqué, compteur d'anomalies de la vue exécutive) — acceptés jusqu'à V2, à corriger dans V2. | 2026-11-01 | **Fermé** — V1-05 corrigé (efa5d8e, PR #222), V1-03 corrigé dans le lot V2 (b649fab) |
-| HUMAN @orchestrator | **q240 (cockpit)** — merger l'écran F5b (PR #237, sans migration) : CI, Sonar, QA, Sécurité verts ; 2 remarques Codex corrigées (5416e00). | 2026-11-08 | **Ouvert — HUMAN** |
+| HUMAN @orchestrator | **q240 (cockpit)** — merger l'écran F5b (PR #237, sans migration) : CI, Sonar, QA, Sécurité verts ; 2 remarques Codex corrigées (5416e00). | 2026-11-08 | **Fermé** (DECISION-119) — PR #237 fusionnée (57591fa), sans migration |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
@@ -2762,3 +2762,13 @@ DECISION (PO, conversation, tracé q241 à q244 dans le cockpit) : séquence de
 RELATED: q89, q162, q165, q217, q225, q237, q240-q244, I-RT3-01, OD-8.
 OWNER: @orchestrator
 STATUS: DÉCIDÉ — cockpit releases/r1 et r2 mis à jour (r1 v36, r2 v3).
+
+DECISION-119
+DATE: 2026-11-08
+DECISION (PO, cockpit q240 A) : fusion de la PR #237 (écran F5b : page
+  « Santé de la gouvernance », revue des exceptions, création d'une
+  acceptation) dans staging (faite, 57591fa, sans migration).
+RELATED: q240, D5, D6, D6bis, DECISION-117, DECISION-118.
+OWNER: @orchestrator
+STATUS: FAIT — suites non bloquantes : issue « Contestée » à l'écran,
+  SEC F5B-01, écran de réglage des seuils.
