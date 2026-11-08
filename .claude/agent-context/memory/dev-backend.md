@@ -518,3 +518,11 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
   exécution, liens). Changement de périmètre d'une ressource restreinte = verrou + lecteurs avant/après + audit dans la
   même transaction (`changePerimeter`). Piège vécu : un script d'édition qui s'arrête à mi-parcours laisse des fichiers à
   moitié modifiés (INSERT sans `visibility`, SEC V2-01) — relire le diff complet avant de pousser.
+
+## 2026-11-08 — I-RT3-01 arrêt propre (branche feat/r1-irt3-01-arret-propre, aucune migration)
+
+- `backend/src/shutdown.ts` : `InFlightRegistry` (`track`/`drain(ms)` → `{awaited, abandoned}`) + `trackedNotifier`. Les envois après réponse sont : le `Notifier` injecté (RiskService, FeedbackService, KriMeasure, ActionPlan, Governance : `.notify().catch()`) → enveloppé une fois dans `server.ts` ; et `GovernanceNotifier.processRequest` lancé à `res.end` → 2e paramètre optionnel du middleware. `NotificationService` (in-app) est attendu dans les services, donc non concerné.
+- Arrêt : SIGTERM/SIGINT → `server.close` (attend les requêtes actives, bornées) → `drain` (`SHUTDOWN_DRAIN_MS`, défaut 10 s, env zod) → `pool.end` → exit 0 ; 2e signal = exit 1. Journalisation en `console` (pas de logger applicatif hors pino-http).
+- Limite connue : au-delà du délai, les envois restants sont perdus (journalisé) ; un SIGKILL ou un crash n'est pas couvert. Cloud Run : terminationGracePeriod 10 s par défaut, garder SHUTDOWN_DRAIN_MS < délai de grâce.
+- Le skill `ponytail` n'existe pas dans la liste de skills de ce worktree (Unknown skill) : appliqué l'esprit, sans l'outil.
+- Le harnais refuse les commandes bash composées (heredoc python + &&) dans un worktree : utiliser Write/Edit.
