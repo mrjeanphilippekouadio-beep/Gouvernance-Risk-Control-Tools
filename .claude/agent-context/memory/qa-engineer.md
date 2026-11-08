@@ -384,3 +384,7 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 - QA-IRT3-01 MINOR : `SHUTDOWN_DRAIN_MS` n'est pas un budget global (attente des requêtes puis drain complet) : mesuré 1,8 x (4 s -> 7,2 s), jusqu'à 2 x ; avec le défaut 10 s = SIGKILL Cloud Run. QA-IRT3-02 MINOR : défaut 10 s = période de grâce, aucune marge.
 - Pratique : pour tester un arrêt, lancer `node --import tsx` en process unique (pas `tsx` CLI ni un script shell) afin d'avoir le vrai code de sortie ; simuler Telegram en remplaçant `fetch` dans un preload ; un oracle de comptage doit inclure le `processRequest` D5 suivi à `res.end` (2 envois, pas 1).
 - Le shell refuse les commandes composées longues dans un worktree : créer les fichiers avec Write, lancer les commandes séparément.
+
+## 2026-11-08 (retest) — QA-IRT3-01 sur db11c17
+- Verdict PASS. Échéance unique mesurée (budget 4000 ms -> exit 4,02 s, avant 7,2 s) ; requête infinie -> connexions coupées, exit 1 ; défaut 8000. Backend 2833 pass / 752 skipped / 0 fail ; script 29 vérifications. QA-IRT3-01/02 clos ; INFO : envoi abandonné = exit 0 + journal seulement (QA-IRT3-04), pool.end sans budget après échéance (QA-IRT3-05).
+- Leçon : ne pas écrire un oracle de code de sortie de mémoire ; relire la règle du lot (ici « 1 seulement si requêtes coupées ou pool non fermé »).
