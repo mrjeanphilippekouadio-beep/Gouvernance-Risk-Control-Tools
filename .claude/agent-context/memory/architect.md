@@ -147,3 +147,23 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
 
 - Le worktree fourni peut être sur un ancien commit sans Bash pour le corriger : lire les sources dans le
   checkout principal, écrire dans le worktree, et le signaler dans le rapport.
+
+- 2026-11-08 : cadrage q217/q237 (`docs/architecture/q217-q237-conservation-cadrage-2026-11-08.md`). Sans git, la
+  copie principale s'arrêtait à 084 : code récent lu dans `.claude/worktrees/agent-aa01625b780ee7c38`, suivi dans
+  `agent-a4a2d174766260cf7` (le Glob sur `.claude/worktrees/*` sert de substitut à `git show`).
+  Reco : motif hors du journal (table `visibility_reasons` effaçable + `audit_log.reason_ref` nullable, garde 038
+  intacte), purge manuelle calquée sur 085 ; q237 = pseudonymisation de `users.display_name`/`email` après une durée D
+  fixée par le DPO (NULL = jamais). Questions q240-q245 (numéros indicatifs). Condition H1 : aucun motif réel en prod.
+
+## Principes ajoutés (2026-11-08)
+
+14. **On ne purge pas ce qu'une FK du journal référence** : `audit_log.user_id` → `users` NOT NULL, et le journal
+    n'est jamais purgé (ACT-072 C). La « fin de conservation » d'une identité est donc une pseudonymisation de la
+    ligne référencée, jamais une suppression.
+15. **Avant de purger un champ texte, vérifier qu'il ne sert pas de clé** : `grant_reason = CREATION_GRANT_REASON`
+    sert de lookup dans `PostgresRiskRepository.listCreationAccess`. Même chose pour `PERMISSION_CHANGE` : l'action est
+    partagée par les rôles et la visibilité, donc pour cibler une catégorie de lignes du journal il faut un marqueur posé
+    à l'INSERT (patron 066), pas un filtre sur l'action.
+16. **Séparer une donnée à durée courte d'un journal à durée longue dès l'écriture** (référence + table effaçable)
+    plutôt que d'ouvrir une exception dans la garde du journal. Cela ne couvre que le futur : vérifier qu'aucune
+    donnée réelle n'existe déjà.
