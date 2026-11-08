@@ -11,7 +11,9 @@
 //  S5  SHUTDOWN_DRAIN_MS = -1 / 120001 / abc / 1.5 : le process refuse de démarrer (exit != 0, aucune écoute) ; 0 et 120000 démarrent.
 //  S6  SIGINT : même chemin que SIGTERM (exit 0).
 //  S7  sans rien en vol : sortie quasi immédiate, exit 0.
-import { spawn, execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
+import { scryptSync } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,16 +24,21 @@ import net from "node:net";
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const BACKEND = join(ROOT, "backend");
 const DB = "grc_qa_irt3";
-const PSQL = ["-X", "-q", "-h", "127.0.0.1", "-p", "55442", "-U", "postgres", "-d", DB];
 const TMP = mkdtempSync(join(tmpdir(), "qa-irt3-"));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 function check(name, ok, detail = "") { if (!ok) fails++; console.log(`${ok ? "PASS" : "FAIL"} ${name} ${detail}`); }
 
 const SALT = "aabbccddeeff0011";
-const HASH = `scrypt$${SALT}$${execFileSync("node", ["-e", `process.stdout.write(require("crypto").scryptSync("whatever","${SALT}",64).toString("hex"))`]).toString()}`;
+const HASH = `scrypt$${SALT}$${scryptSync("whatever", SALT, 64).toString("hex")}`;
 const USERS = JSON.stringify(["own", "adm"].map((n) => ({ email: `${n}@vv1.test`, passwordHash: HASH })));
-execFileSync("psql", [...PSQL, "-c", "update users set roles = roles || '{feedback.create}' where email='own@vv1.test' and not ('feedback.create' = any(roles))"]);
+const { Client } = createRequire(join(BACKEND, "package.json"))("pg");
+{ // pas de binaire resolu par le PATH (Sonar S4036) : client pg du backend
+  const db = new Client({ host: "127.0.0.1", port: 55442, user: "postgres", database: DB });
+  await db.connect();
+  await db.query("update users set roles = roles || '{feedback.create}' where email='own@vv1.test' and not ('feedback.create' = any(roles))");
+  await db.end();
+}
 
 let nextPort = 8191;
 function start(extra = {}) {
@@ -44,7 +51,7 @@ function start(extra = {}) {
     LOCAL_AUTH_TOKEN_SECRET: "q".repeat(48), CORS_ALLOWED_ORIGINS: "http://127.0.0.1:5199",
     TELEGRAM_BOT_TOKEN: "qa-fake-token", TELEGRAM_CHAT_ID: "1", QA_TG_FILE: tgFile, ...extra,
   };
-  const child = spawn("node", ["--import", "tsx", "--import", join(ROOT, "tests/integration/qa-irt3-preload.mjs"), "src/server.ts"], { cwd: BACKEND, env });
+  const child = spawn(process.execPath, ["--import", "tsx", "--import", join(ROOT, "tests/integration/qa-irt3-preload.mjs"), "src/server.ts"], { cwd: BACKEND, env });
   const p = { port, child, tgFile, log: "", exit: null, exitAt: 0 };
   child.stdout.on("data", (d) => (p.log += d)); child.stderr.on("data", (d) => (p.log += d));
   p.done = new Promise((res) => child.on("exit", (code, sig) => { p.exit = { code, sig }; p.exitAt = Date.now(); res(p.exit); }));
