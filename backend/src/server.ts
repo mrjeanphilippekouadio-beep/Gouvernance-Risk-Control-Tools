@@ -4,7 +4,7 @@ import cors from "cors";
 import { corsOptions } from "./api/corsOptions.js";
 import { env, getLocalAuthUsers } from "./config/env.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
-import { InFlightRegistry, trackedNotifier } from "./shutdown.js";
+import { InFlightRegistry, gracefulShutdown, trackedNotifier } from "./shutdown.js";
 import { pool } from "./infrastructure/database/pool.js";
 import { createLastSeenRecorder } from "./infrastructure/identity/lastSeen.js";
 import { assertProductionDatabaseRole } from "./infrastructure/database/postgres/databaseRoleSecurity.js";
@@ -747,18 +747,15 @@ async function startServer(): Promise<void> {
     stopping = true;
     // eslint-disable-next-line no-console
     console.log(`${signal} received: closing the server, draining in-flight notifications.`);
-    // Stops accepting; requests still running finish first (their notifications are only registered at res.end),
-    // bounded by the same deadline.
-    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
-    server.closeIdleConnections();
-    void (async () => {
-      await Promise.race([closed, new Promise<void>((resolve) => setTimeout(resolve, env.SHUTDOWN_DRAIN_MS).unref())]);
-      const { awaited, abandoned } = await inFlight.drain(env.SHUTDOWN_DRAIN_MS);
+    // One deadline for requests, sends and pool close (see gracefulShutdown).
+    void gracefulShutdown({
+      server,
+      registry: inFlight,
+      closePool: () => pool.end(),
+      budgetMs: env.SHUTDOWN_DRAIN_MS,
       // eslint-disable-next-line no-console
-      console.log(`Shutdown: ${awaited} in-flight send(s) awaited, ${abandoned} abandoned at the ${env.SHUTDOWN_DRAIN_MS} ms deadline.`);
-      await pool.end().catch(() => undefined);
-      process.exit(0);
-    })();
+      log: (line) => console.log(line),
+    }).then((code) => process.exit(code));
   };
   process.on("SIGTERM", () => stop("SIGTERM"));
   process.on("SIGINT", () => stop("SIGINT"));

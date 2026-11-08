@@ -18,6 +18,7 @@ export class TelegramNotifier implements Notifier {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({ chat_id: this.chatId, text: message }),
+      signal: AbortSignal.timeout(5_000), // SEC-IRT3-04: explicit bound, below the shutdown budget
     });
 
     if (!res.ok) {
