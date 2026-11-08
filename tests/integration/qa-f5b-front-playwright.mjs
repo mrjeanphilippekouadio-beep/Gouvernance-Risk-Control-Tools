@@ -85,9 +85,10 @@ try {
   await A.shot("02-detail");
 
   await dialog.getByRole("button", { name: "Accepter ce principe" }).click();
-  // q169 : maximum de 45 jours (pose en SQL avant le parcours) -> seule la durée de 30 jours est proposée, aide affichée ; F5B-03 : aide « ne nommez pas »
+  // q169 : maximum de 45 jours (pose en SQL avant le parcours), qui ne vaut que pour une acceptation faite seul (seul le serveur le sait)
+  // -> toutes les durées + le maximum sont proposés, aide affichée ; F5B-03 : aide « ne nommez pas »
   const opts = await dialog.locator("#accept-days option").allInnerTexts();
-  check("3.0 durée : seules les durées ≤ maximum (45 j) sont proposées, avec l'aide", opts.join() === "30 jours" && /maximale fixée par votre organisation : 45 jours/.test(await dialog.innerText()), opts.join());
+  check("3.0 durée : durées usuelles + maximum (45 j), avec l'aide « si personne d'autre ne peut confirmer »", opts.join() === "30 jours,45 jours,90 jours,180 jours,365 jours" && /personne d'autre ne peut confirmer cette acceptation, votre organisation la limite à 45 jours/.test(await dialog.innerText()), opts.join());
   check("3.0b aide « Ne nommez pas la personne concernée » sur le motif", /Ne nommez pas la personne concernée/.test(await dialog.innerText()));
   await dialog.getByLabel(/Motif de l'acceptation/).fill("Acceptation QA F5b");
   await dialog.getByRole("button", { name: "Enregistrer l'acceptation" }).click();

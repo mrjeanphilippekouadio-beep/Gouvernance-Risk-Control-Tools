@@ -63,7 +63,7 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
   const refresh = useCallback(async () => {
     setLoading(true); setError(null); setDenied(false);
     // the D5 list only decorates; if it fails nothing is hidden and the server still refuses a duplicate
-    governanceAcceptancesApi.list(token).then((l) => setLive(l.filter((a) => a.status === "PENDING" || a.status === "ACTIVE")), () => setLive([]));
+    governanceAcceptancesApi.list(token).then((l) => setLive(l.filter((a) => (a.status === "PENDING" || a.status === "ACTIVE") && Date.parse(a.expiresAt) > Date.now())), () => setLive([]));
     configApi.get(token).then((c) => setMaxDays(c.acceptanceMaxDays ?? null), () => setMaxDays(null)); // unreadable config: no filter, the server refuses
     try { setData(await governanceHealthApi.get(token)); }
     catch (err) {
@@ -97,7 +97,8 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
   const openReview = (e: PanelException) => { setReason(""); setOutcome("REVIEWED"); setActionError(null); setReview(e); };
   const openDetail = (p: PanelPrinciple) => { setAccepting(false); setReason(""); setDays("30"); setActionError(null); setDetail(p); };
 
-  const choices = (() => { const ok = ["30", "90", "180", "365"].filter((d) => maxDays === null || Number(d) <= maxDays); return ok.length > 0 ? ok : [String(maxDays)]; })();
+  // q169: the maximum only frames an acceptance made alone, which only the server knows: offer every duration (plus the maximum itself), the server refuses an over-long solo one
+  const choices = maxDays === null || ["30", "90", "180", "365"].includes(String(maxDays)) ? ["30", "90", "180", "365"] : [...["30", "90", "180", "365"], String(maxDays)].sort((a, b) => Number(a) - Number(b));
   const dayChoice = choices.includes(days) ? days : choices[0]!;
   const pendingOf = (id: string) => live.find((a) => a.principleId === id && a.status === "PENDING");
   const pendingText = (a: PrincipleAcceptance) => `Acceptation en attente de confirmation par un tiers — demandée le ${day(a.acceptedAt)}`;
@@ -199,7 +200,7 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
             <FormField label="Motif de l'acceptation (obligatoire)" htmlFor="accept-reason" help={REASON_NO_NAME_HINT}>
               <textarea id="accept-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required />
             </FormField>
-            <FormField label="Durée" htmlFor="accept-days" help={maxDays === null ? "Le serveur peut refuser une durée trop longue." : `Durée maximale fixée par votre organisation : ${maxDays} jours.`}>
+            <FormField label="Durée" htmlFor="accept-days" help={maxDays === null ? "Le serveur peut refuser une durée trop longue." : `Si personne d'autre ne peut confirmer cette acceptation, votre organisation la limite à ${maxDays} jours.`}>
               <select id="accept-days" value={dayChoice} onChange={(e) => setDays(e.target.value)}>
                 {choices.map((d) => <option key={d} value={d}>{d} jours</option>)}
               </select>
