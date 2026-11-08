@@ -154,6 +154,19 @@ export class ActionPlanService {
     return this.access.set(actor, this.target(plan), input, requestId);
   }
 
+  /** Lot V5 (q225 A): renews the access of named people to an action plan in a « personnes nommées » dossier (30 days from now, never more). */
+  async renewAccess(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { userIds: string[]; reason: string },
+    requestId: string,
+  ): Promise<ResourceVisibilityState> {
+    requirePermission(actor, "actionplan.read");
+    const plan = await this.getRaw(actor, id);
+    if (!this.access) throw new ValidationError("Renewing a named access is not available");
+    return this.access.renew(actor, this.target(plan), input, requestId);
+  }
+
   /** Best effort: recipient = the action's responsible user only (risk owner / superior not wired, see handoff). */
   /** F-NOTIF-03: messages carry no title/date (readable with notification.read alone); `dedupe` = F-NOTIF-01. */
   /**

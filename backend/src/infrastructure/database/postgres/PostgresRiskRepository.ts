@@ -7,6 +7,8 @@ import type { RiskRepository } from "../../../domain/repositories/RiskRepository
 import type { CreateRiskInput, Risk, RiskVisibilityChange, RiskVisibilityState, UpdateRiskInput } from "../../../domain/entities/Risk.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
+import { isClosed, listExpiries, renewGrants, stampNamedExpiry } from "./namedAccess.js";
+import type { AccessExpiry, AccessRenewalResult } from "../../../domain/repositories/ResourceAccessRepository.js";
 
 interface RiskRow {
   id: string;
@@ -171,6 +173,8 @@ export class PostgresRiskRepository implements RiskRepository {
           [input.tenantId, row.id, userId, input.grantedBy, CREATION_GRANT_REASON],
         );
       }
+      // Lot V5 (q225): a risk created NOMINATIF carries an expiry on every named access.
+      if (input.visibility === "NOMINATIF") await stampNamedExpiry(client, input.tenantId, "RISK", row.id);
       await client.query("COMMIT");
       return { risk: toDomain(row), created: true };
     } catch (err) {
@@ -258,12 +262,36 @@ export class PostgresRiskRepository implements RiskRepository {
         `UPDATE risks SET visibility = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
         [tenantId, riskId, change.visibility],
       );
+      // Lot V5 (q225): a named-people dossier carries an expiry on every live access, those kept as those just added.
+      if (change.visibility === "NOMINATIF") await stampNamedExpiry(db, tenantId, "RISK", riskId);
       const { rows: [gain] } = await db.query<{ widening: boolean }>(
         `SELECT EXISTS (SELECT 1 FROM users WHERE tenant_id = $1 AND deleted_at IS NULL AND risk_visible_to($1, $2, id)
                           AND NOT (id = ANY($3::uuid[]))) AS widening`,
         [tenantId, riskId, readersBefore],
       );
       return { before, after: { visibility: change.visibility, accessUserIds: await list() }, widening: gain?.widening ?? false };
+    }, audit);
+  }
+
+  accessExpiries(tenantId: string, riskId: string): Promise<AccessExpiry[]> {
+    return listExpiries(this.pool, tenantId, "RISK", riskId);
+  }
+
+  async renewAccess(tenantId: string, riskId: string, userIds: string[], audit?: TransactionalAudit<AccessRenewalResult>): Promise<AccessRenewalResult> {
+    return runAudited(this.pool, async (db) => {
+      const locked = await db.query<{ visibility: Visibility }>(
+        `SELECT visibility FROM risks WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+        [tenantId, riskId],
+      );
+      const visibility = locked.rows[0]?.visibility;
+      if (!visibility) throw new NotFoundError("Risk", riskId);
+      if (visibility !== "NOMINATIF") throw new ValidationError("Only the access to a named-people dossier expires and can be renewed");
+      if (await isClosed(db, tenantId, "RISK", riskId)) throw new ValidationError("This dossier is closed: the named access has ended");
+      const before = await listExpiries(db, tenantId, "RISK", riskId);
+      await renewGrants(db, tenantId, "RISK", riskId, userIds);
+      const now = Date.now();
+      const widening = userIds.some((u) => before.some((b) => b.userId === u && b.expiresAt !== null && b.expiresAt.getTime() <= now));
+      return { visibility, before, after: await listExpiries(db, tenantId, "RISK", riskId), widening };
     }, audit);
   }
 
