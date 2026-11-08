@@ -492,6 +492,9 @@ pour l'usage.
 | HUMAN @privacy @dev-backend | **q253, q254 (cockpit)** — lot V5 (revue A15 `docs/privacy/privacy-visibility-v5-2026-11-08.md`, sous conditions) : q253 échéance aussi pour les ajouts nominatifs d'un dossier PERIMETRE (PRIV-V5-02) ; q254 pas de retour d'accès à la réouverture (PRIV-V5-03). Sans PO : PRIV-V5-01 `expiresAt` réservé aux gestionnaires et au propriétaire (à corriger dans V5). | 2026-11-08 | **Ouvert — HUMAN** |
 | HUMAN @orchestrator | **q255 (cockpit)** — merger I-RT3-01 (PR #238, sans migration) : Sécurité verte (2 retests), QA verte (27/27), CI, Sonar, Codex verts. | 2026-11-08 | **Ouvert — HUMAN** |
 | @devops HUMAN | **SEC-IRT3-05** : confirmer le délai de grâce réel de Render pour le backend et fixer `SHUTDOWN_DRAIN_MS` (25000 si 30 s) ; 8000 par défaut reste sûr. | 2026-11-08 | Ouvert |
+| HUMAN @dev-backend @risk-manager | **q257 (cockpit)** — B-6c : déplacer un risque (SEC-B6C-01) ou un sous-processus (QA-B6C-02, MAJOR) vers un autre Dispositif contourne le circuit q89. Reco A : libre, mais audit ancien/nouveau Dispositif + motif + Risk Managers prévenus. | 2026-11-08 | **Ouvert — HUMAN** |
+| @risk-manager | **SEC-B6C-02** : le tableau de bord appétence et Risk 360 comparent le score d'une évaluation (échelle de sa version) au seuil de la version applicable aujourd'hui ; A13 dispatché (règle + I-C2). | 2026-11-08 | En cours (A13) |
+| @security | **Revue A10 de l'archivage d'un Dispositif et de `SET_DEFAULT`** — à faire à la livraison de B-13 (hors B-6c, confirmé). | 2026-11-08 | Ouvert |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
