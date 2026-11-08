@@ -1,0 +1,12 @@
+.gh-columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.gh-column{border:1px solid var(--gs-border);border-radius:var(--gs-radius-card);background:var(--gs-bg-surface);padding:12px 14px;font-size:12px;line-height:1.5;min-width:0}
+.gh-column--current{border:2px solid var(--gs-primary);background:var(--gs-primary-bg)}
+.gh-column summary{cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.gh-column summary:focus-visible{outline:2px solid var(--gs-primary);outline-offset:2px}
+.gh-column__mark{font-size:11px;font-weight:700;color:var(--gs-primary)}
+.gh-column__level{font-weight:700;margin:8px 0 4px}
+.gh-offenders{margin:0;padding-left:16px;font-size:12px}
+.gh-offenders li{margin:0 0 2px}
+.gh-detail p{margin:0 0 10px;font-size:13px;line-height:1.5}
+.gh-detail h3{font-size:13px;margin:14px 0 6px}
+@media(max-width:900px){.gh-columns{grid-template-columns:1fr}}

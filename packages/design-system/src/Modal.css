@@ -44,4 +44,5 @@
 
 .gs-modal-lg {
   width: 800px;
+  box-sizing: border-box;
 }

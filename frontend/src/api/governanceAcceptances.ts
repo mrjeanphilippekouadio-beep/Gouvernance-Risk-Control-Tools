@@ -27,6 +27,9 @@ const BASE = "/api/v1/governance-principle-acceptances";
 /** D5 routes. Every rule (maker-checker, expiry, permissions) is the server's. */
 export const governanceAcceptancesApi = {
   list: (token: string) => apiRequest<PrincipleAcceptance[]>(BASE, { token }),
+  /** Creates an acceptance of a non-respected principle; the author is the authenticated user. */
+  accept: (token: string, input: { principleId: string; reason: string; expiresAt: string }) =>
+    apiRequest<PrincipleAcceptance>(BASE, { method: "POST", body: input, token }),
   confirm: (token: string, id: string) => apiRequest<PrincipleAcceptance>(`${BASE}/${id}/confirm`, { method: "POST", token }),
   reject: (token: string, id: string, reason: string) =>
     apiRequest<PrincipleAcceptance>(`${BASE}/${id}/reject`, { method: "POST", body: { reason }, token }),
