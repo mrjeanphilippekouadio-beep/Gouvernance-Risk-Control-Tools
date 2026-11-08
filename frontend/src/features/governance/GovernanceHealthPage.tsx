@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, Modal, StatusBadge, Table, Tabs, type StatusTone, type TableColumn } from "@djamo/design-system";
 import { governanceHealthApi, type GovernanceHealth, type PanelException, type PanelOffender, type PanelPrinciple, type PrincipleStatus } from "../../api/governanceHealth";
-import { governanceAcceptancesApi } from "../../api/governanceAcceptances";
+import { governanceAcceptancesApi, type PrincipleAcceptance } from "../../api/governanceAcceptances";
 import { usePermissions } from "../../auth/usePermissions";
 import { describeError, isPermissionDenied } from "../indicators/shared";
 import { PrincipleComparisonColumns } from "./PrincipleComparisonColumns";
@@ -42,6 +42,7 @@ type ReviewTarget = PanelException;
 export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
   const { can } = usePermissions(token);
   const [data, setData] = useState<GovernanceHealth | null>(null);
+  const [live, setLive] = useState<PrincipleAcceptance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
@@ -58,6 +59,8 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
 
   const refresh = useCallback(async () => {
     setLoading(true); setError(null); setDenied(false);
+    // the D5 list only decorates; if it fails nothing is hidden and the server still refuses a duplicate
+    governanceAcceptancesApi.list(token).then((l) => setLive(l.filter((a) => a.status === "PENDING" || a.status === "ACTIVE")), () => setLive([]));
     try { setData(await governanceHealthApi.get(token)); }
     catch (err) {
       if (isPermissionDenied(err)) setDenied(true); else setError(describeError(err));
@@ -90,6 +93,8 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
   const openReview = (e: PanelException) => { setReason(""); setOutcome("REVIEWED"); setActionError(null); setReview(e); };
   const openDetail = (p: PanelPrinciple) => { setAccepting(false); setReason(""); setDays("30"); setActionError(null); setDetail(p); };
 
+  const pendingOf = (id: string) => live.find((a) => a.principleId === id && a.status === "PENDING");
+  const pendingText = (a: PrincipleAcceptance) => `Acceptation en attente de confirmation par un tiers — demandée le ${day(a.acceptedAt)}`;
   const principleColumns: TableColumn<PanelPrinciple>[] = [
     { key: "status", header: "Statut", render: (p) => <>
       <StatusBadge {...statusBadge(p)} />
@@ -100,6 +105,7 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
       {p.status === "NOT_EVALUABLE" && <div className="muted">Non évaluable : {p.notEvaluableReason ?? "raison non fournie"}</div>}
       {p.acceptanceNote && <div className="muted">{p.acceptanceNote}</div>}
       {p.acceptance && <div className="muted">Accepté jusqu'au {day(p.acceptance.expiresAt)}</div>}
+      {pendingOf(p.id) && <div className="muted">{pendingText(pendingOf(p.id)!)}</div>}
     </> },
     { key: "consequences", header: "Conséquence", render: (p) => p.consequences },
     { key: "offenders", header: "Objets en cause", render: (p) => <Offenders p={p} /> },
@@ -171,13 +177,14 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
         </>
         : <>
           <Button onClick={() => setDetail(null)}>Fermer</Button>
-          {detail?.status === "NOT_RESPECTED" && can("governanceprinciple.accept") && <Button variant="primary" onClick={() => { setReason(""); setActionError(null); setAccepting(true); }}>Accepter ce principe</Button>}
+          {detail?.status === "NOT_RESPECTED" && !live.some((a) => a.principleId === detail.id) && can("governanceprinciple.accept") && <Button variant="primary" onClick={() => { setReason(""); setActionError(null); setAccepting(true); }}>Accepter ce principe</Button>}
         </>}
     >
       {detail && <div className="gh-detail">
         <p><strong>{detail.title}</strong></p>
         <p><StatusBadge {...statusBadge(detail)} /></p>
         {detail.status === "NOT_EVALUABLE" && <p>Non évaluable : {detail.notEvaluableReason ?? "raison non fournie"}</p>}
+        {pendingOf(detail.id) && <MessageBanner tone="info">{pendingText(pendingOf(detail.id)!)}</MessageBanner>}
         {detail.covers && <p className="muted">Évalué : {detail.covers}</p>}
         <p>{detail.consequences}</p>
         {actionError && <MessageBanner tone="danger">{actionError}</MessageBanner>}

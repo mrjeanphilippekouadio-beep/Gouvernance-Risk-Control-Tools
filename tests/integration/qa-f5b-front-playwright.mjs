@@ -92,6 +92,16 @@ try {
   const created = ((await api("adm", "GET", "/governance-principle-acceptances")).json.data ?? []).find((a) => a.principleId === target.id);
   check("3.2 l'API liste l'acceptation (PENDING ou ACTIVE)", created && ["PENDING", "ACTIVE"].includes(created.status), created?.status);
 
+  // 3.3 acceptation PENDING : mention sur la ligne et dans le détail, plus de bouton « Accepter », statut du principe inchangé
+  if (created?.status === "PENDING") {
+    const prow = A.page.locator("table tbody tr").filter({ hasText: target.id }).first();
+    await prow.getByText(/Acceptation en attente de confirmation par un tiers — demandée le/).waitFor();
+    check("3.3 ligne : mention « en attente » + statut « Non respecté » conservé", /Non respecté/.test(await prow.innerText()));
+    await prow.getByRole("button", { name: /Détail/ }).click();
+    check("3.4 détail : mention + pas de bouton « Accepter »", (await A.page.getByRole("dialog").getByText(/en attente de confirmation par un tiers/).count()) === 1 && (await A.page.getByRole("button", { name: "Accepter ce principe" }).count()) === 0);
+    await A.page.getByRole("button", { name: "Fermer" }).click();
+  }
+
   await A.page.getByRole("button", { name: /Exceptions à revoir/ }).click();
   const erow = A.page.locator("table tbody tr").filter({ hasText: "selfValidation.qa" });
   check("4.1 l'exception est listée « À revoir »", (await erow.count()) === 1 && /À revoir/.test(await erow.innerText()));
