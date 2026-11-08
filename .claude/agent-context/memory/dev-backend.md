@@ -525,3 +525,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Clôture : RISK/CONTROL = ARCHIVED ou deleted_at ; KPI = deleted_at (pas de statut) ; ANOMALY = CLOSED ; ACTION_PLAN = TERMINEE.
 - Renouvellement : `POST /:id/visibility/renew` {userIds (boundedArray 1..50), reason}, `ResourceVisibilityManager.renew` / `RiskService.renewAccess`, droit = celui de l'ajout, pas de renouvellement de soi-même, refus si dossier clos ou non NOMINATIF.
 - Piège tests live : les suites V0..V4 rejouent 080/082/083/084 sur la base partagée et restaurent d'anciennes définitions ; la suite V5 rejoue 084 puis 087 en beforeAll. Les gardes statiques de numéros de migration (QA-panel*, v2bis, v3) sont à relever à chaque nouvelle migration.
+
+## 2026-11-08 Lot V5, retours QA/Sécu/Privacy (087 modifiée en place, pas de 088)
+
+- Lecture en échec fermé : `visibility_granted` = accès sans échéance valide seulement si le niveau propre du dossier n est pas NOMINATIF (`visibility_own_level`). Tout INSERT direct sur un NOMINATIF dans un test ou un seed doit porter `expires_at`.
+- Garde : l échéance d un accès vivant ne fait que s allonger ; plafond calculé avec `clock_timestamp()` (pas `now()`), sinon deux renouvellements concurrents se croisent (500). Les tests qui antidatent désactivent le trigger le temps de l UPDATE.
+- Une ligne vivante échue reste en table (révocable / réactivable) ; instantané d audit, retour de `set` et `accessCount` ne comptent que `visibility_granted` (`validList`). Ré-ajouter une personne échue la renouvelle (`reviveExpired`), 400 si dossier clos.
+- Renouvellement autorisé dès que l accès porte une échéance, quel que soit le niveau. Règle de fond des listes PERIMETRE : attend q253 (PO), non inventée ; 2 `it.fails` QA-V5-01 restent.
+- `expiresAt` renvoyé seulement à qui a `resourcevisibility.set` ou au propriétaire (`expiryScope`).
+- Non fait : KPI clos au renouvellement = 404 conservé (un KPI supprimé est 404 sur toute l API ; un 400 révélerait l existence).
