@@ -683,6 +683,44 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
     });
   });
 
+  // ------------------------------------------------------------------------------------------------ G (retest, migration 088)
+  describe("G migration 088: SQL guard on processes.risk_framework_id and on ASSIGN_PROCESS tenants", () => {
+    const refused = async (q: string, p: unknown[]) => { try { await pg.query(q, p); return null; } catch (e) { return (e as { code?: string }).code ?? "?"; } };
+    it("G1 no write outside an approved request: direct UPDATE, INSERT with a Dispositif, other-tenant Dispositif -> 42501, nothing changed", async () => {
+      const p = await proc();
+      expect(await refused(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [p, F["FB"]])).toBe("42501");
+      expect(await refused(`INSERT INTO processes (tenant_id, level, name, risk_framework_id) VALUES ($1,'PROCESS','x',$2)`, [T, F["FB"]])).toBe("42501");
+      expect(await refused(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [p, F["FB_B"]])).toBe("42501");
+      expect(await attached(p)).toBeNull();
+      // resetting to NULL stays allowed
+      await attach(p, F["FB"]);
+      expect(await refused(`UPDATE processes SET risk_framework_id = NULL WHERE id = $1`, [p])).toBeNull();
+    });
+    it("G2 an approval of an EARLIER transaction cannot be replayed to re-attach", async () => {
+      const { p, rid } = await pending();
+      expect((await decide("rm2", rid, "approve")).status).toBe(200);
+      await sql(`ALTER TABLE processes DISABLE TRIGGER processes_framework_guard`);
+      try { await sql(`UPDATE processes SET risk_framework_id = NULL WHERE id = $1`, [p]); } finally { await sql(`ALTER TABLE processes ENABLE TRIGGER processes_framework_guard`); }
+      expect(await refused(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [p, F["FB"]])).toBe("42501");
+      // nor to another Dispositif, nor for another process
+      const other = await proc();
+      expect(await refused(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [other, F["FB"]])).toBe("42501");
+    });
+    it("G3 an ASSIGN_PROCESS request must name a process and a Dispositif of its own tenant", async () => {
+      const ins = (t: string, fw: string, pr: string, by: string) => refused(
+        `INSERT INTO risk_framework_change_requests (tenant_id, kind, framework_id, process_id, reason, requested_by) VALUES ($1,'ASSIGN_PROCESS',$2,$3,'x',$4)`, [t, fw, pr, by]);
+      expect(await ins(T, F["FB"]!, F["PB"]!, uid["rm1"]!)).toBe("42501");
+      expect(await ins(T, F["FB_B"]!, await proc(), uid["rm1"]!)).toBe("42501");
+    });
+    it("G4 both guard functions pin search_path with pg_temp last; the trigger exists and is enabled", async () => {
+      const f = await sql(`SELECT proname, proconfig FROM pg_proc WHERE proname IN ('processes_framework_guard','risk_framework_assign_tenant_guard')`);
+      expect(f).toHaveLength(2);
+      for (const x of f) expect(x.proconfig).toEqual(["search_path=pg_catalog, public, pg_temp"]);
+      const t = await sql(`SELECT tgname, tgenabled FROM pg_trigger WHERE tgname IN ('processes_framework_guard','risk_framework_assign_tenant_guard')`);
+      expect(t.map((x) => x.tgenabled)).toEqual(["O", "O"]);
+    });
+  });
+
   // ------------------------------------------------------------------------------------------------ D
   describe("D I-C1 on a real PostgreSQL: each version is compared to its OWN scale only", () => {
     const params = (o: Row = {}) => ({ committeeEvaluationMinScore: 21, committeeEvaluationEnforced: true, committeeTreatmentMinScore: null, appetiteThresholds: [], lowCriticalityThreshold: 3, ...o });
