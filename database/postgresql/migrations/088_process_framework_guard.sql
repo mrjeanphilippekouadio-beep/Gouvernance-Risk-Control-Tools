@@ -6,6 +6,7 @@
 --       (2) une demande ASSIGN_PROCESS APPROVED du même tenant, pour ce processus et ce Dispositif, décidée dans
 --           la transaction courante (decided_at = now(), qui est l'heure de début de la transaction) : seul le chemin
 --           d'approbation (decideAssignment) satisfait la condition. Remettre la colonne à NULL reste permis.
+--       (3) un processus rattaché ne peut pas changer de tenant (R-03).
 --   (b) risk_framework_change_requests : une demande ASSIGN_PROCESS naît avec un processus et un Dispositif du tenant
 --       de la demande.
 --
@@ -23,6 +24,10 @@ BEGIN
       RAISE EXCEPTION 'processes: risk_framework_id cannot be set at insert; it is written by an approved ASSIGN_PROCESS request' USING ERRCODE = '42501';
     END IF;
     RETURN NEW;
+  END IF;
+  -- R-03 (retest A10): a process carrying a Dispositif cannot change tenant (it would keep another tenant's Dispositif).
+  IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id AND NEW.risk_framework_id IS NOT NULL THEN
+    RAISE EXCEPTION 'processes: a process attached to a Dispositif cannot change tenant' USING ERRCODE = '42501';
   END IF;
   IF NEW.risk_framework_id IS NOT DISTINCT FROM OLD.risk_framework_id OR NEW.risk_framework_id IS NULL THEN
     RETURN NEW;
@@ -43,7 +48,7 @@ $$;
 
 DROP TRIGGER IF EXISTS processes_framework_guard ON processes;
 CREATE TRIGGER processes_framework_guard
-  BEFORE INSERT OR UPDATE OF risk_framework_id ON processes
+  BEFORE INSERT OR UPDATE OF risk_framework_id, tenant_id ON processes
   FOR EACH ROW EXECUTE FUNCTION processes_framework_guard();
 
 CREATE OR REPLACE FUNCTION risk_framework_assign_tenant_guard() RETURNS trigger LANGUAGE plpgsql

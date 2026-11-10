@@ -212,6 +212,13 @@ describe("B-6c inter-Dispositif ceiling (I-C1) and wiring", () => {
     expect(src).not.toMatch(/min\(probability_levels/);
   });
 
+  it("088 (R-03): the guard also watches tenant_id and refuses a tenant change of an attached process; search_path pinned", () => {
+    const sql = readFileSync("../database/postgresql/migrations/088_process_framework_guard.sql", "utf8");
+    expect(sql).toMatch(/UPDATE OF risk_framework_id, tenant_id ON processes/);
+    expect(sql).toMatch(/NEW\.tenant_id IS DISTINCT FROM OLD\.tenant_id AND NEW\.risk_framework_id IS NOT NULL/);
+    expect((sql.match(/SET search_path = pg_catalog, public, pg_temp/g) ?? []).length).toBe(2);
+  });
+
   it("the route body is strict and carries no attribution field", () => {
     const src = readFileSync("src/api/v1/riskFrameworks.routes.ts", "utf8");
     expect(src).toMatch(/AssignBody = z\.object\(\{ processId: Id, reason: Reason \}\)\.strict\(\)/);
