@@ -495,6 +495,8 @@ pour l'usage.
 | HUMAN @dev-backend @risk-manager | **q257 (cockpit)** — B-6c : déplacer un risque (SEC-B6C-01) ou un sous-processus (QA-B6C-02, MAJOR) vers un autre Dispositif contourne le circuit q89. Reco A : libre, mais audit ancien/nouveau Dispositif + motif + Risk Managers prévenus. | 2026-11-08 | **Ouvert — HUMAN** |
 | @risk-manager | **SEC-B6C-02** : le tableau de bord appétence et Risk 360 comparent le score d'une évaluation (échelle de sa version) au seuil de la version applicable aujourd'hui ; A13 dispatché (règle + I-C2). | 2026-11-08 | En cours (A06, dans B-6c) — A13 : constat fondé (tableau de bord), règle déjà décidée : seuil de la version de l'évaluation, sans normalisation ; pas de question PO (`docs/risk/A13-B6c-comparaison-seuils-2026-11-08.md`) |
 | @security | **Revue A10 de l'archivage d'un Dispositif et de `SET_DEFAULT`** — à faire à la livraison de B-13 (hors B-6c, confirmé). | 2026-11-08 | Ouvert |
+| HUMAN @orchestrator | **q258 (cockpit)** — merger V5 (PR #239, migration 087) : Sécurité et QA vertes après retest, Privacy sous conditions, CI/Sonar/Codex verts. À merger avant #240. | 2026-11-10 | **Ouvert — HUMAN** |
+| @orchestrator | **PR #240 (B-6c, migration 088)** ouverte, Sécurité et QA vertes après retest ; à merger après #239 : fusionner staging et réaligner les tests de contiguïté des migrations (087+088, 49 fonctions, plage 66..88, filtre n !== 88 retiré). | 2026-11-10 | En cours |
 ## Decision Log
 
 Format standard `product-manager.md` §47. Consulter ici avant de rouvrir un
