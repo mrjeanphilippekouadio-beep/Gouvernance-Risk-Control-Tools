@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { Pool } from "pg";
+import { ProcessService } from "../src/services/ProcessService.js";
+import { PostgresRiskFrameworkRepository } from "../src/infrastructure/database/postgres/PostgresRiskFrameworkRepository.js";
 import { readFileSync } from "node:fs";
 import { RiskFrameworkService } from "../src/services/RiskFrameworkService.js";
 import { resolveApplicableFrameworkId } from "../src/services/riskFrameworkResolution.js";
-import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
+import { ConflictError, ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
 import type { Permission } from "../src/domain/permissions.js";
 import type { Role, SystemGroup } from "../src/domain/entities/Role.js";
 import type {
@@ -203,6 +206,73 @@ describe("B-6c withdrawal of an assignment request by its requester", () => {
     const s = setup();
     const r = await ask(s);
     await expect(s.service.withdraw(actor("u1", ["riskframework.update"]), r.id, "x", "r")).rejects.toThrow(ForbiddenError);
+  });
+});
+
+describe("B-6c Codex P2 #1: a process with a PENDING assignment cannot be archived", () => {
+  const build = (pending: boolean) => {
+    const softDelete = vi.fn(async () => undefined);
+    const processes = { async getById() { return { id: "p1", tenantId: "t1", level: "PROCESS" }; }, softDelete };
+    const frameworks = { async hasPendingAssignment() { return pending; } };
+    const svc = new ProcessService(processes as never, { async record() { /* unused */ } } as never, undefined, undefined, undefined, undefined, undefined, undefined, undefined, frameworks);
+    return { svc, softDelete };
+  };
+  const admin = actor("u1", ["process.read", "process.delete"] as never);
+
+  it("refuses with a clear message and deletes nothing", async () => {
+    const { svc, softDelete } = build(true);
+    await expect(svc.archive(admin, "p1", "obsolète", "r")).rejects.toThrow(/demande de rattachement/);
+    expect(softDelete).not.toHaveBeenCalled();
+  });
+
+  it("archives when no assignment is pending", async () => {
+    const { svc, softDelete } = build(false);
+    await svc.archive(admin, "p1", "obsolète", "r");
+    expect(softDelete).toHaveBeenCalledOnce();
+  });
+});
+
+describe("B-6c Codex P2 #2: the approval rule is re-read under lock when an assignment is decided", () => {
+  const pool = (liveRule: string) => {
+    const log: string[] = [];
+    const res = (rows: unknown[]) => ({ rows, rowCount: rows.length });
+    const client = {
+      async query(sql: string) {
+        const s = sql.replace(/\s+/g, " ").trim();
+        log.push(s);
+        if (/FROM risk_framework_change_requests .*FOR UPDATE/.test(s)) return res([{ id: "r1", status: "PENDING", kind: "ASSIGN_PROCESS", process_id: "p1", framework_id: "fwB", previous_value: { frameworkId: null } }]);
+        if (/SELECT change_approver FROM risk_framework_versions/.test(s)) return res([{ change_approver: liveRule }]);
+        if (/^UPDATE risk_framework_change_requests/.test(s)) return res([{ id: "r1", status: "REJECTED", kind: "ASSIGN_PROCESS", process_id: "p1", framework_id: "fwB" }]);
+        return { rows: [], rowCount: 1 };
+      },
+      release() { /* noop */ },
+    };
+    return { pool: { connect: async () => client } as unknown as Pool, log };
+  };
+  const decision = (approverRule: string) => ({ outcome: "REJECTED" as const, decidedBy: "u2", comment: "non", decisionRegime: "NORMAL" as const, deciderGroup: "RISK_MANAGER" as const, ratificationStatus: null, approverRule: approverRule as never });
+
+  it("a rule that changed since the decider was authorised: ConflictError, rolled back, request untouched", async () => {
+    const f = pool("COMMITTEE");
+    await expect(new PostgresRiskFrameworkRepository(f.pool).decideAssignment("t1", "r1", decision("RISK_MANAGER"))).rejects.toThrow(ConflictError);
+    expect(f.log).toContain("ROLLBACK");
+    expect(f.log.some((q) => /^UPDATE risk_framework_change_requests/.test(q))).toBe(false);
+  });
+
+  it("the same rule: the decision is recorded and committed; the read takes a share lock", async () => {
+    const f = pool("RISK_MANAGER");
+    await new PostgresRiskFrameworkRepository(f.pool).decideAssignment("t1", "r1", decision("RISK_MANAGER"));
+    expect(f.log.at(-1)).toBe("COMMIT");
+    expect(f.log.find((q) => /SELECT change_approver/.test(q))).toMatch(/tenant_id = \$1 .* FOR SHARE/);
+  });
+
+  it("the service passes the rule it used to authorise the decider", async () => {
+    const s = setup();
+    const seen: unknown[] = [];
+    const orig = s.repo.decideAssignment;
+    s.repo.decideAssignment = async (t: string, id: string, d: RecordDecisionInput, a?: TransactionalAudit<AssignmentResult>) => { seen.push((d as { approverRule?: string }).approverRule); return orig(t, id, d, a); };
+    const r = await s.service.requestProcessAssignment(actor("u1"), "fwB", { processId: "p1", reason: "m" }, "r1");
+    await s.service.approve(actor("u2"), r.id, undefined, "r2");
+    expect(seen).toEqual(["RISK_MANAGER"]);
   });
 });
 

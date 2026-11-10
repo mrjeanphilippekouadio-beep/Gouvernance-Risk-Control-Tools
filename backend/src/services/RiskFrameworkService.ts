@@ -624,8 +624,9 @@ export class RiskFrameworkService {
       throw new ValidationError("Le Dispositif d'arrivée n'a plus de version active : la demande ne peut être approuvée");
     }
     // q89: the rule of the Dispositif of arrival (its ACTIVE version); the requester is the only excluded person.
-    const { decider, fallbackCause, bypassedGroups } = await this.resolveExcluding(
-      actor.tenantId, new Set([request.requestedBy]), active?.changeApprover ?? "RISK_MANAGER");
+    // The repository re-reads that rule under lock and refuses (409) if it changed since: `approverRule`.
+    const approverRule = active?.changeApprover ?? "RISK_MANAGER";
+    const { decider, fallbackCause, bypassedGroups } = await this.resolveExcluding(actor.tenantId, new Set([request.requestedBy]), approverRule);
     const fallback = decider.regime === "FALLBACK";
     const cleanComment = cleanText(comment, "comment", MAX_COMMENT, outcome === "REJECTED" || fallback);
 
@@ -648,6 +649,7 @@ export class RiskFrameworkService {
       deciderGroup: "RISK_MANAGER",
       ratificationStatus: fallback ? "PENDING" : null,
       fallbackCause,
+      approverRule,
     }, events);
 
     await this.notify(actor, [request.requestedBy], request.id, "RISK_FRAMEWORK_CHANGE_DECIDED",

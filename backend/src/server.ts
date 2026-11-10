@@ -285,6 +285,7 @@ const processService = new ProcessService(
   userRepository,
   selfValidationGate,
   resourceVisibilityManager,
+  riskFrameworkRepository, // B-6c: archive refused while an assignment is pending
 );
 const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
   processEvaluationModeRequestRepository,

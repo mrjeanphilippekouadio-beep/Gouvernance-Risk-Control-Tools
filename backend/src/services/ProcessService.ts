@@ -6,6 +6,7 @@ import type { RiskRepository } from "../domain/repositories/RiskRepository.js";
 import type { ControlRepository } from "../domain/repositories/ControlRepository.js";
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
+import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
 import type { ProcessEvaluationModeRequestRepository } from "../domain/repositories/ProcessEvaluationModeRequestRepository.js";
 import {
   PROCESS_LEVEL_BY_RANK,
@@ -86,6 +87,8 @@ export class ProcessService {
     private readonly selfValidation?: SelfValidationGate,
     /** q207 (DECISION-107): a new owner who opens restricted resources is reasoned, traced and reported. Wired in server.ts. */
     private readonly access?: ResourceVisibilityManager,
+    /** B-6c: refuses archiving a process that has a PENDING Dispositif assignment (its approval would fail on a deleted process). */
+    private readonly frameworks?: Pick<RiskFrameworkRepository, "hasPendingAssignment">,
   ) {}
 
   private async assertDepartmentExists(tenantId: string, departmentId: string): Promise<void> {
@@ -455,6 +458,11 @@ export class ProcessService {
           "Cannot archive this process: it is still referenced by controls.processId — unlink those controls first, or the FK would silently dangle",
         );
       }
+    }
+    if (await this.frameworks?.hasPendingAssignment?.(tenantId, processId)) {
+      throw new ValidationError(
+        "Cannot archive this process: it has a pending Dispositif assignment request — retirez ou faites décider la demande de rattachement d'abord",
+      );
     }
     if (this.evaluationModeRequests) {
       const pending = await this.evaluationModeRequests.list(tenantId, { processId, status: "PENDING_VALIDATION" });

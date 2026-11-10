@@ -780,7 +780,16 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     });
   }
 
-  async decideAssignment(tenantId: string, requestId: string, d: RecordDecisionInput, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult> {
+  async hasPendingAssignment(tenantId: string, processId: string): Promise<boolean> {
+    const { rowCount } = await this.pool.query(
+      `SELECT 1 FROM risk_framework_change_requests
+       WHERE tenant_id = $1 AND kind = 'ASSIGN_PROCESS' AND process_id = $2 AND status = 'PENDING' LIMIT 1`,
+      [tenantId, processId],
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
+  async decideAssignment(tenantId: string, requestId: string, d: RecordDecisionInput & { approverRule: ChangeApprover }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult> {
     return this.tx(async (c) => {
       const locked = await c.query<RequestRow>(
         `SELECT * FROM risk_framework_change_requests WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
@@ -791,6 +800,16 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
       if (req.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${req.status})`);
       if (req.kind !== "ASSIGN_PROCESS" || !req.process_id) throw new ValidationError(`Request kind ${req.kind} is not an assignment`);
 
+      // The rule that authorised the decider is the one of the ACTIVE version of the Dispositif of arrival: re-read
+      // under a share lock (an activation archives it, which needs the exclusive lock, so it waits for us).
+      const live = await c.query<{ change_approver: ChangeApprover }>(
+        `SELECT change_approver FROM risk_framework_versions
+         WHERE tenant_id = $1 AND framework_id = $2 AND status = 'ACTIVE' FOR SHARE`,
+        [tenantId, req.framework_id],
+      );
+      if ((live.rows[0]?.change_approver ?? "RISK_MANAGER") !== d.approverRule) {
+        throw new ConflictError("La règle d'approbation du Dispositif d'arrivée a changé depuis le début de votre décision : rejouez-la");
+      }
       const decided = await c.query<RequestRow>(
         `UPDATE risk_framework_change_requests
          SET status = $3, decided_by = $4, decided_at = now(), decision_comment = $5,

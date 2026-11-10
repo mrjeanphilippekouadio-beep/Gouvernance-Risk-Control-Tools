@@ -2,6 +2,7 @@ import type {
   AssignmentResult,
   CreateAssignmentRequestInput,
   BootstrapFacts,
+  ChangeApprover,
   ChangeRequestStatus,
   DecisionRegime,
   RecordBootstrapDecisionInput,
@@ -93,8 +94,12 @@ export interface RiskFrameworkRepository {
   /**
    * B-6c, one transaction. Reserves the PENDING ASSIGN_PROCESS request (FOR UPDATE) and records the decision;
    * APPROVED also writes `processes.risk_framework_id` (effect on the evaluations created from then on only).
+   * `approverRule` is the `changeApprover` the service used to authorise the decider: the ACTIVE version of the
+   * Dispositif of arrival is re-read under lock and a different rule is a ConflictError (replay the decision).
    */
-  decideAssignment?(tenantId: string, requestId: string, decision: RecordDecisionInput, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult>;
+  decideAssignment?(tenantId: string, requestId: string, decision: RecordDecisionInput & { approverRule: ChangeApprover }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult>;
+  /** B-6c: true when a PENDING ASSIGN_PROCESS request targets this process (ProcessService.archive refuses then). Optional (fakes). */
+  hasPendingAssignment?(tenantId: string, processId: string): Promise<boolean>;
   /** B-6c: requester's retraction of a PENDING ASSIGN_PROCESS request (nothing written on the process). Optional (fakes). */
   withdrawAssignment?(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult>;
   /** Requester's own retraction; version back to DRAFT. The service checks who may call it. */

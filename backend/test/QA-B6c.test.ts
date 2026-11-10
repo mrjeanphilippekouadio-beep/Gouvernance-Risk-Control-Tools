@@ -435,7 +435,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
 
     it("B6b the repository replays the target check under lock (the service check alone is a TOCTOU window): archived target / lost ACTIVE version / deleted process -> refused, PENDING kept", async () => {
       const repo = new PostgresRiskFrameworkRepository(pg);
-      const d = { outcome: "APPROVED" as const, decidedBy: uid["rm2"]!, comment: null, decisionRegime: "NORMAL" as const, deciderGroup: "RISK_MANAGER" as const, ratificationStatus: null };
+      const d = { outcome: "APPROVED" as const, decidedBy: uid["rm2"]!, comment: null, decisionRegime: "NORMAL" as const, deciderGroup: "RISK_MANAGER" as const, ratificationStatus: null, approverRule: "RISK_MANAGER" as const };
       const fwY = (await one(`INSERT INTO risk_frameworks (tenant_id, name, created_by) VALUES ($1,'Dispositif Y',$2) RETURNING id`, [T, uid["rm1"]])).id as string;
       const c = await pg.connect();
       let vY: string;
