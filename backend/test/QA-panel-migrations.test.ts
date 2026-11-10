@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
  *    The test leaves the database in the full 071 state.
  */
 const DIR = join(__dirname, "..", "..", "database", "postgresql", "migrations");
-const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "079", "080", "081", "082", "083", "084", "085", "086"] as const;
+const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "079", "080", "081", "082", "083", "084", "085", "086", "088"] as const; // 087 belongs to lot V5 (not merged on this branch yet)
 const up = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && !f.endsWith(".down.sql"))!;
 const down = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && f.endsWith(".down.sql"))!;
 const read = (f: string) => readFileSync(join(DIR, f), "utf8");
@@ -59,7 +59,7 @@ describe("QA-panel migrations 066-071 (static)", () => {
         expect(header, `${up(n)} ${m[1]}`).toMatch(/SET\s+search_path\s*=\s*pg_catalog,\s*public,\s*pg_temp\b/i);
       }
     }
-    expect(functions).toBe(42); // 068 x3, 070 x2 (guard + truncate guard), 071 x2, 072 x2, 073 x4, 076 x2, 079 x2, 080 x2, 082 x1 (risk_visible_to), 083 x7 (V2 *_visible_to + 3 helpers), 084 x15 (guard, is_administrator, reads_all, 5 *_visible_core, 2 effective levels, 5 *_visible_to — DECISION-111 q219)
+    expect(functions).toBe(44); // 088 x2 (processes_framework_guard, risk_framework_assign_tenant_guard); 068 x3, 070 x2 (guard + truncate guard), 071 x2, 072 x2, 073 x4, 076 x2, 079 x2, 080 x2, 082 x1 (risk_visible_to), 083 x7 (V2 *_visible_to + 3 helpers), 084 x15 (guard, is_administrator, reads_all, 5 *_visible_core, 2 effective levels, 5 *_visible_to — DECISION-111 q219)
   });
 
   it("066 adds the audit column without touching existing audit rows (no UPDATE/DELETE on audit_log)", () => {

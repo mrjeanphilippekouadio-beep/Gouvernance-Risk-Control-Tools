@@ -61,14 +61,11 @@ export class RiskService {
     private readonly frameworks?: Pick<RiskFrameworkRepository, "getDefaultFramework" | "getProcessFrameworkId">,
   ) {}
 
-  /** F-B6b-04: the Dispositif id that applies to a risk placed on `processId` (spec §7); null if none. Best effort: a read failure never blocks the update. */
+  /** F-B6b-04: the Dispositif id that applies to a risk placed on `processId` (spec §7); null if none. Fails closed (SEC-B6C-01). */
   private async applicableFrameworkId(tenantId: string, processId: string | null): Promise<string | null> {
     if (!this.frameworks) return null;
-    try {
-      return await resolveApplicableFrameworkId({ frameworks: this.frameworks, processes: this.processes }, tenantId, processId);
-    } catch {
-      return null;
-    }
+    // SEC-B6C-01: fail closed. A failed read fails the update; the audit never says null / "unchanged" by default.
+    return resolveApplicableFrameworkId({ frameworks: this.frameworks, processes: this.processes }, tenantId, processId);
   }
 
   /** q212: before a designation, whether it opens the restricted risk (reason required outside the RM group). */

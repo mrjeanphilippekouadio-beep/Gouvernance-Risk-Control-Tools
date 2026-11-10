@@ -67,6 +67,11 @@ const sh = (cmd: string, args: string[], env: Record<string, string> = {}) =>
 type Row = Record<string, any>;
 const sql = async (q: string, p: unknown[] = []) => (await pg.query(q, p)).rows as Row[];
 const one = async (q: string, p: unknown[] = []) => (await sql(q, p))[0]!;
+/** Test setup only: migration 088 forbids writing processes.risk_framework_id outside an approved request, so the guard is lifted around the write. */
+const attach = async (id: string, fw: string) => {
+  await sql(`ALTER TABLE processes DISABLE TRIGGER processes_framework_guard`);
+  try { await sql(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [id, fw]); } finally { await sql(`ALTER TABLE processes ENABLE TRIGGER processes_framework_guard`); }
+};
 
 type Res = { status: number; text: string; json: Row | null };
 async function call(who: Who | null, method: string, path: string, body?: unknown): Promise<Res> {
@@ -255,7 +260,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       const gone = await proc();
       await sql(`UPDATE processes SET deleted_at = now() WHERE id = $1`, [gone]);
       const already = await proc();
-      await sql(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [already, F["FB"]]);
+      await attach(already, F["FB"]);
       const before = await snap();
       const refused: Array<[string, Res, number]> = [
         ["unknown framework", await ask("rm1", UNKNOWN, p), 404],
@@ -507,7 +512,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
 
     it("B9 moving an already attached process: previous value and audit carry the former Dispositif", async () => {
       const p = await proc();
-      await sql(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [p, F["FB"]]);
+      await attach(p, F["FB"]);
       const r = await ask("rm1", F["FA"]!, p, "Retour au A");
       expect(r.status, r.text).toBe(201);
       expect(r.json!["data"].previousValue).toEqual({ frameworkId: F["FB"] });
@@ -582,7 +587,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
     it("C3 moving a risk to another process: audit keeps the Dispositif before / after; no row when the process does not change; atomic", async () => {
       const pA = await proc();
       const pB = await proc();
-      await sql(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [pB, F["FB"]]);
+      await attach(pB, F["FB"]);
       const rk = await risk(pA);
       const moves = async () => (await sql(`SELECT * FROM audit_log WHERE entity_id = $1 AND entity_type = 'Risk' AND new_value ? 'frameworkChanged'`, [rk]));
       expect((await call("rm1", "PATCH", `/risks/${rk}`, { description: "sans changement de processus" })).status).toBe(200);
@@ -641,10 +646,10 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect(await attached(post.json!["data"].id)).toBeNull();
     });
 
-    it.fails("KNOWN GAP QA-B6C-01 E3 an ATTACHED process cannot be turned into a sub-process through PATCH /processes (clean 4xx, attachment kept)", async () => {
+    it("QA-B6C-01 E3 an ATTACHED process cannot be turned into a sub-process through PATCH /processes (clean 4xx, attachment kept)", async () => {
       const p = await proc();
       const parent = await proc();
-      await sql(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [p, F["FB"]]);
+      await attach(p, F["FB"]);
       const r = await call("pu", "PATCH", `/processes/${p}`, { level: "SUBPROCESS", parentId: parent });
       // state first: whatever the answer, nothing is half-written
       expect(await attached(p)).toBe(F["FB"]);
@@ -656,7 +661,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
 
     it.fails("KNOWN GAP QA-B6C-02 E4 re-parenting a sub-process under a PROCESS attached elsewhere moves its Dispositif: the audit must say so", async () => {
       const pFB = await proc();
-      await sql(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [pFB, F["FB"]]);
+      await attach(pFB, F["FB"]);
       const pDefault = await proc();
       const sub = await proc("SUBPROCESS", pDefault);
       const app = (id: string) => call("rm1", "GET", `/risk-frameworks/applicable?processId=${id}`).then((r) => r.text);

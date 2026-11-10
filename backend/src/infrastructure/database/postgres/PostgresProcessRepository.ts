@@ -9,7 +9,7 @@ import type {
   UpdateProcessInput,
 } from "../../../domain/entities/Process.js";
 import type { EvaluationMode } from "../../../domain/entities/Config.js";
-import { NotFoundError } from "../../../domain/errors/DomainErrors.js";
+import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 import { runAudited } from "./PostgresAuditRepository.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
@@ -133,12 +133,22 @@ export class PostgresProcessRepository implements ProcessRepository {
       return current;
     }
 
-    const { rows } = await this.pool.query<ProcessRow>(
-      `UPDATE processes SET ${setClauses.join(", ")}, updated_at = now()
-       WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
-       RETURNING *`,
-      [tenantId, id, ...values],
-    );
+    let rows: ProcessRow[];
+    try {
+      ({ rows } = await this.pool.query<ProcessRow>(
+        `UPDATE processes SET ${setClauses.join(", ")}, updated_at = now()
+         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+         RETURNING *`,
+        [tenantId, id, ...values],
+      ));
+    } catch (err) {
+      // QA-B6C-01: only a PROCESS-level process can carry a Dispositif (055): a clear refusal instead of a 500.
+      if ((err as { code?: string; constraint?: string })?.code === "23514"
+          && (err as { constraint?: string }).constraint === "processes_risk_framework_level_check") {
+        throw new ValidationError("Ce processus est rattaché à un Dispositif : un processus rattaché doit rester de niveau PROCESS. Détachez-le d'abord.");
+      }
+      throw err;
+    }
     const row = rows[0];
     if (!row) throw new NotFoundError("Process", id);
     return toDomain(row);
