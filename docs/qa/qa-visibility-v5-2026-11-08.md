@@ -45,3 +45,18 @@ Observations (pas des défauts) : (i) la migration horodate aussi les accès d'u
 ## 5. Limites
 
 Pas de test navigateur (aucun changement frontend). Le temps est simulé en avançant les échéances par SQL (le garde autorise une échéance passée) et par une échéance à 1,5 s ; aucun test ne laisse passer 30 jours réels. Un seul tenant de test pour les lectures ; l'isolation inter-tenant des nouvelles requêtes (filtre `tenant_id` dans `namedAccess.ts`) a été relue, pas testée en live.
+
+## 6. Retest (2026-11-10, `origin/feat/r1-visibility-v5` à `50be6f8`, 087 modifiée en place)
+
+**Verdict : VERT avec une réserve en attente de la décision PO q253.** Pas un avis Security (retest A10 distinct : VERT, `0ed308b`).
+
+| Constat | État |
+|---|---|
+| QA-V5-02 `accessCount` d'un dossier clos | **Clos** : le test passe de `it.fails` à `it` (0 pour un dossier clos ou échu). |
+| QA-V5-04 corps JSON non objet | **Clos** : 400 au lieu de 500, test passé en `it`. |
+| QA-V5-01 échéance résiduelle après retour à PERIMETRE | **Partiellement clos.** Désormais : renouvellement autorisé dès qu'un accès porte une échéance, quel que soit le niveau (200) ; ré-ajout d'une personne échue = renouvellement (une seule ligne, rien de révoqué) ; dossier clos => 400 et le ré-ajout ne rend pas l'accès. Plus de perte sans moyen de rétablir : deux tests « [QA-V5-01 retest] ». **Reste ouvert** : une liste PERIMETRE garde son échéance et s'éteint à la date (règle de fond que le PO tranche avec q253) ; un `it.fails` « EN ATTENTE DE q253 » le documente (à passer en `it` ou à réécrire selon la décision). |
+| QA-V5-03 KPI clos => 404 | **Accepté** (validation de l'orchestrateur : 400 révélerait l'existence d'un KPI supprimé). |
+
+Exécution : `QA-visibility-v5.test.ts` 61 tests = 60 PASS + 1 `it.fails` (q253) ; suites live V0 à V5 (15 fichiers, `--no-file-parallelism`, base propre `grc_qa_v5swp` reconstruite avec la 087 modifiée) : 585 PASS + 1 `it.fails`, rien d'ignoré ; `npm run typecheck && npm test` : OK, 168 fichiers PASS (21 ignorés), 2837 PASS. Rejeu de 087 et `.down` toujours verts.
+
+Statut : RETEST_PASS sous réserve de q253 (item HUMAN à suivre par l'orchestrateur).

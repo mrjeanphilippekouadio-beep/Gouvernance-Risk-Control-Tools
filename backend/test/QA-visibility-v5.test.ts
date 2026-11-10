@@ -404,17 +404,38 @@ describe.skipIf(!live)("QA-visibility-v5 on the REAL server + LOCAL PostgreSQL 1
 
   // ------------------------------------------------------------------------------------------------ LEVEL CHANGES
   describe("LEVEL changes keep the expiry rule inside NOMINATIF", () => {
-    it.fails("[QA-V5-01] NOMINATIF -> PERIMETRE: the kept list of a PERIMETRE dossier has no expiry (q225 is for NOMINATIF only; migration header: NULL for a PERIMETRE list)", async () => {
+    it.fails("[QA-V5-01, EN ATTENTE DE q253] NOMINATIF -> PERIMETRE: the kept list of a PERIMETRE dossier has no expiry (migration header; the PO rules on the substance with q253)", async () => {
       const id = await nominatif("CONTROL");
       const r = await setVis("rm", "CONTROL", id, "PERIMETRE");
       expect(r.status, r.text.slice(0, 200)).toBe(200);
-      expect(await expiryOf("CONTROL", id), "stale expiry left on a PERIMETRE list").toBeNull();
+      expect(await expiryOf("CONTROL", id), "expiry kept on a PERIMETRE list").toBeNull();
     });
-    it.fails("[QA-V5-01] NOMINATIF -> PERIMETRE -> after the stale date, the named person of the PERIMETRE dossier still reads it", async () => {
+    it("[QA-V5-01 retest] NOMINATIF -> PERIMETRE: an expired person is never lost without a way back: renewable (200), and re-adding her is a renewal; both restore the read", async () => {
       const id = await nominatif("CONTROL");
       expect((await setVis("rm", "CONTROL", id, "PERIMETRE")).status).toBe(200);
       await expire("CONTROL", id);
-      expect(await reads("named", "CONTROL", id), "list of a PERIMETRE dossier must not lapse").toBe(true);
+      expect(await reads("named", "CONTROL", id), "lapsed").toBe(false);
+      const g = await get("rm", `/controls/${id}/visibility`);
+      expect(g.json.data.accessUserIds).toContain(UID.named);
+      const r = await renew("rm", "CONTROL", id, [UID.named]);
+      expect(r.status, r.text.slice(0, 200)).toBe(200);
+      expect(await reads("named", "CONTROL", id), "renewed").toBe(true);
+      expect(daysFromNow(await expiryOf("CONTROL", id))).toBeGreaterThan(29.9);
+      await expire("CONTROL", id);
+      expect(await reads("named", "CONTROL", id)).toBe(false);
+      const add = await setVis("rm", "CONTROL", id, "PERIMETRE", [UID.named]);
+      expect(add.status, add.text.slice(0, 200)).toBe(200);
+      expect(await reads("named", "CONTROL", id), "re-added = renewed").toBe(true);
+      expect(await grantRows(id), "one row, nothing revoked").toHaveLength(1);
+    });
+    it("[QA-V5-01 retest] a closed dossier still refuses renewal and re-adding does not bring the access back", async () => {
+      const id = await nominatif("CONTROL");
+      expect((await setVis("rm", "CONTROL", id, "PERIMETRE")).status).toBe(200);
+      await expire("CONTROL", id);
+      await sql(CLOSE.CONTROL, [id]);
+      expect((await renew("rm", "CONTROL", id, [UID.named])).status).toBe(400);
+      await setVis("rm", "CONTROL", id, "PERIMETRE", [UID.named]);
+      expect(await reads("named", "CONTROL", id)).toBe(false);
     });
     it("CLIENT <-> NOMINATIF: going to CLIENT empties the list (everybody reads); back to NOMINATIF with the person re-added gives a NEW live access with a fresh 30 days; the old row stays revoked", async () => {
       const id = await nominatif("CONTROL");
