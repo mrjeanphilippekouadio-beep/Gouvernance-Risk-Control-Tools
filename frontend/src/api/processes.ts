@@ -62,7 +62,7 @@ export const processesApi = {
     apiRequest<Process[]>(`/api/v1/processes${includeInactive ? "?includeInactive=true" : ""}`, { token }),
   create: (token: string, body: ProcessInput & { departmentId: string }) =>
     apiRequest<Process>("/api/v1/processes", { method: "POST", body, token }),
-  update: (token: string, id: string, body: Partial<ProcessInput>) =>
+  update: (token: string, id: string, body: Partial<ProcessInput> & { reason?: string }) =>
     apiRequest<Process>(`/api/v1/processes/${id}`, { method: "PATCH", body, token }),
   archive: (token: string, id: string, reason: string) =>
     apiRequest<{ status: string }>(`/api/v1/processes/${id}/archive`, { method: "POST", body: { reason }, token }),

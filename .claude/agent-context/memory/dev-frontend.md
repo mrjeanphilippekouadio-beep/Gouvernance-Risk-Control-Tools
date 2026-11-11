@@ -160,3 +160,8 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - Boutons masqués par permission (create : nouveau KRI et saisie de mesure ; update : modifier, risques couverts ; delete : désactiver) ; entrée « KRI » avec `requires: "kri.read"`.
 - Le filtre département disparaît sans `department.read` (403 → pas de liste).
 - Build en worktree : `npm install` à la racine puis `npm run build` dans `packages/design-system` avant le build frontend (sinon `styles.css` introuvable).
+
+## 2026-11-11 — B-6c q257 A / q252 A (`feat/r1-b6c-changement-dispositif`, DECISION-121)
+- Motif de changement de Dispositif : `ProcessesPage` (modale d'édition) affiche un champ « Motif du changement de parent » dès que le parent change (facultatif à l'écran, envoyé en `reason` si rempli) ; le serveur tranche et son 400 s'affiche tel quel dans la modale. Aucun recalcul du Dispositif côté front. Il n'existe AUCUN écran d'édition de risque (RisksPage : création/activation/archivage/propriétaires seulement) : rien à faire côté risque tant qu'un tel écran n'existe pas ; `risksApi` n'a pas de `update` générique.
+- « Confirmer seul » : `FrameworksPage`, tableau « Demandes en attente », visible sur toute demande `ASSIGN_PROCESS` (l'API n'expose pas d'état NO_DECIDER ni l'identité de l'utilisateur courant : 403/409 serveur affichés tels quels). Double confirmation en deux temps dans la modale de motif (bannière d'avertissement puis « Oui, confirmer seul »). `riskFrameworksApi.soleConfirm`.
+- Worktree neuf : `npm install` à la racine, build DS puis frontend, `git checkout package-lock.json`. Le harnais refuse les scripts Python en ligne : Write dans le scratchpad puis `python3 -I`.

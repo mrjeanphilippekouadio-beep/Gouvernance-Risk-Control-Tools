@@ -74,6 +74,7 @@ export interface ChangeRequest {
   versionId: string | null;
   reason: string;
   status: RequestStatus;
+  processId?: string | null;
   requestedBy: string;
   createdAt: string;
   decidedBy: string | null;
@@ -107,6 +108,9 @@ export const riskFrameworksApi = {
     apiRequest<unknown>(`${base}/change-requests/${rid}/approve`, { method: "POST", body: comment ? { comment } : {}, token }),
   reject: (token: string, rid: string, comment: string) =>
     apiRequest<unknown>(`${base}/change-requests/${rid}/reject`, { method: "POST", body: { comment }, token }),
+  /** q252 A (DECISION-121): the requester of a pending process attachment confirms it alone; the server refuses (409/403) otherwise. */
+  soleConfirm: (token: string, rid: string, reason: string) =>
+    apiRequest<unknown>(`${base}/change-requests/${rid}/sole-confirm`, { method: "POST", body: { reason }, token }),
   withdraw: (token: string, rid: string, reason: string) =>
     apiRequest<unknown>(`${base}/change-requests/${rid}/withdraw`, { method: "POST", body: { reason }, token }),
 };
