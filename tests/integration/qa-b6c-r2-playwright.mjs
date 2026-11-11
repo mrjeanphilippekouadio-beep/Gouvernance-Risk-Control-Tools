@@ -29,7 +29,8 @@ mkdirSync(SHOTS, { recursive: true });
 // Base fixe (pas de variable d'environnement passée à psql : Sonar S6350).
 const QA_DB = "grc_qa_b6c";
 const PG = ["-h", "127.0.0.1", "-p", "55442", "-U", "postgres", "-d", QA_DB, "-Atq"];
-const sql = (q) => execFileSync("/usr/bin/psql", [...PG, "-c", q], { encoding: "utf8" }).trim();
+// SQL passé sur stdin, jamais en argument de commande (Sonar S6350).
+const sql = (q) => execFileSync("/usr/bin/psql", PG, { input: q, encoding: "utf8" }).trim();
 const T = "aaaaaaaa-0000-4000-8000-000000000001";
 const TC = "dddddddd-0000-4000-8000-000000000001";
 const NAMES = ["solo", "rm1", "rm2", "pu"];
