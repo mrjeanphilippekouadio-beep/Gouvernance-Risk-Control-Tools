@@ -35,7 +35,6 @@ import { GovernanceDecisionsPage } from "./features/governance/GovernanceDecisio
 import { UsersAdmin } from "./features/admin/UsersAdmin";
 import { BrandingPage } from "./features/setup/BrandingPage";
 import { ModulesPage } from "./features/setup/ModulesPage";
-import { ClientsPage } from "./features/setup/ClientsPage";
 import { ImportPage } from "./features/setup/ImportPage";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
@@ -48,7 +47,7 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "govhealth" | "auditmissions" | "rightsmatrix" | "restricted" | "mydata" | "branding" | "modules" | "clients" | "import";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "govhealth" | "auditmissions" | "rightsmatrix" | "restricted" | "mydata" | "branding" | "modules" | "import";
 type NavItem = { id: View; label: string; icon: string; available?: boolean; /** Hidden without this permission (display only). */ requires?: string | string[] } | { separator: string };
 const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
@@ -106,7 +105,6 @@ const NAV_GROUPS: NavGroup[] = [
     { separator: "Mise en service" },
     { id: "branding", label: "Image de marque", icon: "panel", available: true, requires: "branding.read" },
     { id: "modules", label: "Modules", icon: "settings", available: true, requires: "config.read" },
-    { id: "clients", label: "Clients", icon: "table", available: true, requires: "config.manage" },
     { id: "import", label: "Import Excel", icon: "table", available: true, requires: "config.manage" },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
@@ -147,7 +145,6 @@ const PAGE_TITLES: Record<View, string> = {
   mydata: "Vos données",
   branding: "Image de marque",
   modules: "Activation des modules",
-  clients: "Clients",
   import: "Import Excel",
 };
 
@@ -286,7 +283,6 @@ function App() {
             {view === "mydata" && <MyDataPage token={token} />}
             {view === "branding" && <BrandingPage token={token} />}
             {view === "modules" && <ModulesPage token={token} />}
-            {view === "clients" && <ClientsPage token={token} />}
             {view === "import" && <ImportPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} />}
             {view === "risks" && <RisksPage token={token} shortcuts={{ onOpenFrameworks: () => go("frameworks"), onOpenAppetite: openAppetite, onOpenScales: () => go("scales"), onOpenProcesses: () => go("processes") }} />}

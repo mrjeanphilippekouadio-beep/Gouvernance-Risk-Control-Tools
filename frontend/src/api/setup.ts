@@ -46,7 +46,7 @@ export const setupApi = {
     apiRequest<ModuleToggle>(`/api/v1/modules/${encodeURIComponent(name)}/toggle`, { method: "PATCH", body: { enabled, reason }, token }),
   tenants: (token: string) => apiRequest<Tenant[]>("/api/v1/tenants", { token }),
   createTenant: (token: string, body: { name: string; deploymentMode?: DeploymentMode }) => apiRequest<Tenant>("/api/v1/tenants", { method: "POST", body, token }),
-  updateTenant: (token: string, id: string, body: { name?: string; deploymentMode?: DeploymentMode; active?: boolean }) =>
+  updateTenant: (token: string, id: string, body: { name?: string; deploymentMode?: DeploymentMode }) =>
     apiRequest<Tenant>(`/api/v1/tenants/${encodeURIComponent(id)}`, { method: "PATCH", body, token }),
   importPreview: (token: string, file: File) => apiRequest<ImportReport>("/api/v1/import/excel/preview", { method: "POST", formData: form(file), token }),
   importCommit: (token: string, file: File) => apiRequest<ImportReport>("/api/v1/import/excel/commit", { method: "POST", formData: form(file), token }),

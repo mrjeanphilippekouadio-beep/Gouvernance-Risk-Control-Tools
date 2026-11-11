@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, StatusBadge, Table, type TableColumn } from "@djamo/design-system";
 import { setupApi, type ModuleToggle } from "../../api/setup";
 import { FormModal, dateOnly, describeError, isForbidden } from "../indicators/shared";
+import { usePermissions } from "../../auth/usePermissions";
 import "../core/CorePages.css";
 
 /** Libellés d'affichage des noms de module renvoyés par le serveur ; un nom inconnu s'affiche tel quel. */
@@ -12,6 +13,7 @@ const MODULE_LABELS: Record<string, string> = {
 
 /** F8 R1 (q165, DECISION-058) : activation des modules. Le motif est obligatoire et exigé aussi par le serveur (PATCH /modules/:name/toggle). */
 export function ModulesPage({ token }: { token: string }) {
+  const { can } = usePermissions(token);
   const [rows, setRows] = useState<ModuleToggle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export function ModulesPage({ token }: { token: string }) {
     { key: "name", header: "Module", render: (m) => MODULE_LABELS[m.moduleName] ?? m.moduleName },
     { key: "state", header: "État", render: (m) => <StatusBadge label={m.enabled ? "Activé" : "Désactivé"} tone={m.enabled ? "success" : "neutral"} /> },
     { key: "date", header: "Dernier changement", render: (m) => (m.id ? dateOnly(m.updatedAt) : "Jamais modifié") },
-    { key: "action", header: "Action", render: (m) => <Button onClick={() => { setReason(""); setFormError(null); setTarget(m); }}>{m.enabled ? "Désactiver" : "Activer"}</Button> },
+    { key: "action", header: "Action", render: (m) => (can("config.manage") ? <Button onClick={() => { setReason(""); setFormError(null); setTarget(m); }}>{m.enabled ? "Désactiver" : "Activer"}</Button> : "—") },
   ];
 
   return <section className="core-page">

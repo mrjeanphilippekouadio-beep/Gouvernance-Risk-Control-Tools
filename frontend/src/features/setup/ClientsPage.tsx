@@ -7,6 +7,8 @@ import "../core/CorePages.css";
 const MODE_LABELS: Record<DeploymentMode, string> = { managed_saas: "SaaS géré", customer_managed: "Géré par le client", on_premise: "Sur site" };
 
 /**
+
+ * NON EXPOSÉ avant q260 / SEC-F8-01 : retiré de la navigation et des routes (App.tsx), composant conservé isolé.
  * F8 R1 (q165) : clients (tenants). Réservé au super-administrateur côté serveur (config.manage).
  * Pas de désactivation ici : le serveur l'accepte sans motif (écart signalé), l'écran ne l'expose pas.
  */

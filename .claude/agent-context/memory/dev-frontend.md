@@ -169,3 +169,4 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - Import Excel : le serveur n'importe que des risques (process + description) ; aperçu puis commit (revalidation serveur). Pas d'import d'évidences/KRI : API absente.
 - Branding : `logoUrl` est une URL Drive, affichée en lien (https seulement), pas en `<img>` (rendu non vérifié, pas de navigateur). Aucune QA navigateur faite.
 - Menu : `requires` = branding.read / config.read / config.manage (affichage seulement).
+- Correctifs QA/Sécu F8 : écran Clients retiré du menu ET des routes (SEC-F8-01, q260 en attente), `ClientsPage.tsx` conservé isolé et commenté ; `active` retiré de `updateTenant` ; boutons Activer/Désactiver des Modules affichés seulement avec `config.manage` (QA-F8-04, `usePermissions`, affichage seul). Règle : un écran dont la décision PO est en attente ne se range pas en « caché dans le menu » mais hors de la table des vues.
