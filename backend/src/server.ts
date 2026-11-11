@@ -309,7 +309,7 @@ const organizationProfileService = new OrganizationProfileService(
 const governanceHealthService = new GovernanceHealthService(new PostgresGovernanceHealthRepository(pool), organizationProfileRepository);
 // R3 / R5 (q227): the « dernière activité » retention and the « Vos données » notice.
 const privacyService = new PrivacyService(new PostgresLastSeenRetentionRepository(pool), configRepository, auditRepository);
-const auditLogService = new AuditLogService(auditRepository);
+const auditLogService = new AuditLogService(auditRepository, userRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository, visibilityResolver, resourceVisibilityManager);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository, selfValidationGate);
 const effectivenessService = new ControlEffectivenessService(

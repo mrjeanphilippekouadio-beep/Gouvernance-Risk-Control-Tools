@@ -11,6 +11,9 @@ import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGate.js";
 import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
+import { auditPersonTextPair } from "./auditPersonText.js";
+
+const PROCESS_PERSON_FIELDS = ["owner"] as const;
 
 export interface ProcessEvaluationModeRequestWithOwners extends ProcessEvaluationModeRequest {
   /**
@@ -178,8 +181,7 @@ export class ProcessEvaluationModeRequestService {
         entityType: "Process",
         entityId: request.processId,
         action: "UPDATE" as const,
-        oldValue: beforeProcess,
-        newValue: afterProcess,
+        ...auditPersonTextPair(beforeProcess, afterProcess, PROCESS_PERSON_FIELDS),
         reason: null,
         requestId,
       },
@@ -265,8 +267,7 @@ export class ProcessEvaluationModeRequestService {
       entityType: "Process",
       entityId: processId,
       action: "UPDATE",
-      oldValue: before,
-      newValue: after,
+      ...auditPersonTextPair(before, after, PROCESS_PERSON_FIELDS),
       reason: null,
       requestId,
     });

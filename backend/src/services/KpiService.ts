@@ -17,6 +17,9 @@ import type { VisibilityResolver } from "./VisibilityResolver.js";
 import { READER_DEFAULT_SCOPE, type Visibility } from "../domain/visibility.js";
 import type { ResourceVisibilityManager, VisibilityTarget } from "./resourceVisibility.js";
 import type { ResourceVisibilityState } from "../domain/repositories/ResourceAccessRepository.js";
+import { auditPersonTextPair, auditWithoutPersonText } from "./auditPersonText.js";
+
+const KPI_PERSON_FIELDS = ["owner"] as const;
 
 export interface KpiWithStatus extends Kpi {
   status: KpiStatus;
@@ -134,7 +137,7 @@ export class KpiService {
       entityId: kpi.id,
       action: "CREATE",
       oldValue: null,
-      newValue: kpi,
+      newValue: auditWithoutPersonText(kpi, KPI_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -194,8 +197,7 @@ export class KpiService {
       entityType: "Kpi",
       entityId: id,
       action: "UPDATE",
-      oldValue: before,
-      newValue: after,
+      ...auditPersonTextPair(before, after, KPI_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -235,8 +237,7 @@ export class KpiService {
       entityType: "Kpi",
       entityId: id,
       action: "ASSIGN",
-      oldValue: before,
-      newValue: after,
+      ...auditPersonTextPair(before, after, KPI_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -264,7 +265,7 @@ export class KpiService {
       entityType: "Kpi",
       entityId: id,
       action: "DELETE",
-      oldValue: before,
+      oldValue: auditWithoutPersonText(before, KPI_PERSON_FIELDS),
       newValue: null,
       reason,
       requestId,
