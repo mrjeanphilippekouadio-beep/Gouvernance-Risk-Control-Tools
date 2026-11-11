@@ -286,7 +286,8 @@ export class UserService {
       entityId: id,
       action: "UPDATE",
       oldValue: auditSnapshot(before),
-      newValue: auditSnapshot(after),
+      // q272 (DECISION-130): the row says the name changed, never what it was or became.
+      newValue: before.displayName !== after.displayName ? { ...auditSnapshot(after), displayNameChanged: true } : auditSnapshot(after),
       reason: null,
       requestId,
     });

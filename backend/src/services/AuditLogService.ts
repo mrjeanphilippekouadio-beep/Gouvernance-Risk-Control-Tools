@@ -18,7 +18,7 @@ const DEFAULT_LIMIT = 100;
  * q251 (DECISION-120): new rows carry only ids; the names are joined back at read time, tenant-scoped. Absent when the
  * account no longer resolves (the id alone is returned, nothing is invented).
  */
-export type AuditEventView = AuditEvent & { userDisplayName?: string; entityDisplayName?: string };
+export type AuditEventView = AuditEvent & { userDisplayName?: string; entityDisplayName?: string; namesAreCurrent?: true };
 
 export class AuditLogService {
   constructor(
@@ -26,29 +26,31 @@ export class AuditLogService {
     private readonly users?: UserRepository,
   ) {}
 
+  /**
+   * q272 (DECISION-130): the joined names are the accounts' CURRENT names (`namesAreCurrent: true`), not the ones at the time of the
+   * action. SEC-q251-03: one grouped, tenant-scoped read for all ids (no per-id fan-out); a failure leaves the ids alone.
+   */
   private async withNames(tenantId: string, events: AuditEvent[]): Promise<AuditEventView[]> {
     const users = this.users;
     if (!users) return events;
-    const cache = new Map<string, Promise<string | undefined>>();
-    const nameOf = (id: string) => {
-      let hit = cache.get(id);
-      if (!hit) {
-        hit = users.getById(tenantId, id).then((u) => u?.displayName, () => undefined);
-        cache.set(id, hit);
-      }
-      return hit;
-    };
-    return Promise.all(
-      events.map(async (e) => {
-        const userDisplayName = await nameOf(e.userId);
-        const entityDisplayName = e.entityType === "User" ? await nameOf(e.entityId) : undefined;
-        return {
-          ...e,
-          ...(userDisplayName !== undefined ? { userDisplayName } : {}),
-          ...(entityDisplayName !== undefined ? { entityDisplayName } : {}),
-        };
-      }),
-    );
+    const ids = [...new Set(events.flatMap((e) => (e.entityType === "User" ? [e.userId, e.entityId] : [e.userId])))];
+    const names = new Map<string, string>();
+    try {
+      if (users.getByIds) for (const u of await users.getByIds(tenantId, ids)) names.set(u.id, u.displayName);
+      else for (const id of ids) { const u = await users.getById(tenantId, id); if (u) names.set(id, u.displayName); }
+    } catch {
+      return events;
+    }
+    return events.map((e) => {
+      const userDisplayName = names.get(e.userId);
+      const entityDisplayName = e.entityType === "User" ? names.get(e.entityId) : undefined;
+      return {
+        ...e,
+        ...(userDisplayName !== undefined ? { userDisplayName } : {}),
+        ...(entityDisplayName !== undefined ? { entityDisplayName } : {}),
+        ...(userDisplayName !== undefined || entityDisplayName !== undefined ? { namesAreCurrent: true as const } : {}),
+      };
+    });
   }
 
   async listRecent(actor: AuthenticatedUser, limit = DEFAULT_LIMIT): Promise<AuditEventView[]> {

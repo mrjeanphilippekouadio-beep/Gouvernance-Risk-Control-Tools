@@ -327,6 +327,10 @@ describe("UserService", () => {
     const dump = JSON.stringify(userRows);
     for (const leak of ["secret.person", "Secret Person", "Renamed Person"]) expect(dump).not.toContain(leak);
     expect(userRows.every((e) => e.entityId === user.id)).toBe(true);
+    // q272: the rename row says the name changed (no value); a non-rename update does not carry the flag.
+    const updates = (userRows as unknown as Array<{ action: string; newValue: Record<string, unknown> }>).filter((e) => e.action === "UPDATE" && e.newValue);
+    expect(updates[0]!.newValue["displayNameChanged"]).toBe(true);
+    expect(updates.slice(1).some((e) => "displayNameChanged" in e.newValue)).toBe(false);
   });
 
   it("q177: suspend and reactivate require a reason, audited with the action; without one nothing changes", async () => {

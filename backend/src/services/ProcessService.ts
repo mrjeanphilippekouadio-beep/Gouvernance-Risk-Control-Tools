@@ -24,6 +24,9 @@ import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGa
 import { writeAudited } from "./auditedWrite.js";
 import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { auditPersonTextPair, auditWithoutPersonText } from "./auditPersonText.js";
+
+const PROCESS_PERSON_FIELDS = ["owner"] as const;
 
 const MAX_CANDIDATE_SCAN = 1000;
 
@@ -127,7 +130,7 @@ export class ProcessService {
       entityId: process.id,
       action: "CREATE",
       oldValue: null,
-      newValue: process,
+      newValue: auditWithoutPersonText(process, PROCESS_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -185,8 +188,7 @@ export class ProcessService {
       entityType: "Process",
       entityId: id,
       action: "UPDATE",
-      oldValue: before,
-      newValue: after,
+      ...auditPersonTextPair(before, after, PROCESS_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -293,10 +295,10 @@ export class ProcessService {
           entityType: "Process",
           entityId: id,
           action: "UPDATE",
-          oldValue: { ...pick(before), legacyOwner: before.owner },
+          oldValue: pick(before),
           newValue: {
             ...pick(after),
-            legacyOwner: after.owner,
+            ...(before.owner !== after.owner ? { legacyOwnerChanged: true } : {}),
             ...(ownerFromProposal !== undefined ? { ownerFromProposal } : {}),
             ...selfChampion?.newValueExtra,
           },
@@ -368,8 +370,7 @@ export class ProcessService {
       entityType: "Process",
       entityId: id,
       action: "UPDATE",
-      oldValue: before,
-      newValue: after,
+      ...auditPersonTextPair(before, after, PROCESS_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -402,7 +403,7 @@ export class ProcessService {
       entityType: "Process",
       entityId: id,
       action: "DELETE",
-      oldValue: before,
+      oldValue: auditWithoutPersonText(before, PROCESS_PERSON_FIELDS),
       newValue: null,
       reason,
       requestId,

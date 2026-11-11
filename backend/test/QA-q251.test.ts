@@ -9,7 +9,7 @@ import { ROOT, qaVisibilityHarness } from "./qaVisibilityHarness.js";
  * Oracles written BEFORE running, from the task statement. Not a Security / Privacy / Compliance opinion.
  *
  * Live part: QA_Q251_LIVE=1 + LOCAL cluster of tests/integration/qa-visibility-v1-setup.sh (127.0.0.1:55442, never Neon); base grc_qa_q251
- * is rebuilt; run live suites with --no-file-parallelism. `it.fails` documents a CONFIRMED gap (turn it into `it` when fixed).
+ * is rebuilt; run live suites with --no-file-parallelism. a former `it.fails` gap (QA-Q251-01) is now a normal test.
  */
 const live = process.env["QA_Q251_LIVE"] === "1";
 const I = (x: string) => `aaaaaaaa-0000-4000-8000-000000000${x}`;
@@ -150,7 +150,7 @@ describe.skipIf(!live)("QA-q251 LIVE (real PostgreSQL + real server)", () => {
     ];
     const status: Record<string, number> = {};
     for (const [label, run] of cases) {
-      // Not vacuous: the write itself must succeed (a 400 would make the it.fails below pass for the wrong reason).
+      // Not vacuous: the write itself must succeed (a 400 would make the test below pass for the wrong reason).
       it(`${label}: the write succeeds`, async () => {
         const r = await run();
         expect([200, 201], r.text).toContain(r.status);
@@ -159,7 +159,7 @@ describe.skipIf(!live)("QA-q251 LIVE (real PostgreSQL + real server)", () => {
     }
     for (const [label, , ent] of cases) {
       // Oracle (task): « aucune nouvelle ligne ne contient nom ni e-mail ». The row must not hold the typed person text.
-      it.fails(`${label}: a typed name / e-mail is not copied into the journal (CONFIRMED GAP QA-Q251-01)`, async () => {
+      it(`${label}: a typed name / e-mail is not copied into the journal (QA-Q251-01, fixed by q273)`, async () => {
         expect(status[label]).toBeDefined();
         const hit = (await needleRows()).filter((x) => x.entity_type === ent);
         expect(hit).toEqual([]);

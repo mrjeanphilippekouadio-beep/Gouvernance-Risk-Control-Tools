@@ -5,6 +5,9 @@ import type { CreateDepartmentInput, Department, UpdateDepartmentInput } from ".
 import { NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { auditPersonTextPair, auditWithoutPersonText } from "./auditPersonText.js";
+
+const DEPT_PERSON_FIELDS = ["manager", "riskOwner"] as const;
 
 /**
  * Rules ported from apps-script-legacy/06_Departements.gs: updated in
@@ -51,7 +54,7 @@ export class DepartmentService {
       entityId: department.id,
       action: "CREATE",
       oldValue: null,
-      newValue: department,
+      newValue: auditWithoutPersonText(department, DEPT_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -93,8 +96,7 @@ export class DepartmentService {
       entityType: "Department",
       entityId: id,
       action: "UPDATE",
-      oldValue: before,
-      newValue: after,
+      ...auditPersonTextPair(before, after, DEPT_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -120,8 +122,7 @@ export class DepartmentService {
       entityType: "Department",
       entityId: id,
       action: "ASSIGN",
-      oldValue: before,
-      newValue: after,
+      ...auditPersonTextPair(before, after, DEPT_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -151,7 +152,7 @@ export class DepartmentService {
       entityType: "Department",
       entityId: id,
       action: "DELETE",
-      oldValue: before,
+      oldValue: auditWithoutPersonText(before, DEPT_PERSON_FIELDS),
       newValue: null,
       reason,
       requestId,
