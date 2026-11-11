@@ -57,8 +57,11 @@ const T = "aaaaaaaa-0000-4000-8000-000000000001";
 const TB = "bbbbbbbb-0000-4000-8000-000000000001";
 const UNKNOWN = "cccccccc-0000-4000-8000-0000000009ff";
 
-type Who = "rm1" | "rm2" | "rm3" | "rm4" | "plain" | "adm" | "aud" | "rmb" | "rmb2" | "pu";
-const WHO: Who[] = ["rm1", "rm2", "rm3", "rm4", "plain", "adm", "aud", "rmb", "rmb2", "pu"];
+type Who = "rm1" | "rm2" | "rm3" | "rm4" | "plain" | "adm" | "aud" | "rmb" | "rmb2" | "pu" | "solo" | "solo2" | "saud" | "scom" | "sx" | "solod";
+const WHO: Who[] = ["rm1", "rm2", "rm3", "rm4", "plain", "adm", "aud", "rmb", "rmb2", "pu", "solo", "solo2", "saud", "scom", "sx", "solod"];
+// Round 2 (q252 A): tenant C = ONE Risk Manager (solo) + Audit (saud) + Committee (scom); tenant D = ONE Risk Manager, no Audit, no Committee.
+const TC = "dddddddd-0000-4000-8000-000000000001";
+const TD = "eeeeeeee-0000-4000-8000-000000000001";
 const TOK = {} as Record<Who, string>;
 let pg: Pool;
 const sh = (cmd: string, args: string[], env: Record<string, string> = {}) =>
@@ -184,6 +187,40 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       F["FB_B"] = await fw(TB, "Dispositif tenant B", true);
       await ver(TB, F["FB_B"]!, await scale(TB, 5, "ACTIVE"), "ACTIVE", 15);
     } finally { await c.query("RESET session_replication_role"); c.release(); }
+
+    // ---- round 2 fixtures (q252 A): tenants C and D, one Risk Manager each
+    const mkIn = async (tenant: string, n: string, perms: string[]) => {
+      uid[n] = (await one(`INSERT INTO users (tenant_id, email, display_name, roles) VALUES ($1,$2,$2,$3) RETURNING id`, [tenant, `${n}@b6c.test`, perms])).id as string;
+    };
+    for (const [t, nm] of [[TC, "C"], [TD, "D"]] as const) await sql(`INSERT INTO tenants (id, name) VALUES ($1,$2)`, [t, `Tenant ${nm} QA B6c r2`]);
+    const grp = async (tenant: string, name: string, g: string, perms: string[]) =>
+      (await one(`INSERT INTO roles (tenant_id, name, permissions, system_group) VALUES ($1,$2,$3,$4) RETURNING id`, [tenant, name, perms, g])).id as string;
+    await mkIn(TC, "solo", []); await mkIn(TC, "solo2", []); await mkIn(TC, "saud", []); await mkIn(TC, "scom", []);
+    await mkIn(TC, "sx", RMPERMS); // every right in direct, NOT in the Risk Manager group
+    await mkIn(TD, "solod", []);
+    F["RM_C"] = await grp(TC, "Risk Manager C", "RISK_MANAGER", [...RMPERMS, "governancehealth.read"]);
+    const AUD_C = await grp(TC, "Audit C", "AUDIT", ["audit.read"]);
+    const COM_C = await grp(TC, "Comite C", "RISK_COMMITTEE", ["riskframework.read"]);
+    const RM_D = await grp(TD, "Risk Manager D", "RISK_MANAGER", RMPERMS);
+    await sql(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1,$2,$3,$3)`, [TC, F["RM_C"], uid["solo"]]);
+    await sql(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1,$2,$3,$4)`, [TC, AUD_C, uid["saud"], uid["solo"]]);
+    await sql(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1,$2,$3,$4)`, [TC, COM_C, uid["scom"], uid["solo"]]);
+    await sql(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1,$2,$3,$3)`, [TD, RM_D, uid["solod"]]);
+    {
+      const c2 = await pg.connect();
+      try {
+        await c2.query("SET session_replication_role = replica");
+        for (const [t, who, key] of [[TC, "solo", "FC1"], [TD, "solod", "FD1"]] as const) {
+          const sc = (await c2.query(`INSERT INTO rating_scales (tenant_id, name, version, status, probability_levels, probability_labels, impact_levels, impact_labels, impact_axes, activated_at)
+            VALUES ($1,'Echelle 5x5 r2','1','ACTIVE',5,$2::jsonb,5,$2::jsonb,$3::jsonb, now()) RETURNING id`,
+            [t, JSON.stringify([1, 2, 3, 4, 5].map((n) => ({ level: n, label: `N${n}` }))), JSON.stringify({ axes: [{ code: "FIN", label: "Financier", order: 1, levelLabels: [1, 2, 3, 4, 5].map((n) => ({ level: n, label: `N${n}` })) }], retainedImpactRule: "MAX" })])).rows[0].id as string;
+          const f = (await c2.query(`INSERT INTO risk_frameworks (tenant_id, name, is_default, created_by) VALUES ($1,'Dispositif r2',true,$2) RETURNING id`, [t, uid[who]])).rows[0].id as string;
+          const v = (await c2.query(`INSERT INTO risk_framework_versions (tenant_id, framework_id, version_number, status, rating_scale_id, committee_evaluation_min_score, created_by, last_edited_by, activated_at, low_criticality_threshold)
+            VALUES ($1,$2,1,'ACTIVE',$3,15,$4,$4,now(),3) RETURNING id`, [t, f, sc, uid[who]])).rows[0].id as string;
+          F[key] = f; F[key + "v"] = v;
+        }
+      } finally { await c2.query("RESET session_replication_role"); c2.release(); }
+    }
     F["CATROOT"] = (await one(`INSERT INTO risk_categories (tenant_id, name) VALUES ($1,'Racine QA') RETURNING id`, [T])).id as string;
     F["CAT"] = (await one(`INSERT INTO risk_categories (tenant_id, name, parent_id) VALUES ($1,'Sous-categorie QA',$2) RETURNING id`, [T, F["CATROOT"]])).id as string;
     F["PB"] = await proc("PROCESS", null, TB);
@@ -659,19 +696,25 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect(r.status, r.text).toBeLessThan(500);
     });
 
-    it.fails("KNOWN GAP QA-B6C-02 E4 re-parenting a sub-process under a PROCESS attached elsewhere moves its Dispositif: the audit must say so", async () => {
+    // Retourne de it.fails en test normal (DECISION-121, q257 A): le deplacement reste libre mais exige un motif, et l'audit nomme les deux Dispositifs.
+    it("QA-B6C-02 E4 re-parenting a sub-process under a PROCESS attached elsewhere: motive required, audit names the old and the new Dispositif", async () => {
       const pFB = await proc();
       await attach(pFB, F["FB"]);
       const pDefault = await proc();
       const sub = await proc("SUBPROCESS", pDefault);
       const app = (id: string) => call("rm1", "GET", `/risk-frameworks/applicable?processId=${id}`).then((r) => r.text);
       expect(await app(sub)).toContain(F["FA"]);
-      const r = await call("pu", "PATCH", `/processes/${sub}`, { parentId: pFB });
+      const noReason = await call("pu", "PATCH", `/processes/${sub}`, { parentId: pFB });
+      expect(noReason.status, noReason.text).toBe(400);
+      expect(await app(sub)).toContain(F["FA"]); // refused: nothing moved
+      const r = await call("pu", "PATCH", `/processes/${sub}`, { parentId: pFB, reason: "Alignement sur le Dispositif B" });
       expect(r.status, r.text).toBe(200);
-      expect(await app(sub)).toContain(F["FB"]); // the Dispositif of the sub-process (and of its risks) changed with no request, no approval
-      const a = await audits(sub, "Process");
-      const mentionsFramework = a.some((x) => JSON.stringify([x.old_value, x.new_value]).match(/ramework/i));
-      expect(mentionsFramework, JSON.stringify(a.map((x) => [x.action, x.old_value, x.new_value]))).toBe(true);
+      expect(await app(sub)).toContain(F["FB"]);
+      const a = (await audits(sub, "Process")).filter((x) => x.action === "UPDATE");
+      expect(a).toHaveLength(1);
+      expect(a[0]!.reason).toBe("Alignement sur le Dispositif B");
+      expect(a[0]!.old_value.riskFrameworkId).toBe(F["FA"]);
+      expect(a[0]!.new_value).toMatchObject({ riskFrameworkId: F["FB"], frameworkChanged: true });
     });
 
     it("E5 the list of change requests shows the assignment with its process and framework", async () => {
@@ -765,6 +808,589 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       const ok = await activate("Dispositif 5x5 seuil 15", F["S5b"]!, params({ committeeEvaluationMinScore: 15 }));
       expect(ok.step, JSON.stringify(ok.res.json ?? ok.res.text)).toBe("approve");
       expect(ok.res.status, ok.res.text).toBe(200);
+    });
+  });
+
+  // ================================================================================================ ROUND 2 (DECISION-121)
+  // Oracles (ecrits avant execution) :
+  //  H  q252 A  POST /risk-frameworks/change-requests/:rid/sole-confirm {reason}
+  //     H1 seul RM + demandeur + motif -> 200, APPROVED, regime SOLE_RM, decided_by = requested_by, groupe RISK_MANAGER, processus rattache,
+  //        2 audits marques `riskFramework.soleRiskManager`, Audit et Comite prevenus (1 chacun, pas le demandeur), marqueur dans /governance-health ;
+  //        tenant sans Audit ni Comite : 200 aussi.
+  //     H2 motif absent / vide / espaces / NUL / non texte / champ en trop / 1001 car. -> 400, rien d'ecrit (PENDING, processus intact).
+  //     H3 pas RM (droits en direct, Audit, sans jeton) -> 403 / 401 ; un AUTRE RM que le demandeur -> 403 ; demandeur alors qu'un autre RM existe -> 409 ;
+  //        autre tenant -> 404 des deux cotes.
+  //     H4 autre kind -> 400 ; demande retiree / deja confirmee -> 409 ; id inconnu -> 404 ; id mal forme -> 4xx jamais 500.
+  //     H5 course 2e RM / confirmation : jamais de 500, 200 <=> APPROVED+rattache, 409 <=> PENDING+intact ; 6 confirmations simultanees = 1 gagnant.
+  //     H6 panne d'audit injectee : confirmation en echec ET etat inchange.
+  //  J  q257 A  deplacement d'un risque / sous-processus : libre, motif seulement si le Dispositif change.
+  //  K  migration 089 : up / down / up, refus du down avec une ligne SOLE_RM, CHECK de forme.
+  const solo = (who: Who, rid: string, body: unknown) => call(who, "POST", `/risk-frameworks/change-requests/${rid}/sole-confirm`, body);
+  const notes = (user: string, type: string) => sql(`SELECT * FROM notifications WHERE recipient_user_id = $1 AND event_type = $2`, [uid[user], type]);
+  async function soloPending(who: Who = "solo", fw = F["FC1"]!, tenant = TC): Promise<{ p: string; rid: string }> {
+    const p = await proc("PROCESS", null, tenant);
+    const r = await ask(who, fw, p, "Rattachement q252");
+    expect(r.status, r.text).toBe(201);
+    return { p, rid: r.json!["data"].id as string };
+  }
+  const intact = async (p: string, rid: string) => {
+    expect((await reqRow(rid)).status).toBe("PENDING");
+    expect(await attached(p)).toBeNull();
+  };
+
+  describe("H q252 A sole-confirm", () => {
+    it("H1 the sole Risk Manager confirms: SOLE_RM, attachment applied, marked audit, Audit + Committee told, panel marker", async () => {
+      const { p, rid } = await soloPending();
+      // creation with no other decider: the NO_DECIDER notice went to the (only) Risk Manager, with the way out
+      const nd = await notes("solo", "RISK_FRAMEWORK_NO_DECIDER");
+      expect(nd.length).toBeGreaterThanOrEqual(1);
+      expect(nd[0]!.message).toMatch(/confirmer lui-même/);
+      const before = await one(`SELECT count(*)::int n FROM audit_log WHERE tenant_id = $1 AND entity_type <> 'Notification'`, [TC]);
+      const r = await solo("solo", rid, { reason: "Je suis le seul Risk Manager du tenant" });
+      expect(r.status, r.text).toBe(200);
+      const row = await reqRow(rid);
+      expect(row).toMatchObject({ status: "APPROVED", decision_regime: "SOLE_RM", decider_group: "RISK_MANAGER", decision_comment: "Je suis le seul Risk Manager du tenant" });
+      expect(row.decided_by).toBe(uid["solo"]);
+      expect(row.requested_by).toBe(uid["solo"]);
+      expect(row.bootstrap_justification).toBeNull();
+      expect(await attached(p)).toBe(F["FC1"]);
+      const a = await sql(`SELECT * FROM audit_log WHERE tenant_id = $1 AND request_id IS NOT NULL AND entity_id = ANY($2) AND action IN ('UPDATE','APPROVE') ORDER BY action`, [TC, [p, rid]]);
+      expect(a.map((x) => `${x.entity_type}:${x.action}`).sort()).toEqual(["Process:UPDATE", "RiskFrameworkChangeRequest:APPROVE"]);
+      for (const x of a) { expect(x.governance_exception).toBe("riskFramework.soleRiskManager"); expect(x.reason).toBe("Je suis le seul Risk Manager du tenant"); expect(x.user_id).toBe(uid["solo"]); }
+      const pu = a.find((x) => x.entity_type === "Process")!;
+      expect(pu.old_value).toEqual({ riskFrameworkId: null });
+      expect(pu.new_value).toMatchObject({ riskFrameworkId: F["FC1"], requestId: rid, decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" });
+      expect((await one(`SELECT count(*)::int n FROM audit_log WHERE tenant_id = $1 AND entity_type <> 'Notification'`, [TC])).n - before.n).toBe(2);
+      for (const u of ["saud", "scom"]) {
+        const n = (await notes(u, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE")).filter((x) => x.resource_id === rid);
+        expect(n, u).toHaveLength(1);
+        expect(n[0]!.message).not.toContain(p);
+      }
+      expect((await notes("solo", "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE")).filter((x) => x.resource_id === rid)).toHaveLength(0);
+      // panel marker + list filter
+      const h = await call("solo", "GET", "/governance-health");
+      expect(h.status, h.text).toBe(200);
+      expect(h.text).toContain("riskFramework.soleRiskManager");
+      const l = await call("solo", "GET", "/risk-frameworks/change-requests?regime=SOLE_RM");
+      expect(l.status, l.text).toBe(200);
+      expect((l.json!["data"] as Row[]).map((x) => x.id)).toContain(rid);
+      // the request cannot be confirmed twice
+      const again = await solo("solo", rid, { reason: "Encore" });
+      expect(again.status, again.text).toBe(409);
+      expect((await sql(`SELECT 1 FROM audit_log WHERE tenant_id = $1 AND entity_id = $2 AND action = 'APPROVE'`, [TC, rid]))).toHaveLength(1);
+    });
+
+    it("H1b a tenant with NO Audit and NO Committee group confirms too (nobody to tell is not an error)", async () => {
+      const { p, rid } = await soloPending("solod", F["FD1"]!, TD);
+      const r = await solo("solod", rid, { reason: "Seul RM, ni Audit ni Comite" });
+      expect(r.status, r.text).toBe(200);
+      expect(await attached(p)).toBe(F["FD1"]);
+      expect((await reqRow(rid)).decision_regime).toBe("SOLE_RM");
+      expect((await sql(`SELECT 1 FROM notifications WHERE tenant_id = $1 AND event_type = 'RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE'`, [TD]))).toHaveLength(0);
+    });
+
+    it("H2 invalid motive or body -> 400, nothing written", async () => {
+      const { p, rid } = await soloPending();
+      const bodies: [string, unknown][] = [
+        ["absent", {}], ["null", { reason: null }], ["empty", { reason: "" }], ["spaces", { reason: "     " }], ["tabs/newlines", { reason: "\t\n \r\n" }],
+        ["NUL", { reason: "a\u0000b" }], ["number", { reason: 12 }], ["array", { reason: ["x"] }], ["extra field", { reason: "ok", decidedBy: uid["rm2"] }],
+        ["attribution", { reason: "ok", requestedBy: uid["solo"] }], ["1001 chars", { reason: "x".repeat(1001) }],
+      ];
+      const s = await snap();
+      for (const [label, b] of bodies) {
+        const r = await solo("solo", rid, b);
+        expect(r.status, `${label}: ${r.text}`).toBe(400);
+        await intact(p, rid);
+      }
+      expect((await snap()).aud).toBe(s.aud);
+      const none = await call("solo", "POST", `/risk-frameworks/change-requests/${rid}/sole-confirm`);
+      expect(none.status, none.text).toBe(400);
+      await intact(p, rid);
+      // boundary: 1 char and (INFO QA-B6C-04) 501 chars are accepted although every other motive of the lot stops at 500
+      const long = await solo("solo", rid, { reason: "x".repeat(501) });
+      expect(long.status, long.text).toBe(200);
+    });
+
+    it("H2b a one-character motive and an inner-space motive are accepted and stored trimmed-or-as-is without loss", async () => {
+      const { rid } = await soloPending();
+      const r = await solo("solo", rid, { reason: "  a  " });
+      expect(r.status, r.text).toBe(200);
+      expect((await reqRow(rid)).decision_comment.trim()).toBe("a");
+    });
+
+    it("H3 who may confirm: only the requester, a Risk Manager, alone; other tenant -> 404", async () => {
+      const { p, rid } = await soloPending();
+      for (const [who, st] of [["sx", 403], ["saud", 403], ["scom", 403], ["solo2", 403]] as [Who, number][]) {
+        const r = await solo(who, rid, { reason: "Tentative" });
+        expect(r.status, `${who}: ${r.text}`).toBe(st);
+        await intact(p, rid);
+      }
+      expect((await solo(null as unknown as Who, rid, { reason: "x" })).status).toBe(401);
+      // other tenants see no such request
+      for (const who of ["solod", "rmb", "rm1"] as Who[]) { const r = await solo(who, rid, { reason: "x" }); expect(r.status, `${who}: ${r.text}`).toBe(404); await intact(p, rid); }
+      // tenant T has 4 Risk Managers: the requester rm1 is refused (409), another RM is refused (403), the other tenant's sole RM is refused (404)
+      const t = await pending(F["FB"]!, "rm1");
+      const r1 = await solo("rm1", t.rid, { reason: "Je confirme seul" });
+      expect(r1.status, r1.text).toBe(409);
+      expect((await solo("rm2", t.rid, { reason: "Je confirme pour lui" })).status).toBe(403);
+      expect((await solo("adm", t.rid, { reason: "Admin" })).status).toBe(403);
+      expect((await solo("solo", t.rid, { reason: "Autre tenant" })).status).toBe(404);
+      await intact(t.p, t.rid);
+      expect((await reqRow(t.rid)).decision_regime).toBeNull();
+      // and the SOLE_RM regime cannot be reached through approve / the other routes
+      expect((await decide("rm1", t.rid, "approve")).status).toBe(403);
+      const viaApprove = await call("solo", "POST", `/risk-frameworks/change-requests/${rid}/approve`, {});
+      expect(viaApprove.status, viaApprove.text).toBe(403);
+    });
+
+    it("H4 other kind, already decided, unknown or malformed id", async () => {
+      const c = await pg.connect();
+      let av: string, sd: string;
+      try {
+        await c.query("SET session_replication_role = replica");
+        const v = await c.query(`INSERT INTO risk_framework_versions (tenant_id, framework_id, version_number, status, rating_scale_id, committee_evaluation_min_score, created_by, last_edited_by, low_criticality_threshold)
+          SELECT tenant_id, framework_id, 2, 'DRAFT', rating_scale_id, 15, created_by, created_by, 3 FROM risk_framework_versions WHERE id = $1 RETURNING id`, [F["FC1v"]]);
+        av = (await c.query(`INSERT INTO risk_framework_change_requests (tenant_id, kind, framework_id, version_id, reason, requested_by) VALUES ($1,'ACTIVATE_VERSION',$2,$3,'x',$4) RETURNING id`, [TC, F["FC1"], v.rows[0].id, uid["solo"]])).rows[0].id as string;
+        sd = (await c.query(`INSERT INTO risk_framework_change_requests (tenant_id, kind, framework_id, reason, requested_by) VALUES ($1,'SET_DEFAULT',$2,'x',$3) RETURNING id`, [TC, F["FC1"], uid["solo"]])).rows[0].id as string;
+      } finally { await c.query("RESET session_replication_role"); c.release(); }
+      for (const [k, id] of [["ACTIVATE_VERSION", av], ["SET_DEFAULT", sd]]) {
+        const r = await solo("solo", id!, { reason: "Pas un rattachement" });
+        expect(r.status, `${k}: ${r.text}`).toBe(400);
+        expect((await reqRow(id!)).status, k).toBe("PENDING");
+        expect((await reqRow(id!)).decision_regime).toBeNull();
+      }
+      // withdrawn / rejected
+      const w = await soloPending();
+      expect((await call("solo", "POST", `/risk-frameworks/change-requests/${w.rid}/withdraw`, { reason: "Retrait" })).status).toBe(200);
+      const rw = await solo("solo", w.rid, { reason: "Trop tard" });
+      expect(rw.status, rw.text).toBe(409);
+      expect(await attached(w.p)).toBeNull();
+      expect((await reqRow(w.rid)).status).toBe("WITHDRAWN");
+      const rj = await soloPending();
+      await sql(`ALTER TABLE risk_framework_change_requests DISABLE TRIGGER USER`);
+      try { await sql(`UPDATE risk_framework_change_requests SET status='REJECTED', decided_by=$2, decided_at=now(), decision_regime='NORMAL', decider_group='RISK_MANAGER', decision_comment='Refus' WHERE id=$1`, [rj.rid, uid["rm1"]]); }
+      finally { await sql(`ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER`); }
+      const rr = await solo("solo", rj.rid, { reason: "Trop tard" });
+      expect(rr.status, rr.text).toBe(409);
+      expect(await attached(rj.p)).toBeNull();
+      expect((await solo("solo", UNKNOWN, { reason: "x" })).status).toBe(404);
+      for (const bad of ["not-a-uuid", "123", "%00", "A".repeat(200)]) {
+        const r = await solo("solo", bad, { reason: "x" });
+        expect(r.status, `${bad}: ${r.text}`).toBeLessThan(500);
+        expect(r.status).toBeGreaterThanOrEqual(400);
+      }
+    });
+
+    it("H4b the Dispositif of arrival archived or without ACTIVE version between the request and the confirmation -> 4xx, request stays PENDING", async () => {
+      const { p, rid } = await soloPending();
+      await sql(`ALTER TABLE risk_frameworks DISABLE TRIGGER USER`);
+      try { await sql(`UPDATE risk_frameworks SET archived_at = now(), archived_by = $2, archive_reason = 'QA' WHERE id = $1`, [F["FC1"], uid["solo"]]); } finally { await sql(`ALTER TABLE risk_frameworks ENABLE TRIGGER USER`); }
+      try {
+        const r = await solo("solo", rid, { reason: "Dispositif archive" });
+        expect(r.status, r.text).toBeGreaterThanOrEqual(400);
+        expect(r.status, r.text).toBeLessThan(500);
+        await intact(p, rid);
+      } finally {
+        await sql(`ALTER TABLE risk_frameworks DISABLE TRIGGER USER`);
+        try { await sql(`UPDATE risk_frameworks SET archived_at = NULL, archived_by = NULL, archive_reason = NULL WHERE id = $1`, [F["FC1"]]); } finally { await sql(`ALTER TABLE risk_frameworks ENABLE TRIGGER USER`); }
+      }
+      // the request is still decidable afterwards
+      expect((await solo("solo", rid, { reason: "Dispositif de nouveau ouvert" })).status).toBe(200);
+    });
+
+    it("H5a a second Risk Manager makes the rule stop (409, PENDING, intact); once they leave it works again", async () => {
+      const { p, rid } = await soloPending();
+      await sql(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1,$2,$3,$4)`, [TC, F["RM_C"], uid["solo2"], uid["solo"]]);
+      let revoked = false;
+      try {
+        const r = await solo("solo", rid, { reason: "Un second RM existe" });
+        expect(r.status, r.text).toBe(409);
+        expect(r.text).toMatch(/tiers/);
+        await intact(p, rid);
+        // that other RM can decide instead (normal circuit, regime NORMAL)
+        const d = await decide("solo2", rid, "approve", "Tiers");
+        expect(d.status, d.text).toBe(200);
+        expect((await reqRow(rid)).decision_regime).toBe("NORMAL");
+        await sql(`UPDATE user_roles SET revoked_at = now() WHERE user_id = $1 AND tenant_id = $2`, [uid["solo2"], TC]);
+        revoked = true;
+        const again = await soloPending();
+        expect((await solo("solo", again.rid, { reason: "Redevenu seul" })).status).toBe(200);
+      } finally {
+        if (!revoked) await sql(`UPDATE user_roles SET revoked_at = now() WHERE user_id = $1 AND tenant_id = $2`, [uid["solo2"], TC]);
+      }
+    });
+
+    it("H5b suspended or deleted second Risk Manager does not count (user soft-deleted) ; an Audit member is not a Risk Manager", async () => {
+      const { rid } = await soloPending();
+      await sql(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1,$2,$3,$4)`, [TC, F["RM_C"], uid["solo2"], uid["solo"]]);
+      await sql(`ALTER TABLE users DISABLE TRIGGER USER`);
+      try { await sql(`UPDATE users SET deleted_at = now() WHERE id = $1`, [uid["solo2"]]); } finally { await sql(`ALTER TABLE users ENABLE TRIGGER USER`); }
+      try {
+        const r = await solo("solo", rid, { reason: "Le second est supprime" });
+        expect(r.status, r.text).toBe(200);
+      } finally {
+        await sql(`ALTER TABLE users DISABLE TRIGGER USER`);
+        try { await sql(`UPDATE users SET deleted_at = NULL WHERE id = $1`, [uid["solo2"]]); } finally { await sql(`ALTER TABLE users ENABLE TRIGGER USER`); }
+        await sql(`UPDATE user_roles SET revoked_at = now() WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL`, [uid["solo2"], TC]);
+      }
+    });
+
+    it("H5c RACE: a second Risk Manager arriving while the sole Risk Manager confirms -> never a 500, state consistent with the answer", async () => {
+      const seen = { ok: 0, conflict: 0 };
+      for (let i = 0; i < 10; i++) {
+        const { p, rid } = await soloPending();
+        const extra = (await one(`INSERT INTO users (tenant_id, email, display_name, roles) VALUES ($1,$2,$2,$3) RETURNING id`, [TC, `race${i}-${Date.now()}@b6c.test`, []])).id as string;
+        const [c, ins] = await Promise.all([
+          solo("solo", rid, { reason: `Course ${i}` }),
+          new Promise<void>((ok) => setTimeout(ok, i * 6)).then(() => sql(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1,$2,$3,$4) RETURNING id`, [TC, F["RM_C"], extra, uid["solo"]])),
+        ]);
+        try {
+          expect(ins).toHaveLength(1);
+          expect([200, 409], `${i}: ${c.text}`).toContain(c.status);
+          const row = await reqRow(rid);
+          if (c.status === 200) { seen.ok++; expect(row).toMatchObject({ status: "APPROVED", decision_regime: "SOLE_RM" }); expect(await attached(p)).toBe(F["FC1"]); }
+          else { seen.conflict++; await intact(p, rid); }
+          // afterwards, with the second RM in place, a fresh confirmation is ALWAYS refused
+          const later = await soloPending();
+          expect((await solo("solo", later.rid, { reason: "Apres la course" })).status).toBe(409);
+          await intact(later.p, later.rid);
+        } finally { await sql(`UPDATE user_roles SET revoked_at = now() WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL`, [extra, TC]); }
+      }
+      console.log("H5c outcomes", JSON.stringify(seen));
+    });
+
+    it("H5d concurrent confirmations of the SAME request: exactly one 200, the others 409, one marked audit pair", async () => {
+      const { p, rid } = await soloPending();
+      const rs = await Promise.all(Array.from({ length: 6 }, (_, i) => solo("solo", rid, { reason: `Simultanee ${i}` })));
+      expect(rs.filter((r) => r.status === 200), JSON.stringify(rs.map((r) => r.status))).toHaveLength(1);
+      expect(rs.filter((r) => r.status === 409), JSON.stringify(rs.map((r) => r.status))).toHaveLength(5);
+      expect(await attached(p)).toBe(F["FC1"]);
+      expect((await sql(`SELECT 1 FROM audit_log WHERE tenant_id = $1 AND entity_id = $2 AND entity_type = 'Process' AND action = 'UPDATE'`, [TC, p]))).toHaveLength(1);
+      expect((await sql(`SELECT 1 FROM notifications WHERE event_type = 'RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE' AND resource_id = $1 AND recipient_user_id = $2`, [rid, uid["saud"]]))).toHaveLength(1);
+    });
+
+    it("H5e confirm // withdraw: one outcome, attachment <=> APPROVED", async () => {
+      for (let i = 0; i < 4; i++) {
+        const { p, rid } = await soloPending();
+        const [a, b] = await Promise.all([solo("solo", rid, { reason: "Confirmer" }), call("solo", "POST", `/risk-frameworks/change-requests/${rid}/withdraw`, { reason: "Retirer" })]);
+        expect([a.status, b.status].sort(), `${a.text} | ${b.text}`).toEqual([200, 409]);
+        const row = await reqRow(rid);
+        expect(await attached(p) === F["FC1"]).toBe(row.status === "APPROVED");
+        expect(["APPROVED", "WITHDRAWN"]).toContain(row.status);
+      }
+    });
+
+    it("H6 audit failure injected: the confirmation fails AND nothing is half-written; the Audit / Committee are not told", async () => {
+      for (const [et, ac] of [["Process", "UPDATE"], ["RiskFrameworkChangeRequest", "APPROVE"]] as const) {
+        const { p, rid } = await soloPending();
+        await failAudit(et, ac);
+        try {
+          const r = await solo("solo", rid, { reason: `Panne ${et}` });
+          expect(r.status, r.text).toBeGreaterThanOrEqual(500);
+          await intact(p, rid);
+          expect((await sql(`SELECT 1 FROM notifications WHERE event_type = 'RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE' AND resource_id = $1`, [rid]))).toHaveLength(0);
+        } finally { await failAudit(null); }
+        expect((await solo("solo", rid, { reason: "Reprise" })).status).toBe(200);
+      }
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------ J q257 A
+  describe("J q257 A move to another Dispositif", () => {
+    const patch = (id: string, body: Row, who: Who = "pu") => call(who, "PATCH", `/processes/${id}`, body);
+    const procAudit = async (id: string) => (await audits(id, "Process")).filter((x) => x.action === "UPDATE");
+    const moveNotes = (id: string) => sql(`SELECT * FROM notifications WHERE event_type = 'OBJECT_FRAMEWORK_CHANGED' AND resource_id = $1 ORDER BY recipient_user_id`, [id]);
+    async function attachedProcess(): Promise<string> { const p = await proc(); await attach(p, F["FB"]); return p; }
+
+    it("J1 sub-process: free move, motive required only when the Dispositif changes (400 otherwise), audit old/new, RM group told without naming the object", async () => {
+      const pFB = await attachedProcess();
+      const parentA = await proc();
+      const sub = await proc("SUBPROCESS", parentA);
+      for (const [label, b] of [["no reason", {}], ["empty", { reason: "" }], ["spaces", { reason: "    " }], ["tabs", { reason: "\t\n" }], ["501", { reason: "x".repeat(501) }], ["number", { reason: 5 }]] as [string, Row][]) {
+        const r = await patch(sub, { parentId: pFB, ...b });
+        expect(r.status, `${label}: ${r.text}`).toBe(400);
+        expect((await one(`SELECT parent_id FROM processes WHERE id = $1`, [sub])).parent_id, label).toBe(parentA);
+      }
+      expect(await procAudit(sub)).toHaveLength(0);
+      expect(await moveNotes(sub)).toHaveLength(0);
+      const ok = await patch(sub, { parentId: pFB, reason: "Aligner sur le Dispositif B" });
+      expect(ok.status, ok.text).toBe(200);
+      expect((await one(`SELECT parent_id FROM processes WHERE id = $1`, [sub])).parent_id).toBe(pFB);
+      const a = await procAudit(sub);
+      expect(a).toHaveLength(1);
+      expect(a[0]).toMatchObject({ reason: "Aligner sur le Dispositif B" });
+      expect(a[0]!.old_value.riskFrameworkId).toBe(F["FA"]);
+      expect(a[0]!.new_value).toMatchObject({ riskFrameworkId: F["FB"], frameworkChanged: true, parentId: pFB });
+      const n = await moveNotes(sub);
+      const rcpt = n.map((x) => x.recipient_user_id as string);
+      for (const m of ["rm1", "rm2", "rm3", "rm4"]) expect(rcpt, m).toContain(uid[m]);
+      expect(rcpt).not.toContain(uid["pu"]); // the mover is never notified
+      expect(rcpt).not.toContain(uid["plain"]);
+      expect(rcpt).not.toContain(uid["rmb"]); // tenant scoped
+      for (const x of n) {
+        expect(x.tenant_id).toBe(T);
+        expect(x.message).not.toMatch(/QA B6c/);
+        expect(x.message).not.toContain(sub);
+        expect(x.message).not.toContain(pFB);
+      }
+      // the notification centre of a recipient serves it
+      const c = await call("rm2", "GET", "/notifications");
+      expect(c.status, c.text).toBe(200);
+      expect(c.text).toContain("OBJECT_FRAMEWORK_CHANGED");
+    });
+
+    it("J2 same Dispositif on both sides (default -> default): no motive needed, no notification, audit says frameworkChanged false", async () => {
+      const parentA = await proc();
+      const parentB = await proc();
+      const sub = await proc("SUBPROCESS", parentA);
+      const r = await patch(sub, { parentId: parentB });
+      expect(r.status, r.text).toBe(200);
+      const a = await procAudit(sub);
+      expect(a).toHaveLength(1);
+      expect(a[0]!.new_value).toMatchObject({ riskFrameworkId: F["FA"], frameworkChanged: false });
+      expect(a[0]!.reason).toBeNull();
+      expect(await moveNotes(sub)).toHaveLength(0);
+      // a motive sent although useless is accepted and dropped (INFO)
+      const r2 = await patch(sub, { parentId: parentA, reason: "inutile" });
+      expect(r2.status, r2.text).toBe(200);
+      expect(await moveNotes(sub)).toHaveLength(0);
+    });
+
+    it("J3 other Dispositif -> other Dispositif (FB -> default via another parent) and back: motive each time", async () => {
+      const pFB = await attachedProcess();
+      const pDef = await proc();
+      const sub = await proc("SUBPROCESS", pFB);
+      expect((await patch(sub, { parentId: pDef })).status).toBe(400);
+      expect((await patch(sub, { parentId: pDef, reason: "Retour au Dispositif par defaut" })).status).toBe(200);
+      const a = await procAudit(sub);
+      expect(a[0]!.old_value.riskFrameworkId).toBe(F["FB"]);
+      expect(a[0]!.new_value).toMatchObject({ riskFrameworkId: F["FA"], frameworkChanged: true });
+      expect((await moveNotes(sub)).length).toBeGreaterThanOrEqual(3);
+    });
+
+    it("J4 level and parentId changed TOGETHER: PROCESS -> SUBPROCESS under a parent of another Dispositif needs a motive; SUBPROCESS -> PROCESS (parent null) likewise", async () => {
+      const pFB = await attachedProcess();
+      const lone = await proc(); // PROCESS, default Dispositif
+      const r0 = await patch(lone, { level: "SUBPROCESS", parentId: pFB });
+      expect(r0.status, r0.text).toBe(400);
+      expect((await one(`SELECT level, parent_id FROM processes WHERE id = $1`, [lone])).level).toBe("PROCESS");
+      const r1 = await patch(lone, { level: "SUBPROCESS", parentId: pFB, reason: "Rattacher au Dispositif B" });
+      expect(r1.status, r1.text).toBe(200);
+      expect(await one(`SELECT level, parent_id FROM processes WHERE id = $1`, [lone])).toMatchObject({ level: "SUBPROCESS", parent_id: pFB });
+      let a = await procAudit(lone);
+      expect(a[0]!.old_value.riskFrameworkId).toBe(F["FA"]);
+      expect(a[0]!.new_value).toMatchObject({ riskFrameworkId: F["FB"], frameworkChanged: true, level: "SUBPROCESS" });
+      // back: sub under FB becomes a PROCESS (resolves to the default again)
+      const r2 = await patch(lone, { level: "PROCESS", parentId: null });
+      expect(r2.status, r2.text).toBe(400);
+      expect((await one(`SELECT level FROM processes WHERE id = $1`, [lone])).level).toBe("SUBPROCESS");
+      const r3 = await patch(lone, { level: "PROCESS", parentId: null, reason: "Redevient un processus" });
+      expect(r3.status, r3.text).toBe(200);
+      a = await procAudit(lone);
+      expect(a).toHaveLength(2);
+      expect(a[1]!.old_value.riskFrameworkId).toBe(F["FB"]);
+      expect(a[1]!.new_value).toMatchObject({ riskFrameworkId: F["FA"], frameworkChanged: true });
+      // level alone (parent untouched) is not a "move": a SUBPROCESS cannot become a PROCESS while keeping a parent -> clean 4xx
+      const sub = await proc("SUBPROCESS", await proc());
+      const r4 = await patch(sub, { level: "PROCESS" });
+      expect(r4.status, r4.text).toBeGreaterThanOrEqual(400);
+      expect(r4.status, r4.text).toBeLessThan(500);
+      // same level, same parent re-sent: nothing to report
+      const r5 = await patch(sub, { parentId: (await one(`SELECT parent_id FROM processes WHERE id = $1`, [sub])).parent_id });
+      expect(r5.status, r5.text).toBe(200);
+      expect((await procAudit(sub)).every((x) => x.new_value.frameworkChanged !== true)).toBe(true);
+    });
+
+    it("J5 hierarchy rules still win: unknown parent, parent of another tenant, itself, a SUBPROCESS as parent -> 4xx, nothing moved, no notification", async () => {
+      const sub = await proc("SUBPROCESS", await proc());
+      const other = await proc("SUBPROCESS", await proc());
+      const tb = F["PB"]!;
+      for (const [label, parentId] of [["unknown", UNKNOWN], ["other tenant", tb], ["itself", sub], ["a sub-process", other]] as const) {
+        const r = await patch(sub, { parentId, reason: "Tentative" });
+        expect(r.status, `${label}: ${r.text}`).toBeGreaterThanOrEqual(400);
+        expect(r.status, `${label}: ${r.text}`).toBeLessThan(500);
+      }
+      expect(await procAudit(sub)).toHaveLength(0);
+      expect(await moveNotes(sub)).toHaveLength(0);
+      const before = await one(`SELECT parent_id FROM processes WHERE id = $1`, [sub]);
+      expect(before.parent_id).not.toBeNull();
+    });
+
+    it("J6 permission: plain user and Audit cannot move (403), nothing written; Risk Manager without process.update too", async () => {
+      const pFB = await attachedProcess();
+      const sub = await proc("SUBPROCESS", await proc());
+      for (const who of ["plain", "aud", "rm2"] as Who[]) {
+        const r = await patch(sub, { parentId: pFB, reason: "x" }, who);
+        expect(r.status, `${who}: ${r.text}`).toBe(403);
+      }
+      expect(await procAudit(sub)).toHaveLength(0);
+      expect((await call(null, "PATCH", `/processes/${sub}`, { parentId: pFB, reason: "x" })).status).toBe(401);
+    });
+
+    it("J7 a process of another tenant cannot be moved (404 same as unknown) ", async () => {
+      const r = await patch(F["PB"]!, { name: "x", parentId: null, reason: "x" });
+      expect(r.status, r.text).toBe(404);
+      expect((await patch(UNKNOWN, { name: "x", reason: "x" })).status).toBe(404);
+    });
+
+    it.fails("KNOWN GAP QA-B6C-03 J8 audit failure on the Process UPDATE: the move must not be applied without its trace", async () => {
+      const pFB = await attachedProcess();
+      const parentA = await proc();
+      const sub = await proc("SUBPROCESS", parentA);
+      await failAudit("Process", "UPDATE");
+      let r: Res;
+      try { r = await patch(sub, { parentId: pFB, reason: "Panne d'audit" }); } finally { await failAudit(null); }
+      expect(r.status, r.text).toBeGreaterThanOrEqual(500);
+      expect(await procAudit(sub)).toHaveLength(0);
+      // oracle: the sub-process keeps its parent (a move with no audit row and no notification is untraceable)
+      expect((await one(`SELECT parent_id FROM processes WHERE id = $1`, [sub])).parent_id).toBe(parentA);
+    });
+
+    it("J9 risk: moving to a process of another Dispositif needs a motive (400 otherwise); audit old/new; RM group told, mover excluded", async () => {
+      const pA = await proc();
+      const pB = await attachedProcess();
+      const rk = await risk(pA);
+      const moves = async () => sql(`SELECT * FROM audit_log WHERE entity_id = $1 AND entity_type = 'Risk' AND new_value ? 'frameworkChanged' ORDER BY timestamp`, [rk]);
+      const nts = () => sql(`SELECT * FROM notifications WHERE event_type = 'OBJECT_FRAMEWORK_CHANGED' AND resource_id = $1`, [rk]);
+      for (const [label, b] of [["none", {}], ["empty", { reason: "" }], ["spaces", { reason: "   " }], ["501", { reason: "x".repeat(501) }]] as [string, Row][]) {
+        const r = await call("rm1", "PATCH", `/risks/${rk}`, { processId: pB, ...b });
+        expect(r.status, `${label}: ${r.text}`).toBe(400);
+        expect((await one(`SELECT process_id FROM risks WHERE id = $1`, [rk])).process_id, label).toBe(pA);
+      }
+      expect(await moves()).toHaveLength(0);
+      expect(await nts()).toHaveLength(0);
+      const ok = await call("rm1", "PATCH", `/risks/${rk}`, { processId: pB, reason: "Risque rattache au Dispositif B" });
+      expect(ok.status, ok.text).toBe(200);
+      const m = await moves();
+      expect(m).toHaveLength(1);
+      expect(m[0]!.reason).toBe("Risque rattache au Dispositif B");
+      expect(m[0]!.old_value).toEqual({ processId: pA, riskFrameworkId: F["FA"] });
+      expect(m[0]!.new_value).toEqual({ processId: pB, riskFrameworkId: F["FB"], frameworkChanged: true });
+      const rcpt = (await nts()).map((x) => x.recipient_user_id as string);
+      for (const u of ["rm2", "rm3", "rm4"]) expect(rcpt).toContain(uid[u]);
+      expect(rcpt).not.toContain(uid["rm1"]);
+      for (const x of await nts()) { expect(x.message).not.toContain(rk); expect(x.message).not.toMatch(/QA risk/); }
+    });
+
+    it("J10 risk: no process -> process of another Dispositif counts (default is the 'before'); process -> null likewise; same Dispositif needs nothing", async () => {
+      const pB = await attachedProcess();
+      const rk = await risk(null);
+      expect((await call("rm1", "PATCH", `/risks/${rk}`, { processId: pB })).status).toBe(400);
+      expect((await call("rm1", "PATCH", `/risks/${rk}`, { processId: pB, reason: "Vers B" })).status).toBe(200);
+      expect((await call("rm1", "PATCH", `/risks/${rk}`, { processId: null })).status).toBe(400);
+      expect((await call("rm1", "PATCH", `/risks/${rk}`, { processId: null, reason: "Detache" })).status).toBe(200);
+      const rk2 = await risk(await proc());
+      expect((await call("rm1", "PATCH", `/risks/${rk2}`, { processId: await proc() })).status).toBe(200);
+    });
+
+    it("J11 the motive of a risk move does not weaken the visibility rules: a user without risk.update still gets 403 and nothing is notified", async () => {
+      const pB = await attachedProcess();
+      const rk = await risk(await proc());
+      const r = await call("plain", "PATCH", `/risks/${rk}`, { processId: pB, reason: "x" });
+      expect(r.status, r.text).toBe(403);
+      expect((await sql(`SELECT 1 FROM notifications WHERE event_type = 'OBJECT_FRAMEWORK_CHANGED' AND resource_id = $1`, [rk]))).toHaveLength(0);
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------ K migration 089
+  describe("K migration 089 on a throw-away database: up / down / up, refusal with a SOLE_RM row, shape CHECKs", () => {
+    const MDB = "grc_qa_b6c_mig";
+    const mig = (n: string) => join(ROOT, "database", "postgresql", "migrations", n);
+    const psql = (db: string, args: string[]) => execFileSync("/usr/bin/psql", ["-X", "-q", "-h", "127.0.0.1", "-p", String(PGPORT), "-U", "postgres", "-d", db, "-v", "ON_ERROR_STOP=1", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const defs = (db: string) => psql(db, ["-At", "-c", `SELECT conname || ' ' || pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'risk_framework_change_requests'::regclass ORDER BY conname`]);
+    const fails = (db: string, f: string) => { try { psql(db, ["-f", f]); return null; } catch (e) { return String((e as { stderr?: string }).stderr ?? e); } };
+    let mp: Pool;
+    const msql = async (q: string, p: unknown[] = []) => (await mp.query(q, p)).rows as Row[];
+    const insertReq = async (o: { regime: string | null; decidedBy: string; comment: string | null; kind?: string; status?: string; group?: string | null }) => {
+      const t = "aaaaaaaa-0000-4000-8000-000000000001";
+      const u = (await msql(`SELECT id FROM users LIMIT 2`)).map((x) => x.id as string);
+      const fw = (await msql(`INSERT INTO risk_frameworks (tenant_id, name, created_by) VALUES ($1,$2,$3) RETURNING id`, [t, `FM ${Math.random()}`, u[0]]))[0]!.id as string;
+      const pr = (await msql(`INSERT INTO processes (tenant_id, level, name) VALUES ($1,'PROCESS',$2) RETURNING id`, [t, `P ${Math.random()}`]))[0]!.id as string;
+      const requester = u[0]!;
+      const decider = o.decidedBy === "same" ? requester : u[1]!;
+      return mp.query(
+        `INSERT INTO risk_framework_change_requests (tenant_id, kind, framework_id, process_id, version_id, reason, requested_by, status, decided_by, decided_at, decision_regime, decider_group, decision_comment)
+         VALUES ($1,$2,$3,$4,NULL,'r',$5,$6,$7,now(),$8,$9,$10) RETURNING id`,
+        [t, o.kind ?? "ASSIGN_PROCESS", fw, (o.kind ?? "ASSIGN_PROCESS") === "ASSIGN_PROCESS" ? pr : null, requester, o.status ?? "APPROVED", decider, o.regime, o.group === undefined ? "RISK_MANAGER" : o.group, o.comment]);
+    };
+    const code = async (p: Promise<unknown>) => { try { await p; return null; } catch (e) { return (e as { code?: string }).code ?? "?"; } };
+
+    it("K1 089 up is idempotent, down restores the pre-089 CHECKs (same definitions), up again restores them; SOLE_RM refused before up", async () => {
+      sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", MDB]);
+      // pre-089 baseline = a database with 001..088 only
+      const base = defs(MDB);
+      expect(base).toMatch(/risk_framework_change_requests_sole_rm_shape_check/);
+      const upF = mig("089_sole_risk_manager_assignment.sql");
+      const downF = mig("089_sole_risk_manager_assignment.down.sql");
+      expect(fails(MDB, upF)).toBeNull(); // replay
+      expect(defs(MDB)).toBe(base);
+      expect(fails(MDB, downF)).toBeNull();
+      const down = defs(MDB);
+      expect(down).not.toMatch(/sole_rm_shape/);
+      expect(down).not.toMatch(/SOLE_RM/);
+      expect(down).toMatch(/risk_framework_change_requests_maker_checker CHECK \(\(\(decided_by IS NULL\) OR \(decided_by <> requested_by\) OR \(decision_regime = 'BOOTSTRAP'::text\)\)\)/);
+      // QA-B6C-05 TRIVIAL: the down is NOT replayable (ADD CONSTRAINT ..._decision_regime_check without a prior DROP IF EXISTS): it fails cleanly, nothing changes. Oracle revised with justification: only the UP is declared idempotent.
+      const second = fails(MDB, downF);
+      expect(second).toMatch(/already exists/);
+      expect(defs(MDB)).toBe(down);
+      expect(fails(MDB, upF)).toBeNull();
+      const up2 = defs(MDB);
+      // names may differ cosmetically (the auto-named regime CHECK of 055 becomes ..._values_check), definitions must be the same set
+      const strip = (s: string) => s.split("\n").map((l) => l.replace(/^\S+ /, "")).sort().join("\n");
+      expect(strip(up2)).toBe(strip(base));
+      expect(await (async () => { const f = await Promise.resolve(fails(MDB, upF)); return f; })()).toBeNull(); // 3rd up
+      expect(strip(defs(MDB))).toBe(strip(base));
+    }, 280000);
+
+    it("K2 the down REFUSES (and changes nothing) while a SOLE_RM row exists; it passes once the row is gone", async () => {
+      mp = new Pool({ host: "127.0.0.1", port: PGPORT, user: "postgres", database: MDB, max: 2 });
+      try {
+        await mp.query(`ALTER TABLE risk_framework_change_requests DISABLE TRIGGER USER`);
+        const ok = await code(insertReq({ regime: "SOLE_RM", decidedBy: "same", comment: "Seul RM" }));
+        await mp.query(`ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER`);
+        expect(ok).toBeNull();
+        const before = defs(MDB);
+        const err = fails(MDB, mig("089_sole_risk_manager_assignment.down.sql"));
+        expect(err, "down must fail with a SOLE_RM row").not.toBeNull();
+        expect(err).toMatch(/violat|check/i);
+        expect(defs(MDB)).toBe(before); // transaction rolled back
+        expect((await msql(`SELECT count(*)::int n FROM risk_framework_change_requests WHERE decision_regime = 'SOLE_RM'`))[0]!.n).toBe(1);
+        await mp.query(`ALTER TABLE risk_framework_change_requests DISABLE TRIGGER USER`);
+        await mp.query(`DELETE FROM risk_framework_change_requests WHERE decision_regime = 'SOLE_RM'`);
+        await mp.query(`ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER`);
+        expect(fails(MDB, mig("089_sole_risk_manager_assignment.down.sql"))).toBeNull();
+        expect(fails(MDB, mig("089_sole_risk_manager_assignment.sql"))).toBeNull();
+      } finally { await mp.query(`ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER`).catch(() => undefined); }
+    }, 120000);
+
+    it("K3 shape CHECKs: SOLE_RM needs ASSIGN_PROCESS + APPROVED + decider = requester + RISK_MANAGER + non-blank comment; maker-checker still holds for NORMAL/FALLBACK", async () => {
+      const t = async (o: Parameters<typeof insertReq>[0]) => { await mp.query(`ALTER TABLE risk_framework_change_requests DISABLE TRIGGER USER`); try { return await code(insertReq(o)); } finally { await mp.query(`ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER`); } };
+      expect(await t({ regime: "SOLE_RM", decidedBy: "same", comment: "ok" })).toBeNull();
+      expect(await t({ regime: "SOLE_RM", decidedBy: "same", comment: null })).toBe("23514");
+      expect(await t({ regime: "SOLE_RM", decidedBy: "same", comment: "   " })).toBe("23514");
+      expect(await t({ regime: "SOLE_RM", decidedBy: "other", comment: "ok" })).toBe("23514"); // SOLE_RM needs decider = requester
+      expect(await t({ regime: "SOLE_RM", decidedBy: "same", comment: "ok", group: "AUDIT" })).toBe("23514");
+      expect(await t({ regime: "SOLE_RM", decidedBy: "same", comment: "ok", status: "REJECTED" })).toBe("23514");
+      expect(await t({ regime: "SOLE_RM", decidedBy: "same", comment: "ok", kind: "SET_DEFAULT" })).toBe("23514");
+      expect(await t({ regime: "NORMAL", decidedBy: "same", comment: "ok" })).toBe("23514"); // maker-checker kept
+      expect(await t({ regime: "FALLBACK", decidedBy: "same", comment: "ok" })).toBe("23514");
+      expect(await t({ regime: "BOGUS", decidedBy: "same", comment: "ok" })).toBe("23514");
+      expect(await t({ regime: "NORMAL", decidedBy: "other", comment: "ok" })).toBeNull();
+    }, 120000);
+
+    it.fails("KNOWN GAP QA-B6C-04 K3b a SOLE_RM row with a NULL decider_group is refused by the shape CHECK (NULL passes `decider_group = RISK_MANAGER`)", async () => {
+      await mp.query(`ALTER TABLE risk_framework_change_requests DISABLE TRIGGER USER`);
+      try { expect(await code(insertReq({ regime: "SOLE_RM", decidedBy: "same", comment: "ok", group: null }))).toBe("23514"); } finally { await mp.query(`ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER`); }
+    }, 60000);
+
+    it("K4 the guards of 056/059/088 are untouched: an ASSIGN_PROCESS SOLE_RM request still needs the approval chain to write processes.risk_framework_id", async () => {
+      const f = await msql(`SELECT proname, proconfig FROM pg_proc WHERE proname IN ('processes_framework_guard','risk_framework_assign_tenant_guard')`);
+      expect(f).toHaveLength(2);
+      for (const x of f) expect(x.proconfig).toEqual(["search_path=pg_catalog, public, pg_temp"]);
+      const p = (await msql(`SELECT id FROM processes LIMIT 1`))[0]!.id as string;
+      const fw = (await msql(`SELECT id FROM risk_frameworks LIMIT 1`))[0]!.id as string;
+      expect(await code(mp.query(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [p, fw]))).toBe("42501");
+      await mp.end();
     });
   });
 });
