@@ -208,3 +208,124 @@ Le lot B-13 livre trois Dispositifs prêts à l'emploi. Chacun fixe une échelle
 - **C : autre.** Par exemple choisir Léger comme défaut, ou ajouter ou retirer l'un des trois profils.
 
 **Recommandation : option A.** Standard est le seul profil de rigueur moyenne qui passe l'amorçage sans exception et qui n'impose pas à un petit client des cumuls interdits ou un Comité de 4 personnes. Le client monte vers Prudent quand son organisation le permet.
+
+---
+
+# 12. Mise à jour du 2026-11-11 après DECISION-124 (réponse du PO à q259)
+
+Les sections 1 à 11 ci-dessus gardent les anciens noms « Prudent » et « Léger » tant que le PO n'a pas choisi les nouveaux libellés (section 12.4).
+
+## 12.1 Interprétation de l'orchestrateur
+
+Réponse du PO : valeurs validées, Standard par défaut, 4x4 ne doit pas s'appeler « Léger » (une échelle paire est moins sujette au biais du milieu), 5x5 est le classique, pas d'idée de libellé pour 6x6.
+
+**Confirmé** : valeurs validées, Standard 5x5 par défaut, 4x4 n'est pas « moins rigoureux ».
+**Précision** : le PO valide « les valeurs proposées ». Je ne les modifie donc pas, mais son argument touche ma propre construction (section 12.2).
+
+## 12.2 Ce que l'argument change au-delà du libellé
+
+Fait : j'avais mélangé deux idées sous « Léger » : la taille de l'échelle (4x4) et une gouvernance « allégée ». Or, dans mes valeurs, la gouvernance de la version 4x4 est **déjà identique à Standard** sauf une ligne. Détail :
+
+| Élément du 4x4 | Valeur proposée | Identique à Standard ? | Effet de l'argument du PO |
+|---|---|---|---|
+| Mode, obligation Comité, approbateur, auto-proposition, cumuls, Hybride, maîtrise, règle de vote | défauts du contrat | Oui | Aucun. Ce n'est donc pas un profil « allégé » sur la gouvernance. Je le reconnais. |
+| Seuil Comité 9 sur 16 (56 %) | début de la bande Critique | Même règle (Standard 15 sur 25, 60 %) | Aucun. Même logique, pas un assouplissement. |
+| Haut de la bande « Faible » (3), appétence 3 et 6 | proportionnés à l'échelle | Même proportion (19 % et 38 % contre 16 % et 36 %) | Aucun. |
+| `delegation_max_days` | 180 | **Non** (Standard 90) | Hérite du motif « petite structure ». Sans lui, rien ne justifie 180. |
+| Axes d'impact | 4 (client et réputation fusionnés) | **Non** (Standard 5) | Motivé par « petite structure », pas par la taille de l'échelle. |
+| Vitesse et persistance | omises | **Non** | idem |
+| Lignes de défense de la maîtrise | L1, L2 (pas de L3) | **Non** | idem. Un client qui choisit 4x4 pour le biais du milieu mais a une 3e ligne perdrait sa note L3. |
+| Finesse | 9 valeurs de score possibles (1, 2, 3, 4, 6, 8, 9, 12, 16) | Standard : 14 valeurs | **Réel** : avec l'impact retenu en MAX, 4x4 distingue moins de niveaux. C'est le prix du « pas de milieu ». À dire au client. |
+
+Constat : quatre éléments (délégation 180, 4 axes, pas de vitesse/persistance, pas de L3) étaient des choix de **petite structure**, rattachés à tort à la taille d'échelle. Si le 4x4 est un choix de méthode et non de taille, ces quatre éléments n'ont plus de justification propre.
+
+**Je ne les change pas en silence.** Proposition, non appliquée, à arbitrer :
+- **Variante 1 (statu quo validé)** : on garde les valeurs actuelles. Le 4x4 reste un profil conçu pour une petite structure, quel que soit son nom.
+- **Variante 2 (recommandée)** : le 4x4 prend les mêmes axes (5), vitesse, persistance, lignes L1/L2/L3 et délégation (90 jours) que Standard. Seule la taille de l'échelle (4) et les valeurs proportionnées (bandes, seuils) changent. Une petite structure peut ensuite retirer ce qu'elle ne veut pas par une nouvelle version, ce que le schéma permet. Raison : avec un nom qui ne dit plus « petit », on ne doit pas retirer par défaut une 3e ligne ou un axe réputation à un client qui n'est pas petit.
+
+Deux autres constats :
+- L'argument du « biais du milieu » vaut aussi pour le 6x6 (échelle paire). Il ne distingue donc pas le 4x4 : ce qui distingue le 6x6, c'est la **finesse** et, dans mes valeurs, une gouvernance plus **stricte** (cumuls interdits, Comité à 15 sur 36, règle C).
+- Standard 5x5 a un niveau central (3) : risque de choix par défaut. Rien à changer, mais je recommande d'ajouter à l'écran de choix une phrase qui le dit (« échelle à niveau central »).
+- Rien ne change pour le Dispositif par défaut (Standard), ni pour l'amorçage (le 4x4 reste égal aux défauts du contrat, seuil 9, donc activable en premier).
+
+## 12.3 Descriptifs détaillés manquants
+
+Même principe que Standard (section 5.5) : qualitatifs, aucun montant, le client calibre en XOF. Les libellés de probabilité et d'impact global (5.3, 5.4) restent ceux de la section 5.
+
+### 4x4 (profil actuellement nommé « Léger »)
+
+Écrit avec les 5 axes de Standard (variante 2). Pour la variante 1 (4 axes), l'axe CLIENT_REPUTATION prend le plus sévère des niveaux de CLIENT et REPUTATION.
+
+| Niveau | FINANCIER | REGLEMENTAIRE | OPERATIONNEL | CLIENT | REPUTATION |
+|---|---|---|---|---|---|
+| 1 | Perte absorbée par le budget courant ou celui de l'entité | Écart interne ou observation sans sanction | Gêne interne ou service non critique dégradé | Plaintes isolées ou multiples, sans perte | Aucune visibilité externe ou mentions isolées |
+| 2 | Perte exigeant une réallocation budgétaire | Mise en demeure ou rapport de non-conformité | Service critique indisponible quelques heures | Clients touchés, perte limitée et remboursée | Couverture locale limitée |
+| 3 | Perte qui pèse sur le résultat annuel | Sanction financière ou restriction d'activité | Service critique indisponible une journée ou plus | Fonds ou données de nombreux clients compromis | Couverture nationale, perte d'un partenaire |
+| 4 | Perte qui menace la solvabilité ou la liquidité | Retrait d'agrément ou suspension d'activité | Arrêt prolongé de l'activité de paiement | Perte massive de fonds ou fuite de données à grande échelle | Perte de confiance durable, retrait de partenaires majeurs |
+
+Règle de dérivation depuis Standard : niveau 1 = niveaux 1 et 2, niveau 2 = niveau 3, niveau 3 = niveau 4, niveau 4 = niveau 5.
+
+Vitesse (3 niveaux, variante 2) : Lente, Moyenne, Rapide. Persistance : Ponctuelle, Récurrente, Durable. Maîtrise : Inadéquate, Partielle, Adéquate ; lignes L1, L2, L3 (variante 2).
+
+### 6x6 (profil actuellement nommé « Prudent »)
+
+Sept axes, six niveaux. Niveaux d'impact global : 1 Négligeable, 2 Mineur, 3 Modéré, 4 Important, 5 Majeur, 6 Catastrophique.
+
+| Niveau | FINANCIER | REGLEMENTAIRE | OPERATIONNEL | CLIENT |
+|---|---|---|---|---|
+| 1 | Perte absorbée par le budget courant | Écart interne, sans notification | Gêne interne brève | Plainte isolée |
+| 2 | Perte absorbée par le budget de l'entité | Observation informelle du régulateur | Dégradation ponctuelle d'un service non critique | Plaintes multiples, sans perte |
+| 3 | Perte exigeant l'arbitrage du responsable budgétaire | Observation formelle, sans sanction | Service critique ralenti ou indisponible moins d'une heure | Quelques clients touchés, perte remboursée rapidement |
+| 4 | Perte exigeant une réallocation entre entités | Mise en demeure ou rapport de non-conformité | Service critique indisponible quelques heures | Nombreux clients touchés, perte limitée et remboursée |
+| 5 | Perte qui pèse sur le résultat annuel | Sanction financière ou restriction d'activité | Service critique indisponible une journée ou plus | Fonds ou données de nombreux clients compromis |
+| 6 | Perte qui menace la solvabilité ou la liquidité | Retrait d'agrément ou suspension d'activité | Arrêt prolongé de l'activité de paiement | Perte massive de fonds ou fuite de données à grande échelle |
+
+| Niveau | REPUTATION | DONNEES | HUMAIN |
+|---|---|---|---|
+| 1 | Aucune visibilité externe | Incident interne, sans donnée sensible | Gêne sans effet sur les personnes |
+| 2 | Mentions isolées | Donnée non sensible exposée à un tiers, corrigée | Incident mineur, sans arrêt de travail |
+| 3 | Mentions répétées sur les réseaux | Donnée sensible exposée en interne, sans usage constaté | Blessure ou stress nécessitant des soins légers |
+| 4 | Couverture locale limitée | Données sensibles de quelques clients exposées | Arrêt de travail d'un ou plusieurs collaborateurs |
+| 5 | Couverture nationale, perte d'un partenaire | Données sensibles de nombreux clients exposées ou altérées | Atteinte grave à la santé ou à la sécurité |
+| 6 | Perte de confiance durable, retrait de partenaires majeurs | Fuite ou corruption à grande échelle, irrécupérable | Décès ou invalidité permanente |
+
+Vitesse, persistance, maîtrise : identiques à Standard.
+
+Hypothèse à valider par le client : l'axe HUMAIN et ses niveaux 5 et 6 sont écrits pour un contexte général. Pour une fintech, la sécurité des agents ou des collaborateurs exposés (agences, transport de fonds) est le cas pertinent.
+
+## 12.4 Libellés proposés
+
+Critères : court, en français courant, sans jargon, ne dit pas « plus ou moins important ».
+
+**4x4 (échelle paire de 4 niveaux)**
+| Option | Pourquoi | Limite |
+|---|---|---|
+| **Tranché (recommandé)** | Dit l'effet : pas de niveau du milieu, il faut choisir un côté. Compréhensible sans jargon. | Peut sembler « sec » ; la phrase d'aide doit expliquer. |
+| Sans milieu | Décrit exactement la caractéristique. | Un peu négatif, et vaut aussi pour 6x6. |
+| Resserré | Dit que l'échelle est compacte. | Ressemble à « léger » : l'ambiguïté que le PO veut éviter. |
+
+**6x6 (échelle paire de 6 niveaux)**
+| Option | Pourquoi | Limite |
+|---|---|---|
+| **Renforcé (recommandé)** | Dit à la fois la finesse et la gouvernance plus stricte (cumuls interdits, Comité plus sollicité). Ne reprend pas l'argument du milieu, qui vaudrait aussi pour 4x4. | Peut faire penser à une certification. |
+| Approfondi | Met en avant la finesse. | Cache le fait que la gouvernance est plus stricte : le client peut être surpris par les cumuls interdits. |
+| Prudent (inchangé) | Déjà utilisé, mot compris par tous. | Confusion avec « appétence prudente » : c'est un mot de risque, il peut suggérer que Standard est « imprudent ». |
+
+**Recommandation : Tranché (4x4), Standard (5x5, « le classique »), Renforcé (6x6).** Trois mots qui ne se classent pas sur une seule échelle de gravité : le client ne lit pas « Léger = moins bien ». Description à l'écran, une phrase par profil :
+- Tranché : « 4 niveaux, pas de niveau du milieu : on est obligé de se prononcer. Moins de nuances. »
+- Standard : « 5 niveaux, l'échelle classique. Le niveau 3 est un milieu, à utiliser avec prudence. »
+- Renforcé : « 6 niveaux, pas de milieu, plus de nuances, gouvernance plus stricte (cumuls interdits, Comité plus sollicité). »
+
+## Question au PO (libellés des Dispositifs, suite de q259)
+
+**Titre : Noms des trois Dispositifs par défaut et gouvernance du 4x4 (B-13, suite de DECISION-124)**
+
+**Contexte.**
+Vous avez validé les valeurs et Standard comme défaut, et demandé que le 4x4 ne s'appelle plus « Léger ». J'en tire que le 4x4 est un choix de méthode (pas de niveau du milieu), pas un profil allégé. Dans mes valeurs, sa gouvernance est déjà celle de Standard. Seuls quatre éléments le rendaient « petit » : axes réduits à 4, pas de vitesse ni persistance, pas de 3e ligne dans la maîtrise, délégation à 180 jours. Le 6x6 est aussi une échelle paire : ce qui le distingue est sa finesse et sa gouvernance plus stricte. Les descriptifs détaillés du 4x4 et du 6x6 sont rédigés (section 12.3 du document).
+
+**Options.**
+- **A (recommandée) : noms Tranché (4x4), Standard (5x5), Renforcé (6x6), et le 4x4 reprend les axes, la vitesse, la persistance, les trois lignes de défense et la délégation à 90 jours de Standard.** Un client qui veut moins le retire ensuite par une nouvelle version.
+- **B : mêmes noms, mais le 4x4 garde ses éléments « petite structure » validés** (4 axes, pas de vitesse/persistance, L1 et L2, délégation 180 jours). Les noms ne disent pas « petit », la configuration, si.
+- **C : autre** : autres noms (Sans milieu, Resserré ; Approfondi, Prudent) ou vos propres libellés.
+
+**Recommandation : option A.** Un nom neutre doit s'accompagner d'une configuration neutre : on ne retire pas par défaut une 3e ligne ou un axe réputation à un client qui n'est pas forcément petit. Aucun effet sur le Dispositif par défaut (Standard) ni sur l'amorçage.
