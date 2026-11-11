@@ -48,3 +48,10 @@ Le PO a constaté que le frontend n'avançait plus : 13 écrans pour 43 modules 
 - Règle générale : quand le PO dit avoir un accord d'un tiers (DPO, juriste…), l'inscrire une fois au Decision Log comme
   couvrant tout le périmètre du document soumis, et ne pas le reposer sous une autre forme. Ne poser une question que
   pour une précision réellement absente, une seule fois, puis s'arrêter.
+
+## 2026-11-11 — reprise après HANDOFF-2026-11-11
+- q245 à q258 répondues avant la reprise : journalisées (DECISION-120 à 123), #238 et #239 fusionnées (conflit #239 après #238 limité aux mémoires d'agents : union des deux côtés, tests relancés avant merge).
+- **Rechute DECISION-045** : q259 répondue à 14:35, vue à 16:23 ; quatre messages au PO entre-temps disaient « q259 en attente ». La règle « relire `questions` answered avant chaque message au PO » reste à appliquer à la lettre, y compris dans les réponses courtes aux notifications GitHub.
+- Sonar : l'API `sonarcloud.io/api/issues/search?...&pullRequest=N` répond désormais depuis la session (le blocage proxy noté plus haut ne vaut plus) ; utile pour lire un échec de Quality Gate.
+- Un écart du code au texte d'une décision PO (ex. SEC-B6C-04 : « au moment de la demande ») est un correctif, pas une nouvelle question au PO.
+- Limite d'usage de 5 h : un agent coupé se relance par SendMessage dès la remise à zéro ; ne pas programmer de rappel si le PO signale lui-même la reprise.
