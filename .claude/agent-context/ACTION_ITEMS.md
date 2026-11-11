@@ -2931,7 +2931,10 @@ DECISION (PO) : fusion de la PR #247 (F8 mise en service, sans écran Clients)
   et de la PR #240 (B-6c, migrations 088 à 090) dans staging.
 RELATED: q264, q268, DECISION-121.
 OWNER: @orchestrator
-STATUS: à exécuter (merges ci-dessous).
+STATUS: FAIT — #247 fusionnée (622e13a, sans migration) ; #240 fusionnée
+  (2675c80) après fusion de staging dans la branche (conflits limités aux
+  mémoires, union ; 2884 tests et build verts ; CI verte), migrations 088 à
+  090 appliquées par migrate.yml (run 29 vert).
 
 DECISION-127
 DATE: 2026-11-11 (cockpit q265 A 17:42)
