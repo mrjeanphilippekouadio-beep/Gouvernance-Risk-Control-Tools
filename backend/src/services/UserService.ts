@@ -61,6 +61,15 @@ const DIRECTORY_SEARCH_MAX = 100;
 export const DIRECTORY_SEARCH_LIMIT = 20;
 const MAX_ACCOUNT_REASON_LENGTH = 500;
 
+/**
+ * q251 (DECISION-120): a journal row names a person by id only. The e-mail and display name are not copied into
+ * old_value/new_value; reads join them back on the id (AuditLogService). Existing rows are untouched (append-only).
+ */
+function auditSnapshot(u: User): Omit<User, "email" | "displayName"> {
+  const { email: _email, displayName: _displayName, ...rest } = u;
+  return rest;
+}
+
 /** q177 (DECISION-084): suspending or reactivating an account always carries a reason, audited with the action. */
 function requireAccountReason(reason: unknown, what: string): string {
   const trimmed = typeof reason === "string" ? reason.trim() : "";
@@ -165,7 +174,7 @@ export class UserService {
       entityId: user.id,
       action: "CREATE",
       oldValue: null,
-      newValue: user,
+      newValue: auditSnapshot(user),
       reason: null,
       requestId,
     });
@@ -276,8 +285,9 @@ export class UserService {
       entityType: "User",
       entityId: id,
       action: "UPDATE",
-      oldValue: before,
-      newValue: after,
+      oldValue: auditSnapshot(before),
+      // q272 (DECISION-130): the row says the name changed, never what it was or became.
+      newValue: before.displayName !== after.displayName ? { ...auditSnapshot(after), displayNameChanged: true } : auditSnapshot(after),
       reason: null,
       requestId,
     });
@@ -314,7 +324,7 @@ export class UserService {
       entityType: "User",
       entityId: id,
       action: "DELETE",
-      oldValue: before,
+      oldValue: auditSnapshot(before),
       newValue: null,
       reason: why,
       requestId,
@@ -364,8 +374,8 @@ export class UserService {
       entityType: "User",
       entityId: id,
       action: "UPDATE",
-      oldValue: before,
-      newValue: lostRoles.length > 0 ? { ...after, lostRoles: lostRoles.map((r) => r.name) } : after,
+      oldValue: auditSnapshot(before),
+      newValue: lostRoles.length > 0 ? { ...auditSnapshot(after), lostRoles: lostRoles.map((r) => r.name) } : auditSnapshot(after),
       reason: why,
       requestId,
     });

@@ -15,6 +15,8 @@ export interface UserRepository {
    * result, same as `getByEmail`/`list` do via `includeSuspended`.
    */
   getById(tenantId: string, id: string): Promise<User | null>;
+  /** SEC-q251-03: one grouped, tenant-scoped read (not filtered by `deleted_at`, like `getById`). Id + display name only. */
+  getByIds?(tenantId: string, ids: string[]): Promise<Array<{ id: string; displayName: string }>>;
   getByEmail(tenantId: string, email: string, options?: { includeSuspended?: boolean }): Promise<User | null>;
   list(tenantId: string, options?: ListUsersOptions): Promise<User[]>;
   count(tenantId: string, options?: { includeSuspended?: boolean }): Promise<number>;

@@ -28,6 +28,9 @@ import { checkSelfValidation, type SelfValidationGate } from "./SelfValidationGa
 import { writeAudited } from "./auditedWrite.js";
 import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { auditPersonTextPair, auditWithoutPersonText } from "./auditPersonText.js";
+
+const PROCESS_PERSON_FIELDS = ["owner"] as const;
 
 const MAX_CANDIDATE_SCAN = 1000;
 
@@ -135,7 +138,7 @@ export class ProcessService {
       entityId: process.id,
       action: "CREATE",
       oldValue: null,
-      newValue: process,
+      newValue: auditWithoutPersonText(process, PROCESS_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -207,17 +210,21 @@ export class ProcessService {
       this.processes.auditsInTransaction,
       this.audit,
       (audit) => this.processes.update(actor.tenantId, id, input, audit),
-      (updated) => [{
-        tenantId: actor.tenantId,
-        userId: actor.userId,
-        entityType: "Process",
-        entityId: id,
-        action: "UPDATE",
-        oldValue: framework ? { ...before, riskFrameworkId: framework.before } : before,
-        newValue: framework ? { ...updated, riskFrameworkId: framework.after, frameworkChanged } : updated,
-        reason: moveReason,
-        requestId,
-      }],
+      (updated) => {
+        // q251 / q273: free-text owner values never reach the journal, only a `<field>Changed` flag.
+        const pair = auditPersonTextPair(before, updated, PROCESS_PERSON_FIELDS);
+        return [{
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Process",
+          entityId: id,
+          action: "UPDATE",
+          oldValue: framework ? { ...pair.oldValue, riskFrameworkId: framework.before } : pair.oldValue,
+          newValue: framework ? { ...pair.newValue, riskFrameworkId: framework.after, frameworkChanged } : pair.newValue,
+          reason: moveReason,
+          requestId,
+        }];
+      },
     );
 
     if (frameworkChanged) {
@@ -326,10 +333,10 @@ export class ProcessService {
           entityType: "Process",
           entityId: id,
           action: "UPDATE",
-          oldValue: { ...pick(before), legacyOwner: before.owner },
+          oldValue: pick(before),
           newValue: {
             ...pick(after),
-            legacyOwner: after.owner,
+            ...(before.owner !== after.owner ? { legacyOwnerChanged: true } : {}),
             ...(ownerFromProposal !== undefined ? { ownerFromProposal } : {}),
             ...selfChampion?.newValueExtra,
           },
@@ -401,8 +408,7 @@ export class ProcessService {
       entityType: "Process",
       entityId: id,
       action: "UPDATE",
-      oldValue: before,
-      newValue: after,
+      ...auditPersonTextPair(before, after, PROCESS_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -435,7 +441,7 @@ export class ProcessService {
       entityType: "Process",
       entityId: id,
       action: "DELETE",
-      oldValue: before,
+      oldValue: auditWithoutPersonText(before, PROCESS_PERSON_FIELDS),
       newValue: null,
       reason,
       requestId,

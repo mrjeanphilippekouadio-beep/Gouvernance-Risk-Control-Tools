@@ -556,6 +556,19 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Piège de test : un envoi enregistré APRÈS que le registre soit devenu vide n'est pas attendu (rien à attendre à cet instant) ; seul un envoi enregistré pendant une attente en cours l'est.
 - SEC-IRT3-06 : `server.close` attend les sockets, pas les requêtes (client parti = handler encore en cours). Compteur de requêtes actives dans `InFlightRegistry` (`requestCounter()` monté avant le middleware D5, décrémenté à `res.end`, qui est atteint même sur socket détruite ; PAS `finish`/`close`, non fiables dans ce cas). `drain` attend aussi `activeRequests`=0 (sondage 20 ms) ; à l'échéance : log du nombre restant, code 1.
 
+## 2026-11-11 q251 A (DECISION-120, branche feat/r1-q251-journal-sans-identite, sans migration)
+
+- `audit_log` n'a AUCUNE colonne nom/e-mail ; les seules copies d'identité étaient les instantanés `User` complets dans old_value/new_value de `UserService` (create, update, suspend, reactivate). Désormais `auditSnapshot(user)` retire `email` et `displayName` (le reste, dont `id`, est gardé). PrivacyService (purge R3) n'écrivait déjà aucun nom.
+- Lecture : `AuditLogService` reçoit un `UserRepository` OPTIONNEL (2e param) et ajoute `userDisplayName` / `entityDisplayName` (entityType User) par `getById(actor.tenantId, id)` ; compte introuvable -> champ absent (id seul). Ajout compatible, contrat existant inchangé. Câblé dans server.ts.
+- Non traité : champs texte libre porteurs de nom DANS les données métier journalisées (ex. `Department.riskOwner`, propriétaires libres de Process) : ce sont des attributs de l'entité, pas une copie d'identité de l'acteur ; à trancher par Privacy/PO. Un changement de nom n'est plus visible dans le diff avant/après (les deux instantanés sont identiques sur ce champ). Frontend non modifié (AuditLogPage n'affiche que `userId` ; peut utiliser `userDisplayName` ensuite).
+
+## 2026-11-11 q251 v2 (DECISION-130, branche `feat/r1-q251-journal-sans-identite`, aucune migration)
+
+- q272 A : `UserService.update` ajoute `displayNameChanged: true` (sans valeur) à `newValue` si le nom change. Lecture du journal : `AuditLogService.withNames` garde `userDisplayName`/`entityDisplayName` (contrat inchangé) et ajoute `namesAreCurrent: true` = noms ACTUELS, pas ceux de l'époque.
+- q273 A : `services/auditPersonText.ts` (`auditWithoutPersonText`, `auditPersonTextPair`) retire `manager`/`riskOwner` (Department), `owner` (Process, Kpi), `executor` (Control) de TOUTES les écritures d'audit de ces entités (create/update/assign/delete + `ProcessEvaluationModeRequestService`) ; indicateur `<champ>Changed: true` quand ça change ; `legacyOwner` de `setResponsibilities` remplacé par `legacyOwnerChanged`. Toute nouvelle écriture d'audit d'une de ces entités doit passer par ce helper. Les 4 `it.fails` de `QA-q251.test.ts` sont devenus `it` (live, non exécutés ici faute de base locale : A08 à rejouer avec `QA_Q251_LIVE=1`).
+- SEC-q251-03 : `UserRepository.getByIds?` (optionnel) + `PostgresUserRepository.getByIds` (`= ANY($2::uuid[])`, ids non-uuid filtrés avant) ; repli sur `getById` si absent.
+- Harnais worktree : refuse les commandes composées (heredoc + `&&`) ; écrire les scripts via Write puis les lancer seuls.
+
 ## 2026-11-11 B-6c suite (branche feat/r1-b6c-changement-dispositif, migration 089) — q252 A + q257 A (DECISION-121)
 
 - Réalignement après #239 : 087 (V5) + 088 (B-6c) ; 49 fonctions (087 x5, 088 x2) ; garde `QA-visibility-v5` « rien après 087 » assouplie en « rien à partir de 090 ». Chaque nouvelle migration oblige à retoucher 5 tests de contiguïté (`QA-panel`, `QA-panel2`, `QA-visibility-v2bis`, `-v3`, `QA-B8quater`) : lister les numéros, pas les recopier.

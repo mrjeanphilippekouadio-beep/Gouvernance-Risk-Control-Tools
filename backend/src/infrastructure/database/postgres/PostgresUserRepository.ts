@@ -44,6 +44,16 @@ export class PostgresUserRepository implements UserRepository {
     return rows[0] ? toDomain(rows[0]) : null;
   }
 
+  async getByIds(tenantId: string, ids: string[]): Promise<Array<{ id: string; displayName: string }>> {
+    const valid = ids.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+    if (valid.length === 0) return [];
+    const { rows } = await this.pool.query<{ id: string; display_name: string }>(
+      `SELECT id, display_name FROM users WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+      [tenantId, valid],
+    );
+    return rows.map((r) => ({ id: r.id, displayName: r.display_name }));
+  }
+
   async getByEmail(tenantId: string, email: string, options?: { includeSuspended?: boolean }): Promise<User | null> {
     const suspendedFilter = options?.includeSuspended ? "" : "AND deleted_at IS NULL";
     const { rows } = await this.pool.query<UserRow>(
