@@ -96,8 +96,10 @@ export interface RiskFrameworkRepository {
    * APPROVED also writes `processes.risk_framework_id` (effect on the evaluations created from then on only).
    * `approverRule` is the `changeApprover` the service used to authorise the decider: the ACTIVE version of the
    * Dispositif of arrival is re-read under lock and a different rule is a ConflictError (replay the decision).
+   * `soleRiskManager` (q252 A, regime SOLE_RM): the requester decides their own request; under the tenant lock the
+   * repository requires the requester to be the only active Risk Manager (409 otherwise: a third party must decide).
    */
-  decideAssignment?(tenantId: string, requestId: string, decision: RecordDecisionInput & { approverRule: ChangeApprover }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult>;
+  decideAssignment?(tenantId: string, requestId: string, decision: RecordDecisionInput & { approverRule: ChangeApprover; soleRiskManager?: boolean }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult>;
   /** B-6c: true when a PENDING ASSIGN_PROCESS request targets this process (ProcessService.archive refuses then). Optional (fakes). */
   hasPendingAssignment?(tenantId: string, processId: string): Promise<boolean>;
   /** B-6c: requester's retraction of a PENDING ASSIGN_PROCESS request (nothing written on the process). Optional (fakes). */

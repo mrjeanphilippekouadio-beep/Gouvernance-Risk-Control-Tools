@@ -789,8 +789,14 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     return (rowCount ?? 0) > 0;
   }
 
-  async decideAssignment(tenantId: string, requestId: string, d: RecordDecisionInput & { approverRule: ChangeApprover }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult> {
+  async decideAssignment(tenantId: string, requestId: string, d: RecordDecisionInput & { approverRule: ChangeApprover; soleRiskManager?: boolean }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult> {
     return this.tx(async (c) => {
+      if (d.soleRiskManager) {
+        // q252 A: same tenant lock as the bootstrap and the 062 trigger, taken before the request lock (same order):
+        // a second Risk Manager being assigned waits for us, or is already counted below.
+        const tenant = await c.query(`SELECT id FROM tenants WHERE id = $1 FOR NO KEY UPDATE`, [tenantId]);
+        if (tenant.rows.length === 0) throw new NotFoundError("Tenant", tenantId);
+      }
       const locked = await c.query<RequestRow>(
         `SELECT * FROM risk_framework_change_requests WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
         [tenantId, requestId],
@@ -799,6 +805,13 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
       if (!req) throw new NotFoundError("RiskFrameworkChangeRequest", requestId);
       if (req.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${req.status})`);
       if (req.kind !== "ASSIGN_PROCESS" || !req.process_id) throw new ValidationError(`Request kind ${req.kind} is not an assignment`);
+      if (d.soleRiskManager) {
+        if (req.requested_by !== d.decidedBy) throw new ValidationError("La confirmation ne peut être faite que par le demandeur");
+        const facts = await this.readBootstrapFacts(c, tenantId, req.requested_by);
+        if (!facts.requesterIsActiveRiskManager || facts.activeMembers.RISK_MANAGER !== 1) {
+          throw new ConflictError("Un autre Risk Manager peut désormais valider cette demande : un tiers doit la décider");
+        }
+      }
 
       // The rule that authorised the decider is the one of the ACTIVE version of the Dispositif of arrival: re-read
       // under a share lock (an activation archives it, which needs the exclusive lock, so it waits for us).

@@ -55,6 +55,8 @@ const MAX_NAME = 120;
 const MAX_DESCRIPTION = 1000;
 const MAX_REASON = 500;
 const MAX_COMMENT = 1000;
+/** Journal marker (audit_log.governance_exception) of a q252 A confirmation: shown in the governance health panel. */
+export const SOLE_RM_EXCEPTION = "riskFramework.soleRiskManager";
 const MAX_APPETITE_ENTRIES = 200;
 const MAX_LABEL = 200;
 
@@ -597,7 +599,8 @@ export class RiskFrameworkService {
     if (eligible.RISK_MANAGER.length === 0) {
       // q75: nobody can decide — never a tacit validation, never by the administrator.
       await this.notify(actor, all.RISK_MANAGER, request.id, "RISK_FRAMEWORK_NO_DECIDER",
-        "Une demande de rattachement de processus à un Dispositif ne peut être décidée par personne : aucun Risk Manager éligible.", requestId);
+        "Une demande de rattachement de processus à un Dispositif ne peut être décidée par personne : aucun Risk Manager éligible."
+        + " Si vous êtes le seul Risk Manager, le demandeur peut la confirmer lui-même, avec un motif.", requestId);
     } else {
       await this.notify(actor, await this.holders(actor, "riskframework.activate"), frameworkId, "RISK_FRAMEWORK_CHANGE_PENDING",
         "Une demande de rattachement de processus à un Dispositif attend votre décision.", requestId, true);
@@ -661,6 +664,63 @@ export class RiskFrameworkService {
     await this.notify(actor, noticeTo, request.id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE",
       fallback ? "Un rattachement de processus à un Dispositif a été décidé en repli par un Risk Manager (ratification à venir)."
         : "Un rattachement de processus à un Dispositif a été décidé par un Risk Manager.", requestId);
+    return result;
+  }
+
+  /**
+   * q252 A (DECISION-121): the requester is the ONLY Risk Manager able to validate (nobody else eligible), so the
+   * request would stay in NO_DECIDER for ever. They confirm it a second time, with a motive; the attachment then
+   * applies to the evaluations created from now on. Traced (Process UPDATE + request APPROVE, both marked as a
+   * governance exception, hence shown in the health panel), Audit and Committee told if they exist. The rule stops
+   * by itself: with a second active Risk Manager (service check, replayed under the tenant lock) a third party decides.
+   */
+  async confirmSoleAssignment(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { reason: string },
+    requestId: string,
+  ): Promise<AssignmentResult> {
+    requirePermission(actor, "riskframework.process.assign");
+    requirePermission(actor, "riskframework.activate");
+    await this.assertRiskManager(actor);
+    const decide = this.frameworks.decideAssignment?.bind(this.frameworks);
+    if (!decide || !this.inTx) throw new ValidationError("Process assignment is not available");
+    const request = await this.getRequestOrThrow(actor.tenantId, id);
+    if (request.kind !== "ASSIGN_PROCESS") throw new ValidationError("La confirmation ne couvre que le rattachement d'un processus");
+    if (request.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${request.status})`);
+    if (request.requestedBy !== actor.userId) throw new ForbiddenError("Seul le demandeur peut confirmer sa propre demande");
+    const reason = cleanText(input.reason, "reason", MAX_COMMENT, true)!;
+    const target = await this.getFrameworkOrThrow(actor.tenantId, request.frameworkId);
+    const active = await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId);
+    if (target.archivedAt || !active) throw new ValidationError("Le Dispositif d'arrivée n'a plus de version active : la demande ne peut être confirmée");
+    const approverRule = active.changeApprover;
+    const { eligible } = await this.resolveExcluding(actor.tenantId, new Set([actor.userId]), approverRule);
+    if (eligible.RISK_MANAGER.length > 0) {
+      throw new ConflictError("Un autre Risk Manager peut valider cette demande : un tiers doit la décider");
+    }
+
+    const events = (r: AssignmentResult): AuditInput[] => [
+      this.event(actor, "Process", r.processId, "UPDATE",
+        { riskFrameworkId: r.previousFrameworkId },
+        { riskFrameworkId: r.frameworkId, requestId: request.id, decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" },
+        reason, requestId, SOLE_RM_EXCEPTION),
+      this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, reason, requestId, SOLE_RM_EXCEPTION),
+    ];
+    const result = await decide(actor.tenantId, request.id, {
+      outcome: "APPROVED",
+      decidedBy: actor.userId,
+      comment: reason,
+      decisionRegime: "SOLE_RM",
+      deciderGroup: "RISK_MANAGER",
+      ratificationStatus: null,
+      fallbackCause: null,
+      approverRule,
+      soleRiskManager: true,
+    }, events);
+
+    await this.notify(actor, await this.membersOf(actor.tenantId, ["AUDIT", "COMMITTEE"]), request.id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE",
+      "Un rattachement de processus à un Dispositif a été confirmé par le seul Risk Manager du tenant (second avis impossible). "
+      + "Il s'applique aux évaluations créées à partir de maintenant. Détail : consultation des décisions SOLE_RM.", requestId);
     return result;
   }
 
@@ -1031,8 +1091,9 @@ export class RiskFrameworkService {
     newValue: unknown,
     reason: string | null,
     requestId: string,
+    governanceException?: string,
   ): AuditInput {
-    return { tenantId: actor.tenantId, userId: actor.userId, entityType, entityId, action, oldValue, newValue, reason, requestId };
+    return { tenantId: actor.tenantId, userId: actor.userId, entityType, entityId, action, oldValue, newValue, reason, requestId, ...(governanceException ? { governanceException } : {}) };
   }
 
   private async record(

@@ -115,7 +115,8 @@ export function withMasteryIndependence<V extends { masteryAuthoritativeSource: 
 
 export type ChangeRequestKind = "ACTIVATE_VERSION" | "ASSIGN_PROCESS" | "SET_DEFAULT";
 export type ChangeRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
-export type DecisionRegime = "NORMAL" | "FALLBACK" | "BOOTSTRAP";
+/** SOLE_RM (q252 A): the sole active Risk Manager confirmed their own ASSIGN_PROCESS request. */
+export type DecisionRegime = "NORMAL" | "FALLBACK" | "BOOTSTRAP" | "SOLE_RM";
 
 export interface RiskFrameworkChangeRequest {
   id: string;

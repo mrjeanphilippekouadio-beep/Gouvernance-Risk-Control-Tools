@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
  *    The test leaves the database in the full 071 state.
  */
 const DIR = join(__dirname, "..", "..", "database", "postgresql", "migrations");
-const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "079", "080", "081", "082", "083", "084", "085", "086", "087", "088"] as const;
+const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "079", "080", "081", "082", "083", "084", "085", "086", "087", "088", "089"] as const;
 const up = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && !f.endsWith(".down.sql"))!;
 const down = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && f.endsWith(".down.sql"))!;
 const read = (f: string) => readFileSync(join(DIR, f), "utf8");
@@ -35,7 +35,9 @@ describe("QA-panel migrations 066-071 (static)", () => {
       const sql = stripComments(read(up(n)));
       expect(sql, up(n)).not.toMatch(/\bDELETE\s+FROM\b/i);
       expect(sql, up(n)).not.toMatch(/^\s*TRUNCATE\b/im);
-      expect(sql, up(n)).not.toMatch(/\bDROP\s+(TABLE|COLUMN|INDEX|FUNCTION|CONSTRAINT)\b/i);
+      // DROP CONSTRAINT is allowed only to REPLACE a CHECK in place (089 widens decision_regime / maker-checker): no data is removed.
+      expect(sql, up(n)).not.toMatch(/\bDROP\s+(TABLE|COLUMN|INDEX|FUNCTION)\b/i);
+      if (/\bDROP\s+CONSTRAINT\b/i.test(sql)) expect(sql, up(n)).toMatch(/\bADD\s+CONSTRAINT\b/i);
     }
   });
 

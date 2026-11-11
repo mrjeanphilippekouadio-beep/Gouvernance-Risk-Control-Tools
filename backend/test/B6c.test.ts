@@ -30,7 +30,7 @@ const role = (g: SystemGroup): Role => ({
   systemGroup: g, departmentId: null, createdAt: new Date(), updatedAt: new Date(), deletedAt: null,
 }) as Role;
 
-function setup(opts: { rm?: string[]; targetActive?: boolean } = {}) {
+function setup(opts: { rm?: string[]; targetActive?: boolean; auditMembers?: string[] } = {}) {
   const rm = opts.rm ?? ["u1", "u2", "u3"];
   const fw = (id: string): RiskFramework => ({ id, tenantId: "t1", name: id, description: null, isDefault: id === "fwDefault", createdBy: "u1",
     createdAt: new Date(), updatedAt: new Date(), archivedAt: null, archivedBy: null, archiveReason: null }) as RiskFramework;
@@ -78,12 +78,17 @@ function setup(opts: { rm?: string[]; targetActive?: boolean } = {}) {
   const roles = {
     async list() { return [role("RISK_MANAGER"), role("AUDIT"), role("RISK_COMMITTEE")]; },
     async listForUser(_t: string, uid: string) { return rm.includes(uid) ? [role("RISK_MANAGER")] : []; },
-    async listAssignments(_t: string, roleId: string) { return roleId === "RISK_MANAGER" ? rm.map((userId) => ({ userId, revokedAt: null })) : []; },
+    async listAssignments(_t: string, roleId: string) {
+      const ids = roleId === "RISK_MANAGER" ? rm : roleId === "AUDIT" ? (opts.auditMembers ?? []) : [];
+      return ids.map((userId) => ({ userId, revokedAt: null }));
+    },
     async listActiveGrants() { return []; },
   };
   const users = { async getById(_t: string, id: string) { return { id, deletedAt: null }; }, async listWithPermission() { return []; } };
-  const service = new RiskFrameworkService(repo as never, {} as never, roles as never, users as never, { async record() { /* unused */ }, async listForEntity() { return []; } } as never);
-  return { service, attached, requests, audit, repo };
+  const notified: Array<{ recipientUserId: string; eventType: string }> = [];
+  const notifications = { async record(n: { recipientUserId: string; eventType: string }) { notified.push(n); } };
+  const service = new RiskFrameworkService(repo as never, {} as never, roles as never, users as never, { async record() { /* unused */ }, async listForEntity() { return []; } } as never, undefined, notifications as never);
+  return { service, attached, requests, audit, repo, notified };
 }
 
 describe("B-6c request a process assignment (q89)", () => {
@@ -293,5 +298,61 @@ describe("B-6c inter-Dispositif ceiling (I-C1) and wiring", () => {
     const src = readFileSync("src/api/v1/riskFrameworks.routes.ts", "utf8");
     expect(src).toMatch(/AssignBody = z\.object\(\{ processId: Id, reason: Reason \}\)\.strict\(\)/);
     expect(src).toMatch(/\/:id\/process-assignments/);
+  });
+});
+
+describe("q252 A (DECISION-121): the sole Risk Manager confirms their own process attachment", () => {
+  const ask = (s: ReturnType<typeof setup>) => s.service.requestProcessAssignment(actor("u1"), "fwB", { processId: "p1", reason: "Motif de la demande" }, "r1");
+
+  it("happy path: applied (next evaluations), marked as a governance exception, motive audited, Audit told", async () => {
+    const s = setup({ rm: ["u1"], auditMembers: ["a1"] });
+    const r = await ask(s);
+    const out = await s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "Seul Risk Manager du tenant" }, "r2");
+    expect(out.request).toMatchObject({ status: "APPROVED", decidedBy: "u1", decisionRegime: "SOLE_RM" });
+    expect(s.attached.get("p1")).toBe("fwB");
+    const p = s.audit.find((e) => e["entityType"] === "Process")!;
+    expect(p).toMatchObject({ userId: "u1", reason: "Seul Risk Manager du tenant", governanceException: "riskFramework.soleRiskManager" });
+    expect(p["newValue"]).toMatchObject({ decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" });
+    expect(s.audit.find((e) => e["action"] === "APPROVE")).toMatchObject({ governanceException: "riskFramework.soleRiskManager" });
+    expect(s.notified.filter((n) => n.eventType === "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE").map((n) => n.recipientUserId)).toEqual(["a1"]);
+  });
+
+  it("no Audit/Committee member: nobody notified, the confirmation still goes through", async () => {
+    const s = setup({ rm: ["u1"] });
+    const r = await ask(s);
+    await s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "ok" }, "r2");
+    expect(s.notified.filter((n) => n.eventType === "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE")).toHaveLength(0);
+  });
+
+  it("the rule stops by itself: with a second Risk Manager a third party must decide (409), nothing written", async () => {
+    const s = setup({ rm: ["u1", "u2"] });
+    const r = await ask(s);
+    await expect(s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "ok" }, "r2")).rejects.toThrow(ConflictError);
+    expect(s.attached.get("p1")).toBeNull();
+  });
+
+  it("the motive is mandatory, only the requester confirms, permission and membership are required", async () => {
+    const s = setup({ rm: ["u1"] });
+    const r = await ask(s);
+    await expect(s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "  " }, "r2")).rejects.toThrow(ValidationError);
+    await expect(s.service.confirmSoleAssignment(actor("u1", ["riskframework.read", "riskframework.activate"]), r.id, { reason: "ok" }, "r2")).rejects.toThrow(ForbiddenError);
+    await expect(s.service.confirmSoleAssignment(actor("admin"), r.id, { reason: "ok" }, "r2")).rejects.toThrow(ForbiddenError);
+    expect(s.attached.get("p1")).toBeNull();
+  });
+
+  it("an already decided request cannot be confirmed again", async () => {
+    const s = setup({ rm: ["u1"] });
+    const r = await ask(s);
+    await s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "ok" }, "r2");
+    await expect(s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "ok" }, "r3")).rejects.toThrow(ConflictError);
+  });
+
+  it("the repository replays the condition under the tenant lock (static check of the SQL path) and 089 widens the CHECKs", () => {
+    const src = readFileSync("src/infrastructure/database/postgres/PostgresRiskFrameworkRepository.ts", "utf8");
+    expect(src).toMatch(/if \(d\.soleRiskManager\) \{\s*\/\/ q252 A[\s\S]*FOR NO KEY UPDATE/);
+    expect(src).toMatch(/activeMembers\.RISK_MANAGER !== 1/);
+    const sql = readFileSync("../database/postgresql/migrations/089_sole_risk_manager_assignment.sql", "utf8");
+    expect(sql).toMatch(/'NORMAL', 'FALLBACK', 'BOOTSTRAP', 'SOLE_RM'/);
+    expect(sql).toMatch(/decision_regime IN \('BOOTSTRAP', 'SOLE_RM'\)/);
   });
 });
