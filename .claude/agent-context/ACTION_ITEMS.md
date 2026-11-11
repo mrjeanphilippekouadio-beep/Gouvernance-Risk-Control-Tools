@@ -499,7 +499,7 @@ pour l'usage.
 | @security @dev-backend | **F8-GAP-1** — désactivation d'un client (`PATCH /tenants/:id {active:false}`) sous `config.manage`, sans motif ni permission dédiée : transition terminale (règle SEC-013/014). Non exposée à l'écran F8 ; revue A10 en cours (SEC-F8). | 2026-11-11 | **Confirmé** (SEC-F8-02, `docs/security/SEC-f8-mise-en-service-2026-11-11.md` sur `sec/f8`) — décision PO en q261 |
 | @product-manager @dev-backend | **F8-GAP-2** — l'import Excel ne couvre que les risques (aucune API pour évidences, KRI, contrôles ; pas de gabarit téléchargeable). q165 dit « import Excel » sans préciser : à confirmer après QA/Sécurité F8 (question PO si l'élargissement est voulu en R1). | 2026-11-11 | Ouvert |
 | @dev-backend @dev-frontend | **F8-GAP-3** — logo : `GET /branding` renvoie une URL Drive, affichée en lien ; pas d'endpoint vérifié pour l'afficher en image. Non bloquant. | 2026-11-11 | Ouvert |
-| HUMAN @risk-manager @dev-backend | **q259 (cockpit)** — B-13 : valeurs de départ des Dispositifs Prudent / Standard / Léger (`docs/risk/A13-dispositifs-par-defaut-B13-2026-11-11.md`) et Standard comme défaut à la mise en service (A, reco A13), ajuster (B), autre (C). Bloque B-13. | 2026-11-11 | **Ouvert — HUMAN** |
+| HUMAN @risk-manager @dev-backend | **q259 (cockpit)** — B-13 : valeurs de départ des Dispositifs Prudent / Standard / Léger (`docs/risk/A13-dispositifs-par-defaut-B13-2026-11-11.md`) et Standard comme défaut à la mise en service (A, reco A13), ajuster (B), autre (C). Bloque B-13. | 2026-11-11 | **Décidé** (DECISION-124) — valeurs A13 et Standard par défaut validés ; libellés à revoir (4x4 ne doit pas s'appeler « Léger », 6x6 sans libellé) : proposition A13 en cours |
 | HUMAN @security @dev-backend @architect | **q260 (cockpit)** — SEC-F8-01 (MEDIUM 5,5, PoC) : `TenantService` lit/modifie tous les clients sous `config.manage`, droit local d'un client. Super-administrateur = liste d'e-mails en variable d'environnement (A, reco), client opérateur (B), pas d'écran Clients en R1 (C). Bloque l'écran Clients. | 2026-11-11 | **Ouvert — HUMAN** |
 | HUMAN @security @dev-backend | **q261 (cockpit)** — SEC-F8-02/03 : désactivation d'un client sans motif ni droit dédié, et sans effet (`tenants.active` jamais lu) ; chaîne 8,2 HIGH avec SEC-F8-01 dès qu'elle aura un effet. Droit dédié + motif + coupe sessions + réactivation à deux (A, reco) ou connexion seule (B). | 2026-11-11 | **Ouvert — HUMAN** |
 | HUMAN @security @dev-backend | **q262 (cockpit)** — SEC-F8-04 (LOW) : logo, type MIME non vérifié et SVG accepté. Retirer le SVG + vérifier le contenu (A, reco) ou nettoyer le SVG (B). | 2026-11-11 | **Ouvert — HUMAN** |
@@ -2869,3 +2869,22 @@ RELATED: q225, q253, q254, q258, DECISION-121.
 OWNER: @orchestrator
 STATUS: FAIT — suite : B-6c (#240) réaligné sur 087/088 par A06, puis q252/q257 ;
   q253 petit lot à lancer.
+
+DECISION-124
+DATE: 2026-11-11 (cockpit q259, réponse 14:35 UTC, journalisée 16:23)
+DECISION (PO, réponse libre, `decision = other`), texte du PO : « valider les
+  valeurs proposées par le Risk Manager et Standard comme Dispositif par défaut
+  à la mise en service cependant 4*4 n'est ne doit pas etre de label "leger"
+  vu que celui ci est moins sujet au biais du milieu , 5*5 c'est le classique ,
+  pour 6*6 j'ai pas une idée de label ».
+  Interprétation orchestrateur, à confirmer par A13 : (1) les valeurs de
+  `docs/risk/A13-dispositifs-par-defaut-B13-2026-11-11.md` sont validées, et
+  Standard (5x5, « le classique ») est le Dispositif par défaut à la mise en
+  service ; (2) l'échelle 4x4 ne doit pas porter le libellé « Léger » : une
+  échelle paire évite le choix central, ce n'est pas un profil allégé ;
+  (3) libellés du 4x4 et du 6x6 à proposer par A13, puis à valider par le PO.
+RELATED: q259, B-13, DECISION-118.
+OWNER: @orchestrator @risk-manager @dev-backend
+STATUS: DÉCIDÉ — valeurs et défaut ; libellés : proposition A13 en cours.
+  Retard de journalisation : la réponse n'a pas été relue avant les messages
+  au PO de 14:40 à 15:10 (règle DECISION-045 non appliquée).
