@@ -514,7 +514,7 @@ pour l'usage.
 | HUMAN @architect @privacy | **q271 (cockpit)** — conservation (A05 Q-3) : motifs de test du journal de staging laissés en clair si staging n'a que des données de test (A, reco) ou traités comme q270 B (B). Bloque L2a. | 2026-11-11 | **Fermé** (DECISION-129) — A : staging = données de test |
 | HUMAN @security @privacy @dev-backend | **q272 (cockpit)** — q251, SEC-q251-01 (LOW 2,4) / PRIV Q-251-2 : renommage invisible dans le journal. Drapeau « nom modifié » sans valeur + « nom actuel » à la lecture (A, reco A10 et A15) ou tel quel (B). Bloque la PR q251. | 2026-11-11 | **Décidé** (DECISION-130) — A : « nom modifié » sans valeur, « nom actuel » à la lecture |
 | HUMAN @security @privacy @dev-backend | **q273 (cockpit)** — q251, SEC-q251-02 / PRIV Q-251-1 : `Department.manager`/`riskOwner`, `Process.owner`, `Kpi.owner`, `Control.executor` (texte libre ; QA-Q251-01 MAJOR, QA PARTIAL_PASS `qa/q251` 24c3631) recopiés dans le journal. Les inclure dans q251, changement noté sans valeur (A, reco A10 et A15) ou les citer dans R5 (B). Bloque la PR q251. | 2026-11-11 | **Décidé** (DECISION-130) — A : 4 champs libres inclus, changement noté sans valeur |
-| HUMAN @security @dev-backend | **q274 (cockpit)** — SEC-q251-04 (INFO) : `Control.validator` (texte libre « Validateur ») encore recopié dans le journal, absent de la liste q273. Le traiter comme `executor` (A, reco) ou le laisser, champ de rôle (B). Retest A10 q251 v2 : RETEST_PASS SEC-q251-01/02/03 (`sec/q251` 9f21b68). Bloque la PR q251. | 2026-11-11 | **Ouvert — HUMAN** |
+| HUMAN @security @dev-backend | **q274 (cockpit)** — SEC-q251-04 (INFO) : `Control.validator` (texte libre « Validateur ») encore recopié dans le journal, absent de la liste q273. Le traiter comme `executor` (A, reco) ou le laisser, champ de rôle (B). Retest A10 q251 v2 : RETEST_PASS SEC-q251-01/02/03 (`sec/q251` 9f21b68). Bloque la PR q251. | 2026-11-11 | **Fermé** (DECISION-131) — B : `Control.validator` laissé tel quel (champ de rôle) |
 | HUMAN @devops | **`SUPER_ADMIN_EMAILS`** (F8-bis, q260) — à définir dans l'environnement de chaque déploiement (Render) ; l'adresse doit correspondre à un compte `users` existant. Le PO indique quelle(s) adresse(s) au moment du déploiement. | 2026-11-11 | Ouvert (avant merge/déploiement F8-bis) |
 | @dev-db | **F8-bis non atomique** — unicité du nom de client et détection d'un import déjà fait non atomiques (deux requêtes simultanées passent) ; un index unique / une table d'empreintes demanderait une migration (après B-13). Mesure QA en cours. | 2026-11-11 | Ouvert |
 | @privacy | **PRIV Q-251-3** (motifs libres dans le journal) — paraît couvert par q246 A (motifs rangés à part et effacés à l'échéance, lots L2a/L2b) : A15 à confirmer avant toute question au PO. | 2026-11-11 | Ouvert |
@@ -2980,3 +2980,13 @@ DECISION (PO) — suites de q251 : (1) q272 A — la ligne note « nom modifié 
 RELATED: q251, SEC-q251-01/02, PRIV Q-251-1/2, QA-Q251-01.
 OWNER: @orchestrator @dev-backend
 STATUS: DÉCIDÉ — correctif q251 à construire, puis retest QA.
+
+DECISION-131
+DATE: 2026-11-11 (cockpit q274, réponse 17:55 UTC)
+DECISION (PO) : q274 B (reco A non retenue ; champ `decision = other` mais texte
+  identique à l'option B) — `Control.validator` est laissé tel quel dans le
+  journal : ce champ porte un rôle, pas une personne. `Control.executor` reste
+  traité comme décidé en q273 A.
+RELATED: q251, q273, SEC-q251-04, DECISION-130.
+OWNER: @orchestrator
+STATUS: FERMÉ — q251 complet, PR à ouvrir.
