@@ -24,9 +24,11 @@ const require = createRequire("/opt/node-tools/node_modules/");
 const { chromium } = require("playwright");
 const API = process.env.QA_API ?? "http://127.0.0.1:8094";
 const APP = process.env.QA_APP ?? "http://127.0.0.1:5198";
-const SHOTS = process.env.QA_SHOTS ?? "/tmp/claude-0/-home-user-Gouvernance-Risk-Control-Tools/03264995-7a01-58d7-b97b-f2cec283bcf0/scratchpad/shots";
+const SHOTS = process.env.QA_SHOTS ?? "qa-shots/b6c";
 mkdirSync(SHOTS, { recursive: true });
-const PG = ["-h", "127.0.0.1", "-p", "55442", "-U", "postgres", "-d", process.env.QA_DB ?? "grc_qa_b6c", "-Atq"];
+const QA_DB = process.env.QA_DB ?? "grc_qa_b6c";
+if (!/^[a-z0-9_]+$/.test(QA_DB)) { console.error("QA_DB invalide (a-z, 0-9, _ seulement)"); process.exit(2); }
+const PG = ["-h", "127.0.0.1", "-p", "55442", "-U", "postgres", "-d", QA_DB, "-Atq"];
 const sql = (q) => execFileSync("/usr/bin/psql", [...PG, "-c", q], { encoding: "utf8" }).trim();
 const T = "aaaaaaaa-0000-4000-8000-000000000001";
 const TC = "dddddddd-0000-4000-8000-000000000001";
@@ -163,7 +165,7 @@ try {
   await rm1.page.locator("dialog[open] button:has-text('Oui, confirmer seul')").click();
   await sleep(1500);
   d = await dialogText(rm1);
-  check("P4.1 409 affiche dans la fenetre (« Un autre Risk Manager peut valider »)", /Un autre Risk Manager peut valider/.test(d) && (await rm1.page.locator("dialog[open]").count()) === 1, d.slice(0, 300));
+  check("P4.1 409 affiche dans la fenetre (« Un autre Risk Manager peut valider »)", /(Un autre Risk Manager peut valider|n.était pas le seul Risk Manager au moment de la demande).*un tiers doit la décider/.test(d) && (await rm1.page.locator("dialog[open]").count()) === 1, d.slice(0, 300));
   check("P4.2 base : demande PENDING, processus non rattache", sql(`select status from risk_framework_change_requests where id = '${rq.json.data.id}'`) === "PENDING" && sql(`select coalesce(risk_framework_id::text,'null') from processes where id = '${pT}'`) === "null");
   await rm1.shot("p4-409");
 
