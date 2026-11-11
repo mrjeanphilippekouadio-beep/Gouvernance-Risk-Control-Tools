@@ -820,6 +820,31 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     return (rowCount ?? 0) > 0;
   }
 
+  /**
+   * Shared by decideAssignment / decideDefault, inside the transaction and after the request lock: the rule that authorised
+   * the decider is the one of the ACTIVE version of the target, re-read under a share lock (an activation archives it,
+   * which needs the exclusive lock, so it waits for us); then the decision is written on the request.
+   */
+  private async decideUnderRule(
+    c: PoolClient, tenantId: string, requestId: string, frameworkId: string,
+    d: RecordDecisionInput & { approverRule: ChangeApprover }, changedMessage: string,
+  ): Promise<RiskFrameworkChangeRequest> {
+    const live = await c.query<{ change_approver: ChangeApprover }>(
+      `SELECT change_approver FROM risk_framework_versions
+       WHERE tenant_id = $1 AND framework_id = $2 AND status = 'ACTIVE' FOR SHARE`,
+      [tenantId, frameworkId],
+    );
+    if ((live.rows[0]?.change_approver ?? "RISK_MANAGER") !== d.approverRule) throw new ConflictError(changedMessage);
+    const decided = await c.query<RequestRow>(
+      `UPDATE risk_framework_change_requests
+       SET status = $3, decided_by = $4, decided_at = now(), decision_comment = $5,
+           decision_regime = $6, decider_group = $7, ratification_status = $8, fallback_cause = $9
+       WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+      [tenantId, requestId, d.outcome, d.decidedBy, d.comment, d.decisionRegime, d.deciderGroup, d.ratificationStatus, d.fallbackCause ?? null],
+    );
+    return requestOf(decided.rows[0]!);
+  }
+
   async decideAssignment(tenantId: string, requestId: string, d: RecordDecisionInput & { approverRule: ChangeApprover; soleRiskManager?: boolean }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult> {
     return this.tx(async (c) => {
       if (d.soleRiskManager) {
@@ -848,22 +873,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
 
       // The rule that authorised the decider is the one of the ACTIVE version of the Dispositif of arrival: re-read
       // under a share lock (an activation archives it, which needs the exclusive lock, so it waits for us).
-      const live = await c.query<{ change_approver: ChangeApprover }>(
-        `SELECT change_approver FROM risk_framework_versions
-         WHERE tenant_id = $1 AND framework_id = $2 AND status = 'ACTIVE' FOR SHARE`,
-        [tenantId, req.framework_id],
-      );
-      if ((live.rows[0]?.change_approver ?? "RISK_MANAGER") !== d.approverRule) {
-        throw new ConflictError("La règle d'approbation du Dispositif d'arrivée a changé depuis le début de votre décision : rejouez-la");
-      }
-      const decided = await c.query<RequestRow>(
-        `UPDATE risk_framework_change_requests
-         SET status = $3, decided_by = $4, decided_at = now(), decision_comment = $5,
-             decision_regime = $6, decider_group = $7, ratification_status = $8, fallback_cause = $9
-         WHERE tenant_id = $1 AND id = $2 RETURNING *`,
-        [tenantId, requestId, d.outcome, d.decidedBy, d.comment, d.decisionRegime, d.deciderGroup, d.ratificationStatus, d.fallbackCause ?? null],
-      );
-      const request = requestOf(decided.rows[0]!);
+      const request = await this.decideUnderRule(c, tenantId, requestId, req.framework_id, d, "La règle d'approbation du Dispositif d'arrivée a changé depuis le début de votre décision : rejouez-la");
       const processId = req.process_id;
       if (d.outcome === "REJECTED") {
         // A refusal never needs the process or the target to still be usable; nothing is written on the process.
@@ -948,22 +958,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     return this.tx(async (c) => {
       const req = await this.lockPendingDefault(c, tenantId, requestId);
       // The rule that authorised the decider is the one of the ACTIVE version of the target (spec 5.2), replayed under lock.
-      const live = await c.query<{ change_approver: ChangeApprover }>(
-        `SELECT change_approver FROM risk_framework_versions
-         WHERE tenant_id = $1 AND framework_id = $2 AND status = 'ACTIVE' FOR SHARE`,
-        [tenantId, req.framework_id],
-      );
-      if ((live.rows[0]?.change_approver ?? "RISK_MANAGER") !== d.approverRule) {
-        throw new ConflictError("La règle d'approbation du Dispositif a changé depuis le début de votre décision : rejouez-la");
-      }
-      const decided = await c.query<RequestRow>(
-        `UPDATE risk_framework_change_requests
-         SET status = $3, decided_by = $4, decided_at = now(), decision_comment = $5,
-             decision_regime = $6, decider_group = $7, ratification_status = $8, fallback_cause = $9
-         WHERE tenant_id = $1 AND id = $2 RETURNING *`,
-        [tenantId, requestId, d.outcome, d.decidedBy, d.comment, d.decisionRegime, d.deciderGroup, d.ratificationStatus, d.fallbackCause ?? null],
-      );
-      const request = requestOf(decided.rows[0]!);
+      const request = await this.decideUnderRule(c, tenantId, requestId, req.framework_id, d, "La règle d'approbation du Dispositif a changé depuis le début de votre décision : rejouez-la");
       if (d.outcome === "REJECTED") return this.audited(c, { request, previousDefault: null, framework: null }, audit);
 
       // The target may have been archived or lost its ACTIVE version since the request: replayed under lock.

@@ -608,3 +608,8 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - QA-B13.test.ts (A08) : B-int1 à B-int3 et B3 réécrits (plus aucune échelle orpheline ; 1 audit d'échelle). Piège : cette suite live (`QA_B13_LIVE=1`) alterne vert/rouge d'un lancement à l'autre (D7/D8 : « échelle archivée ») avec ou sans mes changements, état non nettoyé entre deux lancements ; relancer après quelques secondes. Le cluster `grcdev` démarre tout seul via le script de la suite.
 - Front : l'écran de version résout déjà le nom via `GET /rating-scales` ; l'API Dispositif ne fournit que `ratingScaleId`, donc l'UUID s'affiche quand la liste des grilles est illisible pour l'utilisateur. Non modifié.
 - Outillage : le harnais refuse `cd ... && ...` avec heredoc ; script Python écrit par Write puis lancé seul, ou Edit.
+
+## 2026-11-11 B-13 Sonar duplication (PR #249, 3,5 % > 3 %)
+
+- Factorisé sans changement de comportement : service `prepareDecision` / `decisionInput` / `notifyDecided` (partagés par decideAssignment et decideSetDefault ; messages passés en paramètre), dépôt `decideUnderRule` (relecture de la règle sous FOR SHARE + UPDATE de la décision, message de conflit en paramètre). Fichier de test QA-B13 non touché (29 lignes restent, ~1 % seul).
+- Sonar : `GET /api/duplications/show?key=<projet>:<fichier>&pullRequest=N` donne les blocs (from, size). `npm ci` dans backend/ requis dans un worktree frais. Heredoc + commande composée refusés : script via Write.

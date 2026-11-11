@@ -11,6 +11,7 @@ import {
   DEFAULT_CONTRACT_PARAMS,
   type AppetiteThresholdEntry,
   ApproverGroup,
+  type RecordDecisionInput,
   type AssignmentResult,
   type BootstrapDeclaration,
   type BootstrapJustification,
@@ -641,17 +642,8 @@ export class RiskFrameworkService {
   ): Promise<AssignmentResult> {
     const decide = this.frameworks.decideAssignment?.bind(this.frameworks);
     if (!decide || !this.inTx) throw new ValidationError("Process assignment is not available");
-    const target = await this.getFrameworkOrThrow(actor.tenantId, request.frameworkId);
-    const active = await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId);
-    if (outcome === "APPROVED" && (target.archivedAt || !active)) {
-      throw new ValidationError("Le Dispositif d'arrivée n'a plus de version active : la demande ne peut être approuvée");
-    }
-    // q89: the rule of the Dispositif of arrival (its ACTIVE version); the requester is the only excluded person.
-    // The repository re-reads that rule under lock and refuses (409) if it changed since: `approverRule`.
-    const approverRule = active?.changeApprover ?? "RISK_MANAGER";
-    const { decider, fallbackCause, bypassedGroups } = await this.resolveExcluding(actor.tenantId, new Set([request.requestedBy]), approverRule);
-    const fallback = decider.regime === "FALLBACK";
-    const cleanComment = cleanText(comment, "comment", MAX_COMMENT, outcome === "REJECTED" || fallback);
+    const { approverRule, decider, fallback, fallbackCause, bypassedGroups, cleanComment } = await this.prepareDecision(
+      actor, request, outcome, comment, "Le Dispositif d'arrivée n'a plus de version active : la demande ne peut être approuvée");
 
     const events = (r: AssignmentResult): AuditInput[] => outcome === "APPROVED"
       ? [
@@ -664,26 +656,14 @@ export class RiskFrameworkService {
         ]
       : [this.event(actor, "RiskFrameworkChangeRequest", request.id, "REJECT", request, r.request, cleanComment, requestId)];
 
-    const result = await decide(actor.tenantId, request.id, {
-      outcome,
-      decidedBy: actor.userId,
-      comment: cleanComment,
-      decisionRegime: decider.regime,
-      deciderGroup: "RISK_MANAGER",
-      ratificationStatus: fallback ? "PENDING" : null,
-      fallbackCause,
-      approverRule,
-    }, events);
-
-    await this.notify(actor, [request.requestedBy], request.id, "RISK_FRAMEWORK_CHANGE_DECIDED",
-      outcome === "APPROVED"
-        ? "Votre demande de rattachement de processus a été approuvée : elle s'applique aux évaluations créées à partir de maintenant."
-        : "Votre demande de rattachement de processus a été refusée.", requestId);
-    // q34 / q56 / q100: same notice as an activation decided by a Risk Manager.
-    const noticeTo = [...(await this.holders(actor, "audit.read")), ...(await this.membersOf(actor.tenantId, bypassedGroups))];
-    await this.notify(actor, noticeTo, request.id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE",
-      fallback ? "Un rattachement de processus à un Dispositif a été décidé en repli par un Risk Manager (ratification à venir)."
-        : "Un rattachement de processus à un Dispositif a été décidé par un Risk Manager.", requestId);
+    const result = await decide(actor.tenantId, request.id, this.decisionInput(actor, outcome, cleanComment, decider, fallback, fallbackCause, approverRule), events);
+    await this.notifyDecided(actor, request, outcome, fallback, bypassedGroups, requestId, {
+      approved: "Votre demande de rattachement de processus a été approuvée : elle s'applique aux évaluations créées à partir de maintenant.",
+      rejected: "Votre demande de rattachement de processus a été refusée.",
+      // q34 / q56 / q100: same notice as an activation decided by a Risk Manager.
+      fallbackNotice: "Un rattachement de processus à un Dispositif a été décidé en repli par un Risk Manager (ratification à venir).",
+      notice: "Un rattachement de processus à un Dispositif a été décidé par un Risk Manager.",
+    });
     return result;
   }
 
@@ -736,15 +716,8 @@ export class RiskFrameworkService {
   ): Promise<DefaultResult> {
     const decide = this.frameworks.decideDefault?.bind(this.frameworks);
     if (!decide || !this.inTx) throw new ValidationError("Default Dispositif change is not available");
-    const target = await this.getFrameworkOrThrow(actor.tenantId, request.frameworkId);
-    const active = await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId);
-    if (outcome === "APPROVED" && (target.archivedAt || !active)) {
-      throw new ValidationError("Le Dispositif n'a plus de version active : la demande ne peut être approuvée");
-    }
-    const approverRule = active?.changeApprover ?? "RISK_MANAGER";
-    const { decider, fallbackCause, bypassedGroups } = await this.resolveExcluding(actor.tenantId, new Set([request.requestedBy]), approverRule);
-    const fallback = decider.regime === "FALLBACK";
-    const cleanComment = cleanText(comment, "comment", MAX_COMMENT, outcome === "REJECTED" || fallback);
+    const { target, approverRule, decider, fallback, fallbackCause, bypassedGroups, cleanComment } = await this.prepareDecision(
+      actor, request, outcome, comment, "Le Dispositif n'a plus de version active : la demande ne peut être approuvée");
 
     const events = (r: DefaultResult): AuditInput[] => outcome === "APPROVED"
       ? [
@@ -757,26 +730,55 @@ export class RiskFrameworkService {
         ]
       : [this.event(actor, "RiskFrameworkChangeRequest", request.id, "REJECT", request, r.request, cleanComment, requestId)];
 
-    const result = await decide(actor.tenantId, request.id, {
+    const result = await decide(actor.tenantId, request.id, this.decisionInput(actor, outcome, cleanComment, decider, fallback, fallbackCause, approverRule), events);
+    await this.notifyDecided(actor, request, outcome, fallback, bypassedGroups, requestId, {
+      approved: "Votre demande de changement du Dispositif par défaut a été approuvée : elle s'applique aux évaluations créées à partir de maintenant.",
+      rejected: "Votre demande de changement du Dispositif par défaut a été refusée.",
+      fallbackNotice: "Un changement du Dispositif par défaut a été décidé en repli par un Risk Manager (ratification à venir).",
+      notice: "Un changement du Dispositif par défaut a été décidé par un Risk Manager.",
+    });
+    return result;
+  }
+
+  /** Shared by ASSIGN_PROCESS and SET_DEFAULT decisions: target/active checks, approver rule, decider, mandatory comment. */
+  private async prepareDecision(actor: AuthenticatedUser, request: RiskFrameworkChangeRequest, outcome: "APPROVED" | "REJECTED", comment: string | undefined, noActiveMessage: string) {
+    const target = await this.getFrameworkOrThrow(actor.tenantId, request.frameworkId);
+    const active = await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId);
+    if (outcome === "APPROVED" && (target.archivedAt || !active)) throw new ValidationError(noActiveMessage);
+    // q89: the rule of the Dispositif concerned (its ACTIVE version); the requester is the only excluded person.
+    // The repository re-reads that rule under lock and refuses (409) if it changed since: `approverRule`.
+    const approverRule = active?.changeApprover ?? "RISK_MANAGER";
+    const { decider, fallbackCause, bypassedGroups } = await this.resolveExcluding(actor.tenantId, new Set([request.requestedBy]), approverRule);
+    const fallback = decider.regime === "FALLBACK";
+    const cleanComment = cleanText(comment, "comment", MAX_COMMENT, outcome === "REJECTED" || fallback);
+    return { target, approverRule, decider, fallback, fallbackCause, bypassedGroups, cleanComment };
+  }
+
+  private decisionInput(
+    actor: AuthenticatedUser, outcome: "APPROVED" | "REJECTED", comment: string | null,
+    decider: { regime: RecordDecisionInput["decisionRegime"] }, fallback: boolean, fallbackCause: RecordDecisionInput["fallbackCause"], approverRule: ChangeApprover,
+  ) {
+    return {
       outcome,
       decidedBy: actor.userId,
-      comment: cleanComment,
+      comment,
       decisionRegime: decider.regime,
-      deciderGroup: "RISK_MANAGER",
-      ratificationStatus: fallback ? "PENDING" : null,
+      deciderGroup: "RISK_MANAGER" as const,
+      ratificationStatus: fallback ? "PENDING" as const : null,
       fallbackCause,
       approverRule,
-    }, events);
+    };
+  }
 
+  private async notifyDecided(
+    actor: AuthenticatedUser, request: RiskFrameworkChangeRequest, outcome: "APPROVED" | "REJECTED",
+    fallback: boolean, bypassedGroups: ApproverGroup[], requestId: string,
+    text: { approved: string; rejected: string; fallbackNotice: string; notice: string },
+  ): Promise<void> {
     await this.notify(actor, [request.requestedBy], request.id, "RISK_FRAMEWORK_CHANGE_DECIDED",
-      outcome === "APPROVED"
-        ? "Votre demande de changement du Dispositif par défaut a été approuvée : elle s'applique aux évaluations créées à partir de maintenant."
-        : "Votre demande de changement du Dispositif par défaut a été refusée.", requestId);
+      outcome === "APPROVED" ? text.approved : text.rejected, requestId);
     const noticeTo = [...(await this.holders(actor, "audit.read")), ...(await this.membersOf(actor.tenantId, bypassedGroups))];
-    await this.notify(actor, noticeTo, request.id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE",
-      fallback ? "Un changement du Dispositif par défaut a été décidé en repli par un Risk Manager (ratification à venir)."
-        : "Un changement du Dispositif par défaut a été décidé par un Risk Manager.", requestId);
-    return result;
+    await this.notify(actor, noticeTo, request.id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE", fallback ? text.fallbackNotice : text.notice, requestId);
   }
 
   /**
