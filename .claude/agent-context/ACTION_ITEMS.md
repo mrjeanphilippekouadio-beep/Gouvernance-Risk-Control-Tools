@@ -484,18 +484,18 @@ pour l'usage.
 | @dev-backend @security | **Lot V2 visibilité** — `feat/r1-visibility-v2` (migration 083) : QA ORANGE→corrigé (QA-VIS2-01..06, 147/147), Sécurité VERT après retest (V2-01/02/04 corrigés), Compliance conforme avec réserves (CMP-V2-01 corrigé ; CMP-V2-02 → q208). Info A10 : sur contrôle/KPI, périmètre et autres champs en deux transactions ; niveau « restreint » lu avant verrou. | 2026-11-01 | **Fait** — PR #223 fusionnée (65007ad), migrate.yml : 083 appliquée sur staging. Suite : q207/q208 (A06), V3, V4 |
 | HUMAN @dev-backend | **Résidus visibilité V1 (SEC-visibility-v1, retest vert)** : V1-05 LOW (ids de risques masqués dans la vue département, actions en retard de la vue exécutive, contrôles du contexte d'évaluation) et V1-03 (texte des anomalies/plans liés à un risque masqué, compteur d'anomalies de la vue exécutive) — acceptés jusqu'à V2, à corriger dans V2. | 2026-11-01 | **Fermé** — V1-05 corrigé (efa5d8e, PR #222), V1-03 corrigé dans le lot V2 (b649fab) |
 | HUMAN @orchestrator | **q240 (cockpit)** — merger l'écran F5b (PR #237, sans migration) : CI, Sonar, QA, Sécurité verts ; 2 remarques Codex corrigées (5416e00). | 2026-11-08 | **Fermé** (DECISION-119) — PR #237 fusionnée (57591fa), sans migration |
-| HUMAN @orchestrator | **q245 à q251 (cockpit)** — conservation (cadrage A05 + relecture A15 + réponse A14, 08/11) : q245 durée du journal d'audit ; q246 motifs hors journal ; q247 motifs concernés ; q248 point de départ ; q249 réglage de la durée ; q250 nom/e-mail/rôles (q237) ; q251 copies du nom et de l'e-mail dans le journal. H1 vérifiée : `main` s'arrête à 046, aucun motif de visibilité en production. | 2026-11-08 | **Ouvert — HUMAN** |
-| HUMAN (juriste Djamo / DPO) | **Régime réglementaire de Djamo et plancher de conservation de la piste d'audit** (A14 CMP-q217-q237) : l'Instruction BCEAO 017-12-2010 (10 ans) vise les SFD et une piste transactionnelle ; applicabilité à Djamo et à un journal d'accès GRC non établie. Aucune purge de motif ou d'identité avant cet avis. | 2026-11-08 | **Ouvert — HUMAN** |
+| HUMAN @orchestrator | **q245 à q251 (cockpit)** — conservation (cadrage A05 + relecture A15 + réponse A14, 08/11) : q245 durée du journal d'audit ; q246 motifs hors journal ; q247 motifs concernés ; q248 point de départ ; q249 réglage de la durée ; q250 nom/e-mail/rôles (q237) ; q251 copies du nom et de l'e-mail dans le journal. H1 vérifiée : `main` s'arrête à 046, aucun motif de visibilité en production. | 2026-11-08 | **Décidé** (DECISION-120) — q245 réponse libre (10 ans, soft delete activable en SQL), q246 A, q247 A, q248 B, q249 A, q250 A, q251 A ; lots à construire |
+| HUMAN (juriste Djamo / DPO) | **Régime réglementaire de Djamo et plancher de conservation de la piste d'audit** (A14 CMP-q217-q237) : l'Instruction BCEAO 017-12-2010 (10 ans) vise les SFD et une piste transactionnelle ; applicabilité à Djamo et à un journal d'accès GRC non établie. Aucune purge de motif ou d'identité avant cet avis. | 2026-11-08 | **Fermé** (DECISION-120) — PO (q245) : 10 ans, pas besoin de l'avis du juriste ni du DPO |
 | HUMAN (DPO) @privacy | **Texte R5 : ajouter l'e-mail et les copies dans le journal** (A15 C1) — phrase corrigée à soumettre au DPO (sans rouvrir la note D6) ; à faire avec q251. Liste DPO A15 §5 : durée D, durée d'un an et plancher, pseudonymisation, exports et sauvegardes, lignes anciennes. | 2026-11-08 | **Ouvert — HUMAN** |
-| HUMAN @security @risk-manager | **I-RT3-01 — résiduel crash** (A10 SEC-irt3-01) : un crash/SIGKILL entre COMMIT et la réponse perd la notification (la ligne d'audit reste). Décider : accepter formellement le résiduel, ou boîte d'envoi / balayage de rattrapage en R2. Question cockpit à poser à la clôture du lot. | 2026-11-08 | **Ouvert — HUMAN** (cockpit q256) |
-| HUMAN @dev-backend @risk-manager | **q252 (cockpit)** — B-6c avec un seul Risk Manager : la demande de rattachement reste en attente (`NO_DECIDER`), contraire à DECISION-066 ; le régime B-6d ne couvre que `ACTIVATE_VERSION` (CHECK 062). Reco A : seconde confirmation du demandeur avec motif, tracée, signalée, Audit/Comité prévenus, fin automatique dès un 2e RM (migration 088). | 2026-11-08 | **Ouvert — HUMAN** |
-| HUMAN @privacy @dev-backend | **q253, q254 (cockpit)** — lot V5 (revue A15 `docs/privacy/privacy-visibility-v5-2026-11-08.md`, sous conditions) : q253 échéance aussi pour les ajouts nominatifs d'un dossier PERIMETRE (PRIV-V5-02) ; q254 pas de retour d'accès à la réouverture (PRIV-V5-03). Sans PO : PRIV-V5-01 `expiresAt` réservé aux gestionnaires et au propriétaire (à corriger dans V5). | 2026-11-08 | **Ouvert — HUMAN** |
-| HUMAN @orchestrator | **q255 (cockpit)** — merger I-RT3-01 (PR #238, sans migration) : Sécurité verte (2 retests), QA verte (27/27), CI, Sonar, Codex verts. | 2026-11-08 | **Ouvert — HUMAN** |
+| HUMAN @security @risk-manager | **I-RT3-01 — résiduel crash** (A10 SEC-irt3-01) : un crash/SIGKILL entre COMMIT et la réponse perd la notification (la ligne d'audit reste). Décider : accepter formellement le résiduel, ou boîte d'envoi / balayage de rattrapage en R2. Question cockpit à poser à la clôture du lot. | 2026-11-08 | **Fermé** (DECISION-121) — q256 A : résiduel accepté pour R1 ; rattrapage automatique depuis le journal d'audit en R2 |
+| HUMAN @dev-backend @risk-manager | **q252 (cockpit)** — B-6c avec un seul Risk Manager : la demande de rattachement reste en attente (`NO_DECIDER`), contraire à DECISION-066 ; le régime B-6d ne couvre que `ACTIVATE_VERSION` (CHECK 062). Reco A : seconde confirmation du demandeur avec motif, tracée, signalée, Audit/Comité prévenus, fin automatique dès un 2e RM (migration 088). | 2026-11-08 | **Décidé** (DECISION-121) — A : seconde confirmation du demandeur avec motif, effet au cycle suivant, tracée et signalée ; à construire sur B-6c (migration 089) |
+| HUMAN @privacy @dev-backend | **q253, q254 (cockpit)** — lot V5 (revue A15 `docs/privacy/privacy-visibility-v5-2026-11-08.md`, sous conditions) : q253 échéance aussi pour les ajouts nominatifs d'un dossier PERIMETRE (PRIV-V5-02) ; q254 pas de retour d'accès à la réouverture (PRIV-V5-03). Sans PO : PRIV-V5-01 `expiresAt` réservé aux gestionnaires et au propriétaire (à corriger dans V5). | 2026-11-08 | **Décidé** (DECISION-121) — q253 A (même échéance 30 j pour les ajouts nominatifs PERIMETRE, à construire) ; q254 A (pas de retour d'accès à la réouverture, aucun code) |
+| HUMAN @orchestrator | **q255 (cockpit)** — merger I-RT3-01 (PR #238, sans migration) : Sécurité verte (2 retests), QA verte (27/27), CI, Sonar, Codex verts. | 2026-11-08 | **Fermé** (DECISION-122) — PR #238 fusionnée (509d476), sans migration |
 | @devops HUMAN | **SEC-IRT3-05** : confirmer le délai de grâce réel de Render pour le backend et fixer `SHUTDOWN_DRAIN_MS` (25000 si 30 s) ; 8000 par défaut reste sûr. | 2026-11-08 | Ouvert |
-| HUMAN @dev-backend @risk-manager | **q257 (cockpit)** — B-6c : déplacer un risque (SEC-B6C-01) ou un sous-processus (QA-B6C-02, MAJOR) vers un autre Dispositif contourne le circuit q89. Reco A : libre, mais audit ancien/nouveau Dispositif + motif + Risk Managers prévenus. | 2026-11-08 | **Ouvert — HUMAN** |
+| HUMAN @dev-backend @risk-manager | **q257 (cockpit)** — B-6c : déplacer un risque (SEC-B6C-01) ou un sous-processus (QA-B6C-02, MAJOR) vers un autre Dispositif contourne le circuit q89. Reco A : libre, mais audit ancien/nouveau Dispositif + motif + Risk Managers prévenus. | 2026-11-08 | **Décidé** (DECISION-121) — A : déplacement libre, journal ancien/nouveau Dispositif, motif obligatoire, groupe Risk Manager prévenu ; à construire sur B-6c |
 | @risk-manager | **SEC-B6C-02** : le tableau de bord appétence et Risk 360 comparent le score d'une évaluation (échelle de sa version) au seuil de la version applicable aujourd'hui ; A13 dispatché (règle + I-C2). | 2026-11-08 | En cours (A06, dans B-6c) — A13 : constat fondé (tableau de bord), règle déjà décidée : seuil de la version de l'évaluation, sans normalisation ; pas de question PO (`docs/risk/A13-B6c-comparaison-seuils-2026-11-08.md`) |
 | @security | **Revue A10 de l'archivage d'un Dispositif et de `SET_DEFAULT`** — à faire à la livraison de B-13 (hors B-6c, confirmé). | 2026-11-08 | Ouvert |
-| HUMAN @orchestrator | **q258 (cockpit)** — merger V5 (PR #239, migration 087) : Sécurité et QA vertes après retest, Privacy sous conditions, CI/Sonar/Codex verts. À merger avant #240. | 2026-11-10 | **Ouvert — HUMAN** |
+| HUMAN @orchestrator | **q258 (cockpit)** — merger V5 (PR #239, migration 087) : Sécurité et QA vertes après retest, Privacy sous conditions, CI/Sonar/Codex verts. À merger avant #240. | 2026-11-10 | **Fermé** (DECISION-123) — PR #239 fusionnée (e006153), migration 087 appliquée par migrate.yml |
 | @orchestrator | **PR #240 (B-6c, migration 088)** ouverte, Sécurité et QA vertes après retest ; à merger après #239 : fusionner staging et réaligner les tests de contiguïté des migrations (087+088, 49 fonctions, plage 66..88, filtre n !== 88 retiré). | 2026-11-10 | En cours |
 ## Decision Log
 
@@ -2785,3 +2785,72 @@ RELATED: q240, D5, D6, D6bis, DECISION-117, DECISION-118.
 OWNER: @orchestrator
 STATUS: FAIT — suites non bloquantes : issue « Contestée » à l'écran,
   SEC F5B-01, écran de réglage des seuils.
+
+DECISION-120
+DATE: 2026-11-11 (cockpit, réponses 14:19–14:21 UTC)
+DECISION (PO, cockpit q245 à q251) — conservation.
+  (1) q245 (réponse libre, `decision = other`), texte du PO : « 10 ans pas
+  besoin du juriste et du DPO cependant on mets un mecanisme de soft delete
+  qu'on pourras utiliser directement avec du sql ». Interprétation
+  orchestrateur, à confirmer par A05 au cadrage du lot : journal d'audit
+  conservé 10 ans ; à l'échéance, aucune purge automatique ; un marquage
+  logique (soft delete) des lignes échues existe et se déclenche à la main
+  en SQL. L'avis du juriste et du DPO n'est plus attendu sur ce point.
+  (2) q246 A — motifs rangés dans un espace séparé référencé par le journal ;
+  texte effacé à l'échéance, trace de l'action conservée (lot moyen).
+  (3) q247 A — tous les motifs, y compris les demandes de lecture élargie.
+  (4) q248 B (reco A non retenue) — point de départ = date où le motif cesse
+  de s'appliquer, avec revue périodique des restrictions actives.
+  (5) q249 A — tout changement de durée demande une seconde personne, tracé ;
+  plancher 365 jours.
+  (6) q250 A — nom et e-mail pseudonymisés (pseudonyme stable) après une
+  durée D fixée par le DPO ; rien n'est effacé tant que D n'est pas fixée.
+  (7) q251 A — le journal n'écrit plus nom ni e-mail sur les nouvelles lignes
+  (petit lot, tout de suite).
+RELATED: q217, q237, q245-q251, docs/architecture/q217-q237-conservation-cadrage-2026-11-08.md,
+  docs/privacy/privacy-q217-q237-cadrage-2026-11-08.md, docs/compliance/CMP-q217-q237-conservation-2026-11-08.md.
+OWNER: @orchestrator @architect @dev-backend @dev-db @privacy
+STATUS: DÉCIDÉ — q251 à construire en premier (petit lot) ; conservation
+  (q245-q250) : lot moyen, cadrage A05 à mettre à jour avec ces réponses.
+
+DECISION-121
+DATE: 2026-11-11 (cockpit, réponses 14:21–14:23 UTC)
+DECISION (PO, cockpit, recommandations retenues) :
+  (1) q252 A — B-6c avec un seul Risk Manager : si aucun autre RM ne peut
+  valider, le demandeur confirme une seconde fois avec motif ; effet au cycle
+  suivant ; confirmation tracée, signalée dans la santé de la gouvernance,
+  Audit et Comité prévenus s'ils existent ; la règle cesse d'elle-même dès
+  qu'un second RM existe.
+  (2) q253 A — échéance aussi pour les ajouts nominatifs d'un dossier
+  PERIMETRE : 30 jours au plus, renouvelable avec motif, fin à la clôture.
+  (3) q254 A — pas de retour d'accès à la réouverture d'un dossier clos ;
+  renouvellement avec motif. Aucun code aujourd'hui (pas de réouverture).
+  (4) q256 A — résiduel I-RT3-01 (crash entre COMMIT et réponse) accepté pour
+  R1 ; rattrapage automatique des notifications depuis le journal d'audit en R2.
+  (5) q257 A — déplacer un risque ou un sous-processus vers un autre
+  Dispositif reste libre, mais journal (ancien et nouveau Dispositif), motif
+  obligatoire et notification du groupe Risk Manager.
+RELATED: q89, q225, q252-q257, SEC-B6C-01, QA-B6C-02, QA-V5-01, SEC-irt3-01.
+OWNER: @orchestrator @dev-backend
+STATUS: DÉCIDÉ — q252 et q257 à construire sur la branche B-6c (#240) ;
+  q253 petit lot après #239 ; q256 → backlog R2.
+
+DECISION-122
+DATE: 2026-11-11
+DECISION (PO, cockpit q255 A) : fusion de la PR #238 (I-RT3-01 arrêt propre)
+  dans staging (faite, 509d476, sans migration).
+RELATED: q255, q256, I-RT3-01, SEC-IRT3-05.
+OWNER: @orchestrator
+STATUS: FAIT — SEC-IRT3-05 (délai de grâce Render) reste ouvert côté DevOps.
+
+DECISION-123
+DATE: 2026-11-11
+DECISION (PO, cockpit q258 A) : fusion de la PR #239 (V5, expiration de
+  l'accès nominatif) dans staging (faite, e006153, migration 087 appliquée
+  par migrate.yml, run 28 vert). Conflit après #238 limité aux mémoires
+  d'agents (union des deux côtés, 67a3ac5) ; typecheck et tests verts
+  (2849 passés, 0 échec), CI verte avant merge.
+RELATED: q225, q253, q254, q258, DECISION-121.
+OWNER: @orchestrator
+STATUS: FAIT — suite : B-6c (#240) réaligné sur 087/088 par A06, puis q252/q257 ;
+  q253 petit lot à lancer.
