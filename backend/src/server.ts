@@ -291,6 +291,7 @@ const processService = new ProcessService(
   selfValidationGate,
   resourceVisibilityManager,
   riskFrameworkRepository, // B-6c: archive refused while an assignment is pending
+  notificationRepository, // q257: Risk Managers told when a sub-process changes Dispositif
 );
 const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
   processEvaluationModeRequestRepository,

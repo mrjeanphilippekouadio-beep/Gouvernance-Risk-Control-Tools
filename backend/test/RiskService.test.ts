@@ -706,13 +706,58 @@ describe("RiskService", () => {
       const service = new RiskService(inMemoryRiskRepository(), audit, undefined, undefined, undefined, undefined,
         inMemoryProcessRepository([pOld, pNew]), undefined, undefined, undefined, frameworks);
       const risk = await service.create(actor, { process: "P", description: "D", processId: pOld.id }, "R1");
-      await service.update(actor, risk.id, { processId: pNew.id }, "R2");
+      await service.update(actor, risk.id, { processId: pNew.id, reason: "Alignement méthodologique" }, "R2");
       type Ev = { entityType: string; action: string; oldValue: { riskFrameworkId?: string }; newValue: { riskFrameworkId?: string; frameworkChanged?: boolean }; userId: string };
       const ev = (audit.events as Ev[]).find((e) => e.entityType === "Risk" && e.newValue?.frameworkChanged !== undefined)!;
       expect(ev.oldValue.riskFrameworkId).toBe("fw-default");
       expect(ev.newValue.riskFrameworkId).toBe("fw-b");
       expect(ev.newValue.frameworkChanged).toBe(true);
       expect(ev.userId).toBe(actor.userId);
+    });
+
+    // q257 (DECISION-121, SEC-B6C-01): free move, but a motive when the Dispositif changes, and the Risk Manager group is told.
+    describe("move of a risk to another Dispositif (q257)", () => {
+      function world() {
+        const audit = inMemoryAuditRepository();
+        const pOld = stubProcess();
+        const pNew = stubProcess();
+        const pSame = stubProcess();
+        const frameworks = {
+          async getDefaultFramework() { return { id: "fw-default" } as never; },
+          async getProcessFrameworkId(_t: string, pid: string) { return pid === pNew.id ? "fw-b" : null; },
+        };
+        const sent: Array<{ recipientUserId: string; eventType: string }> = [];
+        const users = { async listWithPermission() { return [{ id: "rm1", displayName: "RM" }]; } };
+        const notifications = { async create(n: { recipientUserId: string; eventType: string }) { sent.push(n); return n as never; } };
+        const service = new RiskService(inMemoryRiskRepository(), audit, undefined, users as never, undefined, undefined,
+          inMemoryProcessRepository([pOld, pNew, pSame]), undefined, notifications as never, undefined, frameworks);
+        return { service, audit, pOld, pNew, pSame, sent };
+      }
+
+      it("refuses the move without a motive (400) and writes nothing", async () => {
+        const w = world();
+        const risk = await w.service.create(actor, { process: "P", description: "D", processId: w.pOld.id }, "R1");
+        await expect(w.service.update(actor, risk.id, { processId: w.pNew.id }, "R2")).rejects.toThrow(ValidationError);
+        await expect(w.service.update(actor, risk.id, { processId: w.pNew.id, reason: "   " }, "R2")).rejects.toThrow(ValidationError);
+        expect((await w.service.get(actor, risk.id)).processId).toBe(w.pOld.id);
+        expect(w.sent).toHaveLength(0);
+      });
+
+      it("with a motive: audited with the motive, old and new Dispositif, and the Risk Manager group is notified", async () => {
+        const w = world();
+        const risk = await w.service.create(actor, { process: "P", description: "D", processId: w.pOld.id }, "R1");
+        await w.service.update(actor, risk.id, { processId: w.pNew.id, reason: "Méthode B" }, "R2");
+        const ev = (w.audit.events as Array<Record<string, any>>).find((e) => e["newValue"]?.frameworkChanged === true)!;
+        expect(ev).toMatchObject({ reason: "Méthode B", oldValue: { riskFrameworkId: "fw-default" }, newValue: { riskFrameworkId: "fw-b" } });
+        expect(w.sent).toEqual([expect.objectContaining({ recipientUserId: "rm1", eventType: "OBJECT_FRAMEWORK_CHANGED" })]);
+      });
+
+      it("a move between two processes of the same Dispositif needs no motive and sends no notice", async () => {
+        const w = world();
+        const risk = await w.service.create(actor, { process: "P", description: "D", processId: w.pOld.id }, "R1");
+        await w.service.update(actor, risk.id, { processId: w.pSame.id }, "R2");
+        expect(w.sent).toHaveLength(0);
+      });
     });
   });
 });

@@ -7,6 +7,9 @@ import type { ControlRepository } from "../domain/repositories/ControlRepository
 import type { DepartmentRepository } from "../domain/repositories/DepartmentRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
+import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
+import { resolveApplicableFrameworkId } from "./riskFrameworkResolution.js";
+import { notifyFrameworkMove, requireFrameworkMoveReason } from "./frameworkMove.js";
 import type { ProcessEvaluationModeRequestRepository } from "../domain/repositories/ProcessEvaluationModeRequestRepository.js";
 import {
   PROCESS_LEVEL_BY_RANK,
@@ -88,7 +91,9 @@ export class ProcessService {
     /** q207 (DECISION-107): a new owner who opens restricted resources is reasoned, traced and reported. Wired in server.ts. */
     private readonly access?: ResourceVisibilityManager,
     /** B-6c: refuses archiving a process that has a PENDING Dispositif assignment (its approval would fail on a deleted process). */
-    private readonly frameworks?: Pick<RiskFrameworkRepository, "hasPendingAssignment">,
+    private readonly frameworks?: Pick<RiskFrameworkRepository, "hasPendingAssignment"> & Partial<Pick<RiskFrameworkRepository, "getDefaultFramework" | "getProcessFrameworkId">>,
+    /** q257 (DECISION-121): the Risk Manager group is told when a sub-process moves to another Dispositif. Optional: absent = no notification. */
+    private readonly notifications?: Pick<NotificationRepository, "create">,
   ) {}
 
   private async assertDepartmentExists(tenantId: string, departmentId: string): Promise<void> {
@@ -164,6 +169,8 @@ export class ProcessService {
     id: string,
     input: Omit<UpdateProcessInput, "evaluationMode">,
     requestId: string,
+    /** q257: motive of a move to another Dispositif (required then, ignored otherwise). Never stored on the process itself. */
+    reason?: string,
   ): Promise<Process> {
     requirePermission(actor, "process.update");
     const before = await this.get(actor, id);
@@ -180,6 +187,22 @@ export class ProcessService {
     }
     if (input.departmentId) await this.assertDepartmentExists(actor.tenantId, input.departmentId);
 
+    // q257 (DECISION-121, QA-B6C-02): re-parenting stays free (never blocked) but may change the Dispositif that applies
+    // to the sub-process and its risks: motive required then (400), old and new Dispositif in the audit, Risk Managers told.
+    // Fail closed: a failed read fails the update (no silent "unchanged"). Not tracked when the resolver is not wired.
+    const parentMoved = input.parentId !== undefined && (input.parentId ?? null) !== (before.parentId ?? null);
+    const fw = this.frameworks;
+    let framework: { before: string | null; after: string | null } | null = null;
+    if (parentMoved && fw?.getDefaultFramework && fw.getProcessFrameworkId) {
+      const deps = { frameworks: { getDefaultFramework: fw.getDefaultFramework.bind(fw), getProcessFrameworkId: fw.getProcessFrameworkId.bind(fw) }, processes: this.processes };
+      framework = {
+        before: await resolveApplicableFrameworkId(deps, actor.tenantId, id),
+        after: await resolveApplicableFrameworkId(deps, actor.tenantId, input.parentId ?? null),
+      };
+    }
+    const frameworkChanged = framework !== null && framework.before !== framework.after;
+    const moveReason = frameworkChanged ? requireFrameworkMoveReason(reason, "sub-process") : null;
+
     const after = await this.processes.update(actor.tenantId, id, input);
 
     await this.audit.record({
@@ -188,12 +211,16 @@ export class ProcessService {
       entityType: "Process",
       entityId: id,
       action: "UPDATE",
-      oldValue: before,
-      newValue: after,
-      reason: null,
+      oldValue: framework ? { ...before, riskFrameworkId: framework.before } : before,
+      newValue: framework ? { ...after, riskFrameworkId: framework.after, frameworkChanged } : after,
+      reason: moveReason,
       requestId,
     });
 
+    if (frameworkChanged) {
+      await notifyFrameworkMove({ notifications: this.notifications, users: this.users }, actor, id,
+        "Un sous-processus a été déplacé vers un autre Dispositif (motif, ancien et nouveau Dispositif au journal).", requestId);
+    }
     return after;
   }
 

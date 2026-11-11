@@ -12,6 +12,7 @@ import type { RiskFrameworkRepository } from "../domain/repositories/RiskFramewo
 import { resolveApplicableFrameworkId } from "./riskFrameworkResolution.js";
 import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 import { writeAudited } from "./auditedWrite.js";
+import { notifyFrameworkMove, requireFrameworkMoveReason } from "./frameworkMove.js";
 import { checkedRenewal, expiryRows, sameVisibilityState, type ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { RiskEscalation } from "../domain/entities/RiskEscalation.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
@@ -335,6 +336,10 @@ export class RiskService {
     const processMoved = input.processId !== undefined && (input.processId ?? null) !== (before.processId ?? null);
     const frameworkBefore = processMoved ? await this.applicableFrameworkId(actor.tenantId, before.processId ?? null) : null;
     const frameworkAfter = processMoved ? await this.applicableFrameworkId(actor.tenantId, input.processId ?? null) : null;
+    // q257 (DECISION-121, SEC-B6C-01): the move stays free (never blocked) but, when the Dispositif really changes, it
+    // carries a motive (400 otherwise), the audit names the old and the new Dispositif, and the Risk Manager group is told.
+    const frameworkChanged = processMoved && !!this.frameworks && frameworkBefore !== frameworkAfter;
+    if (frameworkChanged) requireFrameworkMoveReason(rawReason, "risk");
 
     const repo = this.risks;
     // Lot V2: the repository measures the real effective readers (`perimeterWidening`); the rule below is the fallback.
@@ -380,6 +385,10 @@ export class RiskService {
       ],
     );
     if (perimeter && !holdsRight) await this.notifyVisibilityChanged(actor, id, widened(written), requestId);
+    if (frameworkChanged) {
+      await notifyFrameworkMove({ notifications: this.notifications, users: this.users }, actor, id,
+        "Un risque a été déplacé vers un autre Dispositif (motif, ancien et nouveau Dispositif au journal).", requestId);
+    }
     return withoutWidening(written);
   }
 

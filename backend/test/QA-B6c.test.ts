@@ -593,14 +593,14 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect((await call("rm1", "PATCH", `/risks/${rk}`, { description: "sans changement de processus" })).status).toBe(200);
       expect((await call("rm1", "PATCH", `/risks/${rk}`, { processId: pA })).status).toBe(200);
       expect(await moves()).toHaveLength(0);
-      const mv = await call("rm1", "PATCH", `/risks/${rk}`, { processId: pB });
+      const mv = await call("rm1", "PATCH", `/risks/${rk}`, { processId: pB, reason: "Alignement q257" });
       expect(mv.status, mv.text).toBe(200);
       let m = await moves();
       expect(m).toHaveLength(1);
       expect(m[0]!.old_value).toEqual({ processId: pA, riskFrameworkId: F["FA"] });
       expect(m[0]!.new_value).toEqual({ processId: pB, riskFrameworkId: F["FB"], frameworkChanged: true });
       const pC = await proc();
-      const back = await call("rm1", "PATCH", `/risks/${rk}`, { processId: pC });
+      const back = await call("rm1", "PATCH", `/risks/${rk}`, { processId: pC, reason: "Retour q257" });
       expect(back.status, back.text).toBe(200);
       m = await moves();
       expect(m).toHaveLength(2);
