@@ -239,6 +239,33 @@ describe.skipIf(!live)("QA-q251 LIVE (real PostgreSQL + real server)", () => {
     });
   });
 
+  it("R6 (B-6c merge) moving a sub-process to another Dispositif while its owner text changes: audit row = reason + old/new Dispositif + ownerChanged, no owner value", async () => {
+    const fa = (await sql<{ id: string }>("INSERT INTO risk_frameworks (tenant_id, name, is_default, created_by) VALUES ($1,'Dispositif A q251',true,$2) RETURNING id", [T, UID.rm]))[0]!.id;
+    const fb = (await sql<{ id: string }>("INSERT INTO risk_frameworks (tenant_id, name, is_default, created_by) VALUES ($1,'Dispositif B q251',false,$2) RETURNING id", [T, UID.rm]))[0]!.id;
+    const mk = async (level: string, parent: string | null, owner: string | null) =>
+      (await sql<{ id: string }>("INSERT INTO processes (tenant_id, level, name, parent_id, owner) VALUES ($1,$2,'QA q251 move ' || gen_random_uuid()::text,$3,$4) RETURNING id", [T, level, parent, owner]))[0]!.id;
+    const pA = await mk("PROCESS", null, null);
+    const pB = await mk("PROCESS", null, null);
+    await sql("ALTER TABLE processes DISABLE TRIGGER processes_framework_guard");
+    try { await sql("UPDATE processes SET risk_framework_id = $2 WHERE id = $1", [pB, fb]); } finally { await sql("ALTER TABLE processes ENABLE TRIGGER processes_framework_guard"); }
+    const sub = await mk("SUBPROCESS", pA, "CANARYNAME OldOwner Q251");
+    // no motive -> 400, nothing written
+    const bad = await call("adm", "PATCH", `/processes/${sub}`, { parentId: pB, owner: "CANARYNAME NewOwner Q251" });
+    expect(bad.status, bad.text).toBe(400);
+    expect((await H.audits(sub)).length).toBe(0);
+    const ok = await call("adm", "PATCH", `/processes/${sub}`, { parentId: pB, owner: "CANARYNAME NewOwner Q251", reason: "Rattachement QA q251" });
+    expect(ok.status, ok.text).toBe(200);
+    const rows = (await H.audits(sub)).filter((x) => x.action === "UPDATE");
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.reason).toBe("Rattachement QA q251");
+    expect(row.old_value).toMatchObject({ riskFrameworkId: fa });
+    expect(row.new_value).toMatchObject({ riskFrameworkId: fb, frameworkChanged: true, ownerChanged: true });
+    for (const v of [row.old_value, row.new_value]) expect(v).not.toHaveProperty("owner");
+    expect(JSON.stringify(row).toLowerCase()).not.toContain("canaryname");
+    expect(await needleRows()).toEqual([]);
+  }, 60000);
+
   it("L5 old rows are not modified by the new writes, and the database still refuses an UPDATE / DELETE of the journal", async () => {
     const after = JSON.stringify(await sql("SELECT * FROM audit_log WHERE id IS NOT NULL AND request_id = 'legacy-q251' ORDER BY entity_id, user_id"));
     expect(after).toBe(legacyBefore);
