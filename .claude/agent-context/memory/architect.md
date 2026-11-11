@@ -164,6 +164,19 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
     sert de lookup dans `PostgresRiskRepository.listCreationAccess`. Même chose pour `PERMISSION_CHANGE` : l'action est
     partagée par les rôles et la visibilité, donc pour cibler une catégorie de lignes du journal il faut un marqueur posé
     à l'INSERT (patron 066), pas un filtre sur l'action.
+- 2026-11-11 : DECISION-120 intégrée (section 8 du cadrage q217/q237). q245 confirmée : journal 10 ans, jamais de
+  suppression physique, marquage manuel en SQL = table `audit_log_retention_marks` (ajout seul) + fonction
+  `mark_expired_audit_log` (refuse < 10 ans, EXECUTE réservé au propriétaire), filtre `NOT EXISTS` sur les seules
+  lectures de consultation ; `AuditRepository` et garde 038 inchangés. Lots L0 (q251, A06) / L1 091 / L2a 092 /
+  L2b 093 (`retention.purge`) / L2c 094 / L3 095. Questions Q-1 (période de revue), Q-2 (anciennes lignes avec
+  nom/e-mail), Q-3 (staging = test ?). D reste au DPO. H1 vérifiée (prod à 046).
+
+17. **« Soft delete » d'une table en ajout seul = table de marques à côté**, elle-même en ajout seul, alimentée par
+    une fonction SQL qui porte le plancher ; jamais une colonne `deleted_at` (exigerait un UPDATE sur le journal).
+    Les lectures techniques (calculs) ne filtrent pas les marques, seules les lectures de consultation le font.
+18. **Une date de fin d'effet non branchée reste NULL et n'efface rien** (fail-closed) ; la revue périodique est le
+    filet qui rattrape les événements de fin oubliés.
+
 16. **Séparer une donnée à durée courte d'un journal à durée longue dès l'écriture** (référence + table effaçable)
     plutôt que d'ouvrir une exception dans la garde du journal. Cela ne couvre que le futur : vérifier qu'aucune
     donnée réelle n'existe déjà.

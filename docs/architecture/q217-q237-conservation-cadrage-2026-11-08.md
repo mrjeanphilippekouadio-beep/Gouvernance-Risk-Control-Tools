@@ -1,6 +1,7 @@
 # q217 / q237 : conservation des motifs de visibilité, du nom et des rôles
 
 Date : 2026-11-08. Auteur : A05 (Architecte). Statut : **cadrage, aucun code**. À valider par A15 (section 6), puis questions au PO (section 4).
+**Mise à jour 2026-11-11** : réponses PO (DECISION-120) intégrées, découpage en lots et questions restantes en **section 8**. Les sections 2 à 4 restent comme historique des options.
 
 Décisions de départ :
 - **q217** (DECISION-110) : les motifs de visibilité sont conservés **un an**, durée configurable.
@@ -191,3 +192,115 @@ Questions proposées. Les numéros sont indicatifs (q239 était le dernier utili
 - **H1** : aucun motif de visibilité réel n'est encore en production (lots V0–V4bis fusionnés dans staging). À vérifier avant de choisir A.
 - **H2** : la fin du compte est `users.deleted_at`, comme pour R3 (`PostgresLastSeenRetentionRepository`).
 - **H3** : les données de staging sont des données de test, sans obligation de purge (à confirmer par le PO).
+
+---
+
+## 8. Décisions du 11/11 et découpage en lots
+
+Date : 2026-11-11. Auteur : A05. Source : DECISION-120 (`ACTION_ITEMS.md`), réponses PO q245 à q251. H1 est vérifiée (production à 046, aucun motif de visibilité en production). Documentation seulement, aucun code.
+
+### 8.1 Réponses retenues
+
+| Question | Réponse | Effet sur ce cadrage |
+|---|---|---|
+| q245 (libre) | « 10 ans, pas besoin du juriste ni du DPO ; mécanisme de soft delete utilisable directement en SQL » | Voir 8.2 (interprétation confirmée, avec précisions) |
+| q246 A | Motif dans un espace séparé, référencé par le journal | Option A de la section 2 |
+| q247 A | Tous les motifs, y compris les demandes de lecture élargie | `sensitive_view_grants` inclus (A15 C3) |
+| q248 B | Départ = fin d'effet du motif, plus revue périodique des restrictions actives | `effect_ended_at` + lot de revue (L2c) |
+| q249 A | Toute modification de durée (hausse ou baisse) par une seconde personne, tracée ; plancher 365 jours | Voir I-2 |
+| q250 A | Pseudonymisation stable du nom et de l'e-mail après D fixée par le DPO ; rien tant que D est vide | Option A de la section 3, D = NULL |
+| q251 A | Plus de nom ni d'e-mail dans les nouvelles lignes du journal | Lot L0, déjà en cours chez A06, non recadré ici |
+
+### 8.2 q245 : interprétation confirmée, avec quatre précisions
+
+L'interprétation de l'orchestrateur est **confirmée** : journal conservé 10 ans ; à l'échéance, aucune purge automatique ; marquage logique des lignes échues, déclenché à la main en SQL. Précisions :
+
+1. **Rien n'est jamais supprimé physiquement.** Une ligne marquée reste en base. Elle disparaît seulement des écrans et des exports de l'application. Le texte R5 devra le dire (item DPO déjà ouvert, ligne 489 d'`ACTION_ITEMS.md`).
+2. **Les 10 ans se comptent depuis `audit_log.created_at`.** Ce n'est pas un réglage de l'interface : le « configurable » de DECISION-038 n° 8 reste attaché aux évidences (lecture A14). Le PO a dit « directement avec du SQL », donc aucun écran, aucune route, aucune permission applicative.
+3. **On ne peut pas marquer une ligne de moins de 10 ans.** La fonction refuse toute durée plus courte. C'est la seule protection contre une erreur de saisie dans une commande SQL lancée à la main.
+4. **Le marquage n'est pas réversible par l'application.** Une correction passerait par une migration revue.
+
+**Compatibilité avec l'ajout seul strict (CLAUDE.md, A23).** Une colonne `deleted_at` sur `audit_log` est impossible : la poser exige un UPDATE, que la garde 038 refuse. Solution retenue, la plus simple :
+
+- Une **table de marquage séparée**, elle-même en ajout seul : `audit_log_retention_marks` (`audit_log_id` clé primaire et FK vers `audit_log`, `tenant_id`, `marked_at`, `marked_by` = rôle de base `current_user`, `run_id`). Garde : UPDATE, DELETE et TRUNCATE refusés, `search_path` pinné.
+- Une **fonction SQL dédiée** `mark_expired_audit_log(p_tenant_id uuid, p_older_than interval DEFAULT '10 years')`. Elle refuse `p_older_than < '10 years'`, insère une marque pour chaque ligne du tenant plus ancienne et non encore marquée, puis renvoie le nombre de lignes et le `run_id`. `EXECUTE` est retiré à `PUBLIC` et au rôle d'exécution de l'application (043) : seul le propriétaire de la base peut la lancer. L'application ne peut donc pas masquer son propre journal.
+- **`AuditRepository` ne change pas** : pas d'`update`, pas de `delete`. Seules les lectures de consultation de `PostgresAuditRepository` (`listForEntity`, `listRecent`, `search`) ajoutent `NOT EXISTS (marque)`. `audit_log` et sa garde 038 restent intacts.
+- **Trace du marquage** : la table de marquage elle-même (qui, quand, quel lot). On n'écrit pas de ligne dans `audit_log`, car `user_id` y est NOT NULL et aucun utilisateur applicatif n'agit.
+- Les lectures **techniques** du journal (dernier `PERMISSION_CHANGE` dans `listRestricted`, indicateurs de santé de la gouvernance) ne filtrent pas les marques. Ce sont des calculs, pas une consultation, et une restriction encore active ne doit pas perdre sa dernière trace.
+
+### 8.3 Interprétations à confirmer en revue (pas des questions PO)
+
+- **I-1** : la fin d'effet d'un motif est posée par l'événement qui y met fin, dans la même transaction (remplacement par un changement ultérieur, retour à « tout le client », révocation, refus d'une demande, expiration prévue d'un droit de lecture élargie). Un motif dont l'événement de fin n'est pas encore branché garde `effect_ended_at` NULL. Il n'est alors jamais effacé (fail-closed), mais il apparaît dans la revue périodique.
+- **I-2** : q249 (seconde personne dans les deux sens, plancher 365 jours) s'applique aux **deux nouvelles durées** de ce chantier : motifs et D. Elle ne s'étend pas d'office à `lastSeenRetentionDays` (q232, réduction seulement), ni à la durée du journal, qui n'est pas un réglage (8.2).
+- **I-3** : rôles conservés sans nom après pseudonymisation (q250 A, section 3). Je ne rouvre pas la réserve A15 : c'est une décision PO.
+
+### 8.4 Lots
+
+Les numéros de migration sont **indicatifs**. La PR #240 occupe 088 à 090. A07 revérifie le dernier numéro présent avant chaque lot (principe : jamais deviner).
+
+**L0 : nom et e-mail hors des nouvelles lignes du journal (q251)**. En cours chez A06, non recadré.
+- Migration : aucune. Taille : S.
+- C'est un prérequis de L3 : sans lui, pseudonymiser `users` laisserait le nom dans les nouvelles lignes.
+
+**L1 : marquage logique du journal à 10 ans (q245)**
+- Contenu : table de marquage, fonction SQL, filtre sur les trois lectures de consultation (8.2), tests (fonction qui refuse moins de 10 ans, garde en ajout seul, lignes marquées absentes de `GET /audit-logs`, test de `search_path` QA-B6a11).
+- Migration : **091** `audit_log_retention_marks` (+ `.down.sql`).
+- Permissions : aucune permission applicative. Droit `EXECUTE` réservé au propriétaire de la base.
+- Dépendances : aucune. Peut partir en parallèle de L0.
+- Taille : **S**. Revues A23 et A10 (garde et droits d'exécution).
+
+**L2a : motifs dans un espace séparé (q246, q247)**
+- Contenu : table `visibility_reasons` (`id`, `tenant_id`, `source`, `text` NULL, `created_at`, `effect_ended_at` NULL, `erased_at` NULL, `reviewed_at` NULL) et sa garde (ajout, effacement unique du texte avec `erased_at`, `effect_ended_at` posée ou avancée, jamais reculée ni remise à NULL, aucun DELETE). `audit_log.reason_ref` nullable (même approche que 066, garde 038 inchangée). Références de motif sur `resource_access_grants` (motif d'ouverture, motif de révocation) et sur `sensitive_view_grants` (demande, décision, révocation). Les gardes 080 et 084 sont reprises **en entier**, avec les nouvelles colonnes dans la liste immuable. `grant_reason` ne garde que la constante `CREATION_GRANT_REASON`, qui sert de clé. Tous les points d'écriture (environ six, plus les demandes de lecture) écrivent le motif dans la table et la référence dans le journal. Lecteurs : `GET /audit-logs` et `listRestricted` font la jointure et affichent « motif effacé le JJ/MM/AAAA (conservation) ». Test de garde : aucune ligne de visibilité ne remet de texte dans `audit_log.reason`.
+- Les textes déjà présents en staging dans les tables de droits sont déplacés vers `visibility_reasons` par la migration. Ceux de `audit_log.reason` restent en clair (H3, question Q-3).
+- Migration : **092**.
+- Permissions : aucune nouvelle.
+- Dépendances : aucune (H1 vérifiée).
+- Taille : **M**. C'est le plus gros lot.
+
+**L2b : fin d'effet, durée et effacement des motifs (q248, q249)**
+- Contenu : pose de `effect_ended_at` à chaque événement de fin (I-1). Réglage `configs.visibility_reason_retention_days` : défaut 365, minimum 365, NULL = jamais. Toute modification passe par le circuit de seconde personne de 076, en hausse comme en baisse. Effacement manuel avec `dryRun` sur le modèle de `last-seen-purge` (085) : texte mis à NULL, `erased_at` posé, trace dans la même transaction, jamais de DELETE.
+- Migration : **093**.
+- Permissions : nouvelle permission **`retention.purge`** (action terminale, donc pas `user.update` ni `config.update`). Le réglage de la durée reprend la permission et le circuit de `lastSeenRetentionDays`.
+- Dépendances : L2a.
+- Taille : **S/M**.
+
+**L2c : revue périodique des restrictions actives (q248 B)**
+- Contenu : liste des motifs encore actifs (`effect_ended_at` NULL) dont la dernière revue (ou la création) dépasse la période. Signal dans le panneau de santé de la gouvernance. Action « confirmer » qui pose `reviewed_at` et écrit une ligne d'audit. La revue ne prolonge rien et n'efface rien : elle force seulement une décision de maintien ou de retrait.
+- Migration : **094** (réglage de la période, si Q-1 la rend configurable ; sinon pas de migration, `reviewed_at` étant créé en L2a).
+- Permissions : `resourcevisibility.set` (existante ; la revue n'est pas une action terminale).
+- Dépendances : L2a, et la réponse à **Q-1**.
+- Taille : **S**.
+
+**L3 : pseudonymisation du nom et de l'e-mail (q250)**
+- Contenu : réglage `configs.identity_retention_days` NULL par défaut (rien n'est effacé), minimum 365 (I-2), seconde personne pour toute modification. `users.pseudonymized_at`. Pseudonyme aléatoire, non dérivé de l'identifiant : `display_name` « Compte effacé n° XXXX », `email` unique en `.invalid`. Point de départ `users.deleted_at` (H2). Réactivation refusée (service et garde). `user_roles` et `users.roles` conservés (I-3). Purge manuelle avec `dryRun` et trace dans la même transaction. La connexion Google se fait par e-mail : un e-mail pseudonymisé ne permet plus de rattacher le compte.
+- Migration : **095**.
+- Permissions : `retention.purge` (créée en L2b, ou ici si L3 passe avant).
+- Dépendances : **L0 fusionné** (A15 C2). Indépendant de L1 et L2.
+- Taille : **S/M**.
+
+**Ordre recommandé** : L0 (en cours) et L1 en parallèle, puis L2a, L2b, L3, puis L2c dès que Q-1 est tranchée. L1, L2a et L3 touchent tous `permissions.ts` ou `server.ts` : un worktree par lot, fusion un par un.
+
+### 8.5 Reste à fixer par le DPO (pas par le PO)
+
+- **Durée D** de q250. Tant qu'elle est vide, L3 est livrable mais n'efface rien.
+- Les autres points de la liste DPO d'A15 restent sur l'item déjà ouvert (ligne 489) : texte R5 (e-mail, copies dans le journal, lignes jamais supprimées physiquement après 10 ans), exports et sauvegardes.
+- Le plancher juridique du journal n'est plus attendu (q245) : l'item ligne 488 est fermé.
+
+### 8.6 Questions encore ouvertes pour le PO
+
+Numéros à attribuer par l'orchestrateur.
+
+**Q-1 : À quelle fréquence revoit-on une restriction d'accès encore active, et qui la revoit ?**
+- A (reco) : tous les 12 mois, par le Risk Manager. Les restrictions en retard sont signalées dans la santé de la gouvernance, sans blocage.
+- B : tous les 6 mois, par le Risk Manager ou par le propriétaire de la fiche, avec le même signalement.
+- Reco : **A**. Elle s'aligne sur la durée d'un an des motifs (q217), et le Risk Manager voit déjà toutes les restrictions.
+
+**Q-2 : Noms et e-mails déjà écrits dans le journal avant L0 : que fait-on ?**
+- A (reco) : on les laisse tels quels. Ils sont masqués au bout de 10 ans comme le reste du journal, et le texte R5 dit que la pseudonymisation après D ne les couvre pas.
+- B : on ouvre une exception à l'ajout seul pour pseudonymiser ces anciennes valeurs. Il faut alors une revue A23 et A10, et ce serait la première modification du journal.
+- Reco : **A**. Elle est cohérente avec q245 (rien n'est jamais supprimé physiquement) et ne crée aucune brèche dans la garde 038.
+
+**Q-3 : Les motifs de test déjà écrits dans le journal de staging peuvent-ils rester en clair ?**
+- A (reco) : oui. Staging ne contient que des données de test, ce qui confirme H3, et la production n'a aucun motif (H1).
+- B : non. Staging contient des données réelles ou une copie de la production : il faut traiter ces lignes comme en Q-2 B.
+- Reco : **A**, sous réserve que le PO confirme qu'aucune donnée réelle n'a été saisie en staging.
