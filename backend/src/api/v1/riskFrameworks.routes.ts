@@ -57,14 +57,16 @@ const IdentityBody = z
 const DraftBody = z.object({ fromVersionId: Id.optional() }).strict();
 const PatchVersionBody = z.object({ ratingScaleId: Id.optional(), ...ParamsShape }).partial().strict();
 const ReasonBody = z.object({ reason: Reason }).strict();
+const AssignBody = z.object({ processId: Id, reason: Reason }).strict();
 const ApproveBody = z.object({ comment: Comment.optional() }).strict();
+const SoleConfirmBody = z.object({ reason: Reason.min(1) }).strict();
 const RejectBody = z.object({ comment: Comment.min(1) }).strict();
 const WithdrawBody = z.object({ reason: Comment.optional() }).strict();
 const ApplicableQuery = z
   .object({ riskId: Id.optional(), processId: Id.optional() })
   .refine((q) => (q.riskId === undefined) !== (q.processId === undefined), { message: "Exactly one of riskId or processId is required" });
 const StatusQuery = z.enum(["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"]).optional();
-const RegimeQuery = z.enum(["NORMAL", "FALLBACK", "BOOTSTRAP"]).optional();
+const RegimeQuery = z.enum(["NORMAL", "FALLBACK", "BOOTSTRAP", "SOLE_RM"]).optional();
 /** B-6d (q83, I-D2): structured motive of a bootstrap decision; the free parameters are frozen server-side, never sent. */
 const BootstrapBody = z
   .object({
@@ -136,6 +138,16 @@ export function riskFrameworksRouter(service: RiskFrameworkService): Router {
     try {
       const body = BootstrapBody.parse(req.body);
       res.json({ data: await service.bootstrapApprove(req.user, id(req.params["rid"]), body, req.requestId) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // q252 A (DECISION-121): the sole Risk Manager confirms their own process-attachment request a second time, with a motive.
+  router.post("/change-requests/:rid/sole-confirm", async (req, res, next) => {
+    try {
+      const body = SoleConfirmBody.parse(req.body);
+      res.json({ data: await service.confirmSoleAssignment(req.user, id(req.params["rid"]), body, req.requestId) });
     } catch (err) {
       next(err);
     }
@@ -220,6 +232,17 @@ export function riskFrameworksRouter(service: RiskFrameworkService): Router {
     try {
       const body = ReasonBody.parse(req.body);
       const request = await service.requestActivation(req.user, id(req.params["id"]), id(req.params["vid"]), body.reason, req.requestId);
+      res.status(201).json({ data: request });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // B-6c (q89): request the attachment of a process to this Dispositif (decided via /change-requests/:rid/approve|reject).
+  router.post("/:id/process-assignments", async (req, res, next) => {
+    try {
+      const body = AssignBody.parse(req.body);
+      const request = await service.requestProcessAssignment(req.user, id(req.params["id"]), body, req.requestId);
       res.status(201).json({ data: request });
     } catch (err) {
       next(err);

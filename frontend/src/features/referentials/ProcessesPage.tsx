@@ -73,6 +73,8 @@ export function ProcessesPage({ token }: { token: string }) {
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // q257 A: motive for a parent change; optional on screen, the server requires it only when the Dispositif really changes.
+  const [moveReason, setMoveReason] = useState("");
   const [archiveOpen, setArchiveOpen] = useState(false);
 
   const latest = useRef(0);
@@ -114,7 +116,7 @@ export function ProcessesPage({ token }: { token: string }) {
       description: row.description ?? "", documentType: row.documentType ?? "", documentReference: row.documentReference ?? "",
       owner: row.owner ?? "", active: row.active,
     });
-    setFormError(null); setFormOpen("edit");
+    setFormError(null); setMoveReason(""); setFormOpen("edit");
   }
 
   async function submit(event: FormEvent) {
@@ -127,7 +129,10 @@ export function ProcessesPage({ token }: { token: string }) {
     try {
       if (formOpen === "edit" && selected) {
         // The server refuses to detach a department once set: only send one when chosen.
-        await processesApi.update(token, selected.id, form.departmentId ? { ...input, departmentId: form.departmentId } : input);
+        const parentChanged = nullable(form.parentId) !== selected.parentId;
+        const body: Partial<ProcessInput> & { reason?: string } = form.departmentId ? { ...input, departmentId: form.departmentId } : input;
+        if (parentChanged && moveReason.trim()) body.reason = moveReason.trim();
+        await processesApi.update(token, selected.id, body);
       } else {
         const created = await processesApi.create(token, { ...input, departmentId: form.departmentId });
         setSelectedId(created.id);
@@ -194,6 +199,11 @@ export function ProcessesPage({ token }: { token: string }) {
             {rows.filter((r) => r.id !== selected?.id || formOpen !== "edit").map((r) => <option key={r.id} value={r.id}>{r.name} ({LEVEL_LABELS[r.level]}){r.active ? "" : " — inactif"}</option>)}
           </select>
         </FormField>
+        {formOpen === "edit" && selected && nullable(form.parentId) !== selected.parentId && (
+          <FormField label="Motif du changement de parent" htmlFor="proc-move-reason" help="Le serveur exige un motif seulement si ce changement fait passer le processus sous un autre Dispositif ; il refuse l'enregistrement sinon.">
+            <textarea id="proc-move-reason" value={moveReason} onChange={(e) => setMoveReason(e.target.value)} maxLength={500} />
+          </FormField>
+        )}
         <FormField label={formOpen === "create" ? "Département *" : "Département"} htmlFor="proc-dept" help={formOpen === "edit" ? "Un département peut être changé, jamais retiré." : undefined}>
           <select id="proc-dept" value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })} required={formOpen === "create"}>
             <option value="">Sélectionner…</option>

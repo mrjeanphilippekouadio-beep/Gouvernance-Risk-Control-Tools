@@ -35,6 +35,21 @@ export async function resolveApplicableVersion(
   tenantId: string,
   processId: string | null,
 ): Promise<ApplicableFramework | null> {
+  const frameworkId = await resolveApplicableFrameworkId(deps, tenantId, processId);
+  if (!frameworkId) return null;
+
+  const version = await deps.frameworks.getActiveVersion(tenantId, frameworkId);
+  if (!version) return null;
+  const scale = await deps.ratingScales.getById(tenantId, version.ratingScaleId);
+  return scale ? { frameworkId, version, scale } : null;
+}
+
+/** Steps 1-2 of spec §7, the Dispositif id alone: the process's attachment, else the tenant default; null if none. */
+export async function resolveApplicableFrameworkId(
+  deps: { frameworks: Pick<RiskFrameworkRepository, "getDefaultFramework" | "getProcessFrameworkId">; processes?: FrameworkResolutionDeps["processes"] },
+  tenantId: string,
+  processId: string | null,
+): Promise<string | null> {
   let frameworkId: string | null = null;
   if (processId && deps.processes) {
     let current: Process | null = await deps.processes.getById(tenantId, processId);
@@ -46,11 +61,5 @@ export async function resolveApplicableVersion(
       current = current.parentId ? await deps.processes.getById(tenantId, current.parentId) : null;
     }
   }
-  if (!frameworkId) frameworkId = (await deps.frameworks.getDefaultFramework(tenantId))?.id ?? null;
-  if (!frameworkId) return null;
-
-  const version = await deps.frameworks.getActiveVersion(tenantId, frameworkId);
-  if (!version) return null;
-  const scale = await deps.ratingScales.getById(tenantId, version.ratingScaleId);
-  return scale ? { frameworkId, version, scale } : null;
+  return frameworkId ?? (await deps.frameworks.getDefaultFramework(tenantId))?.id ?? null;
 }

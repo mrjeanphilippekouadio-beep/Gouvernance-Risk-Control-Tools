@@ -80,8 +80,8 @@ describe("F-B6b-01: appetite-vs-residual reads the Dispositif, not risk_appetite
       {} as never, {} as never, {} as never, {} as never, undefined, undefined, scalesFake as never, frameworksFake() as never,
     );
     vi.spyOn(s as never, "getScoredRisks").mockResolvedValue([
-      { risk: { id: "r1", processId: null }, evaluation: { subCategory: "Fraude", entity: null }, score: 15 },
-      { risk: { id: "r2", processId: null }, evaluation: { subCategory: "Fraude", entity: null }, score: 4 },
+      { risk: { id: "r1", processId: null }, evaluation: { subCategory: "Fraude", entity: null, riskFrameworkVersionId: "ver1" }, score: 15 },
+      { risk: { id: "r2", processId: null }, evaluation: { subCategory: "Fraude", entity: null, riskFrameworkVersionId: "ver1" }, score: 4 },
     ] as never);
     const rows = await s.getAppetiteVsResidual(actor(["dashboard.executive"]));
     expect(rows).toEqual([expect.objectContaining({ subCategory: "Fraude", threshold: 9, maxResidualScore: 15, exceedanceCount: 1, exceeded: true, frameworkVersionId: "ver1" })]);

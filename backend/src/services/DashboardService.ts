@@ -45,6 +45,8 @@ import type { ScoreThreshold } from "../domain/entities/RatingScale.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { DashboardScopeMode, RiskScope } from "../domain/entities/DashboardScope.js";
 import type { DashboardScopeResolver } from "./DashboardScopeResolver.js";
+import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
+import type { RiskFrameworkVersion } from "../domain/entities/RiskFramework.js";
 import { findAppetite } from "../domain/frameworkAppetite.js";
 import { resolveApplicableVersion, type FrameworkResolutionDeps } from "./riskFrameworkResolution.js";
 
@@ -188,6 +190,12 @@ export interface AppetiteVsResidualRow {
   frameworkVersionId?: string | null;
   /** q145: category id of the row (Dispositif wired only; null for a legacy free-label evaluation with no matching entry). */
   subCategoryId?: string | null;
+  /** SEC-B6C-02: evaluations created before the Dispositif (no version); their threshold is the historical read-only one. */
+  preDispositif?: boolean;
+  /** SEC-B6C-02: scores exist but the evaluation's version has no appetite for this sub-category: not assessable, never "respected". */
+  notAssessable?: boolean;
+  /** SEC-B6C-02 (information only, never blocking): the applicable Dispositif version is no longer the evaluation's one. */
+  reassessmentRequired?: boolean;
 }
 
 export interface KriConsolidatedReport {
@@ -304,7 +312,7 @@ export class DashboardService {
      * appetite-vs-residual comes from the Dispositif version applicable to each risk (spec §7), never from
      * `risk_appetites`. Absent: legacy read (tests).
      */
-    private readonly frameworks?: FrameworkResolutionDeps["frameworks"],
+    private readonly frameworks?: FrameworkResolutionDeps["frameworks"] & Partial<Pick<RiskFrameworkRepository, "getVersionById">>,
     /** QA-VIS2-02: masks hidden control / execution ids of the open anomalies. Optional (tests): absent, nothing masked. */
     private readonly access?: Pick<ResourceVisibilityManager, "maskAnomalyParents">,
   ) {}
@@ -681,6 +689,8 @@ export class DashboardService {
       threshold: number | null;
       scores: number[];
       riskIds: string[];
+      preDispositif: boolean;
+      reassessmentRequired: boolean;
     }
     const groups = new Map<string, Group>();
     // q145: a group is keyed by the category id when known (two homonymous sub-categories stay apart), else by label.
@@ -696,7 +706,7 @@ export class DashboardService {
       const key = keyOf(versionId, subCategory, subCategoryId, entity);
       let group = groups.get(key);
       if (!group) {
-        group = { subCategory, subCategoryId, entity, versionId, threshold, scores: [], riskIds: [] };
+        group = { subCategory, subCategoryId, entity, versionId, threshold, scores: [], riskIds: [], preDispositif: false, reassessmentRequired: false };
         groups.set(key, group);
       }
       return group;
@@ -712,13 +722,24 @@ export class DashboardService {
         if (!byProcess.has(cacheKey)) byProcess.set(cacheKey, await resolveApplicableVersion(deps, actor.tenantId, processId));
         return byProcess.get(cacheKey) ?? null;
       };
+      // SEC-B6C-02 (A13): a score is only compared to the threshold of the version it was computed under (the
+      // evaluation's own snapshot), never to today's applicable version, and never normalised across scales.
+      const versionCache = new Map<string, RiskFrameworkVersion | null>();
+      const versionOf = async (id: string) => {
+        if (!versionCache.has(id)) versionCache.set(id, (await this.frameworks!.getVersionById?.(actor.tenantId, id)) ?? null);
+        return versionCache.get(id) ?? null;
+      };
       for (const s of scored) {
-        const applicable = await applicableFor(s.risk.processId ?? null);
-        const entry = applicable
-          ? findAppetite(applicable.version.appetiteThresholds, s.evaluation.subCategory, s.evaluation.entity, s.evaluation.subCategoryId)
-          : null;
+        const evalVersionId = s.evaluation.riskFrameworkVersionId ?? null;
+        let entry: ReturnType<typeof findAppetite> = null;
+        if (evalVersionId) {
+          const v = await versionOf(evalVersionId);
+          entry = v ? findAppetite(v.appetiteThresholds, s.evaluation.subCategory, s.evaluation.entity, s.evaluation.subCategoryId) : null;
+        }
+        // An evaluation before the Dispositif (no version) is never attached to today's version (A13): no threshold,
+        // flagged preDispositif. `risk_appetites` is no longer fed since B-6b (F-B6b-01) and is not read here.
         const group = addGroup(
-          applicable?.version.id ?? null,
+          evalVersionId,
           // Grouped under the matched entry's identity, so the default-Dispositif loop below lands on the same group.
           entry?.subCategory ?? s.evaluation.subCategory,
           entry ? (entry.subCategoryId ?? null) : (s.evaluation.subCategoryId ?? null),
@@ -727,6 +748,11 @@ export class DashboardService {
         );
         group.scores.push(s.score);
         group.riskIds.push(s.risk.id);
+        if (!evalVersionId) group.preDispositif = true;
+        else {
+          const applicable = await applicableFor(s.risk.processId ?? null);
+          if (applicable && applicable.version.id !== evalVersionId) group.reassessmentRequired = true;
+        }
       }
       // Appetites with no risk yet: those of the default Dispositif (no process).
       const def = await applicableFor(null);
@@ -756,7 +782,14 @@ export class DashboardService {
         exceedanceCount,
         exceeded: threshold !== null && maxResidualScore !== null && maxResidualScore > threshold,
         riskIds: group.riskIds,
-        ...(this.frameworks ? { frameworkVersionId: group.versionId, subCategoryId: group.subCategoryId } : {}),
+        ...(this.frameworks ? {
+          frameworkVersionId: group.versionId,
+          subCategoryId: group.subCategoryId,
+          preDispositif: group.preDispositif,
+          // A group with scores but no threshold is "not assessable", never "within appetite".
+          notAssessable: threshold === null && group.scores.length > 0,
+          reassessmentRequired: group.reassessmentRequired,
+        } : {}),
       });
     }
 

@@ -579,3 +579,62 @@ describe("ProcessService", () => {
     });
   });
 });
+
+// q257 (DECISION-121, QA-B6C-02): re-parenting a sub-process to another Dispositif stays free, with a motive, a journal and a notice.
+describe("ProcessService move of a sub-process to another Dispositif (q257)", () => {
+  type Notif = { recipientUserId: string; eventType: string };
+  async function world() {
+    const repo = inMemoryProcessRepository();
+    const events: Array<Record<string, unknown>> = [];
+    const audit = { async record(e: Record<string, unknown>) { events.push(e); }, async listForEntity() { return []; } } as unknown as AuditRepository;
+    const created: Notif[] = [];
+    const base = { tenantId: actor.tenantId, description: null, documentType: null, documentReference: null, owner: null, departmentId: null };
+    const pDefault = await repo.create({ ...base, level: "PROCESS", name: "D", parentId: null });
+    const pB = await repo.create({ ...base, level: "PROCESS", name: "B", parentId: null });
+    const pB2 = await repo.create({ ...base, level: "PROCESS", name: "B2", parentId: null });
+    const sub = await repo.create({ ...base, level: "SUBPROCESS", name: "S", parentId: pDefault.id });
+    const frameworks = {
+      async hasPendingAssignment() { return false; },
+      async getDefaultFramework() { return { id: "fw-default" } as never; },
+      async getProcessFrameworkId(_t: string, id: string) { return id === pB.id || id === pB2.id ? "fw-b" : null; },
+    };
+    const users = { async listActiveInSystemGroup() { return [{ id: "rm1", displayName: "RM" }]; } };
+    const service = new ProcessService(repo, audit, undefined, undefined, undefined, anyDepartment, users as never, undefined, undefined, frameworks as never,
+      { async create(n: Notif) { created.push(n); return n as never; } } as never);
+    return { service, sub, pB, pB2, events, created };
+  }
+
+  it("a move that changes the Dispositif without a motive is refused (400), nothing written", async () => {
+    const w = await world();
+    await expect(w.service.update(actor, w.sub.id, { parentId: w.pB.id }, "r1")).rejects.toThrow(ValidationError);
+    await expect(w.service.update(actor, w.sub.id, { parentId: w.pB.id }, "r1", "  ")).rejects.toThrow(ValidationError);
+    expect(w.events).toHaveLength(0);
+  });
+
+  it("with a motive: moved, audit carries the old and the new Dispositif and the motive, the Risk Manager group is told", async () => {
+    const w = await world();
+    const out = await w.service.update(actor, w.sub.id, { parentId: w.pB.id }, "r1", "Rattacher à la méthode B");
+    expect(out.parentId).toBe(w.pB.id);
+    expect(w.events[0]).toMatchObject({ entityType: "Process", action: "UPDATE", reason: "Rattacher à la méthode B" });
+    expect(w.events[0]!["oldValue"]).toMatchObject({ riskFrameworkId: "fw-default" });
+    expect(w.events[0]!["newValue"]).toMatchObject({ riskFrameworkId: "fw-b", frameworkChanged: true });
+    expect(w.created).toEqual([expect.objectContaining({ recipientUserId: "rm1", eventType: "OBJECT_FRAMEWORK_CHANGED" })]);
+  });
+
+  it("a move inside the same Dispositif is free: no motive needed, no notice, journal says unchanged", async () => {
+    const w = await world();
+    await w.service.update(actor, w.sub.id, { parentId: w.pB.id }, "r1", "motif");
+    w.events.length = 0;
+    w.created.length = 0;
+    await w.service.update(actor, w.sub.id, { parentId: w.pB2.id }, "r2");
+    expect(w.events[0]!["newValue"]).toMatchObject({ frameworkChanged: false });
+    expect(w.events[0]!["reason"]).toBeNull();
+    expect(w.created).toHaveLength(0);
+  });
+
+  it("an update that does not move the sub-process leaves the journal without Dispositif fields", async () => {
+    const w = await world();
+    await w.service.update(actor, w.sub.id, { name: "Renommé" }, "r1");
+    expect(w.events[0]!["newValue"]).not.toHaveProperty("frameworkChanged");
+  });
+});
