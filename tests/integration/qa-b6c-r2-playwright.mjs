@@ -26,8 +26,8 @@ const API = process.env.QA_API ?? "http://127.0.0.1:8094";
 const APP = process.env.QA_APP ?? "http://127.0.0.1:5198";
 const SHOTS = process.env.QA_SHOTS ?? "qa-shots/b6c";
 mkdirSync(SHOTS, { recursive: true });
-const QA_DB = process.env.QA_DB ?? "grc_qa_b6c";
-if (!/^[a-z0-9_]+$/.test(QA_DB)) { console.error("QA_DB invalide (a-z, 0-9, _ seulement)"); process.exit(2); }
+// Base fixe (pas de variable d'environnement passée à psql : Sonar S6350).
+const QA_DB = "grc_qa_b6c";
 const PG = ["-h", "127.0.0.1", "-p", "55442", "-U", "postgres", "-d", QA_DB, "-Atq"];
 const sql = (q) => execFileSync("/usr/bin/psql", [...PG, "-c", q], { encoding: "utf8" }).trim();
 const T = "aaaaaaaa-0000-4000-8000-000000000001";
