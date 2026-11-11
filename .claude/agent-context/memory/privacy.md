@@ -292,3 +292,17 @@ Statut : **SOUS CONDITIONS** (périmètre dossiers « personnes nommées »). Do
 - Q2 (échéances conservées si repassage en PERIMETRE) et Q4 (pas d'audit ni notification à l'échéance) : aucune décision PO nécessaire pour Privacy ; conditions de vérification (QA ; Audit accepte la table comme preuve).
 - Principe ajouté :
 15. Une échéance d'accès est une information sur la personne (depuis quand, jusqu'à quand elle lit) : elle suit les mêmes règles de visibilité que son identité, et une réouverture ne vaut pas renouvellement tant que le texte de la décision n'autorise pas la reprise.
+
+## Revue q251 — journal sans nom ni e-mail (2026-11-11, DECISION-120)
+
+Statut : **COMPLIANT_FOR_SCOPE** pour les écritures du compte utilisateur (création, mise à jour, suspension, réactivation) ; **PARTIALLY_COMPLIANT** global. Document : `docs/privacy/privacy-q251-2026-11-11.md`. Code lu dans le worktree `agent-a78f0369b39cdf17d` (HEAD c30831a), pas via git (pas de Bash dans la session) : identité avec origin à confirmer.
+
+- Vérifié : `auditSnapshot` retire email et displayName (création, update, suspend, reactivate) ; `AuditLogService.withNames` joint le nom actuel sous `audit.read`, scopé tenant, id seul si non résolu. Test q251 présent sur la création seulement (UserService.test.ts l. 315).
+- Écart (a) : `DepartmentService` (riskOwner texte libre, l. 53-125) et `ProcessService` (legacyOwner, l. 296-299) écrivent encore des noms de personnes dans les nouvelles lignes. Hors q251 au sens strict, contraire à l'esprit de Q-F. Reco A : étendre aux propriétaires en texte libre (Q-251-1).
+- Écart (b) : renommage invisible dans avant/après. Perte de traçabilité, à arbitrer avec Audit. Reco A : noms des champs modifiés sans valeurs (Q-251-2).
+- Motifs en texte libre (suspension, réactivation, rôle, groupe) : point 7 du cadrage, toujours ouvert (Q-251-3).
+- R5 à corriger : e-mail absent de « Ce qui est enregistré » ; l'affirmation « servent à la traçabilité du journal » n'est plus exacte pour les nouvelles lignes. Proposition de phrase dans le document, date de mise en production à compléter.
+- DPO : accord global (DECISION-116) non redemandé ; si le PO juge la phrase substantiellement modifiée, c'est une décision PO.
+
+Principe ajouté :
+16. Une règle « pas de nom dans le journal » vaut pour tous les champs qui portent une personne, pas seulement pour le compte : un champ texte libre (propriétaire, motif) est une copie de nom tant qu'il n'est pas contrôlé. Et un texte d'information qui décrit le journal doit dire ce qui est vrai pour les lignes anciennes et les nouvelles séparément.
