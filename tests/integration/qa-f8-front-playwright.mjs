@@ -12,7 +12,7 @@
 //  2. Modules : une ligne par module renvoye par l'API ; motif vide : aucun PATCH ; motif d'espaces : le serveur refuse (400), son texte s'affiche, etat inchange ;
 //     motif valide -> PATCH { enabled: !etat, reason } ; l'API reflete l'etat ; audit STATUS_CHANGE avec motif ; champ motif plafonne a 500 ; double clic = un seul PATCH.
 //     aud (config.read sans config.manage) : PATCH refuse 403 « Missing permission: config.manage » explique a l'ecran, etat inchange.
-//  3. Clients : creation POST { name, deploymentMode } ; nom d'espaces -> refus serveur affiche ; modification PATCH sans « active » ; aucun bouton de desactivation.
+//  3. Clients : écran retiré (SEC-F8-01, q260) ; aucune entrée de menu, même pour adm ; GET /tenants refusé à aud.
 //  4. Import : apercu sans ecriture (0 risque cree) ; commit cree exactement validCount risques ; fichier non xlsx -> erreur serveur affichee ; fichier vide / sans en-tetes : pas de bouton Importer.
 //  5. Branding : fichier .txt -> refus serveur affiche, logo inchange ; PNG -> POST multipart, API reflete le logo ; aud : upload 403.
 //  6. client.ts : appels JSON = application/json ; multipart = multipart/form-data; boundary=..., jamais application/json.
@@ -91,7 +91,7 @@ try {
   check("1.aud sans Clients", !(await U.hasEntry("Clients")));
   check("1.aud sans Import Excel", !(await U.hasEntry("Import Excel")));
   const A = await session("adm");
-  for (const l of ["Image de marque", "Modules", "Clients", "Import Excel"]) check(`1.adm entree « ${l} »`, await A.hasEntry(l));
+  for (const l of ["Image de marque", "Modules", "Import Excel"]) check(`1.adm entree « ${l} »`, await A.hasEntry(l));
 
   // ---------- 2. Modules
   const mods = (await api("adm", "GET", "/modules")).json.data;
@@ -152,38 +152,9 @@ try {
   await U.page.getByRole("button", { name: "Fermer" }).click();
   await U.shot("modules-403");
 
-  // ---------- 3. Clients
-  await A.go("Clients");
-  const tcount0 = (await api("adm", "GET", "/tenants")).json.data.length;
-  check("3.1 une ligne par client de l'API", (await A.page.locator("main tbody tr").count()) === tcount0);
-  check("3.2 aucun bouton Désactiver/Supprimer", (await A.page.getByRole("button", { name: /désactiver|supprimer/i }).count()) === 0);
-  await A.page.getByRole("button", { name: "Nouveau client" }).click();
-  const cd = A.page.getByRole("dialog");
-  await cd.locator("#client-name").fill("   ");
-  await cd.getByRole("button", { name: "Enregistrer" }).click(); await A.page.waitForTimeout(1200);
-  const cdt = norm(await cd.innerText().catch(() => ""));
-  check("3.3 nom d'espaces : aucun client créé", (await api("adm", "GET", "/tenants")).json.data.length === tcount0);
-  check("3.3b nom d'espaces : refus serveur affiché dans le formulaire", /String must|too_small|at least|requis|required|Too small|Invalid/i.test(cdt), cdt.slice(0, 240));
-  await cd.locator("#client-name").fill("Client QA-F8");
-  await cd.locator("#client-mode").selectOption("on_premise");
-  await cd.getByRole("button", { name: "Enregistrer" }).click(); await A.page.waitForTimeout(1500);
-  const rc = lastReq("/api/v1/tenants", "POST");
-  check("3.4 POST { name, deploymentMode } seulement", rc && rc.body === JSON.stringify({ name: "Client QA-F8", deploymentMode: "on_premise" }), rc?.body);
-  const created = (await api("adm", "GET", "/tenants")).json.data.find((t) => t.name === "Client QA-F8");
-  check("3.5 client créé (on_premise, actif)", created?.deploymentMode === "on_premise" && created.active === true);
-  const crow = A.page.locator("main tbody tr", { hasText: "Client QA-F8" });
-  check("3.6 ligne : « Sur site », « Actif »", /Sur site/.test(await crow.innerText()) && /Actif/.test(await crow.innerText()));
-  await crow.getByRole("button", { name: "Modifier" }).click();
-  check("3.7 modifier : champs pré-remplis", (await A.page.locator("#client-name").inputValue()) === "Client QA-F8" && (await A.page.locator("#client-mode").inputValue()) === "on_premise");
-  await A.page.locator("#client-name").fill("Client QA-F8 renomme"); await A.page.locator("#client-mode").selectOption("customer_managed");
-  await A.page.getByRole("button", { name: "Enregistrer" }).click(); await A.page.waitForTimeout(1500);
-  const rp = lastReq(`/api/v1/tenants/${created.id}`, "PATCH");
-  check("3.8 PATCH sans 'active'", rp && !("active" in JSON.parse(rp.body)), rp?.body);
-  const upd = (await api("adm", "GET", `/tenants/${created.id}`)).json.data;
-  check("3.9 API : renommé, mode changé, toujours actif", upd.name === "Client QA-F8 renomme" && upd.deploymentMode === "customer_managed" && upd.active === true);
-  await A.shot("clients");
-  check("3.10 aud : GET /tenants refusé 403", (await api("aud", "GET", "/tenants")).status === 403);
-  check("3.11 audit du tenant créé", (await count(`SELECT count(*) n FROM audit_log WHERE entity_type='Tenant' AND entity_id=$1`, [created.id])) >= 1);
+  // ---------- 3. Clients : écran retiré (SEC-F8-01, q260) — il ne doit être atteignable par personne
+  check("3.1 adm sans entrée « Clients » (écran non exposé avant q260)", !(await A.hasEntry("Clients")));
+  check("3.2 aud : GET /tenants refusé 403", (await api("aud", "GET", "/tenants")).status === 403);
 
   // ---------- 4. Import Excel
   await A.go("Import Excel");
@@ -205,6 +176,7 @@ try {
   check("4.7 commit : exactement 2 risques créés", (await count(`SELECT count(*) n FROM risks WHERE description LIKE '%QA-F8%'`)) === risksBefore + 2);
   check("4.8 bandeau « 2 risques créés sur 4 lignes »", /2 risques créés sur 4 lignes/.test(txt), txt.slice(0, 300));
   check("4.9 plus de bouton Importer après commit", (await A.page.getByRole("button", { name: /^Importer/ }).count()) === 0);
+  check("4.9b Aperçu verrouillé après commit (pas de réimport du même fichier, Codex P2)", await prevBtn.isDisabled());
   await A.page.getByRole("button", { name: "Nouvel import" }).click();
   check("4.10 Nouvel import remet à zéro", !/Détail par ligne/.test(await A.text()));
   await imp(FAKE); await prevBtn.click(); await A.page.waitForTimeout(1500);

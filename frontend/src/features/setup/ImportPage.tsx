@@ -46,9 +46,9 @@ export function ImportPage({ token }: { token: string }) {
     </div>
     {error && <MessageBanner tone="danger" title="Import impossible">{error}</MessageBanner>}
     <Card header={<strong>Fichier</strong>}>
-      <FileUpload key={pickerKey} accept={XLSX} buttonLabel="Choisir un classeur .xlsx" onSelect={pick} disabled={busy} />
+      <FileUpload key={pickerKey} accept={XLSX} buttonLabel="Choisir un classeur .xlsx" onSelect={pick} disabled={busy || committed} />
       <div>
-        <Button onClick={() => void run(false)} disabled={!file || busy}>{busy ? "Analyse…" : "Aperçu (sans écriture)"}</Button>{" "}
+        <Button onClick={() => void run(false)} disabled={!file || busy || committed}>{busy ? "Analyse…" : "Aperçu (sans écriture)"}</Button>{" "}
         {report && !committed && report.validCount > 0 && <Button variant="primary" onClick={() => void run(true)} disabled={busy}>Importer {report.validCount} ligne{report.validCount > 1 ? "s" : ""} valide{report.validCount > 1 ? "s" : ""}</Button>}
         {committed && <Button onClick={() => { setFile(null); setReport(null); setCommitted(false); setPickerKey((k) => k + 1); }}>Nouvel import</Button>}
       </div>
