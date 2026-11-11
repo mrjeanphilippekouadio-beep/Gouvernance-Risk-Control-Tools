@@ -71,6 +71,19 @@ export class KpiService {
     return this.access.set(actor, this.target(kpi), input, requestId);
   }
 
+  /** Lot V5 (q225 A): renews the access of named people to a KPI in a « personnes nommées » dossier (30 days from now, never more). */
+  async renewAccess(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { userIds: string[]; reason: string },
+    requestId: string,
+  ): Promise<ResourceVisibilityState> {
+    requirePermission(actor, "kpi.read");
+    const kpi = await this.requireKpi(actor, id);
+    if (!this.access) throw new ValidationError("Renewing a named access is not available");
+    return this.access.renew(actor, this.target(kpi), input, requestId);
+  }
+
   /**
    * Lot V2 (SEC V1-02 extended, SEC V2-04 / CMP-V2-01): department / process of a restricted KPI decide who reads it. The
    * perimeter part is written locked and audited in its own transaction; returns the fields left for the generic update.

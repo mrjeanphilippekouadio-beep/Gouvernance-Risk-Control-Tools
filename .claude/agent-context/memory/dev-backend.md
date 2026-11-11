@@ -519,6 +519,22 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
   même transaction (`changePerimeter`). Piège vécu : un script d'édition qui s'arrête à mi-parcours laisse des fichiers à
   moitié modifiés (INSERT sans `visibility`, SEC V2-01) — relire le diff complet avant de pousser.
 
+## 2026-11-08 Lot V5 (q225 A, branche feat/r1-visibility-v5, migration 087)
+
+- Accès nominatif : `resource_access_grants.expires_at` (NULL = pas d'échéance : listes PERIMETRE hors q225). Posée à 30 jours quand le niveau devient/est NOMINATIF (`stampNamedExpiry`, dans la même transaction que le changement de niveau et la création de risque). Le garde SQL plafonne à now()+30 j et interdit de retirer l'échéance. Lecture : `visibility_granted` (et `risk_visible_core`, qui avait un EXISTS en ligne) ignore l'accès échu ou dont le dossier est clos (`visibility_resource_closed`) ; aucune ligne supprimée ni révoquée.
+- Clôture : RISK/CONTROL = ARCHIVED ou deleted_at ; KPI = deleted_at (pas de statut) ; ANOMALY = CLOSED ; ACTION_PLAN = TERMINEE.
+- Renouvellement : `POST /:id/visibility/renew` {userIds (boundedArray 1..50), reason}, `ResourceVisibilityManager.renew` / `RiskService.renewAccess`, droit = celui de l'ajout, pas de renouvellement de soi-même, refus si dossier clos ou non NOMINATIF.
+- Piège tests live : les suites V0..V4 rejouent 080/082/083/084 sur la base partagée et restaurent d'anciennes définitions ; la suite V5 rejoue 084 puis 087 en beforeAll. Les gardes statiques de numéros de migration (QA-panel*, v2bis, v3) sont à relever à chaque nouvelle migration.
+
+## 2026-11-08 Lot V5, retours QA/Sécu/Privacy (087 modifiée en place, pas de 088)
+
+- Lecture en échec fermé : `visibility_granted` = accès sans échéance valide seulement si le niveau propre du dossier n est pas NOMINATIF (`visibility_own_level`). Tout INSERT direct sur un NOMINATIF dans un test ou un seed doit porter `expires_at`.
+- Garde : l échéance d un accès vivant ne fait que s allonger ; plafond calculé avec `clock_timestamp()` (pas `now()`), sinon deux renouvellements concurrents se croisent (500). Les tests qui antidatent désactivent le trigger le temps de l UPDATE.
+- Une ligne vivante échue reste en table (révocable / réactivable) ; instantané d audit, retour de `set` et `accessCount` ne comptent que `visibility_granted` (`validList`). Ré-ajouter une personne échue la renouvelle (`reviveExpired`), 400 si dossier clos.
+- Renouvellement autorisé dès que l accès porte une échéance, quel que soit le niveau. Règle de fond des listes PERIMETRE : attend q253 (PO), non inventée ; 2 `it.fails` QA-V5-01 restent.
+- `expiresAt` renvoyé seulement à qui a `resourcevisibility.set` ou au propriétaire (`expiryScope`).
+- Non fait : KPI clos au renouvellement = 404 conservé (un KPI supprimé est 404 sur toute l API ; un 400 révélerait l existence).
+
 ## 2026-11-08 — I-RT3-01 arrêt propre (branche feat/r1-irt3-01-arret-propre, aucune migration)
 
 - `backend/src/shutdown.ts` : `InFlightRegistry` (`track`/`drain(ms)` → `{awaited, abandoned}`) + `trackedNotifier`. Les envois après réponse sont : le `Notifier` injecté (RiskService, FeedbackService, KriMeasure, ActionPlan, Governance : `.notify().catch()`) → enveloppé une fois dans `server.ts` ; et `GovernanceNotifier.processRequest` lancé à `res.end` → 2e paramètre optionnel du middleware. `NotificationService` (in-app) est attendu dans les services, donc non concerné.

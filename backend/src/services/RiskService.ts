@@ -5,11 +5,12 @@ import type { DepartmentRepository } from "../domain/repositories/DepartmentRepo
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { RiskEscalationRepository } from "../domain/repositories/RiskEscalationRepository.js";
 import type { ProcessRepository } from "../domain/repositories/ProcessRepository.js";
+import type { AccessRenewalResult } from "../domain/repositories/ResourceAccessRepository.js";
 import type { CreateRiskInput, Risk, RiskVisibilityState, UpdateRiskInput } from "../domain/entities/Risk.js";
 import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
 import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 import { writeAudited } from "./auditedWrite.js";
-import { sameVisibilityState, type ResourceVisibilityManager } from "./resourceVisibility.js";
+import { checkedRenewal, expiryRows, sameVisibilityState, type ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { RiskEscalation } from "../domain/entities/RiskEscalation.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
@@ -162,7 +163,7 @@ export class RiskService {
   async getAccess(actor: AuthenticatedUser, id: string): Promise<RiskVisibilityState> {
     const risk = await this.get(actor, id);
     const accessUserIds = this.risks.listAccess ? await this.risks.listAccess(actor.tenantId, id) : [];
-    return this.withNames(actor.tenantId, { visibility: risk.visibility ?? "CLIENT", accessUserIds });
+    return this.withNames(actor.tenantId, { visibility: risk.visibility ?? "CLIENT", accessUserIds }, actor.roles.includes("resourcevisibility.set") || (risk.ownerId != null && sameUserId(risk.ownerId, actor.userId)) ? id : undefined);
   }
 
   /**
@@ -221,13 +222,56 @@ export class RiskService {
     if (!holdsRight && !sameVisibilityState(result.before, result.after)) {
       await this.notifyVisibilityChanged(actor, id, result.widening ?? isWidening(result.before, result.after), requestId);
     }
-    return this.withNames(actor.tenantId, result.after);
+    return this.withNames(actor.tenantId, result.after, id);
   }
 
-  private async withNames(tenantId: string, state: RiskVisibilityState): Promise<RiskVisibilityState> {
+  /**
+   * Lot V5 (q225 A): renews the access of named people to a « personnes nommées » risk — new expiry = now + 30 days, never
+   * more. Same right (Risk Manager group or owner), same mandatory reason and same audit as the addition; the Risk
+   * Manager group is notified when the owner renews. Nobody renews their own access.
+   */
+  async renewAccess(actor: AuthenticatedUser, id: string, input: { userIds: string[]; reason: string }, requestId: string): Promise<RiskVisibilityState> {
+    requirePermission(actor, "risk.read");
+    const before = await this.get(actor, id);
+    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const isOwner = before.ownerId !== null && sameUserId(before.ownerId, actor.userId);
+    if (!holdsRight && !isOwner) {
+      throw new ForbiddenError("Only the Risk Manager group or the risk owner can renew a named access");
+    }
+    const { userIds, reason } = checkedRenewal(actor, input.userIds, input.reason);
+    const repo = this.risks;
+    if (!repo.renewAccess) throw new ValidationError("Renewing a risk's named access is not available");
+    for (const userId of userIds) await this.assertActiveAccessUser(actor.tenantId, userId);
+    const renewAccess = repo.renewAccess.bind(repo);
+    await writeAudited<AccessRenewalResult>(
+      repo.auditsInTransaction,
+      this.audit,
+      (audit) => renewAccess(actor.tenantId, id, userIds, audit),
+      ({ visibility, before: b, after: a, widening }) => [{
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Risk",
+        entityId: id,
+        action: "PERMISSION_CHANGE",
+        oldValue: { visibility, access: expiryRows(b) },
+        newValue: { visibility, access: expiryRows(a), renewed: userIds, widening },
+        reason,
+        requestId,
+      }],
+    );
+    if (!holdsRight) await this.notifyVisibilityChanged(actor, id, true, requestId);
+    return this.getAccess(actor, id);
+  }
+
+  private async withNames(tenantId: string, state: RiskVisibilityState, riskId?: string): Promise<RiskVisibilityState> {
     if (!this.users) return state;
     const users = this.users;
-    const accessUsers = await Promise.all(state.accessUserIds.map(async (id) => ({ id, displayName: (await users.getById(tenantId, id))?.displayName ?? null })));
+    const expiries = riskId ? await this.risks.accessExpiries?.(tenantId, riskId) : undefined;
+    const accessUsers = await Promise.all(state.accessUserIds.map(async (userId) => {
+      const e = expiries?.find((x) => sameUserId(x.userId, userId));
+      return { id: userId, displayName: (await users.getById(tenantId, userId))?.displayName ?? null,
+        ...(e !== undefined ? { expiresAt: e.expiresAt ? e.expiresAt.toISOString() : null } : {}) };
+    }));
     return { ...state, accessUsers };
   }
 

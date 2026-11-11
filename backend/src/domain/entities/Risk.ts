@@ -83,7 +83,7 @@ export interface RiskVisibilityState {
    * q205: names of the named people, for the risk's readers only (PRIV-REV-Q205-001: being named on a risk is visible to
    * those who see it). Filled by the service on reads; a missing account has a null name.
    */
-  accessUsers?: Array<{ id: string; displayName: string | null }>;
+  accessUsers?: Array<{ id: string; displayName: string | null; /** Lot V5 (q225): ISO expiry of a named-people access; null = none. */ expiresAt?: string | null }>;
 }
 
 export interface UpdateRiskInput {

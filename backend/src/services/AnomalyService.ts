@@ -84,6 +84,19 @@ export class AnomalyService {
     return this.access.set(actor, this.target(anomaly), input, requestId);
   }
 
+  /** Lot V5 (q225 A): renews the access of named people to an anomaly in a « personnes nommées » dossier (30 days from now, never more). */
+  async renewAccess(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { userIds: string[]; reason: string },
+    requestId: string,
+  ): Promise<ResourceVisibilityState> {
+    requirePermission(actor, "anomaly.read");
+    const anomaly = await this.getRaw(actor, id);
+    if (!this.access) throw new ValidationError("Renewing a named access is not available");
+    return this.access.renew(actor, this.target(anomaly), input, requestId);
+  }
+
   async create(
     actor: AuthenticatedUser,
     input: Omit<CreateAnomalyInput, "tenantId" | "detectedBy">,

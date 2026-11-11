@@ -2,6 +2,8 @@ import type { AuditRepository } from "../domain/repositories/AuditRepository.js"
 import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type {
+  AccessExpiry,
+  AccessRenewalResult,
   HiddenCounts,
   RestrictedResourceRow,
   PerimeterChange,
@@ -64,6 +66,20 @@ export function sameUserId(a: string, b: string): boolean {
   return normalise(a) === normalise(b);
 }
 
+/** Lot V5 (q225): an expiry as written in the audit rows and shown to the readers (ISO date-time, null = none). */
+export function expiryRows(list: AccessExpiry[]): Array<{ userId: string; expiresAt: string | null }> {
+  return list.map((e) => ({ userId: e.userId, expiresAt: e.expiresAt ? e.expiresAt.toISOString() : null }));
+}
+
+/** Lot V5 (q225): what both the resource managers and the risk service check before renewing a named access. */
+export function checkedRenewal(actor: AuthenticatedUser, rawUserIds: string[], rawReason: string | undefined): { userIds: string[]; reason: string } {
+  const reason = checkedReason(rawReason, "renew a named access");
+  const userIds = [...new Set(rawUserIds)];
+  if (userIds.length === 0) throw new ValidationError("At least one person is required to renew an access");
+  if (userIds.some((u) => sameUserId(u, actor.userId))) throw new ValidationError("You cannot renew your own access");
+  return { userIds, reason };
+}
+
 export function checkedReason(raw: string | undefined, what: string): string {
   const reason = raw?.trim() ?? "";
   if (!reason || reason.length > 500 || !isAcceptableReason(reason)) {
@@ -109,9 +125,57 @@ export class ResourceVisibilityManager {
     private readonly notifications?: Pick<NotificationRepository, "create">,
   ) {}
 
+  /** PRIV-V5-01: the expiry of a named access is shown to who manages the visibility (Risk Manager group, owner) only. */
+  private expiryScope(actor: AuthenticatedUser, target: VisibilityTarget): VisibilityTarget | undefined {
+    const manages = actor.roles.includes("resourcevisibility.set") || (target.ownerId !== null && sameUserId(target.ownerId, actor.userId));
+    return manages ? target : undefined;
+  }
+
   async get(actor: AuthenticatedUser, target: VisibilityTarget): Promise<ResourceVisibilityState> {
     const accessUserIds = await this.access.listAccess(actor.tenantId, target.type, target.id);
-    return this.withNames(actor.tenantId, { visibility: target.visibility, accessUserIds });
+    return this.withNames(actor.tenantId, { visibility: target.visibility, accessUserIds }, this.expiryScope(actor, target));
+  }
+
+  /**
+   * Lot V5 (q225 A, DECISION-112): renews the access of named people to a « personnes nommées » dossier — new expiry =
+   * now + 30 days, never more. Same right as the addition (Risk Manager group or owner account), same mandatory reason,
+   * audit row in the same transaction, Risk Manager group notified when the owner renews. Nobody renews their own access.
+   */
+  async renew(
+    actor: AuthenticatedUser,
+    target: VisibilityTarget,
+    input: { userIds: string[]; reason: string },
+    requestId: string,
+  ): Promise<ResourceVisibilityState> {
+    const holdsRight = actor.roles.includes("resourcevisibility.set");
+    const isOwner = target.ownerId !== null && sameUserId(target.ownerId, actor.userId);
+    if (!holdsRight && !isOwner) {
+      throw new ForbiddenError("Only the Risk Manager group or the owner can renew a named access to this resource");
+    }
+    if (target.inheritsFrom) {
+      throw new ValidationError(`This resource follows the visibility of its ${target.inheritsFrom.toLowerCase()}: renew there`);
+    }
+    const { userIds, reason } = checkedRenewal(actor, input.userIds, input.reason);
+    for (const userId of userIds) await this.assertActiveUser(actor.tenantId, userId);
+    const access = this.access;
+    const result = await writeAudited<AccessRenewalResult>(
+      access.auditsInTransaction,
+      this.audit,
+      (audit) => access.renewAccess(actor.tenantId, target.type, target.id, userIds, audit),
+      ({ visibility, before, after, widening }) => [{
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: target.entity,
+        entityId: target.id,
+        action: "PERMISSION_CHANGE",
+        oldValue: { visibility, access: expiryRows(before) },
+        newValue: { visibility, access: expiryRows(after), renewed: userIds, widening },
+        reason,
+        requestId,
+      }],
+    );
+    if (!holdsRight) await this.notifyOwnerChange(actor, target, true, requestId);
+    return this.get(actor, target);
   }
 
   async set(
@@ -157,7 +221,7 @@ export class ResourceVisibilityManager {
     // q208 (DECISION-107): every change by the owner reaches the Risk Manager group, widening or restricting.
     // QA-V2B-02: a request that changes nothing (same level, same list) does not wake the group.
     if (!holdsRight && !sameVisibilityState(result.before, result.after)) await this.notifyOwnerChange(actor, target, result.widening, requestId);
-    return this.withNames(actor.tenantId, result.after);
+    return this.withNames(actor.tenantId, result.after, this.expiryScope(actor, target));
   }
 
   /**
@@ -457,10 +521,19 @@ export class ResourceVisibilityManager {
     if ((await this.hidden(actor, type, [id])).size > 0) throw new NotFoundError(entity, shownId);
   }
 
-  private async withNames(tenantId: string, state: ResourceVisibilityState): Promise<ResourceVisibilityState> {
+  private async withNames(tenantId: string, state: ResourceVisibilityState, of?: Pick<VisibilityTarget, "type" | "id">): Promise<ResourceVisibilityState> {
     if (!this.users) return state;
     const users = this.users;
-    const accessUsers = await Promise.all(state.accessUserIds.map(async (id) => ({ id, displayName: (await users.getById(tenantId, id))?.displayName ?? null })));
+    // Lot V5 (q225): each name carries the expiry of its access (null = none), when the repository tells.
+    const expiries = of ? await this.access.accessExpiries?.(tenantId, of.type, of.id) : undefined;
+    const expiryOf = (id: string): string | null | undefined => {
+      const e = expiries?.find((x) => sameUserId(x.userId, id));
+      return e === undefined ? undefined : e.expiresAt ? e.expiresAt.toISOString() : null;
+    };
+    const accessUsers = await Promise.all(state.accessUserIds.map(async (id) => {
+      const expiresAt = expiryOf(id);
+      return { id, displayName: (await users.getById(tenantId, id))?.displayName ?? null, ...(expiresAt !== undefined ? { expiresAt } : {}) };
+    }));
     return { ...state, accessUsers };
   }
 
