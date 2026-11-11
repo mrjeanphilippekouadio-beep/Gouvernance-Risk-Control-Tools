@@ -394,3 +394,9 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 ## 2026-11-08 (retest) — QA-IRT3-01 sur db11c17
 - Verdict PASS. Échéance unique mesurée (budget 4000 ms -> exit 4,02 s, avant 7,2 s) ; requête infinie -> connexions coupées, exit 1 ; défaut 8000. Backend 2833 pass / 752 skipped / 0 fail ; script 29 vérifications. QA-IRT3-01/02 clos ; INFO : envoi abandonné = exit 0 + journal seulement (QA-IRT3-04), pool.end sans budget après échéance (QA-IRT3-05).
 - Leçon : ne pas écrire un oracle de code de sortie de mémoire ; relire la règle du lot (ici « 1 seulement si requêtes coupées ou pool non fermé »).
+
+## 2026-11-11 — QA-q251 (q251 A, DECISION-120 journal sans nom ni e-mail ; tête c30831a, `backend/test/QA-q251.test.ts`, rapport `docs/qa/qa-q251-2026-11-11.md`) — PARTIAL_PASS
+
+- 4 statiques + 21 live (`QA_Q251_LIVE=1`, port 8098, base `grc_qa_q251`) dont 4 `it.fails` ; `npm test` 2855 PASS. Périmètre User/AuditLogService conforme (mutant `auditSnapshot` détecté). Lectures tenant-scopées, compte introuvable = id seul, anciennes lignes intactes.
+- QA-Q251-01 MAJOR : champs texte libre de personne copiés dans les snapshots Department (manager, riskOwner), Process (owner), Kpi (owner), Control (executor). Décision PO / Privacy requise. INFO : renommage = old == new ; noms courants, comptes suspendus nommés ; N+1 jusqu'à 500.
+- Leçons : (1) un `it.fails` qui enveloppe l'écriture est vacueux si l'appel renvoie 400 : séparer un `it` exigeant 2xx de l'`it.fails` de scan ; (2) route du journal = `/audit-log` (singulier) ; (3) un profil sans lecture d'un risque NOMINATIF reçoit 404 : utiliser `rm` ; (4) rôle RACI = R/A/C/I ; (5) `npm ci` nécessaire, le lien vers node_modules du dépôt principal est cassé ici ; (6) mutant : sauvegarder, muter, restaurer, vérifier `git status` ; (7) le shell refuse les commandes composées (heredoc + &&) : Write puis commandes simples.
