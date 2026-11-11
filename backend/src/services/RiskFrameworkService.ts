@@ -20,6 +20,8 @@ import {
   ChangeRequestStatus,
   FrameworkParams,
   DecisionResult,
+  DefaultResult,
+  ArchiveFrameworkResult,
   RiskFramework,
   RiskFrameworkChangeRequest,
   RiskFrameworkVersion,
@@ -43,6 +45,8 @@ import {
   type FallbackCause,
 } from "../domain/frameworkApproval.js";
 import { ADMIN_PERMISSIONS } from "../domain/fixedGroupPermissions.js";
+import { DEFAULT_FRAMEWORK_TEMPLATES } from "../domain/defaultFrameworks.js";
+import type { RatingScale } from "../domain/entities/RatingScale.js";
 import { assertReadyToActivate } from "../domain/ratingScaleRules.js";
 import { ABSOLUTE_MAX_SCORE, defaultCommitteeThreshold, maxScoreForScale } from "../domain/scoring.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
@@ -185,7 +189,9 @@ function checkParams<T extends UpdateDraftParams>(input: T): T {
 export class RiskFrameworkService {
   constructor(
     private readonly frameworks: RiskFrameworkRepository,
-    private readonly ratingScales: Pick<RatingScaleRepository, "getById">,
+    /** The writers are only used by `provisionDefaults` (B-13), which refuses when they are not wired. */
+    private readonly ratingScales: Pick<RatingScaleRepository, "getById"> & Partial<Pick<RatingScaleRepository,
+      "create" | "updateThresholds" | "updateImpactAxes" | "updateVelocity" | "updatePersistence" | "updateMastery" | "auditsInTransaction">>,
     /** Fixed groups are roles with a `systemGroup`; members come from role assignments. */
     private readonly roles: Pick<RoleRepository, "list" | "listForUser" | "listAssignments" | "listActiveGrants">,
     private readonly users: Pick<UserRepository, "getById" | "listWithPermission">,
@@ -472,6 +478,13 @@ export class RiskFrameworkService {
         this.event(actor, "RiskFrameworkChangeRequest", id, "STATUS_CHANGE", request, r.request, comment, requestId),
       ]);
     }
+    if (request.kind === "SET_DEFAULT") {
+      const withdrawDefault = this.frameworks.withdrawDefault?.bind(this.frameworks);
+      if (!withdrawDefault || !this.inTx) throw new ValidationError("Default Dispositif change is not available");
+      return withdrawDefault(actor.tenantId, id, comment, (r) => [
+        this.event(actor, "RiskFrameworkChangeRequest", id, "STATUS_CHANGE", request, r.request, comment, requestId),
+      ]);
+    }
     return this.audited<DecisionResult>(
       (result) => [this.event(actor, "RiskFrameworkChangeRequest", id, "STATUS_CHANGE", request, result.request, comment, requestId)],
       (audit) => this.frameworks.withdraw(actor.tenantId, id, comment, audit),
@@ -497,6 +510,7 @@ export class RiskFrameworkService {
       throw new ForbiddenError("Le demandeur ne peut pas décider sa propre demande (maker-checker)");
     }
     if (request.kind === "ASSIGN_PROCESS") return this.decideAssignment(actor, request, outcome, comment, requestId);
+    if (request.kind === "SET_DEFAULT") return this.decideSetDefault(actor, request, outcome, comment, requestId);
     if (request.kind !== "ACTIVATE_VERSION" || !request.versionId) {
       throw new ValidationError(`Request kind ${request.kind} is not supported yet`);
     }
@@ -665,6 +679,169 @@ export class RiskFrameworkService {
       fallback ? "Un rattachement de processus à un Dispositif a été décidé en repli par un Risk Manager (ratification à venir)."
         : "Un rattachement de processus à un Dispositif a été décidé par un Risk Manager.", requestId);
     return result;
+  }
+
+  // -- default Dispositif and archiving (B-13, spec 11.1) ---------------------
+
+  /**
+   * Request to make `frameworkId` the tenant default. The approval rule is the ACTIVE version of that Dispositif
+   * (spec 5.2), so it needs one. Nothing changes until approval; the new default then applies to the evaluations created
+   * from that moment on, for the processes without an explicit attachment (the snapshot keeps the past ones).
+   */
+  async requestSetDefault(actor: AuthenticatedUser, frameworkId: string, reason: string, requestId: string): Promise<RiskFrameworkChangeRequest> {
+    requirePermission(actor, "riskframework.update");
+    await this.assertRiskManager(actor);
+    const clean = cleanText(reason, "reason", MAX_REASON, true)!;
+    const create = this.frameworks.createDefaultRequest?.bind(this.frameworks);
+    if (!create || !this.inTx) throw new ValidationError("Default Dispositif change is not available");
+    const target = await this.getFrameworkOrThrow(actor.tenantId, frameworkId);
+    if (target.archivedAt) throw new ValidationError("Un Dispositif archivé ne peut pas devenir le Dispositif par défaut");
+    if (target.isDefault) throw new ValidationError("Ce Dispositif est déjà le Dispositif par défaut");
+    const active = await this.frameworks.getActiveVersion(actor.tenantId, frameworkId);
+    if (!active) throw new ValidationError("Ce Dispositif n'a pas de version active : activez-en une d'abord");
+
+    // The repository re-checks all of it under lock and writes the audit row in the same transaction (q90).
+    const request = await create({
+      tenantId: actor.tenantId,
+      frameworkId,
+      reason: clean,
+      requestedBy: actor.userId,
+      audit: (r) => [this.event(actor, "RiskFrameworkChangeRequest", r.id, "SUBMIT", null, r, clean, requestId)],
+    });
+    const { eligible, all } = await this.resolveExcluding(actor.tenantId, new Set([actor.userId]), active.changeApprover);
+    if (eligible.RISK_MANAGER.length === 0) {
+      // q75: nobody can decide — never a tacit validation, never by the administrator.
+      await this.notify(actor, all.RISK_MANAGER, request.id, "RISK_FRAMEWORK_NO_DECIDER",
+        "Une demande de changement du Dispositif par défaut ne peut être décidée par personne : aucun Risk Manager éligible.", requestId);
+    } else {
+      await this.notify(actor, await this.holders(actor, "riskframework.activate"), frameworkId, "RISK_FRAMEWORK_CHANGE_PENDING",
+        "Une demande de changement du Dispositif par défaut attend votre décision.", requestId, true);
+    }
+    return request;
+  }
+
+  /** Approve/reject a SET_DEFAULT request (called by `decide` after permission, Risk Manager, pending and requester != decider checks). */
+  private async decideSetDefault(
+    actor: AuthenticatedUser,
+    request: RiskFrameworkChangeRequest,
+    outcome: "APPROVED" | "REJECTED",
+    comment: string | undefined,
+    requestId: string,
+  ): Promise<DefaultResult> {
+    const decide = this.frameworks.decideDefault?.bind(this.frameworks);
+    if (!decide || !this.inTx) throw new ValidationError("Default Dispositif change is not available");
+    const target = await this.getFrameworkOrThrow(actor.tenantId, request.frameworkId);
+    const active = await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId);
+    if (outcome === "APPROVED" && (target.archivedAt || !active)) {
+      throw new ValidationError("Le Dispositif n'a plus de version active : la demande ne peut être approuvée");
+    }
+    const approverRule = active?.changeApprover ?? "RISK_MANAGER";
+    const { decider, fallbackCause, bypassedGroups } = await this.resolveExcluding(actor.tenantId, new Set([request.requestedBy]), approverRule);
+    const fallback = decider.regime === "FALLBACK";
+    const cleanComment = cleanText(comment, "comment", MAX_COMMENT, outcome === "REJECTED" || fallback);
+
+    const events = (r: DefaultResult): AuditInput[] => outcome === "APPROVED"
+      ? [
+          // Spec 13: RiskFramework UPDATE (isDefault before -> after) for both identities, with the reason of the request.
+          ...(r.previousDefault ? [this.event(actor, "RiskFramework", r.previousDefault.id, "UPDATE", r.previousDefault,
+            { ...r.previousDefault, isDefault: false, requestId: request.id }, request.reason, requestId)] : []),
+          this.event(actor, "RiskFramework", request.frameworkId, "UPDATE", target,
+            { ...r.framework, requestId: request.id, decisionRegime: decider.regime, effect: "NEXT_EVALUATIONS" }, request.reason, requestId),
+          this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, cleanComment, requestId),
+        ]
+      : [this.event(actor, "RiskFrameworkChangeRequest", request.id, "REJECT", request, r.request, cleanComment, requestId)];
+
+    const result = await decide(actor.tenantId, request.id, {
+      outcome,
+      decidedBy: actor.userId,
+      comment: cleanComment,
+      decisionRegime: decider.regime,
+      deciderGroup: "RISK_MANAGER",
+      ratificationStatus: fallback ? "PENDING" : null,
+      fallbackCause,
+      approverRule,
+    }, events);
+
+    await this.notify(actor, [request.requestedBy], request.id, "RISK_FRAMEWORK_CHANGE_DECIDED",
+      outcome === "APPROVED"
+        ? "Votre demande de changement du Dispositif par défaut a été approuvée : elle s'applique aux évaluations créées à partir de maintenant."
+        : "Votre demande de changement du Dispositif par défaut a été refusée.", requestId);
+    const noticeTo = [...(await this.holders(actor, "audit.read")), ...(await this.membersOf(actor.tenantId, bypassedGroups))];
+    await this.notify(actor, noticeTo, request.id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE",
+      fallback ? "Un changement du Dispositif par défaut a été décidé en repli par un Risk Manager (ratification à venir)."
+        : "Un changement du Dispositif par défaut a été décidé par un Risk Manager.", requestId);
+    return result;
+  }
+
+  /**
+   * Archive a Dispositif (terminal: own permission `riskframework.archive`, never `update`, mandatory reason).
+   * Refused for the default Dispositif, while a live process is attached, or while a request is pending for it.
+   * Its DRAFT and ACTIVE versions are archived with it; evaluations that reference it stay readable.
+   */
+  async archiveFramework(actor: AuthenticatedUser, id: string, reason: string, requestId: string): Promise<RiskFramework> {
+    requirePermission(actor, "riskframework.archive");
+    await this.assertRiskManager(actor);
+    const clean = cleanText(reason, "reason", MAX_REASON, true)!;
+    const archive = this.frameworks.archiveFramework?.bind(this.frameworks);
+    if (!archive || !this.inTx) throw new ValidationError("Dispositif archiving is not available");
+    const before = await this.getFrameworkOrThrow(actor.tenantId, id);
+    if (before.archivedAt) throw new ValidationError("Ce Dispositif est déjà archivé");
+    if (before.isDefault) throw new ValidationError("Le Dispositif par défaut ne peut pas être archivé : définissez-en un autre par défaut d'abord");
+    // The repository re-checks default / attached processes / pending requests under lock; the audit is in the same transaction.
+    const result = await archive(actor.tenantId, id, actor.userId, clean, (r: ArchiveFrameworkResult) => [
+      this.event(actor, "RiskFramework", id, "STATUS_CHANGE", r.before, r.framework, clean, requestId),
+      ...r.versions.map((v) => this.event(actor, "RiskFrameworkVersion", v.after.id, "STATUS_CHANGE", v.before, v.after, clean, requestId)),
+    ]);
+    return result.framework;
+  }
+
+  /**
+   * B-13 (DECISION-124/127): makes the three default Dispositifs (Tranché 4x4, Standard 5x5, Renforcé 6x6) available
+   * as DRAFTs of the tenant: one rating scale (DRAFT) + one Dispositif with its version 1 each. Idempotent by name
+   * (case-insensitive): an existing non-archived Dispositif of that name is left alone. Nothing is activated and nothing
+   * is made the default here: the first activation does that (spec 4), so activate Standard first. Authorised by
+   * `riskframework.create` (the Risk Manager has no `ratingscale.create`): the content is fixed reference data.
+   * Not atomic across templates (each write is its own transaction): a failure leaves a DRAFT scale that a retry does not reuse.
+   */
+  async provisionDefaults(actor: AuthenticatedUser, requestId: string): Promise<{ created: string[]; skipped: string[] }> {
+    requirePermission(actor, "riskframework.create");
+    await this.assertRiskManager(actor);
+    const rs = this.ratingScales;
+    if (!rs.create || !rs.updateThresholds || !rs.updateImpactAxes || !rs.updateVelocity || !rs.updatePersistence || !rs.updateMastery) {
+      throw new ValidationError("Default Dispositifs are not available");
+    }
+    const taken = new Set((await this.frameworks.listFrameworks(actor.tenantId)).filter((f) => !f.archivedAt).map((f) => f.name.toLowerCase()));
+    const created: string[] = [];
+    const skipped: string[] = [];
+    const inTx = rs.auditsInTransaction === true;
+    const write = async (before: RatingScale | null, call: (audit?: TransactionalAudit<RatingScale>) => Promise<RatingScale>): Promise<RatingScale> => {
+      const build: TransactionalAudit<RatingScale> = (after) => [
+        this.event(actor, "RatingScale", after.id, before ? "UPDATE" : "CREATE", before, after, "Dispositif par défaut (modèle)", requestId),
+      ];
+      if (inTx) return call(build);
+      const after = await call();
+      for (const e of build(after)) await this.audit.record(e);
+      return after;
+    };
+
+    for (const t of DEFAULT_FRAMEWORK_TEMPLATES) {
+      if (taken.has(t.name.toLowerCase())) { skipped.push(t.name); continue; }
+      const sc = t.scale;
+      let scale = await write(null, (a) => rs.create!({
+        tenantId: actor.tenantId, name: sc.name, version: sc.version, probabilityLevels: sc.size, impactLevels: sc.size,
+        probabilityLabels: sc.probabilityLabels, impactLabels: sc.impactLabels,
+      }, a));
+      scale = await write(scale, (a) => rs.updateThresholds!(actor.tenantId, scale.id, sc.thresholds, a));
+      scale = await write(scale, (a) => rs.updateImpactAxes!(actor.tenantId, scale.id, { axes: sc.axes, retainedImpactRule: "MAX" }, a));
+      scale = await write(scale, (a) => rs.updateVelocity!(actor.tenantId, scale.id, sc.velocity, a));
+      scale = await write(scale, (a) => rs.updatePersistence!(actor.tenantId, scale.id, sc.persistence, a));
+      scale = await write(scale, (a) => rs.updateMastery!(actor.tenantId, scale.id, { levels: sc.mastery.levels, defenseLines: sc.mastery.defenseLines, aggregation: "MIN", thresholds: sc.mastery.thresholds }, a));
+      // Same rules as for any scale before activation: a template that fails them is a bug caught here, not at activation.
+      assertReadyToActivate(scale);
+      await this.create(actor, { name: t.name, description: t.description, ratingScaleId: scale.id, params: t.params }, requestId);
+      created.push(t.name);
+    }
+    return { created, skipped };
   }
 
   /**

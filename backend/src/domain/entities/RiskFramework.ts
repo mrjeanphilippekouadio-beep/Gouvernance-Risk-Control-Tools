@@ -226,6 +226,29 @@ export interface AssignmentResult {
   frameworkId: string | null;
 }
 
+/** B-13: request to make an open Dispositif (with an ACTIVE version) the tenant default; `requestedBy` is set by the service. */
+export interface CreateDefaultRequestInput {
+  tenantId: string;
+  frameworkId: string;
+  reason: string;
+  requestedBy: string;
+  audit?: TransactionalAudit<RiskFrameworkChangeRequest>;
+}
+
+/** B-13: outcome of a SET_DEFAULT decision. `previousDefault` null = the tenant had none. APPROVED only: `framework` is the new default. */
+export interface DefaultResult {
+  request: RiskFrameworkChangeRequest;
+  previousDefault: RiskFramework | null;
+  framework: RiskFramework | null;
+}
+
+/** B-13: outcome of archiving a Dispositif (spec 11.1): the identity and every version closed with it. */
+export interface ArchiveFrameworkResult {
+  before: RiskFramework;
+  framework: RiskFramework;
+  versions: Array<{ before: RiskFrameworkVersion; after: RiskFrameworkVersion }>;
+}
+
 export interface DecisionResult {
   request: RiskFrameworkChangeRequest;
   version: RiskFrameworkVersion;
