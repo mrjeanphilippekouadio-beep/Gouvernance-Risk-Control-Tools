@@ -445,3 +445,7 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 
 - QA-B13-01 clos (une transaction par modèle) ; réécriture de A06 vérifiée en la rejouant sur l'ancien code (elle échoue : non complaisante) ; ajout B-int4 (panne au 2e modèle) et D9 (course archivage // soumission : 500 par interblocage sur l'ancien code, jamais 5xx sur le nouveau). 37/37 live, suite 2911, Playwright 35/35.
 - Leçon : une alternance vert/rouge de tests live vient souvent d'un ORACLE dépendant de l'issue d'une course précédente (ici : quel Dispositif reste défaut décide lequel D6 archive, donc quelle échelle devient ARCHIVED) ; prendre les fixtures partagées au moment de l'appel (échelle ACTIVE courante). Pour prouver qu'un test réécrit n'est pas complaisant : `git checkout <ancien> -- backend/src`, le rejouer, restaurer avec `git checkout HEAD -- backend/src`.
+
+## 2026-11-11 (retest court) — QA-B13 sur e98f605 — RETEST_PASS
+
+- Factorisation Sonar sans changement de comportement : B13 live 37/37, B6c live 60/60, suite 2920, Playwright B-13 35/35. Rien de nouveau à retenir hors méthode : après un refactor pur, rejouer les suites qui traversent le code factorisé (ici aussi B-6c via ASSIGN_PROCESS).
