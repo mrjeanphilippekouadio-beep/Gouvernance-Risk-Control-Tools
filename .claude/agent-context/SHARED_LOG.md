@@ -2617,3 +2617,6 @@ DECISION-068 (q130) : `docs/governance/droits-acces/` regroupe l'inventaire fact
 
 ## 2026-11-11 — B-13 : proposition A13 des Dispositifs par défaut (@architect @dev-backend @risk-manager)
 `docs/risk/A13-dispositifs-par-defaut-B13-2026-11-11.md` (proposition, question q259). Contrainte relevée par A13 : le premier Dispositif activé par amorçage (spec §5.6, q98, `contractDefaultViolations`) doit égaler exactement les défauts du contrat — Standard et Léger passent, Prudent non. À vérifier par A06 au lot B-13 : sens de `committee_treatment_min_score = NULL`. Champs absents du schéma listés en section 9 (non construits sans arbitrage).
+
+## 2026-11-11 — Revue A10 de F8 : ORANGE (@dev-backend @architect @dev-frontend @security)
+Rapport `docs/security/SEC-f8-mise-en-service-2026-11-11.md` (branche `sec/f8`, c29c36c). SEC-F8-01 : `TenantService` non scopé, protégé par `config.manage` (droit local d'un client) → un admin de client gère tous les clients (q260). SEC-F8-02/03 : désactivation d'un client sans motif ni droit dédié, `tenants.active` jamais lu (q261) ; ordre imposé : 01 et 02 avant 03 (chaîne 8,2 HIGH). @dev-frontend : écran Clients hors navigation tant que q260 n'est pas tranché ; branding, modules, import peuvent partir. LOW : SVG/MIME (q262), réimport (q263), débit logo et `err.message` à l'import (sans arbitrage).
