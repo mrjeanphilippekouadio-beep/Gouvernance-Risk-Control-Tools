@@ -34,14 +34,14 @@ const { check, failures } = verdicts();
 const EMAIL = { rm1: "rm1@b6c.test", rm2: "rm2@b6c.test", plain: "plain@b6c.test" };
 const { login, api } = localApi(API, EMAIL);
 
-execFileSync("bash", [join(HERE, "qa-visibility-v1-setup.sh"), "up", DBN], { stdio: "ignore" });
+execFileSync("/bin/bash", [join(HERE, "qa-visibility-v1-setup.sh"), "up", DBN], { stdio: "ignore" });
 const RM = sql(`select id from roles where tenant_id = '${T}' and system_group = 'RISK_MANAGER'`);
 const granter = sql(`select id from users where email = 'adm@vv1.test'`);
 const mk = (n, perms = "{}") => sql(`insert into users (tenant_id, email, display_name, roles) values ('${T}','${n}@b6c.test','${n}','${perms}') returning id`).split("\n")[0];
 for (const n of ["rm1", "rm2"]) { const id = mk(n); sql(`insert into user_roles (tenant_id, role_id, user_id, granted_by) values ('${T}','${RM}','${id}','${granter}')`); }
 mk("plain", "{risk.read,riskframework.read}");
 const env = { ...process.env, QA_PORT: "8095", QA_DB: DBN };
-execFileSync("bash", [join(HERE, "qa-b6c-server.sh"), "start"], { env, stdio: "ignore" });
+execFileSync("/bin/bash", [join(HERE, "qa-b6c-server.sh"), "start"], { env, stdio: "ignore" });
 
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
 const sessions = [];
@@ -207,5 +207,5 @@ try {
   check("exception du parcours", false, String(e).slice(0, 500));
   for (const s of sessions) await s.shot("exception").catch(() => undefined);
 }
-execFileSync("bash", [join(HERE, "qa-b6c-server.sh"), "stop"], { stdio: "ignore" });
+execFileSync("/bin/bash", [join(HERE, "qa-b6c-server.sh"), "stop"], { stdio: "ignore" });
 await finish(browser, failures);
