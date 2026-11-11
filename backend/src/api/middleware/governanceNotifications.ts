@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import type { GovernanceNotifier } from "../../services/GovernanceNotifier.js";
+import type { InFlightRegistry } from "../../shutdown.js";
 
 const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -14,7 +15,7 @@ const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * Residual, accepted: a crash or instance stop between the COMMIT and `res.end` (the audit row stays; no push).
  * Mounted once, before the routers; `req.user` is set later by each router's own authentication and read at `res.end`.
  */
-export function governanceNotificationsMiddleware(notifier: Pick<GovernanceNotifier, "processRequest">) {
+export function governanceNotificationsMiddleware(notifier: Pick<GovernanceNotifier, "processRequest">, inFlight?: InFlightRegistry) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!READ_ONLY_METHODS.has(req.method)) {
       const end = res.end;
@@ -23,7 +24,11 @@ export function governanceNotificationsMiddleware(notifier: Pick<GovernanceNotif
         const out = Reflect.apply(end, this, args);
         if (!triggered) {
           triggered = true;
-          if (res.statusCode < 300 && req.user) void notifier.processRequest(req.user.tenantId, req.user.userId, req.requestId);
+          if (res.statusCode < 300 && req.user) {
+            const sent = notifier.processRequest(req.user.tenantId, req.user.userId, req.requestId);
+            // I-RT3-01: remembered so the graceful shutdown can await it (still not awaited here).
+            void (inFlight ? inFlight.track(sent) : sent);
+          }
         }
         return out;
       } as typeof res.end;
