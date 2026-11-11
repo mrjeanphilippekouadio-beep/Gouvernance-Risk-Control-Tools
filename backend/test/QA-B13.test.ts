@@ -240,10 +240,31 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
       expect(await orphanScales()).toBe(0);
     });
 
-    it("B-int3 reprise : la relance aboutit (3 modeles), exactement une echelle par modele, aucune orpheline", async () => {
+    it("B-int4 panne au 2e modele (echelle « Standard (5x5) » refusee par trigger) : Tranché reste cree ENTIER (Dispositif + echelle + version), Standard absent, aucune orpheline", async () => {
+      await sql(`CREATE FUNCTION qa_fail_scale_fn() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public, pg_temp AS $f$ BEGIN IF NEW.name = 'Standard (5x5)' THEN RAISE EXCEPTION 'QA: scale refused'; END IF; RETURN NEW; END $f$`);
+      await sql(`CREATE TRIGGER qa_fail_scale_trg BEFORE INSERT ON rating_scales FOR EACH ROW EXECUTE FUNCTION qa_fail_scale_fn()`);
+      let r: Res;
+      try { r = await call("rm1", "POST", "/risk-frameworks/defaults", {}); } finally { await sql(`DROP TRIGGER qa_fail_scale_trg ON rating_scales`); await sql(`DROP FUNCTION qa_fail_scale_fn()`); }
+      expect(r.status, r.text).toBeGreaterThanOrEqual(500);
+      const tr = (await fwByName("Tranché"))!;
+      expect(tr, "le premier modele, deja commite, reste").toBeTruthy();
+      const v = (await verOf(tr.id))[0]!;
+      const sc = await one(`SELECT status, criticality_thresholds, impact_axes, velocity_levels, mastery_scale FROM rating_scales WHERE id = $1`, [v.rating_scale_id]);
+      expect(sc.status).toBe("DRAFT");
+      expect(sc.criticality_thresholds).toHaveLength(4);
+      expect((sc.impact_axes as Row).axes).toHaveLength(5);
+      expect(sc.velocity_levels).toHaveLength(3);
+      expect(sc.mastery_scale).toBeTruthy();
+      expect(await fwByName("Standard")).toBeUndefined();
+      expect(await fwByName("Renforcé")).toBeUndefined();
+      expect(await scalesNamed("Standard (5x5)")).toBe(0);
+      expect(await orphanScales()).toBe(0);
+    });
+
+    it("B-int3 reprise apres B-int4 : la relance cree les deux modeles manquants et saute Tranché, exactement une echelle par modele, aucune orpheline", async () => {
       const r = await call("rm1", "POST", "/risk-frameworks/defaults", {});
       expect(r.status, r.text).toBe(201);
-      expect(r.json!["data"]).toEqual({ created: ["Tranché", "Standard", "Renforcé"], skipped: [] });
+      expect(r.json!["data"]).toEqual({ created: ["Standard", "Renforcé"], skipped: ["Tranché"] });
       expect(await scalesNamed("Tranché (4x4)")).toBe(1);
       expect(await scalesNamed("Standard (5x5)")).toBe(1);
       expect(await scalesNamed("Renforcé (6x6)")).toBe(1);
@@ -550,7 +571,8 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
     // ---------------------------------------------------------------------------------------------- D archivage
     describe("D archivage POST /:id/archive", () => {
       const mkFw = async (name: string) => {
-        const sc = (await verOf(F["Standard"]!))[0]!.rating_scale_id;
+        // A scale that is ACTIVE right now (never the scale of a Dispositif that D6 may have archived: the order of C6/C7 decides which default is left, so D6 archives Standard or Renforcé)
+        const sc = (await one(`SELECT id FROM rating_scales WHERE tenant_id = $1 AND status = 'ACTIVE' AND deleted_at IS NULL ORDER BY created_at LIMIT 1`, [T])).id as string;
         const c = await call("rm1", "POST", "/risk-frameworks", { name, ratingScaleId: sc, params: { committeeEvaluationMinScore: 15, committeeEvaluationEnforced: true, committeeTreatmentMinScore: null, appetiteThresholds: [], lowCriticalityThreshold: 4 } });
         expect(c.status, c.text).toBe(201);
         return (c.json!["data"].framework?.id ?? c.json!["data"].id) as string;
@@ -695,6 +717,27 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
           if (isArch) seen.archived++; else seen.refused++;
         }
         console.log("D7 outcomes", JSON.stringify(seen));
+      });
+
+      it("D9 CONCURRENCE archivage // soumission d'une version (SEC-B13-03 : interblocage) : jamais de 5xx, jamais archive avec une demande d'activation vivante", async () => {
+        const seen = { archived: 0, submitted: 0 };
+        for (let i = 0; i < 20; i++) {
+          const f = await mkFw(`Course D9 ${i}`); // DRAFT v1, no ACTIVE version
+          const v = (await verOf(f))[0]!;
+          const [a, b] = await Promise.all([
+            new Promise<Res>((ok) => setTimeout(ok, i % 2 === 0 ? i % 7 : 0)).then(() => archive("rm3", f, `Course ${i}`)),
+            new Promise<Res>((ok) => setTimeout(ok, i % 2 === 1 ? i % 7 : 0)).then(() => call("rm1", "POST", `/risk-frameworks/${f}/versions/${v.id}/activation-requests`, { reason: `Course ${i}` })),
+          ]);
+          expect(a.status, `iter ${i} archive: ${a.text}`).toBeLessThan(500);
+          expect(b.status, `iter ${i} submit: ${b.text}`).toBeLessThan(500);
+          const isArch = (await archived(f)).archived_at !== null;
+          const pend = await count(`SELECT count(*)::int n FROM risk_framework_change_requests WHERE framework_id = $1 AND status = 'PENDING'`, [f]);
+          expect(isArch && pend > 0, `iter ${i}: archive=${a.status} submit=${b.status} archived=${isArch} pending=${pend}`).toBe(false);
+          expect(isArch || pend > 0 || (a.status >= 400 && b.status >= 400), `iter ${i}: rien n'a abouti sans erreur`).toBe(true);
+          if (isArch) seen.archived++; else seen.submitted++;
+          if (pend > 0) await decide("rm1", (await one(`SELECT id FROM risk_framework_change_requests WHERE framework_id = $1 AND status = 'PENDING'`, [f])).id, "withdraw");
+        }
+        console.log("D9 outcomes", JSON.stringify(seen));
       });
 
       it("D8 CONCURRENCE archivage // SET_DEFAULT : jamais archive ET defaut", async () => {
