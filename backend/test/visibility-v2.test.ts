@@ -117,7 +117,7 @@ describe.skipIf(!hasLocalPg)("lot V2 on real PostgreSQL (local only)", () => {
   const sees = async (fn: string, id: string, userId: string | null) =>
     (await one(`SELECT ${fn}($1, $2, $3::uuid) AS v`, [ctx.tenant, id, userId])).v as boolean;
   const grant = (type: string, id: string, userId: string, by: string) =>
-    one(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason) VALUES ($1, $2, $3, $4, $5, 'test') RETURNING id`, [ctx.tenant, type, id, userId, by]);
+    one(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, $2, $3, $4, $5, 'test', now() + interval '10 days') RETURNING id`, [ctx.tenant, type, id, userId, by]);
   const dept = async () => (await one(`INSERT INTO departments (tenant_id, name) VALUES ($1, $2) RETURNING id`, [ctx.tenant, `D-${Math.random()}`])).id as string;
   const control = async (visibility: string, departmentId: string | null = null, processId: string | null = null) =>
     (await one(`INSERT INTO controls (tenant_id, label, process_id, department_id, control_type, frequency, executor, compliance_criteria, visibility)

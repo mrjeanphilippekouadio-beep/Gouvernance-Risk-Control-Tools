@@ -2,6 +2,7 @@ import { Router } from "express";
 import { ValidationError } from "../../domain/errors/DomainErrors.js";
 import { z } from "zod";
 import { boundedArray, reasonText } from "../validation.js";
+import { RenewBody } from "./resourceVisibility.routes.js";
 import type { RiskService } from "../../services/RiskService.js";
 import type { RaciEnrichmentViewService } from "../../services/RaciEnrichmentViewService.js";
 import type { RiskDeviceViewService } from "../../services/RiskDeviceViewService.js";
@@ -127,6 +128,16 @@ export function risksRouter(
       const body = RiskVisibilityBody.parse(req.body);
       const state = await riskService.setVisibility(req.user, z.guid().parse(req.params["id"]), body, req.requestId);
       res.json({ data: state });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Lot V5 (q225 A): renewal of the named people's access (30 days from now), same right and reason as the addition.
+  router.post("/:id/visibility/renew", async (req, res, next) => {
+    try {
+      const body = RenewBody.parse(req.body);
+      res.json({ data: await riskService.renewAccess(req.user, z.guid().parse(req.params["id"]), body, req.requestId) });
     } catch (err) {
       next(err);
     }

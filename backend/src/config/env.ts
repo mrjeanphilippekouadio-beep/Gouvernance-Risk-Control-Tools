@@ -10,6 +10,8 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_ENV: z.enum(["development", "staging", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
+  // I-RT3-01: max wait for in-flight notifications at SIGTERM/SIGINT = TOTAL stop budget (running requests + sends + pool close), platform grace minus 2 s.
+  SHUTDOWN_DRAIN_MS: z.coerce.number().int().min(0).max(120_000).default(8_000),
 
   DATABASE_URL: z
     .string()

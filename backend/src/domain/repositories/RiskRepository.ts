@@ -1,6 +1,7 @@
 import type { CreateRiskInput, Risk, RiskVisibilityChange, RiskVisibilityState, UpdateRiskInput } from "../entities/Risk.js";
 import type { TransactionalAudit } from "../entities/RiskFramework.js";
 import type { ReadScope } from "../visibility.js";
+import type { AccessExpiry, AccessRenewalResult } from "./ResourceAccessRepository.js";
 
 /**
  * The domain talks only to this interface — never to `pg`, Neon, or any
@@ -67,6 +68,13 @@ export interface RiskRepository {
     change: RiskVisibilityChange,
     audit?: TransactionalAudit<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }>,
   ): Promise<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }>;
+  /**
+   * Lot V5 (q225 A): renews the named-people access of `userIds` on a NOMINATIF, not closed risk (new expiry = now() + 30
+   * days, never more), under a row lock, audit rows in the same transaction. Optional: absent, renewal is refused.
+   */
+  renewAccess?(tenantId: string, riskId: string, userIds: string[], audit?: TransactionalAudit<AccessRenewalResult>): Promise<AccessRenewalResult>;
+  /** Lot V5: expiry of each live access of the risk. */
+  accessExpiries?(tenantId: string, riskId: string): Promise<AccessExpiry[]>;
   /**
    * Lot V1 (q193): among `ids`, the risks the scope may NOT read (restricted and not admitted). Archived and deleted
    * risks are included, unlike `list`: what inherits from a risk follows its visibility whatever its status. Optional:

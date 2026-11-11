@@ -8,8 +8,12 @@ export interface ResourceVisibilityState {
   visibility: Visibility;
   accessUserIds: string[];
   /** Names of the named people, for the resource's readers only (q205). Filled by the service. */
-  accessUsers?: Array<{ id: string; displayName: string | null }>;
+  accessUsers?: Array<{ id: string; displayName: string | null; /** Lot V5 (q225): ISO expiry of a named-people access; null = none. */ expiresAt?: string | null }>;
 }
+
+/** Lot V5 (q225): the expiry of one live access (null = no expiry: a PERIMETRE list). */
+export interface AccessExpiry { userId: string; expiresAt: Date | null }
+export type AccessRenewalResult = { visibility: Visibility; before: AccessExpiry[]; after: AccessExpiry[]; widening: boolean };
 
 export interface ResourceVisibilityChange {
   visibility: Visibility;
@@ -60,6 +64,19 @@ export interface ResourceAccessRepository {
     change: ResourceVisibilityChange,
     audit?: TransactionalAudit<VisibilityChangeResult>,
   ): Promise<VisibilityChangeResult>;
+  /**
+   * Lot V5 (q225 A): renews the named-people access of `userIds` on a NOMINATIF, not closed dossier — new expiry = now() +
+   * 30 days, never more — under a row lock, audit rows in the same transaction. `widening` = someone read nothing before.
+   */
+  renewAccess(
+    tenantId: string,
+    type: RestrictableResource,
+    id: string,
+    userIds: string[],
+    audit?: TransactionalAudit<AccessRenewalResult>,
+  ): Promise<AccessRenewalResult>;
+  /** Lot V5: expiry of each live access of the resource. Optional for the test fakes built before V5. */
+  accessExpiries?(tenantId: string, type: RestrictableResource, id: string): Promise<AccessExpiry[]>;
   /**
    * SEC V2-04 / CMP-V2-01: department and/or process of a restricted control or KPI changed under a row lock, with the
    * effective readers measured before and after and the audit rows in the same transaction.

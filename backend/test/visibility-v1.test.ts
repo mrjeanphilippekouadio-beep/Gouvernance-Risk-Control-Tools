@@ -184,7 +184,7 @@ describe.skipIf(!hasLocalPg)("visibility V1 (real PostgreSQL, local only)", () =
       `INSERT INTO risks (tenant_id, process, description, owner_id, superior_owner_id, process_id, owner_department_id, visibility)
        VALUES ($1, 'v1', 'risque restreint', $2, $3, $4, $5, 'PERIMETRE') RETURNING id`, [ctx.tenant, o, s, proc, dept])).id;
     await one(`INSERT INTO raci_assignments (tenant_id, entity_type, entity_id, user_id, role, created_by) VALUES ($1, 'RISK', $2, $3, 'C', $4) RETURNING id`, [ctx.tenant, riskId, r, o]);
-    await one(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason) VALUES ($1, 'RISK', $2, $3, $4, 'test') RETURNING id`, [ctx.tenant, riskId, g, o]);
+    await one(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, 'RISK', $2, $3, $4, 'test', now() + interval '10 days') RETURNING id`, [ctx.tenant, riskId, g, o]);
 
     for (const u of [o, s, r, po, dm, g, rm]) expect(await sees(riskId, u!), u).toBe(true);
     expect(await sees(riskId, x!)).toBe(false);

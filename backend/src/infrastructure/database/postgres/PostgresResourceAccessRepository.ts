@@ -1,5 +1,7 @@
 import type { Pool } from "pg";
 import type {
+  AccessExpiry,
+  AccessRenewalResult,
   HiddenCounts,
   RestrictedResourceRow,
   PerimeterChange,
@@ -15,6 +17,7 @@ import type { ReadScope, Visibility } from "../../../domain/visibility.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { runAudited } from "./PostgresAuditRepository.js";
 import { unknownDepartmentAsValidation } from "./foreignKey.js";
+import { isClosed, listExpiries, renewGrants, reviveExpired, stampNamedExpiry, validList } from "./namedAccess.js";
 import { resourceVisibleExpr, visibleToFunction } from "./visibilityFilter.js";
 
 /** Fixed identifiers only (never user input): the root table of each type and whether it has a soft-delete column. */
@@ -57,6 +60,34 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
 
   listAccess(tenantId: string, type: RestrictableResource, id: string): Promise<string[]> {
     return activeList(this.pool, tenantId, type, id);
+  }
+
+  accessExpiries(tenantId: string, type: RestrictableResource, id: string): Promise<AccessExpiry[]> {
+    return listExpiries(this.pool, tenantId, type, id);
+  }
+
+  async renewAccess(
+    tenantId: string,
+    type: RestrictableResource,
+    id: string,
+    userIds: string[],
+    audit?: TransactionalAudit<AccessRenewalResult>,
+  ): Promise<AccessRenewalResult> {
+    const root = ROOT[type];
+    return runAudited(this.pool, async (db) => {
+      const locked = await db.query<{ visibility: Visibility }>(
+        `SELECT visibility FROM ${root.table} WHERE tenant_id = $1 AND id = $2 ${root.softDeleted ? "AND deleted_at IS NULL" : ""} FOR UPDATE`,
+        [tenantId, id],
+      );
+      const visibility = locked.rows[0]?.visibility;
+      if (!visibility) throw new NotFoundError(root.entity, id);
+      if (await isClosed(db, tenantId, type, id)) throw new ValidationError("This dossier is closed: the named access has ended");
+      const before = await listExpiries(db, tenantId, type, id);
+      await renewGrants(db, tenantId, type, id, userIds);
+      const now = Date.now();
+      const widening = userIds.some((u) => before.some((b) => b.userId === u && b.expiresAt !== null && b.expiresAt.getTime() <= now));
+      return { visibility, before, after: await listExpiries(db, tenantId, type, id), widening };
+    }, audit);
   }
 
   readers(tenantId: string, type: RestrictableResource | "RISK", id: string): Promise<string[]> {
@@ -201,7 +232,8 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
        )
        SELECT r.type, r.id, r.label, r.visibility, r.updated_at,
               (SELECT count(*) FROM resource_access_grants g
-                WHERE g.tenant_id = $1 AND g.resource_type = r.type AND g.resource_id = r.id AND g.revoked_at IS NULL) AS access_count,
+                WHERE g.tenant_id = $1 AND g.resource_type = r.type AND g.resource_id = r.id AND g.revoked_at IS NULL
+                  AND visibility_granted(g.tenant_id, g.resource_type, g.resource_id, g.user_id)) AS access_count,
               lc.user_id AS last_by, lc."timestamp" AS last_at, lc.reason AS last_reason, (lc.new_value->>'widening')::boolean AS last_widening
        FROM restricted r
        LEFT JOIN LATERAL (
@@ -289,10 +321,12 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
         [tenantId, id],
       );
       if (!locked.rows[0]) throw new NotFoundError(root.entity, id);
-      const before: ResourceVisibilityState = { visibility: locked.rows[0].visibility, accessUserIds: await activeList(db, tenantId, type, id) };
+      // Every live row (expired ones too: they can be revoked or revived); the audit snapshot lists those who read now.
+      const rawBefore = await activeList(db, tenantId, type, id);
+      const before: ResourceVisibilityState = { visibility: locked.rows[0].visibility, accessUserIds: await validList(db, tenantId, type, id) };
       const readersBefore = await effectiveReaders(db, tenantId, type, id);
       // Back to CLIENT revokes the list as read under the lock (a concurrent grant cannot survive).
-      const revoke = change.visibility === "CLIENT" ? before.accessUserIds : change.revokeUserIds;
+      const revoke = change.visibility === "CLIENT" ? rawBefore : change.revokeUserIds;
       for (const userId of new Set(revoke)) {
         const { rowCount } = await db.query(
           `UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $5, revoke_reason = $6
@@ -302,7 +336,7 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
         if (!rowCount) throw new ValidationError(`No active access to revoke for user ${userId}`);
       }
       for (const userId of new Set(change.addUserIds)) {
-        if (before.accessUserIds.includes(userId)) continue;
+        if (rawBefore.includes(userId)) { await reviveExpired(db, tenantId, type, id, userId); continue; }
         await db.query(
           `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason)
            VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -313,9 +347,11 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
         `UPDATE ${root.table} SET visibility = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
         [tenantId, id, change.visibility],
       );
+      // Lot V5 (q225): a named-people dossier carries an expiry on every live access, those kept as those just added.
+      if (change.visibility === "NOMINATIF") await stampNamedExpiry(db, tenantId, type, id);
       const readersAfter = await effectiveReaders(db, tenantId, type, id);
       const widening = readersAfter.some((u) => !readersBefore.includes(u));
-      return { before, after: { visibility: change.visibility, accessUserIds: await activeList(db, tenantId, type, id) }, widening };
+      return { before, after: { visibility: change.visibility, accessUserIds: await validList(db, tenantId, type, id) }, widening };
     }, audit);
   }
 }

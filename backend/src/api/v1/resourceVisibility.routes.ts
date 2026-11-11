@@ -15,7 +15,14 @@ const VisibilityBody = z.object({
   reason: reasonText(500),
 });
 
+/** Lot V5 (q225 A): renewal of the named people's access (same right and same mandatory reason as the addition). */
+export const RenewBody = z.object({
+  userIds: boundedArray(z.guid(), MAX_ACCESS_CHANGE, 1),
+  reason: reasonText(500),
+});
+
 interface VisibilityService {
+  renewAccess(actor: AuthenticatedUser, id: string, input: { userIds: string[]; reason: string }, requestId: string): Promise<unknown>;
   getAccess(actor: AuthenticatedUser, id: string): Promise<unknown>;
   setVisibility(
     actor: AuthenticatedUser,
@@ -42,6 +49,15 @@ export function mountVisibilityRoutes(router: Router, service: VisibilityService
     try {
       const body = VisibilityBody.parse(req.body);
       res.json({ data: await service.setVisibility(req.user, z.guid().parse(req.params["id"]), body, req.requestId) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/:id/visibility/renew", async (req, res, next) => {
+    try {
+      const body = RenewBody.parse(req.body);
+      res.json({ data: await service.renewAccess(req.user, z.guid().parse(req.params["id"]), body, req.requestId) });
     } catch (err) {
       next(err);
     }

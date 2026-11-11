@@ -30,6 +30,7 @@ import { EvaluationModeRequestsPage } from "./features/governance/EvaluationMode
 import { OrganizationProfilePage } from "./features/governance/OrganizationProfilePage";
 import { MyDataPage } from "./features/privacy/MyDataPage";
 import { DesignationsPage } from "./features/governance/DesignationsPage";
+import { GovernanceHealthPage } from "./features/governance/GovernanceHealthPage";
 import { GovernanceDecisionsPage } from "./features/governance/GovernanceDecisionsPage";
 import { UsersAdmin } from "./features/admin/UsersAdmin";
 import { ContextRail } from "./design-system/ContextRail";
@@ -43,7 +44,7 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "auditmissions" | "rightsmatrix" | "restricted" | "mydata";
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "govhealth" | "auditmissions" | "rightsmatrix" | "restricted" | "mydata";
 type NavItem = { id: View; label: string; icon: string; available?: boolean; /** Hidden without this permission (display only). */ requires?: string | string[] } | { separator: string };
 const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
@@ -85,6 +86,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "departments", label: "Départements", icon: "table", available: true },
     { id: "riskcategories", label: "Catégories de risque", icon: "table", available: true },
     { separator: "Gouvernance" },
+    { id: "govhealth", label: "Santé de la gouvernance", icon: "panel", available: true, requires: "governancehealth.read" },
     { id: "orgprofile", label: "Profil d'organisation", icon: "panel", available: true },
     { id: "designations", label: "Désignations", icon: "user", available: true },
     { id: "govdecisions", label: "Décisions de gouvernance", icon: "check", available: true },
@@ -130,6 +132,7 @@ const PAGE_TITLES: Record<View, string> = {
   designations: "Désignations",
   users: "Comptes",
   govdecisions: "Décisions de gouvernance",
+  govhealth: "Santé de la gouvernance",
   auditmissions: "Missions d'audit",
   rightsmatrix: "Matrice des droits",
   mydata: "Vos données",
@@ -263,6 +266,7 @@ function App() {
             {view === "orgprofile" && <OrganizationProfilePage token={token} />}
             {view === "designations" && <DesignationsPage token={token} />}
             {view === "users" && <UsersAdmin token={token} />}
+            {view === "govhealth" && <GovernanceHealthPage token={token} />}
             {view === "govdecisions" && <GovernanceDecisionsPage token={token} />}
             {view === "auditmissions" && <AuditMissionsPage token={token} />}
             {view === "rightsmatrix" && <RightsMatrixPage token={token} />}

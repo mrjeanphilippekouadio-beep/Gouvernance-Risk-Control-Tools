@@ -65,6 +65,19 @@ export class ControlService {
     return this.access.set(actor, this.target(control), input, requestId);
   }
 
+  /** Lot V5 (q225 A): renews the access of named people to a control in a « personnes nommées » dossier (30 days from now, never more). */
+  async renewAccess(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { userIds: string[]; reason: string },
+    requestId: string,
+  ): Promise<ResourceVisibilityState> {
+    requirePermission(actor, "control.read");
+    const control = await this.getRaw(actor, id);
+    if (!this.access) throw new ValidationError("Renewing a named access is not available");
+    return this.access.renew(actor, this.target(control), input, requestId);
+  }
+
   async create(
     actor: AuthenticatedUser,
     input: Omit<CreateControlInput, "tenantId">,
