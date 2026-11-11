@@ -856,7 +856,8 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect(await attached(p)).toBe(F["FC1"]);
       const a = await sql(`SELECT * FROM audit_log WHERE tenant_id = $1 AND request_id IS NOT NULL AND entity_id = ANY($2) AND action IN ('UPDATE','APPROVE') ORDER BY action`, [TC, [p, rid]]);
       expect(a.map((x) => `${x.entity_type}:${x.action}`).sort()).toEqual(["Process:UPDATE", "RiskFrameworkChangeRequest:APPROVE"]);
-      for (const x of a) { expect(x.governance_exception).toBe("riskFramework.soleRiskManager"); expect(x.reason).toBe("Je suis le seul Risk Manager du tenant"); expect(x.user_id).toBe(uid["solo"]); }
+      // one exception per confirmation in the health panel: only the APPROVE row carries the marker (SEC INFO 09)
+      for (const x of a) { expect(x.governance_exception, x.entity_type).toBe(x.action === "APPROVE" ? "riskFramework.soleRiskManager" : null); expect(x.reason).toBe("Je suis le seul Risk Manager du tenant"); expect(x.user_id).toBe(uid["solo"]); }
       const pu = a.find((x) => x.entity_type === "Process")!;
       expect(pu.old_value).toEqual({ riskFrameworkId: null });
       expect(pu.new_value).toMatchObject({ riskFrameworkId: F["FC1"], requestId: rid, decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" });
@@ -906,8 +907,11 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       const none = await call("solo", "POST", `/risk-frameworks/change-requests/${rid}/sole-confirm`);
       expect(none.status, none.text).toBe(400);
       await intact(p, rid);
-      // boundary: 1 char and (INFO QA-B6C-04) 501 chars are accepted although every other motive of the lot stops at 500
-      const long = await solo("solo", rid, { reason: "x".repeat(501) });
+      // boundary: the motive stops at 500 characters like everywhere else (501 refused, nothing written; 500 accepted)
+      const tooLong = await solo("solo", rid, { reason: "x".repeat(501) });
+      expect(tooLong.status, tooLong.text).toBe(400);
+      await intact(p, rid);
+      const long = await solo("solo", rid, { reason: "x".repeat(500) });
       expect(long.status, long.text).toBe(200);
     });
 
@@ -1233,7 +1237,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect((await patch(UNKNOWN, { name: "x", reason: "x" })).status).toBe(404);
     });
 
-    it.fails("KNOWN GAP QA-B6C-03 J8 audit failure on the Process UPDATE: the move must not be applied without its trace", async () => {
+    it("QA-B6C-03 J8 (fixed, SEC-B6C-05) audit failure on the Process UPDATE: the move must not be applied without its trace", async () => {
       const pFB = await attachedProcess();
       const parentA = await proc();
       const sub = await proc("SUBPROCESS", parentA);
@@ -1317,7 +1321,8 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
 
     it("K1 089 up is idempotent, down restores the pre-089 CHECKs (same definitions), up again restores them; SOLE_RM refused before up", async () => {
       sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", MDB]);
-      // pre-089 baseline = a database with 001..088 only
+      // The setup script applies every migration: step back to the 089 state (090 down) so that 089 is exercised as before.
+      expect(fails(MDB, mig("090_sole_rm_frozen_at_request.down.sql"))).toBeNull();
       const base = defs(MDB);
       expect(base).toMatch(/risk_framework_change_requests_sole_rm_shape_check/);
       const upF = mig("089_sole_risk_manager_assignment.sql");
@@ -1360,6 +1365,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
         await mp.query(`ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER`);
         expect(fails(MDB, mig("089_sole_risk_manager_assignment.down.sql"))).toBeNull();
         expect(fails(MDB, mig("089_sole_risk_manager_assignment.sql"))).toBeNull();
+        expect(fails(MDB, mig("090_sole_rm_frozen_at_request.sql"))).toBeNull(); // back to the head state (090)
       } finally { await mp.query(`ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER`).catch(() => undefined); }
     }, 120000);
 
@@ -1378,10 +1384,28 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect(await t({ regime: "NORMAL", decidedBy: "other", comment: "ok" })).toBeNull();
     }, 120000);
 
-    it.fails("KNOWN GAP QA-B6C-04 K3b a SOLE_RM row with a NULL decider_group is refused by the shape CHECK (NULL passes `decider_group = RISK_MANAGER`)", async () => {
+    it("QA-B6C-04 K3b (fixed in 090) a SOLE_RM row with a NULL decider_group is refused by the shape CHECK (NULL passes `decider_group = RISK_MANAGER`)", async () => {
       await mp.query(`ALTER TABLE risk_framework_change_requests DISABLE TRIGGER USER`);
       try { expect(await code(insertReq({ regime: "SOLE_RM", decidedBy: "same", comment: "ok", group: null }))).toBe("23514"); } finally { await mp.query(`ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER`); }
     }, 60000);
+
+    it("K5 090: up idempotent, down restores the 089 shape (replayable) and drops the column, up again refuses a NULL decider_group and keeps the column default false", async () => {
+      const upF = mig("090_sole_rm_frozen_at_request.sql");
+      const downF = mig("090_sole_rm_frozen_at_request.down.sql");
+      const col = async () => msql(`SELECT column_default, is_nullable FROM information_schema.columns WHERE table_name = 'risk_framework_change_requests' AND column_name = 'sole_rm_at_request'`);
+      const head = defs(MDB);
+      expect(fails(MDB, upF)).toBeNull(); // replay
+      expect(defs(MDB)).toBe(head);
+      expect(await col()).toEqual([{ column_default: "false", is_nullable: "NO" }]);
+      expect(fails(MDB, downF)).toBeNull();
+      expect(await col()).toHaveLength(0);
+      expect(defs(MDB)).toMatch(/sole_rm_shape_check CHECK[^\n]*\(decider_group = 'RISK_MANAGER'::text\)/);
+      expect(defs(MDB)).not.toMatch(/decider_group IS NOT NULL/);
+      expect(fails(MDB, downF)).toBeNull(); // the 090 down is replayable
+      expect(fails(MDB, upF)).toBeNull();
+      expect(defs(MDB)).toBe(head);
+      expect(await col()).toEqual([{ column_default: "false", is_nullable: "NO" }]);
+    }, 120000);
 
     it("K4 the guards of 056/059/088 are untouched: an ASSIGN_PROCESS SOLE_RM request still needs the approval chain to write processes.risk_framework_id", async () => {
       const f = await msql(`SELECT proname, proconfig FROM pg_proc WHERE proname IN ('processes_framework_guard','risk_framework_assign_tenant_guard')`);

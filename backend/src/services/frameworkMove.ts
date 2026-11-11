@@ -17,19 +17,20 @@ export function requireFrameworkMoveReason(raw: string | undefined, what: string
 }
 
 /**
- * q257: tells the Risk Manager group (holders of `riskframework.activate`, the mover excluded). Best effort, after the
+ * q257: tells the Risk Manager group (active members of the FIXED Risk Manager group, the mover excluded; SEC INFO 10:
+ * not the holders of a permission). Best effort, after the
  * write; never names the object (it may be restricted), the audit row carries the detail. Optional deps: absent = nothing.
  */
 export async function notifyFrameworkMove(
-  deps: { notifications?: Pick<NotificationRepository, "create">; users?: Pick<UserRepository, "listWithPermission"> },
+  deps: { notifications?: Pick<NotificationRepository, "create">; users?: Pick<UserRepository, "listActiveInSystemGroup"> },
   actor: AuthenticatedUser,
   resourceId: string,
   message: string,
   requestId: string,
 ): Promise<void> {
-  if (!deps.notifications || !deps.users?.listWithPermission) return;
+  if (!deps.notifications || !deps.users?.listActiveInSystemGroup) return;
   try {
-    const managers = await deps.users.listWithPermission(actor.tenantId, "riskframework.activate", actor.userId);
+    const managers = await deps.users.listActiveInSystemGroup(actor.tenantId, "RISK_MANAGER", actor.userId);
     for (const m of managers) {
       try {
         await deps.notifications.create({

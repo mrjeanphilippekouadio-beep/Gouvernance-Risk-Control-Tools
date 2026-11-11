@@ -203,19 +203,22 @@ export class ProcessService {
     const frameworkChanged = framework !== null && framework.before !== framework.after;
     const moveReason = frameworkChanged ? requireFrameworkMoveReason(reason, "sub-process") : null;
 
-    const after = await this.processes.update(actor.tenantId, id, input);
-
-    await this.audit.record({
-      tenantId: actor.tenantId,
-      userId: actor.userId,
-      entityType: "Process",
-      entityId: id,
-      action: "UPDATE",
-      oldValue: framework ? { ...before, riskFrameworkId: framework.before } : before,
-      newValue: framework ? { ...after, riskFrameworkId: framework.after, frameworkChanged } : after,
-      reason: moveReason,
-      requestId,
-    });
+    const after = await writeAudited<Process>(
+      this.processes.auditsInTransaction,
+      this.audit,
+      (audit) => this.processes.update(actor.tenantId, id, input, audit),
+      (updated) => [{
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        entityType: "Process",
+        entityId: id,
+        action: "UPDATE",
+        oldValue: framework ? { ...before, riskFrameworkId: framework.before } : before,
+        newValue: framework ? { ...updated, riskFrameworkId: framework.after, frameworkChanged } : updated,
+        reason: moveReason,
+        requestId,
+      }],
+    );
 
     if (frameworkChanged) {
       await notifyFrameworkMove({ notifications: this.notifications, users: this.users }, actor, id,

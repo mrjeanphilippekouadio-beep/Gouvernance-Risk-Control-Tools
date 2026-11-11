@@ -97,6 +97,7 @@ interface RequestRow {
   ratification_status: "PENDING" | null;
   fallback_cause: "LEGACY_APPROVER_PRE_B12" | null;
   bootstrap_justification: BootstrapJustification | null;
+  sole_rm_at_request?: boolean;
 }
 
 const frameworkOf = (r: FrameworkRow): RiskFramework => ({
@@ -166,6 +167,7 @@ const requestOf = (r: RequestRow): RiskFrameworkChangeRequest => ({
   ratificationStatus: r.ratification_status,
   fallbackCause: r.fallback_cause ?? null,
   bootstrapJustification: r.bootstrap_justification ?? null,
+  soleRmAtRequest: r.sole_rm_at_request ?? false,
 });
 
 /** Domain key -> column. The only columns a draft update may ever write (whitelist, never client-named). */
@@ -770,11 +772,14 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
         [input.tenantId, input.processId],
       );
       if ((pending.rowCount ?? 0) > 0) throw new ConflictError("Une demande de rattachement est déjà en attente pour ce processus");
+      // q252 A / SEC-B6C-04: "no other Risk Manager" is judged AT REQUEST TIME and frozen on the row.
+      const facts = await this.readBootstrapFacts(c, input.tenantId, input.requestedBy);
+      const soleRm = facts.requesterIsActiveRiskManager && facts.activeMembers.RISK_MANAGER === 1;
       const { rows } = await c.query<RequestRow>(
         `INSERT INTO risk_framework_change_requests
-           (tenant_id, kind, framework_id, process_id, previous_value, reason, requested_by)
-         VALUES ($1, 'ASSIGN_PROCESS', $2, $3, $4, $5, $6) RETURNING *`,
-        [input.tenantId, input.frameworkId, input.processId, JSON.stringify({ frameworkId: previous }), input.reason, input.requestedBy],
+           (tenant_id, kind, framework_id, process_id, previous_value, reason, requested_by, sole_rm_at_request)
+         VALUES ($1, 'ASSIGN_PROCESS', $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [input.tenantId, input.frameworkId, input.processId, JSON.stringify({ frameworkId: previous }), input.reason, input.requestedBy, soleRm],
       );
       return this.audited(c, requestOf(rows[0]!), input.audit);
     });
@@ -792,8 +797,9 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
   async decideAssignment(tenantId: string, requestId: string, d: RecordDecisionInput & { approverRule: ChangeApprover; soleRiskManager?: boolean }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult> {
     return this.tx(async (c) => {
       if (d.soleRiskManager) {
-        // q252 A: same tenant lock as the bootstrap and the 062 trigger, taken before the request lock (same order):
-        // a second Risk Manager being assigned waits for us, or is already counted below.
+        // q252 A: same tenant lock as the bootstrap, taken before the request lock (same order). It serialises two
+        // confirmations/bootstraps; it does NOT block a Risk Manager assignment once the bootstrap has ended (the 062
+        // trigger returns before locking). Safe anyway: the count below is read under it, and an assignment only adds.
         const tenant = await c.query(`SELECT id FROM tenants WHERE id = $1 FOR NO KEY UPDATE`, [tenantId]);
         if (tenant.rows.length === 0) throw new NotFoundError("Tenant", tenantId);
       }
@@ -807,6 +813,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
       if (req.kind !== "ASSIGN_PROCESS" || !req.process_id) throw new ValidationError(`Request kind ${req.kind} is not an assignment`);
       if (d.soleRiskManager) {
         if (req.requested_by !== d.decidedBy) throw new ValidationError("La confirmation ne peut être faite que par le demandeur");
+        if (!req.sole_rm_at_request) throw new ConflictError("Le demandeur n'était pas le seul Risk Manager au moment de la demande : un tiers doit la décider");
         const facts = await this.readBootstrapFacts(c, tenantId, req.requested_by);
         if (!facts.requesterIsActiveRiskManager || facts.activeMembers.RISK_MANAGER !== 1) {
           throw new ConflictError("Un autre Risk Manager peut désormais valider cette demande : un tiers doit la décider");

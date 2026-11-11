@@ -565,3 +565,15 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Frontend : l'écran d'édition d'un risque et d'un processus doit maintenant envoyer `reason` quand le Dispositif change (non fait, back seulement).
 - Limites : `PATCH /processes/:id` avec changement de `level` + `parentId` simultané non traité ; descendants d'un process déplacé non listés dans l'audit.
 - Leçon outillage : le harnais refuse les commandes `cd ... && git ...` composées avec heredoc ; passer par Write (script dans le scratchpad) puis un appel `python3` simple.
+
+## 2026-11-11 B-6c retours A08/A10 sur q252/q257 (migration 090)
+
+- SEC-B6C-04 : « aucun autre RM » figé À LA DEMANDE : colonne `sole_rm_at_request` (090, défaut false, posée par `createAssignmentRequest` via `readBootstrapFacts` : demandeur seul RM actif). `sole-confirm` refusé 409 si false (service `=== false` pour ne pas casser les faux dépôts, et dépôt sous verrou). La vérification « un 2e RM est arrivé » à la confirmation reste. Demandes déjà en attente à l'application de 090 : non confirmables seul (à refaire).
+- 090 corrige aussi le CHECK `sole_rm_shape_check` (`decider_group IS NOT NULL AND ... = 'RISK_MANAGER'`) ; down rejouable. Règle : un CHECK avec `col = 'x'` laisse passer NULL, toujours ajouter `IS NOT NULL`.
+- SEC-B6C-05 : `ProcessRepository.update` prend un 4e paramètre `audit` (runAudited) ; `ProcessService.update` passe par `writeAudited`.
+- INFO 09 : une confirmation SOLE_RM = UNE exception en santé : seule la ligne APPROVE porte `riskFramework.soleRiskManager` (le Process UPDATE n'est pas une action validante, donc non comptée sans marqueur).
+- INFO 10 : `OBJECT_FRAMEWORK_CHANGED` part au groupe fixe RM : nouvelle méthode optionnelle `UserRepository.listActiveInSystemGroup(tenant, "RISK_MANAGER", exclude)` (fakes de tests : `listActiveInSystemGroup`, plus `listWithPermission`). Front : cette notification ouvre l'écran Dispositifs.
+- Motif `sole-confirm` : 500 (`Reason`). Commentaire sur le verrou tenant corrigé (062 sort avant de verrouiller après le bootstrap).
+- SEC-B6C-06 : garde `DROP CONSTRAINT` de QA-panel-migrations = liste blanche (fichier -> contrainte supprimée -> contrainte ré-ajoutée de même nom ; `%I` = DROP dynamique de 089). Toute nouvelle entrée est un point de revue.
+- Front : `run()` de FrameworksPage ne ferme plus sur un 403 métier (seulement `isPermissionDenied`) et ré-arme l'étape 1 de « Confirmer seul » après tout échec ; libellé lisible du marqueur en santé (`RULE_LABELS`). L'API ne renvoie que `processId` (pas le nom) : colonne Processus NON ajoutée.
+- Outillage : un cluster PG local de test se crée avec `pg_createcluster 16 grcdev -p 55442 --start -- --auth-local=trust --auth-host=trust` ; QA-B6c live : `QA_B6C_LIVE=1 npx vitest run test/QA-B6c.test.ts` (le setup applique TOUTES les migrations : les tests K reculent d'abord via 090.down). `npm ci` aussi dans `backend/` (pas seulement à la racine).

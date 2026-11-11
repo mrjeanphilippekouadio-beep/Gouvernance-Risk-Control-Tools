@@ -30,7 +30,7 @@ const role = (g: SystemGroup): Role => ({
   systemGroup: g, departmentId: null, createdAt: new Date(), updatedAt: new Date(), deletedAt: null,
 }) as Role;
 
-function setup(opts: { rm?: string[]; targetActive?: boolean; auditMembers?: string[] } = {}) {
+function setup(opts: { rm?: string[]; targetActive?: boolean; auditMembers?: string[]; soleAtRequest?: boolean } = {}) {
   const rm = opts.rm ?? ["u1", "u2", "u3"];
   const fw = (id: string): RiskFramework => ({ id, tenantId: "t1", name: id, description: null, isDefault: id === "fwDefault", createdBy: "u1",
     createdAt: new Date(), updatedAt: new Date(), archivedAt: null, archivedBy: null, archiveReason: null }) as RiskFramework;
@@ -51,7 +51,7 @@ function setup(opts: { rm?: string[]; targetActive?: boolean; auditMembers?: str
     async createAssignmentRequest(i: CreateAssignmentRequestInput) {
       const r = { id: `r${requests.length + 1}`, tenantId: i.tenantId, kind: "ASSIGN_PROCESS", frameworkId: i.frameworkId, versionId: null,
         processId: i.processId, previousValue: { frameworkId: attached.get(i.processId) ?? null }, reason: i.reason, status: "PENDING",
-        requestedBy: i.requestedBy } as RiskFrameworkChangeRequest;
+        requestedBy: i.requestedBy, soleRmAtRequest: opts.soleAtRequest ?? rm.length === 1 } as RiskFrameworkChangeRequest;
       requests.push(r);
       for (const e of i.audit?.(r) ?? []) audit.push(e);
       return r;
@@ -311,7 +311,9 @@ describe("q252 A (DECISION-121): the sole Risk Manager confirms their own proces
     expect(out.request).toMatchObject({ status: "APPROVED", decidedBy: "u1", decisionRegime: "SOLE_RM" });
     expect(s.attached.get("p1")).toBe("fwB");
     const p = s.audit.find((e) => e["entityType"] === "Process")!;
-    expect(p).toMatchObject({ userId: "u1", reason: "Seul Risk Manager du tenant", governanceException: "riskFramework.soleRiskManager" });
+    // One exception per confirmation in the health panel: only the APPROVE row carries the marker.
+    expect(p).toMatchObject({ userId: "u1", reason: "Seul Risk Manager du tenant" });
+    expect(p["governanceException"]).toBeUndefined();
     expect(p["newValue"]).toMatchObject({ decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" });
     expect(s.audit.find((e) => e["action"] === "APPROVE")).toMatchObject({ governanceException: "riskFramework.soleRiskManager" });
     expect(s.notified.filter((n) => n.eventType === "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE").map((n) => n.recipientUserId)).toEqual(["a1"]);
@@ -329,6 +331,26 @@ describe("q252 A (DECISION-121): the sole Risk Manager confirms their own proces
     const r = await ask(s);
     await expect(s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "ok" }, "r2")).rejects.toThrow(ConflictError);
     expect(s.attached.get("p1")).toBeNull();
+  });
+
+  it("SEC-B6C-04: judged at REQUEST time: a request made while another Risk Manager existed is never confirmable alone, even once they are gone (409)", async () => {
+    const s = setup({ rm: ["u1"], soleAtRequest: false });
+    const r = await ask(s);
+    await expect(s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "ok" }, "r2")).rejects.toThrow(/au moment de la demande/);
+    expect(s.attached.get("p1")).toBeNull();
+  });
+
+  it("the repository freezes the fact at creation and refuses on it under lock (static check)", () => {
+    const src = readFileSync("src/infrastructure/database/postgres/PostgresRiskFrameworkRepository.ts", "utf8");
+    expect(src).toMatch(/sole_rm_at_request\)\s+VALUES/);
+    expect(src).toMatch(/if \(!req\.sole_rm_at_request\) throw new ConflictError/);
+    const sql = readFileSync("../database/postgresql/migrations/090_sole_rm_frozen_at_request.sql", "utf8");
+    expect(sql).toMatch(/sole_rm_at_request boolean NOT NULL DEFAULT false/);
+    expect(sql).toMatch(/decider_group IS NOT NULL AND decider_group = 'RISK_MANAGER'/);
+  });
+
+  it("the motive of sole-confirm is bounded to 500 characters like everywhere else", () => {
+    expect(readFileSync("src/api/v1/riskFrameworks.routes.ts", "utf8")).toMatch(/SoleConfirmBody = z\.object\(\{ reason: Reason\.min\(1\) \}\)/);
   });
 
   it("the motive is mandatory, only the requester confirms, permission and membership are required", async () => {

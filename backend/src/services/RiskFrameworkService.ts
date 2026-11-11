@@ -670,8 +670,8 @@ export class RiskFrameworkService {
   /**
    * q252 A (DECISION-121): the requester is the ONLY Risk Manager able to validate (nobody else eligible), so the
    * request would stay in NO_DECIDER for ever. They confirm it a second time, with a motive; the attachment then
-   * applies to the evaluations created from now on. Traced (Process UPDATE + request APPROVE, both marked as a
-   * governance exception, hence shown in the health panel), Audit and Committee told if they exist. The rule stops
+   * applies to the evaluations created from now on. Traced (Process UPDATE + request APPROVE; only the APPROVE row is marked as a
+   * governance exception, so the health panel counts ONE exception per confirmation), Audit and Committee told. The rule stops
    * by itself: with a second active Risk Manager (service check, replayed under the tenant lock) a third party decides.
    */
   async confirmSoleAssignment(
@@ -689,7 +689,9 @@ export class RiskFrameworkService {
     if (request.kind !== "ASSIGN_PROCESS") throw new ValidationError("La confirmation ne couvre que le rattachement d'un processus");
     if (request.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${request.status})`);
     if (request.requestedBy !== actor.userId) throw new ForbiddenError("Seul le demandeur peut confirmer sa propre demande");
-    const reason = cleanText(input.reason, "reason", MAX_COMMENT, true)!;
+    // SEC-B6C-04: judged at REQUEST time (DECISION-121); the repository re-checks the frozen flag under lock.
+    if (request.soleRmAtRequest === false) throw new ConflictError("Le demandeur n'était pas le seul Risk Manager au moment de la demande : un tiers doit la décider");
+    const reason = cleanText(input.reason, "reason", MAX_REASON, true)!;
     const target = await this.getFrameworkOrThrow(actor.tenantId, request.frameworkId);
     const active = await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId);
     if (target.archivedAt || !active) throw new ValidationError("Le Dispositif d'arrivée n'a plus de version active : la demande ne peut être confirmée");
@@ -703,7 +705,7 @@ export class RiskFrameworkService {
       this.event(actor, "Process", r.processId, "UPDATE",
         { riskFrameworkId: r.previousFrameworkId },
         { riskFrameworkId: r.frameworkId, requestId: request.id, decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" },
-        reason, requestId, SOLE_RM_EXCEPTION),
+        reason, requestId),
       this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, reason, requestId, SOLE_RM_EXCEPTION),
     ];
     const result = await decide(actor.tenantId, request.id, {

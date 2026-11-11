@@ -111,7 +111,7 @@ export class PostgresProcessRepository implements ProcessRepository {
     return toDomain(row);
   }
 
-  async update(tenantId: string, id: string, input: UpdateProcessInput): Promise<Process> {
+  async update(tenantId: string, id: string, input: UpdateProcessInput, audit?: TransactionalAudit<Process>): Promise<Process> {
     const { setClauses, values } = buildUpdateSet(
       {
         parent_id: input.parentId,
@@ -127,31 +127,38 @@ export class PostgresProcessRepository implements ProcessRepository {
       },
       3,
     );
-    if (setClauses.length === 0) {
-      const current = await this.getById(tenantId, id);
-      if (!current) throw new NotFoundError("Process", id);
-      return current;
-    }
-
-    let rows: ProcessRow[];
-    try {
-      ({ rows } = await this.pool.query<ProcessRow>(
-        `UPDATE processes SET ${setClauses.join(", ")}, updated_at = now()
-         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
-         RETURNING *`,
-        [tenantId, id, ...values],
-      ));
-    } catch (err) {
-      // QA-B6C-01: only a PROCESS-level process can carry a Dispositif (055): a clear refusal instead of a 500.
-      if ((err as { code?: string; constraint?: string })?.code === "23514"
-          && (err as { constraint?: string }).constraint === "processes_risk_framework_level_check") {
-        throw new ValidationError("Ce processus est rattaché à un Dispositif : un processus rattaché doit rester de niveau PROCESS. Détachez-le d'abord.");
-      }
-      throw err;
-    }
-    const row = rows[0];
-    if (!row) throw new NotFoundError("Process", id);
-    return toDomain(row);
+    // SEC-B6C-05: the change and its audit row (old/new Dispositif, motive) commit together.
+    return runAudited(
+      this.pool,
+      async (db) => {
+        if (setClauses.length === 0) {
+          const current = await db.query<ProcessRow>(
+            `SELECT * FROM processes WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`, [tenantId, id]);
+          if (!current.rows[0]) throw new NotFoundError("Process", id);
+          return toDomain(current.rows[0]);
+        }
+        let rows: ProcessRow[];
+        try {
+          ({ rows } = await db.query<ProcessRow>(
+            `UPDATE processes SET ${setClauses.join(", ")}, updated_at = now()
+             WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+             RETURNING *`,
+            [tenantId, id, ...values],
+          ));
+        } catch (err) {
+          // QA-B6C-01: only a PROCESS-level process can carry a Dispositif (055): a clear refusal instead of a 500.
+          if ((err as { code?: string; constraint?: string })?.code === "23514"
+              && (err as { constraint?: string }).constraint === "processes_risk_framework_level_check") {
+            throw new ValidationError("Ce processus est rattaché à un Dispositif : un processus rattaché doit rester de niveau PROCESS. Détachez-le d'abord.");
+          }
+          throw err;
+        }
+        const row = rows[0];
+        if (!row) throw new NotFoundError("Process", id);
+        return toDomain(row);
+      },
+      audit,
+    );
   }
 
   async setResponsibilities(

@@ -138,6 +138,8 @@ export interface RiskFrameworkChangeRequest {
   ratificationStatus: "PENDING" | null;
   /** B-6d (q100): set only on a FALLBACK decision taken because the legacy approver's vote cannot exist before B-12. */
   fallbackCause: "LEGACY_APPROVER_PRE_B12" | null;
+  /** q252 A: ASSIGN_PROCESS only; the requester was the sole active Risk Manager WHEN the request was created (frozen, 090). */
+  soleRmAtRequest?: boolean;
   /** B-6d (q83, I-D2, I-D8): structured motive + frozen free parameters of a BOOTSTRAP decision; null otherwise. */
   bootstrapJustification: BootstrapJustification | null;
 }

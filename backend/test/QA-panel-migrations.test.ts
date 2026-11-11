@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
  *    The test leaves the database in the full 071 state.
  */
 const DIR = join(__dirname, "..", "..", "database", "postgresql", "migrations");
-const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "079", "080", "081", "082", "083", "084", "085", "086", "087", "088", "089"] as const;
+const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "079", "080", "081", "082", "083", "084", "085", "086", "087", "088", "089", "090"] as const;
 const up = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && !f.endsWith(".down.sql"))!;
 const down = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && f.endsWith(".down.sql"))!;
 const read = (f: string) => readFileSync(join(DIR, f), "utf8");
@@ -35,9 +35,37 @@ describe("QA-panel migrations 066-071 (static)", () => {
       const sql = stripComments(read(up(n)));
       expect(sql, up(n)).not.toMatch(/\bDELETE\s+FROM\b/i);
       expect(sql, up(n)).not.toMatch(/^\s*TRUNCATE\b/im);
-      // DROP CONSTRAINT is allowed only to REPLACE a CHECK in place (089 widens decision_regime / maker-checker): no data is removed.
       expect(sql, up(n)).not.toMatch(/\bDROP\s+(TABLE|COLUMN|INDEX|FUNCTION)\b/i);
-      if (/\bDROP\s+CONSTRAINT\b/i.test(sql)) expect(sql, up(n)).toMatch(/\bADD\s+CONSTRAINT\b/i);
+    }
+  });
+
+  // SEC-B6C-06: a DROP CONSTRAINT is accepted only when (file, constraint) is listed here AND the same file re-adds a
+  // constraint of the SAME name (a CHECK replaced in place, nothing weakened silently). Adding a line here is a review point.
+  // "%I" = the DROP is dynamic (name found in pg_constraint by definition, 089 for the auto-named 055 CHECK): the
+  // replacement is then the explicitly named constraint given in the list.
+  const REPLACED_IN_PLACE: Record<string, Array<{ dropped: string; readded: string }>> = {
+    "089": [
+      { dropped: "%I", readded: "risk_framework_change_requests_decision_regime_values_check" },
+      { dropped: "risk_framework_change_requests_maker_checker", readded: "risk_framework_change_requests_maker_checker" },
+      { dropped: "risk_framework_change_requests_sole_rm_shape_check", readded: "risk_framework_change_requests_sole_rm_shape_check" },
+    ],
+    "090": [
+      { dropped: "risk_framework_change_requests_sole_rm_shape_check", readded: "risk_framework_change_requests_sole_rm_shape_check" },
+    ],
+  };
+
+  it("DROP CONSTRAINT in an up file only on the explicit (file, constraint) whitelist, each re-added under the same name", () => {
+    for (const n of NUMBERS) {
+      const sql = stripComments(read(up(n)));
+      const drops = [...sql.matchAll(/\bDROP\s+CONSTRAINT\s+(?:IF\s+EXISTS\s+)?("?[\w%]+"?)/gi)].map((m) => m[1]!.replace(/"/g, ""));
+      const allowed = REPLACED_IN_PLACE[n] ?? [];
+      for (const dropped of drops) {
+        const entry = allowed.find((a) => a.dropped === dropped);
+        expect(entry, `${up(n)} drops ${dropped}: not on the whitelist`).toBeDefined();
+        expect(sql, `${up(n)} must re-add ${entry!.readded}`).toMatch(new RegExp(`\\bADD\\s+CONSTRAINT\\s+${entry!.readded}\\b`, "i"));
+      }
+      // And the list stays honest: no entry for a drop that no longer exists.
+      for (const a of allowed) expect(drops, `${up(n)} whitelist entry ${a.dropped} unused`).toContain(a.dropped);
     }
   });
 

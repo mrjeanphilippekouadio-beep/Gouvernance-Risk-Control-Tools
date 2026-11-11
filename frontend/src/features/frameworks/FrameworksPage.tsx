@@ -15,7 +15,7 @@ import {
 import { ratingScalesApi, type RatingScale } from "../../api/evaluations";
 import { riskCategoriesApi, type RiskCategory } from "../../api/riskCategories";
 import { AppetiteThresholdsTab } from "./AppetiteThresholdsTab";
-import { FormModal, dateOnly, describeError, isForbidden } from "../indicators/shared";
+import { FormModal, dateOnly, describeError, isPermissionDenied } from "../indicators/shared";
 import "../core/CorePages.css";
 
 const STATUS_LABELS: Record<VersionStatus, string> = { DRAFT: "Brouillon", PENDING_APPROVAL: "En attente d'approbation", ACTIVE: "Active", ARCHIVED: "Archivée" };
@@ -165,7 +165,12 @@ export function FrameworksPage({ token }: { token: string }) {
   async function run(action: () => Promise<void>, close: () => void) {
     setSaving(true); setFormError(null);
     try { await action(); close(); await afterWrite(); }
-    catch (err) { setFormError(describeError(err)); if (isForbidden(err)) close(); }
+    catch (err) {
+      // QA-B6C-06: a refusal at the 2nd step of "Confirmer seul" goes back to step 1 (motive editable).
+      // QA-B6C-07: a business 403 shows the server message in the window; only a missing permission (explained by the global dialog) closes it.
+      setFormError(describeError(err)); setSoleArmed(false);
+      if (isPermissionDenied(err)) close();
+    }
     finally { setSaving(false); }
   }
 

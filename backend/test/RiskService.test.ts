@@ -727,7 +727,7 @@ describe("RiskService", () => {
           async getProcessFrameworkId(_t: string, pid: string) { return pid === pNew.id ? "fw-b" : null; },
         };
         const sent: Array<{ recipientUserId: string; eventType: string }> = [];
-        const users = { async listWithPermission() { return [{ id: "rm1", displayName: "RM" }]; } };
+        const users = { async listActiveInSystemGroup() { return [{ id: "rm1", displayName: "RM" }]; } };
         const notifications = { async create(n: { recipientUserId: string; eventType: string }) { sent.push(n); return n as never; } };
         const service = new RiskService(inMemoryRiskRepository(), audit, undefined, users as never, undefined, undefined,
           inMemoryProcessRepository([pOld, pNew, pSame]), undefined, notifications as never, undefined, frameworks);

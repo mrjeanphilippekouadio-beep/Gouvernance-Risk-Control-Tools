@@ -10,6 +10,11 @@ import { PrincipleComparisonColumns } from "./PrincipleComparisonColumns";
 import "../core/CorePages.css";
 import "./GovernanceHealth.css";
 
+/** Readable label of an exception marker the server names; an unknown key is shown as is. Display only. */
+const RULE_LABELS: Record<string, string> = {
+  "riskFramework.soleRiskManager": "Rattachement de processus confirmé par le seul Risk Manager, sans second avis (DECISION-121)",
+};
+const ruleLabel = (rule: string) => RULE_LABELS[rule] ?? rule;
 
 /** Tone by severity for a non-respected principle; the other statuses have a fixed tone. Display only, the status is the server's. */
 function statusBadge(p: PanelPrinciple): { label: string; tone: StatusTone } {
@@ -121,11 +126,11 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
 
   const exceptionColumns: TableColumn<PanelException>[] = [
     { key: "age", header: "Âge", render: (e) => <>{e.ageDays} j{e.overdue && <> <StatusBadge label="En retard" tone="danger" /></>}<div className="muted">{e.at.length > 10 ? e.at.slice(0, 16).replace("T", " ") : e.at}</div></> },
-    { key: "what", header: "Action", render: (e) => <><strong>{e.rule}</strong><div className="muted">{e.action} · {e.entityType} {e.entityId}</div>{e.reason && <div>{e.reason}</div>}</> },
+    { key: "what", header: "Action", render: (e) => <><strong>{ruleLabel(e.rule)}</strong><div className="muted">{e.action} · {e.entityType} {e.entityId}</div>{e.reason && <div>{e.reason}</div>}</> },
     { key: "who", header: "Par", render: (e) => e.mine ? "Vous" : (e.userLabel ?? "Masqué (droit d'audit requis)") },
     { key: "state", header: "État", render: (e) => <StatusBadge label={e.reviewed ? "Revue" : "À revoir"} tone={e.reviewed ? "success" : "warning"} /> },
     { key: "actions", header: "", render: (e) => !e.reviewed && !e.mine && can("governanceexception.review")
-      ? <Button aria-label={`Revoir ${e.rule}`} onClick={() => openReview(e)}>Revoir</Button> : null },
+      ? <Button aria-label={`Revoir ${ruleLabel(e.rule)}`} onClick={() => openReview(e)}>Revoir</Button> : null },
   ];
 
   const rmEmpty = data?.principles.some((p) => p.offenders.some((o) => o.kind === "GROUP" && o.id === "RISK_MANAGER" && o.count === 0)) ?? false;
@@ -227,7 +232,7 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
     >
       {review && <form id="review-form" onSubmit={submitReview}>
         {actionError && <MessageBanner tone="danger">{actionError}</MessageBanner>}
-        <p>{review.rule} · {review.action} {review.entityType}</p>
+        <p>{ruleLabel(review.rule)} · {review.action} {review.entityType}</p>
         <FormField label="Issue" htmlFor="review-outcome">
           <select id="review-outcome" value={outcome} onChange={(e) => setOutcome(e.target.value === "CONTESTED" ? "CONTESTED" : "REVIEWED")}>
             <option value="REVIEWED">Revue : rien à redire</option>

@@ -598,7 +598,7 @@ describe("ProcessService move of a sub-process to another Dispositif (q257)", ()
       async getDefaultFramework() { return { id: "fw-default" } as never; },
       async getProcessFrameworkId(_t: string, id: string) { return id === pB.id || id === pB2.id ? "fw-b" : null; },
     };
-    const users = { async listWithPermission() { return [{ id: "rm1", displayName: "RM" }]; } };
+    const users = { async listActiveInSystemGroup() { return [{ id: "rm1", displayName: "RM" }]; } };
     const service = new ProcessService(repo, audit, undefined, undefined, undefined, anyDepartment, users as never, undefined, undefined, frameworks as never,
       { async create(n: Notif) { created.push(n); return n as never; } } as never);
     return { service, sub, pB, pB2, events, created };
