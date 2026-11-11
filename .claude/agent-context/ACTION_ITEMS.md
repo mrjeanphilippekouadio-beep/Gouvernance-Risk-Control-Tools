@@ -517,14 +517,14 @@ pour l'usage.
 | HUMAN @security @dev-backend | **q274 (cockpit)** — SEC-q251-04 (INFO) : `Control.validator` (texte libre « Validateur ») encore recopié dans le journal, absent de la liste q273. Le traiter comme `executor` (A, reco) ou le laisser, champ de rôle (B). Retest A10 q251 v2 : RETEST_PASS SEC-q251-01/02/03 (`sec/q251` 9f21b68). Bloque la PR q251. | 2026-11-11 | **Fermé** (DECISION-131) — B : `Control.validator` laissé tel quel (champ de rôle) |
 | HUMAN @devops | **`SUPER_ADMIN_EMAILS`** (F8-bis, q260) — à définir dans l'environnement de chaque déploiement (Render) ; l'adresse doit correspondre à un compte `users` existant. Le PO indique quelle(s) adresse(s) au moment du déploiement. | 2026-11-11 | Ouvert (avant merge/déploiement F8-bis) |
 | @dev-db | **F8-bis non atomique — QA-F8B-01 (MAJOR) / QA-F8B-02 (MINOR)** (QA PARTIAL_PASS, `qa/f8bis` 72eddbf, Playwright 88 PASS) — 4 `POST /tenants` simultanés du même nom = 4 clients ; 2 commits d'import simultanés = doublons. Index unique sur le nom normalisé (migration 092, après B-13) + verrou/contrainte pour l'empreinte d'import. Observation : un client inactif reste modifiable (à confirmer PO avec q277). | 2026-11-11 | Ouvert (lot correctif F8-bis, après q275 à q277 et le merge de B-13) |
-| HUMAN @security @dev-backend | **q275 (cockpit) — ESCALADE A10** SEC-F8B-03 (HIGH 8,1, SUSPECTED) : la connexion Google n'exige pas `hd` ; un compte grand public sur l'adresse d'un super-administrateur le rend super-administrateur. Exiger `hd` pour les super-administrateurs (A, reco) ou tous (B). Bloque la production de F8-bis. Rapport `docs/security/SEC-f8bis-2026-11-11.md` (`sec/f8bis`). | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @security @devops | **q276 (cockpit)** — adresse de super-administrateur réattribuée : règle d'exploitation seule (A, reco) ou + épinglage `sub` (B). | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @security @devops @dev-backend | **q277 (cockpit)** — SEC-F8B-01 (LOW, PoC) : minimum de 2 super-administrateurs, désactivation refusée si elle empêche toute réactivation, secours DevOps tracé (A, reco) ou secours DevOps seul (B). | 2026-11-11 | **Ouvert — HUMAN** |
+| HUMAN @security @dev-backend | **q275 (cockpit) — ESCALADE A10** SEC-F8B-03 (HIGH 8,1, SUSPECTED) : la connexion Google n'exige pas `hd` ; un compte grand public sur l'adresse d'un super-administrateur le rend super-administrateur. Exiger `hd` pour les super-administrateurs (A, reco) ou tous (B). Bloque la production de F8-bis. Rapport `docs/security/SEC-f8bis-2026-11-11.md` (`sec/f8bis`). | 2026-11-11 | **Décidé** (DECISION-132) — réponse libre : domaine de l'entreprise exigé pour les super-administrateurs, quel que soit le fournisseur d'identité (lot correctif F8-bis) |
+| HUMAN @security @devops | **q276 (cockpit)** — adresse de super-administrateur réattribuée : règle d'exploitation seule (A, reco) ou + épinglage `sub` (B). | 2026-11-11 | **Question en retour du PO** (DECISION-132) — « super-administrateur comme rôle attribuable ? » : analyse A10 demandée, puis nouvelle question |
+| HUMAN @security @devops @dev-backend | **q277 (cockpit)** — SEC-F8B-01 (LOW, PoC) : minimum de 2 super-administrateurs, désactivation refusée si elle empêche toute réactivation, secours DevOps tracé (A, reco) ou secours DevOps seul (B). | 2026-11-11 | **Décidé** (DECISION-132) — A : minimum 2, désactivation refusée si elle empêche toute réactivation, secours DevOps tracé |
 | @dev-backend | **SEC-F8B-02** (LOW 2,2, PoC) — désactivation/réactivation : état et audit hors transaction (audit en échec = désactivation sans trace, auto-réactivation possible). Correctif sans arbitrage, lot correctif F8-bis. | 2026-11-11 | Ouvert |
-| HUMAN @risk-manager @dev-backend | **q278 (cockpit)** — B-13 : imposer Standard en première activation d'un client (A, reco) ou laisser le choix (B). | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @risk-manager @dev-backend @security | **q279 (cockpit)** — B-13 : étendre le régime SOLE_RM (q252, q266) au changement de Dispositif par défaut (A, reco) ou non (B). | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @risk-manager @dev-backend | **q280 (cockpit)** — B-13 : appétence par famille livrée vide, à remplir par le client (A, reco, A13 §6) ou règle de correspondance famille → sous-catégorie à proposer (B). | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @orchestrator | **q281 (cockpit)** — merger q251 (PR #248, sans migration) : QA RETEST_PASS (31/31 + B-6c 60/60 après fusion staging), Sécurité RETEST_PASS, Privacy conforme, CI et Sonar verts, Codex sans remarque. | 2026-11-11 | **Ouvert — HUMAN** |
+| HUMAN @risk-manager @dev-backend | **q278 (cockpit)** — B-13 : imposer Standard en première activation d'un client (A, reco) ou laisser le choix (B). | 2026-11-11 | **Fermé** (DECISION-133) — B : choix libre, recommandation à l'écran (déjà construit) |
+| HUMAN @risk-manager @dev-backend @security | **q279 (cockpit)** — B-13 : étendre le régime SOLE_RM (q252, q266) au changement de Dispositif par défaut (A, reco) ou non (B). | 2026-11-11 | **Décidé** (DECISION-133) — A : régime SOLE_RM étendu à SET_DEFAULT (lot suivant, migration) |
+| HUMAN @risk-manager @dev-backend | **q280 (cockpit)** — B-13 : appétence par famille livrée vide, à remplir par le client (A, reco, A13 §6) ou règle de correspondance famille → sous-catégorie à proposer (B). | 2026-11-11 | **Décidé** (DECISION-133) — réponse libre : import d'un fichier texte familles / sous-catégories avec vérifications (lot à cadrer) |
+| HUMAN @orchestrator | **q281 (cockpit)** — merger q251 (PR #248, sans migration) : QA RETEST_PASS (31/31 + B-6c 60/60 après fusion staging), Sécurité RETEST_PASS, Privacy conforme, CI et Sonar verts, Codex sans remarque. | 2026-11-11 | **Fermé** (DECISION-134) — merge PR #248 |
 | @dev-backend @risk-manager | **B-13 livré** (`feat/r1-b13-dispositifs-defaut` 633d6b4, migration 091) — reste : provisionnement non atomique entre modèles (échelle DRAFT orpheline possible) ; Renforcé livré avec approbateur RISK_MANAGER / vote DEFAULT (cibles COMMITTEE / C après B-12) ; descriptifs section 3 du doc A13 citent encore « Léger »/« Prudent ». Revues QA, A10 à lancer. | 2026-11-11 | QA PASS_WITH_RESERVES (`qa/b13` 25bfdcc : 35/35 live+statiques, Playwright 35/35, valeurs A13 mot pour mot), A10 VERT ; lot correctif SEC-B13-02/03 + QA-B13-01 en cours ; q278–q280 en attente PO |
 | @dev-db | **SEC-B13-01** (INFO, A10 VERT `sec/b13` b556720) — R-02 contournable sous le rôle runtime : supprimer en vidant le Dispositif puis restaurer `deleted_at` ; ajouter `deleted_at` au `UPDATE OF` du trigger et refuser la restauration (aucun chemin applicatif ne restaure). | 2026-11-11 | Ouvert (avec INFO-12) |
 | @dev-backend | **SEC-B13-02 / 03** (INFO) — provisionnement : une transaction par modèle (échelles DRAFT orphelines sur appels parallèles) ; archivage vs soumission de version : interblocage 40P01 possible (500) → verrouiller les versions d'abord ou convertir en 409. Lot correctif B-13 après QA. | 2026-11-11 | **Fermé** (RETEST_PASS A10, c70b30a, `sec/b13` e39b1d2) — INFO résiduel : journaliser le code SQL d'un interblocage converti en 409 (optionnel) |
@@ -3001,3 +3001,55 @@ DECISION (PO) : q274 B (reco A non retenue ; champ `decision = other` mais texte
 RELATED: q251, q273, SEC-q251-04, DECISION-130.
 OWNER: @orchestrator
 STATUS: FERMÉ — q251 complet, PR à ouvrir.
+
+DECISION-132
+DATE: 2026-11-11 (cockpit q275 à q277, 22:36–22:37 UTC)
+DECISION (PO) — super-administrateur (F8-bis) :
+  (1) q275 (réponse libre), texte du PO : « exiger le domaine de l'entreprise
+  mais pas forcement google sinon c'est bloqué l'app a un seul fournisseur ».
+  Interprétation orchestrateur, à confirmer par A10 : le statut de
+  super-administrateur exige que le fournisseur d'identité atteste le domaine
+  de l'entreprise (Google : revendication `hd` ; tout autre fournisseur ajouté
+  plus tard devra fournir une attestation équivalente, sinon le statut est
+  refusé) ; le domaine attendu est une configuration du serveur, pas un
+  codage en dur sur Google. Bloque la production de F8-bis.
+  (2) q276 (réponse libre, question en retour) : « et si on le faisais comme
+  un role attribuable je pense que c'est plus propre ou c'est quoi le souci
+  avec ma proposition ? » — pas de décision : analyse A10 demandée, puis
+  question cockpit avec options.
+  (3) q277 A — au moins deux super-administrateurs ; désactivation refusée si
+  elle laisse moins d'un autre super-administrateur actif pour réactiver ;
+  secours par modification de la configuration par DevOps, tracée.
+RELATED: q260, q261, SEC-F8B-01, SEC-F8B-03, DECISION-125.
+OWNER: @orchestrator @security @dev-backend @devops
+STATUS: DÉCIDÉ pour q275/q277 ; q276 en cours d'instruction.
+
+DECISION-133
+DATE: 2026-11-11 (cockpit q278 à q280, 22:38–22:41 UTC)
+DECISION (PO) — B-13 :
+  (1) q278 B (reco A non retenue) — pas de contrainte serveur : choix libre du
+  premier Dispositif activé, recommandation de Standard à l'écran (déjà
+  construit).
+  (2) q279 A — régime SOLE_RM de q252 étendu au changement de Dispositif par
+  défaut : seconde confirmation avec motif, effet au cycle suivant, tracé,
+  revue a posteriori par un tiers (q266).
+  (3) q280 (réponse libre), texte du PO : « Mieux proposons d'importer un
+  fichier txt avec les familles et les sous catégorie je te laisse le choix du
+  format de fichier il doit etre juste simple et efficace on doit s'assurer des
+  verifications a l'import ». Interprétation orchestrateur : un import d'un
+  fichier texte simple qui déclare les familles de risque et leurs
+  sous-catégories (correspondance famille → sous-catégorie), avec aperçu et
+  contrôles avant écriture, pour que l'appétence par famille des Dispositifs
+  par défaut s'applique ; format proposé par A05/A13 (le plus simple, ex. une
+  ligne « famille ; sous-catégorie »).
+RELATED: q259, q265, q252, q266, B-13.
+OWNER: @orchestrator @dev-backend @risk-manager @architect
+STATUS: DÉCIDÉ — q279 et q280 : lots après le merge de B-13.
+
+DECISION-134
+DATE: 2026-11-11 (cockpit q281 A, 22:41 UTC)
+DECISION (PO) : fusion de la PR #248 (q251, journal sans nom ni e-mail, sans
+  migration) dans staging.
+RELATED: q251, q272, q273, q274, DECISION-120, 130, 131.
+OWNER: @orchestrator
+STATUS: à exécuter.
