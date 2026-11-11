@@ -55,3 +55,12 @@ Le PO a constaté que le frontend n'avançait plus : 13 écrans pour 43 modules 
 - Sonar : l'API `sonarcloud.io/api/issues/search?...&pullRequest=N` répond désormais depuis la session (le blocage proxy noté plus haut ne vaut plus) ; utile pour lire un échec de Quality Gate.
 - Un écart du code au texte d'une décision PO (ex. SEC-B6C-04 : « au moment de la demande ») est un correctif, pas une nouvelle question au PO.
 - Limite d'usage de 5 h : un agent coupé se relance par SendMessage dès la remise à zéro ; ne pas programmer de rappel si le PO signale lui-même la reprise.
+
+## 2026-11-11 (soir) — état pour reprise
+- Fusionnés dans staging : #238, #239 (087), #247 (F8), #240 (B-6c, 088–090). Decision Log jusqu'à DECISION-131.
+- Branches prêtes / en cours :
+  - `feat/r1-q251-journal-sans-identite` = PR #248, prête (q281 posée).
+  - `feat/r1-b13-dispositifs-defaut` (091) : A10 VERT (`sec/b13`), QA en cours (`qa/b13`) ; puis lot correctif INFO SEC-B13-01..03 ; questions q278–q280.
+  - `feat/r1-f8bis-clients` (sans migration) : A10 ORANGE + escalade q275 (`hd`), QA PARTIAL_PASS (concurrence) ; lot correctif après q275–q277 et après le merge de B-13 (index unique = migration 092).
+- File de migrations à tenir séquentielle : 091 B-13 → 092 F8-bis → q253 → q266 → conservation L1 (puis L2a/L2b/L2c/L3) → INFO-12 + SEC-B13-01. Une branche avec une migration ne part qu'après le merge de la précédente (sinon trou de numérotation et tests de contiguïté rouges).
+- Leçons du jour : un conflit de code résolu par l'orchestrateur appelle un retest QA explicite ; Sonar refuse les scripts QA qui écrivent dans /tmp ou passent une variable d'environnement / une valeur d'API en argument de commande (passer le SQL sur stdin) ; un worktree neuf doit compiler `packages/design-system` avant le build front.
