@@ -160,3 +160,13 @@ M10 gabarit page de réglage, M11 liste « À faire », M12 panneau latéral, M1
 - Boutons masqués par permission (create : nouveau KRI et saisie de mesure ; update : modifier, risques couverts ; delete : désactiver) ; entrée « KRI » avec `requires: "kri.read"`.
 - Le filtre département disparaît sans `department.read` (403 → pas de liste).
 - Build en worktree : `npm install` à la racine puis `npm run build` dans `packages/design-system` avant le build frontend (sinon `styles.css` introuvable).
+
+## 2026-11-11 — F8 R1 mise en service (`feat/r1-f8-mise-en-service`, q165 / DECISION-080)
+- Écrans : `features/setup/{BrandingPage,ModulesPage,ClientsPage,ImportPage}.tsx`, client `api/setup.ts`, groupe de menu « Mise en service » (Administration). Tableaux de bord et rapports = R2, non faits.
+- `apiRequest` accepte maintenant `formData` (multipart : pas de Content-Type JSON, le navigateur pose la frontière). Réutilisable pour tout upload.
+- Préalable DECISION-058 : DÉJÀ posé côté backend (`ModuleToggleService.toggle` + `reasonText(500)`) ; l'écran demande le motif. Rien d'inventé.
+- Clients = `/tenants` (config.manage, super-admin). Désactivation volontairement NON exposée : `PATCH /tenants/:id {active:false}` passe sous config.manage sans motif (état terminal sans permission dédiée ni motif = gap backend à signaler).
+- Import Excel : le serveur n'importe que des risques (process + description) ; aperçu puis commit (revalidation serveur). Pas d'import d'évidences/KRI : API absente.
+- Branding : `logoUrl` est une URL Drive, affichée en lien (https seulement), pas en `<img>` (rendu non vérifié, pas de navigateur). Aucune QA navigateur faite.
+- Menu : `requires` = branding.read / config.read / config.manage (affichage seulement).
+- Correctifs QA/Sécu F8 : écran Clients retiré du menu ET des routes (SEC-F8-01, q260 en attente), `ClientsPage.tsx` conservé isolé et commenté ; `active` retiré de `updateTenant` ; boutons Activer/Désactiver des Modules affichés seulement avec `config.manage` (QA-F8-04, `usePermissions`, affichage seul). Règle : un écran dont la décision PO est en attente ne se range pas en « caché dans le menu » mais hors de la table des vues.
