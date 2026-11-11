@@ -3052,4 +3052,4 @@ DECISION (PO) : fusion de la PR #248 (q251, journal sans nom ni e-mail, sans
   migration) dans staging.
 RELATED: q251, q272, q273, q274, DECISION-120, 130, 131.
 OWNER: @orchestrator
-STATUS: à exécuter.
+STATUS: FAIT — PR #248 fusionnée (705d02e), sans migration.
