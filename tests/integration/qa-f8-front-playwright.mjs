@@ -143,14 +143,9 @@ try {
   check("2.16 serveur : module inconnu refusé (400)", (await api("adm", "PATCH", "/modules/NOPE/toggle", { enabled: true, reason: "x" })).status === 400);
 
   await U.go("Modules");
-  await U.page.locator("main tbody tr", { hasText: "Risques" }).getByRole("button").click();
-  await U.page.locator("#module-reason").fill("Tentative aud QA-F8");
-  await U.page.getByRole("button", { name: "Confirmer" }).click(); await U.page.waitForTimeout(1500);
-  const utxt = norm(await U.page.locator("body").innerText());
-  check("2.17 aud : état inchangé", (await modState("RISK")) === true);
-  check("2.18 aud : le refus 403 est expliqué (dialogue global « Vous n’avez pas ce droit »)", /Vous n’avez pas ce droit/.test(utxt), utxt.slice(-300));
-  await U.page.getByRole("button", { name: "Fermer" }).click();
-  await U.shot("modules-403");
+  check("2.17 aud (config.read seul) : aucun bouton Activer/Désactiver (QA-F8-04 corrigé)", (await U.page.locator("main tbody tr").getByRole("button").count()) === 0 && (await U.page.locator("main tbody tr").count()) === mods.length);
+  check("2.18 aud : PATCH direct refusé 403 par le serveur, état inchangé", (await api("aud", "PATCH", "/modules/RISK/toggle", { enabled: false, reason: "Tentative aud QA-F8" })).status === 403 && (await modState("RISK")) === true);
+  await U.shot("modules-lecture-seule");
 
   // ---------- 3. Clients : écran retiré (SEC-F8-01, q260) — il ne doit être atteignable par personne
   check("3.1 adm sans entrée « Clients » (écran non exposé avant q260)", !(await A.hasEntry("Clients")));

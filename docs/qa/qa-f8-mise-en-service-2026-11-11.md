@@ -46,3 +46,11 @@ Limites : le stockage Drive est en mémoire (preload QA), donc l'URL du logo est
 
 SECURITY_REVIEW_REQUIRED : oui (QA-F8-02, QA-F8-06). PRIVACY : non. COMPLIANCE : non. RISK : non. RETEST_REQUIRED : non pour l'écran ; oui pour QA-F8-01/03 quand Dev Backend les traite.
 STATUS : PASS.
+
+## Retest @ 27abbf5 (PR #247), 2026-11-11
+
+Base neuve, script complet rejoué : **62 contrôles sur 62 PASS**, build frontend OK. Le nombre baisse (72 -> 62) car la section Clients est remplacée par des absences (3.1 pas d'entrée « Clients », 3.2 `GET /tenants` 403 pour `aud`).
+- QA-F8-04 corrigé : `aud` (config.read seul) ne voit plus aucun bouton Activer/Désactiver ; son PATCH direct reste refusé 403 et l'état est inchangé (2.17/2.18 réécrits dans ce sens, l'ancien oracle supposait le bouton visible).
+- 4.9b (correctif Codex P2) : après un commit, Aperçu et choix de fichier sont verrouillés jusqu'à « Nouvel import » : PASS.
+- Écran Clients retiré : QA-F8-01 (doublons/longueur des noms) et QA-F8-05 (403 métier sur la modale Clients) ne concernent plus l'écran ; QA-F8-01 reste un défaut serveur à traiter avant la réexposition (q260). QA-F8-02, 03, 06 inchangés.
+- Régression `client.ts` (JSON et multipart) : inchangée, PASS. STATUS : RETEST_PASS.
