@@ -45,6 +45,7 @@ function dashboard(world: World, scored: unknown[], opts: { wired?: boolean; leg
     async getDefaultFramework(t: string) { calls.getDefaultFramework.push(t); const id = world.defaults[t]; return id ? ({ id } as never) : null; },
     async getProcessFrameworkId(t: string, p: string) { return world.processFw[`${t}:${p}`] ?? null; },
     async getActiveVersion(t: string, f: string) { calls.getActiveVersion.push(`${t}:${f}`); return world.active[`${t}:${f}`] ?? null; },
+    async getVersionById(t: string, id: string) { return Object.entries(world.active).find(([k, v]) => k.startsWith(`${t}:`) && v?.id === id)?.[1] ?? null; },
   };
   const processes = { async getById(t: string, id: string) { return t === T1 ? ((world.processes[id] as never) ?? null) : null; } };
   const ratingScales = { async getById() { return world.scaleGone ? null : ({ id: "s5", probabilityLevels: 5, impactLevels: 5 } as never); } };
@@ -58,8 +59,9 @@ function dashboard(world: World, scored: unknown[], opts: { wired?: boolean; leg
   vi.spyOn(s as never, "getScoredRisks").mockResolvedValue(scored as never);
   return { s, calls, list };
 }
-const sr = (id: string, processId: string | null, subCategory: string, entity: string | null, score: number) =>
-  ({ risk: { id, processId }, evaluation: { subCategory, entity }, score });
+/** SEC-B6C-02: an evaluation carries the version of its snapshot (default "v1"); null = created before the Dispositif. */
+const sr = (id: string, processId: string | null, subCategory: string, entity: string | null, score: number, ver: string | null = "v1") =>
+  ({ risk: { id, processId }, evaluation: { subCategory, entity, riskFrameworkVersionId: ver }, score });
 const EXEC: Permission[] = ["dashboard.executive"];
 
 describe("QA-B6bF appetite-vs-residual on the Dispositif (F-B6b-01)", () => {
@@ -87,7 +89,7 @@ describe("QA-B6bF appetite-vs-residual on the Dispositif (F-B6b-01)", () => {
 
   it("no Dispositif at all for the tenant: no throw, no fallback to risk_appetites, risks listed with threshold null / frameworkVersionId null", async () => {
     const w: World = { defaults: {}, processFw: {}, processes: {}, active: {} };
-    const { s, list } = dashboard(w, [sr("r1", null, "Fraude", null, 25)], { legacyAppetites: [{ subCategory: "Fraude", entity: null, threshold: 1 }] });
+    const { s, list } = dashboard(w, [sr("r1", null, "Fraude", null, 25, null)], { legacyAppetites: [{ subCategory: "Fraude", entity: null, threshold: 1 }] });
     const rows = await s.getAppetiteVsResidual(actor(EXEC));
     expect(rows).toEqual([expect.objectContaining({ subCategory: "Fraude", threshold: null, exceeded: false, exceedanceCount: 0, maxResidualScore: 25, frameworkVersionId: null })]);
     expect(list).not.toHaveBeenCalled();
@@ -95,10 +97,10 @@ describe("QA-B6bF appetite-vs-residual on the Dispositif (F-B6b-01)", () => {
 
   it("Dispositif without ACTIVE version, or whose scale is gone: same degraded answer (not an error)", async () => {
     const noActive = base(); noActive.active = {};
-    const a = await dashboard(noActive, [sr("r1", null, "Fraude", null, 25)]).s.getAppetiteVsResidual(actor(EXEC));
+    const a = await dashboard(noActive, [sr("r1", null, "Fraude", null, 25, null)]).s.getAppetiteVsResidual(actor(EXEC));
     expect(a).toEqual([expect.objectContaining({ threshold: null, exceeded: false, frameworkVersionId: null })]);
     const gone = base(); gone.scaleGone = true;
-    const b = await dashboard(gone, [sr("r1", null, "Fraude", null, 25)]).s.getAppetiteVsResidual(actor(EXEC));
+    const b = await dashboard(gone, [sr("r1", null, "Fraude", null, 25, null)]).s.getAppetiteVsResidual(actor(EXEC));
     expect(b).toEqual([expect.objectContaining({ threshold: null, exceeded: false, frameworkVersionId: null })]);
   });
 
@@ -113,7 +115,7 @@ describe("QA-B6bF appetite-vs-residual on the Dispositif (F-B6b-01)", () => {
     w.processes = { p1: { id: "p1", level: "PROCESS", parentId: null }, c1: { id: "c1", level: "SOUS_PROCESSUS", parentId: "p1" } };
     w.processFw[`${T1}:p1`] = "fw2";
     w.active[`${T1}:fw2`] = version("v2", "fw2", [["Fraude", null, 20]]);
-    const { s, calls } = dashboard(w, [sr("r1", "c1", "Fraude", null, 15), sr("r2", null, "Fraude", null, 15), sr("r3", "c1", "Fraude", null, 21)]);
+    const { s, calls } = dashboard(w, [sr("r1", "c1", "Fraude", null, 15, "v2"), sr("r2", null, "Fraude", null, 15), sr("r3", "c1", "Fraude", null, 21, "v2")]);
     const rows = (await s.getAppetiteVsResidual(actor(EXEC))).filter((r) => r.subCategory === "Fraude");
     expect(rows).toHaveLength(2);
     expect(rows.find((r) => r.frameworkVersionId === "v2")).toMatchObject({ threshold: 20, maxResidualScore: 21, exceedanceCount: 1, riskIds: ["r1", "r3"] });
@@ -131,7 +133,8 @@ describe("QA-B6bF appetite-vs-residual on the Dispositif (F-B6b-01)", () => {
     const w = base();
     const { s, calls } = dashboard(w, [sr("r1", null, "Fraude", null, 10)]);
     const rows = await s.getAppetiteVsResidual(actor(EXEC, T2));
-    expect(rows).toEqual([expect.objectContaining({ threshold: null, frameworkVersionId: null })]);
+    // SEC-B6C-02: the evaluation keeps its own version id, but the tenant-scoped lookup finds no version for T2: no threshold.
+    expect(rows).toEqual([expect.objectContaining({ threshold: null, exceeded: false, notAssessable: true })]);
     expect(calls.getDefaultFramework.every((t) => t === T2)).toBe(true);
     expect(calls.getActiveVersion).toEqual([]);
   });
@@ -326,5 +329,33 @@ describe("QA-B6bF the legacy-reader inventory cannot be dodged by renaming the i
       }
     }
     expect(bad, "rename the field to the canonical name or extend the inventory patterns").toEqual([]);
+  });
+});
+
+// SEC-B6C-02 (A13): a score is compared to the threshold of ITS evaluation's version, never to today's applicable one.
+describe("B-6c SEC-B6C-02 appetite-vs-residual compares each evaluation to its own version", () => {
+  const twoFrameworks = (): World => ({
+    defaults: { [T1]: "fw1" }, processFw: { [`${T1}:p1`]: "fw2" },
+    processes: { p1: { id: "p1", level: "PROCESS", parentId: null } },
+    active: { [`${T1}:fw1`]: version("v1", "fw1", [["Fraude", null, 15]]), [`${T1}:fw2`]: version("v2", "fw2", [["Fraude", null, 30]]) },
+  });
+
+  it("20 on a 5x5 evaluation, process attached afterwards to a 6x6 Dispositif with threshold 30: the exceedance stays flagged, reassessment required", async () => {
+    const { s } = dashboard(twoFrameworks(), [sr("r1", "p1", "Fraude", null, 20, "v1")]);
+    const rows = (await s.getAppetiteVsResidual(actor(EXEC))).filter((r) => r.subCategory === "Fraude" && r.riskIds.length > 0);
+    expect(rows).toEqual([expect.objectContaining({ frameworkVersionId: "v1", threshold: 15, maxResidualScore: 20, exceeded: true, exceedanceCount: 1, reassessmentRequired: true, preDispositif: false })]);
+  });
+
+  it("an evaluation of the applicable version is not flagged for reassessment", async () => {
+    const { s } = dashboard(twoFrameworks(), [sr("r1", "p1", "Fraude", null, 20, "v2")]);
+    const row = (await s.getAppetiteVsResidual(actor(EXEC))).find((r) => r.riskIds.length > 0)!;
+    expect(row).toMatchObject({ frameworkVersionId: "v2", threshold: 30, exceeded: false, reassessmentRequired: false });
+  });
+
+  it("version without appetite for the sub-category: not assessable, never 'respected'; evaluation before the Dispositif: flagged, no threshold", async () => {
+    const { s } = dashboard(twoFrameworks(), [sr("r1", null, "Cyber", null, 25, "v1"), sr("r2", null, "Fraude", null, 25, null)]);
+    const rows = await s.getAppetiteVsResidual(actor(EXEC));
+    expect(rows.find((r) => r.subCategory === "Cyber")).toMatchObject({ threshold: null, notAssessable: true, exceeded: false });
+    expect(rows.find((r) => r.riskIds.includes("r2"))).toMatchObject({ frameworkVersionId: null, threshold: null, preDispositif: true, reassessmentRequired: false });
   });
 });

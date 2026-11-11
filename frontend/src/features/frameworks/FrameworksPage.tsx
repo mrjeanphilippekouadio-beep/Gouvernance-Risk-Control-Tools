@@ -15,7 +15,7 @@ import {
 import { ratingScalesApi, type RatingScale } from "../../api/evaluations";
 import { riskCategoriesApi, type RiskCategory } from "../../api/riskCategories";
 import { AppetiteThresholdsTab } from "./AppetiteThresholdsTab";
-import { FormModal, dateOnly, describeError, isForbidden } from "../indicators/shared";
+import { FormModal, dateOnly, describeError, isPermissionDenied } from "../indicators/shared";
 import "../core/CorePages.css";
 
 const STATUS_LABELS: Record<VersionStatus, string> = { DRAFT: "Brouillon", PENDING_APPROVAL: "En attente d'approbation", ACTIVE: "Active", ARCHIVED: "Archivée" };
@@ -68,7 +68,7 @@ function diffPatch(form: DraftForm, v: FrameworkVersion): DraftPatch {
 
 type ReasonAction =
   | { kind: "discard" | "activate"; version: FrameworkVersion }
-  | { kind: "approve" | "reject" | "withdraw"; request: ChangeRequest }
+  | { kind: "approve" | "reject" | "withdraw" | "soleConfirm"; request: ChangeRequest }
   | { kind: "identity" };
 
 const REASON_TEXT: Record<ReasonAction["kind"], { title: string; label: string; submit: string; required: boolean }> = {
@@ -77,6 +77,7 @@ const REASON_TEXT: Record<ReasonAction["kind"], { title: string; label: string; 
   approve: { title: "Approuver la demande", label: "Commentaire", submit: "Approuver", required: false },
   reject: { title: "Refuser la demande", label: "Commentaire *", submit: "Refuser", required: true },
   withdraw: { title: "Retirer la demande", label: "Motif *", submit: "Retirer", required: true },
+  soleConfirm: { title: "Confirmer seul le rattachement", label: "Motif de la confirmation *", submit: "Confirmer seul", required: true },
   identity: { title: "Modifier le Dispositif", label: "Motif de la modification *", submit: "Enregistrer", required: true },
 };
 
@@ -105,6 +106,7 @@ export function FrameworksPage({ token }: { token: string }) {
   const [reasonAction, setReasonAction] = useState<ReasonAction | null>(null);
   const [identity, setIdentity] = useState({ name: "", description: "" });
   const [reasonText, setReasonText] = useState("");
+  const [soleArmed, setSoleArmed] = useState(false); // second confirmation step of "Confirmer seul"
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -163,7 +165,12 @@ export function FrameworksPage({ token }: { token: string }) {
   async function run(action: () => Promise<void>, close: () => void) {
     setSaving(true); setFormError(null);
     try { await action(); close(); await afterWrite(); }
-    catch (err) { setFormError(describeError(err)); if (isForbidden(err)) close(); }
+    catch (err) {
+      // QA-B6C-06: a refusal at the 2nd step of "Confirmer seul" goes back to step 1 (motive editable).
+      // QA-B6C-07: a business 403 shows the server message in the window; only a missing permission (explained by the global dialog) closes it.
+      setFormError(describeError(err)); setSoleArmed(false);
+      if (isPermissionDenied(err)) close();
+    }
     finally { setSaving(false); }
   }
 
@@ -184,7 +191,7 @@ export function FrameworksPage({ token }: { token: string }) {
   }
 
   function openReason(action: ReasonAction) {
-    setReasonText(""); setFormError(null);
+    setReasonText(""); setFormError(null); setSoleArmed(false);
     if (action.kind === "identity" && detail) setIdentity({ name: detail.name, description: detail.description ?? "" });
     setReasonAction(action);
   }
@@ -194,11 +201,13 @@ export function FrameworksPage({ token }: { token: string }) {
     const action = reasonAction;
     if (!action || !detail) return;
     const text = reasonText.trim();
+    if (action.kind === "soleConfirm" && !soleArmed) { setSoleArmed(true); return; }
     void run(async () => {
       if (action.kind === "discard") await riskFrameworksApi.discardDraft(token, detail.id, action.version.id, text);
       else if (action.kind === "activate") { await riskFrameworksApi.requestActivation(token, detail.id, action.version.id, text); setNotice("Demande d'activation envoyée : un tiers doit la décider."); }
       else if (action.kind === "approve") await riskFrameworksApi.approve(token, action.request.id, text || undefined);
       else if (action.kind === "reject") await riskFrameworksApi.reject(token, action.request.id, text);
+      else if (action.kind === "soleConfirm") { await riskFrameworksApi.soleConfirm(token, action.request.id, text); setNotice("Rattachement confirmé : il s'applique aux évaluations créées à partir de maintenant."); }
       else if (action.kind === "withdraw") await riskFrameworksApi.withdraw(token, action.request.id, text);
       else await riskFrameworksApi.updateIdentity(token, detail.id, { name: identity.name.trim(), description: identity.description.trim() || null, reason: text });
     }, () => setReasonAction(null));
@@ -275,6 +284,7 @@ export function FrameworksPage({ token }: { token: string }) {
               <Button variant="primary" onClick={() => openReason({ kind: "approve", request: q })}>Approuver</Button>
               <Button variant="destructive" onClick={() => openReason({ kind: "reject", request: q })}>Refuser</Button>
               <Button onClick={() => openReason({ kind: "withdraw", request: q })}>Retirer</Button>
+              {q.kind === "ASSIGN_PROCESS" && <Button onClick={() => openReason({ kind: "soleConfirm", request: q })}>Confirmer seul</Button>}
             </div> },
           ]}
           rows={requests}
@@ -354,14 +364,19 @@ export function FrameworksPage({ token }: { token: string }) {
       </form>}
     </FormModal>
 
-    <FormModal open={reasonAction !== null} onClose={() => setReasonAction(null)} title={reasonMeta?.title ?? ""} formId="fw-reason" saving={saving} submitLabel={reasonMeta?.submit ?? "Valider"}>
+    <FormModal open={reasonAction !== null} onClose={() => setReasonAction(null)} title={reasonMeta?.title ?? ""} formId="fw-reason" saving={saving} submitLabel={reasonAction?.kind === "soleConfirm" && soleArmed ? "Oui, confirmer seul" : (reasonMeta?.submit ?? "Valider")}>
       <form id="fw-reason" onSubmit={submitReason}>
         {formError && <MessageBanner tone="danger">{formError}</MessageBanner>}
         {reasonAction?.kind === "identity" && <>
           <FormField label="Nom" htmlFor="fi-name"><input id="fi-name" value={identity.name} onChange={(e) => setIdentity({ ...identity, name: e.target.value })} required maxLength={120} /></FormField>
           <FormField label="Description" htmlFor="fi-desc"><textarea id="fi-desc" value={identity.description} onChange={(e) => setIdentity({ ...identity, description: e.target.value })} maxLength={1000} /></FormField>
         </>}
-        <FormField label={reasonMeta?.label ?? ""} htmlFor="fw-reason-text"><textarea id="fw-reason-text" value={reasonText} onChange={(e) => setReasonText(e.target.value)} required={reasonMeta?.required} maxLength={reasonAction?.kind === "approve" || reasonAction?.kind === "reject" ? 1000 : 500} /></FormField>
+        {reasonAction?.kind === "soleConfirm" && <MessageBanner tone="warning" title={soleArmed ? "Seconde confirmation" : "Confirmation sans second avis"}>
+          {soleArmed
+            ? "Confirmez-vous définitivement ce rattachement sans second avis ? Cette confirmation est tracée et signalée à la santé de la gouvernance."
+            : "Réservé au demandeur lorsqu'aucun autre Risk Manager ne peut valider. Cette confirmation est tracée et signalée à la santé de la gouvernance. Le serveur refuse si un autre Risk Manager peut décider."}
+        </MessageBanner>}
+        <FormField label={reasonMeta?.label ?? ""} htmlFor="fw-reason-text"><textarea id="fw-reason-text" readOnly={soleArmed} value={reasonText} onChange={(e) => setReasonText(e.target.value)} required={reasonMeta?.required} maxLength={reasonAction?.kind === "approve" || reasonAction?.kind === "reject" ? 1000 : 500} /></FormField>
       </form>
     </FormModal>
   </section>;

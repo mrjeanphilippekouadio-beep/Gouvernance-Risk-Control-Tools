@@ -5,7 +5,8 @@ export interface ProcessRepository {
   getById(tenantId: string, id: string): Promise<Process | null>;
   list(tenantId: string, options?: { includeInactive?: boolean }): Promise<Process[]>;
   create(input: CreateProcessInput): Promise<Process>;
-  update(tenantId: string, id: string, input: UpdateProcessInput): Promise<Process>;
+  /** SEC-B6C-05: when `audit` is given and `auditsInTransaction`, the audit rows commit with the write. */
+  update(tenantId: string, id: string, input: UpdateProcessInput, audit?: TransactionalAudit<Process>): Promise<Process>;
   /** DECISION-079: true when `setResponsibilities` inserts the events given by `audit` in the SAME transaction. */
   readonly auditsInTransaction?: boolean;
   /** D2b: the only write of the three responsibility columns (not part of the generic update). */

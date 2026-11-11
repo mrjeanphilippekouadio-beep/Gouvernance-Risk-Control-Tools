@@ -8,8 +8,11 @@ import type { ProcessRepository } from "../domain/repositories/ProcessRepository
 import type { AccessRenewalResult } from "../domain/repositories/ResourceAccessRepository.js";
 import type { CreateRiskInput, Risk, RiskVisibilityState, UpdateRiskInput } from "../domain/entities/Risk.js";
 import type { NotificationRepository } from "../domain/repositories/NotificationRepository.js";
+import type { RiskFrameworkRepository } from "../domain/repositories/RiskFrameworkRepository.js";
+import { resolveApplicableFrameworkId } from "./riskFrameworkResolution.js";
 import { isAcceptableReason } from "../domain/governance/selfValidation.js";
 import { writeAudited } from "./auditedWrite.js";
+import { notifyFrameworkMove, requireFrameworkMoveReason } from "./frameworkMove.js";
 import { checkedRenewal, expiryRows, sameVisibilityState, type ResourceVisibilityManager } from "./resourceVisibility.js";
 import type { RiskEscalation } from "../domain/entities/RiskEscalation.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
@@ -56,7 +59,16 @@ export class RiskService {
     private readonly notifications?: Pick<NotificationRepository, "create">,
     /** q212 (DECISION-109): a designation that opens a restricted risk is reasoned, traced and reported. Wired in server.ts. */
     private readonly access?: ResourceVisibilityManager,
+    /** F-B6b-04: optional. Absent, a process change of a risk is audited without the Dispositif before/after. */
+    private readonly frameworks?: Pick<RiskFrameworkRepository, "getDefaultFramework" | "getProcessFrameworkId">,
   ) {}
+
+  /** F-B6b-04: the Dispositif id that applies to a risk placed on `processId` (spec §7); null if none. Fails closed (SEC-B6C-01). */
+  private async applicableFrameworkId(tenantId: string, processId: string | null): Promise<string | null> {
+    if (!this.frameworks) return null;
+    // SEC-B6C-01: fail closed. A failed read fails the update; the audit never says null / "unchanged" by default.
+    return resolveApplicableFrameworkId({ frameworks: this.frameworks, processes: this.processes }, tenantId, processId);
+  }
 
   /** q212: before a designation, whether it opens the restricted risk (reason required outside the RM group). */
   private async designationOpening(actor: AuthenticatedUser, risk: Risk, userId: string | null, reason: string | undefined, role: "owner" | "superior owner" = "owner") {
@@ -319,6 +331,16 @@ export class RiskService {
       }
     }
 
+    // F-B6b-04: moving a risk to another process may move it to another Dispositif (a methodological act): the audit
+    // keeps the Dispositif that applied before and the one that applies after (spec §7), whether or not it changed.
+    const processMoved = input.processId !== undefined && (input.processId ?? null) !== (before.processId ?? null);
+    const frameworkBefore = processMoved ? await this.applicableFrameworkId(actor.tenantId, before.processId ?? null) : null;
+    const frameworkAfter = processMoved ? await this.applicableFrameworkId(actor.tenantId, input.processId ?? null) : null;
+    // q257 (DECISION-121, SEC-B6C-01): the move stays free (never blocked) but, when the Dispositif really changes, it
+    // carries a motive (400 otherwise), the audit names the old and the new Dispositif, and the Risk Manager group is told.
+    const frameworkChanged = processMoved && !!this.frameworks && frameworkBefore !== frameworkAfter;
+    if (frameworkChanged) requireFrameworkMoveReason(rawReason, "risk");
+
     const repo = this.risks;
     // Lot V2: the repository measures the real effective readers (`perimeterWidening`); the rule below is the fallback.
     const widened = (updated: Risk & { perimeterWidening?: boolean }) => updated.perimeterWidening ?? perimeter?.widening ?? false;
@@ -338,6 +360,17 @@ export class RiskService {
           reason: perimeter ? reason : null,
           requestId,
         },
+        ...(processMoved && this.frameworks ? [{
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          entityType: "Risk",
+          entityId: id,
+          action: "UPDATE" as const,
+          oldValue: { processId: before.processId ?? null, riskFrameworkId: frameworkBefore },
+          newValue: { processId: updated.processId ?? null, riskFrameworkId: frameworkAfter, frameworkChanged: frameworkBefore !== frameworkAfter },
+          reason: reason || null,
+          requestId,
+        }] : []),
         ...(perimeter ? [{
           tenantId: actor.tenantId,
           userId: actor.userId,
@@ -352,6 +385,10 @@ export class RiskService {
       ],
     );
     if (perimeter && !holdsRight) await this.notifyVisibilityChanged(actor, id, widened(written), requestId);
+    if (frameworkChanged) {
+      await notifyFrameworkMove({ notifications: this.notifications, users: this.users }, actor, id,
+        "Un risque a été déplacé vers un autre Dispositif (motif, ancien et nouveau Dispositif au journal).", requestId);
+    }
     return withoutWidening(written);
   }
 

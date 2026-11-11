@@ -4,7 +4,7 @@ import { ApiError } from "../../api/client";
 import { notificationsApi, type AppNotification, type NotificationResourceType, type NotificationSubscription, type NotificationType } from "../../api/notifications";
 import "./NotificationCenter.css";
 
-export type NotificationTarget = "risks" | "actions" | "controls" | "evaluation" | "roles" | "processes";
+export type NotificationTarget = "risks" | "actions" | "controls" | "evaluation" | "roles" | "processes" | "frameworks";
 
 const POLL_MS = 60_000;
 const COUNT_CAP = 100;
@@ -21,6 +21,7 @@ const TARGETS: Partial<Record<NotificationResourceType, { view: NotificationTarg
 /** Codex P2 (PR #224): an event whose screen is not its resource type's (a MANAGEMENT notice about a process). */
 const EVENT_TARGETS: Partial<Record<string, { view: NotificationTarget; label: string }>> = {
   PROCESS_OWNER_VISIBILITY_WIDENED: { view: "processes", label: "Ouvrir les processus" },
+  OBJECT_FRAMEWORK_CHANGED: { view: "frameworks", label: "Ouvrir les Dispositifs" },
 };
 
 function errorText(e: unknown): string {

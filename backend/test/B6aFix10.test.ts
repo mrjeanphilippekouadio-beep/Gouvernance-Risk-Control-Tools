@@ -37,12 +37,17 @@ function pool(cfg: number) {
 }
 const decision = { outcome: "APPROVED" as const, decidedBy: "u2", comment: null, decisionRegime: "NORMAL" as const, deciderGroup: "RISK_MANAGER" as const, ratificationStatus: null };
 
-describe("F-B6a-10 mirrorScale checks the smallest ceiling of the scales left ACTIVE", () => {
-  it("configs 30 with Small5 still ACTIVE: refused, names the threshold, full ROLLBACK", async () => {
+describe("B-6c (spec 2.3, I-C1): a version is compared to its OWN scale only, not to other Dispositifs' scales", () => {
+  it("threshold 30 on a 6x6 scale while a 5x5 scale stays ACTIVE elsewhere: accepted and committed", async () => {
     const f = pool(30);
-    await expect(new PostgresRiskFrameworkRepository(f.pool).recordDecision("t1", "r1", decision))
-      .rejects.toThrow(/smallest maximum score \(25\).*seuil Comité évaluation de la version \(30\)/);
-    expect(f.log.at(-1)).toBe("ROLLBACK");
+    await new PostgresRiskFrameworkRepository(f.pool).recordDecision("t1", "r1", decision);
+    expect(f.log.at(-1)).toBe("COMMIT");
+    expect(f.log.some((q) => /^SELECT min\(/.test(q))).toBe(false);
+  });
+
+  it("a threshold above its own scale (37 on 6x6) is still refused", async () => {
+    const f = pool(37);
+    await expect(new PostgresRiskFrameworkRepository(f.pool).recordDecision("t1", "r1", decision)).rejects.toThrow(/maximum score of the scale \(36\)/);
     expect(f.log).not.toContain("COMMIT");
   });
 

@@ -32,6 +32,8 @@ export interface UserRepository {
    * display name — used by RoleService.listGrantors, nothing else.
    */
   listWithPermission?(tenantId: string, permission: string, excludeUserId: string): Promise<Array<{ id: string; displayName: string }>>;
+  /** q257 (DECISION-121): active members of a FIXED group (e.g. "RISK_MANAGER": non-revoked assignment of the system role, user not deleted), minus `excludeUserId`. Id + display name only. */
+  listActiveInSystemGroup?(tenantId: string, systemGroup: string, excludeUserId: string): Promise<Array<{ id: string; displayName: string }>>;
   /**
    * q205 (DECISION-105): active accounts of the tenant whose display name contains `text` (case-insensitive), filtered
    * in SQL before the limit, ordered by name. Id + display name only.

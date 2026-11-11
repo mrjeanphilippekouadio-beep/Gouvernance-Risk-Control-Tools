@@ -11,6 +11,7 @@ import {
   DEFAULT_CONTRACT_PARAMS,
   type AppetiteThresholdEntry,
   ApproverGroup,
+  type AssignmentResult,
   type BootstrapDeclaration,
   type BootstrapJustification,
   type BootstrapFacts,
@@ -54,6 +55,8 @@ const MAX_NAME = 120;
 const MAX_DESCRIPTION = 1000;
 const MAX_REASON = 500;
 const MAX_COMMENT = 1000;
+/** Journal marker (audit_log.governance_exception) of a q252 A confirmation: shown in the governance health panel. */
+export const SOLE_RM_EXCEPTION = "riskFramework.soleRiskManager";
 const MAX_APPETITE_ENTRIES = 200;
 const MAX_LABEL = 200;
 
@@ -461,6 +464,14 @@ export class RiskFrameworkService {
     if (request.requestedBy !== actor.userId) throw new ForbiddenError("Seul le demandeur peut retirer sa demande");
     if (request.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${request.status})`);
     const comment = cleanText(reason, "reason", MAX_REASON, true);
+    if (request.kind === "ASSIGN_PROCESS") {
+      requirePermission(actor, "riskframework.process.assign");
+      const withdrawAssignment = this.frameworks.withdrawAssignment?.bind(this.frameworks);
+      if (!withdrawAssignment || !this.inTx) throw new ValidationError("Process assignment is not available");
+      return withdrawAssignment(actor.tenantId, id, comment, (r) => [
+        this.event(actor, "RiskFrameworkChangeRequest", id, "STATUS_CHANGE", request, r.request, comment, requestId),
+      ]);
+    }
     return this.audited<DecisionResult>(
       (result) => [this.event(actor, "RiskFrameworkChangeRequest", id, "STATUS_CHANGE", request, result.request, comment, requestId)],
       (audit) => this.frameworks.withdraw(actor.tenantId, id, comment, audit),
@@ -485,6 +496,7 @@ export class RiskFrameworkService {
     if (request.requestedBy === actor.userId) {
       throw new ForbiddenError("Le demandeur ne peut pas décider sa propre demande (maker-checker)");
     }
+    if (request.kind === "ASSIGN_PROCESS") return this.decideAssignment(actor, request, outcome, comment, requestId);
     if (request.kind !== "ACTIVATE_VERSION" || !request.versionId) {
       throw new ValidationError(`Request kind ${request.kind} is not supported yet`);
     }
@@ -547,6 +559,170 @@ export class RiskFrameworkService {
         : fallback ? "Une demande de Dispositif a été décidée en repli par un Risk Manager (ratification à venir)." : "Une demande de Dispositif a été décidée par un Risk Manager.",
       requestId);
     if (auditError) throw auditError; // reported after the (best effort) notifications left
+    return result;
+  }
+
+  // -- process assignment (B-6c, spec §11.1, q89) -----------------------
+
+  /**
+   * Request to attach a PROCESS-level process to a Dispositif. A methodological act (F-B6b-04): own permission,
+   * Risk Manager membership (spec §10), mandatory reason. The approval rule is the ACTIVE version of the Dispositif
+   * of ARRIVAL (q89, §5.2), so the target must have one. Nothing is written on the process until approval.
+   */
+  async requestProcessAssignment(
+    actor: AuthenticatedUser,
+    frameworkId: string,
+    input: { processId: string; reason: string },
+    requestId: string,
+  ): Promise<RiskFrameworkChangeRequest> {
+    requirePermission(actor, "riskframework.process.assign");
+    await this.assertRiskManager(actor);
+    const reason = cleanText(input.reason, "reason", MAX_REASON, true)!;
+    const create = this.frameworks.createAssignmentRequest?.bind(this.frameworks);
+    if (!create || !this.inTx) throw new ValidationError("Process assignment is not available");
+    const target = await this.getFrameworkOrThrow(actor.tenantId, frameworkId);
+    if (target.archivedAt) throw new ValidationError("Le Dispositif d'arrivée est archivé");
+    const active = await this.frameworks.getActiveVersion(actor.tenantId, frameworkId);
+    if (!active) throw new ValidationError("Le Dispositif d'arrivée n'a pas de version active : activez-en une d'abord");
+
+    // The repository re-checks target and process under lock, and writes the audit row in the same transaction (q90).
+    const request = await create({
+      tenantId: actor.tenantId,
+      frameworkId,
+      processId: input.processId,
+      reason,
+      requestedBy: actor.userId,
+      audit: (r) => [this.event(actor, "RiskFrameworkChangeRequest", r.id, "SUBMIT", null, r, reason, requestId)],
+    });
+
+    const { eligible, all } = await this.resolveExcluding(actor.tenantId, new Set([actor.userId]), active.changeApprover);
+    if (eligible.RISK_MANAGER.length === 0) {
+      // q75: nobody can decide — never a tacit validation, never by the administrator.
+      await this.notify(actor, all.RISK_MANAGER, request.id, "RISK_FRAMEWORK_NO_DECIDER",
+        "Une demande de rattachement de processus à un Dispositif ne peut être décidée par personne : aucun Risk Manager éligible."
+        + " Si vous êtes le seul Risk Manager, le demandeur peut la confirmer lui-même, avec un motif.", requestId);
+    } else {
+      await this.notify(actor, await this.holders(actor, "riskframework.activate"), frameworkId, "RISK_FRAMEWORK_CHANGE_PENDING",
+        "Une demande de rattachement de processus à un Dispositif attend votre décision.", requestId, true);
+    }
+    return request;
+  }
+
+  /**
+   * Approve/reject an ASSIGN_PROCESS request (called by `decide` after permission, Risk Manager, pending and
+   * requester != decider checks). §5.3 point 4 (authors of a version) does not apply: no version is created.
+   */
+  private async decideAssignment(
+    actor: AuthenticatedUser,
+    request: RiskFrameworkChangeRequest,
+    outcome: "APPROVED" | "REJECTED",
+    comment: string | undefined,
+    requestId: string,
+  ): Promise<AssignmentResult> {
+    const decide = this.frameworks.decideAssignment?.bind(this.frameworks);
+    if (!decide || !this.inTx) throw new ValidationError("Process assignment is not available");
+    const target = await this.getFrameworkOrThrow(actor.tenantId, request.frameworkId);
+    const active = await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId);
+    if (outcome === "APPROVED" && (target.archivedAt || !active)) {
+      throw new ValidationError("Le Dispositif d'arrivée n'a plus de version active : la demande ne peut être approuvée");
+    }
+    // q89: the rule of the Dispositif of arrival (its ACTIVE version); the requester is the only excluded person.
+    // The repository re-reads that rule under lock and refuses (409) if it changed since: `approverRule`.
+    const approverRule = active?.changeApprover ?? "RISK_MANAGER";
+    const { decider, fallbackCause, bypassedGroups } = await this.resolveExcluding(actor.tenantId, new Set([request.requestedBy]), approverRule);
+    const fallback = decider.regime === "FALLBACK";
+    const cleanComment = cleanText(comment, "comment", MAX_COMMENT, outcome === "REJECTED" || fallback);
+
+    const events = (r: AssignmentResult): AuditInput[] => outcome === "APPROVED"
+      ? [
+          // Spec §13: Process UPDATE, riskFrameworkId before -> after, the reason of the request.
+          this.event(actor, "Process", r.processId, "UPDATE",
+            { riskFrameworkId: r.previousFrameworkId },
+            { riskFrameworkId: r.frameworkId, requestId: request.id, decisionRegime: decider.regime, effect: "NEXT_EVALUATIONS" },
+            request.reason, requestId),
+          this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, cleanComment, requestId),
+        ]
+      : [this.event(actor, "RiskFrameworkChangeRequest", request.id, "REJECT", request, r.request, cleanComment, requestId)];
+
+    const result = await decide(actor.tenantId, request.id, {
+      outcome,
+      decidedBy: actor.userId,
+      comment: cleanComment,
+      decisionRegime: decider.regime,
+      deciderGroup: "RISK_MANAGER",
+      ratificationStatus: fallback ? "PENDING" : null,
+      fallbackCause,
+      approverRule,
+    }, events);
+
+    await this.notify(actor, [request.requestedBy], request.id, "RISK_FRAMEWORK_CHANGE_DECIDED",
+      outcome === "APPROVED"
+        ? "Votre demande de rattachement de processus a été approuvée : elle s'applique aux évaluations créées à partir de maintenant."
+        : "Votre demande de rattachement de processus a été refusée.", requestId);
+    // q34 / q56 / q100: same notice as an activation decided by a Risk Manager.
+    const noticeTo = [...(await this.holders(actor, "audit.read")), ...(await this.membersOf(actor.tenantId, bypassedGroups))];
+    await this.notify(actor, noticeTo, request.id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE",
+      fallback ? "Un rattachement de processus à un Dispositif a été décidé en repli par un Risk Manager (ratification à venir)."
+        : "Un rattachement de processus à un Dispositif a été décidé par un Risk Manager.", requestId);
+    return result;
+  }
+
+  /**
+   * q252 A (DECISION-121): the requester is the ONLY Risk Manager able to validate (nobody else eligible), so the
+   * request would stay in NO_DECIDER for ever. They confirm it a second time, with a motive; the attachment then
+   * applies to the evaluations created from now on. Traced (Process UPDATE + request APPROVE; only the APPROVE row is marked as a
+   * governance exception, so the health panel counts ONE exception per confirmation), Audit and Committee told. The rule stops
+   * by itself: with a second active Risk Manager (service check, replayed under the tenant lock) a third party decides.
+   */
+  async confirmSoleAssignment(
+    actor: AuthenticatedUser,
+    id: string,
+    input: { reason: string },
+    requestId: string,
+  ): Promise<AssignmentResult> {
+    requirePermission(actor, "riskframework.process.assign");
+    requirePermission(actor, "riskframework.activate");
+    await this.assertRiskManager(actor);
+    const decide = this.frameworks.decideAssignment?.bind(this.frameworks);
+    if (!decide || !this.inTx) throw new ValidationError("Process assignment is not available");
+    const request = await this.getRequestOrThrow(actor.tenantId, id);
+    if (request.kind !== "ASSIGN_PROCESS") throw new ValidationError("La confirmation ne couvre que le rattachement d'un processus");
+    if (request.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${request.status})`);
+    if (request.requestedBy !== actor.userId) throw new ForbiddenError("Seul le demandeur peut confirmer sa propre demande");
+    // SEC-B6C-04: judged at REQUEST time (DECISION-121); the repository re-checks the frozen flag under lock.
+    if (request.soleRmAtRequest === false) throw new ConflictError("Le demandeur n'était pas le seul Risk Manager au moment de la demande : un tiers doit la décider");
+    const reason = cleanText(input.reason, "reason", MAX_REASON, true)!;
+    const target = await this.getFrameworkOrThrow(actor.tenantId, request.frameworkId);
+    const active = await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId);
+    if (target.archivedAt || !active) throw new ValidationError("Le Dispositif d'arrivée n'a plus de version active : la demande ne peut être confirmée");
+    const approverRule = active.changeApprover;
+    const { eligible } = await this.resolveExcluding(actor.tenantId, new Set([actor.userId]), approverRule);
+    if (eligible.RISK_MANAGER.length > 0) {
+      throw new ConflictError("Un autre Risk Manager peut valider cette demande : un tiers doit la décider");
+    }
+
+    const events = (r: AssignmentResult): AuditInput[] => [
+      this.event(actor, "Process", r.processId, "UPDATE",
+        { riskFrameworkId: r.previousFrameworkId },
+        { riskFrameworkId: r.frameworkId, requestId: request.id, decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" },
+        reason, requestId),
+      this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, reason, requestId, SOLE_RM_EXCEPTION),
+    ];
+    const result = await decide(actor.tenantId, request.id, {
+      outcome: "APPROVED",
+      decidedBy: actor.userId,
+      comment: reason,
+      decisionRegime: "SOLE_RM",
+      deciderGroup: "RISK_MANAGER",
+      ratificationStatus: null,
+      fallbackCause: null,
+      approverRule,
+      soleRiskManager: true,
+    }, events);
+
+    await this.notify(actor, await this.membersOf(actor.tenantId, ["AUDIT", "COMMITTEE"]), request.id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE",
+      "Un rattachement de processus à un Dispositif a été confirmé par le seul Risk Manager du tenant (second avis impossible). "
+      + "Il s'applique aux évaluations créées à partir de maintenant. Détail : consultation des décisions SOLE_RM.", requestId);
     return result;
   }
 
@@ -861,7 +1037,17 @@ export class RiskFrameworkService {
     all: EligibleMembers;
     eligible: EligibleMembers;
   }> {
-    const excluded = new Set([requesterId, ...(await this.authorsOf(tenantId, version))]);
+    return this.resolveExcluding(tenantId, new Set([requesterId, ...(await this.authorsOf(tenantId, version))]), approver);
+  }
+
+  /** The circuit of §5.4 for an explicit set of excluded people (an assignment has no version, hence no authors). */
+  private async resolveExcluding(tenantId: string, excluded: Set<string>, approver: ChangeApprover): Promise<{
+    decider: { kind: "RISK_MANAGER"; regime: "NORMAL" | "FALLBACK" };
+    fallbackCause: FallbackCause | null;
+    bypassedGroups: ApproverGroup[];
+    all: EligibleMembers;
+    eligible: EligibleMembers;
+  }> {
     const all: EligibleMembers = { RISK_MANAGER: [], AUDIT: [], COMMITTEE: [] };
     for (const g of Object.keys(all) as ApproverGroup[]) all[g] = await this.activeMembers(tenantId, g);
     const eligible: EligibleMembers = {
@@ -907,8 +1093,9 @@ export class RiskFrameworkService {
     newValue: unknown,
     reason: string | null,
     requestId: string,
+    governanceException?: string,
   ): AuditInput {
-    return { tenantId: actor.tenantId, userId: actor.userId, entityType, entityId, action, oldValue, newValue, reason, requestId };
+    return { tenantId: actor.tenantId, userId: actor.userId, entityType, entityId, action, oldValue, newValue, reason, requestId, ...(governanceException ? { governanceException } : {}) };
   }
 
   private async record(

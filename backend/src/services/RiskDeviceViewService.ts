@@ -46,7 +46,11 @@ export interface RiskAppetiteContext {
    * no authoritative evaluation to resolve a (subCategory, entity) from, or
    * no active threshold is defined for it.
    */
-  currentThreshold: RiskAppetite | null;
+  /**
+   * SEC-B6C-02: from a Dispositif, it carries its version and the size of its scale; it is NOT comparable to a score
+   * computed on another scale (compare `appliedThreshold`, the evaluation's own snapshot, instead).
+   */
+  currentThreshold: (RiskAppetite & { frameworkVersionId?: string; scaleSize?: number }) | null;
 }
 
 export interface RiskDeviceView {
@@ -151,7 +155,7 @@ export class RiskDeviceViewService {
     subCategory: string,
     entity: string | null,
     subCategoryId: string | null,
-  ): Promise<RiskAppetite | null> {
+  ): Promise<(RiskAppetite & { frameworkVersionId?: string; scaleSize?: number }) | null> {
     if (!this.frameworks || !this.ratingScales) return null;
     const applicable = await resolveApplicableVersion(
       { frameworks: this.frameworks, ratingScales: this.ratingScales, processes: this.processes },
@@ -169,6 +173,8 @@ export class RiskDeviceViewService {
       entity: entry.entity,
       threshold: entry.threshold,
       methodologyVersion: `v${applicable.version.versionNumber}`,
+      frameworkVersionId: applicable.version.id,
+      scaleSize: applicable.scale.impactLevels,
       description: entry.description,
       active: true,
       createdAt: at,
