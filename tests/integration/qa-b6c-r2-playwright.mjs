@@ -1,7 +1,7 @@
 // QA niveau 2, B-6c round 2 (DECISION-121) : parcours navigateur. VRAI backend (tsx, PostgreSQL 16 LOCAL 127.0.0.1:55442, jamais Neon).
 // Prerequis : base grc_qa_b6c montee par `QA_B6C_LIVE=1 npx vitest run test/QA-B6c.test.ts` (tenants T / C / D, comptes <nom>@b6c.test),
 // puis `QA_PORT=8094 QA_DB=grc_qa_b6c bash tests/integration/qa-b6c-server.sh start` et vite sur 5198
-// (VITE_API_BASE_URL=http://127.0.0.1:8094 VITE_AUTH_PROVIDER=local). Variables : QA_API, QA_APP, QA_SHOTS, QA_DB.
+// (VITE_API_BASE_URL=http://127.0.0.1:8094 VITE_AUTH_PROVIDER=local). Variables : QA_API, QA_APP, QA_SHOTS (base fixe grc_qa_b6c).
 //
 // ORACLES (ecrits avant execution)
 //  P1 solo (seul RM du tenant C) : « Confirmer seul » sur une demande ASSIGN_PROCESS PENDING -> fenetre « Confirmer seul le rattachement » + avertissement,
