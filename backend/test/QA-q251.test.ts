@@ -118,6 +118,9 @@ describe.skipIf(!live)("QA-q251 LIVE (real PostgreSQL + real server)", () => {
     expect(rows.length).toBeGreaterThanOrEqual(1);
     // NOTE (pin): a pure rename leaves old == new apart from updatedAt; the journal no longer tells what the name was.
     expect(JSON.stringify(rows[0]!.old_value)).not.toContain("Renamed");
+    // q272: the rename row says a name changed, without a value; suspend / reactivate rows carry no such flag.
+    const all = (await H.audits(canaryId)).filter((x) => x.entity_type === "User" && x.action === "UPDATE");
+    expect(all.filter((x) => x.new_value?.["displayNameChanged"] === true)).toHaveLength(1);
   });
 
   it("L3 role assignment, revocation, RACI and visibility writes of the named account carry ids only", async () => {
@@ -127,7 +130,13 @@ describe.skipIf(!live)("QA-q251 LIVE (real PostgreSQL + real server)", () => {
     expect([200, 204], revoke.text).toContain(revoke.status);
     const raci = await call("out2", "POST", "/raci", { entityType: "RISK", entityId: I("501"), userId: canaryId, role: "C" });
     expect([200, 201], raci.text).toContain(raci.status);
-    const vis = await call("rm", "PUT", `/risks/${I("503")}/visibility`, { visibility: "NOMINATIF", userIds: [canaryId], reason: "QA q251" });
+    const vis = await call("rm", "PUT", `/risks/${I("503")}/visibility`, { visibility: "NOMINATIF", addUserIds: [canaryId], reason: "QA q251" });
+    expect(vis.status, vis.text).toBe(200);
+    expect((await sql("SELECT 1 FROM resource_access_grants WHERE resource_id = $1 AND user_id = $2 AND revoked_at IS NULL", [I("503"), canaryId])).length).toBe(1);
+    const renew = await call("rm", "POST", `/risks/${I("503")}/visibility/renew`, { userIds: [canaryId], reason: "QA q251" });
+    expect([200, 201], renew.text).toContain(renew.status);
+    const unvis = await call("rm", "PUT", `/risks/${I("503")}/visibility`, { visibility: "NOMINATIF", revokeUserIds: [canaryId], reason: "QA q251" });
+    expect(unvis.status, unvis.text).toBe(200);
     expect([200, 201], vis.text).toContain(vis.status);
     expect(await needleRows()).toEqual(expect.not.arrayContaining([expect.objectContaining({ entity_type: "User" })]));
     const hit = (await needleRows()).filter((x) => !["Department", "Process", "Kpi", "Control"].includes(x.entity_type));
@@ -167,6 +176,69 @@ describe.skipIf(!live)("QA-q251 LIVE (real PostgreSQL + real server)", () => {
     }
   });
 
+  // Retest (DECISION-130, q272 / q273): every write path of the four free-text entities, with a typed name / e-mail, then a full scan.
+  describe("retest q272 / q273: all writes of the free-text entities", () => {
+    const ids: Record<string, string> = {};
+    const ok = (r: { status: number; text: string }) => expect([200, 201, 204], r.text).toContain(r.status);
+    const rowsOf = (id: string) => H.audits(id);
+    it("R1 create, update (value changed), designate, archive of Department / Process / Kpi / Control succeed with typed names", async () => {
+      await sql("UPDATE users SET roles = roles || ARRAY['process.responsibility.assign','process.delete','department.delete','kpi.delete','control.delete','control.update','kpi.update']::text[] WHERE id = $1", [UID.adm]);
+      let r = await call("adm", "POST", "/departments", { name: "Dept R q251", manager: "CANARYNAME M1", riskOwner: "canary.q251.a@example.test" });
+      ok(r); ids["dept"] = r.json.data.id;
+      ok(await call("adm", "PATCH", `/departments/${ids["dept"]}`, { manager: "CANARYNAME M2" }));
+      ok(await call("adm", "POST", `/departments/${ids["dept"]}/designate-risk-owner`, { riskOwner: "canary.q251.b@example.test" }));
+      ok(await call("adm", "POST", `/departments/${ids["dept"]}/archive`, { reason: "QA q251 retest" }));
+      r = await call("adm", "POST", "/processes", { level: "PROCESS", name: "Proc R q251", owner: "CANARYNAME P1", departmentId: I("201") });
+      ok(r); ids["proc"] = r.json.data.id;
+      ok(await call("adm", "PATCH", `/processes/${ids["proc"]}`, { owner: "CANARYNAME P2" }));
+      ok(await call("adm", "PUT", `/processes/${ids["proc"]}/responsibilities`, { ownerUserId: canaryId, reason: "QA q251 retest" }));
+      ok(await call("adm", "POST", `/processes/${ids["proc"]}/archive`, { reason: "QA q251 retest" }));
+      r = await call("adm", "POST", "/kpis", { label: "Kpi R q251", targetValue: 1, unit: "u", frequency: "MONTHLY", owner: "CANARYNAME K1", departmentId: I("201") });
+      ok(r); ids["kpi"] = r.json.data.id;
+      ok(await call("adm", "PATCH", `/kpis/${ids["kpi"]}`, { owner: "CANARYNAME K2" }));
+      ok(await call("adm", "POST", `/kpis/${ids["kpi"]}/link`, { departmentId: I("202") }));
+      ok(await call("adm", "POST", `/kpis/${ids["kpi"]}/archive`, { reason: "QA q251 retest" }));
+      r = await call("adm", "POST", "/controls", { label: "Ctl R q251", coveredRiskIds: [I("501")], controlType: "PREVENTIVE", frequency: "MONTHLY", executor: "CANARYNAME C1", complianceCriteria: "c" });
+      ok(r); ids["ctl"] = r.json.data.id;
+      ok(await call("adm", "PATCH", `/controls/${ids["ctl"]}`, { executor: "CANARYNAME C2" }));
+      ok(await call("adm", "POST", `/controls/${ids["ctl"]}/archive`, { reason: "QA q251 retest" }));
+    }, 120000);
+    it("R2 a changed value leaves only `<field>Changed: true` (Department.manager, Process.owner, Kpi.owner, Control.executor), never the value", async () => {
+      const flag: Array<[string, string, string]> = [["dept", "managerChanged", "manager"], ["proc", "ownerChanged", "owner"], ["kpi", "ownerChanged", "owner"], ["ctl", "executorChanged", "executor"]];
+      for (const [k, f, field] of flag) {
+        const rows = (await rowsOf(ids[k]!)).filter((x) => x.action === "UPDATE");
+        expect(rows.some((x) => x.new_value?.[f] === true), `${k} ${f}`).toBe(true);
+        for (const x of await rowsOf(ids[k]!)) for (const v of [x.old_value, x.new_value]) if (v) expect(v, `${k}`).not.toHaveProperty(field);
+      }
+      const dr = (await rowsOf(ids["dept"]!)).filter((x) => x.action === "UPDATE" || x.action === "ASSIGN");
+      expect(dr.some((x) => x.new_value?.["riskOwnerChanged"] === true)).toBe(true);
+      // legacy owner of a process (responsibilities row): flag only when it changed; here owner did not change in that call
+      const pr = (await rowsOf(ids["proc"]!)).filter((x) => x.action === "UPDATE");
+      expect(pr.length).toBeGreaterThanOrEqual(2);
+    });
+    it("R3 an update that does NOT change the field carries no flag (no false positive)", async () => {
+      const rows = (await rowsOf(ids["ctl"]!)).filter((x) => x.action === "UPDATE");
+      expect(rows.filter((x) => x.new_value?.["executorChanged"] === true)).toHaveLength(1);
+      const kpiRows = (await rowsOf(ids["kpi"]!)).filter((x) => x.action === "UPDATE");
+      expect(kpiRows.filter((x) => x.new_value?.["ownerChanged"] === true)).toHaveLength(1);
+    });
+    it("R4 FULL SCAN of audit_log (every entity type: RACI, resource access, roles, process, department, kpi, control...): no new row holds the name or the e-mail", async () => {
+      const hit = await needleRows();
+      expect(hit, JSON.stringify(hit.map((h) => [h.entity_type, h.action]))).toEqual([]);
+      const all = await sql<{ n: number }>("SELECT count(*)::int AS n FROM audit_log WHERE request_id <> 'legacy-q251' AND (coalesce(old_value::text,'') || coalesce(new_value::text,'') || coalesce(reason,'')) ~* '(@[a-z0-9-]+\\.(test|com|org|net))'");
+      expect(all[0]!.n, "any e-mail-looking string in a new row").toBe(0);
+      const types = (await sql<{ t: string }>("SELECT DISTINCT entity_type AS t FROM audit_log WHERE request_id <> 'legacy-q251'")).map((x) => x.t);
+      expect(types).toEqual(expect.arrayContaining(["User", "Role", "Department", "Process", "Kpi", "Control"]));
+    });
+    it("R5 the RACI and resource-access rows exist, carry the account by id only, and the entity types are covered by the scan", async () => {
+      const rows = await sql<{ entity_type: string; txt: string }>(
+        "SELECT entity_type, coalesce(old_value::text,'') || coalesce(new_value::text,'') AS txt FROM audit_log WHERE request_id <> 'legacy-q251' AND (coalesce(old_value::text,'') || coalesce(new_value::text,'')) LIKE '%' || $1 || '%'", [canaryId]);
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.some((x) => /raci/i.test(x.entity_type))).toBe(true);
+      expect(rows.some((x) => x.entity_type === "Risk" && /accessUserIds/.test(x.txt))).toBe(true);
+    });
+  });
+
   it("L5 old rows are not modified by the new writes, and the database still refuses an UPDATE / DELETE of the journal", async () => {
     const after = JSON.stringify(await sql("SELECT * FROM audit_log WHERE id IS NOT NULL AND request_id = 'legacy-q251' ORDER BY entity_id, user_id"));
     expect(after).toBe(legacyBefore);
@@ -191,6 +263,8 @@ describe.skipIf(!live)("QA-q251 LIVE (real PostgreSQL + real server)", () => {
       }
       // the stored row has none of it: the name comes from the join only
       expect(r.text).not.toContain("canary.q251");
+      // q272: the read states that the names are the current ones
+      expect(r.json.data.every((e: any) => e.namesAreCurrent === true)).toBe(true);
     });
     it("L8 every filter returns the joined names (userId, action, entityType, from, to, combined, recent, limit)", async () => {
       const paths = [
