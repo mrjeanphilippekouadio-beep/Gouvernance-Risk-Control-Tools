@@ -12,7 +12,7 @@ import type {
 } from "../../../domain/entities/RatingScale.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 
-interface RatingScaleRow {
+export interface RatingScaleRow {
   id: string;
   tenant_id: string;
   name: string;
@@ -36,7 +36,7 @@ interface RatingScaleRow {
   deletion_reason: string | null;
 }
 
-function toDomain(row: RatingScaleRow): RatingScale {
+export function ratingScaleOf(row: RatingScaleRow): RatingScale {
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -90,7 +90,7 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
       `SELECT * FROM rating_scales WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
       [tenantId, id],
     );
-    return rows[0] ? toDomain(rows[0]) : null;
+    return rows[0] ? ratingScaleOf(rows[0]) : null;
   }
 
   async isReferencedByFrameworkVersion(tenantId: string, id: string): Promise<boolean> {
@@ -112,7 +112,7 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
        ORDER BY created_at DESC`,
       [tenantId],
     );
-    return rows.map(toDomain);
+    return rows.map(ratingScaleOf);
   }
 
   async create(input: CreateRatingScaleInput, audit?: TransactionalAudit<RatingScale>): Promise<RatingScale> {
@@ -135,7 +135,7 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
     );
     const row = rows[0];
     if (!row) throw new Error("Insert into rating_scales returned no row");
-    return toDomain(row);
+    return ratingScaleOf(row);
     });
   }
 
@@ -163,7 +163,7 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
       if (existing.length === 0) throw new NotFoundError("RatingScale", id);
       throw new ValidationError("Cannot modify a rating scale that is not a draft — create a new version instead");
     }
-    return toDomain(row);
+    return ratingScaleOf(row);
     });
   }
 
@@ -205,7 +205,7 @@ export class PostgresRatingScaleRepository implements RatingScaleRepository {
       );
       const row = rows[0];
       if (!row) throw new NotFoundError("RatingScale", id);
-      return toDomain(row);
+      return ratingScaleOf(row);
     });
   }
 

@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from "pg";
-import type { RiskFrameworkRepository } from "../../../domain/repositories/RiskFrameworkRepository.js";
+import type { ProvisionedFramework, ProvisionWithScaleInput, RiskFrameworkRepository } from "../../../domain/repositories/RiskFrameworkRepository.js";
 import type {
   AppetiteThresholdEntry,
   ArchiveFrameworkResult,
@@ -32,6 +32,7 @@ import type { EvaluationMode } from "../../../domain/entities/Config.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 import { insertAuditEvent } from "./PostgresAuditRepository.js";
+import { ratingScaleOf, type RatingScaleRow as ScaleRow } from "./PostgresRatingScaleRepository.js";
 
 interface FrameworkRow {
   id: string;
@@ -226,6 +227,8 @@ export function mapPgError(err: unknown): unknown {
   if (e?.code === "42501" && /^risk[ _]framework/.test(e.message ?? "")) {
     return new ValidationError("Cette version est figée : créez une nouvelle version");
   }
+  // SEC-B13-03: a deadlock / serialization failure between two writers of one Dispositif is a retryable conflict, never a 500.
+  if (e?.code === "40P01" || e?.code === "40001") return new ConflictError("Une autre opération est en cours sur ce Dispositif : réessayez");
   return err;
 }
 
@@ -329,8 +332,29 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     params: FrameworkParams;
     audit?: TransactionalAudit<{ framework: RiskFramework; version: RiskFrameworkVersion }>;
   }): Promise<{ framework: RiskFramework; version: RiskFrameworkVersion }> {
-    const p = input.params;
+    return this.tx(async (c) => this.audited(c, await this.insertFrameworkWithDraft(c, input), input.audit));
+  }
+
+  /** B-13: a rating scale (DRAFT, fully built), the Dispositif and its version 1 in ONE transaction: a failure leaves nothing behind. */
+  async provisionWithScale(input: ProvisionWithScaleInput): Promise<ProvisionedFramework> {
+    const sc = input.scale;
     return this.tx(async (c) => {
+      const row = await c.query<ScaleRow>(
+        `INSERT INTO rating_scales
+           (tenant_id, name, version, status, probability_levels, probability_labels, impact_levels, impact_labels,
+            criticality_thresholds, impact_axes, velocity_levels, persistence_levels, mastery_scale)
+         VALUES ($1, $2, $3, 'DRAFT', $4, $5, $4, $6, $7, $8, $9, $10, $11) RETURNING *`,
+        [input.tenantId, sc.name, sc.version, sc.size, JSON.stringify(sc.probabilityLabels), JSON.stringify(sc.impactLabels),
+          JSON.stringify(sc.thresholds), JSON.stringify(sc.impactAxes), JSON.stringify(sc.velocity), JSON.stringify(sc.persistence), JSON.stringify(sc.mastery)],
+      );
+      const scale = ratingScaleOf(row.rows[0]!);
+      const created = await this.insertFrameworkWithDraft(c, { ...input, params: { ...input.params, ratingScaleId: scale.id } });
+      return this.audited(c, { scale, ...created }, input.audit);
+    });
+  }
+
+  private async insertFrameworkWithDraft(c: PoolClient, input: { tenantId: string; name: string; description: string | null; createdBy: string; params: FrameworkParams }) {
+    const p = input.params;
       const fw = await c.query<FrameworkRow>(
         `INSERT INTO risk_frameworks (tenant_id, name, description, created_by)
          VALUES ($1, $2, $3, $4) RETURNING *`,
@@ -369,8 +393,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
           p.committeeVoteCustom === null ? null : JSON.stringify(p.committeeVoteCustom),
         ],
       );
-      return this.audited(c, { framework: frameworkOf(fw.rows[0]!), version: versionOf(ver.rows[0]!) }, input.audit);
-    });
+      return { framework: frameworkOf(fw.rows[0]!), version: versionOf(ver.rows[0]!) };
   }
 
   async updateIdentity(
@@ -978,6 +1001,12 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
 
   async archiveFramework(tenantId: string, id: string, archivedBy: string, reason: string, audit?: TransactionalAudit<ArchiveFrameworkResult>): Promise<ArchiveFrameworkResult> {
     return this.tx(async (c) => {
+      // SEC-B13-03: versions first, then the Dispositif: the order of a submission (version FOR UPDATE, then the request
+      // insert takes the Dispositif key lock). The reverse order deadlocked (40P01, a 500).
+      await c.query(
+        `SELECT id FROM risk_framework_versions WHERE tenant_id = $1 AND framework_id = $2 AND status IN ('DRAFT', 'ACTIVE', 'PENDING_APPROVAL') ORDER BY id FOR UPDATE`,
+        [tenantId, id],
+      );
       const locked = await c.query<FrameworkRow>(
         `SELECT * FROM risk_frameworks WHERE tenant_id = $1 AND id = $2 AND archived_at IS NULL FOR UPDATE`,
         [tenantId, id],

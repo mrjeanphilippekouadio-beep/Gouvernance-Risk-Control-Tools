@@ -189,9 +189,7 @@ function checkParams<T extends UpdateDraftParams>(input: T): T {
 export class RiskFrameworkService {
   constructor(
     private readonly frameworks: RiskFrameworkRepository,
-    /** The writers are only used by `provisionDefaults` (B-13), which refuses when they are not wired. */
-    private readonly ratingScales: Pick<RatingScaleRepository, "getById"> & Partial<Pick<RatingScaleRepository,
-      "create" | "updateThresholds" | "updateImpactAxes" | "updateVelocity" | "updatePersistence" | "updateMastery" | "auditsInTransaction">>,
+    private readonly ratingScales: Pick<RatingScaleRepository, "getById">,
     /** Fixed groups are roles with a `systemGroup`; members come from role assignments. */
     private readonly roles: Pick<RoleRepository, "list" | "listForUser" | "listAssignments" | "listActiveGrants">,
     private readonly users: Pick<UserRepository, "getById" | "listWithPermission">,
@@ -277,9 +275,25 @@ export class RiskFrameworkService {
     const scale = await this.ratingScales.getById(actor.tenantId, input.ratingScaleId);
     if (!scale) throw new ValidationError(`Rating scale ${input.ratingScaleId} does not exist in this tenant`);
 
-    const given = checkParams(await this.withResolvedAppetite(actor.tenantId, input.params ?? {}));
-    const params: FrameworkParams = {
-      ratingScaleId: scale.id,
+    const params: FrameworkParams = { ratingScaleId: scale.id, ...(await this.buildParams(actor.tenantId, input.params, scale)) };
+
+    return this.audited<{ framework: RiskFramework; version: RiskFrameworkVersion }>(
+      (created) => [
+        this.event(actor, "RiskFramework", created.framework.id, "CREATE", null, created.framework, null, requestId),
+        this.event(actor, "RiskFrameworkVersion", created.version.id, "CREATE", null, created.version, null, requestId),
+      ],
+      (audit) => this.frameworks.createWithDraft({ tenantId: actor.tenantId, name, description, createdBy: actor.userId, params, audit }),
+    );
+  }
+
+  /** Parameters of a new Dispositif (given values, contract defaults otherwise), validated; shared by `create` and `provisionDefaults`. */
+  private async buildParams(
+    tenantId: string,
+    inputParams: Parameters<typeof checkParams>[0] | undefined,
+    scale: { probabilityLevels: number; impactLevels: number },
+  ): Promise<Omit<FrameworkParams, "ratingScaleId">> {
+    const given = checkParams(await this.withResolvedAppetite(tenantId, inputParams ?? {}));
+    return {
       defaultEvaluationMode: given.defaultEvaluationMode ?? "CLASSIQUE",
       committeeEvaluationMinScore: given.committeeEvaluationMinScore ?? defaultCommitteeThreshold(maxScoreForScale(scale)),
       committeeEvaluationEnforced: given.committeeEvaluationEnforced ?? true,
@@ -296,14 +310,6 @@ export class RiskFrameworkService {
       committeeVoteRule: given.committeeVoteRule ?? DEFAULT_CONTRACT_PARAMS.committeeVoteRule,
       committeeVoteCustom: null,
     };
-
-    return this.audited<{ framework: RiskFramework; version: RiskFrameworkVersion }>(
-      (created) => [
-        this.event(actor, "RiskFramework", created.framework.id, "CREATE", null, created.framework, null, requestId),
-        this.event(actor, "RiskFrameworkVersion", created.version.id, "CREATE", null, created.version, null, requestId),
-      ],
-      (audit) => this.frameworks.createWithDraft({ tenantId: actor.tenantId, name, description, createdBy: actor.userId, params, audit }),
-    );
   }
 
   async updateIdentity(
@@ -801,44 +807,38 @@ export class RiskFrameworkService {
    * (case-insensitive): an existing non-archived Dispositif of that name is left alone. Nothing is activated and nothing
    * is made the default here: the first activation does that (spec 4), so activate Standard first. Authorised by
    * `riskframework.create` (the Risk Manager has no `ratingscale.create`): the content is fixed reference data.
-   * Not atomic across templates (each write is its own transaction): a failure leaves a DRAFT scale that a retry does not reuse.
+   * One transaction per template (scale + Dispositif + version 1, audit included): a failure leaves no orphan DRAFT scale,
+   * and a replay creates only what is missing.
    */
   async provisionDefaults(actor: AuthenticatedUser, requestId: string): Promise<{ created: string[]; skipped: string[] }> {
     requirePermission(actor, "riskframework.create");
     await this.assertRiskManager(actor);
-    const rs = this.ratingScales;
-    if (!rs.create || !rs.updateThresholds || !rs.updateImpactAxes || !rs.updateVelocity || !rs.updatePersistence || !rs.updateMastery) {
-      throw new ValidationError("Default Dispositifs are not available");
-    }
+    const provision = this.frameworks.provisionWithScale?.bind(this.frameworks);
+    if (!provision || !this.inTx) throw new ValidationError("Default Dispositifs are not available");
     const taken = new Set((await this.frameworks.listFrameworks(actor.tenantId)).filter((f) => !f.archivedAt).map((f) => f.name.toLowerCase()));
     const created: string[] = [];
     const skipped: string[] = [];
-    const inTx = rs.auditsInTransaction === true;
-    const write = async (before: RatingScale | null, call: (audit?: TransactionalAudit<RatingScale>) => Promise<RatingScale>): Promise<RatingScale> => {
-      const build: TransactionalAudit<RatingScale> = (after) => [
-        this.event(actor, "RatingScale", after.id, before ? "UPDATE" : "CREATE", before, after, "Dispositif par défaut (modèle)", requestId),
-      ];
-      if (inTx) return call(build);
-      const after = await call();
-      for (const e of build(after)) await this.audit.record(e);
-      return after;
-    };
-
     for (const t of DEFAULT_FRAMEWORK_TEMPLATES) {
       if (taken.has(t.name.toLowerCase())) { skipped.push(t.name); continue; }
       const sc = t.scale;
-      let scale = await write(null, (a) => rs.create!({
-        tenantId: actor.tenantId, name: sc.name, version: sc.version, probabilityLevels: sc.size, impactLevels: sc.size,
-        probabilityLabels: sc.probabilityLabels, impactLabels: sc.impactLabels,
-      }, a));
-      scale = await write(scale, (a) => rs.updateThresholds!(actor.tenantId, scale.id, sc.thresholds, a));
-      scale = await write(scale, (a) => rs.updateImpactAxes!(actor.tenantId, scale.id, { axes: sc.axes, retainedImpactRule: "MAX" }, a));
-      scale = await write(scale, (a) => rs.updateVelocity!(actor.tenantId, scale.id, sc.velocity, a));
-      scale = await write(scale, (a) => rs.updatePersistence!(actor.tenantId, scale.id, sc.persistence, a));
-      scale = await write(scale, (a) => rs.updateMastery!(actor.tenantId, scale.id, { levels: sc.mastery.levels, defenseLines: sc.mastery.defenseLines, aggregation: "MIN", thresholds: sc.mastery.thresholds }, a));
-      // Same rules as for any scale before activation: a template that fails them is a bug caught here, not at activation.
-      assertReadyToActivate(scale);
-      await this.create(actor, { name: t.name, description: t.description, ratingScaleId: scale.id, params: t.params }, requestId);
+      const params = await this.buildParams(actor.tenantId, t.params, { probabilityLevels: sc.size, impactLevels: sc.size });
+      await provision({
+        tenantId: actor.tenantId, name: t.name, description: t.description, createdBy: actor.userId, params,
+        scale: {
+          name: sc.name, version: sc.version, size: sc.size, probabilityLabels: sc.probabilityLabels, impactLabels: sc.impactLabels,
+          thresholds: sc.thresholds, impactAxes: { axes: sc.axes, retainedImpactRule: "MAX" }, velocity: sc.velocity, persistence: sc.persistence,
+          mastery: { levels: sc.mastery.levels, defenseLines: sc.mastery.defenseLines, aggregation: "MIN", thresholds: sc.mastery.thresholds },
+        },
+        audit: (r) => {
+          // Same rules as for any scale before activation: a template that fails them is a bug, caught here (rolls the whole template back).
+          assertReadyToActivate(r.scale);
+          return [
+            this.event(actor, "RatingScale", r.scale.id, "CREATE", null, r.scale, "Dispositif par défaut (modèle)", requestId),
+            this.event(actor, "RiskFramework", r.framework.id, "CREATE", null, r.framework, null, requestId),
+            this.event(actor, "RiskFrameworkVersion", r.version.id, "CREATE", null, r.version, null, requestId),
+          ];
+        },
+      });
       created.push(t.name);
     }
     return { created, skipped };

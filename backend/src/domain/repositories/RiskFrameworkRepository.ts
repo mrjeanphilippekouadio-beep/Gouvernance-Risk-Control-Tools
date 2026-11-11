@@ -19,6 +19,25 @@ import type {
   TransactionalAudit,
   UpdateDraftParams,
 } from "../entities/RiskFramework.js";
+import type { ImpactAxis, RatingScale, ScaleLevel, ScoreThreshold, MasteryScaleConfig } from "../entities/RatingScale.js";
+
+/** B-13: a fully built DRAFT scale + the Dispositif parameters (the scale id is filled in by the repository). */
+export interface ProvisionWithScaleInput {
+  tenantId: string;
+  name: string;
+  description: string | null;
+  createdBy: string;
+  params: Omit<FrameworkParams, "ratingScaleId">;
+  scale: {
+    name: string; version: string; size: number;
+    probabilityLabels: ScaleLevel[]; impactLabels: ScaleLevel[]; thresholds: ScoreThreshold[];
+    impactAxes: { axes: ImpactAxis[]; retainedImpactRule: "MAX" };
+    velocity: ScaleLevel[]; persistence: ScaleLevel[]; mastery: MasteryScaleConfig;
+  };
+  /** Runs inside the transaction: it may throw to roll everything back. */
+  audit?: TransactionalAudit<ProvisionedFramework>;
+}
+export type ProvisionedFramework = { scale: RatingScale; framework: RiskFramework; version: RiskFrameworkVersion };
 
 /**
  * Every method is tenant-scoped. There is no generic update and no delete: a version only
@@ -53,6 +72,8 @@ export interface RiskFrameworkRepository {
     params: FrameworkParams;
     audit?: TransactionalAudit<{ framework: RiskFramework; version: RiskFrameworkVersion }>;
   }): Promise<{ framework: RiskFramework; version: RiskFrameworkVersion }>;
+  /** B-13: scale + Dispositif + version 1 in ONE transaction (nothing orphaned on failure). Optional (fakes). */
+  provisionWithScale?(input: ProvisionWithScaleInput): Promise<ProvisionedFramework>;
   /** Identity only (name, description); only the provided keys are written. */
   updateIdentity(tenantId: string, id: string, fields: { name?: string; description?: string | null }, audit?: TransactionalAudit<RiskFramework>): Promise<RiskFramework>;
 

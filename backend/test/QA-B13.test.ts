@@ -217,43 +217,37 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
   const scalesNamed = (name: string, tenant = T) => count(`SELECT count(*)::int n FROM rating_scales WHERE tenant_id = $1 AND name = $2 AND deleted_at IS NULL`, [tenant, name]);
 
   // ------------------------------------------------------------------------------------------------ B0 provisionnement interrompu
-  describe("B-int provisionnement interrompu (mesure)", () => {
-    it("B-int1 panne d'audit a la creation du Dispositif (apres l'echelle du 1er modele) : 5xx, ni Dispositif ni defaut, UNE echelle DRAFT orpheline", async () => {
+  describe("B-int provisionnement interrompu (SEC-B13-02 / QA-B13-01 corriges : une transaction par modele)", () => {
+    const orphanScales = () => count(`SELECT count(*)::int n FROM rating_scales s WHERE s.tenant_id = $1 AND NOT EXISTS (SELECT 1 FROM risk_framework_versions v WHERE v.rating_scale_id = s.id)`, [T]);
+
+    it("B-int1 panne d'audit a la creation du Dispositif : 5xx, ni Dispositif ni defaut, AUCUNE echelle orpheline", async () => {
       expect(await count(`SELECT count(*)::int n FROM risk_frameworks WHERE tenant_id = $1`, [T])).toBe(0);
       await failAudit("RiskFramework", "CREATE");
       let r: Res;
       try { r = await call("rm1", "POST", "/risk-frameworks/defaults", {}); } finally { await failAudit(null); }
       expect(r.status, r.text).toBeGreaterThanOrEqual(500);
       expect(await count(`SELECT count(*)::int n FROM risk_frameworks WHERE tenant_id = $1`, [T])).toBe(0);
-      expect(await scalesNamed("Tranché (4x4)")).toBe(1);
-      const orphan = await one(`SELECT status, criticality_thresholds IS NOT NULL AS has_thr FROM rating_scales WHERE tenant_id = $1 AND name = 'Tranché (4x4)'`, [T]);
-      expect(orphan.status).toBe("DRAFT");
-      expect(orphan.has_thr, "l'echelle orpheline est complete (derniere ecriture faite avant le Dispositif)").toBe(true);
+      expect(await scalesNamed("Tranché (4x4)")).toBe(0);
+      expect(await orphanScales()).toBe(0);
     });
 
-    it("B-int2 panne d'audit pendant la construction de l'echelle (ecriture RatingScale UPDATE) : echelle DRAFT orpheline INCOMPLETE ; la reprise ne la reutilise pas", async () => {
-      await failAudit("RatingScale", "UPDATE");
+    it("B-int2 panne d'audit sur l'echelle elle-meme : 5xx, rien d'ecrit", async () => {
+      await failAudit("RatingScale", "CREATE");
       let r: Res;
       try { r = await call("rm1", "POST", "/risk-frameworks/defaults", {}); } finally { await failAudit(null); }
       expect(r.status, r.text).toBeGreaterThanOrEqual(500);
-      expect(await scalesNamed("Tranché (4x4)")).toBe(2); // 1 complete + 1 nue
-      const bare = await sql(`SELECT id, criticality_thresholds, impact_axes FROM rating_scales WHERE tenant_id = $1 AND name = 'Tranché (4x4)' ORDER BY created_at`, [T]);
-      expect(bare).toHaveLength(2);
-      const orphanScales = await count(`SELECT count(*)::int n FROM rating_scales s WHERE s.tenant_id = $1 AND NOT EXISTS (SELECT 1 FROM risk_framework_versions v WHERE v.rating_scale_id = s.id)`, [T]);
-      expect(orphanScales).toBe(2);
-      // visibility of the orphans for a rating-scale reader (listing): they show up
-      const list = await call("rm1", "GET", "/rating-scales");
-      console.log("B-int orphans listed by /rating-scales:", list.status, (list.json?.["data"] as Row[] | undefined)?.filter((x) => x.name === "Tranché (4x4)").length);
+      expect(await scalesNamed("Tranché (4x4)")).toBe(0);
+      expect(await orphanScales()).toBe(0);
     });
 
-    it("B-int3 reprise : la relance aboutit (3 modeles), les orphelines RESTENT (2 echelles « Tranché (4x4) » de trop) et ne bloquent rien", async () => {
+    it("B-int3 reprise : la relance aboutit (3 modeles), exactement une echelle par modele, aucune orpheline", async () => {
       const r = await call("rm1", "POST", "/risk-frameworks/defaults", {});
       expect(r.status, r.text).toBe(201);
       expect(r.json!["data"]).toEqual({ created: ["Tranché", "Standard", "Renforcé"], skipped: [] });
-      expect(await scalesNamed("Tranché (4x4)")).toBe(3);
+      expect(await scalesNamed("Tranché (4x4)")).toBe(1);
       expect(await scalesNamed("Standard (5x5)")).toBe(1);
       expect(await scalesNamed("Renforcé (6x6)")).toBe(1);
-      // each Dispositif references exactly one scale of its own, never an orphan
+      expect(await orphanScales()).toBe(0);
       for (const n of ["Tranché", "Standard", "Renforcé"]) {
         const f = (await fwByName(n))!;
         const v = (await verOf(f.id))[0]!;
@@ -331,7 +325,7 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
       const f = (await fwByName("Standard"))!;
       expect(await count(`SELECT count(*)::int n FROM audit_log WHERE entity_id = $1 AND entity_type = 'RiskFramework' AND action = 'CREATE'`, [f.id])).toBe(1);
       const v = (await verOf(f.id))[0]!;
-      expect(await count(`SELECT count(*)::int n FROM audit_log WHERE entity_id = $1 AND entity_type = 'RatingScale'`, [v.rating_scale_id])).toBe(6);
+      expect(await count(`SELECT count(*)::int n FROM audit_log WHERE entity_id = $1 AND entity_type = 'RatingScale'`, [v.rating_scale_id])).toBe(1); // one CREATE: the scale is born complete, in the transaction of its Dispositif
       // concurrent relaunch from two Risk Managers: documented race (check-then-create by name, no unique index)
       const rs = await Promise.all([call("rm1", "POST", "/risk-frameworks/defaults", {}), call("rm2", "POST", "/risk-frameworks/defaults", {})]);
       for (const x of rs) expect(x.status, x.text).toBeLessThan(500);

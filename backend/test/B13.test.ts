@@ -3,7 +3,8 @@ import { RiskFrameworkService } from "../src/services/RiskFrameworkService.js";
 import { DEFAULT_FRAMEWORK_TEMPLATES } from "../src/domain/defaultFrameworks.js";
 import { contractDefaultViolations } from "../src/domain/frameworkApproval.js";
 import { assertReadyToActivate } from "../src/domain/ratingScaleRules.js";
-import { ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
+import { ConflictError, ForbiddenError, ValidationError } from "../src/domain/errors/DomainErrors.js";
+import { mapPgError } from "../src/infrastructure/database/postgres/PostgresRiskFrameworkRepository.js";
 import type { Permission } from "../src/domain/permissions.js";
 import type { Role, SystemGroup } from "../src/domain/entities/Role.js";
 import type { RatingScale } from "../src/domain/entities/RatingScale.js";
@@ -17,6 +18,7 @@ import type {
   RiskFrameworkVersion,
   TransactionalAudit,
 } from "../src/domain/entities/RiskFramework.js";
+import type { ProvisionWithScaleInput } from "../src/domain/repositories/RiskFrameworkRepository.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 
 // Level 1 tests for B-13 (DECISION-124/127): default Dispositif templates, SET_DEFAULT, archiving. Cross-module cases are A08's.
@@ -72,7 +74,7 @@ describe("B-13 templates (A13 values, validated by the PO)", () => {
   });
 });
 
-function setup(opts: { rm?: string[]; defaultId?: string; activeIds?: string[]; existing?: string[]; attachedProcess?: boolean } = {}) {
+function setup(opts: { rm?: string[]; defaultId?: string; activeIds?: string[]; existing?: string[]; attachedProcess?: boolean; failOnTemplate?: string } = {}) {
   const rm = opts.rm ?? ["u1", "u2", "u3"];
   const fw = (id: string, name = id): RiskFramework => ({ id, tenantId: "t1", name, description: null, isDefault: id === (opts.defaultId ?? "fwA"), createdBy: "u1",
     createdAt: new Date(), updatedAt: new Date(), archivedAt: null, archivedBy: null, archiveReason: null }) as RiskFramework;
@@ -127,30 +129,22 @@ function setup(opts: { rm?: string[]; defaultId?: string; activeIds?: string[]; 
       for (const e of a?.(result) ?? []) audit.push(e);
       return result;
     },
-    async createWithDraft(i: { name: string; description: string | null; params: Record<string, unknown> & { ratingScaleId: string }; audit?: TransactionalAudit<{ framework: RiskFramework; version: RiskFrameworkVersion }> }) {
-      drafts.push({ name: i.name, description: i.description, scaleId: i.params.ratingScaleId, params: i.params });
-      const framework = fw(`new-${i.name}`, i.name);
-      const out = { framework, version: { id: `v-${i.name}`, status: "DRAFT" } as RiskFrameworkVersion };
-      for (const e of i.audit?.(out) ?? []) audit.push(e);
+    /** Mimics the repository transaction: scale + Dispositif commit together; a throwing audit callback commits nothing. */
+    async provisionWithScale(i: ProvisionWithScaleInput) {
+      const sc = i.scale;
+      const scale = { id: `s${scales.size + 1}`, name: sc.name, status: "DRAFT", probabilityLevels: sc.size, impactLevels: sc.size, probabilityLabels: sc.probabilityLabels,
+        impactLabels: sc.impactLabels, criticalityThresholds: sc.thresholds, impactAxes: sc.impactAxes, velocityLevels: sc.velocity, persistenceLevels: sc.persistence,
+        masteryScale: sc.mastery } as unknown as RatingScale;
+      const out = { scale, framework: fw(`new-${i.name}`, i.name), version: { id: `v-${i.name}`, status: "DRAFT" } as RiskFrameworkVersion };
+      const events = i.audit?.(out) ?? [];
+      if (opts.failOnTemplate === i.name) throw new Error("audit store down");
+      scales.set(scale.id, scale);
+      drafts.push({ name: i.name, description: i.description, scaleId: scale.id, params: i.params });
+      for (const e of events) audit.push(e);
       return out;
     },
   };
-  let n = 0;
-  const upd = (k: keyof RatingScale) => async (_t: string, id: string, value: unknown) => {
-    const s = scales.get(id)!;
-    (s as unknown as Record<string, unknown>)[k] = value;
-    return s;
-  };
-  const ratingScales = {
-    async getById(_t: string, id: string) { return scales.get(id) ?? null; },
-    async create(i: Partial<RatingScale>) {
-      const s = { id: `s${++n}`, ...i, status: "DRAFT", criticalityThresholds: null, impactAxes: null } as RatingScale;
-      scales.set(s.id, s);
-      return s;
-    },
-    updateThresholds: upd("criticalityThresholds"), updateImpactAxes: upd("impactAxes"), updateVelocity: upd("velocityLevels"),
-    updatePersistence: upd("persistenceLevels"), updateMastery: upd("masteryScale"),
-  };
+  const ratingScales = { async getById(_t: string, id: string) { return scales.get(id) ?? null; } };
   const roles = {
     async list() { return [role("RISK_MANAGER"), role("AUDIT"), role("RISK_COMMITTEE")]; },
     async listForUser(_t: string, uid: string) { return rm.includes(uid) ? [role("RISK_MANAGER")] : []; },
@@ -178,6 +172,15 @@ describe("B-13 provisionDefaults", () => {
     expect(s.audit.some((e) => e["entityType"] === "RatingScale" && e["action"] === "CREATE")).toBe(true);
   });
 
+  it("SEC-B13-02: a failure while provisioning one template leaves no orphan scale (earlier templates kept, replay completes)", async () => {
+    const s = setup({ failOnTemplate: "Standard" });
+    await expect(s.service.provisionDefaults(actor("u1"), "req")).rejects.toThrow("audit store down");
+    expect(s.drafts.map((d) => d.name)).toEqual(["Tranché"]);
+    expect(s.scales.size).toBe(1); // the Tranché scale, owned by its Dispositif; none for Standard
+    const ok = setup({ existing: ["Tranché"] });
+    expect((await ok.service.provisionDefaults(actor("u1"), "req")).created).toEqual(["Standard", "Renforcé"]);
+  });
+
   it("is idempotent by name: an existing Dispositif is skipped", async () => {
     const s = setup({ existing: ["standard"] });
     const r = await s.service.provisionDefaults(actor("u1"), "req");
@@ -190,6 +193,15 @@ describe("B-13 provisionDefaults", () => {
     await expect(s.service.provisionDefaults(actor("u1", ["riskframework.read"]), "r")).rejects.toThrow(ForbiddenError);
     await expect(s.service.provisionDefaults(actor("admin"), "r")).rejects.toThrow(ForbiddenError);
     expect(s.drafts).toHaveLength(0);
+  });
+});
+
+describe("SEC-B13-03 deadlock mapping", () => {
+  it("a deadlock (40P01) or serialization failure (40001) becomes a 409, other pg errors stay untouched", () => {
+    expect(mapPgError({ code: "40P01" })).toBeInstanceOf(ConflictError);
+    expect(mapPgError({ code: "40001" })).toBeInstanceOf(ConflictError);
+    const other = { code: "XX000" };
+    expect(mapPgError(other)).toBe(other);
   });
 });
 
