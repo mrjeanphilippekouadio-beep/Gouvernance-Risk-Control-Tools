@@ -517,6 +517,10 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
 
 - 2026-11-11 : **DECISION-124 (q259)** : le PO valide mes valeurs B-13 et Standard par défaut ; 4x4 ne doit pas s'appeler « Léger » (échelle paire, moins de biais du milieu). Section 12 ajoutée au document B-13 : j'avais mélangé taille d'échelle et gouvernance allégée ; la gouvernance du 4x4 était déjà égale à Standard sauf 4 éléments « petite structure » (4 axes, pas de vitesse/persistance, pas de L3, délégation 180 j). Je ne les change pas en silence : variante 2 recommandée (aligner sur Standard), à trancher. Le biais du milieu vaut aussi pour 6x6. Libellés proposés : Tranché (4x4), Standard, Renforcé (6x6). Descriptifs détaillés du 4x4 (5 axes) et du 6x6 (7 axes) rédigés. Non arbitré.
 
+- 2026-11-11 : **q280 (DECISION-133), import « familles et sous-catégories »** (`docs/risk/A13-import-familles-q280-2026-11-11.md`, **PROPOSITION non arbitrée**). Faits : `risk_categories` (parent_id), aucune colonne famille, appétence max 200 entrées par version. Format : `famille;sous-catégorie[;catégorie parente]`, UTF-8, `;`, sans en-tête, `#` commentaire, 64 Ko / 200 lignes. Aperçu sans écriture puis validation avec empreinte, tout ou rien, entrées client jamais écrasées (appétence non masquable), aucun seuil dans le fichier, écriture seulement dans le brouillon. Une sous-catégorie dans deux familles = erreur. Reco : correspondance seulement, pas de création de sous-catégories (doublons par faute de frappe, droits du référentiel) ; question PO unique A/B/C. Hypothèse à vérifier par A07 : pas d'unicité du nom de catégorie.
+
+65. Un import ne contourne pas les droits ni l'audit d'un autre référentiel : il ne crée pas ce qu'un écran dédié protège, il le signale.
+
 64. Un nom de profil ne doit pas porter une hypothèse de taille ou de gravité que la configuration ne suit pas : un nom neutre demande une configuration neutre.
 
 63. Un Dispositif par défaut doit pouvoir être activé par le chemin d'amorçage du client le plus petit : sa première valeur doit égaler les défauts du contrat, et un profil plus strict se demande ensuite par le circuit ordinaire.
