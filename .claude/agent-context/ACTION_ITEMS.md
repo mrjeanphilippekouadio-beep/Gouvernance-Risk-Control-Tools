@@ -499,6 +499,7 @@ pour l'usage.
 | @security @dev-backend | **F8-GAP-1** — désactivation d'un client (`PATCH /tenants/:id {active:false}`) sous `config.manage`, sans motif ni permission dédiée : transition terminale (règle SEC-013/014). Non exposée à l'écran F8 ; revue A10 en cours (SEC-F8). | 2026-11-11 | Ouvert |
 | @product-manager @dev-backend | **F8-GAP-2** — l'import Excel ne couvre que les risques (aucune API pour évidences, KRI, contrôles ; pas de gabarit téléchargeable). q165 dit « import Excel » sans préciser : à confirmer après QA/Sécurité F8 (question PO si l'élargissement est voulu en R1). | 2026-11-11 | Ouvert |
 | @dev-backend @dev-frontend | **F8-GAP-3** — logo : `GET /branding` renvoie une URL Drive, affichée en lien ; pas d'endpoint vérifié pour l'afficher en image. Non bloquant. | 2026-11-11 | Ouvert |
+| HUMAN @risk-manager @dev-backend | **q259 (cockpit)** — B-13 : valeurs de départ des Dispositifs Prudent / Standard / Léger (`docs/risk/A13-dispositifs-par-defaut-B13-2026-11-11.md`) et Standard comme défaut à la mise en service (A, reco A13), ajuster (B), autre (C). Bloque B-13. | 2026-11-11 | **Ouvert — HUMAN** |
 | @orchestrator | **PR #240 (B-6c, migration 088)** ouverte, Sécurité et QA vertes après retest ; à merger après #239 : fusionner staging et réaligner les tests de contiguïté des migrations (087+088, 49 fonctions, plage 66..88, filtre n !== 88 retiré). | 2026-11-10 | En cours |
 ## Decision Log
 
