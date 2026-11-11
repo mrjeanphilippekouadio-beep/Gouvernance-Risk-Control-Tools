@@ -41,7 +41,7 @@ export const DIRECTORY_LIMIT = 500;
 export const usersApi = {
   list: (token: string) => apiRequest<UserSummary[]>("/api/v1/users", { token }),
   /** The caller's own account (no permission needed, tenant-scoped). */
-  me: (token: string) => apiRequest<UserSummary>("/api/v1/users/me", { token }),
+  me: (token: string) => apiRequest<UserSummary & { isSuperAdmin?: boolean }>("/api/v1/users/me", { token }),
   /** The caller's own effective permissions (lot F4): used only to hide actions, the server still decides. */
   myPermissions: (token: string) => apiRequest<string[]>("/api/v1/users/me/permissions", { token }),
   /** Active accounts a designation right may name (user.read, process.responsibility.assign, designation.manage or audit.mission.create). */

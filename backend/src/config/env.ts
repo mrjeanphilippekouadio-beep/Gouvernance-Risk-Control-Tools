@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { parseSuperAdminEmails } from "./superAdminEmails.js";
 
 const LocalAuthUserSchema = z.object({
   email: z.string().email(),
@@ -52,6 +53,9 @@ const EnvSchema = z.object({
   // client IP (Express "trust proxy"). 0 = no proxy (local dev). Render =
   // Cloudflare + Render proxy + in-container proxy = 3.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+
+  // q260: platform super-administrators (see superAdminEmails.ts). Never grantable by any tenant role.
+  SUPER_ADMIN_EMAILS: z.string().max(2000).default("").transform(parseSuperAdminEmails),
 
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_CHAT_ID: z.string().optional(),

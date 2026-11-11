@@ -15,6 +15,11 @@ export interface AuthenticatedUser {
    * always resolves to GLOBAL — see server.ts.
    */
   dashboardScopeMode: DashboardScopeMode;
+  /**
+   * q260: platform super-administrator, resolved at identity time from the server-side SUPER_ADMIN_EMAILS list against the
+   * AUTHENTICATED e-mail. Not a permission: no role, no `users.roles` string and no request field can set it.
+   */
+  isSuperAdmin?: boolean;
 }
 
 /**

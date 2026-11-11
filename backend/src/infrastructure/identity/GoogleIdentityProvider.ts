@@ -5,7 +5,7 @@ import { ForbiddenError } from "../../domain/errors/DomainErrors.js";
 
 export interface TenantMembershipLookup {
   (email: string): Promise<
-    { userId: string; tenantId: string; roles: string[]; dashboardScopeMode: DashboardScopeMode } | null
+    { userId: string; tenantId: string; roles: string[]; dashboardScopeMode: DashboardScopeMode; isSuperAdmin?: boolean } | null
   >;
 }
 
@@ -60,6 +60,7 @@ export class GoogleIdentityProvider implements IdentityProvider {
       displayName: payload.name ?? payload.email,
       roles: membership.roles,
       dashboardScopeMode: membership.dashboardScopeMode,
+      isSuperAdmin: membership.isSuperAdmin === true,
     };
   }
 }

@@ -395,6 +395,16 @@ export function requirePermission(actor: AuthenticatedUser, permission: Permissi
 }
 
 /**
+ * q260: platform super-administrator gate (the `/tenants` routes). Not a `Permission`: it is decided from the server-side
+ * e-mail list at identity time (`AuthenticatedUser.isSuperAdmin`), so no tenant role can ever grant it. Fails closed.
+ */
+export function requireSuperAdmin(actor: AuthenticatedUser): void {
+  if (actor.isSuperAdmin !== true) {
+    throw new ForbiddenError("Platform super-administrator only");
+  }
+}
+
+/**
  * SEC-005: `users.roles` is a free-form legacy/bootstrap grant list
  * (seeded or hand-edited via SQL, never validated) that server.ts unions
  * with RBAC-role permissions to compute an actor's effective grants. A

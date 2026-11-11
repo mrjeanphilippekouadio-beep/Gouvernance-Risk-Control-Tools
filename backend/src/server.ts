@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { corsOptions } from "./api/corsOptions.js";
 import { env, getLocalAuthUsers } from "./config/env.js";
+import { isSuperAdminEmail } from "./config/superAdminEmails.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { InFlightRegistry, gracefulShutdown, trackedNotifier } from "./shutdown.js";
 import { pool } from "./infrastructure/database/pool.js";
@@ -491,13 +492,17 @@ const moduleToggleService = new ModuleToggleService(moduleToggleRepository, audi
 const tenantService = new TenantService(tenantRepository, auditRepository);
 const regulatoryFrameworkService = new RegulatoryFrameworkService(regulatoryFrameworkRepository, auditRepository);
 const riskCategoryService = new RiskCategoryService(riskCategoryRepository, auditRepository);
-const riskImportService = new RiskImportService(riskService);
+const riskImportService = new RiskImportService(riskService, auditRepository);
 const userService = new UserService(userRepository, auditRepository, roleService, departmentRepository, notificationService);
 const governanceService = new GovernanceService(reviewCycleRepository, auditRepository, notifier, selfValidationGate);
 
 const lookupMembership = async (email: string) => {
   const { rows } = await pool.query<{ id: string; tenant_id: string; roles: string[]; email: string; display_name: string | null }>(
-    `SELECT id, tenant_id, roles, email, display_name FROM users WHERE email = $1 AND deleted_at IS NULL`,
+    // SEC-F8-03: a deactivated client (tenants.active = false) has no membership: login refused and sessions in progress
+    // cut at their next request (verifyToken calls this on every request).
+    `SELECT u.id, u.tenant_id, u.roles, u.email, u.display_name
+     FROM users u JOIN tenants t ON t.id = u.tenant_id AND t.active = true
+     WHERE u.email = $1 AND u.deleted_at IS NULL`,
     [email],
   );
   const row = rows[0];
@@ -547,6 +552,8 @@ const lookupMembership = async (email: string) => {
     displayName: row.display_name ?? row.email,
     roles,
     dashboardScopeMode,
+    // q260: from the AUTHENTICATED e-mail (verified by the provider), exact match against the env list; never from the DB.
+    isSuperAdmin: isSuperAdminEmail(email, env.SUPER_ADMIN_EMAILS),
   };
 };
 

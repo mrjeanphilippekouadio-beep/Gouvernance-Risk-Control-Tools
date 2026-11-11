@@ -78,10 +78,14 @@ const tenantBUser: AuthenticatedUser = {
   email: "b@example.com",
 };
 
+const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+const pngOfSize = (size: number): Buffer => Buffer.concat([PNG_HEADER, Buffer.alloc(size - PNG_HEADER.length)]);
+
 const validUpload = {
   fileName: "logo.png",
   mimeType: "image/png",
-  content: Buffer.from("fake-png-bytes"),
+  content: Buffer.concat([PNG_HEADER, Buffer.from("fake-png-bytes")]),
 };
 
 describe("BrandingService", () => {
@@ -155,7 +159,7 @@ describe("BrandingService", () => {
 
     it("rejects content over the 5MB limit", async () => {
       const service = new BrandingService(inMemoryBrandingRepository(), fakeDocumentStorage(), recordingAuditRepository());
-      const oversized = Buffer.alloc(5 * 1024 * 1024 + 1);
+      const oversized = pngOfSize(5 * 1024 * 1024 + 1);
       await expect(
         service.uploadLogo(tenantAUser, { ...validUpload, content: oversized }, "REQ-1"),
       ).rejects.toThrow(ValidationError);
@@ -163,7 +167,7 @@ describe("BrandingService", () => {
 
     it("accepts content exactly at the 5MB limit (boundary)", async () => {
       const service = new BrandingService(inMemoryBrandingRepository(), fakeDocumentStorage(), recordingAuditRepository());
-      const atLimit = Buffer.alloc(5 * 1024 * 1024);
+      const atLimit = pngOfSize(5 * 1024 * 1024);
       await expect(
         service.uploadLogo(tenantAUser, { ...validUpload, content: atLimit }, "REQ-1"),
       ).resolves.toBeDefined();
@@ -183,15 +187,24 @@ describe("BrandingService", () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    it.each(["image/png", "image/jpeg", "image/svg+xml", "image/webp"])(
-      "accepts the allowed MIME type %s",
-      async (mimeType) => {
-        const service = new BrandingService(inMemoryBrandingRepository(), fakeDocumentStorage(), recordingAuditRepository());
-        await expect(
-          service.uploadLogo(tenantAUser, { ...validUpload, mimeType }, "REQ-1"),
-        ).resolves.toBeDefined();
-      },
-    );
+    it.each([
+      ["image/png", PNG_HEADER],
+      ["image/jpeg", JPEG_HEADER],
+    ])("accepts %s when the content signature matches", async (mimeType, header) => {
+      const service = new BrandingService(inMemoryBrandingRepository(), fakeDocumentStorage(), recordingAuditRepository());
+      await expect(
+        service.uploadLogo(tenantAUser, { ...validUpload, mimeType, content: Buffer.concat([header, Buffer.from("x")]) }, "REQ-1"),
+      ).resolves.toBeDefined();
+    });
+
+    it("q262: refuses SVG and WebP even when declared, and a declared PNG whose bytes are not PNG", async () => {
+      const service = new BrandingService(inMemoryBrandingRepository(), fakeDocumentStorage(), recordingAuditRepository());
+      const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+      await expect(service.uploadLogo(tenantAUser, { ...validUpload, mimeType: "image/svg+xml", content: svg }, "REQ-1")).rejects.toThrow(ValidationError);
+      await expect(service.uploadLogo(tenantAUser, { ...validUpload, mimeType: "image/webp" }, "REQ-1")).rejects.toThrow(ValidationError);
+      await expect(service.uploadLogo(tenantAUser, { ...validUpload, mimeType: "image/png", content: svg }, "REQ-1")).rejects.toThrow(ValidationError);
+      await expect(service.uploadLogo(tenantAUser, { ...validUpload, mimeType: "image/png", content: Buffer.concat([JPEG_HEADER, Buffer.from("x")]) }, "REQ-1")).rejects.toThrow(ValidationError);
+    });
   });
 
   describe("audit trail", () => {
