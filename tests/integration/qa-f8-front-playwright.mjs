@@ -19,7 +19,9 @@
 //  7. aucune erreur JS / console imprevue.
 import { checkNoErrors, finish, localApi, openSession, verdicts } from "./qa-helpers.mjs";
 import { createRequire } from "node:module";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const require = createRequire("/opt/node-tools/node_modules/");
 const { chromium } = require("playwright");
@@ -31,9 +33,9 @@ const API = process.env.QA_API ?? "http://127.0.0.1:8397";
 const APP = process.env.QA_APP ?? "http://127.0.0.1:5497";
 const SHOTS = process.env.QA_SHOTS ?? "qa-shots/f8";
 const DB = process.env.QA_DB ?? "postgres://postgres@127.0.0.1:55442/grc_qa_f8";
-const TMP = process.env.QA_TMP ?? "/var/tmp/qaf8-files";
+const TMP = process.env.QA_TMP ?? mkdtempSync(join(tmpdir(), "qaf8-files-"));
 const EMAIL = { adm: "adm@vv1.test", aud: "aud@vv1.test", out: "out@vv1.test" };
-mkdirSync(SHOTS, { recursive: true }); mkdirSync(TMP, { recursive: true });
+mkdirSync(SHOTS, { recursive: true }); if (process.env.QA_TMP) mkdirSync(TMP, { recursive: true });
 
 const { check, failures } = verdicts();
 const { TOK, login, api } = localApi(API, EMAIL);
