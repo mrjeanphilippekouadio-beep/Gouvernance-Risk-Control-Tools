@@ -500,20 +500,20 @@ pour l'usage.
 | @product-manager @dev-backend | **F8-GAP-2** — l'import Excel ne couvre que les risques (aucune API pour évidences, KRI, contrôles ; pas de gabarit téléchargeable). q165 dit « import Excel » sans préciser : à confirmer après QA/Sécurité F8 (question PO si l'élargissement est voulu en R1). | 2026-11-11 | Ouvert |
 | @dev-backend @dev-frontend | **F8-GAP-3** — logo : `GET /branding` renvoie une URL Drive, affichée en lien ; pas d'endpoint vérifié pour l'afficher en image. Non bloquant. | 2026-11-11 | Ouvert |
 | HUMAN @risk-manager @dev-backend | **q259 (cockpit)** — B-13 : valeurs de départ des Dispositifs Prudent / Standard / Léger (`docs/risk/A13-dispositifs-par-defaut-B13-2026-11-11.md`) et Standard comme défaut à la mise en service (A, reco A13), ajuster (B), autre (C). Bloque B-13. | 2026-11-11 | **Décidé** (DECISION-124) — valeurs A13 et Standard par défaut validés ; libellés à revoir (4x4 ne doit pas s'appeler « Léger », 6x6 sans libellé) : proposition A13 en cours |
-| HUMAN @security @dev-backend @architect | **q260 (cockpit)** — SEC-F8-01 (MEDIUM 5,5, PoC) : `TenantService` lit/modifie tous les clients sous `config.manage`, droit local d'un client. Super-administrateur = liste d'e-mails en variable d'environnement (A, reco), client opérateur (B), pas d'écran Clients en R1 (C). Bloque l'écran Clients. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @security @dev-backend | **q261 (cockpit)** — SEC-F8-02/03 : désactivation d'un client sans motif ni droit dédié, et sans effet (`tenants.active` jamais lu) ; chaîne 8,2 HIGH avec SEC-F8-01 dès qu'elle aura un effet. Droit dédié + motif + coupe sessions + réactivation à deux (A, reco) ou connexion seule (B). | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @security @dev-backend | **q262 (cockpit)** — SEC-F8-04 (LOW) : logo, type MIME non vérifié et SVG accepté. Retirer le SVG + vérifier le contenu (A, reco) ou nettoyer le SVG (B). | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @security @dev-backend | **q263 (cockpit)** — SEC-F8-07 (LOW) : réimport du même fichier Excel = doublons. Refus par empreinte sauf confirmation avec motif (A, reco), refus toujours (B), tel quel (C). | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @orchestrator | **q264 (cockpit)** — merger F8 mise en service (PR #247, sans migration, sans écran Clients) : QA 62/62 au retest, Sécurité VERT conditionnel staging, CI et Sonar verts, 2 Codex P2 corrigés (27abbf5). | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @risk-manager @dev-backend | **q265 (cockpit)** — B-13, suite de q259 : noms Tranché (4x4) / Standard / Renforcé (6x6) et 4x4 aligné sur la gouvernance de Standard (A, reco A13), mêmes noms et 4x4 « petite structure » (B), autres noms (C). Doc A13 section 12. Bloque B-13. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @compliance @dev-backend | **q266 (cockpit)** — CMP-B6C C2/C3 : revue a posteriori obligatoire de la confirmation SOLE_RM par Audit/Comité sous délai borné + compteur des confirmations non revues, avant tout client réel (A, reco A14), après la production (B), traçabilité seule (C). Bloque la production de B-6c, pas le merge staging. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @security @dev-backend | **q267 (cockpit)** — SEC-B6C-07 (LOW 2,7) : un RM avec `role.assign` retire son collègue avant de faire la demande, confirme seul, le réassigne (lecture littérale de DECISION-121). Accepter (A, reco orchestrateur, couvert par q266 A) ou interdire si le demandeur a retiré un RM récemment (B). Ne bloque pas le merge staging. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @orchestrator | **q268 (cockpit)** — merger B-6c (PR #240, migrations 088 à 090) : Sécurité VERT, QA RETEST_PASS (60/60, Playwright 33/33), Compliance sous conditions (q266, non bloquant staging), CI et Sonar verts. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @architect @privacy @risk-manager | **q269 (cockpit)** — conservation (A05 Q-1) : revue des restrictions actives tous les 12 mois par le RM, retards signalés en santé (A, reco) ou 6 mois RM/propriétaire (B). Bloque L2c. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @architect @privacy @audit | **q270 (cockpit)** — conservation (A05 Q-2) : noms/e-mails déjà écrits dans le journal avant q251 laissés tels quels, masqués à 10 ans, R5 le dit (A, reco) ou exception à l'ajout seul pour les pseudonymiser (B). Bloque L3 et R5. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @architect @privacy | **q271 (cockpit)** — conservation (A05 Q-3) : motifs de test du journal de staging laissés en clair si staging n'a que des données de test (A, reco) ou traités comme q270 B (B). Bloque L2a. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @security @privacy @dev-backend | **q272 (cockpit)** — q251, SEC-q251-01 (LOW 2,4) / PRIV Q-251-2 : renommage invisible dans le journal. Drapeau « nom modifié » sans valeur + « nom actuel » à la lecture (A, reco A10 et A15) ou tel quel (B). Bloque la PR q251. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @security @privacy @dev-backend | **q273 (cockpit)** — q251, SEC-q251-02 / PRIV Q-251-1 : `Department.manager`/`riskOwner`, `Process.owner`, `Kpi.owner`, `Control.executor` (texte libre ; QA-Q251-01 MAJOR, QA PARTIAL_PASS `qa/q251` 24c3631) recopiés dans le journal. Les inclure dans q251, changement noté sans valeur (A, reco A10 et A15) ou les citer dans R5 (B). Bloque la PR q251. | 2026-11-11 | **Ouvert — HUMAN** |
+| HUMAN @security @dev-backend @architect | **q260 (cockpit)** — SEC-F8-01 (MEDIUM 5,5, PoC) : `TenantService` lit/modifie tous les clients sous `config.manage`, droit local d'un client. Super-administrateur = liste d'e-mails en variable d'environnement (A, reco), client opérateur (B), pas d'écran Clients en R1 (C). Bloque l'écran Clients. | 2026-11-11 | **Décidé** (DECISION-125) — A dans sa version sécurisée (réponse libre), à construire (lot F8-bis) |
+| HUMAN @security @dev-backend | **q261 (cockpit)** — SEC-F8-02/03 : désactivation d'un client sans motif ni droit dédié, et sans effet (`tenants.active` jamais lu) ; chaîne 8,2 HIGH avec SEC-F8-01 dès qu'elle aura un effet. Droit dédié + motif + coupe sessions + réactivation à deux (A, reco) ou connexion seule (B). | 2026-11-11 | **Décidé** (DECISION-125) — A, à construire (lot F8-bis, après q260) |
+| HUMAN @security @dev-backend | **q262 (cockpit)** — SEC-F8-04 (LOW) : logo, type MIME non vérifié et SVG accepté. Retirer le SVG + vérifier le contenu (A, reco) ou nettoyer le SVG (B). | 2026-11-11 | **Décidé** (DECISION-125) — A : PNG/JPEG seulement, contenu vérifié |
+| HUMAN @security @dev-backend | **q263 (cockpit)** — SEC-F8-07 (LOW) : réimport du même fichier Excel = doublons. Refus par empreinte sauf confirmation avec motif (A, reco), refus toujours (B), tel quel (C). | 2026-11-11 | **Décidé** (DECISION-125) — A : refus par empreinte sauf confirmation avec motif |
+| HUMAN @orchestrator | **q264 (cockpit)** — merger F8 mise en service (PR #247, sans migration, sans écran Clients) : QA 62/62 au retest, Sécurité VERT conditionnel staging, CI et Sonar verts, 2 Codex P2 corrigés (27abbf5). | 2026-11-11 | **Fermé** (DECISION-126) — merge PR #247 |
+| HUMAN @risk-manager @dev-backend | **q265 (cockpit)** — B-13, suite de q259 : noms Tranché (4x4) / Standard / Renforcé (6x6) et 4x4 aligné sur la gouvernance de Standard (A, reco A13), mêmes noms et 4x4 « petite structure » (B), autres noms (C). Doc A13 section 12. Bloque B-13. | 2026-11-11 | **Décidé** (DECISION-127) — A : Tranché / Standard / Renforcé, 4x4 aligné sur Standard |
+| HUMAN @compliance @dev-backend | **q266 (cockpit)** — CMP-B6C C2/C3 : revue a posteriori obligatoire de la confirmation SOLE_RM par Audit/Comité sous délai borné + compteur des confirmations non revues, avant tout client réel (A, reco A14), après la production (B), traçabilité seule (C). Bloque la production de B-6c, pas le merge staging. | 2026-11-11 | **Décidé** (DECISION-128) — A : revue a posteriori par un tiers sous délai + compteur, avant tout client réel |
+| HUMAN @security @dev-backend | **q267 (cockpit)** — SEC-B6C-07 (LOW 2,7) : un RM avec `role.assign` retire son collègue avant de faire la demande, confirme seul, le réassigne (lecture littérale de DECISION-121). Accepter (A, reco orchestrateur, couvert par q266 A) ou interdire si le demandeur a retiré un RM récemment (B). Ne bloque pas le merge staging. | 2026-11-11 | **Fermé** (DECISION-128) — A : résiduel accepté |
+| HUMAN @orchestrator | **q268 (cockpit)** — merger B-6c (PR #240, migrations 088 à 090) : Sécurité VERT, QA RETEST_PASS (60/60, Playwright 33/33), Compliance sous conditions (q266, non bloquant staging), CI et Sonar verts. | 2026-11-11 | **Fermé** (DECISION-126) — merge PR #240 |
+| HUMAN @architect @privacy @risk-manager | **q269 (cockpit)** — conservation (A05 Q-1) : revue des restrictions actives tous les 12 mois par le RM, retards signalés en santé (A, reco) ou 6 mois RM/propriétaire (B). Bloque L2c. | 2026-11-11 | **Décidé** (DECISION-129) — A : 12 mois, Risk Manager |
+| HUMAN @architect @privacy @audit | **q270 (cockpit)** — conservation (A05 Q-2) : noms/e-mails déjà écrits dans le journal avant q251 laissés tels quels, masqués à 10 ans, R5 le dit (A, reco) ou exception à l'ajout seul pour les pseudonymiser (B). Bloque L3 et R5. | 2026-11-11 | **Décidé** (DECISION-129) — A : anciennes lignes laissées, R5 le dit |
+| HUMAN @architect @privacy | **q271 (cockpit)** — conservation (A05 Q-3) : motifs de test du journal de staging laissés en clair si staging n'a que des données de test (A, reco) ou traités comme q270 B (B). Bloque L2a. | 2026-11-11 | **Fermé** (DECISION-129) — A : staging = données de test |
+| HUMAN @security @privacy @dev-backend | **q272 (cockpit)** — q251, SEC-q251-01 (LOW 2,4) / PRIV Q-251-2 : renommage invisible dans le journal. Drapeau « nom modifié » sans valeur + « nom actuel » à la lecture (A, reco A10 et A15) ou tel quel (B). Bloque la PR q251. | 2026-11-11 | **Décidé** (DECISION-130) — A : « nom modifié » sans valeur, « nom actuel » à la lecture |
+| HUMAN @security @privacy @dev-backend | **q273 (cockpit)** — q251, SEC-q251-02 / PRIV Q-251-1 : `Department.manager`/`riskOwner`, `Process.owner`, `Kpi.owner`, `Control.executor` (texte libre ; QA-Q251-01 MAJOR, QA PARTIAL_PASS `qa/q251` 24c3631) recopiés dans le journal. Les inclure dans q251, changement noté sans valeur (A, reco A10 et A15) ou les citer dans R5 (B). Bloque la PR q251. | 2026-11-11 | **Décidé** (DECISION-130) — A : 4 champs libres inclus, changement noté sans valeur |
 | @privacy | **PRIV Q-251-3** (motifs libres dans le journal) — paraît couvert par q246 A (motifs rangés à part et effacés à l'échéance, lots L2a/L2b) : A15 à confirmer avant toute question au PO. | 2026-11-11 | Ouvert |
 | @dev-backend | **SEC-q251-03** (INFO) — la lecture du journal lance jusqu'à ~500 `getById` en parallèle ; une requête groupée `getByIds` serait préférable. Avec le correctif q251. | 2026-11-11 | Ouvert |
 | @dev-db | **SEC-B6C INFO-12** — durcissement sans coût : `AND sole_rm_at_request` dans le CHECK SOLE_RM et colonne figée dans la garde 057 (aujourd'hui un UPDATE sous le rôle applicatif peut poser le drapeau avec le régime). Petite migration après le merge de #240. | 2026-11-11 | Ouvert |
@@ -2903,3 +2903,74 @@ OWNER: @orchestrator @risk-manager @dev-backend
 STATUS: DÉCIDÉ — valeurs et défaut ; libellés : proposition A13 en cours.
   Retard de journalisation : la réponse n'a pas été relue avant les messages
   au PO de 14:40 à 15:10 (règle DECISION-045 non appliquée).
+
+DECISION-125
+DATE: 2026-11-11 (cockpit, réponses 17:41–17:42 UTC)
+DECISION (PO) — suites de la revue A10 de F8 :
+  (1) q260 (réponse libre), texte du PO : « super-administrateur = liste
+  d'adresses e-mail fixée dans une variable d'environnement du serveur ;
+  aucun rôle de client ne peut l'accorder (simple, petit lot) -- si cela est
+  securisé ou la version securise de cette option ». Interprétation
+  orchestrateur : option A, construite dans sa forme durcie (identité vérifiée
+  par le fournisseur d'authentification, comparaison exacte normalisée, échec
+  fermé si la liste est vide, aucune délégation, chaque action tracée) ; A10
+  valide que cette forme est sûre avant la PR.
+  (2) q261 A — droit dédié et motif obligatoire ; la désactivation bloque la
+  connexion et coupe les sessions ; réactivation par une seconde personne avec
+  motif. Ordre imposé par A10 : q260 avant q261.
+  (3) q262 A — logo : PNG et JPEG seulement, contenu réel vérifié.
+  (4) q263 A — import : refus d'un fichier déjà importé (empreinte), sauf
+  confirmation explicite avec motif.
+RELATED: SEC-F8-01 à 07, QA-F8-01, PR #247.
+OWNER: @orchestrator @dev-backend @security
+STATUS: DÉCIDÉ — lot F8-bis à construire.
+
+DECISION-126
+DATE: 2026-11-11 (cockpit q264 A 17:42, q268 A 17:43)
+DECISION (PO) : fusion de la PR #247 (F8 mise en service, sans écran Clients)
+  et de la PR #240 (B-6c, migrations 088 à 090) dans staging.
+RELATED: q264, q268, DECISION-121.
+OWNER: @orchestrator
+STATUS: à exécuter (merges ci-dessous).
+
+DECISION-127
+DATE: 2026-11-11 (cockpit q265 A 17:42)
+DECISION (PO) : Dispositifs par défaut nommés Tranché (4x4), Standard (5x5),
+  Renforcé (6x6) ; le 4x4 reprend les axes, la vitesse, la persistance, les
+  trois lignes de défense et la délégation à 90 jours de Standard. Avec
+  DECISION-124 : valeurs A13 validées, Standard par défaut.
+RELATED: q259, q265, B-13, docs/risk/A13-dispositifs-par-defaut-B13-2026-11-11.md.
+OWNER: @orchestrator @dev-backend @risk-manager
+STATUS: DÉCIDÉ — B-13 débloqué (après le merge de #240, migrations à partir de 091).
+
+DECISION-128
+DATE: 2026-11-11 (cockpit q266 A 17:43, q267 A 17:43)
+DECISION (PO) : (1) q266 A — revue a posteriori obligatoire de chaque
+  confirmation SOLE_RM par un tiers (Audit ou Comité) sous un délai borné, et
+  compteur des confirmations non revues dans la santé de la gouvernance ;
+  livré avant tout client réel. (2) q267 A — résiduel SEC-B6C-07 accepté.
+RELATED: q252, CMP-B6C C2/C3, SEC-B6C-07.
+OWNER: @orchestrator @dev-backend @compliance
+STATUS: DÉCIDÉ — lot à construire (avant production).
+
+DECISION-129
+DATE: 2026-11-11 (cockpit q269 à q271, 17:43–17:44)
+DECISION (PO) : (1) q269 A — revue des restrictions actives tous les 12 mois
+  par le Risk Manager, retards signalés dans la santé de la gouvernance sans
+  blocage. (2) q270 A — noms et e-mails déjà écrits dans le journal laissés
+  tels quels, masqués à 10 ans ; le texte R5 dit que la pseudonymisation après
+  D ne les couvre pas. (3) q271 A — staging ne contient que des données de test.
+RELATED: DECISION-120, cadrage A05 section 8 (lots L1 à L3).
+OWNER: @orchestrator @architect @dev-backend @privacy
+STATUS: DÉCIDÉ — lots L1 à L3 à construire dans l'ordre A05.
+
+DECISION-130
+DATE: 2026-11-11 (cockpit q272 A 17:44, q273 A 17:45)
+DECISION (PO) — suites de q251 : (1) q272 A — la ligne note « nom modifié »
+  sans valeur ; le nom est affiché comme « nom actuel » à la lecture.
+  (2) q273 A — `Department.manager`/`riskOwner`, `Process.owner`, `Kpi.owner`,
+  `Control.executor` inclus dans q251 : le journal note que le champ a changé,
+  sans sa valeur.
+RELATED: q251, SEC-q251-01/02, PRIV Q-251-1/2, QA-Q251-01.
+OWNER: @orchestrator @dev-backend
+STATUS: DÉCIDÉ — correctif q251 à construire, puis retest QA.
