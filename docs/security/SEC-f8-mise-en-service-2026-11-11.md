@@ -136,3 +136,13 @@ C'est la classe SEC-013/SEC-014 de CLAUDE.md : une transition terminale gardée 
 2. **SEC-F8-02 / SEC-F8-03** : désactiver un client coupe-t-il la connexion seulement, ou aussi les sessions en cours ? La réactivation exige-t-elle une deuxième personne ?
 3. **SEC-F8-04** : garder le SVG (avec assainissement) ou le retirer.
 4. **SEC-F8-07** : faut-il pouvoir réimporter volontairement le même fichier ?
+
+## Retest court (2026-11-11, `529bf6d`)
+
+- **Changements vérifiés.** L'écran Clients n'est plus dans `NAV_GROUPS`, ni dans le type `View`, ni dans le rendu de `App.tsx`. `ClientsPage` n'est plus importé nulle part ; aucun appel à `setupApi.tenants/createTenant/updateTenant` hors de `api/setup.ts` et du composant isolé. Le type `updateTenant` n'accepte plus `active` (SEC-F8-09 fermé côté front). Le bouton du toggle de modules ne s'affiche qu'avec `config.manage` : c'est de l'affichage seulement, le serveur continue de décider (`ModuleToggleService.toggle`). Aucun fichier backend modifié depuis `a173822`.
+- **Résultat.** SEC-F8-09 : RETEST_PASS. SEC-F8-01, 02 et 03 : **inchangés côté serveur** (statut REMEDIATION_REQUIRED, décisions PO q260 et q261). Les routes `/api/v1/tenants` restent appelables directement par tout détenteur de `config.manage`. Retirer l'écran supprime l'incitation, pas l'exposition. SEC-F8-04 à 07 : inchangés (q262, q263, A06).
+- **Verdict : VERT conditionnel pour staging**, sans l'écran Clients, aux conditions suivantes :
+  1. aucun deuxième tenant créé (ni par l'API, ni par SQL) tant que SEC-F8-01 n'est pas corrigé et retesté. Avec un seul tenant, l'impact inter-client de SEC-F8-01 est nul ;
+  2. SEC-F8-03 (prise en compte de `tenants.active`) n'est livré qu'après SEC-F8-01 et SEC-F8-02, sinon la chaîne monte à 8,2 et c'est une escalade HUMAN ;
+  3. l'écran Clients n'est réintroduit qu'après le retest A10 de SEC-F8-01 et 02.
+- **Production : ce n'est pas encore un feu vert** tant que q260 et q261 ne sont pas tranchées et corrigées.
