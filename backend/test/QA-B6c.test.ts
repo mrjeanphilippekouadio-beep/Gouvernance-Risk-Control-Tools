@@ -76,6 +76,12 @@ const attach = async (id: string, fw: string) => {
   try { await sql(`UPDATE processes SET risk_framework_id = $2 WHERE id = $1`, [id, fw]); } finally { await sql(`ALTER TABLE processes ENABLE TRIGGER processes_framework_guard`); }
 };
 
+/** Test cleanup only: 091 freezes an archived Dispositif (no un-archiving), so the guard is lifted around the restore. */
+const unarchive = async (id: string) => {
+  await sql(`ALTER TABLE risk_frameworks DISABLE TRIGGER risk_frameworks_guard`);
+  try { await sql(`UPDATE risk_frameworks SET archived_at = NULL, archived_by = NULL, archive_reason = NULL WHERE id = $1`, [id]); } finally { await sql(`ALTER TABLE risk_frameworks ENABLE TRIGGER risk_frameworks_guard`); }
+};
+
 type Res = { status: number; text: string; json: Row | null };
 async function call(who: Who | null, method: string, path: string, body?: unknown): Promise<Res> {
   const r = await fetch(API + path, {
@@ -456,7 +462,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect((await reqRow(x.rid)).status).toBe("PENDING");
       expect(await attached(x.p)).toBeNull();
       expect((await decide("rm2", x.rid, "reject")).status).toBe(200);
-      await sql(`UPDATE risk_frameworks SET archived_at = NULL, archived_by = NULL, archive_reason = NULL WHERE id = $1`, [F["FX"]]);
+      await unarchive(F["FX"]!);
       // target lost its ACTIVE version
       x = await pending(F["FX"]!);
       const c = await pg.connect();
@@ -487,7 +493,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       await expect(repo.decideAssignment!(T, x.rid, d)).rejects.toThrow();
       expect((await reqRow(x.rid)).status).toBe("PENDING");
       expect(await attached(x.p)).toBeNull();
-      await sql(`UPDATE risk_frameworks SET archived_at = NULL, archived_by = NULL, archive_reason = NULL WHERE id = $1`, [fwY]);
+      await unarchive(fwY);
       x = await mkReq();
       const c2 = await pg.connect();
       try {
@@ -737,7 +743,9 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect(await attached(p)).toBeNull();
       // resetting to NULL stays allowed
       await attach(p, F["FB"]);
-      expect(await refused(`UPDATE processes SET risk_framework_id = NULL WHERE id = $1`, [p])).toBeNull();
+      // 091 (R-02, B-13): a LIVE process can no longer be detached by a direct write (oracle revised: was "allowed" under 088); a deleted one can
+      expect(await refused(`UPDATE processes SET risk_framework_id = NULL WHERE id = $1`, [p])).toBe("42501");
+      expect(await refused(`UPDATE processes SET risk_framework_id = NULL, deleted_at = now() WHERE id = $1`, [p])).toBeNull();
     });
     it("G2 an approval of an EARLIER transaction cannot be replayed to re-attach", async () => {
       const { p, rid } = await pending();
