@@ -69,7 +69,7 @@ export function onPermissionDenied(listener: DeniedListener): () => void {
   };
 }
 
-type RequestOptions = { method?: string; body?: unknown; token: string; headers?: Record<string, string> };
+type RequestOptions = { method?: string; body?: unknown; /** Multipart upload: sent as is, the browser sets the Content-Type boundary. */ formData?: FormData; token: string; headers?: Record<string, string> };
 
 /**
  * Thin HTTP client. No business logic here — it only shapes requests and
@@ -80,11 +80,11 @@ export async function apiRequestFull<T>(path: string, options: RequestOptions): 
   const res = await fetch(`${API_BASE_URL ?? ""}${path}`, {
     method: options.method ?? "GET",
     headers: {
-      "Content-Type": "application/json",
+      ...(options.formData ? {} : { "Content-Type": "application/json" }),
       Authorization: `Bearer ${options.token}`,
       ...(options.headers ?? {}),
     },
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: options.formData ?? (options.body !== undefined ? JSON.stringify(options.body) : undefined),
   });
 
   const requestId = res.headers.get("X-Request-Id");
