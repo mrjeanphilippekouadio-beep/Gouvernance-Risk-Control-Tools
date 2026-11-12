@@ -55,7 +55,8 @@ const IdentityBody = z
   })
   .strict();
 const DraftBody = z.object({ fromVersionId: Id.optional() }).strict();
-const PatchVersionBody = z.object({ ratingScaleId: Id.optional(), ...ParamsShape }).partial().strict();
+// expectedUpdatedAt: the `updatedAt` of the draft as the client read it; the write is refused with 409 DRAFT_CHANGED if it moved since.
+const PatchVersionBody = z.object({ ratingScaleId: Id.optional(), ...ParamsShape, expectedUpdatedAt: z.iso.datetime().optional() }).partial().strict();
 const ReasonBody = z.object({ reason: Reason }).strict();
 const AssignBody = z.object({ processId: Id, reason: Reason }).strict();
 const ApproveBody = z.object({ comment: Comment.optional() }).strict();
@@ -220,8 +221,9 @@ export function riskFrameworksRouter(service: RiskFrameworkService): Router {
 
   router.patch("/:id/versions/:vid", async (req, res, next) => {
     try {
-      const body = PatchVersionBody.parse(req.body);
-      const version = await service.updateDraft(req.user, id(req.params["id"]), id(req.params["vid"]), body, req.requestId);
+      const { expectedUpdatedAt, ...body } = PatchVersionBody.parse(req.body);
+      const version = await service.updateDraft(req.user, id(req.params["id"]), id(req.params["vid"]), body, req.requestId,
+        expectedUpdatedAt ? { expectedUpdatedAt: new Date(expectedUpdatedAt) } : {});
       res.json({ data: version });
     } catch (err) {
       next(err);

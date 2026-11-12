@@ -12,6 +12,9 @@ export class ValidationError extends Error {
   }
 }
 
+/** Optimistic concurrency on a Dispositif draft (409, code DRAFT_CHANGED). */
+export const DRAFT_CHANGED_MESSAGE = "Le brouillon a changé depuis votre lecture : relancez l'aperçu (ou rechargez) avant de réessayer";
+
 /** 409: the request is valid but clashes with existing state; `existingId` lets the client reuse it. */
 export class ConflictError extends Error {
   /** `code`: optional machine-readable discriminator of the 409 (I06), alongside the human message. */

@@ -147,6 +147,8 @@ import { kpiMeasuresRouter } from "./api/v1/kpiMeasures.routes.js";
 import { riskAppetiteRouter } from "./api/v1/riskAppetite.routes.js";
 import { ratingScalesRouter } from "./api/v1/ratingScales.routes.js";
 import { riskFrameworksRouter } from "./api/v1/riskFrameworks.routes.js";
+import { riskFrameworkFamilyImportRouter } from "./api/v1/riskFrameworkFamilyImport.routes.js";
+import { FrameworkFamilyImportService } from "./services/FrameworkFamilyImportService.js";
 import { riskEvaluationsRouter } from "./api/v1/riskEvaluations.routes.js";
 import { treatmentDecisionsRouter } from "./api/v1/treatmentDecisions.routes.js";
 import { krisRouter } from "./api/v1/kris.routes.js";
@@ -371,6 +373,7 @@ const riskFrameworkService = new RiskFrameworkService(
   riskRepository,
   processRepository,
 );
+const frameworkFamilyImportService = new FrameworkFamilyImportService(riskFrameworkService, riskCategoryRepository, ratingScaleRepository);
 const riskEvaluationService = new RiskEvaluationService(
   riskEvaluationRepository,
   auditRepository,
@@ -703,6 +706,7 @@ app.use("/api/v1/hidden-counts", authMiddleware(identityProvider), hiddenCountsR
 app.use("/api/v1/kpi-measures", authMiddleware(identityProvider), kpiMeasuresRouter(kpiMeasureService));
 app.use("/api/v1/appetite", authMiddleware(identityProvider), riskAppetiteRouter(riskAppetiteService));
 app.use("/api/v1/rating-scales", authMiddleware(identityProvider), ratingScalesRouter(ratingScaleService));
+app.use("/api/v1/risk-frameworks", authMiddleware(identityProvider), riskFrameworkFamilyImportRouter(frameworkFamilyImportService));
 app.use("/api/v1/risk-frameworks", authMiddleware(identityProvider), riskFrameworksRouter(riskFrameworkService));
 app.use(
   "/api/v1/risk-evaluations",

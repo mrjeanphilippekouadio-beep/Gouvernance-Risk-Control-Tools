@@ -31,7 +31,7 @@ import {
   withMasteryIndependence,
   type WithMasteryIndependence,
 } from "../domain/entities/RiskFramework.js";
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
+import { ConflictError, DRAFT_CHANGED_MESSAGE, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import {
   BOOTSTRAP_ASKED_ADMIN_MAY_BE_SELF,
@@ -363,11 +363,21 @@ export class RiskFrameworkService {
     versionId: string,
     patch: UpdateDraftParams,
     requestId: string,
+    opts: {
+      /** Optimistic concurrency: refused with 409 DRAFT_CHANGED if the draft was modified after this instant (as read by the caller). */
+      expectedUpdatedAt?: Date;
+      /** Extra audit lines written in the SAME transaction as the edit (e.g. the import line). */
+      extraEvents?: AuditInput[];
+    } = {},
   ): Promise<RiskFrameworkVersion> {
     requirePermission(actor, "riskframework.update");
     await this.assertRiskManager(actor);
     const before = await this.getVersionOrThrow(actor.tenantId, frameworkId, versionId);
     this.assertDraft(before);
+    const { expectedUpdatedAt, extraEvents = [] } = opts;
+    if (expectedUpdatedAt && expectedUpdatedAt.getTime() !== before.updatedAt.getTime()) {
+      throw new ConflictError(DRAFT_CHANGED_MESSAGE, undefined, "DRAFT_CHANGED");
+    }
     const clean = checkParams(await this.withResolvedAppetite(actor.tenantId, patch));
     if (Object.values(clean).every((v) => v === undefined)) throw new ValidationError("Nothing to update");
     if (clean.ratingScaleId !== undefined) {
@@ -380,10 +390,13 @@ export class RiskFrameworkService {
     // UPDATE entry for an edit that failed to store (over-excludes that person, never under-excludes).
     if (this.inTx) {
       return withMasteryIndependence(await this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId,
-        (after) => [this.event(actor, "RiskFrameworkVersion", versionId, "UPDATE", before, after, null, requestId)]));
+        (after) => [this.event(actor, "RiskFrameworkVersion", versionId, "UPDATE", before, after, null, requestId), ...extraEvents],
+        expectedUpdatedAt));
     }
     await this.record(actor, "RiskFrameworkVersion", versionId, "UPDATE", before, { ...before, ...clean, lastEditedBy: actor.userId }, null, requestId);
-    return withMasteryIndependence(await this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId));
+    const stored = await this.frameworks.updateDraft(actor.tenantId, frameworkId, versionId, clean, actor.userId, undefined, expectedUpdatedAt);
+    for (const e of extraEvents) await this.audit.record(e);
+    return withMasteryIndependence(stored);
   }
 
   /** DRAFT -> ARCHIVED. A terminal transition: `riskframework.archive`, never `update`. */
@@ -1166,7 +1179,7 @@ export class RiskFrameworkService {
   // -- membership and circuit ------------------------------------------
 
   /** q51: configuring the Dispositif belongs to the risk function; an administrator alone is not enough. */
-  private async assertRiskManager(actor: AuthenticatedUser): Promise<void> {
+  async assertRiskManager(actor: AuthenticatedUser): Promise<void> {
     const held = await this.roles.listForUser(actor.tenantId, actor.userId);
     if (!held.some((r) => r.systemGroup === "RISK_MANAGER")) {
       throw new ForbiddenError("Réservé aux membres du groupe Risk Manager");

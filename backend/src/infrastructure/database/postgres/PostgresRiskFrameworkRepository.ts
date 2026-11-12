@@ -29,7 +29,7 @@ import type {
   UpdateDraftParams,
 } from "../../../domain/entities/RiskFramework.js";
 import type { EvaluationMode } from "../../../domain/entities/Config.js";
-import { ConflictError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import { ConflictError, DRAFT_CHANGED_MESSAGE, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 import { insertAuditEvent } from "./PostgresAuditRepository.js";
 import { ratingScaleOf, type RatingScaleRow as ScaleRow } from "./PostgresRatingScaleRepository.js";
@@ -463,6 +463,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     fields: UpdateDraftParams,
     editedBy: string,
     audit?: TransactionalAudit<RiskFrameworkVersion>,
+    expectedUpdatedAt?: Date,
   ): Promise<RiskFrameworkVersion> {
     const columns: Record<string, unknown> = {};
     for (const [key, column] of Object.entries(DRAFT_COLUMNS)) {
@@ -471,12 +472,21 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     }
     const { setClauses, values } = buildUpdateSet(columns, 5);
     if (setClauses.length === 0) throw new ValidationError("Nothing to update");
+    // Optimistic concurrency: the write only lands if the draft is still the one the caller read (ms precision, as the JS Date).
+    const guard = expectedUpdatedAt ? ` AND date_trunc('milliseconds', updated_at) = $${5 + values.length}::timestamptz` : "";
     return this.tx(async (c) => {
       const { rows } = await c.query<VersionRow>(
         `UPDATE risk_framework_versions SET ${setClauses.join(", ")}, last_edited_by = $4, updated_at = now()
-         WHERE tenant_id = $1 AND framework_id = $2 AND id = $3 AND status = 'DRAFT' RETURNING *`,
-        [tenantId, frameworkId, versionId, editedBy, ...values],
+         WHERE tenant_id = $1 AND framework_id = $2 AND id = $3 AND status = 'DRAFT'${guard} RETURNING *`,
+        [tenantId, frameworkId, versionId, editedBy, ...values, ...(expectedUpdatedAt ? [expectedUpdatedAt] : [])],
       );
+      if (!rows[0] && expectedUpdatedAt) {
+        const still = await c.query(
+          `SELECT 1 FROM risk_framework_versions WHERE tenant_id = $1 AND framework_id = $2 AND id = $3 AND status = 'DRAFT'`,
+          [tenantId, frameworkId, versionId],
+        );
+        if (still.rowCount) throw new ConflictError(DRAFT_CHANGED_MESSAGE, undefined, "DRAFT_CHANGED");
+      }
       if (!rows[0]) throw new ValidationError("Only a draft version can be modified");
       return this.audited(c, versionOf(rows[0]), audit);
     });
