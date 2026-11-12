@@ -121,6 +121,7 @@ export class TenantService {
         id,
         active: true,
         expectedActive: false,
+        reactivatorMustDifferFrom: actor.userId,
         audit: (r) => this.events(actor, r.after, "STATUS_CHANGE", r.before, r.after, why, requestId),
       });
     }

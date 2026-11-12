@@ -140,6 +140,19 @@ export class PostgresTenantRepository implements TenantRepository {
       if (current[0].active !== input.expectedActive) {
         throw new ConflictError(input.active ? "This client is already active" : "This client is already inactive");
       }
+      if (input.active && input.reactivatorMustDifferFrom) {
+        // Re-read under the lock, in the transaction: the service's earlier check may be stale (QA-F8B-05 / race).
+        const { rows: last } = await client.query<{ user_id: string }>(
+          `SELECT user_id FROM audit_log
+           WHERE tenant_id = $1 AND entity_type = 'Tenant' AND entity_id = $1 AND action = 'STATUS_CHANGE'
+             AND (new_value ->> 'active') = 'false'
+           ORDER BY "timestamp" DESC, id DESC LIMIT 1`,
+          [input.id],
+        );
+        if (last[0]?.user_id === input.reactivatorMustDifferFrom) {
+          throw new ValidationError("The reactivation must be done by a different super-administrator than the one who deactivated");
+        }
+      }
       const rule = input.survivalRule;
       if (!input.active && rule) {
         const { rows: survivors } = await client.query<{ n: number }>(

@@ -16,6 +16,8 @@ export interface SetActiveInput {
   expectedActive: boolean;
   /** Deactivation only: refused unless another active super-administrator outside this client remains (q277). */
   survivalRule?: SuperAdminSurvivalRule;
+  /** Reactivation only: refused if this user made the LAST deactivation, re-read from the audit under the same lock (QA-F8B-05). */
+  reactivatorMustDifferFrom?: string;
   /** SEC-F8B-02: the audit rows are inserted in the SAME transaction as the state change. */
   audit: TransactionalAudit<{ before: Tenant; after: Tenant }>;
 }

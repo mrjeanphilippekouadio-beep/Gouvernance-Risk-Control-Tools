@@ -3,7 +3,7 @@
 ## Configuration serveur (validée au démarrage)
 
 - `SUPER_ADMIN_EMAILS` : adresses exactes des super-administrateurs. **Au moins deux** (le démarrage journalise un avertissement sinon, sans afficher les adresses).
-- `SUPER_ADMIN_DOMAINS` : domaines que le fournisseur d'identité doit **attester** (Google : revendication `hd`). Vide = personne.
+- `SUPER_ADMIN_DOMAINS` : domaines que le fournisseur d'identité doit **attester** (Google : revendication `hd`). Vide = personne : **obligatoire avec `SUPER_ADMIN_EMAILS`** (sans domaine, aucun super-administrateur). Les deux variables figurent dans `backend/.env.example`.
 - Un compte est super-administrateur seulement si son adresse est dans la liste ET le domaine attesté par le fournisseur est celui de l'adresse ET figure dans `SUPER_ADMIN_DOMAINS`.
 - Jeton local (dev/staging) : aucun domaine attesté par défaut ; `LOCAL_AUTH_ATTESTED_DOMAIN` permet de tester en staging et est **refusée au démarrage en production**.
 

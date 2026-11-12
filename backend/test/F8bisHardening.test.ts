@@ -145,6 +145,7 @@ describe("q277 / SEC-F8B-02 TenantService hands the survival rule and the audit 
     t.active = false;
     await service.reactivate(actor, "t2", "back", "r2");
     expect((calls[1] as { survivalRule?: unknown }).survivalRule).toBeUndefined();
+    expect((calls[1] as { reactivatorMustDifferFrom?: string }).reactivatorMustDifferFrom).toBe("u1");
   });
 });
 
@@ -208,6 +209,12 @@ describe.skipIf(!hasLocalPg)("F8 bis hardening on a real database (migration 092
     await expect(service.deactivate(sa1, B.id, "oops", reqId())).rejects.toThrow(/at least two super-administrators/);
     expect((await tenants.getById(B.id))?.active).toBe(true);
     expect((await audit.listForEntity(B.id, "Tenant", B.id)).length).toBe(0);
+
+    // QA-F8B-05 / race: the last deactivator is re-read INSIDE the transaction; sa1 deactivated C, so sa1 cannot reactivate it.
+    await expect(
+      tenants.setActiveAudited({ id: C.id, active: true, expectedActive: false, reactivatorMustDifferFrom: u1, audit: () => [] }),
+    ).rejects.toThrow(/different super-administrator/);
+    expect((await tenants.getById(C.id))?.active).toBe(false);
 
     // A failing audit insert rolls the state change back (no deactivation without trace).
     await expect(
