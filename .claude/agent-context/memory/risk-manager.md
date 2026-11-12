@@ -521,6 +521,8 @@ seul membre, vote nominatif et motivé en append-only. Constat code (F-14) :
 
 - 2026-11-12 : **vérif. seuils de l'import (feat/r1-import-familles a03d826)**. Je n'ai pas pu lire le code (branche non extraite, pas de Bash) : verdict arithmétique seulement. Règle par bandes (haut de la 1re bande = familles strictes, haut de la 2e = autres) redonne mes valeurs : 5x5 4/9, 4x4 3/6, 6x6 3/8 (conforme). Pour un échelle client : acceptable (critères définis par l'organisation) sous 4 garde-fous : bandes triées par min, au moins 2 bandes sinon refus, seuils entre 1 et n², strict <= modéré. Liste des 12 familles et libellé non vérifiés dans le code.
 
+- 2026-11-12 : `WIDE_FIRST_BAND_RATIO` = 25 % du score max (A06) : avis A13 favorable. Un seuil strict > 25 % du max couvre déjà près de la moitié des cellules d'une 5x5 (7 : 12 cellules sur 25 ; 4 : 8 sur 25), donc seuil d'alerte raisonnable. Avertissement non bloquant, constante nommée, pas une norme.
+
 65. Un import ne contourne pas les droits ni l'audit d'un autre référentiel : il ne crée pas ce qu'un écran dédié protège, il le signale.
 
 64. Un nom de profil ne doit pas porter une hypothèse de taille ou de gravité que la configuration ne suit pas : un nom neutre demande une configuration neutre.
