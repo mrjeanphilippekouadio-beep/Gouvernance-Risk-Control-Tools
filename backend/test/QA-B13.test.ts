@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Pool } from "pg";
 import { DEFAULT_FRAMEWORK_TEMPLATES } from "../src/domain/defaultFrameworks.js";
@@ -112,7 +112,7 @@ describe("A valeurs des modeles = document A13 (statique)", () => {
     for (const t of DEFAULT_FRAMEWORK_TEMPLATES) {
       const v = { ...base, committeeEvaluationMinScore: t.params.committeeEvaluationMinScore, riskOwnerExecutorCumulAllowed: t.params.riskOwnerExecutorCumulAllowed, delegateExecutorCumulAllowed: t.params.delegateExecutorCumulAllowed };
       const viol = contractDefaultViolations(v as never, t.scale.size);
-      if (t.name === "Renforcé") expect(viol.sort()).toEqual(["committeeEvaluationMinScore", "delegateExecutorCumulAllowed", "riskOwnerExecutorCumulAllowed"]);
+      if (t.name === "Renforcé") expect(viol.sort((a, b) => a.localeCompare(b))).toEqual(["committeeEvaluationMinScore", "delegateExecutorCumulAllowed", "riskOwnerExecutorCumulAllowed"]);
       else expect(viol, t.name).toEqual([]);
     }
   });
@@ -174,7 +174,7 @@ const archive = (who: Who, fw: string, reason: string | typeof NO_REASON = "Arch
 
 describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base vierge 001..091)", () => {
   beforeAll(async () => {
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", DB]);
+    sh("/bin/bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", DB]);
     pg = new Pool({ host: "127.0.0.1", port: PGPORT, user: "postgres", database: DB, max: 6 });
     const RM = (await one(`SELECT id FROM roles WHERE tenant_id = $1 AND system_group = 'RISK_MANAGER'`, [T])).id as string;
     const AUD = (await one(`SELECT id FROM roles WHERE tenant_id = $1 AND system_group = 'AUDIT'`, [T])).id as string;
@@ -201,7 +201,7 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
       BEGIN IF EXISTS (SELECT 1 FROM qa_fail_audit f WHERE f.entity_type = NEW.entity_type AND (f.action IS NULL OR f.action = NEW.action))
       THEN RAISE EXCEPTION 'QA: audit failure injected'; END IF; RETURN NEW; END $f$`);
     await sql(`CREATE TRIGGER qa_fail_audit_trg BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION qa_fail_audit_fn()`);
-    sh("bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "start"], { QA_PORT: String(PORT), QA_DB: DB });
+    sh("/bin/bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "start"], { QA_PORT: String(PORT), QA_DB: DB });
     for (const w of WHO) {
       const r = await fetch(`${API}/auth/local`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: `${w}@b6c.test`, password: "whatever" }) });
       TOK[w] = ((await r.json()) as { accessToken: string }).accessToken;
@@ -210,7 +210,7 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
   }, 280000);
   afterAll(async () => {
     await pg?.end();
-    sh("bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "stop"]);
+    sh("/bin/bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "stop"]);
   });
 
   const count = async (q: string, p: unknown[] = []) => Number((await one(q, p)).n);
@@ -315,7 +315,7 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
           if (!["Financier", "Réglementaire", "Opérationnel", "Client", "Réputation", "Données", "Humain"].includes(label)) expect(DOC.includes(label.replace(/\\"/g, '"')), `${n}: ${label}`).toBe(true);
         }
       }
-      const names = (await fwList()).map((f) => f.name).sort();
+      const names = (await fwList()).map((f) => f.name).sort((a, b) => a.localeCompare(b));
       expect(names).toEqual(["Renforcé", "Standard", "Tranché"]);
       expect(names.join(" ")).not.toMatch(/Léger|Prudent/);
     });
@@ -331,7 +331,7 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
           delegateExecutorCumulAllowed: v.delegate_executor_cumul_allowed, hybridPolicyEnabled: v.hybrid_policy_enabled, masteryAuthoritativeSource: v.mastery_authoritative_source,
           committeeVoteRule: v.committee_vote_rule, committeeVoteCustom: v.committee_vote_custom,
         } as never, size);
-        if (n === "Renforcé") expect(viol.sort()).toEqual(["committeeEvaluationMinScore", "delegateExecutorCumulAllowed", "riskOwnerExecutorCumulAllowed"]);
+        if (n === "Renforcé") expect(viol.sort((a, b) => a.localeCompare(b))).toEqual(["committeeEvaluationMinScore", "delegateExecutorCumulAllowed", "riskOwnerExecutorCumulAllowed"]);
         else expect(viol, n).toEqual([]);
       }
     });
@@ -602,7 +602,7 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
         const vs = await verOf(f);
         for (const v of vs) { expect(v.status).toBe("ARCHIVED"); expect(v.archive_reason).toContain("Plus utilise"); }
         const au = await sql(`SELECT entity_type, action, reason FROM audit_log WHERE request_id IS NOT NULL AND (entity_id = $1 OR entity_id = ANY($2)) AND action = 'STATUS_CHANGE'`, [f, vs.map((v) => v.id)]);
-        expect(au.map((x) => x.entity_type).sort()).toEqual(["RiskFramework", ...vs.map(() => "RiskFrameworkVersion")].sort());
+        expect(au.map((x) => x.entity_type).sort((a, b) => a.localeCompare(b))).toEqual(["RiskFramework", ...vs.map(() => "RiskFrameworkVersion")].sort((a, b) => a.localeCompare(b)));
         for (const x of au) expect(x.reason).toContain("Plus utilise");
         expect((await archive("rm1", f)).status).toBe(400);
         expect((await ask("rm1", f)).status).toBe(400);
@@ -817,7 +817,7 @@ describe.skipIf(!live)("QA-B13 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
         try { psql(db, ["-c", "CREATE ROLE grc_app_runtime NOLOGIN"]); } catch { /* role du cluster deja la */ }
         try { psql(db, ["-c", "CREATE ROLE grc_migrator NOLOGIN"]); } catch { /* idem */ }
         psql(db, ["-c", "CREATE TABLE schema_migrations (filename text primary key, applied_at timestamptz not null default now())"]);
-        const files = execFileSync("ls", [join(ROOT, "database", "postgresql", "migrations")], { encoding: "utf8" }).split("\n").filter((x) => /^\d{3}_.*\.sql$/.test(x) && !x.endsWith(".down.sql")).sort();
+        const files = readdirSync(join(ROOT, "database", "postgresql", "migrations")).filter((x) => /^\d{3}_.*\.sql$/.test(x) && !x.endsWith(".down.sql")).sort((a, b) => a.localeCompare(b));
         for (const f of files) { if (f.slice(0, 3) > upTo) break; psql(db, ["-1", "-f", M(f)]); }
       };
       build(MDB, "091");

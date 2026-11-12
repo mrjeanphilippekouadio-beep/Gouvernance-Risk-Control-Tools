@@ -16,5 +16,5 @@ env TRUST_PROXY_HOPS=${QA_TRUST_PROXY_HOPS:-0} NODE_ENV=development APP_ENV=deve
   CORS_ALLOWED_ORIGINS="http://127.0.0.1:5198" \
   node_modules/.bin/tsx --import "$R/tests/integration/qa-f7s1-test-preload.mjs" src/server.ts >/var/tmp/qab6c-server.log 2>&1 &
 echo $! >/var/tmp/qab6c-server.pid
-for i in $(seq 1 40); do curl -s -o /dev/null http://127.0.0.1:${QA_PORT:-8094}/api/v1/auth/local -X POST && exit 0; sleep 1; done
+for i in $(seq 1 40); do curl -s -o /dev/null http://127.0.0.1:${QA_PORT:-8094}/api/v1/auth/local -X POST && exit 0; /bin/sleep 1; done
 echo "serveur non demarre"; tail -20 /var/tmp/qab6c-server.log; exit 1

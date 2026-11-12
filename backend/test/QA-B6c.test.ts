@@ -134,7 +134,7 @@ async function pending(fw = F["FB"]!, who: Who = "rm1") {
 
 describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () => {
   beforeAll(async () => {
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", DB]);
+    sh("/bin/bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", DB]);
     pg = new Pool({ host: "127.0.0.1", port: PGPORT, user: "postgres", database: DB, max: 6 });
     const RM = (await one(`SELECT id FROM roles WHERE tenant_id = $1 AND system_group = 'RISK_MANAGER'`, [T])).id as string;
     const AUD = (await one(`SELECT id FROM roles WHERE tenant_id = $1 AND system_group = 'AUDIT'`, [T])).id as string;
@@ -239,7 +239,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       THEN RAISE EXCEPTION 'QA: audit failure injected'; END IF; RETURN NEW; END $f$`);
     await sql(`CREATE TRIGGER qa_fail_audit_trg BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION qa_fail_audit_fn()`);
 
-    sh("bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "start"], { QA_PORT: String(PORT), QA_DB: DB });
+    sh("/bin/bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "start"], { QA_PORT: String(PORT), QA_DB: DB });
     for (const w of WHO) {
       const r = await fetch(`${API}/auth/local`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: `${w}@b6c.test`, password: "whatever" }) });
       TOK[w] = ((await r.json()) as { accessToken: string }).accessToken;
@@ -248,7 +248,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
   }, 280000);
   afterAll(async () => {
     await pg?.end();
-    sh("bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "stop"]);
+    sh("/bin/bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "stop"]);
   });
 
   // ------------------------------------------------------------------------------------------------ A
@@ -863,7 +863,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect(row.bootstrap_justification).toBeNull();
       expect(await attached(p)).toBe(F["FC1"]);
       const a = await sql(`SELECT * FROM audit_log WHERE tenant_id = $1 AND request_id IS NOT NULL AND entity_id = ANY($2) AND action IN ('UPDATE','APPROVE') ORDER BY action`, [TC, [p, rid]]);
-      expect(a.map((x) => `${x.entity_type}:${x.action}`).sort()).toEqual(["Process:UPDATE", "RiskFrameworkChangeRequest:APPROVE"]);
+      expect(a.map((x) => `${x.entity_type}:${x.action}`).sort((a, b) => a.localeCompare(b))).toEqual(["Process:UPDATE", "RiskFrameworkChangeRequest:APPROVE"]);
       // one exception per confirmation in the health panel: only the APPROVE row carries the marker (SEC INFO 09)
       for (const x of a) { expect(x.governance_exception, x.entity_type).toBe(x.action === "APPROVE" ? "riskFramework.soleRiskManager" : null); expect(x.reason).toBe("Je suis le seul Risk Manager du tenant"); expect(x.user_id).toBe(uid["solo"]); }
       const pu = a.find((x) => x.entity_type === "Process")!;
@@ -1109,7 +1109,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       for (let i = 0; i < 4; i++) {
         const { p, rid } = await soloPending();
         const [a, b] = await Promise.all([solo("solo", rid, { reason: "Confirmer" }), call("solo", "POST", `/risk-frameworks/change-requests/${rid}/withdraw`, { reason: "Retirer" })]);
-        expect([a.status, b.status].sort(), `${a.text} | ${b.text}`).toEqual([200, 409]);
+        expect([a.status, b.status].sort((a, b) => a - b), `${a.text} | ${b.text}`).toEqual([200, 409]);
         const row = await reqRow(rid);
         expect(await attached(p) === F["FC1"]).toBe(row.status === "APPROVED");
         expect(["APPROVED", "WITHDRAWN"]).toContain(row.status);
@@ -1352,7 +1352,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
     const code = async (p: Promise<unknown>) => { try { await p; return null; } catch (e) { return (e as { code?: string }).code ?? "?"; } };
 
     it("K1 089 up is idempotent, down restores the pre-089 CHECKs (same definitions), up again restores them; SOLE_RM refused before up", async () => {
-      sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", MDB]);
+      sh("/bin/bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", MDB]);
       // The setup script applies every migration: step back to the 089 state (093 down, then 090 down) so that 089 is exercised as before.
       expect(fails(MDB, mig("093_sole_rm_set_default_hardening.down.sql"))).toBeNull();
       expect(fails(MDB, mig("090_sole_rm_frozen_at_request.down.sql"))).toBeNull();
@@ -1374,7 +1374,7 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect(fails(MDB, upF)).toBeNull();
       const up2 = defs(MDB);
       // names may differ cosmetically (the auto-named regime CHECK of 055 becomes ..._values_check), definitions must be the same set
-      const strip = (s: string) => s.split("\n").map((l) => l.replace(/^\S+ /, "")).sort().join("\n");
+      const strip = (s: string) => s.split("\n").map((l) => l.replace(/^\S+ /, "")).sort((a, b) => a.localeCompare(b)).join("\n");
       expect(strip(up2)).toBe(strip(base));
       expect(await (async () => { const f = await Promise.resolve(fails(MDB, upF)); return f; })()).toBeNull(); // 3rd up
       expect(strip(defs(MDB))).toBe(strip(base));
