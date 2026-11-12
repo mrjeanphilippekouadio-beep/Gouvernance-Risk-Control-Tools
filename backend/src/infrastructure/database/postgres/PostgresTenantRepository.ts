@@ -174,7 +174,7 @@ export class PostgresTenantRepository implements TenantRepository {
         [input.id, input.active],
       );
       const after = toDomain(rows[0]!);
-      for (const event of input.audit({ before: toDomain(current[0]), after })) await insertAuditEvent(client, event);
+      for (const event of input.audit({ before: toDomain(current[0]), after })) await insertAuditEvent(client, event, true); // SEC-F8B-11: dated after the lock, not at transaction start
       await client.query("COMMIT");
       return after;
     } catch (err) {

@@ -249,6 +249,28 @@ describe.skipIf(!hasLocalPg)("F8 bis hardening on a real database (migration 092
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
+  it("SEC-F8B-11: activation audit rows are dated after the lock is taken, not at transaction start", async () => {
+    const T = await tenants.create({ name: `Clock-${tag}` });
+    const uid = await user(T.id, `clock-${tag}@corp.test`);
+    const holder = await pool.connect();
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT pg_advisory_xact_lock(920092)"); // same constant as PostgresTenantRepository
+      const pending = tenants.setActiveAudited({
+        id: T.id, active: false, expectedActive: true,
+        audit: () => [{ tenantId: T.id, userId: uid, entityType: "Tenant", entityId: T.id, action: "STATUS_CHANGE", oldValue: null, newValue: { active: false }, reason: "x", requestId: reqId() }],
+      }); // starts its transaction, then waits for the lock
+      await new Promise((r) => setTimeout(r, 400));
+      const released = new Date();
+      await holder.query("COMMIT");
+      await pending;
+      const [row] = await audit.listForEntity(T.id, "Tenant", T.id);
+      expect(row!.timestamp.getTime()).toBeGreaterThanOrEqual(released.getTime() - 5);
+    } finally {
+      holder.release();
+    }
+  });
+
   it("QA-F8B-02: a second FIRST import audit row of the same file is refused; a confirmed reimport is allowed", async () => {
     const T = await tenants.create({ name: `Imp-${tag}` });
     const uid = await user(T.id, `imp-${tag}@corp.test`);

@@ -37,12 +37,20 @@ function toDomain(row: AuditRow): AuditEvent {
 }
 
 /** The single INSERT into audit_log; `db` may be a pool or a transaction client (q90: same transaction). */
-export async function insertAuditEvent(db: Pick<Pool, "query">, event: Omit<AuditEvent, "id" | "timestamp">): Promise<void> {
+/**
+ * `atWriteTime` (SEC-F8B-11): date the row with clock_timestamp() (the moment of the INSERT) instead of the default now()
+ * (the start of the transaction). Used by writes that took a lock first, where "the last one" is read back from the audit.
+ */
+export async function insertAuditEvent(
+  db: Pick<Pool, "query">,
+  event: Omit<AuditEvent, "id" | "timestamp">,
+  atWriteTime = false,
+): Promise<void> {
   await db
     .query(
     `INSERT INTO audit_log
-       (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, reason, request_id, governance_exception)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+       (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, reason, request_id, governance_exception${atWriteTime ? ', "timestamp"' : ""})
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10${atWriteTime ? ", clock_timestamp()" : ""})`,
     [
       event.tenantId,
       event.userId,
