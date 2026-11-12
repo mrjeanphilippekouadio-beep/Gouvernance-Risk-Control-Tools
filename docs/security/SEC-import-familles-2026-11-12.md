@@ -61,3 +61,18 @@ Les caractères de direction (U+202A à U+202E, U+2066 à U+2069) et les sépara
 ## Limites
 - Base locale jetable ; frontend lu dans le code, pas exécuté.
 - La course SEC-IMP-01 a été provoquée en tenant le verrou de la ligne pendant le commit. L'édition concurrente est émulée par une écriture SQL qui remplace le contenu exact qu'écrirait un `PATCH`.
+
+## Retest `822d68f` (2026-11-12) : VERT
+
+Même PoC sur le vrai serveur et la même base locale. La saisie concurrente est cette fois émulée fidèlement : l'écriture concurrente pose aussi `updated_at = now()`, comme le fait `updateDraft`.
+
+| ID | Résultat |
+|---|---|
+| SEC-IMP-01 | **RETEST_PASS**. I16 : un RM saisit une entrée à la main pendant que le commit attend le verrou ; le commit répond **409 `DRAFT_CHANGED`** et la saisie manuelle est conservée. La garde est faite deux fois : dans le service (relecture fraîche, donc un audit « avant » juste) et dans le `WHERE` de l'`UPDATE`, ce qui la rend atomique. `PATCH /versions/:vid` avec un `expectedUpdatedAt` périmé = 409, à jour = 200. |
+| SEC-IMP-02 | **RETEST_PASS**. Aperçu par un non-RM qui détient `riskframework.update` = 403, comme le commit. `assertRiskManager` devenu public n'est exposé par aucune route : il ne fait que lever une erreur. |
+| SEC-IMP-03 | **RETEST_PASS**. Panne d'audit injectée = 500 et **aucune entrée écrite** ; sans panne, la ligne avant/après et la ligne `IMPORT_FAMILIES` sont écrites dans la même transaction. |
+| SEC-IMP-04 | **RETEST_PASS**. U+200E, U+2028, U+2067 (et U+202E au tour précédent) = ligne en erreur « caractère de contrôle ou de direction ». |
+
+**Garde optionnelle sur `PATCH`** : acceptable. Le seul écrivain qui remplace un tableau entier depuis l'écran (onglet Seuils d'appétence) envoie `expectedUpdatedAt`. Les autres onglets écrivent des colonnes scalaires choisies par `buildUpdateSet` : sans garde, le dernier qui écrit l'emporte sur un même champ, l'écriture reste tracée et c'est un brouillon relu avant activation. Durcissement simple recommandé (A06, INFO) : rendre `expectedUpdatedAt` obligatoire dès que le corps contient `appetiteThresholds`.
+
+**INFO** : la comparaison se fait à la milliseconde (`date_trunc`), alors que `updated_at` est en microsecondes. Deux écritures dans la même milliseconde ne seraient pas distinguées. C'est très improbable (deux écritures humaines) et cela reste mieux que l'absence de garde ; un compteur de version entier fermerait le cas.
