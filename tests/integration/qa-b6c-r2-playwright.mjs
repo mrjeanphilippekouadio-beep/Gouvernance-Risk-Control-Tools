@@ -79,7 +79,7 @@ try {
   await soleRow(solo, "PW-REQ-1").click();
   await sleep(500);
   let d = await dialogText(solo);
-  check("P2.1 fenetre « Confirmer seul le rattachement » + avertissement", /Confirmer seul le rattachement/.test(d) && /Confirmation sans second avis/.test(d), d.slice(0, 200));
+  check("P2.1 fenetre « Confirmer seul le rattachement » + avertissement", /Confirmer seul la demande/.test(d) && /Confirmation sans second avis/.test(d), d.slice(0, 200));
   await solo.page.locator("#fw-reason-text").fill("Je suis le seul Risk Manager");
   await solo.page.locator("dialog[open] button[type=submit], dialog[open] button:has-text('Confirmer seul')").last().click();
   await sleep(500);
@@ -126,7 +126,7 @@ try {
   await solo.page.locator("dialog[open] button:has-text('Oui, confirmer seul')").click();
   await sleep(1800);
   const t1 = await solo.text();
-  check("P1.1 bandeau de succes", /Rattachement confirmé/.test(t1), t1.slice(0, 200));
+  check("P1.1 bandeau de succes", /Demande confirmée/.test(t1), t1.slice(0, 200));
   check("P1.2 la demande a quitte la liste des demandes en attente", !/PW-REQ-1/.test(t1));
   const st = row(`select status, decision_regime, (decided_by = requested_by), (select risk_framework_id = '${FC1}' from processes where id = '${p1}') from risk_framework_change_requests where id = '${r1.json.data.id}'`);
   check("P1.3 base : APPROVED / SOLE_RM / decideur = demandeur / processus rattache", st.join("|") === "APPROVED|SOLE_RM|t|t", st.join("|"));

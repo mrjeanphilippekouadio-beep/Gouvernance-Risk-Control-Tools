@@ -471,3 +471,9 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 
 - QA-IMP-01..04 clos. `QA-Import.test.ts` 30/30 (R3 compat PATCH, R4 courses avec `expectedUpdatedAt`, L7 bande large, L8 bidi), Playwright 26/26, suite 2958.
 - Leçons : (1) quand un correctif change le comportement observé (aperçu désormais refusé au non-RM), réviser l'oracle navigateur avec justification et tester la NOUVELLE règle ; (2) un contrôle optimiste doit se tester dans les deux sens (import vs PATCH avec et sans la valeur attendue) et au niveau de la précision (aller-retour ms) ; (3) `\s` en JS inclut U+FEFF : une normalisation par `\s` fusionne ce caractère avec l'espace.
+
+## 2026-11-12 — QA lot 093 (q279 A SOLE_RM sur SET_DEFAULT, SEC-B13-01, rebind d'identité ; d4b0e40) — VERT
+
+- Rapport `docs/qa/qa-093-2026-11-12.md`. `backend/test/QA-093.test.ts` 21/21 (live `QA_093_LIVE=1`, port 8099, base `grc_qa_093`), B6c 61/61, B13 37/37, Playwright B-13 36/36 et B-6c 33/33, suite 2989. Aucun défaut produit.
+- Panel migrations live : échecs IDENTIQUES sur staging (c26c561, tests de staging sur base 001..092) : rejeu de 075 et `expires_at` à l'état « up 072 » ; sans lien avec 093.
+- Leçons : (1) le cluster 55442 change de répertoire de socket d'un passage à l'autre : `ps aux | grep postgres` pour lire `unix_socket_directories` avant de lancer les suites `QA_PANEL_MIGHOST` ; (2) dans une course « confirmation // ajout d'un 2e RM », retirer la demande restée PENDING avant d'en créer une neuve (unicité d'une demande vivante) ; (3) un changement de wording de l'écran (« la demande » au lieu de « le rattachement ») casse les oracles navigateur par texte : les mettre à jour avec justification ; (4) pour comparer à staging sans second worktree : copier les fichiers de test de `origin/staging` en `zz*.test.ts`, bases 001..N, supprimer après ; (5) Sonar dans mes scripts : `/bin/bash`, `/bin/sleep`, `readdirSync`, tris avec comparateur.

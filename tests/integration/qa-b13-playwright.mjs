@@ -132,8 +132,18 @@ try {
   await fill(rm1, "Le 4x4 devient le défaut", "Envoyer la demande");
   t = await rm1.text();
   check("U4.4 bandeau « Demande envoyée : un tiers doit la décider »", /Demande envoyée : un tiers doit la décider/.test(t), t.slice(0, 200));
-  check("U4.5 la demande est listée (« Changement du Dispositif par défaut ») sans « Confirmer seul »", /Changement du Dispositif par défaut/.test(t) && (await rm1.page.getByRole("button", { name: "Confirmer seul" }).count()) === 0);
+  // lot 093 (q279 A) : « Confirmer seul » s'applique aussi à SET_DEFAULT (oracle révisé : avant 093 le bouton était absent)
+  check("U4.5 la demande est listée (« Changement du Dispositif par défaut ») avec « Confirmer seul » (q279 A)", /Changement du Dispositif par défaut/.test(t) && (await rm1.page.getByRole("button", { name: "Confirmer seul" }).count()) === 1);
   await rm1.shot("u4-demande");
+  await rm1.page.locator("tr", { hasText: "Changement du Dispositif par défaut" }).getByRole("button", { name: "Confirmer seul" }).click();
+  await sleep(500);
+  await fill(rm1, "Je confirme seul", "Confirmer seul");
+  await rm1.page.locator("dialog[open] button", { hasText: "Oui, confirmer seul" }).click();
+  await sleep(1500);
+  d = await dialogText(rm1);
+  check("U4.5b un 2e Risk Manager existe : « Confirmer seul » refusé (409) et le message s'affiche dans la fenêtre", /n'était pas le seul Risk Manager|un tiers doit la décider/.test(d) && sql(`select name from risk_frameworks where tenant_id = '${T}' and is_default and archived_at is null`) === "Standard", d.slice(0, 250));
+  await rm1.page.keyboard.press("Escape");
+  await sleep(300);
   await rm1.page.locator("tr", { hasText: "Changement du Dispositif par défaut" }).getByRole("button", { name: "Approuver" }).click();
   await sleep(500);
   await fill(rm1, "Je m'approuve", "Approuver");

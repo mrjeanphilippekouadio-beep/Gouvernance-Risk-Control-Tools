@@ -466,13 +466,13 @@ describe.skipIf(!live)("QA-093 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
       expect(r).toHaveLength(1);
       expect(r[0]).toMatchObject({ action: "UPDATE", entity_type: "User", request_id: "identity-rebind" });
       expect(r[0]!.old_value).toEqual({ identityLinked: true, identityProvider: "google" });
-      expect(r[0]!.new_value).toEqual({ identityLinked: true, identityProvider: "google" });
+      expect(r[0]!.new_value).toEqual({ identityLinked: true, identityProvider: "google", executedBy: "postgres" });
       expect(r[0]!.reason).toMatch(/changed directly in the database/);
       expect(await code(`UPDATE users SET identity_provider = 'okta' WHERE id = $1`, [u]), "fournisseur seul").toBeNull();
       r = await rows(u);
       expect(r).toHaveLength(2);
       expect(r[1]!.old_value).toEqual({ identityLinked: true, identityProvider: "google" });
-      expect(r[1]!.new_value).toEqual({ identityLinked: true, identityProvider: "okta" });
+      expect(r[1]!.new_value).toEqual({ identityLinked: true, identityProvider: "okta", executedBy: "postgres" });
     });
 
     it("K7b suite : fournisseur change avec le sub, effacement, re-liaison ; le sub n'apparait dans AUCUNE ligne d'audit ; tenant et auteur de la ligne ; la ligne est append-only comme le reste de l'audit", async () => {
@@ -483,7 +483,7 @@ describe.skipIf(!live)("QA-093 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
       const afterClear = await rows(u);
       expect(afterClear.length - before).toBe(2);
       const cleared = afterClear[afterClear.length - 1]!;
-      expect(cleared.new_value).toEqual({ identityLinked: false, identityProvider: null });
+      expect(cleared.new_value).toEqual({ identityLinked: false, identityProvider: null, executedBy: "postgres" });
       expect(cleared.reason).toMatch(/Identity binding cleared/);
       expect(await code(`UPDATE users SET identity_provider = 'google', identity_subject = 'SUB-DELTA-222' WHERE id = $1`, [u]), "re-liaison").toBeNull();
       expect((await rows(u)).length, "re-liaison apres effacement : aucune ligne").toBe(afterClear.length);
@@ -493,6 +493,26 @@ describe.skipIf(!live)("QA-093 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
       expect(row.user_id).toBe(u);
       expect(await one(`SELECT tenant_id FROM audit_log WHERE entity_type = 'User' AND entity_id = $1 LIMIT 1`, [u])).toMatchObject({ tenant_id: TC });
       expect(await code(`UPDATE audit_log SET reason = 'x' WHERE entity_type = 'User' AND entity_id = $1`, [u])).not.toBeNull(); // append-only
+    });
+
+    it("K7d executedBy (SEC-093-01) : la ligne nomme le role de session qui a ecrit (postgres, puis grc_app_runtime via SET SESSION AUTHORIZATION), jamais le sub ni l'ancien sub", async () => {
+      const u = uid["scom"]!;
+      await sql(`UPDATE users SET identity_provider = 'google', identity_subject = 'SUB-FOX-1' WHERE id = $1`, [u]);
+      await sql(`UPDATE users SET identity_subject = 'SUB-FOX-2' WHERE id = $1`, [u]);
+      const c = await pg.connect();
+      try {
+        await c.query(`SET SESSION AUTHORIZATION grc_app_runtime`);
+        await c.query(`UPDATE users SET identity_subject = 'SUB-FOX-3' WHERE id = $1`, [u]);
+      } catch (e) {
+        console.log("K7d : SET SESSION AUTHORIZATION / UPDATE refuse pour grc_app_runtime :", (e as Error).message);
+      } finally { await c.query(`RESET SESSION AUTHORIZATION`); c.release(); }
+      const r = await rows(u);
+      expect(r.length).toBeGreaterThanOrEqual(1);
+      expect(r[0]!.new_value.executedBy).toBe("postgres");
+      if (r.length >= 2) expect(r[1]!.new_value.executedBy, "le role qui a ecrit, pas le superutilisateur de la session pool").toBe("grc_app_runtime");
+      const all = JSON.stringify(r);
+      for (const s of ["SUB-FOX-1", "SUB-FOX-2", "SUB-FOX-3"]) expect(all, s).not.toContain(s);
+      for (const x of r) expect(Object.keys(x.new_value).sort((a, b) => a.localeCompare(b))).toEqual(["executedBy", "identityLinked", "identityProvider"]);
     });
 
     it("K7c fonction : search_path epingle (pg_temp en dernier), trigger actif ; un utilisateur supprime (deleted_at) ou d'un autre tenant : la ligne porte SON tenant", async () => {
@@ -528,6 +548,46 @@ describe.skipIf(!live)("QA-093 sur le VRAI serveur + PostgreSQL 16 LOCAL (base v
       expect(await mkReq({ kind: "SET_DEFAULT", sole: true, regime: "SOLE_RM", comment: "ok", same: false })).toBe("23514");
       expect(await mkReq({ kind: "SET_DEFAULT", sole: true, regime: "NORMAL", comment: "ok" })).toBe("23514"); // maker-checker conserve
     });
+
+    it("K8c (SEC-093-02) 093 s'applique avec une ANCIENNE decision SOLE_RM sans drapeau (ecrite entre 089 et 090) : up accepte, la ligne reste intacte, le CHECK est NOT VALID mais refuse toute ecriture nouvelle sans drapeau ; down accepte (pas de SOLE_RM sur SET_DEFAULT)", () => {
+      const ODB = "grc_qa_093_old";
+      const M = (n: string) => join(ROOT, "database", "postgresql", "migrations", n);
+      const psql = (db: string, args: string[]) => execFileSync("/usr/bin/psql", ["-X", "-q", "-h", "127.0.0.1", "-p", String(PGPORT), "-U", "postgres", "-d", db, "-v", "ON_ERROR_STOP=1", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      const run = (db: string, f: string) => { try { psql(db, ["-f", M(f)]); return null; } catch (e) { return String((e as { stderr?: string }).stderr ?? e); } };
+      psql("postgres", ["-c", `DROP DATABASE IF EXISTS ${ODB} WITH (FORCE)`, "-c", `CREATE DATABASE ${ODB}`]);
+      try { psql(ODB, ["-c", "CREATE ROLE grc_app_runtime NOLOGIN"]); } catch { /* role du cluster deja la */ }
+      try { psql(ODB, ["-c", "CREATE ROLE grc_migrator NOLOGIN"]); } catch { /* idem */ }
+      psql(ODB, ["-c", "CREATE TABLE schema_migrations (filename text primary key, applied_at timestamptz not null default now())"]);
+      const files = readdirSync(join(ROOT, "database", "postgresql", "migrations")).filter((x) => /^\d{3}_.*\.sql$/.test(x) && !x.endsWith(".down.sql")).sort((a, b) => a.localeCompare(b));
+      for (const f of files) { if (f.slice(0, 3) > "092") break; psql(ODB, ["-1", "-f", M(f)]); }
+      const U = "11111111-0000-4000-8000-0000000000aa";
+      const TT = "aaaaaaaa-0000-4000-8000-0000000000aa";
+      psql(ODB, ["-c", `INSERT INTO tenants (id, name) VALUES ('${TT}','Old')`,
+        "-c", `INSERT INTO users (id, tenant_id, email, display_name, roles) VALUES ('${U}','${TT}','old@k8.test','o','{}')`,
+        "-c", `INSERT INTO risk_frameworks (id, tenant_id, name, created_by) VALUES ('22222222-0000-4000-8000-0000000000aa','${TT}','F','${U}')`,
+        "-c", `INSERT INTO processes (id, tenant_id, level, name) VALUES ('44444444-0000-4000-8000-0000000000aa','${TT}','PROCESS','P')`,
+        "-c", "ALTER TABLE risk_framework_change_requests DISABLE TRIGGER USER",
+        "-c", `INSERT INTO risk_framework_change_requests (id, tenant_id, kind, framework_id, process_id, reason, requested_by, status, decided_by, decided_at, decision_regime, decider_group, decision_comment, sole_rm_at_request)
+              VALUES ('33333333-0000-4000-8000-0000000000aa','${TT}','ASSIGN_PROCESS','22222222-0000-4000-8000-0000000000aa','44444444-0000-4000-8000-0000000000aa','r','${U}','APPROVED','${U}',now(),'SOLE_RM','RISK_MANAGER','ancienne decision',false)`,
+        "-c", "ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER"]);
+      const before = psql(ODB, ["-At", "-c", "SELECT * FROM risk_framework_change_requests WHERE id = '33333333-0000-4000-8000-0000000000aa'"]);
+      expect(run(ODB, "093_sole_rm_set_default_hardening.sql"), "093 s'applique malgre l'ancienne decision").toBeNull();
+      expect(psql(ODB, ["-At", "-c", "SELECT * FROM risk_framework_change_requests WHERE id = '33333333-0000-4000-8000-0000000000aa'"]), "la ligne n'est ni revalidee ni modifiee").toBe(before);
+      expect(psql(ODB, ["-At", "-c", "SELECT convalidated FROM pg_constraint WHERE conname = 'risk_framework_change_requests_sole_rm_shape_check'"]).trim()).toBe("f");
+      // toute ecriture NOUVELLE sans drapeau est refusee, avec drapeau acceptee
+      const ins = (id: string, sole: boolean) => {
+        try {
+          psql(ODB, ["-c", "ALTER TABLE risk_framework_change_requests DISABLE TRIGGER USER",
+            "-c", `INSERT INTO risk_framework_change_requests (id, tenant_id, kind, framework_id, process_id, reason, requested_by, status, decided_by, decided_at, decision_regime, decider_group, decision_comment, sole_rm_at_request)
+                  VALUES ('${id}','${TT}','ASSIGN_PROCESS','22222222-0000-4000-8000-0000000000aa','44444444-0000-4000-8000-0000000000aa','r','${U}','APPROVED','${U}',now(),'SOLE_RM','RISK_MANAGER','nouvelle',${sole})`]);
+          return null;
+        } catch (e) { return String((e as { stderr?: string }).stderr ?? e); } finally { psql(ODB, ["-c", "ALTER TABLE risk_framework_change_requests ENABLE TRIGGER USER"]); }
+      };
+      expect(ins("33333333-0000-4000-8000-0000000000ab", false), "nouvelle decision sans drapeau").toMatch(/sole_rm_shape_check/);
+      expect(ins("33333333-0000-4000-8000-0000000000ac", true), "nouvelle decision avec drapeau").toBeNull();
+      expect(run(ODB, "093_sole_rm_set_default_hardening.sql"), "rejeu du up").toBeNull();
+      expect(run(ODB, "093_sole_rm_set_default_hardening.down.sql"), "down avec une decision SOLE_RM sur ASSIGN_PROCESS").toBeNull();
+    }, 280000);
 
     it("K8b up / down / up sur base jetable (001..093 vs 001..092) : up rejoue identique ; down = fonctions de 092 et plus de trigger de rebind ; down REFUSE s'il existe une decision SOLE_RM sur SET_DEFAULT (rien ne change) ; up retablit l'etat", () => {
       const MDB = "grc_qa_093_mig";
