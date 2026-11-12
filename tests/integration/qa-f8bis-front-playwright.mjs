@@ -186,7 +186,7 @@ try {
   await cd.locator("#client-name").fill("Client UI QA-F8bis");
   await cd.getByRole("button", { name: "Enregistrer" }).click(); await S1.page.waitForTimeout(1500);
   const rc = last("/api/v1/tenants", "POST");
-  check("U.4 création UI : POST { name, deploymentMode }", rc && Object.keys(JSON.parse(rc.body)).sort().join() === "deploymentMode,name" && rc.ct.startsWith("application/json"), rc?.body);
+  check("U.4 création UI : POST { name, deploymentMode }", rc && Object.keys(JSON.parse(rc.body)).sort((a, b) => a.localeCompare(b)).join() === "deploymentMode,name" && rc.ct.startsWith("application/json"), rc?.body);
   const rowB = S1.page.locator("main tbody tr", { hasText: "Client B QA-F8bis" });
   check("U.5 ligne client B visible, boutons Modifier + Désactiver", (await rowB.getByRole("button", { name: "Désactiver" }).count()) === 1 && (await rowB.getByRole("button", { name: "Modifier" }).count()) === 1);
   // désactivation UI
@@ -328,7 +328,7 @@ try {
   const raceImp = await Promise.all([imp("adm", IMPC, "c1.xlsx", {}), imp("adm", IMPC, "c2.xlsx", {})]);
   const rc1 = (await count(`SELECT count(*) n FROM risks WHERE description LIKE 'QA-F8bis conc-%'`)) - rc0;
   console.log(`MESURE  2 commits simultanés du même fichier neuf : statuts ${raceImp.map((r) => r.status).join(",")} ; risques créés=${rc1} (attendu 3)`);
-  check("F.11 deux commits simultanés d'un fichier neuf : un seul import (3 risques), l'autre 409 ALREADY_IMPORTED", rc1 === 3 && raceImp.map((r) => r.status).sort().join() === "200,409" && raceImp.some((r) => r.json?.code === "ALREADY_IMPORTED"), `${rc1} risques ; ${raceImp.map((r) => r.status)}`);
+  check("F.11 deux commits simultanés d'un fichier neuf : un seul import (3 risques), l'autre 409 ALREADY_IMPORTED", rc1 === 3 && raceImp.map((r) => r.status).sort((a, b) => a - b).join() === "200,409" && raceImp.some((r) => r.json?.code === "ALREADY_IMPORTED"), `${rc1} risques ; ${raceImp.map((r) => r.status)}`);
   let badImp = 0; const impRes = [];
   for (let k = 0; k < 2; k++) {
     const f = join(TMP, `ronde${k}.xlsx`); await xlsx(f, [["Ronde", `QA-F8bis ronde-${k}-a`], ["Ronde", `QA-F8bis ronde-${k}-b`]]);

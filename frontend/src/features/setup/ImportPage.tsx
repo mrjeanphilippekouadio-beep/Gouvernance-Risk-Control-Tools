@@ -54,7 +54,7 @@ export function ImportPage({ token }: { token: string }) {
       <div>
         <p className="core-page__eyebrow">ADMINISTRATION · MISE EN SERVICE</p>
         <h1>Import Excel</h1>
-        <p className="core-page__subtitle">Import de risques depuis un classeur .xlsx (10 Mo au plus) : une ligne par risque, colonnes « process » et « description ». Vérifiez d'abord l'aperçu, rien n'est créé avant la validation.</p>
+        <p className="core-page__subtitle">Import de risques depuis un classeur .xlsx (8 Mo au plus) : une ligne par risque, colonnes « process » et « description ». Vérifiez d'abord l'aperçu, rien n'est créé avant la validation.</p>
       </div>
     </div>
     {error && <MessageBanner tone="danger" title="Import impossible">{error}</MessageBanner>}
