@@ -198,7 +198,7 @@ describe.skipIf(!hasLocalPg)("F8 bis hardening on a real database (migration 092
     const results = await Promise.allSettled(names.map((name) => tenants.create({ name })));
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     for (const r of results.filter((r) => r.status === "rejected")) expect((r as PromiseRejectedResult).reason).toBeInstanceOf(ConflictError);
-    const { rows } = await pool.query(`SELECT count(*)::int AS n FROM tenants WHERE lower(name) LIKE $1`, [`acme%${tag}%`]);
+    const { rows } = await pool.query(`SELECT count(*)::int AS n FROM tenants WHERE lower(name) LIKE $1`, [`%acme%${tag}%`]);
     expect(rows[0].n).toBe(1);
     // a rename to a clashing normalized name is a clean 409 too
     const other = await tenants.create({ name: `Other ${tag}` });
