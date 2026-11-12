@@ -3,6 +3,9 @@ import express from "express";
 import cors from "cors";
 import { corsOptions } from "./api/corsOptions.js";
 import { env, getLocalAuthUsers } from "./config/env.js";
+import { companyDomainNotAttested, isSuperAdminIdentity } from "./config/superAdminEmails.js";
+import { ensureIdentityBinding } from "./infrastructure/database/postgres/identityBinding.js";
+import type { IdentityProof } from "./infrastructure/identity/IdentityProvider.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
 import { InFlightRegistry, gracefulShutdown, trackedNotifier } from "./shutdown.js";
 import { pool } from "./infrastructure/database/pool.js";
@@ -494,20 +497,53 @@ const configService = new ConfigService(
   new PostgresGovernanceDelayRequestRepository(pool),
 );
 const moduleToggleService = new ModuleToggleService(moduleToggleRepository, auditRepository);
-const tenantService = new TenantService(tenantRepository, auditRepository);
+const tenantService = new TenantService(tenantRepository, auditRepository, {
+  emails: env.SUPER_ADMIN_EMAILS,
+  domains: env.SUPER_ADMIN_DOMAINS,
+});
+// q277: counts only (no addresses in logs). One super-administrator = no client can ever be deactivated (survival rule).
+if (env.SUPER_ADMIN_EMAILS.length < 2) {
+  console.warn(`SUPER_ADMIN_EMAILS holds ${env.SUPER_ADMIN_EMAILS.length} address(es): at least two super-administrators are required (q277)`);
+}
 const regulatoryFrameworkService = new RegulatoryFrameworkService(regulatoryFrameworkRepository, auditRepository);
 const riskCategoryService = new RiskCategoryService(riskCategoryRepository, auditRepository);
-const riskImportService = new RiskImportService(riskService);
+const riskImportService = new RiskImportService(riskService, auditRepository);
 const userService = new UserService(userRepository, auditRepository, roleService, departmentRepository, notificationService);
 const governanceService = new GovernanceService(reviewCycleRepository, auditRepository, notifier, selfValidationGate);
 
-const lookupMembership = async (email: string) => {
-  const { rows } = await pool.query<{ id: string; tenant_id: string; roles: string[]; email: string; display_name: string | null }>(
-    `SELECT id, tenant_id, roles, email, display_name FROM users WHERE email = $1 AND deleted_at IS NULL`,
+const lookupMembership = async (email: string, proof: IdentityProof) => {
+  const { rows } = await pool.query<{
+    id: string;
+    tenant_id: string;
+    roles: string[];
+    email: string;
+    display_name: string | null;
+    identity_provider: string | null;
+    identity_subject: string | null;
+  }>(
+    // SEC-F8-03: a deactivated client (tenants.active = false) has no membership: login refused and sessions in progress
+    // cut at their next request (verifyToken calls this on every request).
+    `SELECT u.id, u.tenant_id, u.roles, u.email, u.display_name, u.identity_provider, u.identity_subject
+     FROM users u JOIN tenants t ON t.id = u.tenant_id AND t.active = true
+     WHERE u.email = $1 AND u.deleted_at IS NULL`,
     [email],
   );
   const row = rows[0];
   if (!row) return null;
+
+  // q285 A (DECISION-136, SEC-F8B R-2): an address of a company domain (SUPER_ADMIN_DOMAINS) must have that domain ATTESTED
+  // by the provider, for every user. Refused BEFORE any `sub` binding, so a look-alike account cannot even claim the account.
+  if (companyDomainNotAttested(email, proof.attestedDomain, env.SUPER_ADMIN_DOMAINS)) {
+    console.warn(`Company-domain attestation missing for user ${row.id}: login refused`);
+    return null;
+  }
+
+  // q282 A: bound to the provider's stable account id at first login; a different id for the same address = refused
+  // (an address reassigned to another person does not inherit the account). Local accounts carry no subject: unchanged.
+  if (proof.subject && !(await ensureIdentityBinding(pool, row, proof.subject))) {
+    console.warn(`Identity subject mismatch for user ${row.id}: login refused`);
+    return null;
+  }
 
   const { rows: rolePerms } = await pool.query<{ permission: string }>(
     `SELECT DISTINCT unnest(r.permissions) AS permission
@@ -553,6 +589,9 @@ const lookupMembership = async (email: string) => {
     displayName: row.display_name ?? row.email,
     roles,
     dashboardScopeMode,
+    // q260/q275: AUTHENTICATED e-mail in the env list AND a domain attested by the identity provider in SUPER_ADMIN_DOMAINS.
+    isSuperAdmin: isSuperAdminIdentity(email, proof.attestedDomain, env.SUPER_ADMIN_EMAILS, env.SUPER_ADMIN_DOMAINS),
+    attestedDomain: proof.attestedDomain,
   };
 };
 
@@ -568,6 +607,7 @@ const identityProvider =
         env.LOCAL_AUTH_TOKEN_TTL_SECONDS,
         lookupMembership,
         recordLastSeen,
+        env.LOCAL_AUTH_ATTESTED_DOMAIN ?? null,
       );
 
 if (env.AUTH_PROVIDER === "local") {

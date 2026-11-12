@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { Button, Card, FileUpload, MessageBanner, Table, type TableColumn } from "@djamo/design-system";
+import { useState, type FormEvent } from "react";
+import { Button, Card, FileUpload, FormField, MessageBanner, Table, type TableColumn } from "@djamo/design-system";
 import { setupApi, type ImportReport, type ImportRowOutcome } from "../../api/setup";
-import { describeError } from "../indicators/shared";
+import { ApiError } from "../../api/client";
+import { FormModal, describeError } from "../indicators/shared";
 import "../core/CorePages.css";
 
 const XLSX = ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -17,16 +18,28 @@ export function ImportPage({ token }: { token: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerKey, setPickerKey] = useState(0);
+  // q263: the server said this exact file was already imported; the user must confirm with a reason.
+  const [confirming, setConfirming] = useState(false);
+  const [reimportReason, setReimportReason] = useState("");
 
   function pick(next: File | null) { setFile(next); setReport(null); setCommitted(false); setError(null); }
 
-  async function run(commit: boolean) {
+  async function run(commit: boolean, reason?: string) {
     if (!file) return;
     setBusy(true); setError(null);
     try {
-      setReport(commit ? await setupApi.importCommit(token, file) : await setupApi.importPreview(token, file));
+      setReport(commit ? await setupApi.importCommit(token, file, reason) : await setupApi.importPreview(token, file));
       setCommitted(commit);
-    } catch (err) { setError(describeError(err)); } finally { setBusy(false); }
+      setConfirming(false); setReimportReason("");
+    } catch (err) {
+      if (commit && !reason && err instanceof ApiError && err.status === 409 && err.code === "ALREADY_IMPORTED") setConfirming(true);
+      else { setError(describeError(err)); if (reason) setConfirming(false); }
+    } finally { setBusy(false); }
+  }
+
+  function confirmReimport(event: FormEvent) {
+    event.preventDefault();
+    if (reimportReason.trim()) void run(true, reimportReason.trim());
   }
 
   const columns: TableColumn<ImportRowOutcome>[] = [
@@ -41,7 +54,7 @@ export function ImportPage({ token }: { token: string }) {
       <div>
         <p className="core-page__eyebrow">ADMINISTRATION · MISE EN SERVICE</p>
         <h1>Import Excel</h1>
-        <p className="core-page__subtitle">Import de risques depuis un classeur .xlsx (10 Mo au plus) : une ligne par risque, colonnes « process » et « description ». Vérifiez d'abord l'aperçu, rien n'est créé avant la validation.</p>
+        <p className="core-page__subtitle">Import de risques depuis un classeur .xlsx (8 Mo au plus) : une ligne par risque, colonnes « process » et « description ». Vérifiez d'abord l'aperçu, rien n'est créé avant la validation.</p>
       </div>
     </div>
     {error && <MessageBanner tone="danger" title="Import impossible">{error}</MessageBanner>}
@@ -53,6 +66,15 @@ export function ImportPage({ token }: { token: string }) {
         {committed && <Button onClick={() => { setFile(null); setReport(null); setCommitted(false); setPickerKey((k) => k + 1); }}>Nouvel import</Button>}
       </div>
     </Card>
+    {report?.alreadyImported && !committed && <MessageBanner tone="warning" title="Fichier déjà importé">Ce fichier a déjà été importé. Pour l'importer de nouveau, il faudra confirmer avec un motif.</MessageBanner>}
+    <FormModal open={confirming} onClose={() => { if (!busy) setConfirming(false); }} title="Fichier déjà importé" formId="reimport-form" saving={busy} submitLabel="Importer de nouveau">
+      <form id="reimport-form" onSubmit={confirmReimport}>
+        <MessageBanner tone="warning">Ce fichier a déjà été importé : un nouvel import recrée les risques. Indiquez le motif, il sera tracé.</MessageBanner>
+        <FormField label="Motif (obligatoire)" htmlFor="reimport-reason">
+          <textarea id="reimport-reason" value={reimportReason} onChange={(e) => setReimportReason(e.target.value)} maxLength={500} required />
+        </FormField>
+      </form>
+    </FormModal>
     {report && <>
       {committed
         ? <MessageBanner tone={report.createdCount === report.validCount ? "success" : "warning"} title="Import terminé">{report.createdCount ?? 0} risque{(report.createdCount ?? 0) > 1 ? "s" : ""} créé{(report.createdCount ?? 0) > 1 ? "s" : ""} sur {report.totalRows} ligne{report.totalRows > 1 ? "s" : ""}. Les lignes refusées figurent ci-dessous avec leur raison.</MessageBanner>

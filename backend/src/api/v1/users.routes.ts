@@ -31,7 +31,8 @@ export function usersRouter(userService: UserService): Router {
   router.get("/me", async (req, res, next) => {
     try {
       const user = await userService.getSelf(req.user);
-      res.json({ data: user });
+      // q260: the front shows the Clients screen to platform super-administrators only (display; the server decides).
+      res.json({ data: { ...user, isSuperAdmin: req.user.isSuperAdmin === true } });
     } catch (err) {
       next(err);
     }

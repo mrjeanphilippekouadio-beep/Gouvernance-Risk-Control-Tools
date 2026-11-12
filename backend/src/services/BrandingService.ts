@@ -7,7 +7,20 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 import type { DocumentStorage } from "../infrastructure/storage/DocumentStorage.js";
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5 MB — generous for a logo image, far below EvidenceService's 25 MB document cap
-const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
+/** q262 (DECISION-125): PNG and JPEG only, checked on the real content (file signature), SVG (scriptable) refused. */
+const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg"];
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const JPEG_SIGNATURE = [0xff, 0xd8, 0xff];
+
+const startsWith = (content: Buffer, signature: number[]): boolean =>
+  content.length >= signature.length && signature.every((byte, i) => content[i] === byte);
+
+/** The type the BYTES say (never the client-declared Content-Type), or null when it is neither PNG nor JPEG. */
+export function detectLogoMimeType(content: Buffer): "image/png" | "image/jpeg" | null {
+  if (startsWith(content, PNG_SIGNATURE)) return "image/png";
+  if (startsWith(content, JPEG_SIGNATURE)) return "image/jpeg";
+  return null;
+}
 
 /**
  * ACT-084 — "Importer le logo client". Deliberately reuses
@@ -50,13 +63,18 @@ export class BrandingService {
     if (!ALLOWED_MIME_TYPES.includes(params.mimeType)) {
       throw new ValidationError(`Logo must be one of: ${ALLOWED_MIME_TYPES.join(", ")}`);
     }
+    // The declared type must match what the content really is; the stored type is the detected one.
+    const detected = detectLogoMimeType(params.content);
+    if (detected === null || detected !== params.mimeType) {
+      throw new ValidationError("Logo content is not a valid PNG or JPEG image");
+    }
 
     const before = await this.branding.getBranding(actor.tenantId);
 
     const uploaded = await this.storage.upload({
       tenantId: actor.tenantId,
       fileName: params.fileName,
-      mimeType: params.mimeType,
+      mimeType: detected,
       content: params.content,
     });
 

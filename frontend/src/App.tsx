@@ -36,6 +36,8 @@ import { UsersAdmin } from "./features/admin/UsersAdmin";
 import { BrandingPage } from "./features/setup/BrandingPage";
 import { ModulesPage } from "./features/setup/ModulesPage";
 import { ImportPage } from "./features/setup/ImportPage";
+import { ClientsPage } from "./features/setup/ClientsPage";
+import { useIsSuperAdmin } from "./auth/useIsSuperAdmin";
 import { ContextRail } from "./design-system/ContextRail";
 import { useGoogleSignIn } from "./auth/useGoogleSignIn";
 import { useLocalSignIn } from "./auth/useLocalSignIn";
@@ -47,8 +49,8 @@ const GOOGLE_CLIENT_ID = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | un
 const AUTH_PROVIDER = (import.meta.env["VITE_AUTH_PROVIDER"] as string | undefined) ?? "google";
 const LOCAL_AUTH_EMAIL = (import.meta.env["VITE_LOCAL_AUTH_EMAIL"] as string | undefined) ?? "";
 
-type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "govhealth" | "auditmissions" | "rightsmatrix" | "restricted" | "mydata" | "branding" | "modules" | "import";
-type NavItem = { id: View; label: string; icon: string; available?: boolean; /** Hidden without this permission (display only). */ requires?: string | string[] } | { separator: string };
+type View = "cartography" | "evaluation" | "risks" | "roles" | "feedback" | "placeholder" | "appetite" | "scales" | "controls" | "monitoring" | "findings" | "actions" | "auditlog" | "anomalies" | "kri" | "kpi" | "processes" | "departments" | "riskcategories" | "frameworks" | "govsettings" | "modereqs" | "orgprofile" | "designations" | "users" | "govdecisions" | "govhealth" | "auditmissions" | "rightsmatrix" | "restricted" | "mydata" | "branding" | "modules" | "import" | "clients";
+type NavItem = { id: View; label: string; icon: string; available?: boolean; /** Hidden without this permission (display only). */ requires?: string | string[]; /** q260: shown to platform super-administrators only (display; the server decides). */ superAdminOnly?: boolean } | { separator: string };
 const isSeparator = (item: NavItem): item is { separator: string } => "separator" in item;
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -106,6 +108,7 @@ const NAV_GROUPS: NavGroup[] = [
     { id: "branding", label: "Image de marque", icon: "panel", available: true, requires: "branding.read" },
     { id: "modules", label: "Modules", icon: "settings", available: true, requires: "config.read" },
     { id: "import", label: "Import Excel", icon: "table", available: true, requires: "config.manage" },
+    { id: "clients", label: "Clients", icon: "settings", available: true, superAdminOnly: true },
     { id: "feedback", label: "Feedback", icon: "message", available: true },
     { id: "placeholder", label: "Paramètres & référentiels", icon: "settings" },
   ] },
@@ -146,6 +149,7 @@ const PAGE_TITLES: Record<View, string> = {
   branding: "Image de marque",
   modules: "Activation des modules",
   import: "Import Excel",
+  clients: "Clients",
 };
 
 function App() {
@@ -159,6 +163,7 @@ function App() {
   const sessionIdentity = AUTH_PROVIDER === "local"
     ? formatIdentity(localAuth.email)
     : getGoogleIdentity(idToken ?? devToken);
+  const isSuperAdmin = useIsSuperAdmin(token ?? "");
   const errorPath = window.location.pathname;
 
   if (errorPath === "/400" || errorPath === "/error/400") return <ErrorPage code={400} />;
@@ -219,7 +224,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} token={token} />
+      <Sidebar view={view} setView={go} mobileNavOpen={mobileNavOpen} setMobileNavOpen={setMobileNavOpen} token={token} isSuperAdmin={isSuperAdmin} />
       <div className="app-main">
         <header className="app-topbar">
           <button
@@ -284,6 +289,7 @@ function App() {
             {view === "branding" && <BrandingPage token={token} />}
             {view === "modules" && <ModulesPage token={token} />}
             {view === "import" && <ImportPage token={token} />}
+            {view === "clients" && isSuperAdmin && <ClientsPage token={token} />}
             {view === "evaluation" && <EvaluationPage token={token} />}
             {view === "risks" && <RisksPage token={token} shortcuts={{ onOpenFrameworks: () => go("frameworks"), onOpenAppetite: openAppetite, onOpenScales: () => go("scales"), onOpenProcesses: () => go("processes") }} />}
             {view === "roles" && <RolesAdmin token={token} />}
@@ -366,9 +372,9 @@ function Icon({ name }: { name: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen, token }: {
+function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen, token, isSuperAdmin }: {
   view: View; setView: (view: View) => void; mobileNavOpen: boolean; setMobileNavOpen: (open: boolean) => void;
-  token: string;
+  token: string; isSuperAdmin: boolean;
 }) {
   const { can } = usePermissions(token);
   const [collapsed, setCollapsed] = useState(false);
@@ -385,7 +391,7 @@ function Sidebar({ view, setView, mobileNavOpen, setMobileNavOpen, token }: {
       {!collapsed && <div className="sidebar-tenant"><span className="tenant-avatar">D</span><div><strong>Workspace</strong><small>Dispositif de gouvernance</small></div><span className="tenant-chevron">⌄</span></div>}
       <nav className="sidebar-nav" aria-label="Navigation principale">
         {NAV_GROUPS.map((navGroup) => {
-          const group = { ...navGroup, items: navGroup.items.filter((item) => isSeparator(item) || !item.requires || [item.requires].flat().some((p) => can(p))) };
+          const group = { ...navGroup, items: navGroup.items.filter((item) => isSeparator(item) || (item.superAdminOnly ? isSuperAdmin : !item.requires || [item.requires].flat().some((p) => can(p)))) };
           const open = openGroup === group.label;
           return (
             <div className="sidebar-group" key={group.label}>

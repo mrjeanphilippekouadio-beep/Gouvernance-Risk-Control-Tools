@@ -38,7 +38,7 @@ export function BrandingPage({ token }: { token: string }) {
       <div>
         <p className="core-page__eyebrow">ADMINISTRATION · MISE EN SERVICE</p>
         <h1>Image de marque</h1>
-        <p className="core-page__subtitle">Logo du client. Formats acceptés par le serveur : PNG, JPEG, SVG, WebP, 5 Mo au plus. Chaque dépôt est tracé.</p>
+        <p className="core-page__subtitle">Logo du client. Formats acceptés : PNG et JPEG (le serveur vérifie le contenu réel du fichier), 5 Mo au plus. Chaque dépôt est tracé.</p>
       </div>
     </div>
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
@@ -52,7 +52,7 @@ export function BrandingPage({ token }: { token: string }) {
     <Card header={<strong>Déposer un logo</strong>}>
       <form onSubmit={submit}>
         {formError && <MessageBanner tone="danger">{formError}</MessageBanner>}
-        <FileUpload key={pickerKey} accept="image/png,image/jpeg,image/svg+xml,image/webp" buttonLabel="Choisir une image" onSelect={setFile} disabled={saving} />
+        <FileUpload key={pickerKey} accept="image/png,image/jpeg" buttonLabel="Choisir une image" onSelect={setFile} disabled={saving} />
         <p className="muted">Le logo précédent n'est pas supprimé du stockage : il est simplement remplacé.</p>
         <Button type="submit" variant="primary" disabled={!file || saving}>{saving ? "Envoi…" : "Enregistrer le logo"}</Button>
       </form>

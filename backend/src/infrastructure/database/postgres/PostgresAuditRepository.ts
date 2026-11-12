@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import type { AuditRepository, AuditSearchFilters } from "../../../domain/repositories/AuditRepository.js";
 import type { AuditEvent } from "../../../domain/entities/AuditEvent.js";
+import { ConflictError } from "../../../domain/errors/DomainErrors.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 
 interface AuditRow {
@@ -36,11 +37,20 @@ function toDomain(row: AuditRow): AuditEvent {
 }
 
 /** The single INSERT into audit_log; `db` may be a pool or a transaction client (q90: same transaction). */
-export async function insertAuditEvent(db: Pick<Pool, "query">, event: Omit<AuditEvent, "id" | "timestamp">): Promise<void> {
-  await db.query(
+/**
+ * `atWriteTime` (SEC-F8B-11): date the row with clock_timestamp() (the moment of the INSERT) instead of the default now()
+ * (the start of the transaction). Used by writes that took a lock first, where "the last one" is read back from the audit.
+ */
+export async function insertAuditEvent(
+  db: Pick<Pool, "query">,
+  event: Omit<AuditEvent, "id" | "timestamp">,
+  atWriteTime = false,
+): Promise<void> {
+  await db
+    .query(
     `INSERT INTO audit_log
-       (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, reason, request_id, governance_exception)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+       (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, reason, request_id, governance_exception${atWriteTime ? ', "timestamp"' : ""})
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10${atWriteTime ? ", clock_timestamp()" : ""})`,
     [
       event.tenantId,
       event.userId,
@@ -53,7 +63,14 @@ export async function insertAuditEvent(db: Pick<Pool, "query">, event: Omit<Audi
       event.requestId,
       event.governanceException ?? null,
     ],
-  );
+    )
+    .catch((err: unknown) => {
+      // QA-F8B-02: a second FIRST import of the same file (same tenant, same hash) hits the partial unique index of migration 092.
+      if ((err as { code?: string }).code === "23505" && (err as { constraint?: string }).constraint === "audit_log_risk_import_once_uq") {
+        throw new ConflictError("Ce fichier vient d'être importé. Confirmez avec un motif pour l'importer de nouveau.", undefined, "ALREADY_IMPORTED");
+      }
+      throw err;
+    });
 }
 
 /**

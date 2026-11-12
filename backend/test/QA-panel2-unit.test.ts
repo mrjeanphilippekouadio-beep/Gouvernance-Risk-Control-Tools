@@ -159,10 +159,11 @@ describe("U2 / q159: the Committee paths leave the double confirmation and stay 
 });
 
 describe("U3 / q155 Google: what counts as a connection", () => {
-  const payloads: Record<string, { email: string; email_verified: boolean; iat: number; name?: string }> = {};
+  const payloads: Record<string, { email: string; email_verified: boolean; iat: number; name?: string; sub?: string }> = {};
+  const withSub = (idToken: string) => ({ sub: "g-sub", ...payloads[idToken] });
   function provider(onIdentified: (t: string, u: string) => void, membership: { userId: string; tenantId: string } | null = { userId: "u1", tenantId: "t1" }) {
     const p = new GoogleIdentityProvider("client", async () => (membership ? { ...membership, roles: [], dashboardScopeMode: "GLOBAL" } : null) as never, onIdentified);
-    (p as unknown as { client: unknown }).client = { verifyIdToken: async ({ idToken }: { idToken: string }) => ({ getPayload: () => payloads[idToken] }) };
+    (p as unknown as { client: unknown }).client = { verifyIdToken: async ({ idToken }: { idToken: string }) => ({ getPayload: () => withSub(idToken) }) };
     return p;
   }
   it("many requests with ONE token = one call; a renewed token (new iat) = a new call (pinned: the silent renewal counts as a connection)", async () => {

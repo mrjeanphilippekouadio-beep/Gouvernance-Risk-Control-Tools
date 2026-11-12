@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import type { AuthenticatedUser, IdentityProvider } from "./IdentityProvider.js";
+import type { AuthenticatedUser, IdentityProof, IdentityProvider } from "./IdentityProvider.js";
 import { ForbiddenError } from "../../domain/errors/DomainErrors.js";
 
 export interface LocalAuthUser {
@@ -8,7 +8,7 @@ export interface LocalAuthUser {
 }
 
 export interface LocalAuthMembershipLookup {
-  (email: string): Promise<AuthenticatedUser | null>;
+  (email: string, proof: IdentityProof): Promise<AuthenticatedUser | null>;
 }
 
 interface LocalTokenPayload {
@@ -68,6 +68,8 @@ export class LocalIdentityProvider implements IdentityProvider {
     private readonly lookupMembership: LocalAuthMembershipLookup,
     /** q155 : appelé à la connexion (authenticate) seulement, jamais par verifyToken. */
     private readonly onLogin?: (tenantId: string, userId: string) => void,
+    /** q275: domain a local account attests. null by default (no local super-administrator); staging opts in via LOCAL_AUTH_ATTESTED_DOMAIN. */
+    private readonly attestedDomain: string | null = null,
   ) {
     this.usersByEmail = new Map();
 
@@ -89,7 +91,7 @@ export class LocalIdentityProvider implements IdentityProvider {
       throw new ForbiddenError("Invalid local credentials");
     }
 
-    const membership = await this.lookupMembership(configuredUser.email);
+    const membership = await this.lookupMembership(configuredUser.email, { attestedDomain: this.attestedDomain });
     if (!membership) {
       throw new ForbiddenError(`No tenant membership found for ${configuredUser.email}`);
     }
@@ -126,7 +128,7 @@ export class LocalIdentityProvider implements IdentityProvider {
       throw new ForbiddenError("Expired local token");
     }
 
-    const membership = await this.lookupMembership(payload.email);
+    const membership = await this.lookupMembership(payload.email, { attestedDomain: this.attestedDomain });
     if (!membership || membership.userId !== payload.sub) {
       throw new ForbiddenError("Local user is no longer authorized");
     }

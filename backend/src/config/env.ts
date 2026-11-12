@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { parseSuperAdminDomains, parseSuperAdminEmails } from "./superAdminEmails.js";
 
 const LocalAuthUserSchema = z.object({
   email: z.string().email(),
@@ -53,6 +54,18 @@ const EnvSchema = z.object({
   // Cloudflare + Render proxy + in-container proxy = 3.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
 
+  // q260: platform super-administrators (see superAdminEmails.ts). Never grantable by any tenant role.
+  SUPER_ADMIN_EMAILS: z.string().max(2000).default("").transform(parseSuperAdminEmails),
+  // q275 (DECISION-132): domains the identity provider must ATTEST for a super-administrator (empty = nobody).
+  SUPER_ADMIN_DOMAINS: z.string().max(2000).default("").transform(parseSuperAdminDomains),
+  // Local tokens attest nothing by default; staging-only way to let declared local accounts attest this domain. Refused in production.
+  LOCAL_AUTH_ATTESTED_DOMAIN: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^([a-z0-9-]+\.)+[a-z]{2,63}$/, "LOCAL_AUTH_ATTESTED_DOMAIN must be an exact domain name")
+    .optional(),
+
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_CHAT_ID: z.string().optional(),
 });
@@ -88,6 +101,11 @@ export function getLocalAuthUsers(): Array<{ email: string; passwordHash: string
 
 if (env.AUTH_PROVIDER === "google" && !env.GOOGLE_OAUTH_CLIENT_ID) {
   console.error("Invalid configuration: GOOGLE_OAUTH_CLIENT_ID is required when AUTH_PROVIDER=google.");
+  process.exit(1);
+}
+
+if (env.APP_ENV === "production" && env.LOCAL_AUTH_ATTESTED_DOMAIN) {
+  console.error("Invalid production configuration: LOCAL_AUTH_ATTESTED_DOMAIN is staging/test-only.");
   process.exit(1);
 }
 

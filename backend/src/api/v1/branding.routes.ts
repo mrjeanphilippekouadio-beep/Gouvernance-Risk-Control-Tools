@@ -2,8 +2,10 @@ import { Router } from "express";
 import multer from "multer";
 import type { BrandingService } from "../../services/BrandingService.js";
 import { ValidationError } from "../../domain/errors/DomainErrors.js";
+import { costlyOperationRateLimiter } from "../middleware/rateLimit.js";
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+// SEC-F8-05: costly-operation limiter on the upload; multer bounded to the single file part (no text field).
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0, parts: 1 } });
 
 /**
  * ACT-084 — `GET /settings/branding` + `POST /settings/branding`
@@ -14,6 +16,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
  */
 export function brandingRouter(brandingService: BrandingService): Router {
   const router = Router();
+  const uploadRateLimiter = costlyOperationRateLimiter();
 
   router.get("/", async (req, res, next) => {
     try {
@@ -24,7 +27,7 @@ export function brandingRouter(brandingService: BrandingService): Router {
     }
   });
 
-  router.post("/", upload.single("file"), async (req, res, next) => {
+  router.post("/", uploadRateLimiter, upload.single("file"), async (req, res, next) => {
     try {
       if (!req.file) throw new ValidationError("Missing file field");
       const branding = await brandingService.uploadLogo(
