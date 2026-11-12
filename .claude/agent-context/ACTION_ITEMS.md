@@ -525,9 +525,9 @@ pour l'usage.
 | HUMAN @risk-manager @dev-backend @security | **q279 (cockpit)** — B-13 : étendre le régime SOLE_RM (q252, q266) au changement de Dispositif par défaut (A, reco) ou non (B). | 2026-11-11 | **Décidé** (DECISION-133) — A : régime SOLE_RM étendu à SET_DEFAULT (lot suivant, migration) |
 | HUMAN @risk-manager @dev-backend | **q280 (cockpit)** — B-13 : appétence par famille livrée vide, à remplir par le client (A, reco, A13 §6) ou règle de correspondance famille → sous-catégorie à proposer (B). | 2026-11-11 | **Décidé** (DECISION-133) — réponse libre : import d'un fichier texte familles / sous-catégories avec vérifications (lot à cadrer) |
 | HUMAN @orchestrator | **q281 (cockpit)** — merger q251 (PR #248, sans migration) : QA RETEST_PASS (31/31 + B-6c 60/60 après fusion staging), Sécurité RETEST_PASS, Privacy conforme, CI et Sonar verts, Codex sans remarque. | 2026-11-11 | **Fermé** (DECISION-134) — merge PR #248 |
-| HUMAN @security @dev-backend | **q282 (cockpit)** — suite de q276 (analyse A10 `docs/security/SEC-f8bis-q275-q276-2026-11-11.md`, `sec/f8bis` b44e282) : liste en configuration + domaine attesté (q275) + liaison de chaque compte à l'identifiant stable du fournisseur (A, reco) ou rôle de plateforme attribuable par écran (B). q275 confirmé par A10 : champ commun `attestedDomain` par fournisseur (Google `hd`), `SUPER_ADMIN_DOMAINS` en configuration, jeton local sans domaine attesté. Bloque le lot correctif F8-bis. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @risk-manager @dev-backend | **q283 (cockpit)** — suite de q280 (cadrage A13 `docs/risk/A13-import-familles-q280-2026-11-11.md`) : import `famille;sous-catégorie` en correspondance seulement (A, reco), avec création des sous-catégories manquantes (B), ou A + famille stockée dans le référentiel (C). Hypothèse à vérifier par A07 : pas d'unicité du nom de catégorie. | 2026-11-11 | **Ouvert — HUMAN** |
-| HUMAN @orchestrator | **q284 (cockpit)** — merger B-13 (PR #249, migration 091) : A10 VERT, QA RETEST_PASS (37/37, B-6c 60/60, Playwright 35/35 après factorisation), Sonar vert (duplication 2,3 %), Codex sans remarque. | 2026-11-11 | **Ouvert — HUMAN** |
+| HUMAN @security @dev-backend | **q282 (cockpit)** — suite de q276 (analyse A10 `docs/security/SEC-f8bis-q275-q276-2026-11-11.md`, `sec/f8bis` b44e282) : liste en configuration + domaine attesté (q275) + liaison de chaque compte à l'identifiant stable du fournisseur (A, reco) ou rôle de plateforme attribuable par écran (B). q275 confirmé par A10 : champ commun `attestedDomain` par fournisseur (Google `hd`), `SUPER_ADMIN_DOMAINS` en configuration, jeton local sans domaine attesté. Bloque le lot correctif F8-bis. | 2026-11-11 | **Décidé** (DECISION-135) — A : liste en configuration + domaine attesté + liaison au `sub` du fournisseur ; rôle de plateforme plus tard |
+| HUMAN @risk-manager @dev-backend | **q283 (cockpit)** — suite de q280 (cadrage A13 `docs/risk/A13-import-familles-q280-2026-11-11.md`) : import `famille;sous-catégorie` en correspondance seulement (A, reco), avec création des sous-catégories manquantes (B), ou A + famille stockée dans le référentiel (C). Hypothèse à vérifier par A07 : pas d'unicité du nom de catégorie. | 2026-11-11 | **Décidé** (DECISION-135) — A : correspondance seulement, sous-catégorie inexistante = erreur |
+| HUMAN @orchestrator | **q284 (cockpit)** — merger B-13 (PR #249, migration 091) : A10 VERT, QA RETEST_PASS (37/37, B-6c 60/60, Playwright 35/35 après factorisation), Sonar vert (duplication 2,3 %), Codex sans remarque. | 2026-11-11 | **Fermé** (DECISION-135) — merge PR #249 |
 | @dev-backend @risk-manager | **B-13 livré** (`feat/r1-b13-dispositifs-defaut` 633d6b4, migration 091) — reste : provisionnement non atomique entre modèles (échelle DRAFT orpheline possible) ; Renforcé livré avec approbateur RISK_MANAGER / vote DEFAULT (cibles COMMITTEE / C après B-12) ; descriptifs section 3 du doc A13 citent encore « Léger »/« Prudent ». Revues QA, A10 à lancer. | 2026-11-11 | QA PASS_WITH_RESERVES (`qa/b13` 25bfdcc : 35/35 live+statiques, Playwright 35/35, valeurs A13 mot pour mot), A10 VERT ; lot correctif SEC-B13-02/03 + QA-B13-01 en cours ; q278–q280 en attente PO |
 | @dev-db | **SEC-B13-01** (INFO, A10 VERT `sec/b13` b556720) — R-02 contournable sous le rôle runtime : supprimer en vidant le Dispositif puis restaurer `deleted_at` ; ajouter `deleted_at` au `UPDATE OF` du trigger et refuser la restauration (aucun chemin applicatif ne restaure). | 2026-11-11 | Ouvert (avec INFO-12) |
 | @dev-backend | **SEC-B13-02 / 03** (INFO) — provisionnement : une transaction par modèle (échelles DRAFT orphelines sur appels parallèles) ; archivage vs soumission de version : interblocage 40P01 possible (500) → verrouiller les versions d'abord ou convertir en 409. Lot correctif B-13 après QA. | 2026-11-11 | **Fermé** (RETEST_PASS A10, c70b30a, `sec/b13` e39b1d2) — INFO résiduel : journaliser le code SQL d'un interblocage converti en 409 (optionnel) |
@@ -3056,3 +3056,18 @@ DECISION (PO) : fusion de la PR #248 (q251, journal sans nom ni e-mail, sans
 RELATED: q251, q272, q273, q274, DECISION-120, 130, 131.
 OWNER: @orchestrator
 STATUS: FAIT — PR #248 fusionnée (705d02e), sans migration.
+
+DECISION-135
+DATE: 2026-11-12 (cockpit q282 à q284, 01:22 UTC)
+DECISION (PO, recommandations retenues) :
+  (1) q282 A — super-administrateur : liste d'adresses en configuration,
+  domaine attesté par le fournisseur d'identité (q275), et liaison de chaque
+  compte à son identifiant stable chez le fournisseur (`sub`), pour tous les
+  utilisateurs ; le rôle de plateforme attribuable reste possible plus tard.
+  (2) q283 A — import « familles et sous-catégories » : correspondance
+  seulement ; une sous-catégorie inexistante est une erreur.
+  (3) q284 A — fusion de la PR #249 (B-13, migration 091) dans staging.
+RELATED: q275, q276, q277, q280, DECISION-132, DECISION-133, B-13.
+OWNER: @orchestrator @dev-backend @security @risk-manager
+STATUS: DÉCIDÉ — merge #249 à exécuter ; lot correctif F8-bis débloqué
+  (q275/q277/q282, migration 092) ; import familles à construire.
