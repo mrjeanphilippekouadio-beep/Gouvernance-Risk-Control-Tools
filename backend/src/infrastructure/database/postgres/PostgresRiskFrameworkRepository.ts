@@ -855,15 +855,29 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     return requestOf(decided.rows[0]!);
   }
 
+  /**
+   * q252 A: same tenant lock as the bootstrap, taken before the request lock (same order). It serialises two
+   * confirmations/bootstraps; it does NOT block a Risk Manager assignment once the bootstrap has ended (the 062
+   * trigger returns before locking). Safe anyway: the count in assertSoleDecision is read under it, and an assignment only adds.
+   */
+  private async lockTenantForSole(c: PoolClient, tenantId: string): Promise<void> {
+    const tenant = await c.query(`SELECT id FROM tenants WHERE id = $1 FOR NO KEY UPDATE`, [tenantId]);
+    if (tenant.rows.length === 0) throw new NotFoundError("Tenant", tenantId);
+  }
+
+  /** SOLE_RM (ASSIGN_PROCESS and SET_DEFAULT, q279 A): requester only, flag frozen at request time, still the only Risk Manager now. */
+  private async assertSoleDecision(c: PoolClient, tenantId: string, req: RequestRow, decidedBy: string): Promise<void> {
+    if (req.requested_by !== decidedBy) throw new ValidationError("La confirmation ne peut être faite que par le demandeur");
+    if (!req.sole_rm_at_request) throw new ConflictError("Le demandeur n'était pas le seul Risk Manager au moment de la demande : un tiers doit la décider");
+    const facts = await this.readBootstrapFacts(c, tenantId, req.requested_by);
+    if (!facts.requesterIsActiveRiskManager || facts.activeMembers.RISK_MANAGER !== 1) {
+      throw new ConflictError("Un autre Risk Manager peut désormais valider cette demande : un tiers doit la décider");
+    }
+  }
+
   async decideAssignment(tenantId: string, requestId: string, d: RecordDecisionInput & { approverRule: ChangeApprover; soleRiskManager?: boolean }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult> {
     return this.tx(async (c) => {
-      if (d.soleRiskManager) {
-        // q252 A: same tenant lock as the bootstrap, taken before the request lock (same order). It serialises two
-        // confirmations/bootstraps; it does NOT block a Risk Manager assignment once the bootstrap has ended (the 062
-        // trigger returns before locking). Safe anyway: the count below is read under it, and an assignment only adds.
-        const tenant = await c.query(`SELECT id FROM tenants WHERE id = $1 FOR NO KEY UPDATE`, [tenantId]);
-        if (tenant.rows.length === 0) throw new NotFoundError("Tenant", tenantId);
-      }
+      if (d.soleRiskManager) await this.lockTenantForSole(c, tenantId);
       const locked = await c.query<RequestRow>(
         `SELECT * FROM risk_framework_change_requests WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
         [tenantId, requestId],
@@ -872,14 +886,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
       if (!req) throw new NotFoundError("RiskFrameworkChangeRequest", requestId);
       if (req.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${req.status})`);
       if (req.kind !== "ASSIGN_PROCESS" || !req.process_id) throw new ValidationError(`Request kind ${req.kind} is not an assignment`);
-      if (d.soleRiskManager) {
-        if (req.requested_by !== d.decidedBy) throw new ValidationError("La confirmation ne peut être faite que par le demandeur");
-        if (!req.sole_rm_at_request) throw new ConflictError("Le demandeur n'était pas le seul Risk Manager au moment de la demande : un tiers doit la décider");
-        const facts = await this.readBootstrapFacts(c, tenantId, req.requested_by);
-        if (!facts.requesterIsActiveRiskManager || facts.activeMembers.RISK_MANAGER !== 1) {
-          throw new ConflictError("Un autre Risk Manager peut désormais valider cette demande : un tiers doit la décider");
-        }
-      }
+      if (d.soleRiskManager) await this.assertSoleDecision(c, tenantId, req, d.decidedBy);
 
       // The rule that authorised the decider is the one of the ACTIVE version of the Dispositif of arrival: re-read
       // under a share lock (an activation archives it, which needs the exclusive lock, so it waits for us).
@@ -943,10 +950,13 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
         `SELECT id FROM risk_frameworks WHERE tenant_id = $1 AND is_default AND archived_at IS NULL`,
         [input.tenantId],
       );
+      // q279 A: same request-time freeze as an assignment (q252 A / SEC-B6C-04).
+      const facts = await this.readBootstrapFacts(c, input.tenantId, input.requestedBy);
+      const soleRm = facts.requesterIsActiveRiskManager && facts.activeMembers.RISK_MANAGER === 1;
       const { rows } = await c.query<RequestRow>(
-        `INSERT INTO risk_framework_change_requests (tenant_id, kind, framework_id, previous_value, reason, requested_by)
-         VALUES ($1, 'SET_DEFAULT', $2, $3, $4, $5) RETURNING *`,
-        [input.tenantId, input.frameworkId, JSON.stringify({ frameworkId: prev.rows[0]?.id ?? null }), input.reason, input.requestedBy],
+        `INSERT INTO risk_framework_change_requests (tenant_id, kind, framework_id, previous_value, reason, requested_by, sole_rm_at_request)
+         VALUES ($1, 'SET_DEFAULT', $2, $3, $4, $5, $6) RETURNING *`,
+        [input.tenantId, input.frameworkId, JSON.stringify({ frameworkId: prev.rows[0]?.id ?? null }), input.reason, input.requestedBy, soleRm],
       );
       return this.audited(c, requestOf(rows[0]!), input.audit);
     });
@@ -964,9 +974,11 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     return req;
   }
 
-  async decideDefault(tenantId: string, requestId: string, d: RecordDecisionInput & { approverRule: ChangeApprover }, audit?: TransactionalAudit<DefaultResult>): Promise<DefaultResult> {
+  async decideDefault(tenantId: string, requestId: string, d: RecordDecisionInput & { approverRule: ChangeApprover; soleRiskManager?: boolean }, audit?: TransactionalAudit<DefaultResult>): Promise<DefaultResult> {
     return this.tx(async (c) => {
+      if (d.soleRiskManager) await this.lockTenantForSole(c, tenantId);
       const req = await this.lockPendingDefault(c, tenantId, requestId);
+      if (d.soleRiskManager) await this.assertSoleDecision(c, tenantId, req, d.decidedBy);
       // The rule that authorised the decider is the one of the ACTIVE version of the target (spec 5.2), replayed under lock.
       const request = await this.decideUnderRule(c, tenantId, requestId, req.framework_id, d, "La règle d'approbation du Dispositif a changé depuis le début de votre décision : rejouez-la");
       if (d.outcome === "REJECTED") return this.audited(c, { request, previousDefault: null, framework: null }, audit);

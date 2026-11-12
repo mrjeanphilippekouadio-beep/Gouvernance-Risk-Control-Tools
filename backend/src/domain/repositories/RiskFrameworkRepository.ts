@@ -139,9 +139,9 @@ export interface RiskFrameworkRepository {
   /**
    * B-13, one transaction. Reserves the PENDING SET_DEFAULT request (FOR UPDATE) and records the decision; APPROVED also
    * moves `is_default` from the current default to the target (effect on the evaluations created from then on only).
-   * `approverRule`: same replay contract as decideAssignment.
+   * `approverRule` and `soleRiskManager` (q279 A, SOLE_RM): same contract as decideAssignment.
    */
-  decideDefault?(tenantId: string, requestId: string, decision: RecordDecisionInput & { approverRule: ChangeApprover }, audit?: TransactionalAudit<DefaultResult>): Promise<DefaultResult>;
+  decideDefault?(tenantId: string, requestId: string, decision: RecordDecisionInput & { approverRule: ChangeApprover; soleRiskManager?: boolean }, audit?: TransactionalAudit<DefaultResult>): Promise<DefaultResult>;
   /** B-13: requester's retraction of a PENDING SET_DEFAULT request. Optional (fakes). */
   withdrawDefault?(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DefaultResult>): Promise<DefaultResult>;
   /**

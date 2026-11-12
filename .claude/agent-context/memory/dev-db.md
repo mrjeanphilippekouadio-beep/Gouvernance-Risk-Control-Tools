@@ -180,3 +180,11 @@
   (audit `migration:082`, down limité aux groupes audités). Épingle QA-panel : compteur de fonctions 19 → 20.
 - Cluster PG16 jetable : `initdb` sous `su postgres`, serveur lancé en tâche de fond (un `pg_ctl start` dans une commande
   courte meurt avec elle / perd sa socket), tests live avec `QA_SWP_PGHOST=/var/tmp/v1sock`, cluster supprimé après.
+
+## 2026-11-12 Migration 093 (q279 A, INFO-12, SEC-B13-01, rebind DevOps)
+
+- 093 redéfinit EN ENTIER (CREATE OR REPLACE, `SET search_path = pg_catalog, public, pg_temp` répété) `risk_framework_change_requests_guard` (057 : `sole_rm_at_request` ajouté au contenu figé) et `processes_framework_guard` (091 : refuse la restauration `deleted_at` NOT NULL -> NULL ; trigger recréé avec `UPDATE OF risk_framework_id, tenant_id, deleted_at`). CHECK `risk_framework_change_requests_sole_rm_shape_check` remplacé : `kind IN ('ASSIGN_PROCESS','SET_DEFAULT')` + `AND sole_rm_at_request` (liste blanche DROP CONSTRAINT de QA-panel-migrations : entrée « 093 »).
+- Nouveau trigger `users_identity_rebind_audit` (AFTER UPDATE OF identity_subject, identity_provider ON users, WHEN ancienne valeur non NULL et changement) : INSERT dans `audit_log` (`User`/`UPDATE`, `request_id 'identity-rebind'`, user_id = le compte, jamais la valeur du `sub`). Pas SECURITY DEFINER : s'exécute avec les droits de l'écrivain (DevOps/superuser ou rôle applicatif, qui a INSERT sur audit_log). La ligne n'indique pas QUI a exécuté le SQL (le ticket reste la trace de l'exécutant).
+- Compte des fonctions épinglées 52 -> 55 (QA-panel-migrations). Down : remet 090 (échoue s'il existe une décision SOLE_RM sur SET_DEFAULT), 057 et 091 tels quels, retire le trigger et la fonction du rebind.
+- Limite connue : l'INSERT d'une demande peut encore poser `sole_rm_at_request = true` (la garde INSERT 057 ne valide pas le drapeau ; sa valeur est calculée par le dépôt). Le gain d'INFO-12 est côté UPDATE/décision uniquement.
+- Vérifié : pg_dump -s identique (hors jetons) down vs 001->092, up après down vs 001->093, rejeu de l'up inchangé.

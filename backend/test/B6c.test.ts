@@ -371,7 +371,7 @@ describe("q252 A (DECISION-121): the sole Risk Manager confirms their own proces
 
   it("the repository replays the condition under the tenant lock (static check of the SQL path) and 089 widens the CHECKs", () => {
     const src = readFileSync("src/infrastructure/database/postgres/PostgresRiskFrameworkRepository.ts", "utf8");
-    expect(src).toMatch(/if \(d\.soleRiskManager\) \{\s*\/\/ q252 A[\s\S]*FOR NO KEY UPDATE/);
+    expect(src).toMatch(/FOR NO KEY UPDATE[\s\S]*if \(d\.soleRiskManager\) await this\.lockTenantForSole\(c, tenantId\);/);
     expect(src).toMatch(/activeMembers\.RISK_MANAGER !== 1/);
     const sql = readFileSync("../database/postgresql/migrations/089_sole_risk_manager_assignment.sql", "utf8");
     expect(sql).toMatch(/'NORMAL', 'FALLBACK', 'BOOTSTRAP', 'SOLE_RM'/);

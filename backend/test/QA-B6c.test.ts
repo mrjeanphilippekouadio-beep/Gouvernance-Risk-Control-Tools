@@ -955,6 +955,29 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
       expect(viaApprove.status, viaApprove.text).toBe(403);
     });
 
+    it("H3b q279 A (DECISION-133): the sole Risk Manager confirms a SET_DEFAULT request: SOLE_RM, default moved, marked audit", async () => {
+      const c = await pg.connect();
+      let target: string;
+      try {
+        await c.query("SET session_replication_role = replica");
+        target = (await c.query(`INSERT INTO risk_frameworks (tenant_id, name, created_by) VALUES ($1,'Dispositif q279',$2) RETURNING id`, [TD, uid["solod"]])).rows[0].id as string;
+        await c.query(`INSERT INTO risk_framework_versions (tenant_id, framework_id, version_number, status, rating_scale_id, committee_evaluation_min_score, created_by, last_edited_by, activated_at, low_criticality_threshold)
+          SELECT tenant_id, $2, 1, 'ACTIVE', rating_scale_id, committee_evaluation_min_score, created_by, last_edited_by, now(), low_criticality_threshold FROM risk_framework_versions WHERE id = $1`, [F["FD1v"], target]);
+      } finally { await c.query("RESET session_replication_role"); c.release(); }
+      const ask = await call("solod", "POST", `/risk-frameworks/${target}/default-requests`, { reason: "Changer le défaut" });
+      expect(ask.status, ask.text).toBe(201);
+      const rid = ask.json!["data"].id as string;
+      expect((await reqRow(rid)).sole_rm_at_request).toBe(true);
+      const r = await solo("solod", rid, { reason: "Seul Risk Manager du tenant" });
+      expect(r.status, r.text).toBe(200);
+      expect(await reqRow(rid)).toMatchObject({ status: "APPROVED", decision_regime: "SOLE_RM", decided_by: uid["solod"], requested_by: uid["solod"] });
+      expect((await one(`SELECT is_default FROM risk_frameworks WHERE id = $1`, [target])).is_default).toBe(true);
+      expect((await one(`SELECT is_default FROM risk_frameworks WHERE id = $1`, [F["FD1"]])).is_default).toBe(false);
+      const a = await sql(`SELECT entity_type, action, governance_exception FROM audit_log WHERE tenant_id = $1 AND request_id IS NOT NULL AND entity_id = ANY($2) AND action IN ('UPDATE','APPROVE')`, [TD, [target, F["FD1"], rid]]);
+      expect(a.filter((x) => x.governance_exception === "riskFramework.soleRiskManager").map((x) => `${x.entity_type}:${x.action}`)).toEqual(["RiskFrameworkChangeRequest:APPROVE"]);
+      expect(a.filter((x) => x.entity_type === "RiskFramework" && x.action === "UPDATE")).toHaveLength(2);
+    });
+
     it("H4 other kind, already decided, unknown or malformed id", async () => {
       const c = await pg.connect();
       let av: string, sd: string;
@@ -965,9 +988,10 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
         av = (await c.query(`INSERT INTO risk_framework_change_requests (tenant_id, kind, framework_id, version_id, reason, requested_by) VALUES ($1,'ACTIVATE_VERSION',$2,$3,'x',$4) RETURNING id`, [TC, F["FC1"], v.rows[0].id, uid["solo"]])).rows[0].id as string;
         sd = (await c.query(`INSERT INTO risk_framework_change_requests (tenant_id, kind, framework_id, reason, requested_by) VALUES ($1,'SET_DEFAULT',$2,'x',$3) RETURNING id`, [TC, F["FC1"], uid["solo"]])).rows[0].id as string;
       } finally { await c.query("RESET session_replication_role"); c.release(); }
-      for (const [k, id] of [["ACTIVATE_VERSION", av], ["SET_DEFAULT", sd]]) {
+      // q279 A (DECISION-133): SET_DEFAULT is now covered, but this row was inserted with sole_rm_at_request = false: 409.
+      for (const [k, id, status] of [["ACTIVATE_VERSION", av, 400], ["SET_DEFAULT", sd, 409]] as const) {
         const r = await solo("solo", id!, { reason: "Pas un rattachement" });
-        expect(r.status, `${k}: ${r.text}`).toBe(400);
+        expect(r.status, `${k}: ${r.text}`).toBe(status);
         expect((await reqRow(id!)).status, k).toBe("PENDING");
         expect((await reqRow(id!)).decision_regime).toBeNull();
       }
@@ -1329,7 +1353,8 @@ describe.skipIf(!live)("QA-B6c sur le VRAI serveur + PostgreSQL 16 LOCAL", () =>
 
     it("K1 089 up is idempotent, down restores the pre-089 CHECKs (same definitions), up again restores them; SOLE_RM refused before up", async () => {
       sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", MDB]);
-      // The setup script applies every migration: step back to the 089 state (090 down) so that 089 is exercised as before.
+      // The setup script applies every migration: step back to the 089 state (093 down, then 090 down) so that 089 is exercised as before.
+      expect(fails(MDB, mig("093_sole_rm_set_default_hardening.down.sql"))).toBeNull();
       expect(fails(MDB, mig("090_sole_rm_frozen_at_request.down.sql"))).toBeNull();
       const base = defs(MDB);
       expect(base).toMatch(/risk_framework_change_requests_sole_rm_shape_check/);
