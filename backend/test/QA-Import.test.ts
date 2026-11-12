@@ -153,7 +153,7 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
   describe("F controles du fichier (section 3.1)", () => {
     it("F1 un fichier valide est accepte ; BOM et CRLF toleres ; commentaires et lignes vides ignores ; rien n'est ecrit", async () => {
       const s0 = await snap();
-      const txt = "﻿# commentaire\r\n\r\nFraude;Fraude interne\r\n   \r\n# autre\r\nConformité;Lutte contre le blanchiment (LBC-FT)\r\n";
+      const txt = "\uFEFF# commentaire\r\n\r\nFraude;Fraude interne\r\n   \r\n# autre\r\nConformité;Lutte contre le blanchiment (LBC-FT)\r\n";
       const r = await preview("rm1", FW, V, txt);
       expect(r.status, r.text).toBe(200);
       expect(r.json!["data"]).toMatchObject({ dataLines: 2, acceptedCount: 2, errorCount: 0, warningCount: 0, keptCount: 0, fingerprint: sha(txt), thresholds: { strict: 4, moderate: 9 } });
@@ -171,7 +171,7 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
         ["%PDF", Buffer.from("%PDF-1.4\nFraude;Fraude interne"), {}, /texte/i],
         ["gzip", Buffer.concat([Buffer.from([0x1f, 0x8b, 8]), Buffer.from("x")]), {}, /texte/i],
         ["OLE", Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0]), Buffer.from("x")]), {}, /texte/i],
-        ["UTF-16LE", Buffer.from("﻿Fraude;Fraude interne\n", "utf16le"), {}, /texte|utf/i],
+        ["UTF-16LE", Buffer.from("\uFEFFFraude;Fraude interne\n", "utf16le"), {}, /texte|utf/i],
         ["Latin-1", Buffer.from("Fraude;Fraude interne\nConformit\xe9;Lutte\n", "latin1"), {}, /UTF-8.*ligne 2|ligne 2.*UTF-8/i],
         ["UTF-8 surlongue", Buffer.from([0x46, 0x72, 0xc0, 0xaf, 0x0a]), {}, /UTF-8/i],
         ["substitut seul", Buffer.from([0x46, 0xed, 0xa0, 0x80, 0x0a]), {}, /UTF-8/i],
@@ -327,7 +327,7 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
 
     it("L6 injections : noms commencant par = + - @, balises, SQL, caracteres bidirectionnels : traites comme du texte, jamais executes ni ecrits (sous-categorie absente)", async () => {
       const s0 = await snap();
-      const r = await one1(["Fraude;=1+1", "Fraude;+cmd", "Fraude;-1", "Fraude;@SUM(A1)", "Fraude;<script>alert(1)</script>", "Fraude;x'; DROP TABLE risk_categories;--", "Fraude;‮fraude interne", "Fraude;​fraude interne"].join("\n"));
+      const r = await one1(["Fraude;=1+1", "Fraude;+cmd", "Fraude;-1", "Fraude;@SUM(A1)", "Fraude;<script>alert(1)</script>", "Fraude;x'; DROP TABLE risk_categories;--", "Fraude;\u202Efraude interne", "Fraude;\u200Bfraude interne"].join("\n"));
       expect(r.json!["data"].errorCount).toBe(8);
       expect(await snap()).toEqual(s0);
       expect(await count(`SELECT count(*)::int n FROM information_schema.tables WHERE table_name = 'risk_categories'`)).toBe(1);
@@ -695,10 +695,10 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
     });
 
     it("L8 caracteres de direction : U+202E, U+202A, U+2066, U+200E, U+2028 refuses (erreur de ligne) ; zero-largeur U+200B / U+FEFF interne / U+2060 : observation", async () => {
-      const r = await preview("rm1", FW, V, ["Fraude;Fraude‮interne", "Fraude;‪fraude", "Fraude;Fraude⁦interne", "Fraude;‎fraude", "Fraude;Fraude interne"].join("\n"));
+      const r = await preview("rm1", FW, V, ["Fraude;Fraude\u202Einterne", "Fraude;\u202Afraude", "Fraude;Fraude\u2066interne", "Fraude;\u200Efraude", "Fraude;Fraude\u2028interne"].join("\n"));
       expect(r.status, r.text).toBe(200);
       for (const l of r.json!["data"].lines as Row[]) expect(l.messages.join(), `ligne ${l.line}`).toMatch(/direction du texte/);
-      const z = await preview("rm1", FW, V, ["Fraude;Fraude​interne", "Fraude;Fraude⁠interne", "Fraude;Fraude﻿interne"].join("\n"));
+      const z = await preview("rm1", FW, V, ["Fraude;Fraude\u200Binterne", "Fraude;Fraude\u2060interne", "Fraude;Fraude\uFEFFinterne"].join("\n"));
       console.log("L8 zero-largeur ->", (z.json!["data"].lines as Row[]).map((l) => `${l.line}:${l.verdict}`).join(" "));
       expect(z.status).toBeLessThan(500);
     });

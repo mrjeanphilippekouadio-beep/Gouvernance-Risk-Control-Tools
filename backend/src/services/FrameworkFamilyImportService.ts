@@ -253,7 +253,7 @@ export class FrameworkFamilyImportService {
     if (existing.length + toAdd.length > MAX_APPETITE_ENTRIES) {
       lines.push({ line: 0, verdict: "ERROR", messages: [`Plus de ${MAX_APPETITE_ENTRIES} entrées d'appétence au total dans ce brouillon`] });
     }
-    const withoutFamily = cats.filter((c) => c.parentId && c.active && !seen.has(c.id)).map((c) => c.name).sort();
+    const withoutFamily = cats.filter((c) => c.parentId && c.active && !seen.has(c.id)).map((c) => c.name).sort((a, b) => a.localeCompare(b));
     const count = (v: LineVerdict) => lines.filter((l) => l.verdict === v).length;
     const report: FamilyImportReport = {
       fingerprint, dataLines, acceptedCount: count("ACCEPTED"), keptCount, warningCount: count("WARNING"), errorCount: count("ERROR"),

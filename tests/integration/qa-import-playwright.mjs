@@ -32,7 +32,7 @@ const { check, failures } = verdicts();
 const EMAIL = { rm1: "rm1@b6c.test", rm2: "rm2@b6c.test", adm: "adm@b6c.test" };
 const { login, api } = localApi(API, EMAIL);
 
-execFileSync("bash", [join(HERE, "qa-visibility-v1-setup.sh"), "up", DBN], { stdio: "ignore" });
+execFileSync("/bin/bash", [join(HERE, "qa-visibility-v1-setup.sh"), "up", DBN], { stdio: "ignore" });
 const RM = sql(`select id from roles where tenant_id = '${T}' and system_group = 'RISK_MANAGER'`);
 const granter = sql(`select id from users where email = 'adm@vv1.test'`);
 const mk = (n, perms = "{}") => sql(`insert into users (tenant_id, email, display_name, roles) values ('${T}','${n}@b6c.test','${n}','${perms}') returning id`).split("\n")[0];
@@ -41,7 +41,7 @@ mk("adm", "{riskframework.read,riskframework.create,riskframework.update,riskfra
 const cat = (name, parent) => sql(`insert into risk_categories (tenant_id, name, parent_id) values ('${T}','${name}',${parent ? `'${parent}'` : "null"}) returning id`).split("\n")[0];
 const RA = cat("Risques opérationnels");
 for (const n of ["Fraude interne", "Fraude sur transactions mobiles", "Fuite de données clients", "Risque de liquidité", "Rançongiciel"]) cat(n, RA);
-execFileSync("bash", [join(HERE, "qa-b6c-server.sh"), "start"], { env: { ...process.env, QA_PORT: "8097", QA_DB: DBN }, stdio: "ignore" });
+execFileSync("/bin/bash", [join(HERE, "qa-b6c-server.sh"), "start"], { env: { ...process.env, QA_PORT: "8097", QA_DB: DBN }, stdio: "ignore" });
 
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
 const sessions = [];
@@ -149,5 +149,5 @@ try {
   check("exception du parcours", false, String(e).slice(0, 500));
   for (const s of sessions) await s.shot("exception").catch(() => undefined);
 }
-execFileSync("bash", [join(HERE, "qa-b6c-server.sh"), "stop"], { stdio: "ignore" });
+execFileSync("/bin/bash", [join(HERE, "qa-b6c-server.sh"), "stop"], { stdio: "ignore" });
 await finish(browser, failures);
