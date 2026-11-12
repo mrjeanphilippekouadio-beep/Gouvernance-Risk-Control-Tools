@@ -533,7 +533,7 @@ pour l'usage.
 | @dev-backend @qa-engineer @security | **F8-bis correctif livré** (`feat/r1-f8bis-clients` 2e7e66f, migration 092 : liaison `sub`, nom de client unique, premier import unique) — retests A08/A10 en cours. Reste : rebind du `sub` manuel par DevOps ; réimports confirmés simultanés possibles ; lecture de l'auteur de désactivation avant transaction (QA-F8B-05). | 2026-11-12 | PR #250 ouverte (aa838fe) : A10 VERT staging, QA RETEST_PASS (101/101, F8 62/62, concurrence) ; question de merge après CI/Sonar/Codex |
 | @orchestrator @qa-engineer | **F8-bis — limite d'import Excel 10 Mo → 8 Mo** (Sonar S5693 sur le nouveau téléversement de validation ; 2 000 lignes tiennent largement) : une constante pour aperçu et validation, texte de l'écran mis à jour, QA-S1 vert. Correctif orchestrateur : à couvrir par le retest QA suivant. | 2026-11-12 | Fait (à retester) |
 | HUMAN @security @dev-backend | **q285 (cockpit) — ESCALADE A10 (R-2, HIGH 8,1 SUSPECTED)** : avant la première liaison `sub`, un compte grand public sur l'adresse d'un collègue capture le compte. Exiger le domaine certifié pour toute adresse des domaines de l'entreprise (A, reco A10) ou accepter (B). Bloque la production de F8-bis. INFO : rebind DevOps non audité, down de 092 efface les liaisons, espace insécable non normalisé par l'index SQL. | 2026-11-12 | **Décidé** (DECISION-136) — A : domaine certifié exigé pour toute adresse des domaines de l'entreprise (correctif dans PR #250) |
-| HUMAN @orchestrator | **q286 (cockpit)** — merger l'import familles (PR #251, sans migration) : A10 VERT, QA RETEST_PASS (30/30 live, Playwright 26/26), Sonar vert après 3 corrections orchestrateur (3c095ae, live 30/30 rejoué), CI verte, Codex indisponible (quota). | 2026-11-12 | **Ouvert — HUMAN** |
+| HUMAN @orchestrator | **q286 (cockpit)** — merger l'import familles (PR #251, sans migration) : A10 VERT, QA RETEST_PASS (30/30 live, Playwright 26/26), Sonar vert après 3 corrections orchestrateur (3c095ae, live 30/30 rejoué), CI verte, Codex indisponible (quota). | 2026-11-12 | **Fermé** (DECISION-137) — merge PR #251 (38d0530) |
 | @dev-backend @devops @security | **SEC-F8B-13 (LOW 2,0)** — `SUPER_ADMIN_DOMAINS` vide désactive la règle q285 et rouvre R-2 : refuser le démarrage en production dans ce cas (reco A10, `sec/f8bis` 888c1d1). Avant la production de F8-bis. | 2026-11-12 | Ouvert |
 | @devops @security | **SEC-F8B-12 (INFO)** — sous-domaine d'adresse absent de `SUPER_ADMIN_DOMAINS` non couvert : lister tous les domaines d'adresses de l'entreprise et vérifier le `hd` réel des domaines secondaires en staging. Prérequis production F8-bis. | 2026-11-12 | Ouvert |
 | @dev-db @security | **INFO A10 — rebind DevOps non audité** : trigger d'audit sur changement de `identity_subject` (migration suivante après 092, `search_path` pinné `pg_catalog, public, pg_temp`, `user_id` valide, pas de doublon avec la ligne de première liaison). Non bloquant, pas d'arbitrage PO (avis A10). | 2026-11-12 | Ouvert — à planifier dans la file des migrations |
@@ -3093,3 +3093,11 @@ DECISION (PO, recommandation A10 retenue) : q285 A — pour toute adresse
 RELATED: q275, q282, DECISION-132, DECISION-135, PR #250.
 OWNER: @dev-backend @security @orchestrator
 STATUS: DÉCIDÉ — correctif confié à A06 sur `feat/r1-f8bis-clients` (PR #250), retest A10 ensuite.
+
+DECISION-137
+DATE: 2026-11-12 (cockpit q286, 17:51 UTC)
+DECISION (PO) : q286 A — fusion de la PR #251 (import familles / sous-catégories,
+  sans migration) dans staging.
+RELATED: q280, q283, DECISION-133, DECISION-135, PR #251.
+OWNER: @orchestrator
+STATUS: DÉCIDÉ — #251 fusionnée (38d0530) ; staging refusionné dans `feat/r1-f8bis-clients` (260b705, conflits mémoire seuls, tests live import 30/30 et q285 10/10 rejoués).
