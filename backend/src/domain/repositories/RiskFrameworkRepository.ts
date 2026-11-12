@@ -1,5 +1,8 @@
 import type {
+  ArchiveFrameworkResult,
   AssignmentResult,
+  CreateDefaultRequestInput,
+  DefaultResult,
   CreateAssignmentRequestInput,
   BootstrapFacts,
   ChangeApprover,
@@ -16,6 +19,25 @@ import type {
   TransactionalAudit,
   UpdateDraftParams,
 } from "../entities/RiskFramework.js";
+import type { ImpactAxis, RatingScale, ScaleLevel, ScoreThreshold, MasteryScaleConfig } from "../entities/RatingScale.js";
+
+/** B-13: a fully built DRAFT scale + the Dispositif parameters (the scale id is filled in by the repository). */
+export interface ProvisionWithScaleInput {
+  tenantId: string;
+  name: string;
+  description: string | null;
+  createdBy: string;
+  params: Omit<FrameworkParams, "ratingScaleId">;
+  scale: {
+    name: string; version: string; size: number;
+    probabilityLabels: ScaleLevel[]; impactLabels: ScaleLevel[]; thresholds: ScoreThreshold[];
+    impactAxes: { axes: ImpactAxis[]; retainedImpactRule: "MAX" };
+    velocity: ScaleLevel[]; persistence: ScaleLevel[]; mastery: MasteryScaleConfig;
+  };
+  /** Runs inside the transaction: it may throw to roll everything back. */
+  audit?: TransactionalAudit<ProvisionedFramework>;
+}
+export type ProvisionedFramework = { scale: RatingScale; framework: RiskFramework; version: RiskFrameworkVersion };
 
 /**
  * Every method is tenant-scoped. There is no generic update and no delete: a version only
@@ -50,6 +72,8 @@ export interface RiskFrameworkRepository {
     params: FrameworkParams;
     audit?: TransactionalAudit<{ framework: RiskFramework; version: RiskFrameworkVersion }>;
   }): Promise<{ framework: RiskFramework; version: RiskFrameworkVersion }>;
+  /** B-13: scale + Dispositif + version 1 in ONE transaction (nothing orphaned on failure). Optional (fakes). */
+  provisionWithScale?(input: ProvisionWithScaleInput): Promise<ProvisionedFramework>;
   /** Identity only (name, description); only the provided keys are written. */
   updateIdentity(tenantId: string, id: string, fields: { name?: string; description?: string | null }, audit?: TransactionalAudit<RiskFramework>): Promise<RiskFramework>;
 
@@ -104,6 +128,24 @@ export interface RiskFrameworkRepository {
   hasPendingAssignment?(tenantId: string, processId: string): Promise<boolean>;
   /** B-6c: requester's retraction of a PENDING ASSIGN_PROCESS request (nothing written on the process). Optional (fakes). */
   withdrawAssignment?(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult>;
+  /**
+   * B-13 (spec 11.1), one transaction. Locks the Dispositif (not archived, has an ACTIVE version, not already the
+   * default, no other PENDING SET_DEFAULT for it) and inserts the SET_DEFAULT request. Optional on the interface (fakes).
+   */
+  createDefaultRequest?(input: CreateDefaultRequestInput): Promise<RiskFrameworkChangeRequest>;
+  /**
+   * B-13, one transaction. Reserves the PENDING SET_DEFAULT request (FOR UPDATE) and records the decision; APPROVED also
+   * moves `is_default` from the current default to the target (effect on the evaluations created from then on only).
+   * `approverRule`: same replay contract as decideAssignment.
+   */
+  decideDefault?(tenantId: string, requestId: string, decision: RecordDecisionInput & { approverRule: ChangeApprover }, audit?: TransactionalAudit<DefaultResult>): Promise<DefaultResult>;
+  /** B-13: requester's retraction of a PENDING SET_DEFAULT request. Optional (fakes). */
+  withdrawDefault?(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DefaultResult>): Promise<DefaultResult>;
+  /**
+   * B-13, one transaction. Archives an open Dispositif that is not the default, with no live process attached and no
+   * PENDING request: its DRAFT and ACTIVE versions go ARCHIVED, the scale mirror follows. Optional (fakes).
+   */
+  archiveFramework?(tenantId: string, id: string, archivedBy: string, reason: string, audit?: TransactionalAudit<ArchiveFrameworkResult>): Promise<ArchiveFrameworkResult>;
   /** Requester's own retraction; version back to DRAFT. The service checks who may call it. */
   withdraw(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DecisionResult>): Promise<DecisionResult>;
 }

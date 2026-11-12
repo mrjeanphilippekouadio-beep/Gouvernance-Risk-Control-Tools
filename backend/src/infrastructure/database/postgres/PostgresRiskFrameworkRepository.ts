@@ -1,8 +1,11 @@
 import type { Pool, PoolClient } from "pg";
-import type { RiskFrameworkRepository } from "../../../domain/repositories/RiskFrameworkRepository.js";
+import type { ProvisionedFramework, ProvisionWithScaleInput, RiskFrameworkRepository } from "../../../domain/repositories/RiskFrameworkRepository.js";
 import type {
   AppetiteThresholdEntry,
+  ArchiveFrameworkResult,
   AssignmentResult,
+  CreateDefaultRequestInput,
+  DefaultResult,
   CreateAssignmentRequestInput,
   ApproverGroup,
   ChangeApprover,
@@ -29,6 +32,7 @@ import type { EvaluationMode } from "../../../domain/entities/Config.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 import { insertAuditEvent } from "./PostgresAuditRepository.js";
+import { ratingScaleOf, type RatingScaleRow as ScaleRow } from "./PostgresRatingScaleRepository.js";
 
 interface FrameworkRow {
   id: string;
@@ -223,6 +227,8 @@ export function mapPgError(err: unknown): unknown {
   if (e?.code === "42501" && /^risk[ _]framework/.test(e.message ?? "")) {
     return new ValidationError("Cette version est figée : créez une nouvelle version");
   }
+  // SEC-B13-03: a deadlock / serialization failure between two writers of one Dispositif is a retryable conflict, never a 500.
+  if (e?.code === "40P01" || e?.code === "40001") return new ConflictError("Une autre opération est en cours sur ce Dispositif : réessayez");
   return err;
 }
 
@@ -326,8 +332,29 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     params: FrameworkParams;
     audit?: TransactionalAudit<{ framework: RiskFramework; version: RiskFrameworkVersion }>;
   }): Promise<{ framework: RiskFramework; version: RiskFrameworkVersion }> {
-    const p = input.params;
+    return this.tx(async (c) => this.audited(c, await this.insertFrameworkWithDraft(c, input), input.audit));
+  }
+
+  /** B-13: a rating scale (DRAFT, fully built), the Dispositif and its version 1 in ONE transaction: a failure leaves nothing behind. */
+  async provisionWithScale(input: ProvisionWithScaleInput): Promise<ProvisionedFramework> {
+    const sc = input.scale;
     return this.tx(async (c) => {
+      const row = await c.query<ScaleRow>(
+        `INSERT INTO rating_scales
+           (tenant_id, name, version, status, probability_levels, probability_labels, impact_levels, impact_labels,
+            criticality_thresholds, impact_axes, velocity_levels, persistence_levels, mastery_scale)
+         VALUES ($1, $2, $3, 'DRAFT', $4, $5, $4, $6, $7, $8, $9, $10, $11) RETURNING *`,
+        [input.tenantId, sc.name, sc.version, sc.size, JSON.stringify(sc.probabilityLabels), JSON.stringify(sc.impactLabels),
+          JSON.stringify(sc.thresholds), JSON.stringify(sc.impactAxes), JSON.stringify(sc.velocity), JSON.stringify(sc.persistence), JSON.stringify(sc.mastery)],
+      );
+      const scale = ratingScaleOf(row.rows[0]!);
+      const created = await this.insertFrameworkWithDraft(c, { ...input, params: { ...input.params, ratingScaleId: scale.id } });
+      return this.audited(c, { scale, ...created }, input.audit);
+    });
+  }
+
+  private async insertFrameworkWithDraft(c: PoolClient, input: { tenantId: string; name: string; description: string | null; createdBy: string; params: FrameworkParams }) {
+    const p = input.params;
       const fw = await c.query<FrameworkRow>(
         `INSERT INTO risk_frameworks (tenant_id, name, description, created_by)
          VALUES ($1, $2, $3, $4) RETURNING *`,
@@ -366,8 +393,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
           p.committeeVoteCustom === null ? null : JSON.stringify(p.committeeVoteCustom),
         ],
       );
-      return this.audited(c, { framework: frameworkOf(fw.rows[0]!), version: versionOf(ver.rows[0]!) }, input.audit);
-    });
+      return { framework: frameworkOf(fw.rows[0]!), version: versionOf(ver.rows[0]!) };
   }
 
   async updateIdentity(
@@ -794,6 +820,31 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     return (rowCount ?? 0) > 0;
   }
 
+  /**
+   * Shared by decideAssignment / decideDefault, inside the transaction and after the request lock: the rule that authorised
+   * the decider is the one of the ACTIVE version of the target, re-read under a share lock (an activation archives it,
+   * which needs the exclusive lock, so it waits for us); then the decision is written on the request.
+   */
+  private async decideUnderRule(
+    c: PoolClient, tenantId: string, requestId: string, frameworkId: string,
+    d: RecordDecisionInput & { approverRule: ChangeApprover }, changedMessage: string,
+  ): Promise<RiskFrameworkChangeRequest> {
+    const live = await c.query<{ change_approver: ChangeApprover }>(
+      `SELECT change_approver FROM risk_framework_versions
+       WHERE tenant_id = $1 AND framework_id = $2 AND status = 'ACTIVE' FOR SHARE`,
+      [tenantId, frameworkId],
+    );
+    if ((live.rows[0]?.change_approver ?? "RISK_MANAGER") !== d.approverRule) throw new ConflictError(changedMessage);
+    const decided = await c.query<RequestRow>(
+      `UPDATE risk_framework_change_requests
+       SET status = $3, decided_by = $4, decided_at = now(), decision_comment = $5,
+           decision_regime = $6, decider_group = $7, ratification_status = $8, fallback_cause = $9
+       WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+      [tenantId, requestId, d.outcome, d.decidedBy, d.comment, d.decisionRegime, d.deciderGroup, d.ratificationStatus, d.fallbackCause ?? null],
+    );
+    return requestOf(decided.rows[0]!);
+  }
+
   async decideAssignment(tenantId: string, requestId: string, d: RecordDecisionInput & { approverRule: ChangeApprover; soleRiskManager?: boolean }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult> {
     return this.tx(async (c) => {
       if (d.soleRiskManager) {
@@ -822,22 +873,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
 
       // The rule that authorised the decider is the one of the ACTIVE version of the Dispositif of arrival: re-read
       // under a share lock (an activation archives it, which needs the exclusive lock, so it waits for us).
-      const live = await c.query<{ change_approver: ChangeApprover }>(
-        `SELECT change_approver FROM risk_framework_versions
-         WHERE tenant_id = $1 AND framework_id = $2 AND status = 'ACTIVE' FOR SHARE`,
-        [tenantId, req.framework_id],
-      );
-      if ((live.rows[0]?.change_approver ?? "RISK_MANAGER") !== d.approverRule) {
-        throw new ConflictError("La règle d'approbation du Dispositif d'arrivée a changé depuis le début de votre décision : rejouez-la");
-      }
-      const decided = await c.query<RequestRow>(
-        `UPDATE risk_framework_change_requests
-         SET status = $3, decided_by = $4, decided_at = now(), decision_comment = $5,
-             decision_regime = $6, decider_group = $7, ratification_status = $8, fallback_cause = $9
-         WHERE tenant_id = $1 AND id = $2 RETURNING *`,
-        [tenantId, requestId, d.outcome, d.decidedBy, d.comment, d.decisionRegime, d.deciderGroup, d.ratificationStatus, d.fallbackCause ?? null],
-      );
-      const request = requestOf(decided.rows[0]!);
+      const request = await this.decideUnderRule(c, tenantId, requestId, req.framework_id, d, "La règle d'approbation du Dispositif d'arrivée a changé depuis le début de votre décision : rejouez-la");
       const processId = req.process_id;
       if (d.outcome === "REJECTED") {
         // A refusal never needs the process or the target to still be usable; nothing is written on the process.
@@ -874,6 +910,146 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
       );
       const asked = (req.previous_value as { frameworkId?: string | null } | null)?.frameworkId ?? null;
       return this.audited(c, { request: requestOf(done.rows[0]!), processId: req.process_id, previousFrameworkId: asked, frameworkId: null }, audit);
+    });
+  }
+
+  // -- B-13: default Dispositif and archiving (spec 11.1) -----------------------------------------------
+
+  async createDefaultRequest(input: CreateDefaultRequestInput): Promise<RiskFrameworkChangeRequest> {
+    return this.tx(async (c) => {
+      await this.assertTargetOpen(c, input.tenantId, input.frameworkId);
+      const cur = await c.query<{ is_default: boolean }>(
+        `SELECT is_default FROM risk_frameworks WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [input.tenantId, input.frameworkId],
+      );
+      if (cur.rows[0]?.is_default) throw new ValidationError("Ce Dispositif est déjà le Dispositif par défaut");
+      const pending = await c.query(
+        `SELECT 1 FROM risk_framework_change_requests
+         WHERE tenant_id = $1 AND kind = 'SET_DEFAULT' AND framework_id = $2 AND status = 'PENDING'`,
+        [input.tenantId, input.frameworkId],
+      );
+      if ((pending.rowCount ?? 0) > 0) throw new ConflictError("Une demande de changement de Dispositif par défaut est déjà en attente pour ce Dispositif");
+      const prev = await c.query<{ id: string }>(
+        `SELECT id FROM risk_frameworks WHERE tenant_id = $1 AND is_default AND archived_at IS NULL`,
+        [input.tenantId],
+      );
+      const { rows } = await c.query<RequestRow>(
+        `INSERT INTO risk_framework_change_requests (tenant_id, kind, framework_id, previous_value, reason, requested_by)
+         VALUES ($1, 'SET_DEFAULT', $2, $3, $4, $5) RETURNING *`,
+        [input.tenantId, input.frameworkId, JSON.stringify({ frameworkId: prev.rows[0]?.id ?? null }), input.reason, input.requestedBy],
+      );
+      return this.audited(c, requestOf(rows[0]!), input.audit);
+    });
+  }
+
+  private async lockPendingDefault(c: PoolClient, tenantId: string, requestId: string): Promise<RequestRow> {
+    const locked = await c.query<RequestRow>(
+      `SELECT * FROM risk_framework_change_requests WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+      [tenantId, requestId],
+    );
+    const req = locked.rows[0];
+    if (!req) throw new NotFoundError("RiskFrameworkChangeRequest", requestId);
+    if (req.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${req.status})`);
+    if (req.kind !== "SET_DEFAULT") throw new ValidationError(`Request kind ${req.kind} is not a default change`);
+    return req;
+  }
+
+  async decideDefault(tenantId: string, requestId: string, d: RecordDecisionInput & { approverRule: ChangeApprover }, audit?: TransactionalAudit<DefaultResult>): Promise<DefaultResult> {
+    return this.tx(async (c) => {
+      const req = await this.lockPendingDefault(c, tenantId, requestId);
+      // The rule that authorised the decider is the one of the ACTIVE version of the target (spec 5.2), replayed under lock.
+      const request = await this.decideUnderRule(c, tenantId, requestId, req.framework_id, d, "La règle d'approbation du Dispositif a changé depuis le début de votre décision : rejouez-la");
+      if (d.outcome === "REJECTED") return this.audited(c, { request, previousDefault: null, framework: null }, audit);
+
+      // The target may have been archived or lost its ACTIVE version since the request: replayed under lock.
+      await this.assertTargetOpen(c, tenantId, req.framework_id);
+      // Both rows locked in id order (no deadlock with a concurrent decision), then the old default goes first
+      // (unique index: one default per tenant).
+      const rows = await c.query<FrameworkRow>(
+        `SELECT * FROM risk_frameworks WHERE tenant_id = $1 AND archived_at IS NULL AND (is_default OR id = $2) ORDER BY id FOR UPDATE`,
+        [tenantId, req.framework_id],
+      );
+      const previous = rows.rows.find((r) => r.is_default) ?? null;
+      if (previous?.id === req.framework_id) throw new ConflictError("Ce Dispositif est déjà le Dispositif par défaut");
+      if (previous) {
+        await c.query(`UPDATE risk_frameworks SET is_default = false, updated_at = now() WHERE tenant_id = $1 AND id = $2`, [tenantId, previous.id]);
+      }
+      const now = await c.query<FrameworkRow>(
+        `UPDATE risk_frameworks SET is_default = true, updated_at = now() WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+        [tenantId, req.framework_id],
+      );
+      return this.audited(c, { request, previousDefault: previous ? frameworkOf(previous) : null, framework: frameworkOf(now.rows[0]!) }, audit);
+    });
+  }
+
+  async withdrawDefault(tenantId: string, requestId: string, comment: string | null, audit?: TransactionalAudit<DefaultResult>): Promise<DefaultResult> {
+    return this.tx(async (c) => {
+      await this.lockPendingDefault(c, tenantId, requestId);
+      const done = await c.query<RequestRow>(
+        `UPDATE risk_framework_change_requests SET status = 'WITHDRAWN', decided_at = now(), decision_comment = $3
+         WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+        [tenantId, requestId, comment],
+      );
+      return this.audited(c, { request: requestOf(done.rows[0]!), previousDefault: null, framework: null }, audit);
+    });
+  }
+
+  async archiveFramework(tenantId: string, id: string, archivedBy: string, reason: string, audit?: TransactionalAudit<ArchiveFrameworkResult>): Promise<ArchiveFrameworkResult> {
+    return this.tx(async (c) => {
+      // SEC-B13-03: versions first, then the Dispositif: the order of a submission (version FOR UPDATE, then the request
+      // insert takes the Dispositif key lock). The reverse order deadlocked (40P01, a 500).
+      await c.query(
+        `SELECT id FROM risk_framework_versions WHERE tenant_id = $1 AND framework_id = $2 AND status IN ('DRAFT', 'ACTIVE', 'PENDING_APPROVAL') ORDER BY id FOR UPDATE`,
+        [tenantId, id],
+      );
+      const locked = await c.query<FrameworkRow>(
+        `SELECT * FROM risk_frameworks WHERE tenant_id = $1 AND id = $2 AND archived_at IS NULL FOR UPDATE`,
+        [tenantId, id],
+      );
+      const row = locked.rows[0];
+      if (!row) throw new NotFoundError("RiskFramework", id);
+      if (row.is_default) throw new ValidationError("Le Dispositif par défaut ne peut pas être archivé : définissez-en un autre par défaut d'abord");
+      const attached = await c.query(
+        `SELECT 1 FROM processes WHERE tenant_id = $1 AND risk_framework_id = $2 AND deleted_at IS NULL LIMIT 1`,
+        [tenantId, id],
+      );
+      if ((attached.rowCount ?? 0) > 0) throw new ValidationError("Des processus sont rattachés à ce Dispositif : rattachez-les à un autre Dispositif d'abord");
+      const pending = await c.query(
+        `SELECT 1 FROM risk_framework_change_requests WHERE tenant_id = $1 AND framework_id = $2 AND status = 'PENDING' LIMIT 1`,
+        [tenantId, id],
+      );
+      if ((pending.rowCount ?? 0) > 0) throw new ConflictError("Des demandes sont en attente pour ce Dispositif : décidez-les ou retirez-les d'abord");
+
+      // No PENDING request, so no PENDING_APPROVAL version: only DRAFT and ACTIVE versions are open.
+      const open = await c.query<VersionRow>(
+        `SELECT * FROM risk_framework_versions WHERE tenant_id = $1 AND framework_id = $2 AND status IN ('DRAFT', 'ACTIVE') ORDER BY version_number FOR UPDATE`,
+        [tenantId, id],
+      );
+      const versions: ArchiveFrameworkResult["versions"] = [];
+      for (const v of open.rows) {
+        const after = await c.query<VersionRow>(
+          `UPDATE risk_framework_versions
+           SET status = 'ARCHIVED', archived_at = now(), archived_by = $3, archive_reason = $4, updated_at = now()
+           WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+          [tenantId, v.id, archivedBy, `Dispositif archivé : ${reason}`],
+        );
+        versions.push({ before: versionOf(v), after: versionOf(after.rows[0]!) });
+      }
+      // Scale mirror (spec 2.3): ARCHIVED once no ACTIVE version references it any more.
+      await c.query(
+        `UPDATE rating_scales SET status = 'ARCHIVED', archived_at = now(), updated_at = now()
+         WHERE tenant_id = $1 AND status = 'ACTIVE' AND deleted_at IS NULL
+           AND id IN (SELECT rating_scale_id FROM risk_framework_versions WHERE tenant_id = $1 AND framework_id = $2)
+           AND NOT EXISTS (SELECT 1 FROM risk_framework_versions x
+                           WHERE x.tenant_id = $1 AND x.rating_scale_id = rating_scales.id AND x.status = 'ACTIVE')`,
+        [tenantId, id],
+      );
+      const done = await c.query<FrameworkRow>(
+        `UPDATE risk_frameworks SET archived_at = now(), archived_by = $3, archive_reason = $4, updated_at = now()
+         WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+        [tenantId, id, archivedBy, reason],
+      );
+      return this.audited(c, { before: frameworkOf(row), framework: frameworkOf(done.rows[0]!), versions }, audit);
     });
   }
 

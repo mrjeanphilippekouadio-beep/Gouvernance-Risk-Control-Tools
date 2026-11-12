@@ -94,7 +94,7 @@ describe("QA-B6a0910 migration 057 vs repository INSERTs", () => {
 
   it("every change-request INSERT omits status and every decision column (defaults to PENDING / NULL)", () => {
     const r = inserts("risk_framework_change_requests");
-    expect(r.length).toBe(2); // B-6c: + the ASSIGN_PROCESS insert
+    expect(r.length).toBe(3); // B-6c: + the ASSIGN_PROCESS insert; B-13: + the SET_DEFAULT insert
     for (const q of r) expect(q).not.toMatch(/\bstatus\b|decided_by|decided_at|decision_comment|decision_regime|decider_group|ratification_status/);
     for (const q of r) expect(q).toMatch(/requested_by/);
   });

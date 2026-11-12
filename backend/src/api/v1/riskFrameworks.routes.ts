@@ -104,6 +104,16 @@ export function riskFrameworksRouter(service: RiskFrameworkService): Router {
     }
   });
 
+  // B-13: makes the three default Dispositifs available as drafts (idempotent by name). Static path, before "/:id".
+  router.post("/defaults", async (req, res, next) => {
+    try {
+      z.object({}).strict().parse(req.body ?? {});
+      res.status(201).json({ data: await service.provisionDefaults(req.user, req.requestId) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // B-6b: the Dispositif version that applies to a risk or a process (read-only). Before "/:id".
   router.get("/applicable", async (req, res, next) => {
     try {
@@ -244,6 +254,26 @@ export function riskFrameworksRouter(service: RiskFrameworkService): Router {
       const body = AssignBody.parse(req.body);
       const request = await service.requestProcessAssignment(req.user, id(req.params["id"]), body, req.requestId);
       res.status(201).json({ data: request });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // B-13 (spec 11.1): request to make this Dispositif the tenant default (decided via /change-requests/:rid/approve|reject).
+  router.post("/:id/default-requests", async (req, res, next) => {
+    try {
+      const body = ReasonBody.parse(req.body);
+      res.status(201).json({ data: await service.requestSetDefault(req.user, id(req.params["id"]), body.reason, req.requestId) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // B-13: archiving is its own action (permission riskframework.archive), never an identity update.
+  router.post("/:id/archive", async (req, res, next) => {
+    try {
+      const body = ReasonBody.parse(req.body);
+      res.json({ data: await service.archiveFramework(req.user, id(req.params["id"]), body.reason, req.requestId) });
     } catch (err) {
       next(err);
     }

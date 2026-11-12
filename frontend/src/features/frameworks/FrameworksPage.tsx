@@ -66,8 +66,13 @@ function diffPatch(form: DraftForm, v: FrameworkVersion): DraftPatch {
   return patch as DraftPatch;
 }
 
+/** B-13: the three default Dispositifs (DECISION-124/127); Standard is the one to activate first (it becomes the default). */
+const DEFAULT_NAMES = ["Tranché", "Standard", "Renforcé"];
+const KIND_LABELS: Record<string, string> = { ACTIVATE_VERSION: "Activation d'une version", ASSIGN_PROCESS: "Rattachement d'un processus", SET_DEFAULT: "Changement du Dispositif par défaut" };
+
 type ReasonAction =
   | { kind: "discard" | "activate"; version: FrameworkVersion }
+  | { kind: "setDefault" | "archive" }
   | { kind: "approve" | "reject" | "withdraw" | "soleConfirm"; request: ChangeRequest }
   | { kind: "identity" };
 
@@ -78,6 +83,8 @@ const REASON_TEXT: Record<ReasonAction["kind"], { title: string; label: string; 
   reject: { title: "Refuser la demande", label: "Commentaire *", submit: "Refuser", required: true },
   withdraw: { title: "Retirer la demande", label: "Motif *", submit: "Retirer", required: true },
   soleConfirm: { title: "Confirmer seul le rattachement", label: "Motif de la confirmation *", submit: "Confirmer seul", required: true },
+  setDefault: { title: "Définir comme Dispositif par défaut", label: "Motif de la demande *", submit: "Envoyer la demande", required: true },
+  archive: { title: "Archiver le Dispositif", label: "Motif de l'archivage *", submit: "Archiver", required: true },
   identity: { title: "Modifier le Dispositif", label: "Motif de la modification *", submit: "Enregistrer", required: true },
 };
 
@@ -208,6 +215,8 @@ export function FrameworksPage({ token }: { token: string }) {
       else if (action.kind === "approve") await riskFrameworksApi.approve(token, action.request.id, text || undefined);
       else if (action.kind === "reject") await riskFrameworksApi.reject(token, action.request.id, text);
       else if (action.kind === "soleConfirm") { await riskFrameworksApi.soleConfirm(token, action.request.id, text); setNotice("Rattachement confirmé : il s'applique aux évaluations créées à partir de maintenant."); }
+      else if (action.kind === "setDefault") { await riskFrameworksApi.requestDefault(token, detail.id, text); setNotice("Demande envoyée : un tiers doit la décider. Le nouveau défaut s'applique aux évaluations créées ensuite, pour les processus sans rattachement explicite."); }
+      else if (action.kind === "archive") { await riskFrameworksApi.archive(token, detail.id, text); setNotice("Dispositif archivé."); }
       else if (action.kind === "withdraw") await riskFrameworksApi.withdraw(token, action.request.id, text);
       else await riskFrameworksApi.updateIdentity(token, detail.id, { name: identity.name.trim(), description: identity.description.trim() || null, reason: text });
     }, () => setReasonAction(null));
@@ -221,8 +230,20 @@ export function FrameworksPage({ token }: { token: string }) {
     finally { setSaving(false); }
   }
 
+  async function provision() {
+    setSaving(true); setNotice(null); setError(null);
+    try {
+      const r = await riskFrameworksApi.provisionDefaults(token);
+      setNotice(r.created.length > 0
+        ? `Modèles créés en brouillon : ${r.created.join(", ")}. Activez Standard en premier : le premier Dispositif activé devient le Dispositif par défaut.`
+        : "Les trois modèles existent déjà.");
+      await refreshList();
+    } catch (err) { setError(describeError(err)); }
+    finally { setSaving(false); }
+  }
+
   const listColumns: TableColumn<FrameworkSummary>[] = [
-    { key: "name", header: "Dispositif", render: (r) => <><strong>{r.name}</strong>{r.archivedAt && <div className="muted">Archivé</div>}</> },
+    { key: "name", header: "Dispositif", render: (r) => <><strong>{r.name}</strong>{r.isDefault && <> <StatusBadge label="Par défaut" tone="success" /></>}{r.archivedAt && <div className="muted">Archivé</div>}{r.description && <div className="muted">{r.description}</div>}</> },
     { key: "active", header: "Version active", render: (r) => r.activeVersion ? `v${r.activeVersion.versionNumber} · active depuis le ${dateOnly(r.activeVersion.activatedAt)}` : "Aucune version active" },
     { key: "mastery", header: "Indépendance sur la Maîtrise", render: (r) => r.activeVersion ? (r.activeVersion.reducedMasteryIndependence ? <StatusBadge label="Indépendance réduite" tone="warning" /> : <StatusBadge label="Non réduite" tone="neutral" />) : "—" },
     { key: "open", header: "", render: (r) => <Button onClick={() => { setSelectedId(r.id); setViewVersionId(null); setDetailTab("versions"); setNotice(null); }} aria-label={`Voir le détail de ${r.name}`}>Détail</Button> },
@@ -257,7 +278,10 @@ export function FrameworksPage({ token }: { token: string }) {
         <h1>Dispositif de risque</h1>
         <p className="core-page__subtitle">Versions de la méthodologie. Une version active ne change que par une demande d'activation décidée par un tiers ; le serveur applique les droits et les règles.</p>
       </div>
-      <Button variant="primary" onClick={() => { setCreateForm({ name: "", description: "", ratingScaleId: "" }); setFormError(null); setCreateOpen(true); }}>Nouveau Dispositif</Button>
+      <div className="core-form-actions">
+        {DEFAULT_NAMES.some((n) => !rows.some((r) => !r.archivedAt && r.name.toLowerCase() === n.toLowerCase())) && <Button onClick={() => void provision()} disabled={saving || loading}>Charger les modèles par défaut</Button>}
+        <Button variant="primary" onClick={() => { setCreateForm({ name: "", description: "", ratingScaleId: "" }); setFormError(null); setCreateOpen(true); }}>Nouveau Dispositif</Button>
+      </div>
     </div>
     {error && <MessageBanner tone="danger" title="Chargement impossible">{error}</MessageBanner>}
     {notice && <MessageBanner tone="success">{notice}</MessageBanner>}
@@ -267,8 +291,8 @@ export function FrameworksPage({ token }: { token: string }) {
     </Card>
 
     {selectedId && <Card
-      header={<><strong>{detail?.name ?? "Dispositif"}</strong>{detail?.archivedAt && <> <StatusBadge label="Archivé" tone="neutral" /></>}</>}
-      footer={detail && !detail.archivedAt ? <><Button onClick={() => openReason({ kind: "identity" })}>Modifier nom et description</Button><Button onClick={() => void newDraft()} disabled={saving}>Nouveau brouillon depuis la version active</Button></> : undefined}
+      header={<><strong>{detail?.name ?? "Dispositif"}</strong>{detail?.isDefault && <> <StatusBadge label="Par défaut" tone="success" /></>}{detail?.archivedAt && <> <StatusBadge label="Archivé" tone="neutral" /></>}</>}
+      footer={detail && !detail.archivedAt ? <><Button onClick={() => openReason({ kind: "identity" })}>Modifier nom et description</Button><Button onClick={() => void newDraft()} disabled={saving}>Nouveau brouillon depuis la version active</Button>{!detail.isDefault && <Button onClick={() => openReason({ kind: "setDefault" })} aria-label={`Définir ${detail.name} comme Dispositif par défaut`}>Définir par défaut</Button>}<Button variant="destructive" onClick={() => openReason({ kind: "archive" })} aria-label={`Archiver ${detail.name}`}>Archiver</Button></> : undefined}
     >
       {detailError && <MessageBanner tone="danger" title="Erreur">{detailError}</MessageBanner>}
       {detail?.description && <p className="muted">{detail.description}</p>}
@@ -277,6 +301,7 @@ export function FrameworksPage({ token }: { token: string }) {
         <h2 className="core-panel__head">Demandes en attente</h2>
         <Table
           columns={[
+            { key: "kind", header: "Demande", render: (q: ChangeRequest) => KIND_LABELS[q.kind] ?? q.kind },
             { key: "reason", header: "Motif", render: (q: ChangeRequest) => q.reason },
             { key: "version", header: "Version", render: (q: ChangeRequest) => { const v = detail?.versions.find((x) => x.id === q.versionId); return v ? `v${v.versionNumber}` : "—"; } },
             { key: "date", header: "Demandée le", render: (q: ChangeRequest) => dateOnly(q.createdAt) },
@@ -371,6 +396,8 @@ export function FrameworksPage({ token }: { token: string }) {
           <FormField label="Nom" htmlFor="fi-name"><input id="fi-name" value={identity.name} onChange={(e) => setIdentity({ ...identity, name: e.target.value })} required maxLength={120} /></FormField>
           <FormField label="Description" htmlFor="fi-desc"><textarea id="fi-desc" value={identity.description} onChange={(e) => setIdentity({ ...identity, description: e.target.value })} maxLength={1000} /></FormField>
         </>}
+        {reasonAction?.kind === "setDefault" && <MessageBanner tone="info">Le Dispositif doit avoir une version active. La demande est décidée par un autre Risk Manager ; une fois approuvée, le nouveau défaut s'applique aux évaluations créées ensuite, pour les processus sans rattachement explicite. Les évaluations existantes ne changent pas.</MessageBanner>}
+        {reasonAction?.kind === "archive" && <MessageBanner tone="warning" title="Action définitive">Refusé par le serveur si ce Dispositif est le Dispositif par défaut, si des processus lui sont rattachés ou si des demandes sont en attente. Ses versions sont archivées avec lui ; les évaluations qui le référencent restent lisibles.</MessageBanner>}
         {reasonAction?.kind === "soleConfirm" && <MessageBanner tone="warning" title={soleArmed ? "Seconde confirmation" : "Confirmation sans second avis"}>
           {soleArmed
             ? "Confirmez-vous définitivement ce rattachement sans second avis ? Cette confirmation est tracée et signalée à la santé de la gouvernance."
