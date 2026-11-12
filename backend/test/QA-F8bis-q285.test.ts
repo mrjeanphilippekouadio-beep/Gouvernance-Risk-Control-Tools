@@ -84,7 +84,7 @@ describe.skipIf(!live)("B q285 sur le VRAI serveur + PostgreSQL 16 LOCAL (une co
   const server = (cmd: "start" | "stop", env: Record<string, string> = {}) => {
     const clean: NodeJS.ProcessEnv = { ...process.env };
     for (const k of ["SUPER_ADMIN_EMAILS", "SUPER_ADMIN_DOMAINS", "LOCAL_AUTH_ATTESTED_DOMAIN"]) delete clean[k];
-    execFileSync("bash", [join(ROOT, "tests", "integration", "qa-q285-server.sh"), cmd], {
+    execFileSync("/bin/bash", [join(ROOT, "tests", "integration", "qa-q285-server.sh"), cmd], {
       env: { ...clean, QA_PORT: String(PORT), QA_DB: DB, QA_CORS: "http://127.0.0.1:5198", ...env }, stdio: ["ignore", "pipe", "pipe"], timeout: 120000,
     });
   };
@@ -96,9 +96,9 @@ describe.skipIf(!live)("B q285 sur le VRAI serveur + PostgreSQL 16 LOCAL (une co
   const get = async (token: string, path: string) => (await fetch(`${API}${path}`, { headers: { authorization: `Bearer ${token}`, connection: "close" } })).status;
   async function inConfig<R>(env: Record<string, string>, fn: () => Promise<R>): Promise<R> {
     server("stop");
-    execFileSync("sleep", ["1"]);
+    execFileSync("/bin/sleep", ["1"]);
     server("start", env);
-    try { return await fn(); } finally { server("stop"); execFileSync("sleep", ["1"]); }
+    try { return await fn(); } finally { server("stop"); execFileSync("/bin/sleep", ["1"]); }
   }
   /** Outcome of a login attempt + what that session can do. */
   const outcome = async (email: string) => {
@@ -108,7 +108,7 @@ describe.skipIf(!live)("B q285 sur le VRAI serveur + PostgreSQL 16 LOCAL (une co
   };
 
   beforeAll(async () => {
-    execFileSync("bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", DB], { stdio: "ignore", timeout: 280000 });
+    execFileSync("/bin/bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", DB], { stdio: "ignore", timeout: 280000 });
     pg = new Pool({ host: "127.0.0.1", port: PGPORT, user: "postgres", database: DB, max: 2 });
     for (const e of ["ext@autre.test", "hors@autre.test", "look@xvv1.test", "look@sub.vv1.test"]) {
       await pg.query(`INSERT INTO users (tenant_id, email, display_name, roles) VALUES ($1,$2,$2,$3)`, [T, e, ["risk.read", "process.read"]]);
