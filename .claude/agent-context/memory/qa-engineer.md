@@ -453,3 +453,6 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 ## 2026-11-11 (retest court) — QA-B13 sur e98f605 — RETEST_PASS
 
 - Factorisation Sonar sans changement de comportement : B13 live 37/37, B6c live 60/60, suite 2920, Playwright B-13 35/35. Rien de nouveau à retenir hors méthode : après un refactor pur, rejouer les suites qui traversent le code factorisé (ici aussi B-6c via ASSIGN_PROCESS).
+
+## 2026-11-12 — Retest QA-F8bis @ 2e7e66f (092, q275/q277/q282)
+- 101/101 PASS + f8 62/62 + 2941 tests backend. QA-F8B-01 (index unique nom normalisé) et -02 (index partiel premier import) corrigés : 8 rondes x 6 créations = 1 client/ronde ; 2 commits simultanés = 1 seul. q277 testé en déplaçant/supprimant/dé-listant l'autre SA par SQL (refus 409 sans effet de bord) ; q275 : 3 configs de domaine => 403. 092 up/down/up OK, doublons préexistants => refus explicite et rollback. Piège : limiteur import 30/15 min, ne pas multiplier les rondes de commits (429 = artefact) ; un INSERT SQL dans audit_log exige request_id. Variantes de config serveur : copier le script de lancement. Ne jamais pousser avec -f (refusé) : un push normal suffit quand l'ancien commit est ancêtre.

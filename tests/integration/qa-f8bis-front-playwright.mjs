@@ -142,11 +142,22 @@ try {
   const created = race.filter((r) => r.status === 201).length;
   const inDb = await count(`SELECT count(*) n FROM tenants WHERE lower(regexp_replace(name, '\\s+', ' ', 'g')) = 'concurrent qa-f8bis'`);
   console.log(`MESURE  10 créations simultanées du même nom : statuts ${race.map((r) => r.status).join(",")} ; créés=${created} ; en base=${inDb}`);
-  known("B.12 création simultanée du même nom : exactement 1 client en base (non atomique, signalé par A06)", inDb === 1, `${inDb} clients de même nom`);
+  check("B.12 création simultanée du même nom : exactement 1 client en base (non atomique, signalé par A06)", inDb === 1, `${inDb} clients de même nom`);
   const race2 = await Promise.all([0, 1, 2, 3].map(() => api("sa1", "POST", "/tenants", { name: "Concurrent2 QA-F8bis" })));
   const inDb2 = await count(`SELECT count(*) n FROM tenants WHERE name = 'Concurrent2 QA-F8bis'`);
   console.log(`MESURE  4 créations simultanées strictement identiques : statuts ${race2.map((r) => r.status).join(",")} ; en base=${inDb2}`);
-  known("B.13 idem, 4 requêtes identiques", inDb2 === 1, `${inDb2}`);
+  check("B.13 idem, 4 requêtes identiques : 1 client, les 3 autres refusées en 409 (jamais 500)", inDb2 === 1 && race2.filter((r) => r.status === 409).length === 3, `${inDb2} ; ${race2.map((r) => r.status)}`);
+  let badRounds = 0, five = [];
+  for (let k = 0; k < 8; k++) {
+    const nm = `Ronde ${k} QA-F8bis`;
+    const rr = await Promise.all(Array.from({ length: 6 }, (_, i) => api(i % 2 ? "sa1" : "sa2", "POST", "/tenants", { name: i % 3 ? nm.toUpperCase() : nm })));
+    const nb = await count(`SELECT count(*) n FROM tenants WHERE lower(name) = lower($1)`, [nm]);
+    if (nb !== 1 || rr.filter((r) => r.status === 201).length !== 1 || rr.some((r) => ![201, 409].includes(r.status))) badRounds++;
+    five.push(`${nb}/${rr.map((r) => r.status).join("")}`);
+  }
+  console.log(`MESURE  8 rondes x 6 créations simultanées (casse variable) : ${five.join(" ")}`);
+  check("B.14 8 rondes de 6 créations simultanées : à chaque ronde 1 client, 1x201, le reste 409", badRounds === 0, `${badRounds} rondes en défaut`);
+  check("B.15 l'index normalisé tient aussi en SQL direct (insertion d'un doublon refusée 23505)", await db.query(`INSERT INTO tenants (name) VALUES ('  CLIENT   b qa-f8bis ')`).then(() => false, (e) => e.code === "23505"));
 
   // utilisateur tb dans le client B
   await db.query(`INSERT INTO users (tenant_id, email, display_name, roles) VALUES ($1, $2, 'QA tb', ARRAY['risk.read'])`, [B.id, EMAIL.tb]);
@@ -233,6 +244,38 @@ try {
   await S1.go("Feedback"); await S1.go("Clients");
   check("U.11 après rechargement, état actif conforme", (await S1.page.locator("main tbody tr", { hasText: "Client B QA-F8bis" }).innerText()).includes("Actif"));
 
+  // ---------- D bis. q277 : au moins un autre super-administrateur actif hors du client désactivé
+  const deact = async (why) => api("sa1", "POST", `/tenants/${B.id}/deactivate`, { reason: why });
+  await db.query(`UPDATE users SET tenant_id = $1 WHERE email = $2`, [B.id, EMAIL.sa2]);
+  let r1 = await deact("Test survie sa2 dans B");
+  check("S.1 l'autre super-administrateur est DANS le client ciblé : désactivation refusée 409, client actif", r1.status === 409 && /super-administrat/i.test(JSON.stringify(r1.json)) && (await api("sa1", "GET", `/tenants/${B.id}`)).json.data.active === true, JSON.stringify(r1.json));
+  await db.query(`UPDATE users SET tenant_id = $1 WHERE email = $2`, [T1, EMAIL.sa2]);
+  await db.query(`UPDATE users SET deleted_at = now() WHERE email = $1`, [EMAIL.sa2]);
+  r1 = await deact("Test survie sa2 supprimé");
+  check("S.2 l'autre super-administrateur est supprimé : refusée 409", r1.status === 409 && (await api("sa1", "GET", `/tenants/${B.id}`)).json.data.active === true, JSON.stringify(r1.json));
+  await db.query(`UPDATE users SET deleted_at = NULL WHERE email = $1`, [EMAIL.sa2]);
+  check("S.3 refus sans effet de bord : aucune ligne d'audit de désactivation de B, B toujours actif", (await count(`SELECT count(*) n FROM audit_log WHERE entity_id=$1 AND action='STATUS_CHANGE' AND reason LIKE 'Test survie%'`, [B.id])) === 0);
+  await login("sa2");
+  const ok = await deact("Désactivation autorisée QA-F8bis (survie ok)");
+  check("S.4 avec un autre super-administrateur actif hors du client : désactivation acceptée (200)", ok.status === 200 && ok.json.data.active === false, JSON.stringify(ok.json));
+  check("S.5 réactivation par l'autre (sa2) OK", (await api("sa2", "POST", `/tenants/${B.id}/reactivate`, { reason: "Retour à l'état actif QA-F8bis" })).status === 200);
+  // un seul super-administrateur listé et attesté : refus
+  await db.query(`UPDATE users SET email = 'com-off@vv1.test' WHERE email = $1`, [EMAIL.sa2]);
+  r1 = await deact("Test survie sans second SA");
+  check("S.6 un seul super-administrateur restant (l'autre n'est plus listé) : refusée 409", r1.status === 409, JSON.stringify(r1.json));
+  await db.query(`UPDATE users SET email = $1 WHERE email = 'com-off@vv1.test'`, [EMAIL.sa2]);
+  check("S.7 l'écran affiche le refus (modale Désactiver) : message du serveur", await (async () => {
+    await db.query(`UPDATE users SET tenant_id = $1 WHERE email = $2`, [B.id, EMAIL.sa2]);
+    const P = await session("sa1"); await P.go("Clients");
+    await P.page.locator("main tbody tr", { hasText: "Client B QA-F8bis" }).getByRole("button", { name: "Désactiver" }).click();
+    const d = P.page.getByRole("dialog"); await d.locator("#client-status-reason").fill("Test écran survie QA");
+    await d.getByRole("button", { name: "Désactiver" }).click(); await P.page.waitForTimeout(1500);
+    const tt = norm(await d.innerText().catch(() => "")); await P.shot("clients-survie");
+    await db.query(`UPDATE users SET tenant_id = $1 WHERE email = $2`, [T1, EMAIL.sa2]);
+    return /at least two|super-administrat/i.test(tt) && (await api("sa1", "GET", `/tenants/${B.id}`)).json.data.active === true;
+  })());
+  await login("sa2");
+
   // ---------- E. logo
   const adm = (buf, type, name) => upload("adm", "/branding", buf, type, name);
   const okPng = await adm(PNG, "image/png", "logo.png");
@@ -285,7 +328,18 @@ try {
   const raceImp = await Promise.all([imp("adm", IMPC, "c1.xlsx", {}), imp("adm", IMPC, "c2.xlsx", {})]);
   const rc1 = (await count(`SELECT count(*) n FROM risks WHERE description LIKE 'QA-F8bis conc-%'`)) - rc0;
   console.log(`MESURE  2 commits simultanés du même fichier neuf : statuts ${raceImp.map((r) => r.status).join(",")} ; risques créés=${rc1} (attendu 3)`);
-  known("F.11 deux commits simultanés d'un fichier neuf : un seul import (empreinte écrite avant lecture non verrouillée)", rc1 === 3, `${rc1} risques créés`);
+  check("F.11 deux commits simultanés d'un fichier neuf : un seul import (3 risques), l'autre 409 ALREADY_IMPORTED", rc1 === 3 && raceImp.map((r) => r.status).sort().join() === "200,409" && raceImp.some((r) => r.json?.code === "ALREADY_IMPORTED"), `${rc1} risques ; ${raceImp.map((r) => r.status)}`);
+  let badImp = 0; const impRes = [];
+  for (let k = 0; k < 2; k++) {
+    const f = join(TMP, `ronde${k}.xlsx`); await xlsx(f, [["Ronde", `QA-F8bis ronde-${k}-a`], ["Ronde", `QA-F8bis ronde-${k}-b`]]);
+    const rr = await Promise.all([0, 1, 2].map((i) => imp("adm", f, `r${k}-${i}.xlsx`, {})));
+    const made = await count(`SELECT count(*) n FROM risks WHERE description LIKE $1`, [`QA-F8bis ronde-${k}-%`]);
+    impRes.push(`${made}/${rr.map((r) => r.status).join("")}`);
+    if (made !== 2 || rr.filter((r) => r.status === 200).length !== 1 || rr.some((r) => ![200, 409].includes(r.status))) badImp++;
+  }
+  console.log(`MESURE  2 rondes x 3 commits simultanés : ${impRes.join(" ")}`);
+  check("F.11b 2 rondes de 3 commits simultanés : à chaque ronde 2 risques, 1x200, le reste 409", badImp === 0, `${badImp} rondes en défaut`);
+  check("F.11c index unique d'import : un 2e « premier import » en SQL direct refusé (23505)", await db.query(`INSERT INTO audit_log (tenant_id, user_id, entity_type, entity_id, action, new_value, request_id) SELECT tenant_id, user_id, entity_type, entity_id, action, new_value, 'qa-dup' FROM audit_log WHERE entity_type='RiskImport' AND (new_value->>'reimport')='false' LIMIT 1`).then(() => false, (e) => e.code === "23505"));
 
   // UI import
   const A = await session("adm");
