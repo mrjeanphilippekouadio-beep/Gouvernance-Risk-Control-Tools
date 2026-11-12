@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { RatingScaleRepository } from "../domain/repositories/RatingScaleRepository.js";
 import type { RiskCategoryRepository } from "../domain/repositories/RiskCategoryRepository.js";
 import type { AppetiteThresholdEntry, RiskFrameworkVersion } from "../domain/entities/RiskFramework.js";
@@ -14,6 +13,8 @@ const MAX_DATA_LINES = 200;
 const MAX_FIELD = 120;
 const MAX_APPETITE_ENTRIES = 200; // same ceiling as RiskFrameworkService
 export const STARTING_VALUE_NOTE = "valeur de départ à confirmer";
+/** A13: the strict threshold (top of the first criticality band) above this share of the scale's maximum score is flagged as very wide. */
+export const WIDE_FIRST_BAND_RATIO = 0.25;
 
 export type LineVerdict = "ACCEPTED" | "WARNING" | "ERROR" | "KEPT";
 export interface FamilyImportLine {
@@ -39,6 +40,7 @@ export interface FamilyImportReport {
   /** Thresholds the new entries receive (taken from the draft's scale). */
   thresholds: { strict: number; moderate: number };
 }
+type Thresholds = FamilyImportReport["thresholds"] & { maxScore: number };
 
 const MAGIC: Array<[string, number[]]> = [
   ["PK", [0x50, 0x4b]], ["%PDF", [0x25, 0x50, 0x44, 0x46]], ["gzip", [0x1f, 0x8b]],
@@ -110,15 +112,15 @@ function isSame(a: AppetiteThresholdEntry, b: AppetiteThresholdEntry): boolean {
  */
 export class FrameworkFamilyImportService {
   constructor(
-    private readonly frameworks: Pick<RiskFrameworkService, "getVersion" | "updateDraft">,
+    private readonly frameworks: Pick<RiskFrameworkService, "getVersion" | "updateDraft" | "assertRiskManager">,
     private readonly categories: Pick<RiskCategoryRepository, "list">,
     private readonly ratingScales: Pick<RatingScaleRepository, "getById">,
-    private readonly audit: AuditRepository,
   ) {}
 
   /** Dry run: reads and judges the file, writes nothing. */
   async preview(actor: AuthenticatedUser, frameworkId: string, versionId: string, buffer: Buffer): Promise<FamilyImportReport> {
     requirePermission(actor, "riskframework.update");
+    await this.frameworks.assertRiskManager(actor); // same gate as the commit (and as updateDraft): no 200 then 403
     return (await this.analyse(actor, frameworkId, versionId, buffer)).report;
   }
 
@@ -127,22 +129,25 @@ export class FrameworkFamilyImportService {
     actor: AuthenticatedUser, frameworkId: string, versionId: string, buffer: Buffer, fingerprint: string, requestId: string,
   ): Promise<FamilyImportReport & { createdCount: number }> {
     requirePermission(actor, "riskframework.update");
-    const { report, toAdd, existing } = await this.analyse(actor, frameworkId, versionId, buffer);
+    const { report, toAdd, existing, readAt } = await this.analyse(actor, frameworkId, versionId, buffer);
     if (report.fingerprint !== fingerprint.toLowerCase()) {
       throw new ConflictError("Le fichier n'est plus celui de l'aperçu : relancez l'aperçu", undefined, "IMPORT_FINGERPRINT_MISMATCH");
     }
     if (report.errorCount > 0) throw new ValidationError(`Import refusé : ${report.errorCount} erreur(s) bloquante(s), rien n'a été écrit`);
     if (toAdd.length > 0) {
       // Existing entries are passed through untouched: a value entered by the client is never overwritten.
-      await this.frameworks.updateDraft(actor, frameworkId, versionId, { appetiteThresholds: [...existing, ...toAdd] }, requestId);
+      // Optimistic concurrency: the write is refused (409 DRAFT_CHANGED) if the draft moved since it was read above.
+      // The import audit line (fingerprint and counts, never the file content) is written in the same transaction.
+      await this.frameworks.updateDraft(actor, frameworkId, versionId, { appetiteThresholds: [...existing, ...toAdd] }, requestId, {
+        expectedUpdatedAt: readAt,
+        extraEvents: [{
+          tenantId: actor.tenantId, userId: actor.userId, entityType: "RiskFrameworkVersion", entityId: versionId, action: "UPDATE",
+          oldValue: null,
+          newValue: { operation: "IMPORT_FAMILIES", fingerprint: report.fingerprint, dataLines: report.dataLines, createdCount: toAdd.length, keptCount: report.keptCount },
+          reason: null, requestId,
+        }],
+      });
     }
-    // Audit without the file content: fingerprint and counts only.
-    await this.audit.record({
-      tenantId: actor.tenantId, userId: actor.userId, entityType: "RiskFrameworkVersion", entityId: versionId, action: "UPDATE",
-      oldValue: null,
-      newValue: { operation: "IMPORT_FAMILIES", fingerprint: report.fingerprint, dataLines: report.dataLines, createdCount: toAdd.length, keptCount: report.keptCount },
-      reason: null, requestId,
-    });
     return { ...report, createdCount: toAdd.length };
   }
 
@@ -152,6 +157,7 @@ export class FrameworkFamilyImportService {
     const version: RiskFrameworkVersion = await this.frameworks.getVersion(actor, frameworkId, versionId);
     if (version.status !== "DRAFT") throw new ValidationError("L'import ne s'applique qu'à un brouillon de Dispositif");
     const existing = version.appetiteThresholds;
+    const readAt = version.updatedAt;
     const thresholds = await this.thresholdsOf(actor.tenantId, version);
     const cats = await this.categories.list(actor.tenantId);
     const byName = new Map<string, typeof cats>();
@@ -184,7 +190,7 @@ export class FrameworkFamilyImportService {
       if (fields.some((f) => f === "")) return err("Champ vide");
       if (fields.some((f) => f.length > MAX_FIELD)) return err(`Champ de plus de ${MAX_FIELD} caractères`);
       // eslint-disable-next-line no-control-regex
-      if (fields.some((f) => /[\u0000-\u001f\u007f-\u009f]/.test(f))) return err("Caractère de contrôle interdit");
+      if (fields.some((f) => /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/.test(f))) return err("Caractère de contrôle ou de direction du texte interdit");
       const [famRaw, subRaw, parentRaw] = fields as [string, string, string | undefined];
       // The echo of the raw text is bounded (120 chars, no control character) and never goes to the audit.
       out.family = famRaw;
@@ -237,6 +243,9 @@ export class FrameworkFamilyImportService {
 
     const notices: string[] = [];
     if (lines.length === 0) lines.push({ line: 0, verdict: "ERROR", messages: ["Aucune ligne de données : rien à importer"] });
+    if (thresholds.strict > thresholds.maxScore * WIDE_FIRST_BAND_RATIO) {
+      notices.push(`La première bande de criticité de l'échelle est très large (jusqu'à ${thresholds.strict} sur ${thresholds.maxScore}, plus de ${WIDE_FIRST_BAND_RATIO * 100} % du score maximal) : le seuil des familles strictes en découle et sera élevé. Vérifiez-le avant d'activer.`);
+    }
     const used = new Set(lines.filter((l) => l.verdict === "ACCEPTED" || l.verdict === "KEPT").map((l) => l.family));
     for (const f of APPETITE_FAMILIES.filter((f) => f.strict && !used.has(f.label))) {
       notices.push(`Aucune sous-catégorie pour la famille stricte « ${f.label} » : oubli probable`);
@@ -248,16 +257,16 @@ export class FrameworkFamilyImportService {
     const count = (v: LineVerdict) => lines.filter((l) => l.verdict === v).length;
     const report: FamilyImportReport = {
       fingerprint, dataLines, acceptedCount: count("ACCEPTED"), keptCount, warningCount: count("WARNING"), errorCount: count("ERROR"),
-      withoutFamily, notices, lines, thresholds,
+      withoutFamily, notices, lines, thresholds: { strict: thresholds.strict, moderate: thresholds.moderate },
     };
-    return { report, toAdd, existing };
+    return { report, toAdd, existing, readAt };
   }
 
   /** Strict = top of the lowest criticality band, moderate = top of the next one (A13 B-13 section 6: 4/9 on 5x5, 3/6 on 4x4, 3/8 on 6x6). */
-  private async thresholdsOf(tenantId: string, v: RiskFrameworkVersion): Promise<{ strict: number; moderate: number }> {
+  private async thresholdsOf(tenantId: string, v: RiskFrameworkVersion): Promise<Thresholds> {
     const scale = await this.ratingScales.getById(tenantId, v.ratingScaleId);
     const bands = [...(scale?.criticalityThresholds ?? [])].sort((a, b) => a.min - b.min);
     if (bands.length < 2) throw new ValidationError("L'échelle du brouillon n'a pas au moins deux bandes de criticité : impossible de déduire les seuils");
-    return { strict: bands[0]!.max, moderate: bands[1]!.max };
+    return { strict: bands[0]!.max, moderate: bands[1]!.max, maxScore: bands[bands.length - 1]!.max };
   }
 }

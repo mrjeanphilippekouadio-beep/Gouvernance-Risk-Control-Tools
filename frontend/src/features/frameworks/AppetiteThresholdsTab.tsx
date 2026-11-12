@@ -59,7 +59,7 @@ export function AppetiteThresholdsTab({ token, frameworkId, version, categories,
     const stored = version.appetiteThresholds;
     if (next.length === stored.length && next.every((a, i) => sameEntry(a, stored[i]))) { setError("Aucune modification à enregistrer."); return; }
     setSaving(true); setError(null); setSaved(false);
-    riskFrameworksApi.updateDraft(token, frameworkId, version.id, { appetiteThresholds: next })
+    riskFrameworksApi.updateDraft(token, frameworkId, version.id, { appetiteThresholds: next, expectedUpdatedAt: version.updatedAt })
       .then(async () => { setSaved(true); await onSaved(); })
       .catch((err) => { if (!isForbidden(err)) setError(describeError(err)); })
       .finally(() => setSaving(false));

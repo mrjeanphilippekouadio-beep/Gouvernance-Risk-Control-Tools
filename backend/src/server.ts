@@ -370,7 +370,7 @@ const riskFrameworkService = new RiskFrameworkService(
   riskRepository,
   processRepository,
 );
-const frameworkFamilyImportService = new FrameworkFamilyImportService(riskFrameworkService, riskCategoryRepository, ratingScaleRepository, auditRepository);
+const frameworkFamilyImportService = new FrameworkFamilyImportService(riskFrameworkService, riskCategoryRepository, ratingScaleRepository);
 const riskEvaluationService = new RiskEvaluationService(
   riskEvaluationRepository,
   auditRepository,

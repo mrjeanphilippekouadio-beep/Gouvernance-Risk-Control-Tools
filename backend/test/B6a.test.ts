@@ -227,6 +227,16 @@ describe("B-6a drafts", () => {
     await expect(s.service.updateDraft(u1, fw, v, {}, R)).rejects.toThrow(/Nothing to update/);
   });
 
+  it("SEC-IMP-01: a stale expectedUpdatedAt is a 409 DRAFT_CHANGED and nothing is written; the current one is accepted", async () => {
+    const s = setup();
+    const { fw, v } = await created(s);
+    const read = s.versions[0]!.updatedAt;
+    await expect(s.service.updateDraft(u2, fw, v, { selfProposalAllowed: true }, R, { expectedUpdatedAt: new Date(read.getTime() - 1) }))
+      .rejects.toMatchObject({ code: "DRAFT_CHANGED" });
+    expect(s.versions[0]!.selfProposalAllowed).toBe(false);
+    await expect(s.service.updateDraft(u2, fw, v, { selfProposalAllowed: true }, R, { expectedUpdatedAt: read })).resolves.toMatchObject({ selfProposalAllowed: true });
+  });
+
   it.each(["PENDING_APPROVAL", "ACTIVE", "ARCHIVED"] as const)("refuses to modify a %s version", async (status) => {
     const s = setup();
     const { fw, v } = await created(s);

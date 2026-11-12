@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, Card, FileUpload, MessageBanner, Table, type TableColumn } from "@djamo/design-system";
 import { riskFrameworksApi, type FamilyImportLine, type FamilyImportReport } from "../../api/riskFrameworks";
-import { describeError, isForbidden } from "../indicators/shared";
+import { describeError, isPermissionDenied } from "../indicators/shared";
 
 const VERDICT_LABELS: Record<FamilyImportLine["verdict"], string> = {
   ACCEPTED: "Acceptée", WARNING: "Avertissement", ERROR: "Erreur", KEPT: "Conservée",
@@ -33,7 +33,7 @@ export function FamilyImportPanel({ token, frameworkId, versionId, onImported }:
     if (!file) return;
     setBusy(true); setError(null); setDone(false);
     try { setReport(await riskFrameworksApi.importFamiliesPreview(token, frameworkId, versionId, file)); }
-    catch (err) { setReport(null); if (!isForbidden(err)) setError(describeError(err)); }
+    catch (err) { setReport(null); if (!isPermissionDenied(err)) setError(describeError(err)); }
     finally { setBusy(false); }
   }
 
@@ -44,7 +44,7 @@ export function FamilyImportPanel({ token, frameworkId, versionId, onImported }:
       setReport(await riskFrameworksApi.importFamiliesCommit(token, frameworkId, versionId, file, report.fingerprint));
       setDone(true);
       await onImported();
-    } catch (err) { if (!isForbidden(err)) setError(describeError(err)); }
+    } catch (err) { if (!isPermissionDenied(err)) setError(describeError(err)); }
     finally { setBusy(false); }
   }
 

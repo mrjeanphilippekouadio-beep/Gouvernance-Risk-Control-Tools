@@ -84,6 +84,8 @@ export interface ChangeRequest {
 
 /** Draft parameters sent on PATCH (committeeVoteCustom is never sent from this screen; appetiteThresholds replaces the whole list). */
 export type DraftPatch = Partial<Omit<FrameworkParams, "committeeVoteCustom">>;
+/** `expectedUpdatedAt`: the `updatedAt` of the draft as read; the server answers 409 DRAFT_CHANGED if it moved since. */
+export type DraftUpdate = DraftPatch & { expectedUpdatedAt?: string };
 
 /** Mirrors backend FrameworkFamilyImportService (DECISION-133). */
 export type FamilyImportVerdict = "ACCEPTED" | "WARNING" | "ERROR" | "KEPT";
@@ -113,7 +115,7 @@ export const riskFrameworksApi = {
     apiRequest<Framework>(`${base}/${id}`, { method: "PATCH", body, token }),
   createDraft: (token: string, id: string, fromVersionId?: string) =>
     apiRequest<FrameworkVersion>(`${base}/${id}/versions`, { method: "POST", body: fromVersionId ? { fromVersionId } : {}, token }),
-  updateDraft: (token: string, id: string, versionId: string, body: DraftPatch) =>
+  updateDraft: (token: string, id: string, versionId: string, body: DraftUpdate) =>
     apiRequest<FrameworkVersion>(`${base}/${id}/versions/${versionId}`, { method: "PATCH", body, token }),
   importFamiliesPreview: (token: string, id: string, versionId: string, file: File) => {
     const form = new FormData();

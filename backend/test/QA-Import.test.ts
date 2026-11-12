@@ -554,7 +554,7 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
       expect(await appetite(), "atomique").toEqual([]);
     });
 
-    it.fails("KNOWN GAP QA-IMP-02 S4b panne d'audit sur la SEULE ligne d'import (cle `operation`) : le client recoit 5xx mais l'ecriture est deja faite (2 entrees) : 5xx => rien d'ecrit attendu", async () => {
+    it("QA-IMP-02 S4b (corrige) panne d'audit sur la SEULE ligne d'import (cle `operation`) : le client recoit 5xx mais l'ecriture est deja faite (2 entrees) : 5xx => rien d'ecrit attendu", async () => {
       await sql(`DELETE FROM qa_fail_audit`);
       await sql(`INSERT INTO qa_fail_audit (entity_type, action, key) VALUES ('RiskFrameworkVersion', 'UPDATE', 'operation')`);
       let r: Res;
@@ -577,8 +577,8 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
 
   // ------------------------------------------------------------------------------------------------ R course
   describe("R course : commit // edition du meme brouillon (updateDraft sans verrou optimiste)", () => {
-    it.fails("KNOWN GAP QA-IMP-01 R1 MESURE : un commit et une edition cliente (PATCH du tableau d'appetence qui ajoute SA propre entree) du meme brouillon, lances ensemble. Oracle attendu : aucune entree perdue quand les deux repondent 200", async () => {
-      const seen = { ok: 0, lostClient: 0, lostImport: 0, other: 0 };
+    it("QA-IMP-01 R1 MESURE (corrige : 409 au lieu d ecraser) : un commit et une edition cliente (PATCH du tableau d'appetence qui ajoute SA propre entree) du meme brouillon, lances ensemble. Oracle attendu : aucune entree perdue quand les deux repondent 200", async () => {
+      const seen: Record<string, number> = { ok: 0, lostClient: 0, lostImport: 0, other: 0 };
       const detail: string[] = [];
       for (let i = 0; i < 30; i++) {
         await setAppetite([]);
@@ -589,6 +589,8 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
           new Promise<Res>((ok) => setTimeout(ok, delayImport)).then(() => commit("rm1", FW, V, GOOD)),
           new Promise<Res>((ok) => setTimeout(ok, delayClient)).then(() => call("rm2", "PATCH", `/risk-frameworks/${FW}/versions/${V}`, { appetiteThresholds: [clientEntry] })),
         ]);
+        // A 409 DRAFT_CHANGED on the import is the correct outcome of a lost race: nothing of the client was overwritten.
+        if (a.status === 409 && b.status === 200) { seen.conflict = (seen.conflict ?? 0) + 1; if ((await appetite()).some((e) => e.subCategoryId === C["free"])) continue; seen.lostClient++; continue; }
         if (a.status !== 200 || b.status !== 200) { seen.other++; detail.push(`${i}: ${a.status}/${b.status}`); continue; }
         const ent = await appetite();
         const hasClient = ent.some((e) => e.subCategoryId === C["free"]);
@@ -613,7 +615,7 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
       const src = (await import("node:fs")).readFileSync(join(ROOT, "backend", "src", "infrastructure", "database", "postgres", "PostgresRiskFrameworkRepository.ts"), "utf8");
       const m = /async updateDraft\([\s\S]*?\n  }\n/.exec(src)![0];
       expect(m, "updateDraft : UPDATE inconditionnel sur (tenant, framework, id, status = DRAFT), sans comparaison de version").toMatch(/WHERE tenant_id = \$1 AND framework_id = \$2 AND id = \$3 AND status = 'DRAFT'/);
-      expect(m).not.toMatch(/updated_at\s*=\s*\$|FOR UPDATE|expected/i);
+      expect(m, "QA-IMP-01 corrige : ecriture conditionnelle sur updated_at").toMatch(/expectedUpdatedAt/);
     });
   });
 });
