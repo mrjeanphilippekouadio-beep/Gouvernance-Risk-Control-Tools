@@ -5,6 +5,7 @@
 - `SUPER_ADMIN_EMAILS` : adresses exactes des super-administrateurs. **Au moins deux** (le démarrage journalise un avertissement sinon, sans afficher les adresses).
 - `SUPER_ADMIN_DOMAINS` : domaines que le fournisseur d'identité doit **attester** (Google : revendication `hd`). Vide = personne : **obligatoire avec `SUPER_ADMIN_EMAILS`** (sans domaine, aucun super-administrateur). Les deux variables figurent dans `backend/.env.example`.
 - Un compte est super-administrateur seulement si son adresse est dans la liste ET le domaine attesté par le fournisseur est celui de l'adresse ET figure dans `SUPER_ADMIN_DOMAINS`.
+- **Domaine d'entreprise (q285, DECISION-136) :** `SUPER_ADMIN_DOMAINS` sert aussi de liste des domaines d'entreprise. Pour **tout** utilisateur dont l'adresse est sur l'un de ces domaines, la connexion exige que le fournisseur atteste ce domaine (Google : `hd`) ; sinon refus (403) avant toute liaison du `sub`, avec un avertissement dans le journal serveur (identifiant du compte, sans adresse). Les autres domaines ne changent pas. Conséquence : un compte local de staging sur un domaine d'entreprise exige `LOCAL_AUTH_ATTESTED_DOMAIN` égal à ce domaine.
 - Jeton local (dev/staging) : aucun domaine attesté par défaut ; `LOCAL_AUTH_ATTESTED_DOMAIN` permet de tester en staging et est **refusée au démarrage en production**.
 
 ## Règle de désactivation d'un client (q277)

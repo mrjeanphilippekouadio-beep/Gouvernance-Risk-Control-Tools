@@ -54,6 +54,20 @@ export function emailDomain(email: string): string {
 }
 
 /**
+ * q285 A: true when the address belongs to a company domain (SUPER_ADMIN_DOMAINS) but the provider did not attest exactly
+ * that domain. Other domains: false (behavior unchanged).
+ */
+export function companyDomainNotAttested(
+  authenticatedEmail: string,
+  attestedDomain: string | null | undefined,
+  companyDomains: readonly string[],
+): boolean {
+  const domain = emailDomain(authenticatedEmail);
+  if (!companyDomains.includes(domain)) return false;
+  return (attestedDomain ?? "").trim().toLowerCase() !== domain;
+}
+
+/**
  * q275: platform super-administrator = authenticated e-mail in the list AND a domain ATTESTED by the identity provider
  * (`attestedDomain`, null = nothing attested = refused) that is the e-mail's own domain AND is in SUPER_ADMIN_DOMAINS.
  * The only place that decides it; provider-specific proof (Google `hd`, ...) stays in the identity adapters.

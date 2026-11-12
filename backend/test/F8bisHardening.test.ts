@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Pool } from "pg";
 import { z } from "zod";
-import { emailDomain, isSuperAdminIdentity, parseSuperAdminDomains } from "../src/config/superAdminEmails.js";
+import { companyDomainNotAttested, emailDomain, isSuperAdminIdentity, parseSuperAdminDomains } from "../src/config/superAdminEmails.js";
 import { GoogleIdentityProvider } from "../src/infrastructure/identity/GoogleIdentityProvider.js";
 import { LocalIdentityProvider, hashLocalPassword } from "../src/infrastructure/identity/LocalIdentityProvider.js";
 import type { AuthenticatedUser, IdentityProof } from "../src/infrastructure/identity/IdentityProvider.js";
@@ -40,6 +40,24 @@ describe("q275 SUPER_ADMIN_DOMAINS and the attested-domain rule", () => {
     expect(isSuperAdminIdentity("boss@corp.com", "corp.com", [], domains)).toBe(false);
     expect(isSuperAdminIdentity("other@corp.com", "corp.com", emails, domains)).toBe(false);
     expect(emailDomain("a@B.com")).toBe("b.com");
+  });
+
+  it("q285: a company-domain address needs exactly that domain attested; other domains are unaffected", () => {
+    const d = ["corp.com"];
+    expect(companyDomainNotAttested("a@corp.com", null, d)).toBe(true);
+    expect(companyDomainNotAttested("a@corp.com", undefined, d)).toBe(true);
+    expect(companyDomainNotAttested("a@corp.com", "other.com", d)).toBe(true);
+    expect(companyDomainNotAttested("a@corp.com", "CORP.com", d)).toBe(false);
+    expect(companyDomainNotAttested("a@gmail.com", null, d)).toBe(false);
+    expect(companyDomainNotAttested("a@sub.corp.com", null, d)).toBe(false); // exact domain only
+    expect(companyDomainNotAttested("a@corp.com", null, [])).toBe(false); // no company domain configured
+  });
+
+  it("q285 wiring: the refusal sits before the sub binding in the membership lookup", () => {
+    const server = readFileSync(join(__dirname, "..", "src", "server.ts"), "utf8");
+    const refuse = server.indexOf("companyDomainNotAttested(email, proof.attestedDomain, env.SUPER_ADMIN_DOMAINS)");
+    expect(refuse).toBeGreaterThan(0);
+    expect(refuse).toBeLessThan(server.indexOf("ensureIdentityBinding(pool, row, proof.subject)"));
   });
 
   const member = { userId: "u1", tenantId: "t1", roles: [], dashboardScopeMode: "GLOBAL" as const };

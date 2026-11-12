@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import { corsOptions } from "./api/corsOptions.js";
 import { env, getLocalAuthUsers } from "./config/env.js";
-import { isSuperAdminIdentity } from "./config/superAdminEmails.js";
+import { companyDomainNotAttested, isSuperAdminIdentity } from "./config/superAdminEmails.js";
 import { ensureIdentityBinding } from "./infrastructure/database/postgres/identityBinding.js";
 import type { IdentityProof } from "./infrastructure/identity/IdentityProvider.js";
 import { BASE_PERMISSIONS, filterKnownPermissions, type Permission } from "./domain/permissions.js";
@@ -527,6 +527,13 @@ const lookupMembership = async (email: string, proof: IdentityProof) => {
   );
   const row = rows[0];
   if (!row) return null;
+
+  // q285 A (DECISION-136, SEC-F8B R-2): an address of a company domain (SUPER_ADMIN_DOMAINS) must have that domain ATTESTED
+  // by the provider, for every user. Refused BEFORE any `sub` binding, so a look-alike account cannot even claim the account.
+  if (companyDomainNotAttested(email, proof.attestedDomain, env.SUPER_ADMIN_DOMAINS)) {
+    console.warn(`Company-domain attestation missing for user ${row.id}: login refused`);
+    return null;
+  }
 
   // q282 A: bound to the provider's stable account id at first login; a different id for the same address = refused
   // (an address reassigned to another person does not inherit the account). Local accounts carry no subject: unchanged.
