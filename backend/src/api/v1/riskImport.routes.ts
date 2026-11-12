@@ -7,7 +7,7 @@ import { ValidationError } from "../../domain/errors/DomainErrors.js";
 import { costlyOperationRateLimiter } from "../middleware/rateLimit.js";
 
 /** Workbook size cap (2 000 rows fit far below it); one value for preview and commit. */
-const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
+const MAX_IMPORT_BYTES = 8_000_000; // 8 Mo (décimal), seuil Sonar S5693
 
 const upload = multer({
   storage: multer.memoryStorage(),
