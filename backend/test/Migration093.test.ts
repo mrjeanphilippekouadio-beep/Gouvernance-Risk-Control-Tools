@@ -55,12 +55,31 @@ describe.skipIf(!live)("093 on a real local database", () => {
     const rows = await rebindRows(u);
     expect(rows).toHaveLength(2);
     expect(rows.every((r) => r.user_id === u)).toBe(true);
-    expect(rows[1].new_value).toEqual({ identityLinked: false, identityProvider: null });
+    expect(rows[1].new_value).toEqual({ identityLinked: false, identityProvider: null, executedBy: "postgres" });
     expect(JSON.stringify(rows)).not.toContain(`sub-`);
     // Rebinding from NULL again is the application's first-binding path: still no extra row.
     await pool.query(`UPDATE users SET identity_provider = 'google', identity_subject = $2 WHERE id = $1`, [u, `sub-c-${tag}`]);
     expect(await rebindRows(u)).toHaveLength(2);
     expect(await code(pool.query(`UPDATE audit_log SET reason = 'x' WHERE entity_id = $1`, [u]))).toBe("42501");
+  });
+
+  it("SEC-093-02: 093 applies while a SOLE_RM decision without the flag already exists (CHECK is NOT VALID, row untouched)", async () => {
+    const u = await user("legacy");
+    const fw = (await pool.query(`INSERT INTO risk_frameworks (tenant_id, name, created_by) VALUES ($1, $2, $3) RETURNING id`, [tenant, `FWL-${randomUUID()}`, u])).rows[0].id;
+    const p = (await pool.query(`INSERT INTO processes (tenant_id, level, name) VALUES ($1, 'PROCESS', $2) RETURNING id`, [tenant, `PL-${tag}`])).rows[0].id;
+    // Simulate the 089-090 window: the shape CHECK without the flag, a SOLE_RM decision written under it.
+    await pool.query(`ALTER TABLE risk_framework_change_requests DROP CONSTRAINT risk_framework_change_requests_sole_rm_shape_check`);
+    const id = (await pool.query(
+      `INSERT INTO risk_framework_change_requests (tenant_id, kind, framework_id, process_id, previous_value, reason, requested_by, sole_rm_at_request)
+       VALUES ($1, 'ASSIGN_PROCESS', $2, $3, '{"frameworkId":null}', 'm', $4, false) RETURNING id`, [tenant, fw, p, u])).rows[0].id;
+    await pool.query(
+      `UPDATE risk_framework_change_requests SET status = 'APPROVED', decided_by = $2, decided_at = now(), decision_comment = 'seul',
+         decision_regime = 'SOLE_RM', decider_group = 'RISK_MANAGER' WHERE id = $1`, [id, u]);
+    await pool.query(readFileSync("../database/postgresql/migrations/093_sole_rm_set_default_hardening.sql", "utf8"));
+    const { rows } = await pool.query(`SELECT decision_regime, sole_rm_at_request FROM risk_framework_change_requests WHERE id = $1`, [id]);
+    expect(rows[0]).toEqual({ decision_regime: "SOLE_RM", sole_rm_at_request: false });
+    const v = await pool.query(`SELECT convalidated FROM pg_constraint WHERE conname = 'risk_framework_change_requests_sole_rm_shape_check'`);
+    expect(v.rows[0].convalidated).toBe(false);
   });
 
   it("SEC-B13-01: a deleted process cannot be restored; a normal soft delete still works", async () => {

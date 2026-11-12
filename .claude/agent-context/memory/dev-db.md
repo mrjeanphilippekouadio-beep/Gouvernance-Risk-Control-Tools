@@ -188,3 +188,5 @@
 - Compte des fonctions épinglées 52 -> 55 (QA-panel-migrations). Down : remet 090 (échoue s'il existe une décision SOLE_RM sur SET_DEFAULT), 057 et 091 tels quels, retire le trigger et la fonction du rebind.
 - Limite connue : l'INSERT d'une demande peut encore poser `sole_rm_at_request = true` (la garde INSERT 057 ne valide pas le drapeau ; sa valeur est calculée par le dépôt). Le gain d'INFO-12 est côté UPDATE/décision uniquement.
 - Vérifié : pg_dump -s identique (hors jetons) down vs 001->092, up après down vs 001->093, rejeu de l'up inchangé.
+
+- 2026-11-12 SEC-093-02/01 : le CHECK SOLE_RM de 093 est posé NOT VALID (jamais de revalidation des décisions SOLE_RM de la fenêtre 089-090 ; test live Migration093). Le trigger de rebind ajoute `executedBy: session_user` dans new_value (sans le sub). Reste INFO : garde INSERT 057 ouverte, liaison NULL->valeur posée en SQL non vue.
