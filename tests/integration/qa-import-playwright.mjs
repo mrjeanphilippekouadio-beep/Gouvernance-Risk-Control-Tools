@@ -136,18 +136,13 @@ try {
   await adm.page.getByRole("button", { name: "Aperçu (sans écriture)" }).click();
   await sleep(1500);
   t = await adm.text();
-  check("W6.1 aperçu autorisé pour un compte sans appartenance au groupe RM (observation)", /Aperçu : rien n'a été écrit/.test(t), t.slice(0, 200));
   const before = appetiteCount();
-  const confirm = adm.page.getByRole("button", { name: /Confirmer l'import/ });
-  if ((await confirm.count()) > 0) {
-    await confirm.click();
-    await sleep(1800);
-    t = await adm.text();
-    const dlg = norm(await adm.page.locator("dialog[open]").innerText().catch(() => ""));
-    check("W6.2 refus du serveur (groupe Risk Manager) AFFICHÉ à l'écran (panneau, page ou fenêtre)", /Réservé aux membres du groupe Risk Manager/.test(t + " " + dlg), `dialogue=${dlg.slice(0, 120)} | page=${t.slice(t.indexOf("Importer"), t.indexOf("Importer") + 200)}`);
-    check("W6.3 base inchangée", appetiteCount() === before);
-    await adm.shot("w6-refus");
-  } else check("W6.2 bouton de confirmation présent pour adm", false, "absent");
+  const dlg = norm(await adm.page.locator("dialog[open]").innerText().catch(() => ""));
+  check("W6.1 (QA-IMP-04 corrigé) l'aperçu est refusé à un compte hors groupe RM : aucun rapport affiché", !/Aperçu : rien n'a été écrit/.test(t));
+  check("W6.2 (QA-IMP-03 corrigé) le refus « Réservé aux membres du groupe Risk Manager » est AFFICHÉ à l'écran (panneau, page ou fenêtre)", /Réservé aux membres du groupe Risk Manager/.test(t + " " + dlg), `dialogue=${dlg.slice(0, 120)} | page=${t.slice(t.indexOf("Importer"), t.indexOf("Importer") + 200)}`);
+  check("W6.3 base inchangée", appetiteCount() === before);
+  check("W6.4 aucun bouton de confirmation", (await adm.page.getByRole("button", { name: /Confirmer l'import/ }).count()) === 0);
+  await adm.shot("w6-refus");
 
   checkNoErrors(check, sessions, "W7");
 } catch (e) {

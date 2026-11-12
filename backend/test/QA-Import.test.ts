@@ -617,5 +617,90 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
       expect(m, "updateDraft : UPDATE inconditionnel sur (tenant, framework, id, status = DRAFT), sans comparaison de version").toMatch(/WHERE tenant_id = \$1 AND framework_id = \$2 AND id = \$3 AND status = 'DRAFT'/);
       expect(m, "QA-IMP-01 corrige : ecriture conditionnelle sur updated_at").toMatch(/expectedUpdatedAt/);
     });
+
+    const getUpdatedAt = async () => (await call("rm1", "GET", `/risk-frameworks/${FW}/versions/${V}`)).json!["data"].updatedAt as string;
+    const patch = (who: Who, body: Row) => call(who, "PATCH", `/risk-frameworks/${FW}/versions/${V}`, body);
+    const entry = (i: number) => ({ subCategory: "Non citée", subCategoryId: C["free"], entity: `P${i}`, threshold: 5, description: `edition ${i}` });
+
+    it("R3 PATCH du brouillon : sans expectedUpdatedAt reste COMPATIBLE (200) ; avec la valeur lue 200 (aller-retour en ms sans faux conflit) ; avec une valeur perimee 409 DRAFT_CHANGED sans rien ecrire ; mal forme 400", async () => {
+      await setAppetite([]);
+      const t0 = await getUpdatedAt();
+      const compat = await patch("rm1", { appetiteThresholds: [entry(0)] });
+      expect(compat.status, compat.text).toBe(200);
+      const t1 = await getUpdatedAt();
+      expect(t1).not.toBe(t0);
+      const okExp = await patch("rm1", { appetiteThresholds: [entry(0), entry(1)], expectedUpdatedAt: t1 });
+      expect(okExp.status, okExp.text).toBe(200);
+      expect(await appetite()).toHaveLength(2);
+      const stale = await patch("rm2", { appetiteThresholds: [entry(2)], expectedUpdatedAt: t1 });
+      expect(stale.status, stale.text).toBe(409);
+      expect(stale.json!["code"] ?? stale.text).toMatch(/DRAFT_CHANGED/);
+      expect(await appetite(), "rien d'ecrit sur un 409").toHaveLength(2);
+      for (const bad of ["hier", "", 12, null, "2026-11-12T10:00:00+02:00", "2026-13-40T00:00:00Z"]) {
+        const r = await patch("rm1", { appetiteThresholds: [entry(3)], expectedUpdatedAt: bad });
+        expect(r.status, `expectedUpdatedAt=${JSON.stringify(bad)}: ${r.text}`).toBe(400);
+      }
+      // expectedUpdatedAt alone (nothing to update) is refused, never silently accepted
+      const only = await patch("rm1", { expectedUpdatedAt: await getUpdatedAt() });
+      expect(only.status, only.text).toBeGreaterThanOrEqual(400);
+      expect(only.status).toBeLessThan(500);
+      // the import itself: a commit based on a stale read is refused with 409 and retried successfully
+      await setAppetite([]);
+      const c = await commit("rm1", FW, V, GOOD);
+      expect(c.status, c.text).toBe(200);
+      const again = await commit("rm1", FW, V, GOOD);
+      expect(again.status, again.text).toBe(200);
+      await setAppetite([]);
+    });
+
+    it("R4 MESURE (30 courses) : commit // PATCH portant expectedUpdatedAt lu avant : jamais de saisie perdue dans AUCUN sens ; deux 200 => les deux ecritures presentes ; 409 tolere ; jamais 500", async () => {
+      const seen: Record<string, number> = { both200: 0, importConflict: 0, patchConflict: 0, other: 0 };
+      for (let i = 0; i < 30; i++) {
+        await setAppetite([]);
+        const t = await getUpdatedAt();
+        const clientEntry = { subCategory: "Non citée", subCategoryId: C["free"], entity: null, threshold: 11, description: `client ${i}` };
+        const [a, b] = await Promise.all([
+          new Promise<Res>((ok) => setTimeout(ok, i % 3 === 0 ? 0 : (i % 3) * 4)).then(() => commit("rm1", FW, V, GOOD)),
+          new Promise<Res>((ok) => setTimeout(ok, i % 3 === 0 ? 3 : 0)).then(() => patch("rm2", { appetiteThresholds: [clientEntry], expectedUpdatedAt: t })),
+        ]);
+        expect(a.status, `iter ${i} import: ${a.text}`).toBeLessThan(500);
+        expect(b.status, `iter ${i} patch: ${b.text}`).toBeLessThan(500);
+        const ent = await appetite();
+        const hasClient = ent.some((e) => e.subCategoryId === C["free"]);
+        const hasImport = ent.some((e) => e.subCategoryId === C["fraud"]) && ent.some((e) => e.subCategoryId === C["aml"]);
+        if (b.status === 200) expect(hasClient, `iter ${i}: PATCH 200 mais sa saisie est perdue (${a.status}/${b.status})`).toBe(true);
+        if (a.status === 200) expect(hasImport, `iter ${i}: import 200 mais ses entrees sont perdues (${a.status}/${b.status})`).toBe(true);
+        if (a.status === 200 && b.status === 200) seen["both200"]!++;
+        else if (a.status === 409) seen["importConflict"]!++;
+        else if (b.status === 409) seen["patchConflict"]!++;
+        else seen["other"]!++;
+      }
+      console.log("R4 outcomes (30 courses)", JSON.stringify(seen));
+      await setAppetite([]);
+    });
+
+    it("L7 avertissement « premiere bande large » : echelle dont la premiere bande depasse 25 % du score maximal => message d'avertissement dans l'apercu, sans bloquer ; echelle normale : pas de message", async () => {
+      const scaleId = (await one(`SELECT rating_scale_id AS s FROM risk_framework_versions WHERE id = $1`, [V])).s as string;
+      const orig = (await one(`SELECT criticality_thresholds AS c FROM rating_scales WHERE id = $1`, [scaleId])).c as Row[];
+      const normal = await preview("rm1", FW, V, GOOD);
+      expect((normal.json!["data"].notices as string[]).join("|")).not.toMatch(/première bande/);
+      const wide = orig.map((b, i) => (i === 0 ? { ...b, max: 10 } : i === 1 ? { ...b, min: 11, max: 14 } : b));
+      await sql(`UPDATE rating_scales SET criticality_thresholds = $2::jsonb WHERE id = $1`, [scaleId, JSON.stringify(wide)]);
+      try {
+        const r = await preview("rm1", FW, V, GOOD);
+        expect(r.status, r.text).toBe(200);
+        expect((r.json!["data"].notices as string[]).join("|")).toMatch(/première bande de criticité.*très large/);
+        expect(r.json!["data"].errorCount).toBe(0);
+      } finally { await sql(`UPDATE rating_scales SET criticality_thresholds = $2::jsonb WHERE id = $1`, [scaleId, JSON.stringify(orig)]); }
+    });
+
+    it("L8 caracteres de direction : U+202E, U+202A, U+2066, U+200E, U+2028 refuses (erreur de ligne) ; zero-largeur U+200B / U+FEFF interne / U+2060 : observation", async () => {
+      const r = await preview("rm1", FW, V, ["Fraude;Fraude‮interne", "Fraude;‪fraude", "Fraude;Fraude⁦interne", "Fraude;‎fraude", "Fraude;Fraude interne"].join("\n"));
+      expect(r.status, r.text).toBe(200);
+      for (const l of r.json!["data"].lines as Row[]) expect(l.messages.join(), `ligne ${l.line}`).toMatch(/direction du texte/);
+      const z = await preview("rm1", FW, V, ["Fraude;Fraude​interne", "Fraude;Fraude⁠interne", "Fraude;Fraude﻿interne"].join("\n"));
+      console.log("L8 zero-largeur ->", (z.json!["data"].lines as Row[]).map((l) => `${l.line}:${l.verdict}`).join(" "));
+      expect(z.status).toBeLessThan(500);
+    });
   });
 });

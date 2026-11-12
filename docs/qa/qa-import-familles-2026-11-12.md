@@ -49,3 +49,11 @@ Panneau présent (format, limites, mise en garde) ; fichier à erreurs : « rien
 ## Revues requises
 
 SECURITY : oui pour QA-IMP-01 (altération silencieuse d'une valeur d'appétence saisie par le client). COMPLIANCE / PRIVACY / RISK : non requis par ce lot. RETEST : après correction de QA-IMP-01 / 02 / 03.
+
+## Retest (822d68f) : RETEST_PASS (VERT)
+
+- **QA-IMP-01 clos.** Contrôle optimiste sur `updated_at` : R1 est un test normal et passe (30 courses : 0 saisie cliente perdue, 15 à 20 réponses 409 `DRAFT_CHANGED` de l'import, jamais 500). Le dernier cas « import perdu » (6 à 9 sur 30) ne vient que d'un PATCH sans `expectedUpdatedAt` (compatibilité voulue). Ajout R4 : commit // PATCH portant `expectedUpdatedAt`, 30 courses, deux fois : aucune saisie perdue dans aucun sens, deux 200 => les deux écritures présentes (3 à 5 cas), 409 côté import ou côté PATCH sinon, jamais 500. R3 : PATCH sans `expectedUpdatedAt` reste compatible (200) ; valeur relue renvoyée telle quelle : 200 (pas de faux conflit en millisecondes) ; valeur périmée : 409 `DRAFT_CHANGED`, rien d'écrit ; valeurs mal formées (`hier`, vide, nombre, null, décalage horaire, date impossible) : 400 ; `expectedUpdatedAt` seul : 4xx. L'onglet Seuils d'appétence envoie bien `expectedUpdatedAt` (code vérifié). Limite connue : la comparaison est à la milliseconde (deux écritures dans la même milliseconde ne seraient pas distinguées).
+- **QA-IMP-02 clos** : S4b (panne sur la seule ligne d'import) est un test normal : 5xx et rien d'écrit.
+- **QA-IMP-03 / 04 clos** : l'aperçu est refusé (403) à un compte hors groupe RM aux deux routes, et le refus « Réservé aux membres du groupe Risk Manager » est affiché dans l'écran (Playwright W6, oracle mis à jour en conséquence).
+- **Ajouts d'A06 vérifiés** : L8 caractères de direction (U+202E, 202A, 2066, 200E, 2028) refusés avec message de ligne ; zéro-largeur U+200B et U+2060 : « sous-catégorie absente », U+FEFF interne : traité comme un espace (même sous-catégorie, inoffensif). L7 avertissement « première bande très large » (> 25 % du score maximal) : présent sur une échelle modifiée, sans bloquer, absent sur l'échelle normale.
+- Chiffres : `QA-Import.test.ts` 30 / 30 live, deux lancements ; Playwright 26 / 26 ; `npm run typecheck` OK ; `npm test` 2958 pass / 967 skipped / 0 fail ; build frontend OK.
