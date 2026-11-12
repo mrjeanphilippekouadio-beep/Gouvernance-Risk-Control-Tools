@@ -3069,5 +3069,5 @@ DECISION (PO, recommandations retenues) :
   (3) q284 A — fusion de la PR #249 (B-13, migration 091) dans staging.
 RELATED: q275, q276, q277, q280, DECISION-132, DECISION-133, B-13.
 OWNER: @orchestrator @dev-backend @security @risk-manager
-STATUS: DÉCIDÉ — merge #249 à exécuter ; lot correctif F8-bis débloqué
+STATUS: DÉCIDÉ — #249 fusionnée (4526d31), migration 091 appliquée (run 30 vert) ; lot correctif F8-bis débloqué
   (q275/q277/q282, migration 092) ; import familles à construire.
