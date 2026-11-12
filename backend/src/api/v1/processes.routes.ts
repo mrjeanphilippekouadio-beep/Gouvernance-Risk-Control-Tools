@@ -28,7 +28,8 @@ const CreateProcessBody = z.object({
   departmentId: z.guid().nullish(),
 });
 
-const UpdateProcessBody = CreateProcessBody.partial();
+// q257: `reason` is the motive of a move to another Dispositif (required by the service when it happens), never a column.
+const UpdateProcessBody = CreateProcessBody.partial().extend({ reason: reasonText(500).optional() });
 // B-8 bis (q46): mandatory on creation only (the update body keeps it optional/nullish).
 const CreateProcessBodyStrict = CreateProcessBody.extend({ departmentId: z.guid() });
 // D2b: omitted = untouched, null = cleared. Strict: no other field (and no attribution field) is accepted.
@@ -103,8 +104,8 @@ export function processesRouter(processService: ProcessService): Router {
 
   router.patch("/:id", async (req, res, next) => {
     try {
-      const body = UpdateProcessBody.parse(req.body);
-      const process = await processService.update(req.user, req.params["id"] as string, body, req.requestId);
+      const { reason, ...body } = UpdateProcessBody.parse(req.body);
+      const process = await processService.update(req.user, req.params["id"] as string, body, req.requestId, reason);
       res.json({ data: process });
     } catch (err) {
       next(err);

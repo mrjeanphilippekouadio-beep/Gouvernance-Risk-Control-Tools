@@ -74,6 +74,7 @@ export interface ChangeRequest {
   versionId: string | null;
   reason: string;
   status: RequestStatus;
+  processId?: string | null;
   requestedBy: string;
   createdAt: string;
   decidedBy: string | null;
@@ -107,6 +108,18 @@ export const riskFrameworksApi = {
     apiRequest<unknown>(`${base}/change-requests/${rid}/approve`, { method: "POST", body: comment ? { comment } : {}, token }),
   reject: (token: string, rid: string, comment: string) =>
     apiRequest<unknown>(`${base}/change-requests/${rid}/reject`, { method: "POST", body: { comment }, token }),
+  /** q252 A (DECISION-121): the requester of a pending process attachment confirms it alone; the server refuses (409/403) otherwise. */
+  soleConfirm: (token: string, rid: string, reason: string) =>
+    apiRequest<unknown>(`${base}/change-requests/${rid}/sole-confirm`, { method: "POST", body: { reason }, token }),
+  /** B-13: request to make this Dispositif the tenant default (decided like any change request by a third Risk Manager). */
+  requestDefault: (token: string, id: string, reason: string) =>
+    apiRequest<ChangeRequest>(`${base}/${id}/default-requests`, { method: "POST", body: { reason }, token }),
+  /** B-13: archiving, its own action (refused for the default Dispositif, with attached processes or pending requests). */
+  archive: (token: string, id: string, reason: string) =>
+    apiRequest<Framework>(`${base}/${id}/archive`, { method: "POST", body: { reason }, token }),
+  /** B-13: makes the three default Dispositifs (Tranché, Standard, Renforcé) available as drafts; idempotent by name. */
+  provisionDefaults: (token: string) =>
+    apiRequest<{ created: string[]; skipped: string[] }>(`${base}/defaults`, { method: "POST", body: {}, token }),
   withdraw: (token: string, rid: string, reason: string) =>
     apiRequest<unknown>(`${base}/change-requests/${rid}/withdraw`, { method: "POST", body: { reason }, token }),
 };

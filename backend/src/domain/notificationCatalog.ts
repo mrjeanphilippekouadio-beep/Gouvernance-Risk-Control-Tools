@@ -21,6 +21,8 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeInfo[] = [
   { resourceType: "MANAGEMENT", eventType: "RISK_FRAMEWORK_NO_DECIDER", label: "Dispositif sans décideur", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE", label: "Changement du Dispositif signalé à l’audit", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "RISK_FRAMEWORK_BOOTSTRAP_NOTICE", label: "Dispositif activé en amorçage", mandatory: true },
+  // q257 (DECISION-121): a risk or sub-process moved to another Dispositif; the Risk Manager group is told, nothing is blocked.
+  { resourceType: "MANAGEMENT", eventType: "OBJECT_FRAMEWORK_CHANGED", label: "Risque ou sous-processus déplacé vers un autre Dispositif", mandatory: true },
   // D5 (DECISION-074 R-6.3/R-6.4, q157, q158, SEC-PNL-04): governance safeguards, emitted after commit by GovernanceNotifier.
   { resourceType: "MANAGEMENT", eventType: "GOVERNANCE_EXCEPTION_RECORDED", label: "Action appliquée sans validation indépendante", mandatory: true },
   { resourceType: "MANAGEMENT", eventType: "GOVERNANCE_EXCEPTIONS_TO_REVIEW", label: "Actions sans validation indépendante à revoir", mandatory: true },

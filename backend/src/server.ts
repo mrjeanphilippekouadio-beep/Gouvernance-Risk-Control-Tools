@@ -263,6 +263,7 @@ const notifier = trackedNotifier(
 
 // Lot V2 (DECISION-100/102): level and named-people list of controls, anomalies, action plans and KPIs.
 const resourceVisibilityManager = new ResourceVisibilityManager(new PostgresResourceAccessRepository(pool), auditRepository, userRepository, notificationRepository);
+const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
 const riskService = new RiskService(
   riskRepository,
   auditRepository,
@@ -274,6 +275,7 @@ const riskService = new RiskService(
   visibilityResolver,
   notificationRepository,
   resourceVisibilityManager,
+  riskFrameworkRepository, // F-B6b-04: Dispositif before/after on a risk's process change
 );
 const departmentService = new DepartmentService(departmentRepository, auditRepository, processRepository);
 // DECISION-074 D4: one gate for every self-validation guard, one query object for validators / third parties / markers.
@@ -289,6 +291,8 @@ const processService = new ProcessService(
   userRepository,
   selfValidationGate,
   resourceVisibilityManager,
+  riskFrameworkRepository, // B-6c: archive refused while an assignment is pending
+  notificationRepository, // q257: Risk Managers told when a sub-process changes Dispositif
 );
 const processEvaluationModeRequestService = new ProcessEvaluationModeRequestService(
   processEvaluationModeRequestRepository,
@@ -306,7 +310,7 @@ const organizationProfileService = new OrganizationProfileService(
 const governanceHealthService = new GovernanceHealthService(new PostgresGovernanceHealthRepository(pool), organizationProfileRepository);
 // R3 / R5 (q227): the « dernière activité » retention and the « Vos données » notice.
 const privacyService = new PrivacyService(new PostgresLastSeenRetentionRepository(pool), configRepository, auditRepository);
-const auditLogService = new AuditLogService(auditRepository);
+const auditLogService = new AuditLogService(auditRepository, userRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository, visibilityResolver, resourceVisibilityManager);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository, selfValidationGate);
 const effectivenessService = new ControlEffectivenessService(
@@ -335,7 +339,6 @@ const findingService = new FindingService(
   selfValidationGate,
 );
 const notificationService = new NotificationService(notificationRepository, notificationSubscriptionRepository, auditRepository);
-const riskFrameworkRepository = new PostgresRiskFrameworkRepository(pool);
 const governanceDesignationRepository = new PostgresGovernanceDesignationRepository(pool);
 const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository, governanceDesignationRepository, new PostgresSensitiveViewGrantRepository(pool), resourceVisibilityManager);
 const governanceDesignationService = new GovernanceDesignationService(governanceDesignationRepository, auditRepository, userRepository, roleRepository, governanceQueries, configRepository);

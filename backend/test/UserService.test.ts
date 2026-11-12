@@ -312,6 +312,27 @@ describe("UserService", () => {
     await expect(userService.suspend(admin, user.id, "REQ-9", "Motif de test")).rejects.toThrow(ValidationError);
   });
 
+  it("q251: new journal rows carry the user id only, never the e-mail or display name", async () => {
+    const events: unknown[] = [];
+    const audit: AuditRepository = { ...inMemoryAuditRepository(), record: async (e) => void events.push(e) };
+    const roleService = new RoleService(inMemoryRoleRepository(), audit);
+    const userService = new UserService(inMemoryUserRepository(), audit, roleService);
+    const role = await seedRole(roleService, admin);
+    const user = await userService.create(admin, { email: "secret.person@djamo.com", displayName: "Secret Person", roleId: role.id }, "REQ-Q251a");
+    await userService.update(admin, user.id, { displayName: "Renamed Person" }, "REQ-Q251b");
+    await userService.suspend(admin, user.id, "REQ-Q251c", "Départ");
+    await userService.reactivate(admin, user.id, "REQ-Q251d", "Retour");
+    const userRows = (events as Array<{ entityType: string; entityId: string }>).filter((e) => e.entityType === "User");
+    expect(userRows.length).toBeGreaterThanOrEqual(4);
+    const dump = JSON.stringify(userRows);
+    for (const leak of ["secret.person", "Secret Person", "Renamed Person"]) expect(dump).not.toContain(leak);
+    expect(userRows.every((e) => e.entityId === user.id)).toBe(true);
+    // q272: the rename row says the name changed (no value); a non-rename update does not carry the flag.
+    const updates = (userRows as unknown as Array<{ action: string; newValue: Record<string, unknown> }>).filter((e) => e.action === "UPDATE" && e.newValue);
+    expect(updates[0]!.newValue["displayNameChanged"]).toBe(true);
+    expect(updates.slice(1).some((e) => "displayNameChanged" in e.newValue)).toBe(false);
+  });
+
   it("q177: suspend and reactivate require a reason, audited with the action; without one nothing changes", async () => {
     const events: Array<{ action: string; reason: string | null }> = [];
     const audit: AuditRepository = { ...inMemoryAuditRepository(), record: async (e) => void events.push(e as never) };

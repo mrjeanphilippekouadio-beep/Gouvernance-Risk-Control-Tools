@@ -43,6 +43,38 @@ const sampleEvents: AuditEvent[] = Array.from({ length: 10 }, (_, i) => ({
   requestId: `REQ-${i}`,
 }));
 
+describe("AuditLogService q251 names joined at read time", () => {
+  const users = {
+    async getById(tenantId: string, id: string) {
+      return tenantId === "tenant-1" && id === "user-1" ? { id, displayName: "JP Dupont" } : null;
+    },
+  } as unknown as import("../src/domain/repositories/UserRepository.js").UserRepository;
+  const userEvent = (over: Partial<AuditEvent>): AuditEvent => ({ ...sampleEvents[0]!, entityType: "User", entityId: "user-1", ...over });
+
+  it("adds the actor and target display names from the id, and the id alone when the account does not resolve", async () => {
+    const service = new AuditLogService(fakeAuditRepository([userEvent({}), userEvent({ id: "e2", userId: "gone", entityId: "gone" })]), users);
+    const [known, gone] = await service.listRecent(reader);
+    expect(known).toMatchObject({ userId: "user-1", userDisplayName: "JP Dupont", entityDisplayName: "JP Dupont" });
+    expect(gone).toMatchObject({ userId: "gone", entityId: "gone" });
+    expect(gone).not.toHaveProperty("userDisplayName");
+    expect(gone).not.toHaveProperty("entityDisplayName");
+  });
+});
+
+describe("AuditLogService SEC-q251-03 grouped name read", () => {
+  it("reads all names with one getByIds call, tenant-scoped, and marks them as current", async () => {
+    const calls: Array<[string, string[]]> = [];
+    const users = {
+      async getByIds(tenantId: string, ids: string[]) { calls.push([tenantId, ids]); return [{ id: "user-1", displayName: "JP Dupont" }]; },
+      async getById() { throw new Error("per-id read must not be used"); },
+    } as unknown as import("../src/domain/repositories/UserRepository.js").UserRepository;
+    const service = new AuditLogService(fakeAuditRepository(sampleEvents), users);
+    const rows = await service.listRecent(reader);
+    expect(calls).toEqual([["tenant-1", ["user-1"]]]);
+    expect(rows[0]).toMatchObject({ userDisplayName: "JP Dupont", namesAreCurrent: true });
+  });
+});
+
 describe("AuditLogService", () => {
   it("lists recent events for the actor's tenant, respecting the limit", async () => {
     const service = new AuditLogService(fakeAuditRepository(sampleEvents));

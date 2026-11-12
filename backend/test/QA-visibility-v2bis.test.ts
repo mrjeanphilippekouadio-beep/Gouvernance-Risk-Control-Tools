@@ -51,8 +51,8 @@ describe("QA-visibility-v2bis STATIC", () => {
   });
   it("no migration: 083 is still the last one (DECISION-107 adds no schema)", () => {
     const names = execFileSync("ls", [join(ROOT, "database", "postgresql", "migrations")], { encoding: "utf8" }).split("\n").filter((f) => f.endsWith(".sql") && !f.endsWith(".down.sql"));
-    // the only schemas after 083 are lot V4 (084, resource.readall) the D6 panel (085) and its thresholds (086), never this batch
-    expect(names.sort((a, b) => a.localeCompare(b)).filter((n) => n > "083_resource_visibility_v2.sql")).toEqual(["084_resource_readall.sql", "085_governance_tracking.sql", "086_governance_thresholds.sql", "087_named_access_expiry.sql"]);
+    // the only schemas after 083 are lot V4 (084, resource.readall) the D6 panel (085) and its thresholds (086), the V5 named-access expiry (087) the B-6c process guard (088) the B-6c sole-Risk-Manager regime (089) and its request-time freeze (090) the B-13 default / archive guard (091), never this batch
+    expect(names.sort((a, b) => a.localeCompare(b)).filter((n) => n > "083_resource_visibility_v2.sql")).toEqual(["084_resource_readall.sql", "085_governance_tracking.sql", "086_governance_thresholds.sql", "087_named_access_expiry.sql", "088_process_framework_guard.sql", "089_sole_risk_manager_assignment.sql", "090_sole_rm_frozen_at_request.sql", "091_framework_default_archive_guard.sql"]);
   });
   it("V3: the list query is paginated (LIMIT / OFFSET, limit bounded to 500)", () => {
     const src = read("backend", "src", "infrastructure", "database", "postgres", "PostgresResourceAccessRepository.ts");

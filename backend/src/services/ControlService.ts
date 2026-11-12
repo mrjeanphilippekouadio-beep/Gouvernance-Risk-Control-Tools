@@ -11,6 +11,9 @@ import type { VisibilityResolver } from "./VisibilityResolver.js";
 import { READER_DEFAULT_SCOPE, type Visibility } from "../domain/visibility.js";
 import type { ResourceVisibilityManager, VisibilityTarget } from "./resourceVisibility.js";
 import type { ResourceVisibilityState } from "../domain/repositories/ResourceAccessRepository.js";
+import { auditPersonTextPair, auditWithoutPersonText } from "./auditPersonText.js";
+
+const CONTROL_PERSON_FIELDS = ["executor"] as const;
 
 /**
  * Rules ported from apps-script-legacy/11_Controles.gs (validateControle_):
@@ -102,7 +105,7 @@ export class ControlService {
       entityId: control.id,
       action: "CREATE",
       oldValue: null,
-      newValue: control,
+      newValue: auditWithoutPersonText(control, CONTROL_PERSON_FIELDS),
       reason: null,
       requestId,
     });
@@ -198,8 +201,7 @@ export class ControlService {
         entityType: "Control",
         entityId: id,
         action: input.status ? "STATUS_CHANGE" : "UPDATE",
-        oldValue: raw,
-        newValue: after,
+        ...auditPersonTextPair(raw, after, CONTROL_PERSON_FIELDS),
         reason: null,
         requestId,
       });
@@ -221,7 +223,7 @@ export class ControlService {
       entityType: "Control",
       entityId: id,
       action: "DELETE",
-      oldValue: before,
+      oldValue: auditWithoutPersonText(before, CONTROL_PERSON_FIELDS),
       newValue: null,
       reason,
       requestId,

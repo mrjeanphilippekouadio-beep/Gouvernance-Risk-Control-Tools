@@ -115,7 +115,8 @@ export function withMasteryIndependence<V extends { masteryAuthoritativeSource: 
 
 export type ChangeRequestKind = "ACTIVATE_VERSION" | "ASSIGN_PROCESS" | "SET_DEFAULT";
 export type ChangeRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
-export type DecisionRegime = "NORMAL" | "FALLBACK" | "BOOTSTRAP";
+/** SOLE_RM (q252 A): the sole active Risk Manager confirmed their own ASSIGN_PROCESS request. */
+export type DecisionRegime = "NORMAL" | "FALLBACK" | "BOOTSTRAP" | "SOLE_RM";
 
 export interface RiskFrameworkChangeRequest {
   id: string;
@@ -137,6 +138,8 @@ export interface RiskFrameworkChangeRequest {
   ratificationStatus: "PENDING" | null;
   /** B-6d (q100): set only on a FALLBACK decision taken because the legacy approver's vote cannot exist before B-12. */
   fallbackCause: "LEGACY_APPROVER_PRE_B12" | null;
+  /** q252 A: ASSIGN_PROCESS only; the requester was the sole active Risk Manager WHEN the request was created (frozen, 090). */
+  soleRmAtRequest?: boolean;
   /** B-6d (q83, I-D2, I-D8): structured motive + frozen free parameters of a BOOTSTRAP decision; null otherwise. */
   bootstrapJustification: BootstrapJustification | null;
 }
@@ -202,6 +205,48 @@ export interface RecordBootstrapDecisionInput {
   decidedBy: string;
   comment: string;
   justification: BootstrapJustification;
+}
+
+/** B-6c (q89): request to attach a PROCESS-level Process to a Dispositif; `requestedBy` is set by the service. */
+export interface CreateAssignmentRequestInput {
+  tenantId: string;
+  frameworkId: string;
+  processId: string;
+  reason: string;
+  requestedBy: string;
+  audit?: TransactionalAudit<RiskFrameworkChangeRequest>;
+}
+
+/** B-6c: outcome of an ASSIGN_PROCESS decision. `previousFrameworkId` null = the process followed the tenant default. */
+export interface AssignmentResult {
+  request: RiskFrameworkChangeRequest;
+  processId: string;
+  previousFrameworkId: string | null;
+  /** The Dispositif now attached (APPROVED) or null (REJECTED: nothing written on the process). */
+  frameworkId: string | null;
+}
+
+/** B-13: request to make an open Dispositif (with an ACTIVE version) the tenant default; `requestedBy` is set by the service. */
+export interface CreateDefaultRequestInput {
+  tenantId: string;
+  frameworkId: string;
+  reason: string;
+  requestedBy: string;
+  audit?: TransactionalAudit<RiskFrameworkChangeRequest>;
+}
+
+/** B-13: outcome of a SET_DEFAULT decision. `previousDefault` null = the tenant had none. APPROVED only: `framework` is the new default. */
+export interface DefaultResult {
+  request: RiskFrameworkChangeRequest;
+  previousDefault: RiskFramework | null;
+  framework: RiskFramework | null;
+}
+
+/** B-13: outcome of archiving a Dispositif (spec 11.1): the identity and every version closed with it. */
+export interface ArchiveFrameworkResult {
+  before: RiskFramework;
+  framework: RiskFramework;
+  versions: Array<{ before: RiskFrameworkVersion; after: RiskFrameworkVersion }>;
 }
 
 export interface DecisionResult {
