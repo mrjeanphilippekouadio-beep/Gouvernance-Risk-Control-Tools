@@ -59,7 +59,7 @@ describe("q260/q261 wiring (static guards)", () => {
 
   it("the super-administrator flag is derived from the env list and never from a role or the database", () => {
     const server = src("server.ts");
-    expect(server).toMatch(/isSuperAdmin: isSuperAdminEmail\(email, env\.SUPER_ADMIN_EMAILS\)/);
+    expect(server).toMatch(/isSuperAdmin: isSuperAdminIdentity\(email, proof\.attestedDomain, env\.SUPER_ADMIN_EMAILS, env\.SUPER_ADMIN_DOMAINS\)/);
     expect(src("domain/permissions.ts")).not.toMatch(/"platform\./);
   });
 });

@@ -50,7 +50,7 @@ describe("last_seen_at recorder", () => {
     const record = vi.fn();
     const p = new GoogleIdentityProvider("cid", async () => m, record);
     (p as unknown as { client: unknown }).client = {
-      verifyIdToken: async () => ({ getPayload: () => ({ email: "a@b.c", email_verified: true, iat }) }),
+      verifyIdToken: async () => ({ getPayload: () => ({ email: "a@b.c", email_verified: true, iat, sub: "g-1" }) }),
     };
     await p.verifyToken("x");
     await p.verifyToken("x");

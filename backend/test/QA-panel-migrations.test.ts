@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
  *    The test leaves the database in the full 071 state.
  */
 const DIR = join(__dirname, "..", "..", "database", "postgresql", "migrations");
-const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "079", "080", "081", "082", "083", "084", "085", "086", "087", "088", "089", "090", "091"] as const;
+const NUMBERS = ["066", "067", "068", "069", "070", "071", "072", "073", "074", "075", "076", "077", "078", "079", "080", "081", "082", "083", "084", "085", "086", "087", "088", "089", "090", "091", "092"] as const;
 const up = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && !f.endsWith(".down.sql"))!;
 const down = (n: string) => readdirSync(DIR).find((f) => f.startsWith(`${n}_`) && f.endsWith(".down.sql"))!;
 const read = (f: string) => readFileSync(join(DIR, f), "utf8");
@@ -52,6 +52,8 @@ describe("QA-panel migrations 066-071 (static)", () => {
     "090": [
       { dropped: "risk_framework_change_requests_sole_rm_shape_check", readded: "risk_framework_change_requests_sole_rm_shape_check" },
     ],
+    // 092: idempotent re-run of the ADD (drop-then-add of the same CHECK on the users identity pair).
+    "092": [{ dropped: "users_identity_pair_check", readded: "users_identity_pair_check" }],
   };
 
   it("DROP CONSTRAINT in an up file only on the explicit (file, constraint) whitelist, each re-added under the same name", () => {

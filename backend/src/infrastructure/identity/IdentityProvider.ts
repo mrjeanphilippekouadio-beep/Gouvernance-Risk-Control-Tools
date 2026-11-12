@@ -20,6 +20,18 @@ export interface AuthenticatedUser {
    * AUTHENTICATED e-mail. Not a permission: no role, no `users.roles` string and no request field can set it.
    */
   isSuperAdmin?: boolean;
+  /**
+   * q275: the domain the identity provider ATTESTS for this account (Google: the `hd` claim), null when it attests nothing.
+   * Each identity adapter fills it from its own proof; the rest of the code reads only this field, never a provider claim.
+   */
+  attestedDomain?: string | null;
+}
+
+/** What an adapter proved about the caller, handed to the membership lookup (q275 domain, q282 stable subject). */
+export interface IdentityProof {
+  attestedDomain: string | null;
+  /** The provider's stable account id (Google `sub`); absent for local accounts (no external provider). */
+  subject?: { provider: string; id: string };
 }
 
 /**

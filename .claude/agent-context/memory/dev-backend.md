@@ -623,3 +623,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 
 - Factorisé sans changement de comportement : service `prepareDecision` / `decisionInput` / `notifyDecided` (partagés par decideAssignment et decideSetDefault ; messages passés en paramètre), dépôt `decideUnderRule` (relecture de la règle sous FOR SHARE + UPDATE de la décision, message de conflit en paramètre). Fichier de test QA-B13 non touché (29 lignes restent, ~1 % seul).
 - Sonar : `GET /api/duplications/show?key=<projet>:<fichier>&pullRequest=N` donne les blocs (from, size). `npm ci` dans backend/ requis dans un worktree frais. Heredoc + commande composée refusés : script via Write.
+
+## 2026-11-12 F8 bis correctifs (DECISION-125/132/135, migration 092, branche feat/r1-f8bis-clients)
+
+- q275 : `AuthenticatedUser.attestedDomain` + `IdentityProof {attestedDomain, subject?}` passé par chaque adaptateur à `lookupMembership(email, proof)`. Google : `hd` (null si absent), `sub` exigé. Local : null par défaut, `LOCAL_AUTH_ATTESTED_DOMAIN` (refusée en production au démarrage). Règle unique `isSuperAdminIdentity` (config/superAdminEmails.ts) : e-mail listé ET domaine attesté = domaine de l'adresse ET dans `SUPER_ADMIN_DOMAINS`. Test de garde : aucune lecture de `.hd` hors adaptateur Google.
+- q282 A : `users.identity_provider/identity_subject` (092, unique actif), liaison à la première connexion par `identityBinding.ts` (UPDATE ... IS NULL + audit dans une transaction, sans le `sub` dans le journal) ; sub différent = connexion refusée. Rebind = DevOps (NULL les deux colonnes).
+- q277 A : `TenantRepository.setActiveAudited` (optionnel) : verrou consultatif plateforme + FOR UPDATE + règle « un autre super-admin actif hors client et hors acteur » + état + audit, une transaction (SEC-F8B-01/02). `TenantService` 3e param optionnel `{emails, domains}`. Secours documenté : docs/security/super-administrateurs-secours.md.
+- QA-F8B-01/02 : index uniques 092 (`tenants_name_normalized_uq`, `audit_log_risk_import_once_uq` sur RiskImport reimport=false), 23505 mappé en ConflictError (ALREADY_IMPORTED pour l'import) dans le dépôt d'audit.
+- Fixtures Google des tests QA-panel2-unit/lastSeen : ajout de `sub`. Contiguïté réalignée pour 092 (whitelist DROP CONSTRAINT : 092 re-crée son CHECK).
+- Outillage : heredoc + git dans une même commande refusé ; Write d'un script puis exécution seule. Tests live : `QA_SWP_PGHOST=/var/run/postgresql QA_SWP_PGPORT=55442 QA_SWP_PGDB=<db>` (test/F8bisHardening.test.ts).

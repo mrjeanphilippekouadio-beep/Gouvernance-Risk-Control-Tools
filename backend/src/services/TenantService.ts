@@ -1,7 +1,7 @@
-import type { TenantRepository } from "../domain/repositories/TenantRepository.js";
+import type { SuperAdminSurvivalRule, TenantRepository } from "../domain/repositories/TenantRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { CreateTenantInput, Tenant, UpdateTenantInput } from "../domain/entities/Tenant.js";
-import type { AuditAction } from "../domain/entities/AuditEvent.js";
+import type { AuditAction, AuditEvent } from "../domain/entities/AuditEvent.js";
 import { ConflictError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requireSuperAdmin } from "../domain/permissions.js";
 import { isAcceptableReason } from "../domain/governance/selfValidation.js";
@@ -30,6 +30,8 @@ export class TenantService {
   constructor(
     private readonly tenants: TenantRepository,
     private readonly audit: AuditRepository,
+    /** q277: the server's super-administrator config. Optional (older callers/tests): without it the survival rule is not applied. */
+    private readonly superAdmins?: { emails: readonly string[]; domains: readonly string[] },
   ) {}
 
   async list(actor: AuthenticatedUser): Promise<Tenant[]> {
@@ -81,6 +83,19 @@ export class TenantService {
     const before = await this.get(actor, id);
     if (!before.active) throw new ConflictError("This client is already inactive");
 
+    // SEC-F8B-02: state + both audit rows in ONE transaction; q277: refused if no other super-administrator could reactivate.
+    if (this.tenants.setActiveAudited) {
+      const survivalRule: SuperAdminSurvivalRule | undefined = this.superAdmins
+        ? { actorUserId: actor.userId, emails: this.superAdmins.emails, domains: this.superAdmins.domains }
+        : undefined;
+      return this.tenants.setActiveAudited({
+        id,
+        active: false,
+        expectedActive: true,
+        survivalRule,
+        audit: (r) => this.events(actor, r.after, "STATUS_CHANGE", r.before, r.after, why, requestId),
+      });
+    }
     const after = await this.tenants.update(id, { active: false });
     await this.record(actor, after, "STATUS_CHANGE", before, after, why, requestId);
     return after;
@@ -101,6 +116,14 @@ export class TenantService {
       throw new ValidationError("The reactivation must be done by a different super-administrator than the one who deactivated");
     }
 
+    if (this.tenants.setActiveAudited) {
+      return this.tenants.setActiveAudited({
+        id,
+        active: true,
+        expectedActive: false,
+        audit: (r) => this.events(actor, r.after, "STATUS_CHANGE", r.before, r.after, why, requestId),
+      });
+    }
     const after = await this.tenants.update(id, { active: true });
     await this.record(actor, after, "STATUS_CHANGE", before, after, why, requestId);
     return after;
@@ -121,7 +144,7 @@ export class TenantService {
     return reason;
   }
 
-  /** QA-F8-01: no two clients with the same name (case/space-insensitive). Check-then-write: no unique index (no migration). */
+  /** QA-F8-01: friendly early check; QA-F8B-01: the unique index of migration 092 is what guarantees it under concurrency. */
   private async assertNameFree(name: string, exceptId: string | null): Promise<void> {
     const wanted = normalizeName(name);
     const clash = (await this.tenants.list()).find((t) => t.id !== exceptId && normalizeName(t.name) === wanted);
@@ -137,6 +160,19 @@ export class TenantService {
     reason: string | null,
     requestId: string,
   ): Promise<void> {
+    for (const event of this.events(actor, target, action, before, after, reason, requestId)) await this.audit.record(event);
+  }
+
+  /** The audit rows of an action: in the actor's tenant AND in the targeted tenant. */
+  private events(
+    actor: AuthenticatedUser,
+    target: Tenant,
+    action: AuditAction,
+    before: Tenant | null,
+    after: Tenant,
+    reason: string | null,
+    requestId: string,
+  ): Array<Omit<AuditEvent, "id" | "timestamp">> {
     const base = {
       userId: actor.userId,
       entityType: "Tenant",
@@ -147,7 +183,8 @@ export class TenantService {
       reason,
       requestId,
     };
-    await this.audit.record({ ...base, tenantId: actor.tenantId });
-    if (target.id !== actor.tenantId) await this.audit.record({ ...base, tenantId: target.id });
+    const events = [{ ...base, tenantId: actor.tenantId }];
+    if (target.id !== actor.tenantId) events.push({ ...base, tenantId: target.id });
+    return events;
   }
 }
