@@ -449,3 +449,14 @@ Mémoire persistante du rôle QA sur GRC Tools. À lire en premier par tout agen
 ## 2026-11-11 (retest court) — QA-B13 sur e98f605 — RETEST_PASS
 
 - Factorisation Sonar sans changement de comportement : B13 live 37/37, B6c live 60/60, suite 2920, Playwright B-13 35/35. Rien de nouveau à retenir hors méthode : après un refactor pur, rejouer les suites qui traversent le code factorisé (ici aussi B-6c via ASSIGN_PROCESS).
+
+## 2026-11-12 — QA import « familles et sous-catégories » (q280/q283, DECISION-133/135 ; a03d826) — PARTIAL_PASS
+
+- Rapport `docs/qa/qa-import-familles-2026-11-12.md`. `backend/test/QA-Import.test.ts` 26 tests (24 + 2 `it.fails`, live `QA_IMP_LIVE=1`, port 8096, base `grc_qa_imp`), `tests/integration/qa-import-playwright.mjs` 25/26 (monte `grc_qa_impui`, port 8097). `qa-b6c-server.sh` accepte `QA_TRUST_PROXY_HOPS`. Suite 2950.
+- QA-IMP-01 MAJOR : `commit` réécrit `[...existant lu avant, ...nouvelles]` par un UPDATE inconditionnel : édition cliente concurrente écrasée (13/30 courses, les deux en 200). QA-IMP-02 MINOR audit d'import hors transaction (5xx mais entrées écrites). QA-IMP-03 MINOR front : 403 métier avalé (`isForbidden`). QA-IMP-04 TRIVIAL aperçu sans contrôle RM, commit avec.
+- Leçons : (1) limiteur par IP (30/15 min) : monter le serveur avec `TRUST_PROXY_HOPS=1` et varier `X-Forwarded-For` dans les tests, un test dédié pour le 429 ; (2) un oracle navigateur par regex large sur le texte de la page est vacueux (le mot « droit » figure dans l'aide statique) : chercher la phrase exacte du serveur ; (3) mesurer une course par ratio sur 30 itérations décalées et classer les issues (les deux conservées / client perdu / import perdu), pas par une seule exécution ; (4) un test d'audit par filtre « première ligne avec la clé » prend l'ancienne ligne d'un test précédent : filtrer par empreinte ; (5) 64 Ko exacts : construire le fichier octet par octet puis asserter la taille avant d'envoyer.
+
+## 2026-11-12 (retest) — QA import familles sur 822d68f — RETEST_PASS (VERT)
+
+- QA-IMP-01..04 clos. `QA-Import.test.ts` 30/30 (R3 compat PATCH, R4 courses avec `expectedUpdatedAt`, L7 bande large, L8 bidi), Playwright 26/26, suite 2958.
+- Leçons : (1) quand un correctif change le comportement observé (aperçu désormais refusé au non-RM), réviser l'oracle navigateur avec justification et tester la NOUVELLE règle ; (2) un contrôle optimiste doit se tester dans les deux sens (import vs PATCH avec et sans la valeur attendue) et au niveau de la précision (aller-retour ms) ; (3) `\s` en JS inclut U+FEFF : une normalisation par `\s` fusionne ce caractère avec l'espace.

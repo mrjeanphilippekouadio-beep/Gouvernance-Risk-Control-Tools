@@ -79,8 +79,11 @@ export interface RiskFrameworkRepository {
 
   /** Copies `sourceVersionId` into a new DRAFT (version_number = max + 1). */
   createDraftFrom(tenantId: string, frameworkId: string, sourceVersionId: string, createdBy: string, audit?: TransactionalAudit<RiskFrameworkVersion>): Promise<RiskFrameworkVersion>;
-  /** DRAFT only (0 rows -> error). Only the provided keys are written. */
-  updateDraft(tenantId: string, frameworkId: string, versionId: string, fields: UpdateDraftParams, editedBy: string, audit?: TransactionalAudit<RiskFrameworkVersion>): Promise<RiskFrameworkVersion>;
+  /**
+   * DRAFT only (0 rows -> error). Only the provided keys are written. `expectedUpdatedAt`: optimistic concurrency,
+   * refused with a ConflictError (code DRAFT_CHANGED) if the draft was modified since the caller read it.
+   */
+  updateDraft(tenantId: string, frameworkId: string, versionId: string, fields: UpdateDraftParams, editedBy: string, audit?: TransactionalAudit<RiskFrameworkVersion>, expectedUpdatedAt?: Date): Promise<RiskFrameworkVersion>;
   /** DRAFT -> ARCHIVED (abandon). */
   discardDraft(tenantId: string, frameworkId: string, versionId: string, archivedBy: string, reason: string, audit?: TransactionalAudit<RiskFrameworkVersion>): Promise<RiskFrameworkVersion>;
 
