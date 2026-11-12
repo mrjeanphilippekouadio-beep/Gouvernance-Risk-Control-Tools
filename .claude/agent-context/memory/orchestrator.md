@@ -64,3 +64,9 @@ Le PO a constaté que le frontend n'avançait plus : 13 écrans pour 43 modules 
   - `feat/r1-f8bis-clients` (sans migration) : A10 ORANGE + escalade q275 (`hd`), QA PARTIAL_PASS (concurrence) ; lot correctif après q275–q277 et après le merge de B-13 (index unique = migration 092).
 - File de migrations à tenir séquentielle : 091 B-13 → 092 F8-bis → q253 → q266 → conservation L1 (puis L2a/L2b/L2c/L3) → INFO-12 + SEC-B13-01. Une branche avec une migration ne part qu'après le merge de la précédente (sinon trou de numérotation et tests de contiguïté rouges).
 - Leçons du jour : un conflit de code résolu par l'orchestrateur appelle un retest QA explicite ; Sonar refuse les scripts QA qui écrivent dans /tmp ou passent une variable d'environnement / une valeur d'API en argument de commande (passer le SQL sur stdin) ; un worktree neuf doit compiler `packages/design-system` avant le build front.
+
+### 2026-11-12 (soir) — leçons
+- Coupure de limite : une réponse cockpit (q285, 07:41) n'a été vue qu'à 16:47. Après chaque reprise, relire le cockpit AVANT tout le reste (DECISION-045).
+- Un agent peut rester bloqué sans rapport, ni notification de fin (A10 silencieux 50 min sur un `rm` dans `node_modules`). Au point de contrôle, regarder l'horodatage de la dernière ligne de `tasks/<id>.output` et relancer par SendMessage.
+- Codex : quota du compte épuisé depuis la PR #251. Le signaler dans chaque question de fusion tant qu'il ne relit plus. QA et Sécurité restent les seuls verrous.
+- Avant de rapatrier `qa/*` ou `sec/*`, corriger soi-même les chemins relatifs (`bash`, `sleep`) et les caractères de direction écrits en clair (`\uXXXX`) : Sonar les signale à chaque fois (S4036, S6389).
