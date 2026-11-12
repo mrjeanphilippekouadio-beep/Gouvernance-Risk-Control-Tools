@@ -20,7 +20,9 @@ ALTER TABLE risk_framework_change_requests ADD CONSTRAINT risk_framework_change_
     kind IN ('ASSIGN_PROCESS', 'SET_DEFAULT') AND status = 'APPROVED' AND decided_by = requested_by AND sole_rm_at_request
     AND decider_group IS NOT NULL AND decider_group = 'RISK_MANAGER' AND ratification_status IS NULL AND fallback_cause IS NULL
     AND bootstrap_justification IS NULL AND decision_comment IS NOT NULL AND length(btrim(decision_comment)) > 0
-  ));
+  )) NOT VALID;
+-- SEC-093-02 : NOT VALID, les décisions SOLE_RM déjà écrites (possiblement sans drapeau, entre 089 et 090) ne sont jamais revalidées
+-- ni réécrites ; le CHECK s'applique à toute écriture nouvelle.
 
 -- 2. Garde 055/057 + sole_rm_at_request dans le contenu figé.
 CREATE OR REPLACE FUNCTION risk_framework_change_requests_guard() RETURNS trigger LANGUAGE plpgsql
@@ -100,7 +102,7 @@ BEGIN
   VALUES (
     NEW.tenant_id, NEW.id, 'User', NEW.id, 'UPDATE',
     jsonb_build_object('identityLinked', true, 'identityProvider', OLD.identity_provider),
-    jsonb_build_object('identityLinked', NEW.identity_subject IS NOT NULL, 'identityProvider', NEW.identity_provider),
+    jsonb_build_object('identityLinked', NEW.identity_subject IS NOT NULL, 'identityProvider', NEW.identity_provider, 'executedBy', session_user::text),
     CASE WHEN NEW.identity_subject IS NULL
       THEN 'Identity binding cleared (DevOps rebind): the account will be linked again at the next login'
       ELSE 'Identity binding changed directly in the database' END,
