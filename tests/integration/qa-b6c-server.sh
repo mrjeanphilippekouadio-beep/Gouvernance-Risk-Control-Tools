@@ -11,7 +11,7 @@ cd "$R/backend" || exit 1
 SALT=aabbccddeeff0011
 HASH="scrypt\$$SALT\$$(node -e 'const c=require("crypto");process.stdout.write(c.scryptSync("whatever",process.argv[1],64).toString("hex"))' $SALT)"
 USERS=$(node -e 'const h=process.argv[1];console.log(JSON.stringify(["rm1","rm2","rm3","rm4","plain","adm","aud","rmb","rmb2","pu","solo","solo2","saud","scom","sx","solod"].map(n=>({email:n+"@b6c.test",passwordHash:h}))))' "$HASH")
-env NODE_ENV=development APP_ENV=development PORT=${QA_PORT:-8094} DATABASE_URL="postgresql://postgres@127.0.0.1:55442/${QA_DB:-grc_qa_b6c}" \
+env TRUST_PROXY_HOPS=${QA_TRUST_PROXY_HOPS:-0} NODE_ENV=development APP_ENV=development PORT=${QA_PORT:-8094} DATABASE_URL="postgresql://postgres@127.0.0.1:55442/${QA_DB:-grc_qa_b6c}" \
   AUTH_PROVIDER=local LOCAL_AUTH_USERS_JSON="$USERS" LOCAL_AUTH_TOKEN_SECRET="$(node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))')" \
   CORS_ALLOWED_ORIGINS="http://127.0.0.1:5198" \
   node_modules/.bin/tsx --import "$R/tests/integration/qa-f7s1-test-preload.mjs" src/server.ts >/var/tmp/qab6c-server.log 2>&1 &
