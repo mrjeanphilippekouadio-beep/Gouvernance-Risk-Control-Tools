@@ -85,6 +85,23 @@ export interface ChangeRequest {
 /** Draft parameters sent on PATCH (committeeVoteCustom is never sent from this screen; appetiteThresholds replaces the whole list). */
 export type DraftPatch = Partial<Omit<FrameworkParams, "committeeVoteCustom">>;
 
+/** Mirrors backend FrameworkFamilyImportService (DECISION-133). */
+export type FamilyImportVerdict = "ACCEPTED" | "WARNING" | "ERROR" | "KEPT";
+export interface FamilyImportLine { line: number; verdict: FamilyImportVerdict; family?: string; subCategory?: string; messages: string[] }
+export interface FamilyImportReport {
+  fingerprint: string;
+  dataLines: number;
+  acceptedCount: number;
+  keptCount: number;
+  warningCount: number;
+  errorCount: number;
+  withoutFamily: string[];
+  notices: string[];
+  lines: FamilyImportLine[];
+  thresholds: { strict: number; moderate: number };
+  createdCount?: number;
+}
+
 const base = "/api/v1/risk-frameworks";
 
 export const riskFrameworksApi = {
@@ -98,6 +115,17 @@ export const riskFrameworksApi = {
     apiRequest<FrameworkVersion>(`${base}/${id}/versions`, { method: "POST", body: fromVersionId ? { fromVersionId } : {}, token }),
   updateDraft: (token: string, id: string, versionId: string, body: DraftPatch) =>
     apiRequest<FrameworkVersion>(`${base}/${id}/versions/${versionId}`, { method: "PATCH", body, token }),
+  importFamiliesPreview: (token: string, id: string, versionId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<FamilyImportReport>(`${base}/${id}/versions/${versionId}/import-families/preview`, { method: "POST", formData: form, token });
+  },
+  importFamiliesCommit: (token: string, id: string, versionId: string, file: File, fingerprint: string) => {
+    const form = new FormData();
+    form.append("fingerprint", fingerprint);
+    form.append("file", file);
+    return apiRequest<FamilyImportReport>(`${base}/${id}/versions/${versionId}/import-families/commit`, { method: "POST", formData: form, token });
+  },
   discardDraft: (token: string, id: string, versionId: string, reason: string) =>
     apiRequest<FrameworkVersion>(`${base}/${id}/versions/${versionId}/discard`, { method: "POST", body: { reason }, token }),
   requestActivation: (token: string, id: string, versionId: string, reason: string) =>

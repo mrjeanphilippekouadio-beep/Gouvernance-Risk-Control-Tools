@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Button, FormField, MessageBanner, Table } from "@djamo/design-system";
 import { riskFrameworksApi, type AppetiteEntry, type FrameworkVersion } from "../../api/riskFrameworks";
 import type { RiskCategory } from "../../api/riskCategories";
+import { FamilyImportPanel } from "./FamilyImportPanel";
 import { describeError, isForbidden } from "../indicators/shared";
 
 /** Editable mirror of an AppetiteEntry (numbers as text). `label` is the stored label, shown while no category is chosen. */
@@ -82,7 +83,9 @@ export function AppetiteThresholdsTab({ token, frameworkId, version, categories,
     </>;
   }
 
-  return <form onSubmit={submit} aria-label="Seuils d'appétence du brouillon">
+  return <>
+  <FamilyImportPanel token={token} frameworkId={frameworkId} versionId={version.id} onImported={onSaved} />
+  <form onSubmit={submit} aria-label="Seuils d'appétence du brouillon">
     {error && <div role="alert"><MessageBanner tone="danger">{error}</MessageBanner></div>}
     {saved && <div role="status"><MessageBanner tone="success">Seuils enregistrés.</MessageBanner></div>}
     {categoriesError && <MessageBanner tone="warning" title="Catégories de risque indisponibles">{categoriesError} Sans cette liste, aucune sous-catégorie ne peut être choisie.</MessageBanner>}
@@ -111,5 +114,6 @@ export function AppetiteThresholdsTab({ token, frameworkId, version, categories,
       <Button type="button" onClick={() => setRows([...rows, emptyRow()])}>Ajouter un seuil</Button>
       <Button type="submit" variant="primary" disabled={saving}>{saving ? "Enregistrement…" : "Enregistrer les seuils"}</Button>
     </div>
-  </form>;
+  </form>
+  </>;
 }

@@ -613,3 +613,12 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 
 - Factorisé sans changement de comportement : service `prepareDecision` / `decisionInput` / `notifyDecided` (partagés par decideAssignment et decideSetDefault ; messages passés en paramètre), dépôt `decideUnderRule` (relecture de la règle sous FOR SHARE + UPDATE de la décision, message de conflit en paramètre). Fichier de test QA-B13 non touché (29 lignes restent, ~1 % seul).
 - Sonar : `GET /api/duplications/show?key=<projet>:<fichier>&pullRequest=N` donne les blocs (from, size). `npm ci` dans backend/ requis dans un worktree frais. Heredoc + commande composée refusés : script via Write.
+
+## 2026-11-12 Import « familles et sous-catégories » (DECISION-133 q280, DECISION-135 q283 A) — pas de migration
+
+- `FrameworkFamilyImportService` (+ `domain/appetiteFamilies.ts`, `api/v1/riskFrameworkFamilyImport.routes.ts`, `frontend/.../FamilyImportPanel.tsx`). Routes `POST /risk-frameworks/:id/versions/:vid/import-families/preview|commit` (multipart ; commit = fichier + champ `fingerprint` sha256 de l'aperçu, 409 `IMPORT_FINGERPRINT_MISMATCH` sinon). Permission réutilisée : `riskframework.update` (aucune nouvelle).
+- L'écriture passe par `RiskFrameworkService.updateDraft` (Risk Manager, brouillon, résolution des sous-catégories, audit UPDATE inclus) ; l'import ajoute sa propre ligne d'audit (empreinte + compteurs, jamais le texte). Le service est un module séparé qui prend `Pick<RiskFrameworkService, "getVersion"|"updateDraft">`.
+- Seuils déduits de l'échelle du brouillon : strict = max de la 1re bande de criticité, modéré = max de la 2e (donne 4/9, 3/6, 3/8 des trois Dispositifs par défaut) ; pas de table de valeurs en dur.
+- Entrée client existante (même `subCategoryId`, quelle que soit l'entité) = « conservée », jamais écrasée. Sous-catégorie inactive = avertissement et ignorée (updateDraft refuse l'inactive).
+- Piège : le garde-fou `QA-B6bF` exige le nom de champ canonique `ratingScales` pour tout repo d'échelle injecté.
+- Limite connue : course entre lecture du brouillon et `updateDraft` (liste entière remplacée) ; une édition concurrente du même brouillon peut être écrasée. Pas de verrou optimiste existant sur updateDraft.
