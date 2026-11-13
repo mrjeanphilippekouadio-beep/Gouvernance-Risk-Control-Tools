@@ -306,3 +306,18 @@ Statut : **COMPLIANT_FOR_SCOPE** pour les écritures du compte utilisateur (cré
 
 Principe ajouté :
 16. Une règle « pas de nom dans le journal » vaut pour tous les champs qui portent une personne, pas seulement pour le compte : un champ texte libre (propriétaire, motif) est une copie de nom tant qu'il n'est pas contrôlé. Et un texte d'information qui décrit le journal doit dire ce qui est vrai pour les lignes anciennes et les nouvelles séparément.
+
+## Revue L2a — conservation, motifs hors journal (2026-11-13, PRIV-L2A-2026-11-13)
+
+Statut : **SOUS CONDITIONS, non fusionnable en l'état** (GAP_IDENTIFIED, REVALIDATION_REQUIRED). Document : `docs/privacy/PRIV-l2a-2026-11-13.md`. Code lu statiquement dans le worktree `agent-af8d5033fc01a3968` (f7ad5af), sans exécution.
+
+- Conception conforme à q246 A et q247 A : table `visibility_reasons`, référence dans le journal, lectures élargies incluses, instantanés épurés, affichage « motif effacé » centralisé.
+- **PRIV-L2A-01 (bloquant fusion)** : le même texte part en clair dans une seconde ligne d'audit sur deux chemins. `RoleService.assignToUser` (ROLE_CHANGE l. 771, quand un cumul fournit `cleanReason`) et `RiskService` (l. 379, ligne de déplacement de Dispositif quand périmètre et Dispositif changent ensemble). L'effacement L2b ne couvrirait pas ces copies.
+- **PRIV-L2A-02 (avant L2b)** : la garde 096 permet l'effacement à tout moment, sans fin d'effet ni durée minimale ; `grc_app_runtime` a UPDATE.
+- **PRIV-L2A-03 (décision A05 / PO)** : motifs de rôle, de révocation de groupe fixe et de déplacement de sous-processus restent en clair, sans référence. Q-251-3 n'est **pas** couvert par q246 A (ce qui était écrit dans ACTION_ITEMS est inexact).
+- **PRIV-L2A-05** : backfill avec `DISABLE TRIGGER`, vérifier la transaction du runner et le comptage de production (attendu zéro) avant application.
+- Q2 : les motifs système « Fin automatique : … » ne nomment personne mais décrivent un fait sur la personne : effaçables à la même échéance.
+- Q4 : points R5 listés dans le rapport, sans redemander au DPO (accord DECISION-116 non redemandé).
+
+Principe ajouté :
+17. Un même texte de motif n'apparaît jamais en clair dans une seconde ligne du même événement : quand un motif est déjà rangé dans un espace effaçable, les autres lignes portent la référence. Une copie non effaçable annule l'effacement.
