@@ -30,7 +30,7 @@ describe("QA-visibility-v5 STATIC", () => {
     expect(names).toContain("087_named_access_expiry.sql");
     expect(names).toContain("087_named_access_expiry.down.sql");
     expect(names.filter((n) => n.startsWith("087_") && !n.endsWith(".down.sql"))).toHaveLength(1);
-    expect(names.filter((n) => /^\d{3}_/.test(n) && n >= "094")).toHaveLength(0);
+    expect(names.filter((n) => /^\d{3}_/.test(n) && n >= "095")).toHaveLength(0);
     expect(read("backend", "src", "api", "v1", "resourceVisibility.routes.ts")).toMatch(/userIds: boundedArray\(z\.guid\(\), MAX_ACCESS_CHANGE, 1\)/);
   });
   it("the renewal route is mounted for the five types (risk on its own router, the four others through mountVisibilityRoutes)", () => {
@@ -404,11 +404,28 @@ describe.skipIf(!live)("QA-visibility-v5 on the REAL server + LOCAL PostgreSQL 1
 
   // ------------------------------------------------------------------------------------------------ LEVEL CHANGES
   describe("LEVEL changes keep the expiry rule inside NOMINATIF", () => {
-    it.fails("[QA-V5-01, EN ATTENTE DE q253] NOMINATIF -> PERIMETRE: the kept list of a PERIMETRE dossier has no expiry (migration header; the PO rules on the substance with q253)", async () => {
+    it("[QA-V5-01, q253 A decided] NOMINATIF -> PERIMETRE: the kept list of a PERIMETRE dossier keeps its expiry", async () => {
       const id = await nominatif("CONTROL");
       const r = await setVis("rm", "CONTROL", id, "PERIMETRE");
       expect(r.status, r.text.slice(0, 200)).toBe(200);
-      expect(await expiryOf("CONTROL", id), "expiry kept on a PERIMETRE list").toBeNull();
+      expect(await expiryOf("CONTROL", id), "expiry kept on a PERIMETRE list").not.toBeNull();
+    });
+    it("q253 A: a person named on a PERIMETRE dossier gets 30 days, renewable with a reason, and loses the read at closure (five types)", async () => {
+      for (const type of TYPES) {
+        const id = await insertItem(type, "PERIMETRE");
+        const r = await setVis("rm", type, id, "PERIMETRE", [UID.out2]);
+        expect(r.status, `${type}: ${r.text.slice(0, 200)}`).toBe(200);
+        const days = daysFromNow(await expiryOf(type, id, UID.out2));
+        expect(days, type).toBeGreaterThan(29.9);
+        expect(days, type).toBeLessThanOrEqual(30);
+        expect(await reads("out2", type, id), `${type} live`).toBe(true);
+        await expire(type, id, UID.out2);
+        expect(await reads("out2", type, id), `${type} expired`).toBe(false);
+        expect((await renew("rm", type, id, [UID.out2])).status, type).toBe(200);
+        expect(await reads("out2", type, id), `${type} renewed`).toBe(true);
+        await sql(CLOSE[type], [id]);
+        expect(await reads("out2", type, id), `${type} closed`).toBe(false);
+      }
     });
     it("[QA-V5-01 retest] NOMINATIF -> PERIMETRE: an expired person is never lost without a way back: renewable (200), and re-adding her is a renewal; both restore the read", async () => {
       const id = await nominatif("CONTROL");

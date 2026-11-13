@@ -190,3 +190,9 @@
 - Vérifié : pg_dump -s identique (hors jetons) down vs 001->092, up après down vs 001->093, rejeu de l'up inchangé.
 
 - 2026-11-12 SEC-093-02/01 : le CHECK SOLE_RM de 093 est posé NOT VALID (jamais de revalidation des décisions SOLE_RM de la fenêtre 089-090 ; test live Migration093). Le trigger de rebind ajoute `executedBy: session_user` dans new_value (sans le sub). Reste INFO : garde INSERT 057 ouverte, liaison NULL->valeur posée en SQL non vue.
+
+## 2026-11-13 q253 A (DECISION-121, PRIV-V5-02) : échéance 30 j sur les accès nommés d'un dossier PERIMETRE (branche feat/r1-q253-echeance-perimetre, migration 094)
+- Mécanisme de V5 réutilisé tel quel : `stampNamedExpiry` est maintenant appelé pour tout niveau non CLIENT (3 endroits : `set` du dépôt de ressources, `set` et création du dépôt de risques). Aucune fonction SQL redéfinie : `visibility_granted` applique déjà échéance + clôture à tout accès daté ; le renouvellement (`renewGrants`) n'a pas de condition de niveau, il exige seulement une échéance posée.
+- 094 = données seulement : les accès vivants sans échéance d'un dossier PERIMETRE reçoivent now()+30 j (règle de 087 pour ses accès existants : jamais de révocation immédiate). Down = ligne du suivi seulement (une échéance posée ne se retire pas : garde 087).
+- PRIV-V5-01 déjà fait en V5 (`expiryScope` côté ressources, test dans visibility-v5.test.ts ; RiskService.getAccess pareil). q254 : rien à coder, pas de réouverture.
+- Reste (INFO) : un accès écrit directement en SQL sans échéance sur un dossier PERIMETRE lit encore (visibility_granted échoue fermé seulement sur NOMINATIF, SEC-V5-02) ; fermer ça = redéfinir la fonction, non fait. Test QA-V5-01 `it.fails` converti en test réel.

@@ -347,8 +347,8 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
         `UPDATE ${root.table} SET visibility = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
         [tenantId, id, change.visibility],
       );
-      // Lot V5 (q225): a named-people dossier carries an expiry on every live access, those kept as those just added.
-      if (change.visibility === "NOMINATIF") await stampNamedExpiry(db, tenantId, type, id);
+      // Lot V5 (q225) + q253 A: a restricted dossier (NOMINATIF or PERIMETRE) carries an expiry on every live access, those kept as those just added.
+      if (change.visibility !== "CLIENT") await stampNamedExpiry(db, tenantId, type, id);
       const readersAfter = await effectiveReaders(db, tenantId, type, id);
       const widening = readersAfter.some((u) => !readersBefore.includes(u));
       return { before, after: { visibility: change.visibility, accessUserIds: await validList(db, tenantId, type, id) }, widening };

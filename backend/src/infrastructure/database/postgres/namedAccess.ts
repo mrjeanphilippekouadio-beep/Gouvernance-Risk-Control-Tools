@@ -9,7 +9,7 @@ type Db = Pick<Pool, "query">;
  * (migration 087; the database guard refuses anything longer), or until the dossier is closed. Renewable.
  */
 
-/** Dossier turned NOMINATIF (or created so): every live access still without an expiry gets now() + 30 days. */
+/** Dossier turned NOMINATIF or PERIMETRE (or created so; q253 A): every live access still without an expiry gets now() + 30 days. */
 export async function stampNamedExpiry(db: Db, tenantId: string, type: string, id: string): Promise<void> {
   await db.query(
     `UPDATE resource_access_grants SET expires_at = now() + interval '30 days'

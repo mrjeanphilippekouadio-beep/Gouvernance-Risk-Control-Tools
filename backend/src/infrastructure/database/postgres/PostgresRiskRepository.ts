@@ -173,8 +173,8 @@ export class PostgresRiskRepository implements RiskRepository {
           [input.tenantId, row.id, userId, input.grantedBy, CREATION_GRANT_REASON],
         );
       }
-      // Lot V5 (q225): a risk created NOMINATIF carries an expiry on every named access.
-      if (input.visibility === "NOMINATIF") await stampNamedExpiry(client, input.tenantId, "RISK", row.id);
+      // Lot V5 (q225) + q253 A: a risk created NOMINATIF or PERIMETRE carries an expiry on every named access.
+      if (input.visibility && input.visibility !== "CLIENT") await stampNamedExpiry(client, input.tenantId, "RISK", row.id);
       await client.query("COMMIT");
       return { risk: toDomain(row), created: true };
     } catch (err) {
@@ -264,8 +264,8 @@ export class PostgresRiskRepository implements RiskRepository {
         `UPDATE risks SET visibility = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
         [tenantId, riskId, change.visibility],
       );
-      // Lot V5 (q225): a named-people dossier carries an expiry on every live access, those kept as those just added.
-      if (change.visibility === "NOMINATIF") await stampNamedExpiry(db, tenantId, "RISK", riskId);
+      // Lot V5 (q225) + q253 A: a restricted dossier (NOMINATIF or PERIMETRE) carries an expiry on every live access, those kept as those just added.
+      if (change.visibility !== "CLIENT") await stampNamedExpiry(db, tenantId, "RISK", riskId);
       const { rows: [gain] } = await db.query<{ widening: boolean }>(
         `SELECT EXISTS (SELECT 1 FROM users WHERE tenant_id = $1 AND deleted_at IS NULL AND risk_visible_to($1, $2, id)
                           AND NOT (id = ANY($3::uuid[]))) AS widening`,
