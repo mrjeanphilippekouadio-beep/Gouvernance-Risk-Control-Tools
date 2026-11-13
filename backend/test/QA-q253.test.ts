@@ -132,6 +132,26 @@ describe.skipIf(!live)("QA-q253 sur le VRAI serveur + PostgreSQL 16 LOCAL", () =
       }
     });
 
+    it("SEC-Q253-01 : un acces nominatif NON DATE ecrit en SQL sur un dossier PERIMETRE (ou NOMINATIF) ne donne AUCUNE lecture (404 comme un inconnu), cinq types ; un dossier CLIENT reste lisible ; un acces date vivant lit", async () => {
+      for (const type of TYPES) {
+        const p = await insertItem(type, "PERIMETRE");
+        await grant(type, p, UID.out2); // SQL direct, sans echeance
+        expect(await reads("out2", type, p), `${type} PERIMETRE non date`).toBe(false);
+        expect((await get("out2", `${PATH[type]}/${p}`)).status).toBe((await get("out", `${PATH[type]}/${p}`)).status);
+        const n = await insertItem(type, "NOMINATIF");
+        await grant(type, n, UID.out2);
+        expect(await reads("out2", type, n), `${type} NOMINATIF non date`).toBe(false);
+        const c = await insertItem(type, "CLIENT");
+        await grant(type, c, UID.out2);
+        expect(await reads("out2", type, c), `${type} CLIENT`).toBe(true);
+        const d = await insertItem(type, "PERIMETRE");
+        await grant(type, d, UID.out2, "10 days");
+        expect(await reads("out2", type, d), `${type} PERIMETRE date`).toBe(true);
+        // le Risk Manager le dossier PERIMETRE non date : lecture inchangee
+        expect(await reads("rm", type, p), `${type} RM`).toBe(true);
+      }
+    });
+
     it("risque CREE en PERIMETRE avec une liste nominative (POST /risks) : chaque personne nommee porte une echeance de 30 jours", async () => {
       const body = { process: "Q253", description: "Q253 create", visibility: "PERIMETRE", accessUserIds: [UID.out2], departmentId: I("201") };
       const r = await call("rm", "POST", "/risks", body);
@@ -385,6 +405,8 @@ describe.skipIf(!live)("M migration 094 (base jetable, sans serveur)", () => {
   const U = [1, 2, 3].map((n) => `bbbbbbbb-0000-4000-8000-0000000001${n}0`);
   const ID = (n: number) => `cccccccc-0000-4000-8000-0000000002${String(n).padStart(2, "0")}`;
   const snapshot = () => rows("SELECT resource_type || '/' || resource_id || '/' || user_id || '/' || COALESCE(expires_at::text, 'NULL') || '/' || (revoked_at IS NOT NULL) FROM resource_access_grants ORDER BY 1");
+  /** Number of public functions with a pinned search_path (a trigger / guard function must keep it, pg_temp last). */
+  const pinned = () => Number(rows("SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proconfig::text LIKE '%search_path=pg_catalog, public, pg_temp%'")[0]);
   const fnDefs = () => rows("SELECT p.proname || '=' || md5(pg_get_functiondef(p.oid)) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' ORDER BY 1");
 
   it("094 sur une base 001..093 avec donnees : seuls les acces VIVANTS SANS ECHEANCE d'un dossier PERIMETRE sont dates a +30 j (cinq types) ; CLIENT, acces deja dates (NOMINATIF et PERIMETRE), acces revoques : intacts ; aucune ligne perdue ; rejeu et up / down / up sans effet", () => {
@@ -420,7 +442,20 @@ describe.skipIf(!live)("M migration 094 (base jetable, sans serveur)", () => {
     const before = snapshot();
     const countBefore = rows("SELECT count(*) FROM resource_access_grants")[0];
     const defsBefore = fnDefs();
+    const pinnedBefore = pinned();
+    const logic = () => rows("SELECT trim(regexp_replace(regexp_replace(prosrc, '--[^\\n]*', '', 'g'), '\\s+', ' ', 'g')) FROM pg_proc WHERE proname = 'visibility_granted'").join(" ");
+    const logicBefore = logic();
     psql(["-1", "-f", M("094_perimeter_named_access_expiry.sql")]);
+    const defsAfterUp = fnDefs();
+    // SEC-Q253-01 : 094 redefinit UNE seule fonction (visibility_granted), la condition sans echeance passe de <> 'NOMINATIF' a = 'CLIENT' ; search_path epingle
+    const changed = defsAfterUp.filter((d, i) => d !== defsBefore[i]).map((d) => d.split("=")[0]);
+    expect(defsAfterUp.map((d) => d.split("=")[0]), "memes fonctions").toEqual(defsBefore.map((d) => d.split("=")[0]));
+    expect(changed, "une seule fonction redefinie").toEqual(["visibility_granted"]);
+    const src = rows("SELECT replace(replace(prosrc, E'\\n', ' '), '  ', ' ') FROM pg_proc WHERE proname = 'visibility_granted'")[0]!;
+    expect(src).toMatch(/visibility_own_level\(p_tenant, p_type, p_id\) = 'CLIENT'/);
+    expect(src).not.toMatch(/<> 'NOMINATIF'/);
+    expect(rows("SELECT proconfig::text FROM pg_proc WHERE proname = 'visibility_granted'")[0]).toBe("{\"search_path=pg_catalog, public, pg_temp\"}");
+    expect(pinned(), "nombre de fonctions epinglees inchange (aucune fonction non epinglee apparue)").toBe(pinnedBefore);
     const after = rows("SELECT resource_type, resource_id, user_id, expires_at IS NULL, revoked_at IS NOT NULL, round(extract(epoch FROM (expires_at - now())) / 86400)::int FROM resource_access_grants ORDER BY 1, 2, 3");
     expect(rows("SELECT count(*) FROM resource_access_grants")[0], "aucune ligne perdue").toBe(countBefore);
     const row = (t: string, n: number, u: string) => after.find((l) => l.startsWith(`${t}|${ID(n)}|${u}|`))!.split("|");
@@ -445,12 +480,34 @@ describe.skipIf(!live)("M migration 094 (base jetable, sans serveur)", () => {
     psql(["-f", M("094_perimeter_named_access_expiry.down.sql")]);
     expect(rows("SELECT count(*) FROM schema_migrations WHERE filename = '094_perimeter_named_access_expiry.sql'")[0]).toBe("0");
     expect(snapshot(), "down : donnees intactes").toEqual(stamped);
+    const afterDown = fnDefs();
+    // le down redefinit visibility_granted sans les commentaires de 087 : texte different, LOGIQUE identique (commentaires et espaces retires) ; aucune autre fonction touchee
+    expect(afterDown.filter((d, i) => d !== defsBefore[i]).map((d) => d.split("=")[0]), "down : seule visibility_granted differe (commentaires)").toEqual(["visibility_granted"]);
+    expect(logic(), "down : logique de visibility_granted = celle d'avant 094 (<> 'NOMINATIF')").toBe(logicBefore);
+    expect(logic()).toMatch(/<> 'NOMINATIF'/);
+    expect(rows("SELECT proconfig::text FROM pg_proc WHERE proname = 'visibility_granted'")[0], "down : search_path epingle").toBe("{\"search_path=pg_catalog, public, pg_temp\"}");
+    expect(pinned(), "down : nombre de fonctions epinglees inchange").toBe(pinnedBefore);
     psql(["-1", "-f", M("094_perimeter_named_access_expiry.sql")]);
     expect(snapshot(), "up apres down : aucun changement").toEqual(stamped);
-    expect(fnDefs(), "094 ne redefinit aucune fonction").toEqual(defsBefore);
+    expect(fnDefs(), "up apres down : definitions identiques a celles de l'up initial").toEqual(defsAfterUp);
+    expect(pinned(), "up apres down : fonctions epinglees").toBe(pinnedBefore);
     // une ligne ajoutee APRES 094 sans echeance n'est pas datee par un rejeu (le code pose l'echeance, pas la migration)
     psql(["-c", `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason) VALUES ('${MT}', 'RISK', '${ID(11 - 1)}', '${U[0]}', '${U[1]}', 'apres 094')`]);
     psql(["-1", "-f", M("094_perimeter_named_access_expiry.sql")]);
     expect(rows(`SELECT round(extract(epoch FROM (expires_at - now())) / 86400)::int FROM resource_access_grants WHERE grant_reason = 'apres 094'`)[0], "le rejeu date une ligne sans echeance d'un dossier PERIMETRE (comportement documente : idempotent sur les lignes datees seulement)").toBe("30");
+    // SEC-Q253-01 : table de verite de visibility_granted pour des acces ecrits EN SQL (hors du code), sur des dossiers neufs
+    const mkR = (n: number, level: string) => `INSERT INTO risks (id, tenant_id, process, description, status, owner_id, visibility) VALUES ('${ID(n)}', '${MT}', 'p', 'd', 'ACTIVE', '${U[0]}', '${level}');`;
+    const gr = (n: number, exp: string) => `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ('${MT}', 'RISK', '${ID(n)}', '${U[2]}', '${U[0]}', 'SQL direct', ${exp});`;
+    psql(["-c", [mkR(60, "PERIMETRE"), mkR(61, "NOMINATIF"), mkR(62, "CLIENT"), mkR(63, "PERIMETRE"), mkR(64, "PERIMETRE"),
+      gr(60, "NULL"), gr(61, "NULL"), gr(62, "NULL"), gr(63, "now() + interval '12 days'"), gr(64, "now() - interval '1 minute'"),
+    ].join("\n")]);
+    const granted = (n: number) => rows(`SELECT visibility_granted('${MT}', 'RISK', '${ID(n)}', '${U[2]}')`)[0];
+    expect(granted(60), "acces PERIMETRE NON DATE ecrit en SQL : aucune lecture").toBe("f");
+    expect(granted(61), "acces NOMINATIF non date : aucune lecture").toBe("f");
+    expect(granted(62), "acces non date sur un dossier CLIENT : compte (le dossier est lisible par tous)").toBe("t");
+    expect(granted(63), "PERIMETRE date, vivant : compte").toBe("t");
+    expect(granted(64), "PERIMETRE echu : ne compte pas").toBe("f");
+    psql(["-c", `UPDATE risks SET status = 'ARCHIVED' WHERE id = '${ID(63)}'`]);
+    expect(granted(63), "PERIMETRE date mais dossier clos : ne compte pas").toBe("f");
   }, 280000);
 });
