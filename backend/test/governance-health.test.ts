@@ -8,6 +8,7 @@ import { PostgresGovernanceHealthRepository } from "../src/infrastructure/databa
 import { ForbiddenError } from "../src/domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../src/infrastructure/identity/IdentityProvider.js";
 import { GOVERNANCE_THRESHOLDS } from "../src/domain/entities/Config.js";
+import { SOLE_RM_REVIEW_DEFAULT_DAYS } from "../src/domain/entities/GovernanceReviews.js";
 import { hasLocalPg, migrationSql, useMigrationTenant } from "./migrationHarness.js";
 
 /** Lot D6 (DECISION-074 R-6, DECISION-113) — level 1. */
@@ -247,9 +248,24 @@ describe("D6 — GovernanceHealthService (masking R-6.1 / q156)", () => {
     expect(view.trackedSince).toBeInstanceOf(Date);
     expect(view.retentionPurge).toMatchObject({ ageDays: 3 });
     // CMP: no global score hides the principles that cannot be evaluated.
-    expect(Object.keys(view).sort()).toEqual(["catalogVersion", "computedAt", "exceptions", "organizationSize", "principles", "profileGaps", "retentionPurge", "trackedSince"]);
+    expect(Object.keys(view).sort()).toEqual(["catalogVersion", "computedAt", "exceptions", "organizationSize", "principles", "profileGaps", "retentionPurge", "soleRm", "trackedSince"]);
     expect(view.organizationSize).toBeNull();
     expect(view.principles.every((p) => p.highlighted === null)).toBe(true);
+  });
+
+  it("q266 A: a SOLE_RM exception is overdue after the SOLE_RM default delay when the tenant set none, the tenant's delay wins otherwise", async () => {
+    const sole = { ...marked, auditId: "s1", rule: "riskFramework.soleRiskManager", entityType: "RiskFrameworkChangeRequest", action: "APPROVE", at: new Date(Date.now() - 10 * 86_400_000) };
+    const view = (delay: number | null) => new GovernanceHealthService(
+      { loadFacts: async () => facts({ markedActions: [sole, marked], markedTotal: 2, unreviewedTotal: 2, exceptionReviewDelayDays: delay,
+        soleRm: { total: 1, unreviewed: 1, overdue: 0, withoutPriorReview: 0 } }), activeAcceptances: async () => [] },
+      { getActive: async () => null, observe: async () => ({ activeAccounts: 3, riskManagers: 1, committeeMembers: 0, auditMembers: 1 }) },
+    ).get(actor(["governancehealth.read"]));
+    const none = await view(null);
+    expect(none.exceptions.items.map((i) => i.overdue)).toEqual([false, false]);
+    expect(none.soleRm).toEqual({ total: 1, unreviewed: 1, overdue: 0, withoutPriorReview: 0, reviewDelayDays: SOLE_RM_REVIEW_DEFAULT_DAYS });
+    const set = await view(5);
+    expect(set.exceptions.items.map((i) => i.overdue)).toEqual([true, false]);
+    expect(set.soleRm.reviewDelayDays).toBe(5);
   });
 
   it("a fixed-group member sees the restricted risk; the exception reviewer sees reason and exact time", async () => {

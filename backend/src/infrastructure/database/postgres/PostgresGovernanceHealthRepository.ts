@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import type { GovernanceHealthRepository } from "../../../domain/repositories/GovernanceHealthRepository.js";
 import type { ActiveAcceptance, FactRole, GovernanceFacts, MarkedAction } from "../../../domain/governance/health.js";
 import type { SystemGroup } from "../../../domain/entities/Role.js";
+import { SOLE_RM_EXCEPTIONS, SOLE_RM_REVIEW_DEFAULT_DAYS, SOLE_RM_WITHOUT_PRIOR_REVIEW_EXCEPTION } from "../../../domain/entities/GovernanceReviews.js";
 import { GOVERNANCE_THRESHOLDS, type GovernanceThresholdKey, type GovernanceThresholds } from "../../../domain/entities/Config.js";
 
 /** Bound of the listed items (marked actions, unmarked self-validations); totals are always exact. */
@@ -29,7 +30,7 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
     );
     if (!tenant) throw new Error("Tenant not found");
     const since = tenant.tracked_since;
-    const [users, roles, assignments, configRows, ratifications, riskGaps, processGaps, marked, markedTotals, unmarked, unmarkedTotal, designations, vacancy, purgeRuns, gapTotals, byRule, riskStats, ownerCounts, cumulSetting, thresholdRows, selfValidators] =
+    const [users, roles, assignments, configRows, ratifications, riskGaps, processGaps, marked, markedTotals, unmarked, unmarkedTotal, designations, vacancy, purgeRuns, gapTotals, byRule, riskStats, ownerCounts, cumulSetting, thresholdRows, selfValidators, soleRmRows] =
       await Promise.all([
         q<{ id: string; label: string; active: boolean; roles: string[]; last_seen_at: Date | null }>(
           `SELECT id, display_name AS label, deleted_at IS NULL AS active, coalesce(roles, '{}') AS roles, last_seen_at FROM users WHERE tenant_id = $1`,
@@ -164,6 +165,22 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
            UNION ${unmarkedSelfValidations("v.user_id")}`,
           [since],
         ),
+        // q266 A (C3): one audit row carries the marker per confirmation, so one confirmation = one count (CMP-B6C-09).
+        // Overdue = same rule as the panel list: floor(age in days) > delay, i.e. at least delay + 1 days old; the delay is the
+        // tenant's (q168) or, when unset, the SOLE_RM default (q291). Computed at read, no scheduled job (q180).
+        q<{ total: string; unreviewed: string; overdue: string; without_prior: string }>(
+          `SELECT count(*) AS total,
+                  count(*) FILTER (WHERE NOT x.reviewed) AS unreviewed,
+                  count(*) FILTER (WHERE NOT x.reviewed AND x.at <= $3::timestamptz - (x.delay + 1) * interval '1 day') AS overdue,
+                  count(*) FILTER (WHERE x.rule = $4) AS without_prior
+           FROM (SELECT a."timestamp" AS at, a.governance_exception AS rule,
+                        coalesce((SELECT c.exception_review_delay_days FROM configs c WHERE c.tenant_id = a.tenant_id), $5::int) AS delay,
+                        EXISTS (SELECT 1 FROM governance_exception_reviews r
+                                WHERE r.tenant_id = a.tenant_id AND r.audit_log_id = a.id AND r.outcome = 'REVIEWED') AS reviewed
+                 FROM audit_log a
+                 WHERE a.tenant_id = $1 AND a."timestamp" >= $2 AND a.governance_exception = ANY($6::text[])) x`,
+          [since, now, SOLE_RM_WITHOUT_PRIOR_REVIEW_EXCEPTION, SOLE_RM_REVIEW_DEFAULT_DAYS, SOLE_RM_EXCEPTIONS],
+        ),
       ]);
     const config = configRows[0];
     const totals = markedTotals[0];
@@ -196,6 +213,10 @@ export class PostgresGovernanceHealthRepository implements GovernanceHealthRepos
       riskManagerVacancySince: vacancy[0]?.since ?? null,
       riskManagerVacancyMaxDays: config?.vacancy_max ?? null,
       exceptionReviewDelayDays: config?.review_delay ?? null,
+      soleRm: {
+        total: Number(soleRmRows[0]?.total ?? 0), unreviewed: Number(soleRmRows[0]?.unreviewed ?? 0),
+        overdue: Number(soleRmRows[0]?.overdue ?? 0), withoutPriorReview: Number(soleRmRows[0]?.without_prior ?? 0),
+      },
       lastSeenPurgeAt: purgeRuns[0]?.at ?? null,
       risksTotal: Number(riskStats[0]?.total ?? 0),
       risksCreatorIsOwner: Number(riskStats[0]?.creator_owner ?? 0),

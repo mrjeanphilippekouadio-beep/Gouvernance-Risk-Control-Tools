@@ -1,5 +1,6 @@
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
+import { SOLE_RM_REVIEW_DEFAULT_DAYS } from "../domain/entities/GovernanceReviews.js";
 import { DEFAULT_LAST_SEEN_RETENTION_DAYS, GOVERNANCE_THRESHOLDS, isGovernanceThresholdKey, MIN_LAST_SEEN_RETENTION_DAYS, DEFAULT_RESOURCE_READALL_MAX_DAYS, DEFAULT_RISK_MANAGER_VACANCY_MAX_DAYS, type Config, type ConfigPatch, type EvaluationMode } from "../domain/entities/Config.js";
 import type { TransactionalAudit } from "../domain/entities/RiskFramework.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
@@ -664,6 +665,8 @@ function isRelaxation(key: string, current: number | null, next: number | null):
   if (key === "lastSeenRetentionDays") return next !== null && (current === null || next < current);
   // q233 A: raising a panel threshold makes alerts disappear — never silently: second person, as a lengthening.
   if (isGovernanceThresholdKey(key)) return next !== null && next > (current ?? GOVERNANCE_THRESHOLDS[key].default);
+  // SEC-Q266-01: an unset review delay means SOLE_RM_REVIEW_DEFAULT_DAYS for SOLE_RM confirmations: going past it is a lengthening (q182).
+  if (key === "exceptionReviewDelayDays") return next === null ? current !== null : next > (current ?? SOLE_RM_REVIEW_DEFAULT_DAYS);
   return isLengthening(current, next);
 }
 
