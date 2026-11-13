@@ -98,6 +98,9 @@ export async function runAudited<T>(
   }
 }
 
+/** q245 (095): a row past its 10-year retention mark is hidden from the three consultation reads (never deleted; technical reads do not filter). */
+const NOT_MARKED = "NOT EXISTS (SELECT 1 FROM audit_log_retention_marks m WHERE m.audit_log_id = audit_log.id)";
+
 export class PostgresAuditRepository implements AuditRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -108,7 +111,7 @@ export class PostgresAuditRepository implements AuditRepository {
   async listForEntity(tenantId: string, entityType: string, entityId: string): Promise<AuditEvent[]> {
     const { rows } = await this.pool.query<AuditRow>(
       `SELECT * FROM audit_log
-       WHERE tenant_id = $1 AND entity_type = $2 AND entity_id = $3
+       WHERE tenant_id = $1 AND entity_type = $2 AND entity_id = $3 AND ${NOT_MARKED}
        ORDER BY "timestamp" DESC`,
       [tenantId, entityType, entityId],
     );
@@ -117,14 +120,14 @@ export class PostgresAuditRepository implements AuditRepository {
 
   async listRecent(tenantId: string, limit: number): Promise<AuditEvent[]> {
     const { rows } = await this.pool.query<AuditRow>(
-      `SELECT * FROM audit_log WHERE tenant_id = $1 ORDER BY "timestamp" DESC LIMIT $2`,
+      `SELECT * FROM audit_log WHERE tenant_id = $1 AND ${NOT_MARKED} ORDER BY "timestamp" DESC LIMIT $2`,
       [tenantId, limit],
     );
     return rows.map(toDomain);
   }
 
   async search(tenantId: string, filters: AuditSearchFilters, limit: number): Promise<AuditEvent[]> {
-    const conditions = ["tenant_id = $1"];
+    const conditions = ["tenant_id = $1", NOT_MARKED];
     const values: unknown[] = [tenantId];
     let i = 2;
 
