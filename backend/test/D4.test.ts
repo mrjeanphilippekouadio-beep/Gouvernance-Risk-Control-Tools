@@ -251,6 +251,20 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     await expect(configWorld("unwired").service.setCommitteeAuditCumul(cumulAdmin, true, "r", "q")).rejects.toThrow(ValidationError);
   });
 
+  it("SEC-Q266-01: an unset review delay counts as the SOLE_RM default: unset -> more than 30 days waits for a second person, unset -> 30 or less is direct", async () => {
+    const delaysAdmin = actor("u-admin", ["config.read", "config.governancedelays.set"]);
+    const longer = configWorld(true);
+    const out = await longer.service.setGovernanceDelays(delaysAdmin, { exceptionReviewDelayDays: 3650 }, "Allonger", "q");
+    expect(out.pendingRequest).not.toBeNull();
+    expect(out.config.exceptionReviewDelayDays).not.toBe(3650);
+    for (const days of [30, 7]) {
+      const w = configWorld(true);
+      const r = await w.service.setGovernanceDelays(delaysAdmin, { exceptionReviewDelayDays: days }, "Fixer", "q");
+      expect(r.pendingRequest).toBeNull();
+      expect(r.config.exceptionReviewDelayDays).toBe(days);
+    }
+  });
+
   it("q182 lengthening with nobody else able to approve: applied by the administrator alone, marked and audited", async () => {
     const w = configWorld(false);
     const delaysAdmin = actor("u-admin", ["config.governancedelays.set"]);

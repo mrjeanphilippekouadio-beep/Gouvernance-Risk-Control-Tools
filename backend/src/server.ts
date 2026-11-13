@@ -347,7 +347,7 @@ const governanceDesignationRepository = new PostgresGovernanceDesignationReposit
 const roleService = new RoleService(roleRepository, auditRepository, userRepository, departmentRepository, new PostgresRolePermissionChangeRepository(pool), notificationService, configRepository, riskFrameworkRepository, governanceDesignationRepository, new PostgresSensitiveViewGrantRepository(pool), resourceVisibilityManager);
 const governanceDesignationService = new GovernanceDesignationService(governanceDesignationRepository, auditRepository, userRepository, roleRepository, governanceQueries, configRepository);
 // Lot D5: reviews, principle acceptances, and the mandatory governance notifications (emitted after commit, see the middleware).
-const governanceExceptionService = new GovernanceExceptionService(new PostgresGovernanceExceptionReviewRepository(pool), auditRepository);
+const governanceExceptionService = new GovernanceExceptionService(new PostgresGovernanceExceptionReviewRepository(pool), auditRepository, governanceQueries);
 const governancePrincipleAcceptanceService = new GovernancePrincipleAcceptanceService(
   new PostgresGovernancePrincipleAcceptanceRepository(pool),
   auditRepository,

@@ -1,7 +1,7 @@
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 import type { GovernanceExceptionReviewRepository } from "../domain/repositories/GovernanceReviewRepositories.js";
 import { isAcceptableReason } from "../domain/governance/selfValidation.js";
-import type { ExceptionReviewOutcome, GovernanceExceptionReview } from "../domain/entities/GovernanceReviews.js";
+import { SOLE_RM_EXCEPTIONS, type ExceptionReviewOutcome, type GovernanceExceptionReview } from "../domain/entities/GovernanceReviews.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
@@ -18,6 +18,8 @@ export class GovernanceExceptionService {
   constructor(
     private readonly reviews: GovernanceExceptionReviewRepository,
     private readonly audit: AuditRepository,
+    /** SEC-Q266-02: active members of fixed groups, tenant-scoped. Optional; absent = SOLE_RM exceptions cannot be reviewed (fail closed). */
+    private readonly groups?: { groupMembers(tenantId: string, groups: string[]): Promise<string[]> },
   ) {}
 
   async review(
@@ -36,6 +38,11 @@ export class GovernanceExceptionService {
     const entry = await this.reviews.getAuditEntry(actor.tenantId, auditLogId);
     if (!entry || !entry.reviewable) throw new NotFoundError("GovernanceException", auditLogId);
     if (entry.userId === actor.userId) throw new ForbiddenError("The author of an action cannot review it");
+    // SEC-Q266-02 (DECISION-128): a SOLE_RM confirmation is reviewed by the Audit or the Committee, not by another Risk Manager.
+    if (entry.governanceException && SOLE_RM_EXCEPTIONS.includes(entry.governanceException)) {
+      const members = (await this.groups?.groupMembers(actor.tenantId, ["AUDIT", "RISK_COMMITTEE"])) ?? [];
+      if (!members.includes(actor.userId)) throw new ForbiddenError("A decision made alone by the Risk Manager is reviewed by the Audit or the Committee");
+    }
 
     return this.reviews.insert(
       { tenantId: actor.tenantId, auditLogId, outcome: input.outcome, reviewedBy: actor.userId, comment },

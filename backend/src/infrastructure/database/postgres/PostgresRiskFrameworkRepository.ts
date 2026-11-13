@@ -826,6 +826,7 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
     const { rowCount } = await this.pool.query(
       `SELECT 1 FROM audit_log a
        WHERE a.tenant_id = $1 AND a.governance_exception = ANY($2::text[])
+         AND a."timestamp" >= (SELECT t.governance_tracking_started_at FROM tenants t WHERE t.id = a.tenant_id)
          AND NOT EXISTS (SELECT 1 FROM governance_exception_reviews r
                          WHERE r.tenant_id = a.tenant_id AND r.audit_log_id = a.id AND r.outcome = 'REVIEWED')
        LIMIT 1`,

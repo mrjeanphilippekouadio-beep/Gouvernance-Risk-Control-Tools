@@ -54,3 +54,20 @@ describe.skipIf(!hasLocalPg)("q266 A: SOLE_RM confirmations are reviewed a poste
     expect(await frameworks.hasUnreviewedSoleRm(ctx.tenant)).toBe(false);
   });
 });
+
+describe.skipIf(!hasLocalPg)("QA-Q266-01: hasUnreviewedSoleRm uses the same trackedSince bound as the counter (real PostgreSQL, local only)", () => {
+  const { ctx, one } = useMigrationTenant("q266b");
+  it("a confirmation older than governance_tracking_started_at is ignored, a newer one counts", async () => {
+    const rm = (await one(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, 'rm') RETURNING id`, [ctx.tenant, `rm-${Math.random()}@q266`])).id as string;
+    await one(`UPDATE tenants SET governance_tracking_started_at = now() - interval '10 days' WHERE id = $1 RETURNING id`, [ctx.tenant]);
+    const mark = (daysAgo: number) => one(
+      `INSERT INTO audit_log (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, request_id, governance_exception, "timestamp")
+       VALUES ($1, $2, 'RiskFrameworkChangeRequest', gen_random_uuid(), 'APPROVE', '{}', '{}', $3, $4, now() - $5 * interval '1 day') RETURNING id`,
+      [ctx.tenant, rm, `q266b-${Math.random()}`, SOLE_RM_EXCEPTION, daysAgo]);
+    const repo = new PostgresRiskFrameworkRepository(ctx.pool);
+    await mark(40);
+    expect(await repo.hasUnreviewedSoleRm(ctx.tenant)).toBe(false);
+    await mark(2);
+    expect(await repo.hasUnreviewedSoleRm(ctx.tenant)).toBe(true);
+  });
+});
