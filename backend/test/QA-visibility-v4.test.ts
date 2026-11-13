@@ -454,7 +454,7 @@ describe.skipIf(!live)("QA-visibility-v4 on the REAL server + LOCAL PostgreSQL 1
         expect(await probe("n1")).toBe(404);
         expect((await live_("n1"))?.status ?? "ENDED").not.toBe("APPROVED");
       } finally {
-        await sql("UPDATE sensitive_view_grants SET status = 'REVOKED', revoked_by = $2, revoked_at = now(), revoke_reason = 'QA cleanup' WHERE user_id = $1 AND status IN ('PENDING', 'APPROVED')", [UID.n1, UID.adm]);
+        await sql("UPDATE sensitive_view_grants SET status = 'REVOKED', revoked_by = $2, revoked_at = now(), revoke_reason_ref = (SELECT v.id FROM visibility_reasons v WHERE v.tenant_id = sensitive_view_grants.tenant_id ORDER BY v.created_at LIMIT 1) WHERE user_id = $1 AND status IN ('PENDING', 'APPROVED')", [UID.n1, UID.adm]);
       }
     });
   });
@@ -509,7 +509,7 @@ describe.skipIf(!live)("QA-visibility-v4 on the REAL server + LOCAL PostgreSQL 1
         expect(r.status, r.text).toBeLessThan(500);
       } finally {
         await unassign(rmRole, "out");
-        await sql("UPDATE sensitive_view_grants SET status = 'REVOKED', revoked_by = $2, revoked_at = now(), revoke_reason = 'QA cleanup' WHERE user_id = $1 AND status IN ('PENDING', 'APPROVED')", [UID.out, UID.adm]);
+        await sql("UPDATE sensitive_view_grants SET status = 'REVOKED', revoked_by = $2, revoked_at = now(), revoke_reason_ref = (SELECT v.id FROM visibility_reasons v WHERE v.tenant_id = sensitive_view_grants.tenant_id ORDER BY v.created_at LIMIT 1) WHERE user_id = $1 AND status IN ('PENDING', 'APPROVED')", [UID.out, UID.adm]);
       }
       expect(id).toBeTruthy();
     });

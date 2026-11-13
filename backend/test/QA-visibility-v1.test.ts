@@ -329,7 +329,7 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
   describe("CHG: creation and change of visibility", () => {
     const create = (who: Who, body: Record<string, unknown>) =>
       call(who, "POST", "/risks", { process: "CANARY-NEW-PROC", description: `CANARY-NEW-${Math.random().toString(36).slice(2, 8)}`, ...body }, { "Idempotency-Key": `k-${Math.random().toString(36).slice(2)}-${Date.now()}` });
-    const audits = (id: string) => sql<{ action: string; reason: string | null; old_value: any; new_value: any; user_id: string }>("SELECT action, reason, old_value, new_value, user_id FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp", [id]);
+    const audits = (id: string) => sql<{ action: string; reason: string | null; reason_text: string | null; old_value: any; new_value: any; user_id: string }>("SELECT action, reason, (SELECT v.text FROM visibility_reasons v WHERE v.id = reason_ref) AS reason_text, old_value, new_value, user_id FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp", [id]);
 
     it("creation PERIMETRE with a named person: visible to the named person, not to an outsider; the list is recorded with the creator as author", async () => {
       const c = await create("dept", { visibility: "PERIMETRE", accessUserIds: [I("106")], ownerDepartmentId: I("201") });
@@ -442,7 +442,7 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
       expect([...r.json.data.accessUserIds].sort((a: string, b: string) => a.localeCompare(b))).toEqual([I("102"), I("106")]);
       const a = (await audits(id)).filter((x) => x.action === "PERMISSION_CHANGE");
       expect(a).toHaveLength(1);
-      expect(a[0]).toMatchObject({ reason: "Dossier sensible", user_id: I("109") });
+      expect(a[0]).toMatchObject({ reason: null, reason_text: "Dossier sensible", user_id: I("109") });
       expect(a[0]!.old_value.visibility).toBe("PERIMETRE");
       expect(a[0]!.new_value).toMatchObject({ visibility: "NOMINATIF", widening: true }); // 102 was outside the PERIMETRE set (no N+1 on this risk): admitted = widening
       expect(await sql("SELECT 1 FROM notifications")).toHaveLength(0);
@@ -456,7 +456,7 @@ describe.skipIf(!live)("QA-visibility-v1 on the REAL server + LOCAL PostgreSQL 1
       const r = await call("rm", "PUT", `/risks/${id}/visibility`, { visibility: "NOMINATIF", revokeUserIds: [I("106")], reason: "Retrait" });
       expect(r.status).toBe(200);
       expect((await get("named", `/risks/${id}`)).status).toBe(404);
-      expect((await sql("SELECT revoked_by, revoke_reason FROM resource_access_grants WHERE resource_id = $1 AND user_id = $2", [id, I("106")]))[0]).toEqual({ revoked_by: I("109"), revoke_reason: "Retrait" });
+      expect((await sql("SELECT g.revoked_by, g.revoke_reason, v.text AS reason_text FROM resource_access_grants g JOIN visibility_reasons v ON v.id = g.revoke_reason_ref WHERE g.resource_id = $1 AND g.user_id = $2", [id, I("106")]))[0]).toEqual({ revoked_by: I("109"), revoke_reason: null, reason_text: "Retrait" });
     });
 
     it("owner widens PERIMETRE -> CLIENT: allowed, list purged (and does not come back), exactly one notification per RM-group member, none to the owner / Committee / Audit, no risk content in it", async () => {

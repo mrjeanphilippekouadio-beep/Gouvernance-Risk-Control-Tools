@@ -51,8 +51,8 @@ describe("QA-visibility-v2bis STATIC", () => {
   });
   it("no migration: 083 is still the last one (DECISION-107 adds no schema)", () => {
     const names = execFileSync("ls", [join(ROOT, "database", "postgresql", "migrations")], { encoding: "utf8" }).split("\n").filter((f) => f.endsWith(".sql") && !f.endsWith(".down.sql"));
-    // the only schemas after 083 are lot V4 (084, resource.readall) the D6 panel (085) and its thresholds (086), the V5 named-access expiry (087) the B-6c process guard (088) the B-6c sole-Risk-Manager regime (089) and its request-time freeze (090) the B-13 default / archive guard (091) the F8 bis identity binding and unique names (092) the q279 SOLE_RM SET_DEFAULT hardening (093) the q253 PERIMETRE named-access expiry (094) the q245 audit retention marks (095), never this batch
-    expect(names.sort((a, b) => a.localeCompare(b)).filter((n) => n > "083_resource_visibility_v2.sql")).toEqual(["084_resource_readall.sql", "085_governance_tracking.sql", "086_governance_thresholds.sql", "087_named_access_expiry.sql", "088_process_framework_guard.sql", "089_sole_risk_manager_assignment.sql", "090_sole_rm_frozen_at_request.sql", "091_framework_default_archive_guard.sql", "092_identity_binding_unique_names.sql", "093_sole_rm_set_default_hardening.sql", "094_perimeter_named_access_expiry.sql", "095_audit_log_retention_marks.sql"]);
+    // the only schemas after 083 are lot V4 (084, resource.readall) the D6 panel (085) and its thresholds (086), the V5 named-access expiry (087) the B-6c process guard (088) the B-6c sole-Risk-Manager regime (089) and its request-time freeze (090) the B-13 default / archive guard (091) the F8 bis identity binding and unique names (092) the q279 SOLE_RM SET_DEFAULT hardening (093) the q253 PERIMETRE named-access expiry (094) the q245 audit retention marks (095) and the q246 visibility reasons apart from the journal (096), never this batch
+    expect(names.sort((a, b) => a.localeCompare(b)).filter((n) => n > "083_resource_visibility_v2.sql")).toEqual(["084_resource_readall.sql", "085_governance_tracking.sql", "086_governance_thresholds.sql", "087_named_access_expiry.sql", "088_process_framework_guard.sql", "089_sole_risk_manager_assignment.sql", "090_sole_rm_frozen_at_request.sql", "091_framework_default_archive_guard.sql", "092_identity_binding_unique_names.sql", "093_sole_rm_set_default_hardening.sql", "094_perimeter_named_access_expiry.sql", "095_audit_log_retention_marks.sql", "096_visibility_reasons.sql"]);
   });
   it("V3: the list query is paginated (LIMIT / OFFSET, limit bounded to 500)", () => {
     const src = read("backend", "src", "infrastructure", "database", "postgres", "PostgresResourceAccessRepository.ts");
@@ -460,5 +460,13 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       const r = await post("adm", "/roles", { name: "Role QA V2bis", permissions: ["resourcevisibility.set"] });
       expect(r.status, r.text.slice(0, 120)).toBe(400);
     });
+  });
+
+  // PRIV-L2A-01: after every scenario above, no journal line holds a stored visibility reason in clear in audit_log.reason.
+  it("no audit_log.reason equals the text of a stored visibility reason (real PostgreSQL)", async () => {
+    const leaks = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM audit_log a JOIN visibility_reasons v ON v.tenant_id = a.tenant_id AND a.reason = v.text");
+    expect(leaks[0]).toEqual({ n: 0 });
+    expect((await sql<{ n: number }>("SELECT count(*)::int AS n FROM visibility_reasons"))[0]!.n).toBeGreaterThan(0);
   });
 });

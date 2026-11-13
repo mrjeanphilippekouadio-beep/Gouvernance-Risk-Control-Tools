@@ -194,9 +194,9 @@ const patch = (who: Who, path: string, body: unknown) => call(who, "PATCH", path
 const norm = (r: Res, ...ids: string[]) => `${r.status} ${ids.reduce((t, id) => t.replaceAll(id, "<id>"), r.text).replace(/"requestId":"[^"]*"/, "")}`;
 const ids = (r: Res): string[] => ((r.json?.data ?? []) as Array<{ id: string }>).map((x) => x.id);
 const audits = (id: string) => sql<{ action: string; reason: string | null; old_value: any; new_value: any; user_id: string; entity_type: string }>(
-  "SELECT action, reason, old_value, new_value, user_id, entity_type FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp, id", [id]);
+  "SELECT action, CASE WHEN reason_ref IS NULL THEN reason WHEN reason IS NULL THEN (SELECT v.text FROM visibility_reasons v WHERE v.id = reason_ref) ELSE 'CLEAR-TEXT-WITH-REFERENCE:' || reason END AS reason, old_value, new_value, user_id, entity_type FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp, id", [id]);
 const grants = (type: string, id: string) => sql<{ user_id: string; revoked_at: Date | null; revoke_reason: string | null }>(
-  "SELECT user_id, revoked_at, revoke_reason FROM resource_access_grants WHERE resource_type = $1 AND resource_id = $2 ORDER BY granted_at, id", [type, id]);
+  "SELECT user_id, revoked_at, CASE WHEN revoke_reason_ref IS NULL THEN revoke_reason WHEN revoke_reason IS NULL THEN (SELECT v.text FROM visibility_reasons v WHERE v.id = revoke_reason_ref) ELSE 'CLEAR-TEXT-WITH-REFERENCE:' || revoke_reason END AS revoke_reason FROM resource_access_grants WHERE resource_type = $1 AND resource_id = $2 ORDER BY granted_at, id", [type, id]);
 const active = async (type: string, id: string) => (await grants(type, id)).filter((g) => !g.revoked_at).map((g) => g.user_id);
 const level = async (table: string, id: string) => (await sql<{ visibility: string }>(`SELECT visibility FROM ${table} WHERE id = $1`, [id]))[0]?.visibility;
 const notifs = (who: Who, resourceId: string) => sql<{ event_type: string; message: string }>(
@@ -850,11 +850,11 @@ describe.skipIf(!live)("QA-visibility-v2 on the REAL server + LOCAL PostgreSQL 1
       await sql("UPDATE user_roles SET revoked_at = now() WHERE user_id = $1 AND role_id = $2", [UID.dept, I("301")]);
       try { expect(await probe("dept")).toEqual([false, false, false]); } finally { await sql("UPDATE user_roles SET revoked_at = NULL WHERE user_id = $1 AND role_id = $2", [UID.dept, I("301")]); }
       expect(await probe("dept")).toEqual([true, true, true]);
-      await sql("UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $1, revoke_reason = 'QA' WHERE user_id = $2 AND resource_id IN ($3, $4, $5) AND revoked_at IS NULL", [UID.own, UID.named, I("c02"), K("9002"), I("a06")]);
+      await sql("UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $1, revoke_reason_ref = (SELECT v.id FROM visibility_reasons v WHERE v.tenant_id = resource_access_grants.tenant_id ORDER BY v.created_at LIMIT 1) WHERE user_id = $2 AND resource_id IN ($3, $4, $5) AND revoked_at IS NULL", [UID.own, UID.named, I("c02"), K("9002"), I("a06")]);
       try { expect(await probe("named")).toEqual([false, false, false]); } finally {
         // a revocation is final (append-only): the access is restored by a NEW grant, DATED (q253 / SEC-Q253-01: an undated access gives no read on a restricted dossier)
         for (const [t, rid] of [["CONTROL", I("c02")], ["KPI", K("9002")], ["ACTION_PLAN", I("a06")]]) {
-          await sql("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, $2, $3, $4, $5, 'QA restore', now() + interval '30 days')", [I("001"), t, rid, UID.named, UID.own]);
+          await sql("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at) VALUES ($1, $2, $3, $4, $5, (SELECT id FROM visibility_reasons WHERE tenant_id = $1 ORDER BY created_at LIMIT 1), now() + interval '30 days')", [I("001"), t, rid, UID.named, UID.own]);
         }
       }
       expect(await probe("named")).toEqual([true, true, true]);

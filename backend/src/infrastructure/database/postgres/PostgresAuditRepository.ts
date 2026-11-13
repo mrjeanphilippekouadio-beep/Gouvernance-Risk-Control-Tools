@@ -3,6 +3,8 @@ import type { AuditRepository, AuditSearchFilters } from "../../../domain/reposi
 import type { AuditEvent } from "../../../domain/entities/AuditEvent.js";
 import { ConflictError } from "../../../domain/errors/DomainErrors.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
+import { displayReason } from "../../../domain/entities/VisibilityReason.js";
+import { insertVisibilityReason, reasonColumns } from "./visibilityReasons.js";
 
 interface AuditRow {
   id: string;
@@ -17,6 +19,10 @@ interface AuditRow {
   reason: string | null;
   request_id: string;
   governance_exception: string | null;
+  reason_ref: string | null;
+  /** Consultation reads only: the stored reason joined by `reason_ref` (REASON_JOIN). */
+  reason_text?: string | null;
+  reason_erased_at?: Date | null;
 }
 
 function toDomain(row: AuditRow): AuditEvent {
@@ -30,7 +36,9 @@ function toDomain(row: AuditRow): AuditEvent {
     action: row.action,
     oldValue: row.old_value,
     newValue: row.new_value,
-    reason: row.reason,
+    // Conservation L2a: a reason stored in visibility_reasons reads as its text, or as « motif effacé le … » once erased.
+    reason: row.reason_ref ? displayReason(row.reason_text ?? null, row.reason_erased_at ?? null) : row.reason,
+    reasonRef: row.reason_ref ?? null,
     requestId: row.request_id,
     governanceException: row.governance_exception ?? null,
   };
@@ -46,11 +54,19 @@ export async function insertAuditEvent(
   event: Omit<AuditEvent, "id" | "timestamp">,
   atWriteTime = false,
 ): Promise<void> {
+  // Conservation L2a: the text of a visibility reason goes to visibility_reasons (once per shared reason); the journal keeps the reference.
+  let reasonRef = event.reasonRef ?? null;
+  const stored = event.visibilityReason;
+  if (stored) {
+    if (event.reason !== null) throw new Error("A visibility reason is never written in audit_log.reason");
+    stored.id ??= await insertVisibilityReason(db, event.tenantId, stored.source, stored.text);
+    reasonRef = stored.id;
+  }
   await db
     .query(
     `INSERT INTO audit_log
-       (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, reason, request_id, governance_exception${atWriteTime ? ', "timestamp"' : ""})
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10${atWriteTime ? ", clock_timestamp()" : ""})`,
+       (tenant_id, user_id, entity_type, entity_id, action, old_value, new_value, reason, request_id, governance_exception, reason_ref${atWriteTime ? ', "timestamp"' : ""})
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11${atWriteTime ? ", clock_timestamp()" : ""})`,
     [
       event.tenantId,
       event.userId,
@@ -62,6 +78,7 @@ export async function insertAuditEvent(
       event.reason,
       event.requestId,
       event.governanceException ?? null,
+      reasonRef,
     ],
     )
     .catch((err: unknown) => {
@@ -102,13 +119,16 @@ export async function runAudited<T>(
  * q245 (095): a row past its 10-year retention mark is hidden from the consultation reads served by AuditLogService (never deleted).
  * `listForEntity` stays unfiltered: services read it as evidence for separation-of-duties checks (SEC-L1-01).
  */
+const REASON_JOIN = reasonColumns("audit_log.tenant_id", "audit_log.reason_ref", "reason");
 const NOT_MARKED = "NOT EXISTS (SELECT 1 FROM public.audit_log_retention_marks m WHERE m.audit_log_id = audit_log.id)";
 
 export class PostgresAuditRepository implements AuditRepository {
   constructor(private readonly pool: Pool) {}
 
   async record(event: Omit<AuditEvent, "id" | "timestamp">): Promise<void> {
-    await insertAuditEvent(this.pool, event);
+    // A visibility reason and its journal row are written together (one transaction).
+    if (event.visibilityReason) await runAudited(this.pool, async () => undefined, () => [event]);
+    else await insertAuditEvent(this.pool, event);
   }
 
   async listForEntity(tenantId: string, entityType: string, entityId: string): Promise<AuditEvent[]> {
@@ -124,7 +144,7 @@ export class PostgresAuditRepository implements AuditRepository {
   /** Consultation variant of listForEntity (AuditLogService only): hides retention-marked rows. */
   async listVisibleForEntity(tenantId: string, entityType: string, entityId: string): Promise<AuditEvent[]> {
     const { rows } = await this.pool.query<AuditRow>(
-      `SELECT * FROM audit_log
+      `SELECT audit_log.*, ${REASON_JOIN} FROM audit_log
        WHERE tenant_id = $1 AND entity_type = $2 AND entity_id = $3 AND ${NOT_MARKED}
        ORDER BY "timestamp" DESC`,
       [tenantId, entityType, entityId],
@@ -134,7 +154,7 @@ export class PostgresAuditRepository implements AuditRepository {
 
   async listRecent(tenantId: string, limit: number): Promise<AuditEvent[]> {
     const { rows } = await this.pool.query<AuditRow>(
-      `SELECT * FROM audit_log WHERE tenant_id = $1 AND ${NOT_MARKED} ORDER BY "timestamp" DESC LIMIT $2`,
+      `SELECT audit_log.*, ${REASON_JOIN} FROM audit_log WHERE tenant_id = $1 AND ${NOT_MARKED} ORDER BY "timestamp" DESC LIMIT $2`,
       [tenantId, limit],
     );
     return rows.map(toDomain);
@@ -178,7 +198,7 @@ export class PostgresAuditRepository implements AuditRepository {
     values.push(limit);
 
     const { rows } = await this.pool.query<AuditRow>(
-      `SELECT * FROM audit_log WHERE ${conditions.join(" AND ")} ORDER BY "timestamp" DESC LIMIT $${i}`,
+      `SELECT audit_log.*, ${REASON_JOIN} FROM audit_log WHERE ${conditions.join(" AND ")} ORDER BY "timestamp" DESC LIMIT $${i}`,
       values,
     );
     return rows.map(toDomain);

@@ -655,7 +655,7 @@ describe("QA-rights-lines / C5 revoke", () => {
     expect((await w.service.revokeSensitiveView(w.admin, g.id, "Retirée avant décision", "R")).status).toBe("REVOKED");
     await expect(w.service.revokeSensitiveView(w.admin, g.id, "Encore", "R")).rejects.toThrow(ConflictError);
     await expect(w.service.revokeSensitiveView(w.admin, randomUUID(), "Inconnu", "R")).rejects.toThrow(NotFoundError);
-    expect(w.audit.at(-1)).toMatchObject({ action: "UNASSIGN", reason: "Retirée avant décision", entityId: g.id });
+    expect(w.audit.at(-1)).toMatchObject({ action: "UNASSIGN", reason: null, visibilityReason: { source: "SENSITIVE_VIEW_REVOCATION", text: "Retirée avant décision" }, entityId: g.id });
     expect((w.audit.at(-1)!.oldValue as SensitiveViewGrant).status).toBe("PENDING");
     expect((w.audit.at(-1)!.newValue as SensitiveViewGrant).status).toBe("REVOKED");
   });

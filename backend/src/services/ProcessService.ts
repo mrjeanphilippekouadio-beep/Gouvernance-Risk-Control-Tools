@@ -29,6 +29,7 @@ import { writeAudited } from "./auditedWrite.js";
 import type { GovernanceConfirmation } from "../domain/governance/selfValidation.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import { auditPersonTextPair, auditWithoutPersonText } from "./auditPersonText.js";
+import { visibilityReasonOf } from "../domain/entities/VisibilityReason.js";
 
 const PROCESS_PERSON_FIELDS = ["owner"] as const;
 
@@ -352,7 +353,7 @@ export class ProcessService {
           action: "PERMISSION_CHANGE" as const,
           oldValue: { ownerUserId: before.ownerUserId },
           newValue: { ownerUserId: after.ownerUserId, widening: true, through: "PROCESS_OWNER", opened: opening.opened },
-          reason: opening.reason,
+          ...visibilityReasonOf("PROCESS_OWNER_OPENING", opening.reason),
           requestId,
         }] : []),
       ],

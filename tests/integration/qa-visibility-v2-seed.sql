@@ -62,8 +62,9 @@ INSERT INTO kpis (id, tenant_id, label, target_value, unit, frequency, owner, de
 INSERT INTO kpi_measures (tenant_id, kpi_id, period, value, comment, recorded_by)
  SELECT :T, k.id, date '2026-01-01', 5, 'CANARY-V2-KPIM-' || right(k.label, 5), :OWN FROM kpis k WHERE k.label LIKE 'CANARY-V2-KPI-%';
 -- Listes nominatives : `named` (jamais le posant).
-INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at)
- SELECT :T, t, i::uuid, :NAMED, :OWN, 'QA', now() + interval '10 days' FROM (VALUES
+INSERT INTO visibility_reasons (id, tenant_id, source, text) VALUES ('aaaaaaaa-0000-4000-8000-0000000000f2', :T, 'VISIBILITY_CHANGE', 'QA');
+INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at)
+ SELECT :T, t, i::uuid, :NAMED, :OWN, 'aaaaaaaa-0000-4000-8000-0000000000f2', now() + interval '10 days' FROM (VALUES
   ('CONTROL','aaaaaaaa-0000-4000-8000-000000000c02'), ('CONTROL','aaaaaaaa-0000-4000-8000-000000000c03'),
   ('ANOMALY','aaaaaaaa-0000-4000-8000-000000000d04'), ('ANOMALY','aaaaaaaa-0000-4000-8000-000000000d05'),
   ('ACTION_PLAN','aaaaaaaa-0000-4000-8000-000000000a06'), ('ACTION_PLAN','aaaaaaaa-0000-4000-8000-000000000a07'),

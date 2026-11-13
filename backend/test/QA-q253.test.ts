@@ -63,7 +63,7 @@ async function insertItem(type: Type, level: string, extra: { riskId?: string; c
   return id;
 }
 const grant = (type: string, id: string, user: string, inInterval: string | null = null) =>
-  sql(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, $2, $3, $4, $5, 'Q253', ${inInterval ? `now() + interval '${inInterval}'` : "NULL"})`, [T, type, id, user, user === UID.rm ? UID.adm : UID.rm]);
+  sql(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at) VALUES ($1, $2, $3, $4, $5, (SELECT id FROM visibility_reasons WHERE tenant_id = $1 ORDER BY created_at LIMIT 1), ${inInterval ? `now() + interval '${inInterval}'` : "NULL"})`, [T, type, id, user, user === UID.rm ? UID.adm : UID.rm]);
 const withoutGuard = async (query: string, params: unknown[]) => {
   await sql("ALTER TABLE resource_access_grants DISABLE TRIGGER resource_access_grants_guard");
   try { await sql(query, params); } finally { await sql("ALTER TABLE resource_access_grants ENABLE TRIGGER resource_access_grants_guard"); }
@@ -234,7 +234,7 @@ describe.skipIf(!live)("QA-q253 sur le VRAI serveur + PostgreSQL 16 LOCAL", () =
       expect(await upd("UPDATE resource_access_grants SET expires_at = now() + interval '31 days' WHERE resource_id = $1 AND revoked_at IS NULL", [id]), "31 j").not.toBeNull();
       expect(await upd("UPDATE resource_access_grants SET expires_at = now() + interval '30 days 1 second' WHERE resource_id = $1 AND revoked_at IS NULL", [id]), "30 j + 1 s").not.toBeNull();
       expect(await upd("UPDATE resource_access_grants SET expires_at = NULL WHERE resource_id = $1 AND revoked_at IS NULL", [id]), "retrait de l'echeance").not.toBeNull();
-      expect(await upd("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1,'RISK',$2,$3,$4,'x', now() + interval '31 days')", [T, id, UID.n1, UID.rm]), "insertion 31 j").not.toBeNull();
+      expect(await upd("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at) VALUES ($1,'RISK',$2,$3,$4,(SELECT id FROM visibility_reasons WHERE tenant_id = $1 ORDER BY created_at LIMIT 1), now() + interval '31 days')", [T, id, UID.n1, UID.rm]), "insertion 31 j").not.toBeNull();
       expect(daysFromNow(await expiryOf("RISK", id))).toBeLessThanOrEqual(30);
     });
 

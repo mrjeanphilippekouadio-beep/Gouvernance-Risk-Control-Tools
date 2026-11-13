@@ -70,7 +70,7 @@ describe("lot V5 — renewing a named access (resources)", () => {
     expect(f.renewAccess).toHaveBeenCalledWith(T, "ACTION_PLAN", "p1", [NAMED], undefined);
     expect(f.audits).toHaveLength(1);
     expect(f.audits[0]).toMatchObject({ tenantId: T, userId: RM, entityType: "ActionPlan", entityId: "p1", action: "PERMISSION_CHANGE",
-      reason: GOOD.reason, requestId: "req-1", newValue: { renewed: [NAMED], widening: true } });
+      reason: null, visibilityReason: { source: "ACCESS_RENEWAL", text: GOOD.reason }, requestId: "req-1", newValue: { renewed: [NAMED], widening: true } });
     expect(f.notifications.create).not.toHaveBeenCalled();
   });
 
@@ -119,7 +119,7 @@ describe("lot V5 — renewing a named access (risk)", () => {
     await expect(f.service.renewAccess(actor(OWNER, ["risk.read"]), "r1", { ...GOOD, reason: " " }, "r")).rejects.toBeInstanceOf(ValidationError);
     expect(f.renewAccess).not.toHaveBeenCalled();
     await f.service.renewAccess(actor(OWNER, ["risk.read"]), "r1", GOOD, "req-3");
-    expect(f.audits[0]).toMatchObject({ entityType: "Risk", action: "PERMISSION_CHANGE", userId: OWNER, reason: GOOD.reason, newValue: { renewed: [NAMED] } });
+    expect(f.audits[0]).toMatchObject({ entityType: "Risk", action: "PERMISSION_CHANGE", userId: OWNER, reason: null, visibilityReason: { source: "ACCESS_RENEWAL", text: GOOD.reason }, newValue: { renewed: [NAMED] } });
     expect(f.notifications.create).toHaveBeenCalledWith(expect.objectContaining({ recipientUserId: RM, eventType: "RISK_VISIBILITY_WIDENED" }));
   });
 });
@@ -162,8 +162,9 @@ describe.skipIf(!hasLocalPg)("lot V5 on real PostgreSQL (local only)", () => {
   const sees = async (fn: string, id: string, userId: string) =>
     (await one(`SELECT ${fn}($1, $2, $3::uuid) AS v`, [ctx.tenant, id, userId])).v as boolean;
   const grant = async (type: string, id: string, userId: string, by: string, expires: string | null = "now() + interval '10 days'") =>
-    (await one(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at)
-                VALUES ($1, $2, $3, $4, $5, 'test', ${expires ?? "NULL"}) RETURNING id`, [ctx.tenant, type, id, userId, by])).id as string;
+    (await one(`WITH r AS (INSERT INTO visibility_reasons (tenant_id, source, text) VALUES ($1, 'VISIBILITY_CHANGE', 'test') RETURNING id)
+                INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at)
+                SELECT $1, $2, $3, $4, $5, r.id, ${expires ?? "NULL"} FROM r RETURNING id`, [ctx.tenant, type, id, userId, by])).id as string;
   const control = async (visibility = "NOMINATIF") =>
     (await one(`INSERT INTO controls (tenant_id, label, control_type, frequency, executor, compliance_criteria, visibility)
                 VALUES ($1, 'c', 'PREVENTIVE', 'M', 'x', 'y', $2) RETURNING id`, [ctx.tenant, visibility])).id as string;

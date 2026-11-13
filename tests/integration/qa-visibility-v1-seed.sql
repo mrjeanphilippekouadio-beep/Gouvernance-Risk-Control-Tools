@@ -37,8 +37,9 @@ INSERT INTO risks (id, tenant_id, process, description, owner_department_id, sta
  ('aaaaaaaa-0000-4000-8000-000000000501', :T, 'CANARY-CLIENT-PROC', 'CANARY-CLIENT-DESC', 'aaaaaaaa-0000-4000-8000-000000000201', 'ACTIVE', 'aaaaaaaa-0000-4000-8000-000000000101', 'aaaaaaaa-0000-4000-8000-000000000102', 'aaaaaaaa-0000-4000-8000-000000000401', 'CLIENT'),
  ('aaaaaaaa-0000-4000-8000-000000000502', :T, 'CANARY-PERIM-PROC', 'CANARY-PERIM-DESC', 'aaaaaaaa-0000-4000-8000-000000000201', 'ACTIVE', 'aaaaaaaa-0000-4000-8000-000000000101', 'aaaaaaaa-0000-4000-8000-000000000102', 'aaaaaaaa-0000-4000-8000-000000000401', 'PERIMETRE'),
  ('aaaaaaaa-0000-4000-8000-000000000503', :T, 'CANARY-NOMIN-PROC', 'CANARY-NOMIN-DESC', 'aaaaaaaa-0000-4000-8000-000000000201', 'ACTIVE', 'aaaaaaaa-0000-4000-8000-000000000101', 'aaaaaaaa-0000-4000-8000-000000000102', 'aaaaaaaa-0000-4000-8000-000000000401', 'NOMINATIF');
-INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at)
-SELECT :T, 'RISK', r, 'aaaaaaaa-0000-4000-8000-000000000106', 'aaaaaaaa-0000-4000-8000-000000000101', 'QA', now() + interval '10 days'
+INSERT INTO visibility_reasons (id, tenant_id, source, text) VALUES ('aaaaaaaa-0000-4000-8000-0000000000f1', :T, 'VISIBILITY_CHANGE', 'QA');
+INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at)
+SELECT :T, 'RISK', r, 'aaaaaaaa-0000-4000-8000-000000000106', 'aaaaaaaa-0000-4000-8000-000000000101', 'aaaaaaaa-0000-4000-8000-0000000000f1', now() + interval '10 days'
 FROM unnest(ARRAY['aaaaaaaa-0000-4000-8000-000000000502','aaaaaaaa-0000-4000-8000-000000000503']::uuid[]) r;
 INSERT INTO raci_assignments (tenant_id, entity_type, entity_id, user_id, role, created_by)
 SELECT :T, 'RISK', r, 'aaaaaaaa-0000-4000-8000-000000000103', 'C', 'aaaaaaaa-0000-4000-8000-000000000101'

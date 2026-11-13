@@ -13,6 +13,7 @@ import { RACI_ENTITY_TYPES, type RaciAssignment, type RaciEntityType, type RaciR
 import { ForbiddenError, NotFoundError, ValidationError } from "../domain/errors/DomainErrors.js";
 import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
+import { visibilityReasonOf } from "../domain/entities/VisibilityReason.js";
 
 const ENTITY_TYPES: RaciEntityType[] = [...RACI_ENTITY_TYPES];
 const ROLES: RaciRole[] = ["R", "A", "C", "I"];
@@ -85,7 +86,10 @@ export class RaciAssignmentService {
     if (this.access && this.raci.createChecked) {
       const holdsRight = await this.access.exemptFromOpeningReason(actor);
       const givenReason = reason?.trim() ? checkedReason(reason, "open a restricted resource through RACI") : null;
-      const { assignment, opened } = await this.raci.createChecked(input, !holdsRight && !givenReason, ({ assignment: a, opened: o }) => [
+      const { assignment, opened } = await this.raci.createChecked(input, !holdsRight && !givenReason, ({ assignment: a, opened: o }) => {
+        // Conservation L2a: the opening reason is a visibility reason, stored once for both rows (built per call).
+        const openingReason = visibilityReasonOf("RACI_OPENING", givenReason);
+        return [
         {
           tenantId: actor.tenantId,
           userId: actor.userId,
@@ -95,7 +99,7 @@ export class RaciAssignmentService {
           oldValue: null,
           newValue: a,
           // An unneeded reason (nothing opens) is not recorded, as before.
-          reason: o ? givenReason : null,
+          ...(o ? openingReason : { reason: null }),
           requestId,
         },
         ...(o ? [{
@@ -106,10 +110,11 @@ export class RaciAssignmentService {
           action: "PERMISSION_CHANGE" as const,
           oldValue: { raciUserId: userId, reads: false },
           newValue: { raciUserId: userId, role, reads: true, widening: true, through: "RACI" },
-          reason: givenReason,
+          ...openingReason,
           requestId,
         }] : []),
-      ]);
+        ];
+      });
       if (opened && !holdsRight) await this.access.notifyRaciOpening(actor, entityType, entityId, requestId);
       return assignment;
     }
@@ -118,6 +123,7 @@ export class RaciAssignmentService {
     const opening = this.access ? await this.access.guardRaciOpening(actor, entityType, entityId, userId, reason) : null;
 
     let opened = false;
+    const openingReason = visibilityReasonOf("RACI_OPENING", opening?.reason); // Conservation L2a: stored once, referenced by both rows
     const assignment = await this.raci.create(input);
 
     try {
@@ -129,7 +135,7 @@ export class RaciAssignmentService {
         action: "CREATE",
         oldValue: null,
         newValue: assignment,
-        reason: opening?.reason ?? null,
+        ...openingReason,
         requestId,
       });
       if (opening && (await this.access!.raciOpened(actor, entityType, entityId, userId))) {
@@ -142,7 +148,7 @@ export class RaciAssignmentService {
           action: "PERMISSION_CHANGE",
           oldValue: { raciUserId: userId, reads: false },
           newValue: { raciUserId: userId, role, reads: true, widening: true, through: "RACI" },
-          reason: opening.reason,
+          ...openingReason,
           requestId,
         });
       }

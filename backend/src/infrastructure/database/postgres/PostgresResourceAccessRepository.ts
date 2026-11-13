@@ -16,6 +16,8 @@ import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.
 import type { ReadScope, Visibility } from "../../../domain/visibility.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { runAudited } from "./PostgresAuditRepository.js";
+import { displayReason } from "../../../domain/entities/VisibilityReason.js";
+import { insertVisibilityReason, reasonColumns } from "./visibilityReasons.js";
 import { unknownDepartmentAsValidation } from "./foreignKey.js";
 import { isClosed, listExpiries, renewGrants, reviveExpired, stampNamedExpiry, validList } from "./namedAccess.js";
 import { resourceVisibleExpr, visibleToFunction } from "./visibilityFilter.js";
@@ -217,7 +219,8 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
     const limit = Math.min(Math.max(Math.trunc(page?.limit ?? 200), 1), 500);
     const offset = Math.max(Math.trunc(page?.offset ?? 0), 0);
     const { rows } = await this.pool.query<{ type: RestrictedResourceRow["type"]; id: string; label: string; visibility: Visibility; access_count: string; updated_at: Date;
-      last_by: string | null; last_at: Date | null; last_reason: string | null; last_widening: boolean | null }>(
+      last_by: string | null; last_at: Date | null; last_reason: string | null; last_ref: string | null; last_reason_text: string | null;
+      last_reason_erased_at: Date | null; last_widening: boolean | null }>(
       `WITH restricted AS (
          SELECT 'RISK' AS type, id, left(description, 160) AS label, visibility, updated_at FROM risks
            WHERE tenant_id = $1 AND deleted_at IS NULL AND visibility <> 'CLIENT'
@@ -234,10 +237,11 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
               (SELECT count(*) FROM resource_access_grants g
                 WHERE g.tenant_id = $1 AND g.resource_type = r.type AND g.resource_id = r.id AND g.revoked_at IS NULL
                   AND visibility_granted(g.tenant_id, g.resource_type, g.resource_id, g.user_id)) AS access_count,
-              lc.user_id AS last_by, lc."timestamp" AS last_at, lc.reason AS last_reason, (lc.new_value->>'widening')::boolean AS last_widening
+              lc.user_id AS last_by, lc."timestamp" AS last_at, lc.reason AS last_reason, lc.reason_ref AS last_ref, ${reasonColumns("$1", "lc.reason_ref", "last_reason")},
+              (lc.new_value->>'widening')::boolean AS last_widening
        FROM restricted r
        LEFT JOIN LATERAL (
-         SELECT a.user_id, a."timestamp", a.reason, a.new_value FROM audit_log a
+         SELECT a.user_id, a."timestamp", a.reason, a.reason_ref, a.new_value FROM audit_log a
          WHERE a.tenant_id = $1 AND a.action = 'PERMISSION_CHANGE' AND a.entity_id = r.id
            AND a.entity_type = CASE r.type WHEN 'RISK' THEN 'Risk' WHEN 'CONTROL' THEN 'Control' WHEN 'ANOMALY' THEN 'Anomaly'
                                            WHEN 'ACTION_PLAN' THEN 'ActionPlan' ELSE 'Kpi' END
@@ -249,7 +253,12 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
     );
     return rows.map((r) => ({
       type: r.type, id: r.id, label: r.label, visibility: r.visibility, accessCount: Number(r.access_count), updatedAt: r.updated_at,
-      lastChange: r.last_by ? { userId: r.last_by, at: r.last_at as Date, reason: r.last_reason, widening: r.last_widening } : null,
+      lastChange: r.last_by ? {
+        userId: r.last_by, at: r.last_at as Date,
+        // Conservation L2a: the reason read through its reference, or « motif effacé le … (conservation) ».
+        reason: r.last_ref ? displayReason(r.last_reason_text, r.last_reason_erased_at) : r.last_reason,
+        widening: r.last_widening,
+      } : null,
     }));
   }
 
@@ -325,22 +334,24 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
       const rawBefore = await activeList(db, tenantId, type, id);
       const before: ResourceVisibilityState = { visibility: locked.rows[0].visibility, accessUserIds: await validList(db, tenantId, type, id) };
       const readersBefore = await effectiveReaders(db, tenantId, type, id);
+      // Conservation L2a: the text is stored once; the grant rows and the audit row reference it.
+      const reasonId = await insertVisibilityReason(db, tenantId, "VISIBILITY_CHANGE", change.reason);
       // Back to CLIENT revokes the list as read under the lock (a concurrent grant cannot survive).
       const revoke = change.visibility === "CLIENT" ? rawBefore : change.revokeUserIds;
       for (const userId of new Set(revoke)) {
         const { rowCount } = await db.query(
-          `UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $5, revoke_reason = $6
+          `UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $5, revoke_reason_ref = $6
            WHERE tenant_id = $1 AND resource_type = $2 AND resource_id = $3 AND user_id = $4 AND revoked_at IS NULL`,
-          [tenantId, type, id, userId, change.changedBy, change.reason],
+          [tenantId, type, id, userId, change.changedBy, reasonId],
         );
         if (!rowCount) throw new ValidationError(`No active access to revoke for user ${userId}`);
       }
       for (const userId of new Set(change.addUserIds)) {
         if (rawBefore.includes(userId)) { await reviveExpired(db, tenantId, type, id, userId); continue; }
         await db.query(
-          `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason)
+          `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [tenantId, type, id, userId, change.changedBy, change.reason],
+          [tenantId, type, id, userId, change.changedBy, reasonId],
         );
       }
       await db.query(
@@ -351,7 +362,7 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
       if (change.visibility !== "CLIENT") await stampNamedExpiry(db, tenantId, type, id);
       const readersAfter = await effectiveReaders(db, tenantId, type, id);
       const widening = readersAfter.some((u) => !readersBefore.includes(u));
-      return { before, after: { visibility: change.visibility, accessUserIds: await validList(db, tenantId, type, id) }, widening };
+      return { before, after: { visibility: change.visibility, accessUserIds: await validList(db, tenantId, type, id) }, widening, reasonId };
     }, audit);
   }
 }

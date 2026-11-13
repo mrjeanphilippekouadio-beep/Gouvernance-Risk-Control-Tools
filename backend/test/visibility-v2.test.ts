@@ -57,7 +57,7 @@ describe("lot V2 — changing the level of a control, anomaly, plan or KPI", () 
     const { m, audits, notifications } = manager(true);
     await m.set(actor(OWNER), target(), input, "req");
     expect(audits).toHaveLength(1);
-    expect(audits[0]).toMatchObject({ userId: OWNER, entityType: "ActionPlan", action: "PERMISSION_CHANGE", reason: "Dossier sensible", newValue: { widening: true } });
+    expect(audits[0]).toMatchObject({ userId: OWNER, entityType: "ActionPlan", action: "PERMISSION_CHANGE", reason: null, visibilityReason: { source: "VISIBILITY_CHANGE", text: "Dossier sensible" }, newValue: { widening: true } });
     expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ recipientUserId: RM, eventType: "ACTION_PLAN_VISIBILITY_WIDENED" }));
   });
 
@@ -117,7 +117,7 @@ describe.skipIf(!hasLocalPg)("lot V2 on real PostgreSQL (local only)", () => {
   const sees = async (fn: string, id: string, userId: string | null) =>
     (await one(`SELECT ${fn}($1, $2, $3::uuid) AS v`, [ctx.tenant, id, userId])).v as boolean;
   const grant = (type: string, id: string, userId: string, by: string) =>
-    one(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, $2, $3, $4, $5, 'test', now() + interval '10 days') RETURNING id`, [ctx.tenant, type, id, userId, by]);
+    one(`WITH r AS (INSERT INTO visibility_reasons (tenant_id, source, text) VALUES ($1, 'VISIBILITY_CHANGE', 'test') RETURNING id) INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at) SELECT $1, $2, $3, $4, $5, r.id, now() + interval '10 days' FROM r RETURNING id`, [ctx.tenant, type, id, userId, by]);
   const dept = async () => (await one(`INSERT INTO departments (tenant_id, name) VALUES ($1, $2) RETURNING id`, [ctx.tenant, `D-${Math.random()}`])).id as string;
   const control = async (visibility: string, departmentId: string | null = null, processId: string | null = null) =>
     (await one(`INSERT INTO controls (tenant_id, label, process_id, department_id, control_type, frequency, executor, compliance_criteria, visibility)
@@ -242,7 +242,7 @@ describe.skipIf(!hasLocalPg)("lot V2 on real PostgreSQL (local only)", () => {
     expect(await repo.hiddenIds(ctx.tenant, "CONTROL", [c], readerScope({ userId: g! }))).toEqual([]);
     const r2 = await repo.changeVisibility(ctx.tenant, "CONTROL", c, { visibility: "CLIENT", addUserIds: [], revokeUserIds: [], reason: "Ouvrir", changedBy: rm! });
     expect(r2.after).toEqual({ visibility: "CLIENT", accessUserIds: [] });
-    expect(await one(`SELECT revoked_by, revoke_reason FROM resource_access_grants WHERE resource_id = $1`, [c])).toEqual({ revoked_by: rm, revoke_reason: "Ouvrir" });
+    expect(await one(`SELECT g.revoked_by, g.revoke_reason, v.text AS reason_text FROM resource_access_grants g JOIN visibility_reasons v ON v.id = g.revoke_reason_ref WHERE g.resource_id = $1`, [c])).toEqual({ revoked_by: rm, revoke_reason: null, reason_text: "Ouvrir" });
     expect((await repo.readers(ctx.tenant, "CONTROL", c))).toEqual(expect.arrayContaining([x, g, rm]));
     await expect(repo.changeVisibility(ctx.tenant, "KPI", c, { visibility: "CLIENT", addUserIds: [], revokeUserIds: [], reason: "x", changedBy: rm! }))
       .rejects.toBeInstanceOf(NotFoundError);

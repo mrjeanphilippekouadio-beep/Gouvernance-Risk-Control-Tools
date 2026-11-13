@@ -30,7 +30,7 @@ describe("QA-visibility-v5 STATIC", () => {
     expect(names).toContain("087_named_access_expiry.sql");
     expect(names).toContain("087_named_access_expiry.down.sql");
     expect(names.filter((n) => n.startsWith("087_") && !n.endsWith(".down.sql"))).toHaveLength(1);
-    expect(names.filter((n) => /^\d{3}_/.test(n) && n >= "096")).toHaveLength(0);
+    expect(names.filter((n) => /^\d{3}_/.test(n) && n >= "097")).toHaveLength(0);
     expect(read("backend", "src", "api", "v1", "resourceVisibility.routes.ts")).toMatch(/userIds: boundedArray\(z\.guid\(\), MAX_ACCESS_CHANGE, 1\)/);
   });
   it("the renewal route is mounted for the five types (risk on its own router, the four others through mountVisibilityRoutes)", () => {
@@ -76,7 +76,7 @@ async function insertItem(type: Type, level: string, extra: { riskId?: string; c
 }
 /** A grant as written by the application on a NOMINATIF dossier: expiry `in` (SQL interval). */
 const grant = (type: string, id: string, user: string, inInterval: string | null = "10 days") =>
-  sql(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, $2, $3, $4, $5, 'QA5', ${inInterval ? `now() + interval '${inInterval}'` : "NULL"})`, [T, type, id, user, user === UID.rm ? UID.adm : UID.rm]);
+  sql(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at) VALUES ($1, $2, $3, $4, $5, (SELECT id FROM visibility_reasons WHERE tenant_id = $1 ORDER BY created_at LIMIT 1), ${inInterval ? `now() + interval '${inInterval}'` : "NULL"})`, [T, type, id, user, user === UID.rm ? UID.adm : UID.rm]);
 const nominatif = async (type: Type, user: string = UID.named, extra: Parameters<typeof insertItem>[2] = {}) => {
   const id = await insertItem(type, "NOMINATIF", extra);
   await grant(type, id, user);
@@ -507,20 +507,20 @@ describe.skipIf(!live)("QA-visibility-v5 on the REAL server + LOCAL PostgreSQL 1
     const attempt = async (q: string, p: unknown[]) => { try { await sql(q, p); return null; } catch (e) { return (e as Error).message; } };
     it("insert beyond 30 days refused; update beyond 30 days refused; removing an expiry refused; a past expiry allowed; delete refused; revocation cannot move the expiry", async () => {
       const id = await insertItem("CONTROL", "NOMINATIF");
-      expect(await attempt(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1,'CONTROL',$2,$3,$4,'x', now() + interval '31 days')`, [T, id, UID.named, UID.rm])).toMatch(/30 days/);
-      expect(await attempt(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1,'CONTROL',$2,$3,$4,'x', now() + interval '30 days')`, [T, id, UID.named, UID.rm])).toBeNull();
+      expect(await attempt(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at) VALUES ($1,'CONTROL',$2,$3,$4,(SELECT id FROM visibility_reasons WHERE tenant_id = $1 ORDER BY created_at LIMIT 1), now() + interval '31 days')`, [T, id, UID.named, UID.rm])).toMatch(/30 days/);
+      expect(await attempt(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at) VALUES ($1,'CONTROL',$2,$3,$4,(SELECT id FROM visibility_reasons WHERE tenant_id = $1 ORDER BY created_at LIMIT 1), now() + interval '30 days')`, [T, id, UID.named, UID.rm])).toBeNull();
       expect(await attempt("UPDATE resource_access_grants SET expires_at = now() + interval '31 days' WHERE resource_id = $1", [id])).toMatch(/30 days/);
       expect(await attempt("UPDATE resource_access_grants SET expires_at = NULL WHERE resource_id = $1", [id])).not.toBeNull();
       expect(await attempt("UPDATE resource_access_grants SET expires_at = now() - interval '1 day' WHERE resource_id = $1", [id]), "SEC-V5-03: never shortened or backdated").toMatch(/lengthened/);
       expect(await attempt("DELETE FROM resource_access_grants WHERE resource_id = $1", [id])).toMatch(/never deleted/);
-      expect(await attempt("UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $2, revoke_reason = 'x', expires_at = now() WHERE resource_id = $1", [id, UID.rm])).toMatch(/does not change the expiry/);
-      expect(await attempt("UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $2, revoke_reason = 'x' WHERE resource_id = $1", [id, UID.rm])).toBeNull();
+      expect(await attempt("UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $2, revoke_reason_ref = (SELECT v.id FROM visibility_reasons v WHERE v.tenant_id = resource_access_grants.tenant_id ORDER BY v.created_at LIMIT 1), expires_at = now() WHERE resource_id = $1", [id, UID.rm])).toMatch(/does not change the expiry/);
+      expect(await attempt("UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $2, revoke_reason_ref = (SELECT v.id FROM visibility_reasons v WHERE v.tenant_id = resource_access_grants.tenant_id ORDER BY v.created_at LIMIT 1) WHERE resource_id = $1", [id, UID.rm])).toBeNull();
       expect(await attempt("UPDATE resource_access_grants SET revoked_at = NULL WHERE resource_id = $1", [id])).not.toBeNull();
       expect(await attempt("UPDATE resource_access_grants SET expires_at = now() + interval '5 days' WHERE resource_id = $1", [id]), "revoked row: never touched again").not.toBeNull();
     });
     it("boundary: exactly now()+30 days at insert is accepted (the application itself writes now()+30 days)", async () => {
       const id = await insertItem("CONTROL", "NOMINATIF");
-      expect(await attempt(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1,'CONTROL',$2,$3,$4,'x', now() + interval '30 days' + interval '1 second')`, [T, id, UID.named, UID.rm])).toMatch(/30 days/);
+      expect(await attempt(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at) VALUES ($1,'CONTROL',$2,$3,$4,(SELECT id FROM visibility_reasons WHERE tenant_id = $1 ORDER BY created_at LIMIT 1), now() + interval '30 days' + interval '1 second')`, [T, id, UID.named, UID.rm])).toMatch(/30 days/);
     });
     it("the two branches of the guard that the application relies on: content immutable (user, resource), expiry only on a live row", async () => {
       const id = await nominatif("CONTROL");

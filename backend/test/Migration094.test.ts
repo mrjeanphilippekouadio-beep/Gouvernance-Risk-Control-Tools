@@ -28,6 +28,7 @@ describe.skipIf(!live)("094 on a real local database", () => {
 
   it("stamps the PERIMETRE access, leaves CLIENT and already-dated ones, and a replay moves nothing", async () => {
     const tenant = (await pool.query(`INSERT INTO tenants (name) VALUES ($1) RETURNING id`, [`T094-${tag}`])).rows[0].id;
+    await pool.query(`INSERT INTO visibility_reasons (tenant_id, source, text) VALUES ($1, 'VISIBILITY_CHANGE', 'q253')`, [tenant]); // 096: a grant names its reason by reference
     const mk = async (e: string) => (await pool.query(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, 'U') RETURNING id`, [tenant, `${e}-${tag}@x.test`])).rows[0].id;
     const user = await mk("u");
     const by = await mk("by");
@@ -35,8 +36,8 @@ describe.skipIf(!live)("094 on a real local database", () => {
       `INSERT INTO controls (tenant_id, label, control_type, frequency, executor, compliance_criteria, visibility) VALUES ($1, 'c', 'PREVENTIVE', 'MONTHLY', 'x', 'y', $2) RETURNING id`,
       [tenant, level])).rows[0].id as string;
     const grant = async (id: string, expiry: string | null) => (await pool.query(
-      `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at)
-       VALUES ($1, 'CONTROL', $2, $3, $4, 'q253', ${expiry ? `now() + interval '${expiry}'` : "NULL"}) RETURNING id`, [tenant, id, user, by])).rows[0].id as string;
+      `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at)
+       VALUES ($1, 'CONTROL', $2, $3, $4, (SELECT id FROM visibility_reasons WHERE tenant_id = $1 LIMIT 1), ${expiry ? `now() + interval '${expiry}'` : "NULL"}) RETURNING id`, [tenant, id, user, by])).rows[0].id as string;
     const expiry = async (gid: string) => (await pool.query(`SELECT expires_at FROM resource_access_grants WHERE id = $1`, [gid])).rows[0].expires_at as Date | null;
 
     const perim = await grant(await control("PERIMETRE"), null);

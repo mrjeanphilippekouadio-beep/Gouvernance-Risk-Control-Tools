@@ -122,7 +122,8 @@ describe("q200 (DECISION-103): individual widened view of the rights matrix", ()
     await expect(service.revokeSensitiveView(validator, grant.id, "Pas mon rôle", "REQ-3")).rejects.toThrow(ForbiddenError);
     expect((await service.revokeSensitiveView(admin, grant.id, "Mission terminée", "REQ-4")).status).toBe("REVOKED");
     expect(await service.accounts(rmReader)).toHaveLength(3);
-    expect(audit.at(-1)).toMatchObject({ action: "UNASSIGN", reason: "Mission terminée" });
+    expect(audit.at(-1)).toMatchObject({ action: "UNASSIGN", reason: null, visibilityReason: { source: "SENSITIVE_VIEW_REVOCATION", text: "Mission terminée" } });
+    expect(audit.at(-1)!.newValue).not.toHaveProperty("revokeReason"); // Conservation L2a: the snapshot carries no reason text
   });
 });
 
