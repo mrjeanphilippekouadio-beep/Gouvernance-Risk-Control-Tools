@@ -519,3 +519,10 @@ Mémoire persistante du rôle Dev Backend sur GRC Tools. À lire en premier par 
 - Recherche du « précédent non revu » : méthode facultative `hasUnreviewedSoleRm(tenantId)` sur `RiskFrameworkRepository` (garde `?.`), lue avant la transaction de décision (fenêtre de concurrence acceptée : un seul RM, et le marquage n'est pas un blocage).
 - Notification Audit/Comité : déjà couverte pour les deux kinds (`confirmSoleAssignment` notifie après les deux), Audit et Comité vides = journal seul (DECISION-046) inchangé.
 - Outillage : `bash tests/integration/qa-visibility-v1-setup.sh up <base>` ; suites live avec `QA_SWP_PGHOST=/var/tmp/qavisv1/sock QA_SWP_PGPORT=55442 QA_SWP_PGDB=<base>` (le harnais `migrationHarness` veut un socket unix, pas du TCP).
+
+## 2026-11-13 — conservation L1 (095) (feat/r1-conservation-l1)
+- Masquer sans modifier une table en ajout seul : table de marques séparée (PK = id de la ligne, FK) + `NOT EXISTS` dans les seules lectures de consultation ; les lectures techniques ne filtrent pas. Colonne de date de audit_log = `"timestamp"` (pas `created_at` comme dit dans le cadrage).
+- Durée minimale d'une fonction manuelle : comparer `now() - p_durée` à `now() - interval '10 years'` (un interval compare `'10 years'` à 3600 jours, `3650 days` passerait sinon). Colonne de sortie de `RETURNS TABLE` ≠ nom de colonne cible d'un INSERT (`out_run_id`).
+- Fonction réservée au propriétaire : `REVOKE ALL ... FROM PUBLIC` ET `FROM grc_app_runtime` (043 donne DML par défaut sur toute nouvelle table : retirer aussi INSERT/UPDATE/DELETE/TRUNCATE de la table de marques, garder SELECT).
+- Une migration de plus casse : NUMBERS x2 (QA-panel*-migrations), max 95, compte des fonctions (56 -> 58), listes « après 083 » de QA-visibility-v2bis/v3, et le plafond `>= "096"` de QA-visibility-v5. Test live : `MIG095_LIVE=1 MIG095_DB=<base>`.
+- Entités d'audit_log (`entity_id`) sont des uuid : les tests live n'y mettent pas de chaînes libres.
