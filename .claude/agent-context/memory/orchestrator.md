@@ -70,3 +70,8 @@ Le PO a constaté que le frontend n'avançait plus : 13 écrans pour 43 modules 
 - Un agent peut rester bloqué sans rapport, ni notification de fin (A10 silencieux 50 min sur un `rm` dans `node_modules`). Au point de contrôle, regarder l'horodatage de la dernière ligne de `tasks/<id>.output` et relancer par SendMessage.
 - Codex : quota du compte épuisé depuis la PR #251. Le signaler dans chaque question de fusion tant qu'il ne relit plus. QA et Sécurité restent les seuls verrous.
 - Avant de rapatrier `qa/*` ou `sec/*`, corriger soi-même les chemins relatifs (`bash`, `sleep`) et les caractères de direction écrits en clair (`\uXXXX`) : Sonar les signale à chaque fois (S4036, S6389).
+
+### 2026-11-13 — passation
+- R1 : 093 (#252) et 094 (#253) fusionnées le 13/11. Staging à 094. Passation `HANDOFF-2026-11-13.md` : reste q266 (095), puis conservation L1/L2a/L2b/L3, et L2c sans migration.
+- Une vérification sur la base staging se fait par une requête en lecture seule donnée au PO, jamais par moi. Une variable Render se décrit au PO, jamais je ne la règle.
+- Avant de poser une question de configuration au PO, vérifier dans le code ce qui est vraiment bloquant (q287 : seule la requête de doublons l'était).
