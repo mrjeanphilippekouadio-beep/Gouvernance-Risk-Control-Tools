@@ -304,3 +304,76 @@ Numéros à attribuer par l'orchestrateur.
 - A (reco) : oui. Staging ne contient que des données de test, ce qui confirme H3, et la production n'a aucun motif (H1).
 - B : non. Staging contient des données réelles ou une copie de la production : il faut traiter ces lignes comme en Q-2 B.
 - Reco : **A**, sous réserve que le PO confirme qu'aucune donnée réelle n'a été saisie en staging.
+
+---
+
+## 9. Motifs libres hors visibilité (PRIV-L2A-03)
+
+Date : 2026-11-13. Auteur : A05. Source : avis A15 `docs/privacy/PRIV-l2a-2026-11-13.md` (PRIV-L2A-03, condition C3), DECISION-120 (q245, q246 A, q247 A), DECISION-121 (q257), DECISION-129. Code lu dans `.claude/worktrees/agent-af8d5033fc01a3968/` (L2a), sans le modifier. Documentation seulement, aucun code. Aucune obligation légale n'est citée : le cadre applicable reste non établi (RGPD et loi ivoirienne : NOT_ESTABLISHED).
+
+### 9.1 Règle de classement proposée
+
+Le PO a décidé ce qui est effacé à un an : les motifs **de visibilité** (q246 A, q247 A, et q241 A pour leur définition). Il faut une règle, pas une liste, car le journal reçoit des motifs libres d'environ 40 services (environ 110 écritures `reason:` dans `services/`). Les cinq chemins cités par A15 n'ont rien de particulier par rapport aux autres : archivages, clôtures d'anomalie, confirmations de gouvernance, désignations, profils, etc.
+
+- **Motif de visibilité** : l'acte porte sur le droit de lire **une ressource précise** (niveau, liste nominative, périmètre d'une ressource restreinte, ouverture RACI/processus/département/désignation, lecture élargie). Il va dans `visibility_reasons`. C'est déjà le cas en L2a (10 sources de `VisibilityReasonSource`).
+- **Motif de décision de gouvernance** : l'acte porte sur une **fonction** (rôle, appartenance à un groupe fixe, exception de gouvernance) ou sur un **objet méthodologique** (Dispositif applicable, statut, archivage). Il reste dans `audit_log.reason`, 10 ans, puis il est masqué par L1 comme le reste du journal.
+- **Texte commun aux deux** : il suit le régime le plus court. Une seule saisie sert parfois aux deux, par exemple un cumul avec une ouverture de groupe de département, ou un périmètre modifié en même temps que le Dispositif. Le texte est alors rangé comme motif de visibilité, avec une référence partagée. C'est ce que fait déjà la correction PRIV-L2A-01 visible dans le worktree (`RoleService.ts` l. 771-772, `RiskService.ts` l. 378-380), sous réserve des preuves A08. Conséquence acceptée : la justification du cumul ou du déplacement perd son texte en même temps que le motif de visibilité. La ligne d'audit garde l'acte, l'auteur, la date et la référence.
+
+Un changement de rôle modifie bien qui lit, par exemple parce que les groupes RM, Comité et Audit voient tout. Mais cette lecture découle d'une règle de structure. Ce n'est pas l'objet du motif. Classer chaque changement de rôle comme motif de visibilité reviendrait à effacer à un an la preuve des décisions de gouvernance.
+
+### 9.2 Classement des cinq chemins cités
+
+| Chemin (worktree L2a) | Nature | Risque Privacy réel | Classement proposé |
+|---|---|---|---|
+| `RoleService.ts` l. 772, cumul seul (admin + RM/Comité/Audit, q63/q80/q104) | Motif d'une exception de gouvernance (cumul de fonctions), qui prévient un tiers | Faible à moyen : le texte parle d'une personne nommée par l'acte (pourquoi elle cumule). Il peut contenir un fait personnel (absence, départ) si la personne qui saisit l'écrit | Gouvernance, journal 10 ans |
+| `RoleService.ts` l. 919 et 949, retrait d'un groupe fixe (motif obligatoire, `groupReason`) | Motif d'une décision sur une fonction | **Le plus élevé des cinq** : un retrait se justifie souvent par un fait sur la personne (départ, sanction, conflit d'intérêts, absence longue) | Gouvernance, journal 10 ans. C'est le cas qui justifie l'avertissement de saisie (9.3, option A) |
+| `RoleService.ts` l. 919 + 933, retrait du dernier RM (`governanceException` q149) | Preuve d'une exception de gouvernance relue par la santé de la gouvernance | Comme la ligne précédente | Gouvernance, journal 10 ans. Effacer ce texte à un an affaiblirait la preuve de q149 |
+| `ProcessService.ts` l. 225, déplacement d'un sous-processus vers un autre Dispositif (q257) | Motif méthodologique ; q257 l'a rendu obligatoire **pour la trace** | Faible : l'objet est un processus, pas une personne | Gouvernance, journal 10 ans |
+| `RiskService.ts` l. 380, déplacement de Dispositif seul (q257) | Idem | Faible | Gouvernance, journal 10 ans |
+
+Dans les cinq cas, le risque ne vient pas de la catégorie de l'acte. Il vient de **ce que la personne écrit** : un nom, ou un fait de santé ou de vie privée. Cela vaut aussi pour les quelque 100 autres motifs libres du journal.
+
+### 9.3 Options pour le PO
+
+**A — Laisser ces motifs dans le journal (10 ans puis masqués), le dire dans R5, et avertir à la saisie.**
+- Construction : aucune côté serveur. Une ligne d'aide sous les champs « motif » concernés, au minimum le retrait d'un groupe fixe et le cumul : « Ce motif est conservé 10 ans dans le journal d'audit. N'y écrivez pas d'information personnelle (santé, vie privée) ». La phrase exacte est à valider par A15. Ajout au texte R5 (point 3 de la liste A15 Q4, rendu définitif). Taille **XS**.
+- Ce que l'on garde : la preuve complète des décisions de gouvernance (q63, q149, q257) pendant toute la durée du journal, et la garde 038 intacte.
+- Ce que l'on accepte : un fait personnel écrit malgré l'avertissement reste lisible par le groupe Audit (`audit.read`) jusqu'au masquage à 10 ans, puis en base sans limite (q245 : rien n'est jamais supprimé physiquement).
+
+**B — Ranger aussi ces motifs dans l'espace séparé, effaçables comme les motifs de visibilité.**
+- Construction : élargir `visibility_reasons` (renommage ou nouvelles valeurs de `source`, garde reprise en entier), environ 5 points d'écriture plus 2 lecteurs, tests PostgreSQL réels. Il faut aussi définir la « fin d'effet » d'un acte instantané (un retrait de rôle n'a pas de durée), donc une nouvelle règle de départ. Taille **S/M**, sur le chemin critique de L2b.
+- Ce que l'on perd : le texte de la preuve des exceptions de gouvernance au bout d'un an, alors que le journal est gardé 10 ans pour servir de preuve (q245). La revue a posteriori de q266 et la santé de la gouvernance liraient « motif effacé ».
+- Limite : cela ne couvre que 5 des quelque 110 écritures de motifs libres. Pour être cohérent, il faudrait soit tout migrer (taille L, et le journal n'aurait presque plus de motifs), soit accepter une frontière arbitraire.
+
+**C — Remplacer le texte libre par une liste de motifs pour les rôles (et éventuellement les déplacements).**
+- Construction : liste fermée (par exemple « changement de poste », « départ », « réorganisation », « autre ») plus un complément facultatif. Taille **S** (front + validation). La liste est à proposer par A13/A14, pas par l'architecte.
+- Ce que l'on gagne : moins de texte personnel saisi.
+- Ce que l'on perd : la nuance du motif. Le complément libre ramène le même risque. Cela s'éloigne aussi de la logique de q215/q257 (texte libre lisible).
+
+### 9.4 Recommandation A05
+
+**A**, avec l'avertissement de saisie. Raisons :
+1. Ces motifs sont la preuve de décisions de gouvernance (exceptions q63/q149, déplacements q257). Le PO a fixé leur support et leur durée : le journal, 10 ans (q245). Les effacer à un an contredirait cette durée sans demande du PO.
+2. Le risque Privacy ne dépend pas de la catégorie, il dépend du contenu saisi. Le traiter à la source (avertissement) couvre aussi les quelque 100 autres motifs libres, ce que B ne fait pas.
+3. A ne crée aucune nouvelle durée, aucune nouvelle garde et aucune exception à l'ajout seul. B ajoute un lot sur le chemin critique de L2b pour une couverture partielle.
+4. La règle 9.1 s'applique aux modules futurs sans nouvelle question. Elle est à ajouter à la recette « nouveau module » si le PO retient A.
+
+Point à faire confirmer par A15 en suivi : si un fait personnel apparaît quand même dans un motif de gouvernance, A n'offre aucun moyen de l'effacer avant 10 ans (cohérent avec q270 A pour les noms anciens). Si le PO veut ce moyen, ce serait une exception à l'ajout seul (revues A23 et A10), pas l'option B.
+
+### 9.5 Projet de question cockpit
+
+**Titre** : Motifs saisis lors d'un changement de rôle ou d'un déplacement de Dispositif : combien de temps les garder ?
+
+**Contexte** :
+1. Les motifs qui ouvrent ou ferment l'accès à une fiche restreinte sont rangés à part et effacés au bout d'un an (votre décision q246/q247).
+2. D'autres motifs sont saisis à la main et ne concernent pas l'accès à une fiche : retrait ou cumul d'un rôle (Risk Manager, Comité, Audit, administrateur), déplacement d'un risque ou d'un sous-processus vers un autre Dispositif.
+3. Ils prouvent des décisions de gouvernance. Aujourd'hui, ils restent dans le journal d'audit 10 ans, puis ils sont masqués comme le reste du journal.
+4. Le risque : une personne peut y écrire un fait personnel (par exemple une raison de santé pour un retrait de rôle), lisible par l'Audit pendant 10 ans.
+5. Privacy demande que ce point soit tranché avant le lot d'effacement des motifs (L2b).
+
+**Options** :
+- **A (reco)** : on les garde dans le journal 10 ans, comme preuve. Un message sous le champ demande de ne pas y écrire d'information personnelle, et le texte de confidentialité (R5) le dit. Très petit travail.
+- **B** : on les range avec les motifs d'accès et on les efface au bout d'un an. Lot moyen avant L2b. La preuve de ces décisions perd son texte après un an, et environ 100 autres motifs libres du journal restent non couverts.
+- **C** : on remplace le texte libre par une liste de motifs (changement de poste, départ, réorganisation, autre) pour les rôles. Petit lot. Moins de détail sur le motif.
+
+**Recommandation** : **A**. Ces motifs servent de preuve pendant toute la durée du journal, que vous avez fixée à 10 ans. Le vrai risque vient de ce qui est écrit, et le message de saisie le réduit pour tous les motifs, pas seulement pour ces cinq-là.
