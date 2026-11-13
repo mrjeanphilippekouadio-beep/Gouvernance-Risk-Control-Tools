@@ -19,6 +19,8 @@ END $$;
 ALTER TABLE resource_access_grants DISABLE TRIGGER resource_access_grants_guard;
 ALTER TABLE sensitive_view_grants DISABLE TRIGGER sensitive_view_grants_guard;
 
+ALTER TABLE resource_access_grants DROP CONSTRAINT IF EXISTS rag_reason_text_check;
+ALTER TABLE sensitive_view_grants DROP CONSTRAINT IF EXISTS svg_reason_text_check;
 ALTER TABLE resource_access_grants DROP CONSTRAINT IF EXISTS rag_revocation_shape_check;
 ALTER TABLE resource_access_grants DROP CONSTRAINT IF EXISTS rag_grant_reason_present_check;
 ALTER TABLE sensitive_view_grants DROP CONSTRAINT IF EXISTS svg_reject_reason_check;

@@ -9,7 +9,7 @@ export async function insertVisibilityReason(
   text: string,
 ): Promise<string> {
   const { rows } = await db.query<{ id: string }>(
-    `INSERT INTO visibility_reasons (tenant_id, source, text) VALUES ($1, $2, $3) RETURNING id`,
+    `INSERT INTO public.visibility_reasons (tenant_id, source, text) VALUES ($1, $2, $3) RETURNING id`,
     [tenantId, source, text],
   );
   return rows[0]!.id;
@@ -20,6 +20,6 @@ export async function insertVisibilityReason(
  * the main query stay unambiguous). Yields `<alias>_text` and `<alias>_erased_at`.
  */
 export function reasonColumns(tenantCol: string, refCol: string, alias: string): string {
-  return `(SELECT vr.text FROM visibility_reasons vr WHERE vr.tenant_id = ${tenantCol} AND vr.id = ${refCol}) AS ${alias}_text,
-          (SELECT vr.erased_at FROM visibility_reasons vr WHERE vr.tenant_id = ${tenantCol} AND vr.id = ${refCol}) AS ${alias}_erased_at`;
+  return `(SELECT vr.text FROM public.visibility_reasons vr WHERE vr.tenant_id = ${tenantCol} AND vr.id = ${refCol}) AS ${alias}_text,
+          (SELECT vr.erased_at FROM public.visibility_reasons vr WHERE vr.tenant_id = ${tenantCol} AND vr.id = ${refCol}) AS ${alias}_erased_at`;
 }

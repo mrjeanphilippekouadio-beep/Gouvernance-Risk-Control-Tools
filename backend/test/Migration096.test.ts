@@ -95,6 +95,11 @@ describe.skipIf(!live)("096 on a real local database", () => {
     const rid = randomUUID();
     const id1 = await reason(t);
     expect(await refused(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by) VALUES ($1, 'RISK', $2, $3, $4)`, [t, rid, b, a])).toMatch(/rag_grant_reason_present_check/);
+    // SEC-L2A-02: the old text columns refuse a free text; only the technical creation constant stays allowed.
+    const text = (col: string, value: string) => refused(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, ${col}) VALUES ($1, 'RISK', $2, $3, $4, $5, $6)`, [t, randomUUID(), b, a, id1, value]);
+    expect(await text("grant_reason", "texte libre")).toMatch(/rag_reason_text_check/);
+    expect(await text("grant_reason", "Accès accordé à la création du risque")).toBeNull();
+    expect(await refused(`INSERT INTO sensitive_view_grants (tenant_id, user_id, reason, reason_ref, requested_by) VALUES ($1, $2, 'texte libre', $3, $4)`, [t, b, id1, a])).toMatch(/svg_reason_text_check/);
     const grant = (await q(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref) VALUES ($1, 'RISK', $2, $3, $4, $5) RETURNING id`, [t, rid, b, a, id1]))[0]!["id"] as string;
     expect(await refused(`UPDATE resource_access_grants SET grant_reason_ref = $2 WHERE id = $1`, [grant, await reason(t)])).toMatch(/immutable/);
     expect(await refused(`UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $2 WHERE id = $1`, [grant, a])).toMatch(/rag_revocation_shape_check/);

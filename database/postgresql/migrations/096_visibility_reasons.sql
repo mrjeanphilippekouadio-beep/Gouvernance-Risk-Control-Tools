@@ -184,6 +184,19 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- SEC-L2A-02 : les anciennes colonnes de texte sont vidées par la migration ; la base refuse désormais d'y réécrire un motif.
+-- Seule reste la constante technique du risque à sa création (clé de listCreationAccess).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rag_reason_text_check') THEN
+    ALTER TABLE resource_access_grants ADD CONSTRAINT rag_reason_text_check
+      CHECK ((grant_reason IS NULL OR grant_reason = 'Accès accordé à la création du risque') AND revoke_reason IS NULL);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'svg_reason_text_check') THEN
+    ALTER TABLE sensitive_view_grants ADD CONSTRAINT svg_reason_text_check
+      CHECK (reason IS NULL AND decision_reason IS NULL AND revoke_reason IS NULL);
+  END IF;
+END $$;
+
 -- Garde 087 de resource_access_grants, reprise en entier : les deux références rejoignent le contenu immuable.
 CREATE OR REPLACE FUNCTION resource_access_grants_guard() RETURNS trigger LANGUAGE plpgsql
   SET search_path = pg_catalog, public, pg_temp AS $$

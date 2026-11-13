@@ -50,7 +50,7 @@ describe("visibility reasons never go back into audit_log.reason", () => {
 describe("insertAuditEvent with a visibility reason", () => {
   const base = { tenantId: "t1", userId: "u1", entityType: "Risk", entityId: "r1", action: "PERMISSION_CHANGE" as const, oldValue: null, newValue: null, requestId: "req" };
   const fakeDb = () => {
-    const query = vi.fn(async (sql: string) => (sql.includes("INSERT INTO visibility_reasons") ? { rows: [{ id: "reason-1" }] } : { rows: [] }));
+    const query = vi.fn(async (sql: string) => (sql.includes("INSERT INTO public.visibility_reasons") ? { rows: [{ id: "reason-1" }] } : { rows: [] }));
     return { query, db: { query } as never };
   };
   const auditParams = (query: ReturnType<typeof fakeDb>["query"]) =>
@@ -61,7 +61,7 @@ describe("insertAuditEvent with a visibility reason", () => {
     const shared = visibilityReasonOf("RACI_OPENING", "  Expert consulté ");
     await insertAuditEvent(db, { ...base, ...shared });
     await insertAuditEvent(db, { ...base, entityType: "RaciAssignment", ...shared });
-    const reasonInserts = query.mock.calls.filter(([sql]) => sql.includes("INSERT INTO visibility_reasons"));
+    const reasonInserts = query.mock.calls.filter(([sql]) => sql.includes("INSERT INTO public.visibility_reasons"));
     expect(reasonInserts).toHaveLength(1);
     expect(reasonInserts[0]![1]).toEqual(["t1", "RACI_OPENING", "Expert consulté"]);
     for (const params of auditParams(query)) {
@@ -73,7 +73,7 @@ describe("insertAuditEvent with a visibility reason", () => {
   it("a reason already stored by the repository (id) is referenced, not stored again", async () => {
     const { query, db } = fakeDb();
     await insertAuditEvent(db, { ...base, ...visibilityReasonOf("VISIBILITY_CHANGE", "Motif", "stored-9") });
-    expect(query.mock.calls.filter(([sql]) => sql.includes("INSERT INTO visibility_reasons"))).toHaveLength(0);
+    expect(query.mock.calls.filter(([sql]) => sql.includes("INSERT INTO public.visibility_reasons"))).toHaveLength(0);
     expect(auditParams(query)[0]![10]).toBe("stored-9");
   });
 
