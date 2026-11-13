@@ -35,6 +35,17 @@ export const PRINCIPLE_ACCEPTANCE_ALONE_EXCEPTION = "principle.acceptance.alone"
 /** q181 (DECISION-095): an acceptance made alone renewing a previous one made alone that nobody could review (« renouvelé sans revue »). */
 export const PRINCIPLE_ACCEPTANCE_RENEWED_WITHOUT_REVIEW_EXCEPTION = "principle.acceptance.renewedWithoutReview";
 
+/** Journal marker (audit_log.governance_exception) of a SOLE_RM confirmation (q252 A, ASSIGN_PROCESS and SET_DEFAULT): decided alone by the only Risk Manager. */
+export const SOLE_RM_EXCEPTION = "riskFramework.soleRiskManager";
+/** q266 A / CMP-B6C-03 (pattern q181): a SOLE_RM confirmation made while a previous one was still not reviewed. Never blocked, marked and counted; frozen at write. */
+export const SOLE_RM_WITHOUT_PRIOR_REVIEW_EXCEPTION = "riskFramework.soleRiskManager.withoutPriorReview";
+export const SOLE_RM_EXCEPTIONS: readonly string[] = [SOLE_RM_EXCEPTION, SOLE_RM_WITHOUT_PRIOR_REVIEW_EXCEPTION];
+/**
+ * q266 A (DECISION-128): a SOLE_RM confirmation always has a review delay. The tenant's `exceptionReviewDelayDays` (q168)
+ * wins; this value only applies when the tenant has not set one. q291, en attente PO (A = 30 days recommended): change it here.
+ */
+export const SOLE_RM_REVIEW_DEFAULT_DAYS = 30;
+
 /**
  * DECISION-074 R-5 / q138: a dated acceptance of a principle that is not respected. Content immutable; expiry is not a
  * stored state (expiresAt < now => the principle is "not respected" again on read).

@@ -30,6 +30,7 @@ import type {
 } from "../../../domain/entities/RiskFramework.js";
 import type { EvaluationMode } from "../../../domain/entities/Config.js";
 import { ConflictError, DRAFT_CHANGED_MESSAGE, NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
+import { SOLE_RM_EXCEPTIONS } from "../../../domain/entities/GovernanceReviews.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 import { insertAuditEvent } from "./PostgresAuditRepository.js";
 import { ratingScaleOf, type RatingScaleRow as ScaleRow } from "./PostgresRatingScaleRepository.js";
@@ -819,6 +820,18 @@ export class PostgresRiskFrameworkRepository implements RiskFrameworkRepository 
       );
       return this.audited(c, requestOf(rows[0]!), input.audit);
     });
+  }
+
+  async hasUnreviewedSoleRm(tenantId: string): Promise<boolean> {
+    const { rowCount } = await this.pool.query(
+      `SELECT 1 FROM audit_log a
+       WHERE a.tenant_id = $1 AND a.governance_exception = ANY($2::text[])
+         AND NOT EXISTS (SELECT 1 FROM governance_exception_reviews r
+                         WHERE r.tenant_id = a.tenant_id AND r.audit_log_id = a.id AND r.outcome = 'REVIEWED')
+       LIMIT 1`,
+      [tenantId, SOLE_RM_EXCEPTIONS],
+    );
+    return (rowCount ?? 0) > 0;
   }
 
   async hasPendingAssignment(tenantId: string, processId: string): Promise<boolean> {

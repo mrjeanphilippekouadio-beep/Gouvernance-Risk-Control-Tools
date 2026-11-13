@@ -86,6 +86,8 @@ export interface GovernanceFacts {
   riskManagerVacancySince: Date | null;
   riskManagerVacancyMaxDays: number | null;
   exceptionReviewDelayDays: number | null;
+  /** q266 A (C3): SOLE_RM confirmations since trackedSince, one per confirmation; `overdue` already uses the delay (tenant's, else the SOLE_RM default). Optional: absent = none. */
+  soleRm?: { total: number; unreviewed: number; overdue: number; withoutPriorReview: number };
   /** q231 B: last real execution of the R3 purge (its execution trace), null if never run. */
   lastSeenPurgeAt: Date | null;
   /** q233 A: live risks (not deleted, not archived), those whose creator is the owner, and the count per owner. */

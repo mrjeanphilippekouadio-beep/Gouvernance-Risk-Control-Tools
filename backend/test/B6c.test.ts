@@ -30,7 +30,7 @@ const role = (g: SystemGroup): Role => ({
   systemGroup: g, departmentId: null, createdAt: new Date(), updatedAt: new Date(), deletedAt: null,
 }) as Role;
 
-function setup(opts: { rm?: string[]; targetActive?: boolean; auditMembers?: string[]; soleAtRequest?: boolean } = {}) {
+function setup(opts: { rm?: string[]; targetActive?: boolean; auditMembers?: string[]; soleAtRequest?: boolean; unreviewedSole?: boolean } = {}) {
   const rm = opts.rm ?? ["u1", "u2", "u3"];
   const fw = (id: string): RiskFramework => ({ id, tenantId: "t1", name: id, description: null, isDefault: id === "fwDefault", createdBy: "u1",
     createdAt: new Date(), updatedAt: new Date(), archivedAt: null, archivedBy: null, archiveReason: null }) as RiskFramework;
@@ -43,6 +43,7 @@ function setup(opts: { rm?: string[]; targetActive?: boolean; auditMembers?: str
 
   const repo = {
     auditsInTransaction: true,
+    async hasUnreviewedSoleRm() { return opts.unreviewedSole === true; },
     async getFramework(_t: string, id: string) { return frameworks.find((f) => f.id === id) ?? null; },
     async getActiveVersion(_t: string, id: string) { return id === "fwB" && opts.targetActive !== false ? active : null; },
     async getRequest(_t: string, id: string) { return requests.find((r) => r.id === id) ?? null; },
@@ -317,6 +318,14 @@ describe("q252 A (DECISION-121): the sole Risk Manager confirms their own proces
     expect(p["newValue"]).toMatchObject({ decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" });
     expect(s.audit.find((e) => e["action"] === "APPROVE")).toMatchObject({ governanceException: "riskFramework.soleRiskManager" });
     expect(s.notified.filter((n) => n.eventType === "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE").map((n) => n.recipientUserId)).toEqual(["a1"]);
+  });
+
+  it("q266 A: a confirmation while a previous SOLE_RM one is not reviewed is not blocked, and carries the without-prior-review marker (one marked row)", async () => {
+    const s = setup({ rm: ["u1"], unreviewedSole: true });
+    const r = await ask(s);
+    await s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "Seul Risk Manager du tenant" }, "r2");
+    expect(s.attached.get("p1")).toBe("fwB");
+    expect(s.audit.filter((e) => e["governanceException"])).toEqual([expect.objectContaining({ action: "APPROVE", governanceException: "riskFramework.soleRiskManager.withoutPriorReview" })]);
   });
 
   it("no Audit/Committee member: nobody notified, the confirmation still goes through", async () => {

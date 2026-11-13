@@ -7,6 +7,7 @@ import type { RoleRepository } from "../domain/repositories/RoleRepository.js";
 import type { UserRepository } from "../domain/repositories/UserRepository.js";
 import type { SystemGroup } from "../domain/entities/Role.js";
 import type { AuditEvent } from "../domain/entities/AuditEvent.js";
+import { SOLE_RM_EXCEPTION, SOLE_RM_WITHOUT_PRIOR_REVIEW_EXCEPTION } from "../domain/entities/GovernanceReviews.js";
 import {
   DEFAULT_CONTRACT_PARAMS,
   type AppetiteThresholdEntry,
@@ -61,7 +62,7 @@ const MAX_DESCRIPTION = 1000;
 const MAX_REASON = 500;
 const MAX_COMMENT = 1000;
 /** Journal marker (audit_log.governance_exception) of a q252 A confirmation: shown in the governance health panel. */
-export const SOLE_RM_EXCEPTION = "riskFramework.soleRiskManager";
+export { SOLE_RM_EXCEPTION };
 const MAX_APPETITE_ENTRIES = 200;
 const MAX_LABEL = 200;
 
@@ -906,6 +907,10 @@ export class RiskFrameworkService {
       throw new ConflictError("Un autre Risk Manager peut valider cette demande : un tiers doit la décider");
     }
 
+    // q266 A (pattern q181): never blocked, but marked (and counted) when a previous SOLE_RM confirmation is still not reviewed.
+    // One journal row per confirmation carries the marker, so the health panel counts one exception.
+    const marker = (await this.frameworks.hasUnreviewedSoleRm?.(actor.tenantId))
+      ? SOLE_RM_WITHOUT_PRIOR_REVIEW_EXCEPTION : SOLE_RM_EXCEPTION;
     const decision = {
       outcome: "APPROVED" as const,
       decidedBy: actor.userId,
@@ -920,14 +925,14 @@ export class RiskFrameworkService {
     let result: AssignmentResult | DefaultResult;
     if (isDefault) {
       result = await decideDefault!(actor.tenantId, request.id, decision,
-        this.defaultApprovedEvents(actor, request, target, "SOLE_RM", reason, requestId, SOLE_RM_EXCEPTION));
+        this.defaultApprovedEvents(actor, request, target, "SOLE_RM", reason, requestId, marker));
     } else {
       result = await decideAssign!(actor.tenantId, request.id, decision, (r: AssignmentResult): AuditInput[] => [
         this.event(actor, "Process", r.processId, "UPDATE",
           { riskFrameworkId: r.previousFrameworkId },
           { riskFrameworkId: r.frameworkId, requestId: request.id, decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" },
           reason, requestId),
-        this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, reason, requestId, SOLE_RM_EXCEPTION),
+        this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, reason, requestId, marker),
       ]);
     }
 
