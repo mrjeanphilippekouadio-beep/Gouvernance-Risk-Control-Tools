@@ -155,6 +155,7 @@ describe.skipIf(!hasLocalPg)("lot V5 on real PostgreSQL (local only)", () => {
   beforeAll(async () => {
     await ctx.pool.query(migrationSql("084_resource_readall.sql"));
     await ctx.pool.query(migrationSql("087_named_access_expiry.sql"));
+    await ctx.pool.query(migrationSql("094_perimeter_named_access_expiry.sql")); // q253: visibility_granted fails closed outside CLIENT
   });
   const user = async (name: string) =>
     (await one(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, $3) RETURNING id`, [ctx.tenant, `${name}-${Math.random()}@v5`, name])).id as string;
@@ -194,11 +195,14 @@ describe.skipIf(!hasLocalPg)("lot V5 on real PostgreSQL (local only)", () => {
     expect(await sees("risk_visible_to", r, late!)).toBe(true);
   });
 
-  it("a PERIMETRE list (no expiry) is untouched by q225", async () => {
+  it("fail closed (SEC-Q253-01, mirror of SEC-V5-02): a PERIMETRE dossier whose named access carries no expiry reads nothing; with an expiry it reads", async () => {
     const [by, g] = await Promise.all(["by", "g"].map(user));
     const c = await control("PERIMETRE");
     await grant("CONTROL", c, g!, by!, null);
-    expect(await sees("control_visible_to", c, g!)).toBe(true);
+    expect(await sees("control_visible_to", c, g!)).toBe(false);
+    const dated = await control("PERIMETRE");
+    await grant("CONTROL", dated, g!, by!);
+    expect(await sees("control_visible_to", dated, g!)).toBe(true);
   });
 
   it("closing the dossier cuts the named access, per type", async () => {

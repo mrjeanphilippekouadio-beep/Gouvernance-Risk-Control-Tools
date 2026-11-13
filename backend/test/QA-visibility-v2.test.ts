@@ -852,9 +852,9 @@ describe.skipIf(!live)("QA-visibility-v2 on the REAL server + LOCAL PostgreSQL 1
       expect(await probe("dept")).toEqual([true, true, true]);
       await sql("UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $1, revoke_reason = 'QA' WHERE user_id = $2 AND resource_id IN ($3, $4, $5) AND revoked_at IS NULL", [UID.own, UID.named, I("c02"), K("9002"), I("a06")]);
       try { expect(await probe("named")).toEqual([false, false, false]); } finally {
-        // a revocation is final (append-only): the access is restored by a NEW grant
+        // a revocation is final (append-only): the access is restored by a NEW grant, DATED (q253 / SEC-Q253-01: an undated access gives no read on a restricted dossier)
         for (const [t, rid] of [["CONTROL", I("c02")], ["KPI", K("9002")], ["ACTION_PLAN", I("a06")]]) {
-          await sql("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason) VALUES ($1, $2, $3, $4, $5, 'QA restore')", [I("001"), t, rid, UID.named, UID.own]);
+          await sql("INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, $2, $3, $4, $5, 'QA restore', now() + interval '30 days')", [I("001"), t, rid, UID.named, UID.own]);
         }
       }
       expect(await probe("named")).toEqual([true, true, true]);
