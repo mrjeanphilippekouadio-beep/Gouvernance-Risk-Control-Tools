@@ -2,6 +2,7 @@ import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { GovernanceHealthRepository } from "../domain/repositories/GovernanceHealthRepository.js";
 import type { OrganizationProfileRepository } from "../domain/repositories/OrganizationProfileRepository.js";
+import { SOLE_RM_EXCEPTIONS, SOLE_RM_REVIEW_DEFAULT_DAYS } from "../domain/entities/GovernanceReviews.js";
 import { CATALOG_VERSION, PRINCIPLES, type PrincipleEntry, type RequirementLevel } from "../domain/governance/catalog.js";
 import {
   classifyOrganization,
@@ -74,6 +75,8 @@ export interface GovernanceHealthView {
   profileGaps: ProfileGap[];
   principles: PanelPrinciple[];
   exceptions: { total: number; unreviewed: number; reviewDelayDays: number | null; items: PanelException[] };
+  /** q266 A (C3): SOLE_RM confirmations (decided alone by the only Risk Manager), one per confirmation. `reviewDelayDays` = tenant's delay, else the default (q291). */
+  soleRm: { total: number; unreviewed: number; overdue: number; withoutPriorReview: number; reviewDelayDays: number };
   /** q231 B: the R3 purge is manual — when it last really ran (null = never) and how long ago. */
   retentionPurge: { lastRunAt: Date | null; ageDays: number | null };
 }
@@ -165,7 +168,10 @@ export class GovernanceHealthService {
     });
 
     const delay = facts.exceptionReviewDelayDays;
+    // q266 A: a SOLE_RM confirmation always has a delay, even when the tenant set none.
+    const soleRmDelay = delay ?? SOLE_RM_REVIEW_DEFAULT_DAYS;
     const items = facts.markedActions.map((m): PanelException => {
+      const itemDelay = SOLE_RM_EXCEPTIONS.includes(m.rule) ? soleRmDelay : delay;
       const ageDays = Math.floor((now.getTime() - m.at.getTime()) / DAY);
       return {
         auditId: m.auditId,
@@ -177,7 +183,7 @@ export class GovernanceHealthService {
         reason: seesReasons ? m.reason : null,
         reviewed: m.reviewed,
         ageDays,
-        overdue: delay !== null && !m.reviewed && m.rule !== "riskManager.vacancy" && ageDays > delay,
+        overdue: itemDelay !== null && !m.reviewed && m.rule !== "riskManager.vacancy" && ageDays > itemDelay,
         userId: showNames ? m.userId : null,
         userLabel: showNames ? (labels.get(m.userId) ?? null) : null,
         mine: m.userId === actor.userId,
@@ -194,6 +200,7 @@ export class GovernanceHealthService {
       profileGaps: active ? computeProfileGaps(active.answers, observed) : [],
       principles,
       exceptions: { total: facts.markedTotal, unreviewed: facts.unreviewedTotal, reviewDelayDays: delay, items },
+      soleRm: { total: 0, unreviewed: 0, overdue: 0, withoutPriorReview: 0, ...facts.soleRm, reviewDelayDays: soleRmDelay },
       retentionPurge: {
         lastRunAt: facts.lastSeenPurgeAt,
         ageDays: facts.lastSeenPurgeAt ? Math.floor((now.getTime() - facts.lastSeenPurgeAt.getTime()) / DAY) : null,

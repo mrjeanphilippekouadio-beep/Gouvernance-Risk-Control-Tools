@@ -12,7 +12,8 @@ import "./GovernanceHealth.css";
 
 /** Readable label of an exception marker the server names; an unknown key is shown as is. Display only. */
 const RULE_LABELS: Record<string, string> = {
-  "riskFramework.soleRiskManager": "Rattachement de processus confirmé par le seul Risk Manager, sans second avis (DECISION-121)",
+  "riskFramework.soleRiskManager": "Décision confirmée par le seul Risk Manager, sans second avis (DECISION-121)",
+  "riskFramework.soleRiskManager.withoutPriorReview": "Décision confirmée par le seul Risk Manager, sans revue des précédentes",
 };
 const ruleLabel = (rule: string) => RULE_LABELS[rule] ?? rule;
 
@@ -169,6 +170,8 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
         <p className="muted">{data.exceptions.unreviewed} à revoir sur {data.exceptions.total}
           {data.exceptions.reviewDelayDays !== null && <> · délai de revue : {data.exceptions.reviewDelayDays} jours</>}
           {data.exceptions.items.length < data.exceptions.total && <> · {data.exceptions.items.length} affichées</>}.</p>
+        {data.soleRm.total > 0 && <p className="muted">Confirmations du seul Risk Manager : {data.soleRm.unreviewed} non revue(s) sur {data.soleRm.total},
+          dont {data.soleRm.overdue} en retard (délai {data.soleRm.reviewDelayDays} jours) · {data.soleRm.withoutPriorReview} sans revue des précédentes.</p>}
         <Table columns={exceptionColumns} rows={data.exceptions.items} rowKey={(e) => e.auditId} loading={false} emptyMessage="Aucune exception à revoir." />
       </Card>}
       {data.retentionPurge.lastRunAt === null

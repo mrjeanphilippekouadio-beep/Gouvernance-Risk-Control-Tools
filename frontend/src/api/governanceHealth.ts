@@ -57,6 +57,8 @@ export interface GovernanceHealth {
   profileGaps: ProfileGap[];
   principles: PanelPrinciple[];
   exceptions: { total: number; unreviewed: number; reviewDelayDays: number | null; items: PanelException[] };
+  /** q266 A: confirmations decided alone by the only Risk Manager (counts computed by the server). */
+  soleRm: { total: number; unreviewed: number; overdue: number; withoutPriorReview: number; reviewDelayDays: number };
   retentionPurge: { lastRunAt: string | null; ageDays: number | null };
 }
 

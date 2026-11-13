@@ -18,7 +18,7 @@ const rm = user("rm", ["governanceexception.review", "governanceprinciple.accept
 const rm2 = user("rm2", ["governanceprinciple.acceptance.confirm", "governancehealth.read", "audit.read"]);
 const nobody = user("nobody", []);
 
-function reviewService(entry: { userId: string; reviewable: boolean } | null) {
+function reviewService(entry: { userId: string; reviewable: boolean; governanceException?: string } | null, groupMembers?: string[]) {
   const inserted: unknown[] = [];
   const audits: unknown[] = [];
   const service = new GovernanceExceptionService(
@@ -32,6 +32,7 @@ function reviewService(entry: { userId: string; reviewable: boolean } | null) {
       },
     },
     { record: async () => undefined } as never,
+    groupMembers ? { groupMembers: async () => groupMembers } : undefined,
   );
   return { service, inserted, audits };
 }
@@ -43,6 +44,17 @@ describe("GovernanceExceptionService", () => {
     expect(r.reviewedBy).toBe("rm");
     expect(inserted).toHaveLength(1);
     expect(audits).toMatchObject([{ entityType: "GovernanceExceptionReview", action: "CREATE", newValue: { outcome: "REVIEWED" } }]);
+  });
+  it("SEC-Q266-02: a SOLE_RM exception is reviewed by an Audit or Committee member only; another Risk Manager, or no group source, is refused", async () => {
+    for (const marker of ["riskFramework.soleRiskManager", "riskFramework.soleRiskManager.withoutPriorReview"]) {
+      const sole = { userId: "author", reviewable: true, governanceException: marker };
+      await expect(reviewService(sole, ["auditor"]).service.review(rm, "a1", { outcome: "REVIEWED", comment: "ok" }, "r")).rejects.toThrow(ForbiddenError);
+      await expect(reviewService(sole).service.review(rm, "a1", { outcome: "REVIEWED", comment: "ok" }, "r")).rejects.toThrow(ForbiddenError);
+      const ok = reviewService(sole, ["auditor", "rm"]);
+      expect((await ok.service.review(rm, "a1", { outcome: "REVIEWED", comment: "ok" }, "r")).reviewedBy).toBe("rm");
+    }
+    // other exceptions keep the current rule: the permission is enough
+    expect((await reviewService({ userId: "author", reviewable: true }, []).service.review(rm, "a1", { outcome: "REVIEWED", comment: "ok" }, "r")).reviewedBy).toBe("rm");
   });
   it("refuses without the permission, the author, an unknown/non-reviewable entry, a bad comment", async () => {
     await expect(reviewService({ userId: "a", reviewable: true }).service.review(nobody, "a1", { outcome: "REVIEWED", comment: "ok" }, "r")).rejects.toThrow(ForbiddenError);

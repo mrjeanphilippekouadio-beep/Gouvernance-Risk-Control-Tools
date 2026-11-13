@@ -74,7 +74,7 @@ describe("B-13 templates (A13 values, validated by the PO)", () => {
   });
 });
 
-function setup(opts: { rm?: string[]; defaultId?: string; activeIds?: string[]; existing?: string[]; attachedProcess?: boolean; failOnTemplate?: string; soleAtRequest?: boolean } = {}) {
+function setup(opts: { rm?: string[]; defaultId?: string; activeIds?: string[]; existing?: string[]; attachedProcess?: boolean; failOnTemplate?: string; soleAtRequest?: boolean; unreviewedSole?: boolean } = {}) {
   const rm = opts.rm ?? ["u1", "u2", "u3"];
   const fw = (id: string, name = id): RiskFramework => ({ id, tenantId: "t1", name, description: null, isDefault: id === (opts.defaultId ?? "fwA"), createdBy: "u1",
     createdAt: new Date(), updatedAt: new Date(), archivedAt: null, archivedBy: null, archiveReason: null }) as RiskFramework;
@@ -88,6 +88,7 @@ function setup(opts: { rm?: string[]; defaultId?: string; activeIds?: string[]; 
 
   const repo = {
     auditsInTransaction: true,
+    async hasUnreviewedSoleRm() { return opts.unreviewedSole === true; },
     async listFrameworks() { return frameworks; },
     async getFramework(_t: string, id: string) { return frameworks.find((f) => f.id === id) ?? null; },
     async getActiveVersion(_t: string, id: string) { return activeIds.includes(id) ? ({ id: `v-${id}`, frameworkId: id, status: "ACTIVE", changeApprover: "RISK_MANAGER" } as RiskFrameworkVersion) : null; },
@@ -266,6 +267,14 @@ describe("B-13 SET_DEFAULT", () => {
     expect(s.audit.find((e) => e["action"] === "APPROVE")).toMatchObject({ reason: "Seul Risk Manager du tenant", governanceException: "riskFramework.soleRiskManager" });
     const target = s.audit.find((e) => e["entityType"] === "RiskFramework" && e["entityId"] === "fwB")!;
     expect(target["newValue"]).toMatchObject({ decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" });
+  });
+
+  it("q266 A: SET_DEFAULT confirmed while a previous SOLE_RM one is not reviewed: not blocked, marked without-prior-review on one row", async () => {
+    const s = setup({ rm: ["u1"], soleAtRequest: true, unreviewedSole: true });
+    const r = await s.service.requestSetDefault(actor("u1"), "fwB", "Motif de la demande", "req1");
+    await s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "Seul Risk Manager du tenant" }, "req2");
+    expect(s.frameworks.find((f) => f.id === "fwB")!.isDefault).toBe(true);
+    expect(s.audit.filter((e) => e["governanceException"])).toEqual([expect.objectContaining({ action: "APPROVE", governanceException: "riskFramework.soleRiskManager.withoutPriorReview" })]);
   });
 
   it("q279 A refusals: flag not frozen at request time, a second Risk Manager exists, not the requester, no riskframework.update", async () => {

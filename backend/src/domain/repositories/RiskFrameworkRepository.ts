@@ -127,6 +127,8 @@ export interface RiskFrameworkRepository {
    * repository requires the requester to be the only active Risk Manager (409 otherwise: a third party must decide).
    */
   decideAssignment?(tenantId: string, requestId: string, decision: RecordDecisionInput & { approverRule: ChangeApprover; soleRiskManager?: boolean }, audit?: TransactionalAudit<AssignmentResult>): Promise<AssignmentResult>;
+  /** q266 A: true when a SOLE_RM confirmation of the tenant has no REVIEWED third-party review yet (one count, tenant-scoped). Optional (fakes). */
+  hasUnreviewedSoleRm?(tenantId: string): Promise<boolean>;
   /** B-6c: true when a PENDING ASSIGN_PROCESS request targets this process (ProcessService.archive refuses then). Optional (fakes). */
   hasPendingAssignment?(tenantId: string, processId: string): Promise<boolean>;
   /** B-6c: requester's retraction of a PENDING ASSIGN_PROCESS request (nothing written on the process). Optional (fakes). */
