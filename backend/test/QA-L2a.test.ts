@@ -121,7 +121,7 @@ const ask = (by: Who, whom: Who, reason: unknown) => post(by, BASE, { userId: UI
 const decide = (by: Who, gid: string, ok: boolean, reason?: string) => post(by, `${BASE}/${gid}/${ok ? "approve" : "reject"}`, reason === undefined ? {} : { reason });
 const revoke = (by: Who, gid: string, reason: unknown) => post(by, `${BASE}/${gid}/revoke`, { reason });
 
-describe.skipIf(!live)("QA-L2a on the REAL server + LOCAL PostgreSQL 16 (head 7dd3b27)", () => {
+describe.skipIf(!live)("QA-L2a on the REAL server + LOCAL PostgreSQL 16 (head 4853788)", () => {
   beforeAll(() => H.start(async () => {
     await sql("UPDATE users SET roles = roles || ARRAY['execution.read','effectiveness.read','evidence.read']::text[]");
     await sql("UPDATE users SET roles = array_remove(roles, 'resourcevisibility.set') WHERE email = 'adm@vv1.test'");
@@ -143,8 +143,8 @@ describe.skipIf(!live)("QA-L2a on the REAL server + LOCAL PostgreSQL 16 (head 7d
   }), 280000);
   afterAll(() => H.stop());
 
-  it("the data set is what the oracles assume: no motif yet, the Dispositifs are attached", async () => {
-    expect((await counts()).reasons).toBe(0);
+  it("the data set is what the oracles assume: no canary motif yet, the Dispositifs are attached", async () => {
+    expect(await whereIs(CANARY)).toEqual([]); // the seeds may hold motifs by reference (from 4853788); none carries a canary
     expect((await sql<{ f: string | null }>("SELECT risk_framework_id AS f FROM processes WHERE id = $1", [I("401")]))[0]!.f).toBe(FW1);
   });
 
