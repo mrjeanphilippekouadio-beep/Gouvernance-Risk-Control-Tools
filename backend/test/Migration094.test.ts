@@ -8,10 +8,13 @@ import { Pool } from "pg";
 const up = readFileSync("../database/postgresql/migrations/094_perimeter_named_access_expiry.sql", "utf8");
 
 describe("094 (static)", () => {
-  it("only stamps live grants without expiry on PERIMETRE dossiers; no function redefined, no delete", () => {
+  it("only stamps live grants without expiry on PERIMETRE dossiers; only visibility_granted is redefined (fail closed outside CLIENT), no delete", () => {
     expect(up).toMatch(/revoked_at IS NULL AND g\.expires_at IS NULL/);
     expect(up.match(/x\.visibility = 'PERIMETRE'/g)).toHaveLength(5);
-    expect(up).not.toMatch(/CREATE\s+(OR\s+REPLACE\s+)?FUNCTION|DELETE\s+FROM/i);
+    expect(up.match(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+(\w+)/gi)).toEqual(["CREATE OR REPLACE FUNCTION visibility_granted"]);
+    expect(up).toMatch(/visibility_own_level\(p_tenant, p_type, p_id\) = 'CLIENT'/);
+    expect(up).toMatch(/SET search_path = pg_catalog, public, pg_temp/);
+    expect(up).not.toMatch(/DELETE\s+FROM/i);
   });
 });
 
