@@ -49,7 +49,8 @@ BEGIN
   INSERT INTO audit_log_retention_marks (audit_log_id, tenant_id, run_id)
     SELECT a.id, a.tenant_id, v_run FROM audit_log a
     WHERE a.tenant_id = p_tenant_id AND a."timestamp" < now() - p_older_than
-      AND NOT EXISTS (SELECT 1 FROM audit_log_retention_marks m WHERE m.audit_log_id = a.id);
+      AND NOT EXISTS (SELECT 1 FROM audit_log_retention_marks m WHERE m.audit_log_id = a.id)
+    ON CONFLICT (audit_log_id) DO NOTHING; -- QA-L1-03 : un second lancement simultané compte 0, sans erreur
   GET DIAGNOSTICS v_count = ROW_COUNT;
   RETURN QUERY SELECT v_count, v_run;
 END;

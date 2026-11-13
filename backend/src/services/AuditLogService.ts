@@ -60,7 +60,7 @@ export class AuditLogService {
 
   async listForEntity(actor: AuthenticatedUser, entityType: string, entityId: string): Promise<AuditEventView[]> {
     requirePermission(actor, "audit.read");
-    return this.withNames(actor.tenantId, await this.audit.listForEntity(actor.tenantId, entityType, entityId));
+    return this.withNames(actor.tenantId, await (this.audit.listVisibleForEntity ?? this.audit.listForEntity).call(this.audit, actor.tenantId, entityType, entityId));
   }
 
   /** ACT-071 / ACT-230-231: the filtered journal (user, action, resource, date range). */

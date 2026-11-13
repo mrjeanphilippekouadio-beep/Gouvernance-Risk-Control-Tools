@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { Pool } from "pg";
 import { PostgresAuditRepository } from "../src/infrastructure/database/postgres/PostgresAuditRepository.js";
 import { AuditLogService } from "../src/services/AuditLogService.js";
@@ -25,9 +26,20 @@ describe("095 (static)", () => {
     expect(up).not.toMatch(/(ALTER|UPDATE|INSERT INTO)\s+(TABLE\s+)?audit_log\b(?!_)/i);
   });
 
-  it("only the three consultation reads filter on the marks", () => {
+  it("only the consultation reads filter on the marks (listVisibleForEntity, listRecent, search), listForEntity does not; only AuditLogService calls the filtered variant", () => {
     expect(repoSrc.match(/\$\{NOT_MARKED\}|NOT_MARKED\]/g)).toHaveLength(3);
     expect(repoSrc.match(/audit_log_retention_marks/g)).toHaveLength(1);
+    expect(repoSrc).toMatch(/public\.audit_log_retention_marks/);
+    const body = repoSrc.slice(repoSrc.indexOf("async listForEntity"), repoSrc.indexOf("async listVisibleForEntity"));
+    expect(body).not.toMatch(/NOT_MARKED/);
+    const callers = execFileSync("/usr/bin/grep", ["-rl", "listVisibleForEntity", "src"], { encoding: "utf8" }).split("\n").filter(Boolean).sort((x, y) => x.localeCompare(y));
+    expect(callers).toEqual(["src/domain/repositories/AuditRepository.ts", "src/infrastructure/database/postgres/PostgresAuditRepository.ts", "src/services/AuditLogService.ts"]);
+  });
+  it("the down refuses to run when marks exist, and the function ignores already-marked rows (ON CONFLICT)", () => {
+    const down = readFileSync("../database/postgresql/migrations/095_audit_log_retention_marks.down.sql", "utf8");
+    expect(down.indexOf("RAISE EXCEPTION")).toBeGreaterThan(-1);
+    expect(down.indexOf("RAISE EXCEPTION")).toBeLessThan(down.indexOf("DROP TABLE"));
+    expect(up).toMatch(/ON CONFLICT \(audit_log_id\) DO NOTHING/);
   });
 });
 
@@ -90,8 +102,11 @@ describe.skipIf(!live)("095 on a real local database", () => {
     const service = new AuditLogService(repo);
     const actor = { userId: user, tenantId: tenant, email: "a@x.test", displayName: "A", roles: ["audit.read"] };
     const entityIds = (events: Array<{ entityId: string }>) => events.map((e) => e.entityId);
-    expect(await repo.listForEntity(tenant, "Risk", ent.old)).toHaveLength(0);
-    expect(entityIds(await repo.listForEntity(tenant, "Risk", ent.recent))).toEqual([ent.recent]);
+    expect(await repo.listVisibleForEntity(tenant, "Risk", ent.old)).toHaveLength(0);
+    expect(await service.listForEntity(actor, "Risk", ent.old)).toHaveLength(0);
+    // SEC-L1-01: services (authoredByMe, authorsOf, reactivate, previousImport...) still see the marked row through listForEntity.
+    expect(entityIds(await repo.listForEntity(tenant, "Risk", ent.old))).toEqual([ent.old]);
+    expect(entityIds(await repo.listVisibleForEntity(tenant, "Risk", ent.recent))).toEqual([ent.recent]);
     expect(entityIds(await repo.listRecent(tenant, 500))).not.toContain(ent.old);
     expect(entityIds(await repo.listRecent(tenant, 500))).toContain(ent.recent);
     expect(await repo.search(tenant, { entityId: ent.old }, 10)).toHaveLength(0);
@@ -99,6 +114,22 @@ describe.skipIf(!live)("095 on a real local database", () => {
     expect(entityIds(await service.listRecent(actor))).not.toContain(ent.old);
     // The other tenant's equally old row is not marked: still readable by that tenant.
     expect(entityIds(await repo.search(other, { entityId: ent.old }, 10))).toEqual([ent.old]);
+  });
+
+  it("two simultaneous runs on one tenant: no error, the marks are counted once", async () => {
+    const t = (await q(`INSERT INTO tenants (name) VALUES ($1) RETURNING id`, [`T095c-${tag}`]))[0]!["id"] as string;
+    const u = (await q(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, 'U') RETURNING id`, [t, `c-${tag}@x.test`]))[0]!["id"] as string;
+    await q(`INSERT INTO audit_log (tenant_id, "timestamp", user_id, entity_type, entity_id, action, request_id)
+             SELECT $1, now() - interval '12 years', $2, 'Risk', gen_random_uuid(), 'CREATE', 'r' FROM generate_series(1, 300)`, [t, u]);
+    const runs = await Promise.all([1, 2].map(() => q(`SELECT * FROM mark_expired_audit_log($1)`, [t])));
+    expect(runs.map((r) => Number(r[0]!["marked_count"])).reduce((a, b) => a + b, 0)).toBe(300);
+    expect(Number((await q(`SELECT count(*) AS n FROM audit_log_retention_marks WHERE tenant_id = $1`, [t]))[0]!["n"])).toBe(300);
+  });
+
+  it("the down refuses while marks exist and leaves the table untouched", async () => {
+    const down = readFileSync("../database/postgresql/migrations/095_audit_log_retention_marks.down.sql", "utf8");
+    await expect(pool.query(down)).rejects.toMatchObject({ code: "55000" });
+    expect(Number((await q(`SELECT count(*) AS n FROM audit_log_retention_marks`))[0]!["n"])).toBeGreaterThanOrEqual(1);
   });
 
   it("the application role can read the marks but cannot run the function nor write the table", async () => {

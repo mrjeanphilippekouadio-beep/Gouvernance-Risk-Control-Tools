@@ -15,6 +15,11 @@ export interface AuditRepository {
   record(event: Omit<AuditEvent, "id" | "timestamp">): Promise<void>;
   listForEntity(tenantId: string, entityType: string, entityId: string): Promise<AuditEvent[]>;
   /**
+   * Consultation variant of `listForEntity` (AuditLogService only): hides rows past their retention mark (q245). `listForEntity` stays
+   * unfiltered because services use it as evidence for separation-of-duties checks. Optional so test doubles keep compiling.
+   */
+  listVisibleForEntity?(tenantId: string, entityType: string, entityId: string): Promise<AuditEvent[]>;
+  /**
    * Every action across every module, most recent first — this is the
    * global journal apps-script-legacy/09_JournalGlobal.gs described but
    * explicitly never wired up automatically ("journaliserGlobal_()
