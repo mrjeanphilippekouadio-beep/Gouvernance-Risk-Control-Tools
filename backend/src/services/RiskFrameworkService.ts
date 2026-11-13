@@ -711,7 +711,8 @@ export class RiskFrameworkService {
     if (eligible.RISK_MANAGER.length === 0) {
       // q75: nobody can decide — never a tacit validation, never by the administrator.
       await this.notify(actor, all.RISK_MANAGER, request.id, "RISK_FRAMEWORK_NO_DECIDER",
-        "Une demande de changement du Dispositif par défaut ne peut être décidée par personne : aucun Risk Manager éligible.", requestId);
+        "Une demande de changement du Dispositif par défaut ne peut être décidée par personne : aucun Risk Manager éligible."
+        + " Si vous êtes le seul Risk Manager, le demandeur peut la confirmer lui-même, avec un motif.", requestId);
     } else {
       await this.notify(actor, await this.holders(actor, "riskframework.activate"), frameworkId, "RISK_FRAMEWORK_CHANGE_PENDING",
         "Une demande de changement du Dispositif par défaut attend votre décision.", requestId, true);
@@ -732,15 +733,9 @@ export class RiskFrameworkService {
     const { target, approverRule, decider, fallback, fallbackCause, bypassedGroups, cleanComment } = await this.prepareDecision(
       actor, request, outcome, comment, "Le Dispositif n'a plus de version active : la demande ne peut être approuvée");
 
+    const approvedEvents = this.defaultApprovedEvents(actor, request, target, decider.regime, cleanComment, requestId);
     const events = (r: DefaultResult): AuditInput[] => outcome === "APPROVED"
-      ? [
-          // Spec 13: RiskFramework UPDATE (isDefault before -> after) for both identities, with the reason of the request.
-          ...(r.previousDefault ? [this.event(actor, "RiskFramework", r.previousDefault.id, "UPDATE", r.previousDefault,
-            { ...r.previousDefault, isDefault: false, requestId: request.id }, request.reason, requestId)] : []),
-          this.event(actor, "RiskFramework", request.frameworkId, "UPDATE", target,
-            { ...r.framework, requestId: request.id, decisionRegime: decider.regime, effect: "NEXT_EVALUATIONS" }, request.reason, requestId),
-          this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, cleanComment, requestId),
-        ]
+      ? approvedEvents(r)
       : [this.event(actor, "RiskFrameworkChangeRequest", request.id, "REJECT", request, r.request, cleanComment, requestId)];
 
     const result = await decide(actor.tenantId, request.id, this.decisionInput(actor, outcome, cleanComment, decider, fallback, fallbackCause, approverRule), events);
@@ -751,6 +746,20 @@ export class RiskFrameworkService {
       notice: "Un changement du Dispositif par défaut a été décidé par un Risk Manager.",
     });
     return result;
+  }
+
+  /** Audit rows of an approved SET_DEFAULT (also used by the SOLE_RM confirmation). Spec 13: RiskFramework UPDATE (isDefault before -> after) for both identities, with the reason of the request. */
+  private defaultApprovedEvents(
+    actor: AuthenticatedUser, request: RiskFrameworkChangeRequest, target: RiskFramework,
+    regime: RecordDecisionInput["decisionRegime"], comment: string | null, requestId: string, exception?: string,
+  ) {
+    return (r: DefaultResult): AuditInput[] => [
+      ...(r.previousDefault ? [this.event(actor, "RiskFramework", r.previousDefault.id, "UPDATE", r.previousDefault,
+        { ...r.previousDefault, isDefault: false, requestId: request.id }, request.reason, requestId)] : []),
+      this.event(actor, "RiskFramework", request.frameworkId, "UPDATE", target,
+        { ...r.framework, requestId: request.id, decisionRegime: regime, effect: "NEXT_EVALUATIONS" }, request.reason, requestId),
+      this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, comment, requestId, exception),
+    ];
   }
 
   /** Shared by ASSIGN_PROCESS and SET_DEFAULT decisions: target/active checks, approver rule, decider, mandatory comment. */
@@ -860,8 +869,8 @@ export class RiskFrameworkService {
   }
 
   /**
-   * q252 A (DECISION-121): the requester is the ONLY Risk Manager able to validate (nobody else eligible), so the
-   * request would stay in NO_DECIDER for ever. They confirm it a second time, with a motive; the attachment then
+   * q252 A (DECISION-121, extended to SET_DEFAULT by q279 A / DECISION-133): the requester is the ONLY Risk Manager able to validate (nobody else eligible), so the
+   * request (ASSIGN_PROCESS or SET_DEFAULT) would stay in NO_DECIDER for ever. They confirm it a second time, with a motive; the attachment then
    * applies to the evaluations created from now on. Traced (Process UPDATE + request APPROVE; only the APPROVE row is marked as a
    * governance exception, so the health panel counts ONE exception per confirmation), Audit and Committee told. The rule stops
    * by itself: with a second active Risk Manager (service check, replayed under the tenant lock) a third party decides.
@@ -871,14 +880,18 @@ export class RiskFrameworkService {
     id: string,
     input: { reason: string },
     requestId: string,
-  ): Promise<AssignmentResult> {
-    requirePermission(actor, "riskframework.process.assign");
+  ): Promise<AssignmentResult | DefaultResult> {
     requirePermission(actor, "riskframework.activate");
     await this.assertRiskManager(actor);
-    const decide = this.frameworks.decideAssignment?.bind(this.frameworks);
-    if (!decide || !this.inTx) throw new ValidationError("Process assignment is not available");
+    if (!this.inTx) throw new ValidationError("Sole Risk Manager confirmation is not available");
     const request = await this.getRequestOrThrow(actor.tenantId, id);
-    if (request.kind !== "ASSIGN_PROCESS") throw new ValidationError("La confirmation ne couvre que le rattachement d'un processus");
+    const isDefault = request.kind === "SET_DEFAULT";
+    if (request.kind !== "ASSIGN_PROCESS" && !isDefault) throw new ValidationError("La confirmation ne couvre que le rattachement d'un processus et le changement du Dispositif par défaut");
+    // Same permission as the request itself (q279 A: SET_DEFAULT = `riskframework.update`, as for requestSetDefault).
+    requirePermission(actor, isDefault ? "riskframework.update" : "riskframework.process.assign");
+    const decideAssign = this.frameworks.decideAssignment?.bind(this.frameworks);
+    const decideDefault = this.frameworks.decideDefault?.bind(this.frameworks);
+    if (isDefault ? !decideDefault : !decideAssign) throw new ValidationError("Sole Risk Manager confirmation is not available");
     if (request.status !== "PENDING") throw new ConflictError(`Cette demande est déjà traitée (${request.status})`);
     if (request.requestedBy !== actor.userId) throw new ForbiddenError("Seul le demandeur peut confirmer sa propre demande");
     // SEC-B6C-04: judged at REQUEST time (DECISION-121); the repository re-checks the frozen flag under lock.
@@ -886,34 +899,40 @@ export class RiskFrameworkService {
     const reason = cleanText(input.reason, "reason", MAX_REASON, true)!;
     const target = await this.getFrameworkOrThrow(actor.tenantId, request.frameworkId);
     const active = await this.frameworks.getActiveVersion(actor.tenantId, request.frameworkId);
-    if (target.archivedAt || !active) throw new ValidationError("Le Dispositif d'arrivée n'a plus de version active : la demande ne peut être confirmée");
+    if (target.archivedAt || !active) throw new ValidationError("Le Dispositif concerné n'a plus de version active : la demande ne peut être confirmée");
     const approverRule = active.changeApprover;
     const { eligible } = await this.resolveExcluding(actor.tenantId, new Set([actor.userId]), approverRule);
     if (eligible.RISK_MANAGER.length > 0) {
       throw new ConflictError("Un autre Risk Manager peut valider cette demande : un tiers doit la décider");
     }
 
-    const events = (r: AssignmentResult): AuditInput[] => [
-      this.event(actor, "Process", r.processId, "UPDATE",
-        { riskFrameworkId: r.previousFrameworkId },
-        { riskFrameworkId: r.frameworkId, requestId: request.id, decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" },
-        reason, requestId),
-      this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, reason, requestId, SOLE_RM_EXCEPTION),
-    ];
-    const result = await decide(actor.tenantId, request.id, {
-      outcome: "APPROVED",
+    const decision = {
+      outcome: "APPROVED" as const,
       decidedBy: actor.userId,
       comment: reason,
-      decisionRegime: "SOLE_RM",
-      deciderGroup: "RISK_MANAGER",
+      decisionRegime: "SOLE_RM" as const,
+      deciderGroup: "RISK_MANAGER" as const,
       ratificationStatus: null,
       fallbackCause: null,
       approverRule,
       soleRiskManager: true,
-    }, events);
+    };
+    let result: AssignmentResult | DefaultResult;
+    if (isDefault) {
+      result = await decideDefault!(actor.tenantId, request.id, decision,
+        this.defaultApprovedEvents(actor, request, target, "SOLE_RM", reason, requestId, SOLE_RM_EXCEPTION));
+    } else {
+      result = await decideAssign!(actor.tenantId, request.id, decision, (r: AssignmentResult): AuditInput[] => [
+        this.event(actor, "Process", r.processId, "UPDATE",
+          { riskFrameworkId: r.previousFrameworkId },
+          { riskFrameworkId: r.frameworkId, requestId: request.id, decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" },
+          reason, requestId),
+        this.event(actor, "RiskFrameworkChangeRequest", request.id, "APPROVE", request, r.request, reason, requestId, SOLE_RM_EXCEPTION),
+      ]);
+    }
 
     await this.notify(actor, await this.membersOf(actor.tenantId, ["AUDIT", "COMMITTEE"]), request.id, "RISK_FRAMEWORK_CHANGE_AUDIT_NOTICE",
-      "Un rattachement de processus à un Dispositif a été confirmé par le seul Risk Manager du tenant (second avis impossible). "
+      `${isDefault ? "Un changement du Dispositif par défaut a été confirmé" : "Un rattachement de processus à un Dispositif a été confirmé"} par le seul Risk Manager du tenant (second avis impossible). `
       + "Il s'applique aux évaluations créées à partir de maintenant. Détail : consultation des décisions SOLE_RM.", requestId);
     return result;
   }

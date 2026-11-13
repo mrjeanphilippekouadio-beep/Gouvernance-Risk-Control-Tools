@@ -90,7 +90,7 @@ const lineOf = (r: Res, n: number) => (r.json!["data"].lines as Row[]).find((l) 
 
 describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (base vierge 001..091)", () => {
   beforeAll(async () => {
-    sh("bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", DB]);
+    sh("/bin/bash", [join(ROOT, "tests", "integration", "qa-visibility-v1-setup.sh"), "up", DB]);
     pg = new Pool({ host: "127.0.0.1", port: PGPORT, user: "postgres", database: DB, max: 6 });
     const RM = (await one(`SELECT id FROM roles WHERE tenant_id = $1 AND system_group = 'RISK_MANAGER'`, [T])).id as string;
     const AUD = (await one(`SELECT id FROM roles WHERE tenant_id = $1 AND system_group = 'AUDIT'`, [T])).id as string;
@@ -131,7 +131,7 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
       BEGIN IF EXISTS (SELECT 1 FROM qa_fail_audit f WHERE f.entity_type = NEW.entity_type AND (f.action IS NULL OR f.action = NEW.action) AND (f.key IS NULL OR NEW.new_value ? f.key))
       THEN RAISE EXCEPTION 'QA: audit failure injected'; END IF; RETURN NEW; END $f$`);
     await sql(`CREATE TRIGGER qa_fail_audit_trg BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION qa_fail_audit_fn()`);
-    sh("bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "start"], { QA_PORT: String(PORT), QA_DB: DB, QA_TRUST_PROXY_HOPS: "1" });
+    sh("/bin/bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "start"], { QA_PORT: String(PORT), QA_DB: DB, QA_TRUST_PROXY_HOPS: "1" });
     for (const w of WHO) {
       const r = await fetch(`${API}/auth/local`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": ip() }, body: JSON.stringify({ email: `${w}@b6c.test`, password: "whatever" }) });
       TOK[w] = ((await r.json()) as { accessToken: string }).accessToken;
@@ -144,7 +144,7 @@ describe.skipIf(!live)("QA-Import sur le VRAI serveur + PostgreSQL 16 LOCAL (bas
   }, 280000);
   afterAll(async () => {
     await pg?.end();
-    sh("bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "stop"]);
+    sh("/bin/bash", [join(ROOT, "tests", "integration", "qa-b6c-server.sh"), "stop"]);
   });
 
   const GOOD = "Fraude;Fraude interne\nConformité;Lutte contre le blanchiment (LBC-FT)\n";

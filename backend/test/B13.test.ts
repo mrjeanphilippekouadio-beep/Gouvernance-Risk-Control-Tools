@@ -74,7 +74,7 @@ describe("B-13 templates (A13 values, validated by the PO)", () => {
   });
 });
 
-function setup(opts: { rm?: string[]; defaultId?: string; activeIds?: string[]; existing?: string[]; attachedProcess?: boolean; failOnTemplate?: string } = {}) {
+function setup(opts: { rm?: string[]; defaultId?: string; activeIds?: string[]; existing?: string[]; attachedProcess?: boolean; failOnTemplate?: string; soleAtRequest?: boolean } = {}) {
   const rm = opts.rm ?? ["u1", "u2", "u3"];
   const fw = (id: string, name = id): RiskFramework => ({ id, tenantId: "t1", name, description: null, isDefault: id === (opts.defaultId ?? "fwA"), createdBy: "u1",
     createdAt: new Date(), updatedAt: new Date(), archivedAt: null, archivedBy: null, archiveReason: null }) as RiskFramework;
@@ -94,7 +94,7 @@ function setup(opts: { rm?: string[]; defaultId?: string; activeIds?: string[]; 
     async getRequest(_t: string, id: string) { return requests.find((r) => r.id === id) ?? null; },
     async createDefaultRequest(i: CreateDefaultRequestInput) {
       const r = { id: `r${requests.length + 1}`, tenantId: i.tenantId, kind: "SET_DEFAULT", frameworkId: i.frameworkId, versionId: null, processId: null,
-        reason: i.reason, status: "PENDING", requestedBy: i.requestedBy } as RiskFrameworkChangeRequest;
+        reason: i.reason, status: "PENDING", requestedBy: i.requestedBy, soleRmAtRequest: opts.soleAtRequest ?? false } as RiskFrameworkChangeRequest;
       requests.push(r);
       for (const e of i.audit?.(r) ?? []) audit.push(e);
       return r;
@@ -256,10 +256,30 @@ describe("B-13 SET_DEFAULT", () => {
     expect(s.requests[0]!.status).toBe("WITHDRAWN");
   });
 
-  it("does not offer the sole-Risk-Manager confirmation (ASSIGN_PROCESS only)", async () => {
-    const s = setup({ rm: ["u1"] });
-    const r = await s.service.requestSetDefault(actor("u1"), "fwB", "x", "req1");
-    await expect(s.service.confirmSoleAssignment(actor("u1", [...ALL, "riskframework.process.assign"]), r.id, { reason: "seul" }, "r")).rejects.toThrow(ValidationError);
+  it("q279 A: the sole Risk Manager confirms their own request: default moved, SOLE_RM, exception marker on APPROVE, motive audited", async () => {
+    const s = setup({ rm: ["u1"], soleAtRequest: true });
+    const r = await s.service.requestSetDefault(actor("u1"), "fwB", "Motif de la demande", "req1");
+    const out = await s.service.confirmSoleAssignment(actor("u1"), r.id, { reason: "Seul Risk Manager du tenant" }, "req2");
+    expect(out.request).toMatchObject({ status: "APPROVED", decidedBy: "u1", decisionRegime: "SOLE_RM" });
+    expect(s.frameworks.find((f) => f.id === "fwB")!.isDefault).toBe(true);
+    expect(s.frameworks.find((f) => f.id === "fwA")!.isDefault).toBe(false);
+    expect(s.audit.find((e) => e["action"] === "APPROVE")).toMatchObject({ reason: "Seul Risk Manager du tenant", governanceException: "riskFramework.soleRiskManager" });
+    const target = s.audit.find((e) => e["entityType"] === "RiskFramework" && e["entityId"] === "fwB")!;
+    expect(target["newValue"]).toMatchObject({ decisionRegime: "SOLE_RM", effect: "NEXT_EVALUATIONS" });
+  });
+
+  it("q279 A refusals: flag not frozen at request time, a second Risk Manager exists, not the requester, no riskframework.update", async () => {
+    const notFrozen = setup({ rm: ["u1"], soleAtRequest: false });
+    const r1 = await notFrozen.service.requestSetDefault(actor("u1"), "fwB", "x", "req1");
+    await expect(notFrozen.service.confirmSoleAssignment(actor("u1"), r1.id, { reason: "ok" }, "r")).rejects.toThrow(/au moment de la demande/);
+    const two = setup({ rm: ["u1", "u2"], soleAtRequest: true });
+    const r2 = await two.service.requestSetDefault(actor("u1"), "fwB", "x", "req1");
+    await expect(two.service.confirmSoleAssignment(actor("u1"), r2.id, { reason: "ok" }, "r")).rejects.toThrow(ConflictError);
+    await expect(two.service.confirmSoleAssignment(actor("u2"), r2.id, { reason: "ok" }, "r")).rejects.toThrow(ForbiddenError);
+    const noUpdate = setup({ rm: ["u1"], soleAtRequest: true });
+    const r3 = await noUpdate.service.requestSetDefault(actor("u1"), "fwB", "x", "req1");
+    await expect(noUpdate.service.confirmSoleAssignment(actor("u1", ["riskframework.read", "riskframework.activate"]), r3.id, { reason: "ok" }, "r")).rejects.toThrow(ForbiddenError);
+    expect(noUpdate.frameworks.find((f) => f.id === "fwA")!.isDefault).toBe(true);
   });
 });
 

@@ -17,7 +17,7 @@ Une désactivation est refusée s'il ne resterait aucun autre super-administrate
 À la première connexion, `users.identity_provider` / `identity_subject` enregistrent l'identifiant stable (Google `sub`). Ensuite un autre identifiant pour la même adresse est refusé (connexion 403). Comptes locaux : sans liaison.
 
 Changement légitime de compte d'une personne (procédure DevOps, tracée) : après décision écrite du responsable, exécuter
-`UPDATE users SET identity_provider = NULL, identity_subject = NULL WHERE id = '<id>'` ; le compte se relie à la prochaine connexion. Consigner la demande et l'exécutant dans le ticket de changement.
+`UPDATE users SET identity_provider = NULL, identity_subject = NULL WHERE id = '<id>'` ; le compte se relie à la prochaine connexion. Consigner la demande et l'exécutant dans le ticket de changement. Depuis la migration 093, un trigger écrit lui-même une ligne `audit_log` (`User` / `UPDATE`, `request_id = 'identity-rebind'`, `user_id` = le compte concerné, sans l'identifiant) dès que la liaison passe d'une valeur à une autre valeur ou à NULL ; la première liaison (NULL vers valeur) reste tracée par l'application. La ligne ne dit pas qui a exécuté la requête : le ticket reste la seule trace de l'exécutant.
 
 ## Secours : client désactivé impossible à réactiver
 

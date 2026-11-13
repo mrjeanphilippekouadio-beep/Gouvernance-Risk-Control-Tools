@@ -82,7 +82,7 @@ const REASON_TEXT: Record<ReasonAction["kind"], { title: string; label: string; 
   approve: { title: "Approuver la demande", label: "Commentaire", submit: "Approuver", required: false },
   reject: { title: "Refuser la demande", label: "Commentaire *", submit: "Refuser", required: true },
   withdraw: { title: "Retirer la demande", label: "Motif *", submit: "Retirer", required: true },
-  soleConfirm: { title: "Confirmer seul le rattachement", label: "Motif de la confirmation *", submit: "Confirmer seul", required: true },
+  soleConfirm: { title: "Confirmer seul la demande", label: "Motif de la confirmation *", submit: "Confirmer seul", required: true },
   setDefault: { title: "Définir comme Dispositif par défaut", label: "Motif de la demande *", submit: "Envoyer la demande", required: true },
   archive: { title: "Archiver le Dispositif", label: "Motif de l'archivage *", submit: "Archiver", required: true },
   identity: { title: "Modifier le Dispositif", label: "Motif de la modification *", submit: "Enregistrer", required: true },
@@ -214,7 +214,7 @@ export function FrameworksPage({ token }: { token: string }) {
       else if (action.kind === "activate") { await riskFrameworksApi.requestActivation(token, detail.id, action.version.id, text); setNotice("Demande d'activation envoyée : un tiers doit la décider."); }
       else if (action.kind === "approve") await riskFrameworksApi.approve(token, action.request.id, text || undefined);
       else if (action.kind === "reject") await riskFrameworksApi.reject(token, action.request.id, text);
-      else if (action.kind === "soleConfirm") { await riskFrameworksApi.soleConfirm(token, action.request.id, text); setNotice("Rattachement confirmé : il s'applique aux évaluations créées à partir de maintenant."); }
+      else if (action.kind === "soleConfirm") { await riskFrameworksApi.soleConfirm(token, action.request.id, text); setNotice("Demande confirmée : il s'applique aux évaluations créées à partir de maintenant."); }
       else if (action.kind === "setDefault") { await riskFrameworksApi.requestDefault(token, detail.id, text); setNotice("Demande envoyée : un tiers doit la décider. Le nouveau défaut s'applique aux évaluations créées ensuite, pour les processus sans rattachement explicite."); }
       else if (action.kind === "archive") { await riskFrameworksApi.archive(token, detail.id, text); setNotice("Dispositif archivé."); }
       else if (action.kind === "withdraw") await riskFrameworksApi.withdraw(token, action.request.id, text);
@@ -309,7 +309,7 @@ export function FrameworksPage({ token }: { token: string }) {
               <Button variant="primary" onClick={() => openReason({ kind: "approve", request: q })}>Approuver</Button>
               <Button variant="destructive" onClick={() => openReason({ kind: "reject", request: q })}>Refuser</Button>
               <Button onClick={() => openReason({ kind: "withdraw", request: q })}>Retirer</Button>
-              {q.kind === "ASSIGN_PROCESS" && <Button onClick={() => openReason({ kind: "soleConfirm", request: q })}>Confirmer seul</Button>}
+              {(q.kind === "ASSIGN_PROCESS" || q.kind === "SET_DEFAULT") && <Button onClick={() => openReason({ kind: "soleConfirm", request: q })}>Confirmer seul</Button>}
             </div> },
           ]}
           rows={requests}
@@ -400,7 +400,7 @@ export function FrameworksPage({ token }: { token: string }) {
         {reasonAction?.kind === "archive" && <MessageBanner tone="warning" title="Action définitive">Refusé par le serveur si ce Dispositif est le Dispositif par défaut, si des processus lui sont rattachés ou si des demandes sont en attente. Ses versions sont archivées avec lui ; les évaluations qui le référencent restent lisibles.</MessageBanner>}
         {reasonAction?.kind === "soleConfirm" && <MessageBanner tone="warning" title={soleArmed ? "Seconde confirmation" : "Confirmation sans second avis"}>
           {soleArmed
-            ? "Confirmez-vous définitivement ce rattachement sans second avis ? Cette confirmation est tracée et signalée à la santé de la gouvernance."
+            ? "Confirmez-vous définitivement cette demande sans second avis ? Cette confirmation est tracée et signalée à la santé de la gouvernance."
             : "Réservé au demandeur lorsqu'aucun autre Risk Manager ne peut valider. Cette confirmation est tracée et signalée à la santé de la gouvernance. Le serveur refuse si un autre Risk Manager peut décider."}
         </MessageBanner>}
         <FormField label={reasonMeta?.label ?? ""} htmlFor="fw-reason-text"><textarea id="fw-reason-text" readOnly={soleArmed} value={reasonText} onChange={(e) => setReasonText(e.target.value)} required={reasonMeta?.required} maxLength={reasonAction?.kind === "approve" || reasonAction?.kind === "reject" ? 1000 : 500} /></FormField>

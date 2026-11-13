@@ -17,5 +17,5 @@ env NODE_ENV=development APP_ENV=development PORT=${QA_PORT:-8397} DATABASE_URL=
   CORS_ALLOWED_ORIGINS="${QA_CORS:-http://127.0.0.1:5497}" \
   node_modules/.bin/tsx --import "$R/tests/integration/qa-f7s1-test-preload.mjs" src/server.ts >/var/tmp/qaq285-server.log 2>&1 &
 echo $! >$PIDF
-for i in $(seq 1 40); do curl -s -o /dev/null http://127.0.0.1:${QA_PORT:-8397}/api/v1/auth/local -X POST && exit 0; sleep 1; done
+for i in $(seq 1 40); do curl -s -o /dev/null http://127.0.0.1:${QA_PORT:-8397}/api/v1/auth/local -X POST && exit 0; /bin/sleep 1; done
 echo "serveur non demarre"; tail -20 /var/tmp/qaq285-server.log; exit 1
