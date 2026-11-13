@@ -194,9 +194,9 @@ const patch = (who: Who, path: string, body: unknown) => call(who, "PATCH", path
 const norm = (r: Res, ...ids: string[]) => `${r.status} ${ids.reduce((t, id) => t.replaceAll(id, "<id>"), r.text).replace(/"requestId":"[^"]*"/, "")}`;
 const ids = (r: Res): string[] => ((r.json?.data ?? []) as Array<{ id: string }>).map((x) => x.id);
 const audits = (id: string) => sql<{ action: string; reason: string | null; old_value: any; new_value: any; user_id: string; entity_type: string }>(
-  "SELECT action, reason, old_value, new_value, user_id, entity_type FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp, id", [id]);
+  "SELECT action, COALESCE(reason, (SELECT v.text FROM visibility_reasons v WHERE v.id = reason_ref)) AS reason, old_value, new_value, user_id, entity_type FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp, id", [id]);
 const grants = (type: string, id: string) => sql<{ user_id: string; revoked_at: Date | null; revoke_reason: string | null }>(
-  "SELECT user_id, revoked_at, revoke_reason FROM resource_access_grants WHERE resource_type = $1 AND resource_id = $2 ORDER BY granted_at, id", [type, id]);
+  "SELECT user_id, revoked_at, COALESCE(revoke_reason, (SELECT v.text FROM visibility_reasons v WHERE v.id = revoke_reason_ref)) AS revoke_reason FROM resource_access_grants WHERE resource_type = $1 AND resource_id = $2 ORDER BY granted_at, id", [type, id]);
 const active = async (type: string, id: string) => (await grants(type, id)).filter((g) => !g.revoked_at).map((g) => g.user_id);
 const level = async (table: string, id: string) => (await sql<{ visibility: string }>(`SELECT visibility FROM ${table} WHERE id = $1`, [id]))[0]?.visibility;
 const notifs = (who: Who, resourceId: string) => sql<{ event_type: string; message: string }>(

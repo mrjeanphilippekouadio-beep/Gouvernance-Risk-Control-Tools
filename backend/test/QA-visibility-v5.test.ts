@@ -30,7 +30,7 @@ describe("QA-visibility-v5 STATIC", () => {
     expect(names).toContain("087_named_access_expiry.sql");
     expect(names).toContain("087_named_access_expiry.down.sql");
     expect(names.filter((n) => n.startsWith("087_") && !n.endsWith(".down.sql"))).toHaveLength(1);
-    expect(names.filter((n) => /^\d{3}_/.test(n) && n >= "096")).toHaveLength(0);
+    expect(names.filter((n) => /^\d{3}_/.test(n) && n >= "097")).toHaveLength(0);
     expect(read("backend", "src", "api", "v1", "resourceVisibility.routes.ts")).toMatch(/userIds: boundedArray\(z\.guid\(\), MAX_ACCESS_CHANGE, 1\)/);
   });
   it("the renewal route is mounted for the five types (risk on its own router, the four others through mountVisibilityRoutes)", () => {

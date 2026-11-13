@@ -21,6 +21,7 @@ import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvi
 import type { VisibilityResolver } from "./VisibilityResolver.js";
 import { READER_DEFAULT_SCOPE, type Visibility } from "../domain/visibility.js";
 import type { Notifier } from "../infrastructure/notifications/Notifier.js";
+import { visibilityReasonOf } from "../domain/entities/VisibilityReason.js";
 
 /**
  * All business rules and transitions for Risk live here — never in the
@@ -88,6 +89,8 @@ export class RiskService {
     designated: { role: "owner" | "superior owner"; userId: string } | null,
     requestId: string,
   ) {
+    // Conservation L2a: the opening reason is a visibility reason, stored once for both rows.
+    const openingReason = visibilityReasonOf("RISK_DESIGNATION_OPENING", opening?.reason);
     return [
       {
         tenantId: actor.tenantId,
@@ -97,7 +100,7 @@ export class RiskService {
         action: "ASSIGN" as const,
         oldValue: before,
         newValue: after,
-        reason: opening?.reason ?? null,
+        ...openingReason,
         requestId,
       },
       ...(opening && designated ? [{
@@ -108,7 +111,7 @@ export class RiskService {
         action: "PERMISSION_CHANGE" as const,
         oldValue: { designatedUserId: designated.userId, reads: false },
         newValue: { designatedUserId: designated.userId, as: designated.role, reads: true, widening: true, through: "DESIGNATION" },
-        reason: opening.reason,
+        ...openingReason,
         requestId,
       }] : []),
     ];
@@ -214,11 +217,11 @@ export class RiskService {
     for (const userId of addUserIds) await this.assertActiveAccessUser(actor.tenantId, userId);
     const change = { visibility: input.visibility, addUserIds, revokeUserIds, reason, changedBy: actor.userId };
     const changeVisibility = repo.changeVisibility.bind(repo);
-    const result = await writeAudited<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }>(
+    const result = await writeAudited<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean; reasonId?: string }>(
       repo.auditsInTransaction,
       this.audit,
       (audit) => changeVisibility(actor.tenantId, id, change, audit),
-      ({ before: b, after: a, widening }) => [{
+      ({ before: b, after: a, widening, reasonId }) => [{
         tenantId: actor.tenantId,
         userId: actor.userId,
         entityType: "Risk",
@@ -226,7 +229,8 @@ export class RiskService {
         action: "PERMISSION_CHANGE",
         oldValue: b,
         newValue: { ...a, widening: widening ?? isWidening(b, a) },
-        reason,
+        // Conservation L2a: the text is stored in visibility_reasons (the repository already did, `reasonId`); the journal keeps the reference.
+        ...visibilityReasonOf("VISIBILITY_CHANGE", reason, reasonId),
         requestId,
       }],
     );
@@ -267,7 +271,7 @@ export class RiskService {
         action: "PERMISSION_CHANGE",
         oldValue: { visibility, access: expiryRows(b) },
         newValue: { visibility, access: expiryRows(a), renewed: userIds, widening },
-        reason,
+        ...visibilityReasonOf("ACCESS_RENEWAL", reason),
         requestId,
       }],
     );
@@ -348,7 +352,10 @@ export class RiskService {
       repo.auditsInTransaction,
       this.audit,
       (audit) => repo.update(actor.tenantId, id, fields, audit),
-      (updated) => [
+      (updated) => {
+        // Conservation L2a: a perimeter change carries a visibility reason, stored once for the rows that name it (built per call).
+        const perimeterReason = visibilityReasonOf("PERIMETER_CHANGE", perimeter ? reason : null);
+        return [
         {
           tenantId: actor.tenantId,
           userId: actor.userId,
@@ -357,7 +364,7 @@ export class RiskService {
           action: fields.status ? "STATUS_CHANGE" : "UPDATE",
           oldValue: before,
           newValue: withoutWidening(updated),
-          reason: perimeter ? reason : null,
+          ...perimeterReason,
           requestId,
         },
         ...(processMoved && this.frameworks ? [{
@@ -368,7 +375,8 @@ export class RiskService {
           action: "UPDATE" as const,
           oldValue: { processId: before.processId ?? null, riskFrameworkId: frameworkBefore },
           newValue: { processId: updated.processId ?? null, riskFrameworkId: frameworkAfter, frameworkChanged: frameworkBefore !== frameworkAfter },
-          reason: reason || null,
+          // The Dispositif-move row keeps its own reason (q257); a perimeter-only reason is never repeated here in clear.
+          reason: perimeter && !frameworkChanged ? null : reason || null,
           requestId,
         }] : []),
         ...(perimeter ? [{
@@ -379,10 +387,11 @@ export class RiskService {
           action: "PERMISSION_CHANGE" as const,
           oldValue: { visibility: before.visibility, ownerDepartmentId: before.ownerDepartmentId, processId: before.processId ?? null },
           newValue: { visibility: updated.visibility, ownerDepartmentId: updated.ownerDepartmentId, processId: updated.processId ?? null, widening: widened(updated) },
-          reason,
+          ...perimeterReason,
           requestId,
         }] : []),
-      ],
+        ];
+      },
     );
     if (perimeter && !holdsRight) await this.notifyVisibilityChanged(actor, id, widened(written), requestId);
     if (frameworkChanged) {

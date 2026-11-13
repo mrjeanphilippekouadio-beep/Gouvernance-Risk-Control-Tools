@@ -1,3 +1,5 @@
+import type { VisibilityReason } from "./VisibilityReason.js";
+
 export type AuditAction =
   | "CREATE"
   | "UPDATE"
@@ -34,4 +36,11 @@ export interface AuditEvent {
    * ordinary action. Written at INSERT only. Optional so existing test doubles keep compiling.
    */
   governanceException?: string | null;
+  /**
+   * Conservation L2a (096): reference of the reason stored in `visibility_reasons` (null = none). Read side: `reason` then holds
+   * the joined text, or the « motif effacé » wording; write side: `reason` stays null for a visibility reason.
+   */
+  reasonRef?: string | null;
+  /** Write side only: a visibility reason to store with this event (text in `visibility_reasons`, reference in the journal). */
+  visibilityReason?: VisibilityReason;
 }

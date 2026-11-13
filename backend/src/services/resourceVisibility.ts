@@ -21,6 +21,7 @@ import type { NotificationResourceType } from "../domain/entities/Notification.j
 import { randomUUID } from "node:crypto";
 import { writeAudited } from "./auditedWrite.js";
 import { ADMIN_PERMISSIONS } from "../domain/fixedGroupPermissions.js";
+import { visibilityReasonOf } from "../domain/entities/VisibilityReason.js";
 
 /** A root resource as the visibility rules see it (lot V2, spec §1 and §5). */
 export interface VisibilityTarget {
@@ -170,7 +171,7 @@ export class ResourceVisibilityManager {
         action: "PERMISSION_CHANGE",
         oldValue: { visibility, access: expiryRows(before) },
         newValue: { visibility, access: expiryRows(after), renewed: userIds, widening },
-        reason,
+        ...visibilityReasonOf("ACCESS_RENEWAL", reason),
         requestId,
       }],
     );
@@ -206,7 +207,7 @@ export class ResourceVisibilityManager {
       access.auditsInTransaction,
       this.audit,
       (audit) => access.changeVisibility(actor.tenantId, target.type, target.id, change, audit),
-      ({ before, after, widening }) => [{
+      ({ before, after, widening, reasonId }) => [{
         tenantId: actor.tenantId,
         userId: actor.userId,
         entityType: target.entity,
@@ -214,7 +215,8 @@ export class ResourceVisibilityManager {
         action: "PERMISSION_CHANGE",
         oldValue: before,
         newValue: { ...after, widening },
-        reason,
+        // Conservation L2a: the repository stored the text (`reasonId`, shared with the grant rows); the journal keeps the reference.
+        ...visibilityReasonOf("VISIBILITY_CHANGE", reason, reasonId),
         requestId,
       }],
     );
@@ -286,7 +288,7 @@ export class ResourceVisibilityManager {
         action: "PERMISSION_CHANGE",
         oldValue: { visibility: target.visibility, ...before },
         newValue: { visibility: target.visibility, ...after, widening },
-        reason: guard.reason,
+        ...visibilityReasonOf("PERIMETER_CHANGE", guard.reason),
         requestId,
       }],
     );

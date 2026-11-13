@@ -45,7 +45,8 @@ export type PerimeterChangeResult = {
   widening: boolean;
 };
 
-export type VisibilityChangeResult = { before: ResourceVisibilityState; after: ResourceVisibilityState; widening: boolean };
+/** `reasonId`: the stored reason (visibility_reasons) the grant rows and the audit row both reference (096); absent on test fakes. */
+export type VisibilityChangeResult = { before: ResourceVisibilityState; after: ResourceVisibilityState; widening: boolean; reasonId?: string };
 
 /**
  * Lot V2: level and named-people list (`resource_access_grants`) of a control, anomaly, action plan or KPI, and the

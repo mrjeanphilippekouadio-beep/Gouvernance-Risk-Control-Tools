@@ -57,7 +57,7 @@ describe("lot V2 — changing the level of a control, anomaly, plan or KPI", () 
     const { m, audits, notifications } = manager(true);
     await m.set(actor(OWNER), target(), input, "req");
     expect(audits).toHaveLength(1);
-    expect(audits[0]).toMatchObject({ userId: OWNER, entityType: "ActionPlan", action: "PERMISSION_CHANGE", reason: "Dossier sensible", newValue: { widening: true } });
+    expect(audits[0]).toMatchObject({ userId: OWNER, entityType: "ActionPlan", action: "PERMISSION_CHANGE", reason: null, visibilityReason: { source: "VISIBILITY_CHANGE", text: "Dossier sensible" }, newValue: { widening: true } });
     expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ recipientUserId: RM, eventType: "ACTION_PLAN_VISIBILITY_WIDENED" }));
   });
 

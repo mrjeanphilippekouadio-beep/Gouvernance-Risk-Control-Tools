@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { riskVisibilityClause } from "./visibilityFilter.js";
 import type { ReadScope, Visibility } from "../../../domain/visibility.js";
 import { runAudited } from "./PostgresAuditRepository.js";
+import { insertVisibilityReason } from "./visibilityReasons.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import type { RiskRepository } from "../../../domain/repositories/RiskRepository.js";
 import type { CreateRiskInput, Risk, RiskVisibilityChange, RiskVisibilityState, UpdateRiskInput } from "../../../domain/entities/Risk.js";
@@ -219,8 +220,8 @@ export class PostgresRiskRepository implements RiskRepository {
     tenantId: string,
     riskId: string,
     change: RiskVisibilityChange,
-    audit?: TransactionalAudit<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }>,
-  ): Promise<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }> {
+    audit?: TransactionalAudit<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean; reasonId?: string }>,
+  ): Promise<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean; reasonId?: string }> {
     return runAudited(this.pool, async (db) => {
       const locked = await db.query<{ visibility: Visibility }>(
         `SELECT visibility FROM risks WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
@@ -242,22 +243,24 @@ export class PostgresRiskRepository implements RiskRepository {
         `SELECT id FROM users WHERE tenant_id = $1 AND deleted_at IS NULL AND risk_visible_to($1, $2, id)`,
         [tenantId, riskId],
       )).rows.map((r) => r.id);
+      // Conservation L2a: the text is stored once; the grant rows and the audit row reference it.
+      const reasonId = await insertVisibilityReason(db, tenantId, "VISIBILITY_CHANGE", change.reason);
       // Back to CLIENT revokes the list as read UNDER the lock: a grant added concurrently cannot survive (QA concurrency).
       const revoke = change.visibility === "CLIENT" ? rawBefore : change.revokeUserIds;
       for (const userId of new Set(revoke)) {
         const { rowCount } = await db.query(
-          `UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $4, revoke_reason = $5
+          `UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $4, revoke_reason_ref = $5
            WHERE tenant_id = $1 AND resource_type = 'RISK' AND resource_id = $2 AND user_id = $3 AND revoked_at IS NULL`,
-          [tenantId, riskId, userId, change.changedBy, change.reason],
+          [tenantId, riskId, userId, change.changedBy, reasonId],
         );
         if (!rowCount) throw new ValidationError(`No active access to revoke for user ${userId}`);
       }
       for (const userId of new Set(change.addUserIds)) {
         if (rawBefore.includes(userId)) { await reviveExpired(db, tenantId, "RISK", riskId, userId); continue; }
         await db.query(
-          `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason)
+          `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref)
            VALUES ($1, 'RISK', $2, $3, $4, $5)`,
-          [tenantId, riskId, userId, change.changedBy, change.reason],
+          [tenantId, riskId, userId, change.changedBy, reasonId],
         );
       }
       await db.query(
@@ -271,7 +274,7 @@ export class PostgresRiskRepository implements RiskRepository {
                           AND NOT (id = ANY($3::uuid[]))) AS widening`,
         [tenantId, riskId, readersBefore],
       );
-      return { before, after: { visibility: change.visibility, accessUserIds: await validList(db, tenantId, "RISK", riskId) }, widening: gain?.widening ?? false };
+      return { before, after: { visibility: change.visibility, accessUserIds: await validList(db, tenantId, "RISK", riskId) }, widening: gain?.widening ?? false, reasonId };
     }, audit);
   }
 

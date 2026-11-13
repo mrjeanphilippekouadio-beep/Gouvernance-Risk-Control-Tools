@@ -117,7 +117,7 @@ describe("risk visibility — change (q194, q199)", () => {
     expect(after).toMatchObject({ visibility: "NOMINATIF", accessUserIds: [OTHER], accessUsers: [{ id: OTHER, displayName: null }] });
     expect(f.changes[0]).toMatchObject({ changedBy: RM, reason: "Dossier sensible" });
     expect(f.audits).toHaveLength(1);
-    expect(f.audits[0]).toMatchObject({ action: "PERMISSION_CHANGE", entityType: "Risk", entityId: "r1", reason: "Dossier sensible" });
+    expect(f.audits[0]).toMatchObject({ action: "PERMISSION_CHANGE", entityType: "Risk", entityId: "r1", reason: null, visibilityReason: { source: "VISIBILITY_CHANGE", text: "Dossier sensible" } });
     expect(f.audits[0]!.newValue).toMatchObject({ visibility: "NOMINATIF", widening: false });
     expect(f.notifications.create).not.toHaveBeenCalled();
   });
@@ -283,7 +283,7 @@ describe("SEC V1-02 — the department or process of a restricted risk changes l
     await f.s.update(actor(OWNER, ["risk.read", "risk.update"]), "r1", { ownerDepartmentId: DEPT2, reason: "Réorganisation" }, "req");
     expect(f.update.mock.calls[0]![2]).not.toHaveProperty("reason");
     expect(f.audits.map((a) => a.action)).toEqual(["UPDATE", "PERMISSION_CHANGE"]);
-    expect(f.audits[1]).toMatchObject({ reason: "Réorganisation", newValue: { ownerDepartmentId: DEPT2, widening: true } });
+    expect(f.audits[1]).toMatchObject({ reason: null, visibilityReason: { source: "PERIMETER_CHANGE", text: "Réorganisation" }, newValue: { ownerDepartmentId: DEPT2, widening: true } });
     expect(f.notifications.create).toHaveBeenCalledWith(expect.objectContaining({ eventType: "RISK_VISIBILITY_WIDENED" }));
   });
 

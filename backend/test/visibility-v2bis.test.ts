@@ -54,7 +54,7 @@ describe("q207 — a RACI assignment that opens a restricted resource", () => {
     const w = world(false);
     await w.svc.assign(actor(EDITOR, ["raci.assign"]), "RISK", RISK, TARGET, "C", "req", "Expert consulté");
     expect(w.audits.map((a) => a.action)).toEqual(["CREATE", "PERMISSION_CHANGE"]);
-    expect(w.audits[1]).toMatchObject({ entityType: "Risk", entityId: RISK, userId: EDITOR, reason: "Expert consulté", newValue: { widening: true, through: "RACI", raciUserId: TARGET } });
+    expect(w.audits[1]).toMatchObject({ entityType: "Risk", entityId: RISK, userId: EDITOR, reason: null, visibilityReason: { source: "RACI_OPENING", text: "Expert consulté" }, newValue: { widening: true, through: "RACI", raciUserId: TARGET } });
     expect(w.notifications.create).toHaveBeenCalledWith(expect.objectContaining({ recipientUserId: RM, eventType: "RISK_VISIBILITY_WIDENED", resourceId: RISK }));
   });
 

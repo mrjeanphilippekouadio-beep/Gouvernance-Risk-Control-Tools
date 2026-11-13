@@ -169,6 +169,15 @@ both a general update and an archive/close action.
   — SEC-013/SEC-014). When a method's *side effect* is terminal even if
   its own name/permission suggests a routine update, gate it like the
   terminal action it actually is.
+- **The text of a visibility reason never goes in `audit_log.reason`**
+  (migration 096, q246/q247): it lives in `visibility_reasons`, the journal
+  carries `reason_ref`. Build the audit event with
+  `...visibilityReasonOf(source, text, id?)` (`domain/entities/VisibilityReason.ts`),
+  never `reason: text`; `insertAuditEvent` stores the text and the reference in
+  the same transaction. The same goes for the grant snapshots
+  (`oldValue`/`newValue` of a `SensitiveViewGrant` carry the reference, not the
+  text). `test/visibilityReasons.test.ts` counts the writers — a new writer of a
+  visibility line must be added there.
 
 ## Architecture Agentique ACF
 

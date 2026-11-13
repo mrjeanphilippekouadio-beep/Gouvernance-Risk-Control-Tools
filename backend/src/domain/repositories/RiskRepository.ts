@@ -66,8 +66,8 @@ export interface RiskRepository {
     tenantId: string,
     riskId: string,
     change: RiskVisibilityChange,
-    audit?: TransactionalAudit<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }>,
-  ): Promise<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean }>;
+    audit?: TransactionalAudit<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean; reasonId?: string }>,
+  ): Promise<{ before: RiskVisibilityState; after: RiskVisibilityState; widening?: boolean; reasonId?: string }>;
   /**
    * Lot V5 (q225 A): renews the named-people access of `userIds` on a NOMINATIF, not closed risk (new expiry = now() + 30
    * days, never more), under a row lock, audit rows in the same transaction. Optional: absent, renewal is refused.

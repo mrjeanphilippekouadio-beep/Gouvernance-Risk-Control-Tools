@@ -15,7 +15,12 @@ export interface SensitiveViewGrant {
   userId: string;
   /** Absent on rows written before 084 by test fakes: read as ROLE_READ_SENSITIVE. */
   kind?: SensitiveViewGrantKind;
+  /**
+   * The three reasons read as text (or « motif effacé le … (conservation) » once erased) — joined from visibility_reasons (096).
+   * The `...Ref` fields name the stored reason: what the audit rows carry instead of the text.
+   */
   reason: string;
+  reasonRef?: string | null;
   status: SensitiveViewGrantStatus;
   requestedBy: string;
   requestedAt: Date;
@@ -26,9 +31,11 @@ export interface SensitiveViewGrant {
   decidedBy: string | null;
   decidedAt: Date | null;
   decisionReason: string | null;
+  decisionReasonRef?: string | null;
   revokedBy: string | null;
   revokedAt: Date | null;
   revokeReason: string | null;
+  revokeReasonRef?: string | null;
 }
 
 export interface SensitiveViewGrantRepository {

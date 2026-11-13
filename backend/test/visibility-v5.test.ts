@@ -70,7 +70,7 @@ describe("lot V5 — renewing a named access (resources)", () => {
     expect(f.renewAccess).toHaveBeenCalledWith(T, "ACTION_PLAN", "p1", [NAMED], undefined);
     expect(f.audits).toHaveLength(1);
     expect(f.audits[0]).toMatchObject({ tenantId: T, userId: RM, entityType: "ActionPlan", entityId: "p1", action: "PERMISSION_CHANGE",
-      reason: GOOD.reason, requestId: "req-1", newValue: { renewed: [NAMED], widening: true } });
+      reason: null, visibilityReason: { source: "ACCESS_RENEWAL", text: GOOD.reason }, requestId: "req-1", newValue: { renewed: [NAMED], widening: true } });
     expect(f.notifications.create).not.toHaveBeenCalled();
   });
 
@@ -119,7 +119,7 @@ describe("lot V5 — renewing a named access (risk)", () => {
     await expect(f.service.renewAccess(actor(OWNER, ["risk.read"]), "r1", { ...GOOD, reason: " " }, "r")).rejects.toBeInstanceOf(ValidationError);
     expect(f.renewAccess).not.toHaveBeenCalled();
     await f.service.renewAccess(actor(OWNER, ["risk.read"]), "r1", GOOD, "req-3");
-    expect(f.audits[0]).toMatchObject({ entityType: "Risk", action: "PERMISSION_CHANGE", userId: OWNER, reason: GOOD.reason, newValue: { renewed: [NAMED] } });
+    expect(f.audits[0]).toMatchObject({ entityType: "Risk", action: "PERMISSION_CHANGE", userId: OWNER, reason: null, visibilityReason: { source: "ACCESS_RENEWAL", text: GOOD.reason }, newValue: { renewed: [NAMED] } });
     expect(f.notifications.create).toHaveBeenCalledWith(expect.objectContaining({ recipientUserId: RM, eventType: "RISK_VISIBILITY_WIDENED" }));
   });
 });

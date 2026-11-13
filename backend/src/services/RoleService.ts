@@ -42,6 +42,7 @@ import type { RiskFrameworkRepository } from "../domain/repositories/RiskFramewo
 import type { DashboardScopeMode } from "../domain/entities/DashboardScope.js";
 import type { GovernanceDesignationRepository } from "../domain/repositories/GovernanceDesignationRepository.js";
 import type { AuditEvent } from "../domain/entities/AuditEvent.js";
+import { visibilityReasonOf } from "../domain/entities/VisibilityReason.js";
 import type { GovernanceDesignation } from "../domain/entities/GovernanceDesignation.js";
 import { canonicalId } from "../domain/ids.js";
 import type { SensitiveViewGrant, SensitiveViewGrantKind, SensitiveViewGrantRepository } from "../domain/repositories/SensitiveViewGrantRepository.js";
@@ -459,8 +460,16 @@ export class RoleService {
     }
   }
 
+  /**
+   * Conservation L2a (q247 A): the three reasons of a grant are visibility reasons. The journal carries the reference of the one
+   * this action wrote, never a text — neither in `reason` nor in the grant snapshots (`oldValue` / `newValue`).
+   */
   private grantAuditEvent(actor: AuthenticatedUser, g: SensitiveViewGrant, action: AuditEvent["action"], before: SensitiveViewGrant | null, reason: string | null, requestId: string) {
-    return { tenantId: actor.tenantId, userId: actor.userId, entityType: "SensitiveViewGrant", entityId: g.id, action, oldValue: before, newValue: g, reason, requestId };
+    const reasonFields = action === "SUBMIT" ? visibilityReasonOf("SENSITIVE_VIEW_REQUEST", reason, g.reasonRef)
+      : action === "UNASSIGN" ? visibilityReasonOf("SENSITIVE_VIEW_REVOCATION", reason, g.revokeReasonRef)
+        : visibilityReasonOf("SENSITIVE_VIEW_DECISION", reason, g.decisionReasonRef);
+    return { tenantId: actor.tenantId, userId: actor.userId, entityType: "SensitiveViewGrant", entityId: g.id, action,
+      oldValue: before && grantSnapshot(before), newValue: grantSnapshot(g), ...reasonFields, requestId };
   }
 
   /** q188/q189: an account a restricted reader may not see answers like an unknown account (404, no oracle). */
@@ -606,7 +615,8 @@ export class RoleService {
       newValue: openings.length > 0
         ? { ...after, widening: true, through: "DEPARTMENT_GROUP", opened: openings }
         : after,
-      reason: cleanReason,
+      // Conservation L2a: when the change opens restricted resources, its reason is a visibility reason (stored apart).
+      ...(openings.length > 0 ? visibilityReasonOf("DEPARTMENT_GROUP_OPENING", cleanReason) : { reason: cleanReason }),
       requestId,
     });
     if (openings.length > 0 && !openingHoldsRight) await this.access!.notifyDepartmentGroupOpening(actor, id, requestId);
@@ -746,7 +756,10 @@ export class RoleService {
     // F-B8s-01: the check above may be stale; the repository replays it under the user + role locks.
     // QA-V3-03: the ROLE_CHANGE row and, when the role opens restricted resources (q212), the PERMISSION_CHANGE row are
     // written in the assignment's transaction when the repository supports it; otherwise right after (test fakes).
-    const events = (assignment: RoleAssignment) => [
+    const events = (assignment: RoleAssignment) => {
+      // Conservation L2a: the opening reason is a visibility reason, stored once for both rows (built per call: never reused after a rollback).
+      const openingReason = visibilityReasonOf("DEPARTMENT_GROUP_OPENING", opening?.reason);
+      return [
       {
         tenantId: actor.tenantId,
         userId: actor.userId,
@@ -755,7 +768,7 @@ export class RoleService {
         action: "ROLE_CHANGE" as const,
         oldValue: null,
         newValue: { ...assignment, roleName: role.name },
-        reason: cleanReason ?? opening?.reason ?? null,
+        ...(cleanReason ? { reason: cleanReason } : openingReason),
         requestId,
       },
       ...(opening ? [{
@@ -766,10 +779,11 @@ export class RoleService {
         action: "PERMISSION_CHANGE" as const,
         oldValue: { userId, reads: [] },
         newValue: { userId, departmentId: role.departmentId, widening: true, through: "DEPARTMENT_GROUP", opened: opening.opened },
-        reason: opening.reason,
+        ...openingReason,
         requestId,
       }] : []),
-    ];
+      ];
+    };
     const inTransaction = this.roles.assignAuditsInTransaction === true;
     const assignment = await this.roles.assignToUser(actor.tenantId, roleId, userId, actor.userId, async (lockedRole, held) => {
       const res = await this.assertCumulRules(actor.tenantId, lockedRole, held, held, reason);
@@ -1513,6 +1527,8 @@ export class RoleService {
 
 /** Rows written before 084 (and test fakes) carry no kind: they are role.read.sensitive grants. */
 const grantKind = (g: SensitiveViewGrant): SensitiveViewGrantKind => g.kind ?? "ROLE_READ_SENSITIVE";
+/** Conservation L2a: a grant as the journal keeps it — the reference of each reason, never its text. */
+const grantSnapshot = ({ reason: _reason, decisionReason: _decision, revokeReason: _revoke, ...rest }: SensitiveViewGrant) => rest;
 
 /** G1 (DECISION-044): an administrator who is also a Risk Manager or a Committee member never changes the Audit alone. */
 function auditChangeNeedsValidation(held: Role[]): boolean {

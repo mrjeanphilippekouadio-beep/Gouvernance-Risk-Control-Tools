@@ -33,7 +33,7 @@ export function qaVisibilityHarness<W extends string>(opts: { db: string; port: 
   }
   const get = (w: W, p: string) => call(w, "GET", p);
   const audits = (id: string) => sql<AuditRow>(
-    "SELECT action, reason, old_value, new_value, user_id, entity_type FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp, id", [id]);
+    "SELECT action, COALESCE(reason, (SELECT v.text FROM visibility_reasons v WHERE v.id = reason_ref)) AS reason, old_value, new_value, user_id, entity_type FROM audit_log WHERE entity_id::text = $1 ORDER BY timestamp, id", [id]);
 
   return {
     API, TOK, sql, call, get, audits,
