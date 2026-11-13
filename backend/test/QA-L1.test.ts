@@ -33,6 +33,7 @@ describe("QA-L1 (static): every reader of audit_log is known", () => {
       "infrastructure/database/postgres/PostgresGovernancePrincipleAcceptanceRepository.ts", // technical (reviewed flag)
       "infrastructure/database/postgres/PostgresGovernanceQueries.ts", // technical (independence, counts, notifier)
       "infrastructure/database/postgres/PostgresResourceAccessRepository.ts", // listRestricted: last PERMISSION_CHANGE
+      "infrastructure/database/postgres/PostgresRiskFrameworkRepository.ts", // technical (q266 hasUnreviewedSoleRm: recurrence marker)
       "infrastructure/database/postgres/PostgresTenantRepository.ts", // technical (reactivation maker-checker)
     ]);
   });
