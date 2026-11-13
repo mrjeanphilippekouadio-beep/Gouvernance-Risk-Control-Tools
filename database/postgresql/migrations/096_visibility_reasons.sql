@@ -147,17 +147,17 @@ BEGIN
 
   FOR g IN SELECT id, tenant_id, reason, requested_at, decision_reason, decided_at, revoke_reason, revoked_at FROM sensitive_view_grants LOOP
     IF g.reason IS NOT NULL THEN
-      INSERT INTO visibility_reasons (tenant_id, source, text, created_at) VALUES (g.tenant_id, 'SENSITIVE_VIEW_REQUEST', CASE WHEN btrim(g.reason, E' \t\n\r\f\013') = '' THEN '(motif sans texte)' ELSE g.reason END, g.requested_at)
+      INSERT INTO visibility_reasons (tenant_id, source, text, created_at) VALUES (g.tenant_id, 'SENSITIVE_VIEW_REQUEST', CASE WHEN char_length(btrim(g.reason, E' \t\n\r\f\013')) = 0 THEN '(motif sans texte)' ELSE g.reason END, g.requested_at)
         RETURNING id INTO v_id;
       UPDATE sensitive_view_grants SET reason_ref = v_id, reason = NULL WHERE id = g.id;
     END IF;
     IF g.decision_reason IS NOT NULL THEN
-      INSERT INTO visibility_reasons (tenant_id, source, text, created_at) VALUES (g.tenant_id, 'SENSITIVE_VIEW_DECISION', CASE WHEN btrim(g.decision_reason, E' \t\n\r\f\013') = '' THEN '(motif sans texte)' ELSE g.decision_reason END, g.decided_at)
+      INSERT INTO visibility_reasons (tenant_id, source, text, created_at) VALUES (g.tenant_id, 'SENSITIVE_VIEW_DECISION', CASE WHEN char_length(btrim(g.decision_reason, E' \t\n\r\f\013')) = 0 THEN '(motif sans texte)' ELSE g.decision_reason END, g.decided_at)
         RETURNING id INTO v_id;
       UPDATE sensitive_view_grants SET decision_reason_ref = v_id, decision_reason = NULL WHERE id = g.id;
     END IF;
     IF g.revoke_reason IS NOT NULL THEN
-      INSERT INTO visibility_reasons (tenant_id, source, text, created_at) VALUES (g.tenant_id, 'SENSITIVE_VIEW_REVOCATION', CASE WHEN btrim(g.revoke_reason, E' \t\n\r\f\013') = '' THEN '(motif sans texte)' ELSE g.revoke_reason END, g.revoked_at)
+      INSERT INTO visibility_reasons (tenant_id, source, text, created_at) VALUES (g.tenant_id, 'SENSITIVE_VIEW_REVOCATION', CASE WHEN char_length(btrim(g.revoke_reason, E' \t\n\r\f\013')) = 0 THEN '(motif sans texte)' ELSE g.revoke_reason END, g.revoked_at)
         RETURNING id INTO v_id;
       UPDATE sensitive_view_grants SET revoke_reason_ref = v_id, revoke_reason = NULL WHERE id = g.id;
     END IF;
