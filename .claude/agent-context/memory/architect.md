@@ -177,6 +177,22 @@ Créée le 2026-10-12 (aucune mémoire n'existait). À lire en premier à chaque
 18. **Une date de fin d'effet non branchée reste NULL et n'efface rien** (fail-closed) ; la revue périodique est le
     filet qui rattrape les événements de fin oubliés.
 
+## 2026-11-13
+
+- Classement PRIV-L2A-03 (section 9 du cadrage q217/q237). Règle : **motif de visibilité** = l'acte porte sur le droit de
+  lire une ressource précise (effacé à 1 an, `visibility_reasons`) ; **motif de gouvernance** = l'acte porte sur une
+  fonction (rôle, groupe fixe, exception) ou un objet méthodologique (Dispositif, statut) : journal 10 ans puis masqué
+  (L1). Texte commun aux deux = régime le plus court (référence partagée, déjà fait par PRIV-L2A-01 dans le worktree).
+  Reco A (laisser au journal + avertissement de saisie + R5, XS) contre B (élargir `visibility_reasons`, S/M, perd la
+  preuve q63/q149/q257 à 1 an, ne couvre que 5 des ~110 écritures `reason:` de 40 services) et C (liste fermée, S).
+  Question cockpit rédigée en 9.5, numéro à attribuer par l'orchestrateur.
+
+19. **Classer un texte libre par l'objet de l'acte, pas par son effet indirect** : un changement de rôle change qui
+    lit (groupes « voit tout »), mais son motif reste un motif de gouvernance. Sinon tout devient « visibilité » et la
+    preuve de gouvernance s'efface avec la durée courte.
+20. **Un risque qui vient du contenu saisi se traite à la saisie** (avertissement), pas en déplaçant une sous-liste de
+    champs vers un stockage effaçable : compter d'abord combien d'écritures du même type existent (grep `reason:`).
+
 16. **Séparer une donnée à durée courte d'un journal à durée longue dès l'écriture** (référence + table effaçable)
     plutôt que d'ouvrir une exception dans la garde du journal. Cela ne couvre que le futur : vérifier qu'aucune
     donnée réelle n'existe déjà.
