@@ -3,8 +3,7 @@
 -- en base ; seules les trois lectures de consultation de PostgresAuditRepository la filtrent. Les lectures techniques (dernier
 -- PERMISSION_CHANGE, santé de la gouvernance) ne filtrent pas.
 -- Le marquage se lance à la main, en SQL, par le seul propriétaire de la base (EXECUTE retiré à PUBLIC et à grc_app_runtime, qui ne
--- peut ni écrire dans la table de marques ni lancer la fonction) :
---   SELECT * FROM mark_expired_audit_log('<tenant uuid>');
+-- peut ni écrire dans la table de marques ni lancer la fonction), en appelant mark_expired_audit_log avec l'identifiant du tenant.
 -- La fonction refuse toute durée de moins de 10 ans (calendaires). Pas réversible par l'application : une correction passe par une migration.
 
 CREATE TABLE IF NOT EXISTS audit_log_retention_marks (

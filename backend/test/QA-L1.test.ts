@@ -119,8 +119,8 @@ describe.skipIf(!live)("QA-L1 on a real local database", () => {
     expect([...(await markedEntities(a.t))]).toEqual([oldA]);
     expect((await markedEntities(b.t)).size).toBe(0);
     const repo = new PostgresAuditRepository(pool);
-    expect((await repo.search(b.t, { entityId: oldB }, 10)).length).toBe(1);
-    expect((await repo.search(a.t, { entityId: oldA }, 10)).length).toBe(0);
+    expect(await repo.search(b.t, { entityId: oldB }, 10)).toHaveLength(1);
+    expect(await repo.search(a.t, { entityId: oldA }, 10)).toHaveLength(0);
     // A mark is bound to its row's tenant by the function: tenant_id of every mark equals the row's tenant.
     expect(await q(`SELECT 1 FROM audit_log_retention_marks m JOIN audit_log a ON a.id = m.audit_log_id WHERE m.tenant_id <> a.tenant_id`)).toHaveLength(0);
   });
