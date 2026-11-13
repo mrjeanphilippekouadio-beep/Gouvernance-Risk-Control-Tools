@@ -45,8 +45,8 @@ export function qaVisibilityHarness<W extends string>(opts: { db: string; port: 
     sees: async (w: W, path: string) => (await get(w, path)).status === 200,
     /** Rebuilds the base, starts the server, runs `prepare` (role adjustments by SQL), then logs every profile in. */
     async start(prepare: () => Promise<void>) {
-      sh("bash", [script("qa-visibility-v2-setup.sh"), "up", opts.db]);
-      sh("bash", [script("qa-visibility-v2-server.sh"), "start"], { QA_PORT: String(opts.port), QA_DB: opts.db });
+      sh("/bin/bash", [script("qa-visibility-v2-setup.sh"), "up", opts.db]);
+      sh("/bin/bash", [script("qa-visibility-v2-server.sh"), "start"], { QA_PORT: String(opts.port), QA_DB: opts.db });
       pg = new Pool({ host: "127.0.0.1", port: PGPORT, user: "postgres", database: opts.db, max: 4 });
       await prepare();
       for (const w of opts.who) {
@@ -57,7 +57,7 @@ export function qaVisibilityHarness<W extends string>(opts: { db: string; port: 
     },
     async stop() {
       await pg?.end();
-      sh("bash", [script("qa-visibility-v2-server.sh"), "stop"], { QA_PORT: String(opts.port) });
+      sh("/bin/bash", [script("qa-visibility-v2-server.sh"), "stop"], { QA_PORT: String(opts.port) });
     },
   };
 }
