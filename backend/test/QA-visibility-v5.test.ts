@@ -146,11 +146,11 @@ describe.skipIf(!live)("QA-visibility-v5 on the REAL server + LOCAL PostgreSQL 1
         expect(daysFromNow(await expiryOf(type, id))).toBeLessThan(10.01);
       });
     }
-    it("a PERIMETRE list written without expiry is untouched by the expiry rule (control, KPI, plan, anomaly, risk)", async () => {
+    it("SEC-Q253-01: a PERIMETRE named access written without expiry (direct SQL) reads nothing, fail closed (control, KPI, plan, anomaly, risk)", async () => {
       for (const type of TYPES) {
         const id = await insertItem(type, "PERIMETRE");
         await grant(type, id, UID.named, null);
-        expect(await reads("named", type, id), type).toBe(true);
+        expect(await reads("named", type, id), type).toBe(false);
       }
     });
     it("the owner of a dossier still reads it after expiry and after closure (his right does not come from the list)", async () => {
