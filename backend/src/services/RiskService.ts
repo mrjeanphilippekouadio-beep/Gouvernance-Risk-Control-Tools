@@ -376,7 +376,8 @@ export class RiskService {
           oldValue: { processId: before.processId ?? null, riskFrameworkId: frameworkBefore },
           newValue: { processId: updated.processId ?? null, riskFrameworkId: frameworkAfter, frameworkChanged: frameworkBefore !== frameworkAfter },
           // The Dispositif-move row keeps its own reason (q257); a perimeter-only reason is never repeated here in clear.
-          reason: perimeter && !frameworkChanged ? null : reason || null,
+          // PRIV-L2A-01: when the perimeter changes too, the text is a visibility reason: this row carries the shared reference.
+          ...(perimeter ? (frameworkChanged ? perimeterReason : { reason: null }) : { reason: reason || null }),
           requestId,
         }] : []),
         ...(perimeter ? [{

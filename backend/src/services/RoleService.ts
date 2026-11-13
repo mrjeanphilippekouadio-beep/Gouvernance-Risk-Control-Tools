@@ -768,7 +768,8 @@ export class RoleService {
         action: "ROLE_CHANGE" as const,
         oldValue: null,
         newValue: { ...assignment, roleName: role.name },
-        ...(cleanReason ? { reason: cleanReason } : openingReason),
+        // PRIV-L2A-01: an opening reason is never written in clear, even when a cumul also supplies it as cleanReason.
+        ...(opening?.reason ? openingReason : { reason: cleanReason }),
         requestId,
       },
       ...(opening ? [{

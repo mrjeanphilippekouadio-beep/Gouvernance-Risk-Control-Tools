@@ -461,4 +461,12 @@ describe.skipIf(!live)("QA-visibility-v2bis on the REAL server + LOCAL PostgreSQ
       expect(r.status, r.text.slice(0, 120)).toBe(400);
     });
   });
+
+  // PRIV-L2A-01: after every scenario above, no journal line holds a stored visibility reason in clear in audit_log.reason.
+  it("no audit_log.reason equals the text of a stored visibility reason (real PostgreSQL)", async () => {
+    const leaks = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM audit_log a JOIN visibility_reasons v ON v.tenant_id = a.tenant_id AND a.reason = v.text");
+    expect(leaks[0]).toEqual({ n: 0 });
+    expect((await sql<{ n: number }>("SELECT count(*)::int AS n FROM visibility_reasons"))[0]!.n).toBeGreaterThan(0);
+  });
 });

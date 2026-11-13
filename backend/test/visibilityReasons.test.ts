@@ -32,6 +32,15 @@ describe("visibility reasons never go back into audit_log.reason", () => {
     }
   });
 
+  it("PRIV-L2A-01: a role row never carries an opening reason in clear, nor the Dispositif-move row when the perimeter changes too", () => {
+    // RoleService.assignToUser: the ROLE_CHANGE row takes the shared reference whenever an opening reason exists (even if a cumul supplies cleanReason).
+    expect(source("RoleService.ts")).toMatch(/opening\?\.reason \? openingReason : \{ reason: cleanReason \}/);
+    expect(source("RoleService.ts")).not.toMatch(/cleanReason \? \{ reason: cleanReason \} : openingReason/);
+    // RiskService.update: with a perimeter change, the move row carries perimeterReason (shared reference) or null, never the text.
+    expect(source("RiskService.ts")).toMatch(/perimeter \? \(frameworkChanged \? perimeterReason : \{ reason: null \}\)/);
+    expect(source("RiskService.ts")).not.toMatch(/reason: perimeter && !frameworkChanged \? null : reason \|\| null/);
+  });
+
   it("the sensitive-view grant snapshots carry no reason text (neither in the journal reason nor in oldValue/newValue)", () => {
     expect(source("RoleService.ts")).toMatch(/grantSnapshot\(g\)/);
     expect(source("RoleService.ts")).not.toMatch(/oldValue: before, newValue: g,/);
