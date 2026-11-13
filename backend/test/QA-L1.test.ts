@@ -7,6 +7,7 @@ import { PostgresAuditRepository } from "../src/infrastructure/database/postgres
 import { PostgresResourceAccessRepository } from "../src/infrastructure/database/postgres/PostgresResourceAccessRepository.js";
 import { PostgresGovernanceHealthRepository } from "../src/infrastructure/database/postgres/PostgresGovernanceHealthRepository.js";
 import { PostgresGovernanceExceptionReviewRepository } from "../src/infrastructure/database/postgres/PostgresGovernanceExceptionReviewRepository.js";
+import { RiskFrameworkService } from "../src/services/RiskFrameworkService.js";
 import { AuditLogService } from "../src/services/AuditLogService.js";
 
 /**
@@ -134,7 +135,7 @@ describe.skipIf(!live)("QA-L1 on a real local database", () => {
     expect(await q(`SELECT 1 FROM audit_log_retention_marks WHERE run_id = $1`, [r2["out_run_id"]])).toHaveLength(0);
   });
 
-  it.fails("QA-L1-03: concurrency: two runs on the same tenant at once both end without error (one marks, the other 0); today the second gets 23505", async () => {
+  it("QA-L1-03 (corrigé 0085709): two runs on the same tenant at once both end without error (one marks, the other 0)", async () => {
     const { t, u } = await newTenant();
     for (let i = 0; i < 3; i += 1) await row(t, u, "11 years");
     const c1 = await pool.connect();
@@ -218,11 +219,41 @@ describe.skipIf(!live)("QA-L1 on a real local database", () => {
     expect(after.markedActions.map((m) => m.reason)).toContain("free text");
   });
 
-  it.fails("QA-L1-01: decision logic built on AuditRepository.listForEntity (TenantService.reactivate, RiskFrameworkService.authoredByMe/authorsOf, ProcessService.championSelfDesignated) must still see a marked row", async () => {
+  it("QA-L1-01 (corrigé 0085709): decision logic built on AuditRepository.listForEntity (TenantService.reactivate, RiskFrameworkService.authoredByMe/authorsOf, ProcessService.championSelfDesignated) must still see a marked row", async () => {
     const { t, u } = await newTenant();
     const deactivation = await row(t, u, "11 years", { type: "Tenant", action: "STATUS_CHANGE", entity: t });
     await q(`SELECT * FROM mark_expired_audit_log($1)`, [t]);
     const events = await new PostgresAuditRepository(pool).listForEntity(t, "Tenant", t);
     expect(events.map((e) => e.entityId)).toContain(deactivation);
+  });
+
+  it("QA-L1-01 retest, through the services: a marked CREATE/UPDATE row still counts for authoredByMe (bootstrap declaration) and authorsOf", async () => {
+    const { t, u } = await newTenant();
+    const role = randomUUID();
+    const version = randomUUID();
+    const adminRole = { id: role, permissions: ["role.update"] };
+    const insert = (type: string, entity: string, action: string, newValue: unknown) => q(
+      `INSERT INTO audit_log (tenant_id, "timestamp", user_id, entity_type, entity_id, action, new_value, request_id)
+       VALUES ($1, now() - interval '11 years', $2, $3, $4, $5, $6, 'r')`, [t, u, type, entity, action, JSON.stringify(newValue)]);
+    await insert("Role", role, "CREATE", { permissions: ["role.update"] });
+    await insert("RiskFrameworkVersion", version, "UPDATE", {});
+    const audit = new PostgresAuditRepository(pool);
+    const other = randomUUID();
+    const service = new RiskFrameworkService(
+      {} as never, { getById: async () => null } as never,
+      { listActiveGrants: async () => [{ role: adminRole, grantedBy: other, grantedAt: new Date("2000-01-01") }] } as never,
+      { getById: async (_t: string, id: string) => ({ id, deletedAt: null }) } as never, audit);
+    const svc = service as unknown as {
+      checkDeclaration(a: unknown, d: unknown): Promise<unknown>;
+      authorsOf(t: string, v: unknown): Promise<Set<string>>;
+    };
+    const actor = { userId: u, tenantId: t, email: "a@x.test", displayName: "A", roles: [] };
+    const declaration = { outcome: "x", askedOn: new Date().toISOString().slice(0, 10), askedUserId: other };
+    const refusedBefore = svc.checkDeclaration(actor, declaration);
+    await expect(refusedBefore).rejects.toThrow(/créé ou modifié par vous/);
+    await q(`SELECT * FROM mark_expired_audit_log($1)`, [t]);
+    expect((await markedEntities(t)).size).toBe(2);
+    await expect(svc.checkDeclaration(actor, declaration)).rejects.toThrow(/créé ou modifié par vous/);
+    expect((await svc.authorsOf(t, { id: version, ratingScaleId: randomUUID(), createdBy: null, lastEditedBy: null })).has(u)).toBe(true);
   });
 });
