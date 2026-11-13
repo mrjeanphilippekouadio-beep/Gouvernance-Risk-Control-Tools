@@ -76,13 +76,29 @@ try {
 
   sql(`update configs set exception_review_delay_days = null where tenant_id = '${T}'`);
   await reopen();
-  await row40.getByRole("button", { name: /Revoir/ }).click();
-  const dlg = R.page.getByRole("dialog");
-  await dlg.getByLabel(/Motif/).fill("Revue QA q266");
-  await dlg.getByRole("button", { name: "Enregistrer" }).click();
-  await sleep(1500);
+  const review = async (S, row) => {
+    await row.getByRole("button", { name: /Revoir/ }).click();
+    const dlg = S.page.getByRole("dialog");
+    await dlg.getByLabel(/Motif/).fill("Revue QA q266");
+    await dlg.getByRole("button", { name: "Enregistrer" }).click();
+    await sleep(1500);
+    return dlg;
+  };
+  // SEC-Q266-02 : un Risk Manager tiers est refusé (erreur dans la fenêtre, rien d'écrit)
+  const refused = await review(R, row40);
+  const refusedText = norm(await refused.innerText().catch(() => ""));
+  check("5.0 un Risk Manager tiers est refusé : fenêtre ouverte avec une erreur", (await refused.count()) === 1 && /Audit|Comité|refus|droit|Forbidden|erreur/i.test(refusedText), refusedText.slice(0, 200));
+  await R.page.keyboard.press("Escape");
   await reopen();
-  check("5 après revue de la confirmation de 40 j : « 2 non revue(s) sur 3, dont 0 en retard »", /2 non revue\(s\) sur 3, dont 0 en retard/.test(await line()), await line());
+  check("5.1 après le refus : toujours « 3 non revue(s) sur 3 »", /3 non revue\(s\) sur 3/.test(await line()), await line());
+  // un membre du Comité peut revoir
+  const C = await openSession(browser, { app: APP, email: "com@vv1.test", shots: SHOTS, who: "com" });
+  await C.go(MENU);
+  await C.page.getByRole("button", { name: /Exceptions à revoir/ }).click();
+  await sleep(500);
+  await review(C, C.page.locator("table tbody tr").filter({ hasText: "Confirmation QA 40j" }));
+  await reopen();
+  check("5 après revue par le Comité de la confirmation de 40 j : « 2 non revue(s) sur 3, dont 0 en retard »", /2 non revue\(s\) sur 3, dont 0 en retard/.test(await line()), await line());
   await R.shot("02-after-review");
 
   checkNoErrors(check, [R], "6");
