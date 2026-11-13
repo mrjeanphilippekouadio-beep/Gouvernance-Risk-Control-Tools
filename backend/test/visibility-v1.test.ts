@@ -184,7 +184,7 @@ describe.skipIf(!hasLocalPg)("visibility V1 (real PostgreSQL, local only)", () =
       `INSERT INTO risks (tenant_id, process, description, owner_id, superior_owner_id, process_id, owner_department_id, visibility)
        VALUES ($1, 'v1', 'risque restreint', $2, $3, $4, $5, 'PERIMETRE') RETURNING id`, [ctx.tenant, o, s, proc, dept])).id;
     await one(`INSERT INTO raci_assignments (tenant_id, entity_type, entity_id, user_id, role, created_by) VALUES ($1, 'RISK', $2, $3, 'C', $4) RETURNING id`, [ctx.tenant, riskId, r, o]);
-    await one(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, 'RISK', $2, $3, $4, 'test', now() + interval '10 days') RETURNING id`, [ctx.tenant, riskId, g, o]);
+    await one(`WITH r AS (INSERT INTO visibility_reasons (tenant_id, source, text) VALUES ($1, 'VISIBILITY_CHANGE', 'test') RETURNING id) INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at) SELECT $1, 'RISK', $2, $3, $4, r.id, now() + interval '10 days' FROM r RETURNING id`, [ctx.tenant, riskId, g, o]);
 
     for (const u of [o, s, r, po, dm, g, rm]) expect(await sees(riskId, u!), u).toBe(true);
     expect(await sees(riskId, x!)).toBe(false);
@@ -202,7 +202,7 @@ describe.skipIf(!hasLocalPg)("visibility V1 (real PostgreSQL, local only)", () =
     // back to CLIENT with the list revoked: one transaction, the revocation carries its author and reason
     const { after } = await repo.changeVisibility(ctx.tenant, riskId, { visibility: "CLIENT", addUserIds: [], revokeUserIds: [g!], reason: "Ouverture", changedBy: rm! });
     expect(after).toMatchObject({ visibility: "CLIENT", accessUserIds: [] });
-    expect(await one(`SELECT revoked_by, revoke_reason FROM resource_access_grants WHERE resource_id = $1`, [riskId])).toEqual({ revoked_by: rm, revoke_reason: "Ouverture" });
+    expect(await one(`SELECT g.revoked_by, g.revoke_reason, v.text AS reason_text FROM resource_access_grants g JOIN visibility_reasons v ON v.id = g.revoke_reason_ref WHERE g.resource_id = $1`, [riskId])).toEqual({ revoked_by: rm, revoke_reason: null, reason_text: "Ouverture" });
     expect(await sees(riskId, x!)).toBe(true);
   });
 

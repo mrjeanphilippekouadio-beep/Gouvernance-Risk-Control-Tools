@@ -27,16 +27,17 @@ ALTER TABLE sensitive_view_grants DROP CONSTRAINT IF EXISTS svg_reject_reason_ch
 ALTER TABLE sensitive_view_grants DROP CONSTRAINT IF EXISTS svg_revoke_shape_check;
 ALTER TABLE sensitive_view_grants DROP CONSTRAINT IF EXISTS svg_reason_present_check;
 
-UPDATE resource_access_grants g SET grant_reason = r.text FROM visibility_reasons r
-  WHERE g.grant_reason_ref = r.id AND g.tenant_id = r.tenant_id;
-UPDATE resource_access_grants g SET revoke_reason = r.text FROM visibility_reasons r
-  WHERE g.revoke_reason_ref = r.id AND g.tenant_id = r.tenant_id;
-UPDATE sensitive_view_grants g SET reason = r.text FROM visibility_reasons r
-  WHERE g.reason_ref = r.id AND g.tenant_id = r.tenant_id;
-UPDATE sensitive_view_grants g SET decision_reason = r.text FROM visibility_reasons r
-  WHERE g.decision_reason_ref = r.id AND g.tenant_id = r.tenant_id;
-UPDATE sensitive_view_grants g SET revoke_reason = r.text FROM visibility_reasons r
-  WHERE g.revoke_reason_ref = r.id AND g.tenant_id = r.tenant_id;
+-- Rejouable sur une base déjà redescendue (QA-L2A-03) : la restitution ne s'exécute que si la table existe encore (SQL dynamique).
+DO $$
+BEGIN
+  IF to_regclass('public.visibility_reasons') IS NOT NULL THEN
+    EXECUTE 'UPDATE public.resource_access_grants g SET grant_reason = r.text FROM public.visibility_reasons r WHERE g.grant_reason_ref = r.id AND g.tenant_id = r.tenant_id';
+    EXECUTE 'UPDATE public.resource_access_grants g SET revoke_reason = r.text FROM public.visibility_reasons r WHERE g.revoke_reason_ref = r.id AND g.tenant_id = r.tenant_id';
+    EXECUTE 'UPDATE public.sensitive_view_grants g SET reason = r.text FROM public.visibility_reasons r WHERE g.reason_ref = r.id AND g.tenant_id = r.tenant_id';
+    EXECUTE 'UPDATE public.sensitive_view_grants g SET decision_reason = r.text FROM public.visibility_reasons r WHERE g.decision_reason_ref = r.id AND g.tenant_id = r.tenant_id';
+    EXECUTE 'UPDATE public.sensitive_view_grants g SET revoke_reason = r.text FROM public.visibility_reasons r WHERE g.revoke_reason_ref = r.id AND g.tenant_id = r.tenant_id';
+  END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION resource_access_grants_guard() RETURNS trigger LANGUAGE plpgsql
   SET search_path = pg_catalog, public, pg_temp AS $$

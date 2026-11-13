@@ -90,14 +90,15 @@ describe.skipIf(!hasLocalPg)("visibility V0 (real PostgreSQL)", () => {
     const user = (await one(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, 'U') RETURNING id`, [ctx.tenant, `u-${Math.random()}@v0`])).id;
     const other = (await one(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, 'O') RETURNING id`, [ctx.tenant, `o-${Math.random()}@v0`])).id;
     const grant = (rid: string, by: string) => ctx.pool.query(
-      `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason) VALUES ($1, 'RISK', $2, $3, $4, 'v0') RETURNING id`,
+      `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason) VALUES ($1, 'RISK', $2, $3, $4, 'Accès accordé à la création du risque') RETURNING id`,
       [ctx.tenant, rid, user, by]);
     const rid = crypto.randomUUID();
     await expect(grant(rid, user)).rejects.toThrow(/rag_no_self_grant_check/);
     const id = (await grant(rid, other)).rows[0].id;
     await expect(ctx.pool.query(`DELETE FROM resource_access_grants WHERE id = $1`, [id])).rejects.toThrow(/never deleted/);
     await expect(ctx.pool.query(`UPDATE resource_access_grants SET grant_reason = 'x' WHERE id = $1`, [id])).rejects.toThrow(/immutable/);
-    await ctx.pool.query(`UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $2, revoke_reason = 'fin' WHERE id = $1`, [id, other]);
+    await ctx.pool.query(`INSERT INTO visibility_reasons (tenant_id, source, text) VALUES ($1, 'VISIBILITY_CHANGE', 'fin')`, [ctx.tenant]);
+    await ctx.pool.query(`UPDATE resource_access_grants SET revoked_at = now(), revoked_by = $2, revoke_reason_ref = (SELECT id FROM visibility_reasons WHERE tenant_id = $3 LIMIT 1) WHERE id = $1`, [id, other, ctx.tenant]);
     await expect(ctx.pool.query(`UPDATE resource_access_grants SET revoked_at = NULL, revoked_by = NULL, revoke_reason = NULL WHERE id = $1`, [id])).rejects.toThrow(/revoked once/);
   });
 });

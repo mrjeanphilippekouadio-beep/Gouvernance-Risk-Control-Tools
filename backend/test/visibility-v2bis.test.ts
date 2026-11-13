@@ -109,7 +109,7 @@ describe.skipIf(!hasLocalPg)("lot V2bis on real PostgreSQL (local only)", () => 
     const proc = (await one(`INSERT INTO processes (tenant_id, level, name) VALUES ($1, 'PROCESS', $2) RETURNING id`, [ctx.tenant, `P-${Math.random()}`])).id as string;
     const risk = (await one(`INSERT INTO risks (tenant_id, process, description, owner_id, process_id, visibility) VALUES ($1, 'p', 'Risque restreint V2bis', $2, $3, 'PERIMETRE') RETURNING id`, [ctx.tenant, o, proc])).id as string;
     const kpi = (await one(`INSERT INTO kpis (tenant_id, label, target_value, unit, frequency, owner, process_id, visibility) VALUES ($1, 'KPI V2bis', 1, '%', 'MONTHLY', 't', $2, 'NOMINATIF') RETURNING id`, [ctx.tenant, proc])).id as string;
-    await one(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at) VALUES ($1, 'KPI', $2, $3, $4, 'test', now() + interval '10 days') RETURNING id`, [ctx.tenant, kpi, g, o]);
+    await one(`WITH r AS (INSERT INTO visibility_reasons (tenant_id, source, text) VALUES ($1, 'VISIBILITY_CHANGE', 'test') RETURNING id) INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at) SELECT $1, 'KPI', $2, $3, $4, r.id, now() + interval '10 days' FROM r RETURNING id`, [ctx.tenant, kpi, g, o]);
     const repo = new PostgresResourceAccessRepository(ctx.pool);
     expect(await repo.canRead(ctx.tenant, "RISK", risk, o!)).toBe(true);
     expect(await repo.canRead(ctx.tenant, "RISK", risk, x!)).toBe(false);

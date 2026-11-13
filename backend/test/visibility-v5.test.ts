@@ -162,8 +162,9 @@ describe.skipIf(!hasLocalPg)("lot V5 on real PostgreSQL (local only)", () => {
   const sees = async (fn: string, id: string, userId: string) =>
     (await one(`SELECT ${fn}($1, $2, $3::uuid) AS v`, [ctx.tenant, id, userId])).v as boolean;
   const grant = async (type: string, id: string, userId: string, by: string, expires: string | null = "now() + interval '10 days'") =>
-    (await one(`INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason, expires_at)
-                VALUES ($1, $2, $3, $4, $5, 'test', ${expires ?? "NULL"}) RETURNING id`, [ctx.tenant, type, id, userId, by])).id as string;
+    (await one(`WITH r AS (INSERT INTO visibility_reasons (tenant_id, source, text) VALUES ($1, 'VISIBILITY_CHANGE', 'test') RETURNING id)
+                INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, grant_reason_ref, expires_at)
+                SELECT $1, $2, $3, $4, $5, r.id, ${expires ?? "NULL"} FROM r RETURNING id`, [ctx.tenant, type, id, userId, by])).id as string;
   const control = async (visibility = "NOMINATIF") =>
     (await one(`INSERT INTO controls (tenant_id, label, control_type, frequency, executor, compliance_criteria, visibility)
                 VALUES ($1, 'c', 'PREVENTIVE', 'M', 'x', 'y', $2) RETURNING id`, [ctx.tenant, visibility])).id as string;
