@@ -227,7 +227,7 @@ describe.skipIf(!hasLocalPg)("QA-L2a migration 096 on a database at state 095 wi
     } finally { await c.pool.end(); }
   }, 180000);
 
-  it.fails("QA-L2A-03 (MINOR, it.fails): the down run a second time (already rolled back) is rejected cleanly, like 095's after QA-L1-04", async () => {
+  it("QA-L2A-03 (retest): the down run a second time (already rolled back) is rejected cleanly, like 095's after QA-L1-04", async () => {
     const c = await clone();
     try {
       expect(await runFile(c.name, file(UP))).toBeNull();
@@ -258,13 +258,37 @@ describe.skipIf(!hasLocalPg)("QA-L2a migration 096 on a database at state 095 wi
     } finally { await c.pool.end(); }
   }, 120000);
 
-  it.fails("QA-L2A-04 (MINOR latent, it.fails): a legacy sensitive-view reason made only of tab / newline (accepted by 079's spaces-only btrim) does not break the migration", async () => {
+  it("QA-L2A-04 (retest): a legacy sensitive-view reason made only of tab / newline (accepted by 079's spaces-only btrim) is normalised, the migration succeeds", async () => {
     const c = await clone();
     try {
       await c.pool.query(`INSERT INTO sensitive_view_grants (tenant_id, user_id, reason, requested_by) VALUES ($1, $2, E'\\t', $3)`, [TENANT, U[5], U[0]]);
       const err = await runFile(c.name, file(UP));
       // 096 checks btrim with the whitespace set, 079 only trimmed spaces: the migration aborts (atomically) on such a row.
       expect(err).toBeNull();
+      const v = await c.q(`SELECT v.text FROM sensitive_view_grants g JOIN visibility_reasons v ON v.id = g.reason_ref WHERE g.user_id = $1`, [U[5]]);
+      expect(v).toEqual([{ text: "(motif sans texte)" }]);
+      // the CHECK on visibility_reasons.text is not weakened: a blank text is still refused
+      const blank = await c.pool.query(`INSERT INTO visibility_reasons (tenant_id, source, text) VALUES ($1, 's', E'\\t')`, [TENANT]).then(() => null, (e: Error) => e.message);
+      expect(blank).toMatch(/visibility_reasons_text_check/);
+    } finally { await c.pool.end(); }
+  }, 120000);
+
+  it("SEC-L2A-02: the old text columns refuse any clear reason (only the creation constant stays); the down drops the checks", async () => {
+    const c = await clone();
+    try {
+      expect(await runFile(c.name, file(UP))).toBeNull();
+      const refused = (sql: string) => c.pool.query(sql).then(() => null, (e: Error) => e.message);
+      const rid = (await c.q(`SELECT id FROM visibility_reasons LIMIT 1`))[0]!["id"] as string;
+      const rag = (user: string, cols: string, vals: string) =>
+        `INSERT INTO resource_access_grants (tenant_id, resource_type, resource_id, user_id, granted_by, ${cols}) VALUES ('${TENANT}', 'RISK', '${R[4]}', '${user}', '${U[0]}', ${vals})`;
+      expect(await refused(rag(U[1]!, "grant_reason", "'texte en clair'"))).toMatch(/rag_reason_text_check/);
+      expect(await refused(rag(U[1]!, "grant_reason", `'${CREATION}'`))).toBeNull();
+      expect(await refused(rag(U[2]!, "grant_reason, grant_reason_ref", `'texte ET référence', '${rid}'`))).toMatch(/rag_reason_text_check/);
+      expect(await refused(`UPDATE resource_access_grants SET revoked_at = now(), revoked_by = '${U[0]}', revoke_reason = 'clair' WHERE resource_id = '${R[4]}' AND user_id = '${U[1]}'`)).toMatch(/rag_reason_text_check/);
+      expect(await refused(`INSERT INTO sensitive_view_grants (tenant_id, user_id, reason, requested_by) VALUES ('${TENANT}', '${U[5]}', 'clair', '${U[0]}')`)).toMatch(/svg_reason_text_check/);
+      expect(await refused(`INSERT INTO sensitive_view_grants (tenant_id, user_id, reason, reason_ref, requested_by) VALUES ('${TENANT}', '${U[5]}', 'clair', '${rid}', '${U[0]}')`)).toMatch(/svg_reason_text_check/);
+      expect(await runFile(c.name, file(DOWN))).toBeNull();
+      expect(await c.q(`SELECT 1 FROM pg_constraint WHERE conname IN ('rag_reason_text_check', 'svg_reason_text_check')`)).toHaveLength(0);
     } finally { await c.pool.end(); }
   }, 120000);
 });
