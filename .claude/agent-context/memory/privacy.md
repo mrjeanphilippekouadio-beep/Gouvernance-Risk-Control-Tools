@@ -321,3 +321,17 @@ Statut : **SOUS CONDITIONS, non fusionnable en l'état** (GAP_IDENTIFIED, REVALI
 
 Principe ajouté :
 17. Un même texte de motif n'apparaît jamais en clair dans une seconde ligne du même événement : quand un motif est déjà rangé dans un espace effaçable, les autres lignes portent la référence. Une copie non effaçable annule l'effacement.
+
+## Revue L2b — fin d'effet, durée, effacement (2026-11-14, PRIV-L2B-2026-11-14)
+
+Statut : **SOUS CONDITIONS** (GAP_IDENTIFIED, REVALIDATION_REQUIRED). Document : `docs/privacy/PRIV-l2b-2026-11-14.md`. Code lu statiquement dans le worktree `agent-a09c078af58e347cc` (b24d878), sans exécution.
+
+- **C2 (PRIV-L2A-02) partiellement levée** : la garde 097 refuse l'effacement sans fin d'effet et avant la durée (test l. 56-68). Non levée : la fin d'effet est antidatable jusqu'à `created_at` (l. 74-79), ce qui contourne la durée minimale (PRIV-L2B-01, bloquant fusion de 097, correction de 2 lignes à faire par A07).
+- **Ouvertures sans fin d'effet** (RACI, groupe de département, responsable de processus, désignation de risque) : fail-closed correct, mais I-1 non appliqué pour ces quatre sources ; conservation indéfinie (PRIV-L2B-02, bloquant avant production de l'effacement ou d'un texte de durée).
+- **Retour à CLIENT = fin immédiate** : conforme (q248 B, q249 A).
+- **Message q294** : phrase (A) « N'écrivez pas d'information personnelle (santé, vie privée) : ce motif est conservé 10 ans comme preuve, puis masqué. » pour UsersAdmin et ProcessesPage ; phrase (B) sans durée « ... ce motif est conservé comme preuve. » pour RolesAdmin, champ mixte (une ouverture de groupe de département y va en espace effaçable) — PRIV-L2B-03.
+- Points de saisie non identifiés : retrait de groupe fixe (front), déplacement de Dispositif seul (aucun champ front).
+- R5 : durée manuelle (pas automatique), ouvertures sans fin tant que non branchées, rattrapage 097, passage à NULL = jamais.
+
+Principe ajouté :
+18. Une durée de conservation n'est vraie que si l'événement qui la fait courir est branché. Un motif dont la fin n'est pas posée n'est pas « conservé 10 ans » ni « effacé à un an » : il est conservé sans limite, et le texte doit le dire. Une garde qui accepte une date d'événement antidatée annule la durée minimale.
