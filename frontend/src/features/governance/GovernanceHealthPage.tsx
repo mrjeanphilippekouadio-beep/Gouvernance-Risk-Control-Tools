@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, Modal, StatusBadge, Table, Tabs, type StatusTone, type TableColumn } from "@djamo/design-system";
-import { governanceHealthApi, type GovernanceHealth, type PanelException, type PanelOffender, type PanelPrinciple, type PrincipleStatus } from "../../api/governanceHealth";
+import { governanceHealthApi, type VisibilityReviewItem, type GovernanceHealth, type PanelException, type PanelOffender, type PanelPrinciple, type PrincipleStatus } from "../../api/governanceHealth";
 import { governanceAcceptancesApi, type PrincipleAcceptance } from "../../api/governanceAcceptances";
 import { configApi } from "../../api/config";
 import { REASON_NO_NAME_HINT } from "../../api/visibility";
@@ -173,6 +173,17 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
         {data.soleRm.total > 0 && <p className="muted">Confirmations du seul Risk Manager : {data.soleRm.unreviewed} non revue(s) sur {data.soleRm.total},
           dont {data.soleRm.overdue} en retard (délai {data.soleRm.reviewDelayDays} jours) · {data.soleRm.withoutPriorReview} sans revue des précédentes.</p>}
         <Table columns={exceptionColumns} rows={data.exceptions.items} rowKey={(e) => e.auditId} loading={false} emptyMessage="Aucune exception à revoir." />
+      </Card>}
+      {data.visibilityReview.total > 0 && <Card header={<strong>Restrictions d'accès à revoir</strong>}>
+        <p className="muted">{data.visibilityReview.total} restriction(s) active(s) non revue(s) depuis plus de {data.visibilityReview.periodMonths} mois (signal, rien n'est bloqué).</p>
+        {data.visibilityReview.items.length > 0 && <Table
+          columns={[
+            { key: "resource", header: "Ressource", render: (i: VisibilityReviewItem) => `${i.resourceType} ${i.resourceId}` },
+            { key: "since", header: "Sans revue depuis", render: (i: VisibilityReviewItem) => day(i.dueSince) },
+            { key: "actions", header: "", render: (i: VisibilityReviewItem) => data.visibilityReview.canConfirm
+              ? <Button aria-label={`Confirmer la revue ${i.resourceId}`} disabled={busy} onClick={() => void run(() => governanceHealthApi.confirmVisibilityReview(token, i.reasonId), "Revue confirmée.")}>Confirmer</Button> : null },
+          ]}
+          rows={data.visibilityReview.items} rowKey={(i) => `${i.reasonId}-${i.resourceId}`} loading={false} emptyMessage="" />}
       </Card>}
       {data.retentionPurge.lastRunAt === null
         ? <MessageBanner tone="info">La purge manuelle des anciennes dates de connexion n'a jamais été exécutée.</MessageBanner>

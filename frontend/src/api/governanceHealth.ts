@@ -60,6 +60,12 @@ export interface GovernanceHealth {
   /** q266 A: confirmations decided alone by the only Risk Manager (counts computed by the server). */
   soleRm: { total: number; unreviewed: number; overdue: number; withoutPriorReview: number; reviewDelayDays: number };
   retentionPurge: { lastRunAt: string | null; ageDays: number | null };
+  /** q269 A: restrictions whose yearly review is overdue. `items` is empty unless the reader sees everything; never a reason text. */
+  visibilityReview: { periodMonths: number; total: number; items: VisibilityReviewItem[]; canConfirm: boolean };
+}
+
+export interface VisibilityReviewItem {
+  reasonId: string; source: string; resourceType: string; resourceId: string; dueSince: string; everReviewed: boolean;
 }
 
 export const governanceHealthApi = {
@@ -67,4 +73,7 @@ export const governanceHealthApi = {
   /** D5: review or contest an action applied without a second validation. The reviewer is the authenticated user. */
   review: (token: string, auditId: string, outcome: "REVIEWED" | "CONTESTED", comment: string) =>
     apiRequest<unknown>(`/api/v1/governance-exceptions/${auditId}/reviews`, { method: "POST", body: { outcome, comment }, token }),
+  /** L2c: the Risk Manager confirms the yearly review of a restriction (the reviewer is the authenticated user). */
+  confirmVisibilityReview: (token: string, reasonId: string) =>
+    apiRequest<unknown>(`/api/v1/visibility-reviews/${reasonId}/confirm`, { method: "POST", token }),
 };

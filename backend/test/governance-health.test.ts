@@ -248,9 +248,27 @@ describe("D6 — GovernanceHealthService (masking R-6.1 / q156)", () => {
     expect(view.trackedSince).toBeInstanceOf(Date);
     expect(view.retentionPurge).toMatchObject({ ageDays: 3 });
     // CMP: no global score hides the principles that cannot be evaluated.
-    expect(Object.keys(view).sort()).toEqual(["catalogVersion", "computedAt", "exceptions", "organizationSize", "principles", "profileGaps", "retentionPurge", "soleRm", "trackedSince"]);
+    expect(Object.keys(view).sort()).toEqual(["catalogVersion", "computedAt", "exceptions", "organizationSize", "principles", "profileGaps", "retentionPurge", "soleRm", "trackedSince", "visibilityReview"]);
     expect(view.organizationSize).toBeNull();
     expect(view.principles.every((p) => p.highlighted === null)).toBe(true);
+  });
+
+  it("L2c (q269 A): overdue restriction reviews are a total for anyone; the bounded list and the confirm right only for the Risk Manager group; no text", async () => {
+    const item = { reasonId: "reason-1", source: "VISIBILITY_CHANGE", resourceType: "RISK", resourceId: "res-1", createdAt: new Date("2025-01-02T10:00:00Z"), reviewedAt: null };
+    const view = (as: AuthenticatedUser) => new GovernanceHealthService(
+      { loadFacts: async () => facts(), activeAcceptances: async () => [] },
+      { getActive: async () => null, observe: async () => ({ activeAccounts: 3, riskManagers: 1, committeeMembers: 0, auditMembers: 1 }) },
+      undefined,
+      { listDue: async () => ({ total: 7, items: [item] }) },
+    ).get(as);
+    const admin = (await view(actor(["governancehealth.read", "resourcevisibility.set"]))).visibilityReview;
+    expect(admin).toEqual({ periodMonths: 12, total: 7, items: [], canConfirm: false });
+    const rm = (await view({ ...actor(["governancehealth.read", "resourcevisibility.set"]), userId: RM })).visibilityReview;
+    expect(rm).toMatchObject({ total: 7, canConfirm: true, items: [{ reasonId: "reason-1", dueSince: "2025-01-02", everReviewed: false }] });
+    const noWrite = (await view({ ...actor(["governancehealth.read"]), userId: RM })).visibilityReview;
+    expect(noWrite.canConfirm).toBe(false);
+    // without the optional dependency (older wirings): zero, no failure
+    expect((await service().get(actor(["governancehealth.read"]))).visibilityReview).toMatchObject({ total: 0, items: [] });
   });
 
   it("q266 A: a SOLE_RM exception is overdue after the SOLE_RM default delay when the tenant set none, the tenant's delay wins otherwise", async () => {

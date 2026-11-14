@@ -77,6 +77,9 @@ import { ProcessEvaluationModeRequestService } from "./services/ProcessEvaluatio
 import { OrganizationProfileService } from "./services/OrganizationProfileService.js";
 import { organizationProfileRouter } from "./api/v1/organizationProfile.routes.js";
 import { governanceHealthRouter } from "./api/v1/governanceHealth.routes.js";
+import { visibilityReviewsRouter } from "./api/v1/visibilityReviews.routes.js";
+import { VisibilityReviewService } from "./services/VisibilityReviewService.js";
+import { PostgresVisibilityReviewRepository } from "./infrastructure/database/postgres/PostgresVisibilityReviewRepository.js";
 import { privacyRouter } from "./api/v1/privacy.routes.js";
 import { PrivacyService } from "./services/PrivacyService.js";
 import { PostgresLastSeenRetentionRepository } from "./infrastructure/database/postgres/PostgresLastSeenRetentionRepository.js";
@@ -311,7 +314,10 @@ const organizationProfileService = new OrganizationProfileService(
   auditRepository,
 );
 // Lot D6: the governance panel (read-only), and the offender snapshot it gives to the D5 acceptances.
-const governanceHealthService = new GovernanceHealthService(new PostgresGovernanceHealthRepository(pool), organizationProfileRepository);
+// L2c (q269 A): the yearly review of the active restrictions, listed in the panel and confirmed by the Risk Manager.
+const visibilityReviewRepository = new PostgresVisibilityReviewRepository(pool);
+const governanceHealthService = new GovernanceHealthService(new PostgresGovernanceHealthRepository(pool), organizationProfileRepository, undefined, visibilityReviewRepository);
+const visibilityReviewService = new VisibilityReviewService(visibilityReviewRepository, new PostgresResourceAccessRepository(pool));
 // R3 / R5 (q227): the « dernière activité » retention and the « Vos données » notice.
 const privacyService = new PrivacyService(new PostgresLastSeenRetentionRepository(pool), configRepository, auditRepository);
 const auditLogService = new AuditLogService(auditRepository, userRepository);
@@ -701,6 +707,8 @@ app.use(
 );
 // q208 (DECISION-107): list of the restricted resources, Risk Manager group only (checked by the service).
 app.use("/api/v1/restricted-resources", authMiddleware(identityProvider), restrictedResourcesRouter(resourceVisibilityManager));
+// L2c (q269 A): confirm the yearly review of a restriction (Risk Manager group only, checked by the service).
+app.use("/api/v1/visibility-reviews", authMiddleware(identityProvider), visibilityReviewsRouter(visibilityReviewService));
 // V3 (q196, q198): hidden PERIMETRE counts of the reader (null for the groups that see everything).
 app.use("/api/v1/hidden-counts", authMiddleware(identityProvider), hiddenCountsRouter(resourceVisibilityManager));
 app.use("/api/v1/kpi-measures", authMiddleware(identityProvider), kpiMeasuresRouter(kpiMeasureService));

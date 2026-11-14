@@ -37,6 +37,7 @@ describe("QA-L2a (static): independent inventory of the writers of a visibility 
       "infrastructure/database/postgres/PostgresResourceAccessRepository.ts",
       "infrastructure/database/postgres/PostgresRiskRepository.ts",
       "infrastructure/database/postgres/PostgresSensitiveViewGrantRepository.ts",
+      "infrastructure/database/postgres/PostgresVisibilityReviewRepository.ts", // L2c: reads reason_ref of the last PERMISSION_CHANGE, sets reviewed_at (no text)
       "infrastructure/database/postgres/visibilityReasons.ts",
       "services/ProcessService.ts",
       "services/RaciAssignmentService.ts",
