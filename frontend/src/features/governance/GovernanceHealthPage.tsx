@@ -65,6 +65,7 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
   const [outcome, setOutcome] = useState<"REVIEWED" | "CONTESTED">("REVIEWED");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true); setError(null); setDenied(false);
@@ -88,6 +89,20 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
       if (isPermissionDenied(err)) { setDetail(null); setReview(null); setAccepting(false); } // the global permission dialog explains it
       else setActionError(describeError(err));
     } finally { setBusy(false); }
+  }
+
+  /** L2c: a failed confirmation is shown next to its card, and the list is reloaded (a stale row, 404, disappears). */
+  async function confirmReview(i: VisibilityReviewItem) {
+    setBusy(true); setReviewError(null); setNotice(null);
+    try {
+      await governanceHealthApi.confirmVisibilityReview(token, i.resourceType, i.resourceId);
+      setNotice("Revue confirmée.");
+    } catch (err) {
+      if (!isPermissionDenied(err)) setReviewError(describeError(err));
+    } finally {
+      await refresh();
+      setBusy(false);
+    }
   }
 
   function submitReview(event: FormEvent) {
@@ -174,14 +189,15 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
           dont {data.soleRm.overdue} en retard (délai {data.soleRm.reviewDelayDays} jours) · {data.soleRm.withoutPriorReview} sans revue des précédentes.</p>}
         <Table columns={exceptionColumns} rows={data.exceptions.items} rowKey={(e) => e.auditId} loading={false} emptyMessage="Aucune exception à revoir." />
       </Card>}
-      {data.visibilityReview.total > 0 && <Card header={<strong>Restrictions d'accès à revoir</strong>}>
-        <p className="muted">{data.visibilityReview.total} restriction(s) active(s) non revue(s) depuis plus de {data.visibilityReview.periodMonths} mois (signal, rien n'est bloqué).</p>
+      {data.visibilityReview.total !== 0 && <Card header={<strong>Restrictions d'accès à revoir</strong>}>
+        {reviewError && <MessageBanner tone="danger">{reviewError}</MessageBanner>}
+        <p className="muted">{typeof data.visibilityReview.total === "number" ? data.visibilityReview.total : "Moins de 5"} restriction(s) active(s) non revue(s) depuis plus de {data.visibilityReview.periodMonths} mois (signal, rien n'est bloqué).</p>
         {data.visibilityReview.items.length > 0 && <Table
           columns={[
             { key: "resource", header: "Ressource", render: (i: VisibilityReviewItem) => `${i.resourceType} ${i.resourceId}` },
             { key: "since", header: "Sans revue depuis", render: (i: VisibilityReviewItem) => day(i.dueSince) },
             { key: "actions", header: "", render: (i: VisibilityReviewItem) => data.visibilityReview.canConfirm
-              ? <Button aria-label={`Confirmer la revue ${i.resourceId}`} disabled={busy} onClick={() => void run(() => governanceHealthApi.confirmVisibilityReview(token, i.resourceType, i.resourceId), "Revue confirmée.")}>Confirmer</Button> : null },
+              ? <Button aria-label={`Confirmer la revue ${i.resourceId}`} disabled={busy} onClick={() => void confirmReview(i)}>Confirmer</Button> : null },
           ]}
           rows={data.visibilityReview.items} rowKey={(i) => `${i.resourceType}-${i.resourceId}`} loading={false} emptyMessage="" />}
       </Card>}

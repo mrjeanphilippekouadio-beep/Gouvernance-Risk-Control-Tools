@@ -2,6 +2,7 @@ import { requirePermission } from "../domain/permissions.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { GovernanceHealthRepository } from "../domain/repositories/GovernanceHealthRepository.js";
 import type { OrganizationProfileRepository } from "../domain/repositories/OrganizationProfileRepository.js";
+import { SMALL_CELL_THRESHOLD, type HiddenCount } from "./resourceVisibility.js";
 import { VISIBILITY_REVIEW_LIST_LIMIT, VISIBILITY_REVIEW_PERIOD_MONTHS, type VisibilityReviewRepository } from "../domain/repositories/VisibilityReviewRepository.js";
 import { SOLE_RM_EXCEPTIONS, SOLE_RM_REVIEW_DEFAULT_DAYS } from "../domain/entities/GovernanceReviews.js";
 import { CATALOG_VERSION, PRINCIPLES, type PrincipleEntry, type RequirementLevel } from "../domain/governance/catalog.js";
@@ -16,6 +17,8 @@ import {
 import { computePanel, groupMembers, offendersOf, type Offender, type OffenderKind, type PrincipleStatus } from "../domain/governance/health.js";
 
 const DAY = 86_400_000;
+/** Same rule as `GET /hidden-counts` (q228 A): 0 and 5 or more stay exact, 1 to 4 is never sent. */
+const hiddenCount = (n: number): HiddenCount => (n > 0 && n < SMALL_CELL_THRESHOLD ? { belowThreshold: true } : n);
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 export interface PanelOffender {
@@ -84,7 +87,8 @@ export interface GovernanceHealthView {
    */
   visibilityReview: {
     periodMonths: number;
-    total: number;
+    /** Exact for the groups that see everything; for the others, no NOMINATIF and « moins de 5 » for 1 to 4 (q228 A, DECISION-115). */
+    total: HiddenCount;
     items: Array<{ resourceType: string; resourceId: string; visibility: string; dueSince: string; everReviewed: boolean }>;
     canConfirm: boolean;
   };
@@ -218,7 +222,7 @@ export class GovernanceHealthService {
       // L2c: ids of restricted resources only for the groups that see everything (q232 A); no reason text for anyone; clock per resource (SEC-L2C-01).
       visibilityReview: {
         periodMonths: VISIBILITY_REVIEW_PERIOD_MONTHS,
-        total: seesEverything ? due.total : due.totalExcludingNominative,
+        total: seesEverything ? due.total : hiddenCount(due.totalExcludingNominative),
         items: seesEverything
           ? due.items.map((i) => ({ resourceType: i.resourceType, resourceId: i.resourceId, visibility: i.visibility,
               dueSince: i.dueSince.toISOString().slice(0, 10), everReviewed: i.lastReviewedAt !== null }))
