@@ -79,13 +79,13 @@ export interface GovernanceHealthView {
   /** q266 A (C3): SOLE_RM confirmations (decided alone by the only Risk Manager), one per confirmation. `reviewDelayDays` = tenant's delay, else the default (q291). */
   soleRm: { total: number; unreviewed: number; overdue: number; withoutPriorReview: number; reviewDelayDays: number };
   /**
-   * q269 A (L2c): active restrictions whose yearly review is overdue (signal only, nothing blocks). `total` is exact; `items`
+   * q269 A (L2c): active restrictions whose yearly review is overdue (signal only, nothing blocks). `total` is exact for the groups that see everything, without the NOMINATIF ones for the others (q198, SEC-L2C-02); `items`
    * (bounded) is empty unless the reader belongs to a group that sees everything; never a reason text.
    */
   visibilityReview: {
     periodMonths: number;
     total: number;
-    items: Array<{ reasonId: string; source: string; resourceType: string; resourceId: string; dueSince: string; everReviewed: boolean }>;
+    items: Array<{ resourceType: string; resourceId: string; visibility: string; dueSince: string; everReviewed: boolean }>;
     canConfirm: boolean;
   };
   /** q231 B: the R3 purge is manual — when it last really ran (null = never) and how long ago. */
@@ -117,7 +117,7 @@ export class GovernanceHealthService {
       this.health.activeAcceptances(actor.tenantId),
       this.profiles.getActive(actor.tenantId),
       this.profiles.observe(actor.tenantId),
-      this.visibilityReviews?.listDue(actor.tenantId, VISIBILITY_REVIEW_LIST_LIMIT) ?? { total: 0, items: [] },
+      this.visibilityReviews?.listDue(actor.tenantId, VISIBILITY_REVIEW_LIST_LIMIT) ?? { total: 0, totalExcludingNominative: 0, items: [] },
     ]);
     const showNames = actor.roles.includes("audit.read");
     const labels = new Map(facts.users.map((u) => [u.id, u.label]));
@@ -215,13 +215,13 @@ export class GovernanceHealthService {
       principles,
       exceptions: { total: facts.markedTotal, unreviewed: facts.unreviewedTotal, reviewDelayDays: delay, items },
       soleRm: { total: 0, unreviewed: 0, overdue: 0, withoutPriorReview: 0, ...facts.soleRm, reviewDelayDays: soleRmDelay },
-      // L2c: ids of restricted resources only for the groups that see everything (q232 A); no reason text for anyone.
+      // L2c: ids of restricted resources only for the groups that see everything (q232 A); no reason text for anyone; clock per resource (SEC-L2C-01).
       visibilityReview: {
         periodMonths: VISIBILITY_REVIEW_PERIOD_MONTHS,
-        total: due.total,
+        total: seesEverything ? due.total : due.totalExcludingNominative,
         items: seesEverything
-          ? due.items.map((i) => ({ reasonId: i.reasonId, source: i.source, resourceType: i.resourceType, resourceId: i.resourceId,
-              dueSince: (i.reviewedAt ?? i.createdAt).toISOString().slice(0, 10), everReviewed: i.reviewedAt !== null }))
+          ? due.items.map((i) => ({ resourceType: i.resourceType, resourceId: i.resourceId, visibility: i.visibility,
+              dueSince: i.dueSince.toISOString().slice(0, 10), everReviewed: i.lastReviewedAt !== null }))
           : [],
         canConfirm: actor.roles.includes("resourcevisibility.set") && groupMembers(facts, "RISK_MANAGER").some((u) => u.id === actor.userId),
       },

@@ -3,25 +3,33 @@ export const VISIBILITY_REVIEW_PERIOD_MONTHS = 12;
 /** Bound of the list shown in the governance panel (the total stays exact). */
 export const VISIBILITY_REVIEW_LIST_LIMIT = 50;
 
+/** The restrictable roots (whitelist: a type is never taken from a client string without going through it). */
+export const REVIEWABLE_TYPES = ["RISK", "CONTROL", "ANOMALY", "ACTION_PLAN", "KPI"] as const;
+export type ReviewableType = (typeof REVIEWABLE_TYPES)[number];
+
 /**
- * One active visibility reason (`effect_ended_at` null) that is the reason of the last visibility change of a resource still
- * restricted, whose last review (else creation) is older than the period. Never carries the reason text.
+ * A resource still restricted (visibility other than CLIENT) whose review is overdue. SEC-L2C-01: the clock is per RESOURCE and
+ * only a Risk Manager confirmation restarts it (nothing else: not a renewal, an opening, a perimeter change, a new reason).
+ * Starts at the latest of: the last confirmation, the start of the current restriction (last change from CLIENT to restricted),
+ * else the resource's creation date. Carries no reason text.
  */
 export interface DueVisibilityReview {
-  reasonId: string;
-  source: string;
-  resourceType: string;
+  resourceType: ReviewableType;
   resourceId: string;
-  createdAt: Date;
-  reviewedAt: Date | null;
+  visibility: string;
+  dueSince: Date;
+  lastReviewedAt: Date | null;
 }
 
 export interface VisibilityReviewRepository {
-  /** Overdue reviews, oldest first; `total` is exact, `items` holds at most `limit` rows. Tenant-scoped. */
-  listDue(tenantId: string, limit: number): Promise<{ total: number; items: DueVisibilityReview[] }>;
   /**
-   * Sets `reviewed_at = now()` of a reason that is due, under a row lock, and writes the audit row in the same
-   * transaction. Returns null when the reason is not due (unknown, other tenant, ended, not attached, or already reviewed).
+   * Overdue reviews, oldest first. `total` is exact; `totalExcludingNominative` leaves the NOMINATIF ones out (q198: the count
+   * shown to readers who do not see everything); `items` holds at most `limit` rows. Tenant-scoped.
    */
-  confirm(tenantId: string, reasonId: string, userId: string, requestId: string): Promise<{ reviewedAt: Date } | null>;
+  listDue(tenantId: string, limit: number): Promise<{ total: number; totalExcludingNominative: number; items: DueVisibilityReview[] }>;
+  /**
+   * Records the review of one resource, under a row lock, with its audit line (on the resource, no text, no reference) in the
+   * same transaction. Returns null when it is not due (unknown, other tenant, not restricted, reviewed within the period).
+   */
+  confirm(tenantId: string, type: ReviewableType, id: string, userId: string, requestId: string): Promise<{ reviewedAt: Date } | null>;
 }

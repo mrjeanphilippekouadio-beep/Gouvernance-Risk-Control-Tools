@@ -65,7 +65,7 @@ export interface GovernanceHealth {
 }
 
 export interface VisibilityReviewItem {
-  reasonId: string; source: string; resourceType: string; resourceId: string; dueSince: string; everReviewed: boolean;
+  resourceType: string; resourceId: string; visibility: string; dueSince: string; everReviewed: boolean;
 }
 
 export const governanceHealthApi = {
@@ -74,6 +74,6 @@ export const governanceHealthApi = {
   review: (token: string, auditId: string, outcome: "REVIEWED" | "CONTESTED", comment: string) =>
     apiRequest<unknown>(`/api/v1/governance-exceptions/${auditId}/reviews`, { method: "POST", body: { outcome, comment }, token }),
   /** L2c: the Risk Manager confirms the yearly review of a restriction (the reviewer is the authenticated user). */
-  confirmVisibilityReview: (token: string, reasonId: string) =>
-    apiRequest<unknown>(`/api/v1/visibility-reviews/${reasonId}/confirm`, { method: "POST", token }),
+  confirmVisibilityReview: (token: string, resourceType: string, resourceId: string) =>
+    apiRequest<unknown>(`/api/v1/visibility-reviews/${resourceType}/${resourceId}/confirm`, { method: "POST", token }),
 };

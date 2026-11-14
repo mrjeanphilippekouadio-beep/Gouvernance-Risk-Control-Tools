@@ -181,9 +181,9 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
             { key: "resource", header: "Ressource", render: (i: VisibilityReviewItem) => `${i.resourceType} ${i.resourceId}` },
             { key: "since", header: "Sans revue depuis", render: (i: VisibilityReviewItem) => day(i.dueSince) },
             { key: "actions", header: "", render: (i: VisibilityReviewItem) => data.visibilityReview.canConfirm
-              ? <Button aria-label={`Confirmer la revue ${i.resourceId}`} disabled={busy} onClick={() => void run(() => governanceHealthApi.confirmVisibilityReview(token, i.reasonId), "Revue confirmée.")}>Confirmer</Button> : null },
+              ? <Button aria-label={`Confirmer la revue ${i.resourceId}`} disabled={busy} onClick={() => void run(() => governanceHealthApi.confirmVisibilityReview(token, i.resourceType, i.resourceId), "Revue confirmée.")}>Confirmer</Button> : null },
           ]}
-          rows={data.visibilityReview.items} rowKey={(i) => `${i.reasonId}-${i.resourceId}`} loading={false} emptyMessage="" />}
+          rows={data.visibilityReview.items} rowKey={(i) => `${i.resourceType}-${i.resourceId}`} loading={false} emptyMessage="" />}
       </Card>}
       {data.retentionPurge.lastRunAt === null
         ? <MessageBanner tone="info">La purge manuelle des anciennes dates de connexion n'a jamais été exécutée.</MessageBanner>

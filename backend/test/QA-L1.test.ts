@@ -23,7 +23,7 @@ const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).fl
 describe("QA-L1 (static): every reader of audit_log is known", () => {
   it("only these files read audit_log; a new reader must be classified (consultation = filtered, technical = documented in the QA report)", () => {
     const readers = walk(join(SRC, "infrastructure"))
-      .filter((f) => f.endsWith(".ts") && /\b(FROM|JOIN)\s+audit_log\b(?!_)/i.test(readFileSync(f, "utf8")))
+      .filter((f) => f.endsWith(".ts") && /\b(FROM|JOIN)\s+(?:public\.)?audit_log\b(?!_)/i.test(readFileSync(f, "utf8")))
       .map((f) => f.slice(SRC.length + 1).split("\\").join("/"))
       .sort((a, b) => a.localeCompare(b));
     expect(readers).toEqual([
