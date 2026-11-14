@@ -10,7 +10,7 @@ import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.
 import { displayReason } from "../../../domain/entities/VisibilityReason.js";
 import { ConflictError } from "../../../domain/errors/DomainErrors.js";
 import { runAudited } from "./PostgresAuditRepository.js";
-import { insertVisibilityReason, reasonColumns } from "./visibilityReasons.js";
+import { endGrantReasons, insertVisibilityReason, reasonColumns } from "./visibilityReasons.js";
 
 type Db = Pick<Pool, "query">;
 
@@ -146,6 +146,8 @@ export class PostgresSensitiveViewGrantRepository implements SensitiveViewGrantR
         [tenantId, id, change.status, change.by, reasonRef, change.accessDays ?? DEFAULT_READALL_DAYS],
       );
       if (!rows[0]) throw new ConflictError("This request has already been decided or has expired");
+      // L2b (I-1): a refusal ends the effect of the request and of its decision reasons.
+      if (change.status === "REJECTED") await endGrantReasons(db, tenantId, id);
       return grantOn(db, tenantId, id);
     }, audit);
   }
@@ -188,5 +190,6 @@ async function revokeLocked(db: Db, match: string, tenantId: string, key: string
      WHERE tenant_id = $1 AND id = $2`,
     [tenantId, locked[0].id, change.by, reasonRef],
   );
+  await endGrantReasons(db, tenantId, locked[0].id); // L2b (I-1): a revocation (an expired access closed too) ends all three reasons
   return { before: toDomain(locked[0]), after: await grantOn(db, tenantId, locked[0].id) };
 }

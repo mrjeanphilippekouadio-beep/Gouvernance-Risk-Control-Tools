@@ -17,7 +17,7 @@ import type { ReadScope, Visibility } from "../../../domain/visibility.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { runAudited } from "./PostgresAuditRepository.js";
 import { displayReason } from "../../../domain/entities/VisibilityReason.js";
-import { insertVisibilityReason, reasonColumns } from "./visibilityReasons.js";
+import { endAllOnReturnToClient, insertVisibilityReason, reasonColumns } from "./visibilityReasons.js";
 import { unknownDepartmentAsValidation } from "./foreignKey.js";
 import { isClosed, listExpiries, renewGrants, reviveExpired, stampNamedExpiry, validList } from "./namedAccess.js";
 import { resourceVisibleExpr, visibleToFunction } from "./visibilityFilter.js";
@@ -336,6 +336,8 @@ export class PostgresResourceAccessRepository implements ResourceAccessRepositor
       const readersBefore = await effectiveReaders(db, tenantId, type, id);
       // Conservation L2a: the text is stored once; the grant rows and the audit row reference it.
       const reasonId = await insertVisibilityReason(db, tenantId, "VISIBILITY_CHANGE", change.reason);
+      // L2b (I-1): back to CLIENT ends the effect of every reason of this resource, the new one included.
+      if (change.visibility === "CLIENT") await endAllOnReturnToClient(db, tenantId, root.entity, id, reasonId);
       // Back to CLIENT revokes the list as read under the lock (a concurrent grant cannot survive).
       const revoke = change.visibility === "CLIENT" ? rawBefore : change.revokeUserIds;
       for (const userId of new Set(revoke)) {

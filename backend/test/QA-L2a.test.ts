@@ -434,6 +434,10 @@ describe.skipIf(!live)("QA-L2a on the REAL server + LOCAL PostgreSQL 16 (head 48
 
     it("erased motifs: every reader shows « motif effacé le JJ/MM/AAAA (conservation) », never the text, never null/undefined", async () => {
       const stamp = "2026-11-10T08:00:00Z";
+      // L2b guard (097): only a reason whose effect ended long enough ago can be erased. Age the canary reasons (owner, guard off for this one statement).
+      await sql("ALTER TABLE visibility_reasons DISABLE TRIGGER visibility_reasons_guard");
+      await sql("UPDATE visibility_reasons SET created_at = now() - interval '800 days', effect_ended_at = now() - interval '400 days' WHERE text LIKE $1", [`${CANARY}%`]);
+      await sql("ALTER TABLE visibility_reasons ENABLE TRIGGER visibility_reasons_guard");
       const erased = await sql<{ id: string }>("UPDATE visibility_reasons SET text = NULL, erased_at = $1 WHERE text LIKE $2 RETURNING id", [stamp, `${CANARY}%`]);
       expect(erased.length).toBeGreaterThan(10);
       // 1. the journal, three consultation reads

@@ -2,7 +2,7 @@ import type { Pool } from "pg";
 import { riskVisibilityClause } from "./visibilityFilter.js";
 import type { ReadScope, Visibility } from "../../../domain/visibility.js";
 import { runAudited } from "./PostgresAuditRepository.js";
-import { insertVisibilityReason } from "./visibilityReasons.js";
+import { endAllOnReturnToClient, insertVisibilityReason } from "./visibilityReasons.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import type { RiskRepository } from "../../../domain/repositories/RiskRepository.js";
 import type { CreateRiskInput, Risk, RiskVisibilityChange, RiskVisibilityState, UpdateRiskInput } from "../../../domain/entities/Risk.js";
@@ -245,6 +245,8 @@ export class PostgresRiskRepository implements RiskRepository {
       )).rows.map((r) => r.id);
       // Conservation L2a: the text is stored once; the grant rows and the audit row reference it.
       const reasonId = await insertVisibilityReason(db, tenantId, "VISIBILITY_CHANGE", change.reason);
+      // L2b (I-1): back to CLIENT ends the effect of every reason of this risk, the new one included.
+      if (change.visibility === "CLIENT") await endAllOnReturnToClient(db, tenantId, "Risk", riskId, reasonId);
       // Back to CLIENT revokes the list as read UNDER the lock: a grant added concurrently cannot survive (QA concurrency).
       const revoke = change.visibility === "CLIENT" ? rawBefore : change.revokeUserIds;
       for (const userId of new Set(revoke)) {

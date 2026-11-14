@@ -78,6 +78,7 @@ import { OrganizationProfileService } from "./services/OrganizationProfileServic
 import { organizationProfileRouter } from "./api/v1/organizationProfile.routes.js";
 import { governanceHealthRouter } from "./api/v1/governanceHealth.routes.js";
 import { privacyRouter } from "./api/v1/privacy.routes.js";
+import { PostgresVisibilityReasonRetentionRepository } from "./infrastructure/database/postgres/PostgresVisibilityReasonRetentionRepository.js";
 import { PrivacyService } from "./services/PrivacyService.js";
 import { PostgresLastSeenRetentionRepository } from "./infrastructure/database/postgres/PostgresLastSeenRetentionRepository.js";
 import { GovernanceHealthService } from "./services/GovernanceHealthService.js";
@@ -313,7 +314,7 @@ const organizationProfileService = new OrganizationProfileService(
 // Lot D6: the governance panel (read-only), and the offender snapshot it gives to the D5 acceptances.
 const governanceHealthService = new GovernanceHealthService(new PostgresGovernanceHealthRepository(pool), organizationProfileRepository);
 // R3 / R5 (q227): the « dernière activité » retention and the « Vos données » notice.
-const privacyService = new PrivacyService(new PostgresLastSeenRetentionRepository(pool), configRepository, auditRepository);
+const privacyService = new PrivacyService(new PostgresLastSeenRetentionRepository(pool), configRepository, auditRepository, new PostgresVisibilityReasonRetentionRepository(pool));
 const auditLogService = new AuditLogService(auditRepository, userRepository);
 const controlService = new ControlService(controlRepository, riskRepository, auditRepository, processRepository, visibilityResolver, resourceVisibilityManager);
 const executionService = new ControlExecutionService(executionRepository, controlRepository, auditRepository, selfValidationGate);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, Modal, StatusBadge, Table, type TableColumn } from "@djamo/design-system";
 import { ADMIN_PAGE_SIZE, usersApi, type AdminUser } from "../../api/users";
 import { rolesApi, type Role } from "../../api/roles";
+import { GOVERNANCE_REASON_RETENTION_HINT } from "../../api/visibility";
 import { usePermissions } from "../../auth/usePermissions";
 import { describeError, isPermissionDenied } from "../indicators/shared";
 import "../core/CorePages.css";
@@ -131,7 +132,7 @@ export function UsersAdmin({ token }: Readonly<{ token: string }>) {
               {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </FormField>
-          <FormField label="Motif" htmlFor="user-reason" help="Exigé par le serveur pour un rôle de groupe fixe (Risk Manager, Comité, Audit).">
+          <FormField label="Motif" htmlFor="user-reason" help={`Exigé par le serveur pour un rôle de groupe fixe (Risk Manager, Comité, Audit). ${GOVERNANCE_REASON_RETENTION_HINT}`}>
             <input id="user-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
           </FormField>
         </>}

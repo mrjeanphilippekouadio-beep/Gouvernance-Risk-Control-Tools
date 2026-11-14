@@ -55,6 +55,9 @@ export const DEFAULT_RESOURCE_READALL_MAX_DAYS = 90;
 export const DEFAULT_LAST_SEEN_RETENTION_DAYS = 1826;
 /** q232 A (DECISION-115, SEC D6-01): never less than a year. */
 export const MIN_LAST_SEEN_RETENTION_DAYS = 365;
+/** Conservation L2b (q248 B, q249 A, migration 097): a visibility reason is kept 365 days after its effect ended, never less. */
+export const DEFAULT_VISIBILITY_REASON_RETENTION_DAYS = 365;
+export const MIN_VISIBILITY_REASON_RETENTION_DAYS = 365;
 
 /**
  * q233 A (DECISION-116): thresholds of the governance panel, adjustable per client within the A13 ranges
@@ -123,6 +126,8 @@ export interface Config {
   resourceReadallMaxDays?: number | null;
   /** R3 (q227): days after the end of an account (suspension) before its « dernière activité » date is erased; null = never. Optional for older fakes. */
   lastSeenRetentionDays?: number | null;
+  /** Conservation L2b (q248 B): days after the end of a visibility reason's effect before its text is erased; null = never. Optional for older fakes. */
+  visibilityReasonRetentionDays?: number | null;
   /** R5 (q231 B, DECISION-115): DPO contact shown in « Vos données »; entered at go-live (no write route). Optional for older fakes. */
   dpoContact?: string | null;
   govRmRiskShareMaxPct?: number;
@@ -163,6 +168,7 @@ export interface ConfigPatch {
   riskManagerVacancyMaxDays?: number | null;
   resourceReadallMaxDays?: number | null;
   lastSeenRetentionDays?: number | null;
+  visibilityReasonRetentionDays?: number | null;
   govRmRiskShareMaxPct?: number | null;
   govMaxAdmins?: number | null;
   govRoleMaxPermissions?: number | null;

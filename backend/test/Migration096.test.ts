@@ -20,6 +20,12 @@ describe.skipIf(!live)("096 on a real local database", () => {
   beforeAll(() => { pool = new Pool({ host: "127.0.0.1", port: Number(process.env["MIG096_PORT"] ?? 55442), user: "postgres", database: process.env["MIG096_DB"]!, max: 3 }); });
   afterAll(async () => { await pool?.end(); });
 
+  /** L2b guard (097): only a reason ended long enough ago can be erased; ages one (owner, guard off for that statement). */
+  const age = async (where: string, p: unknown[]) => {
+    await q(`ALTER TABLE visibility_reasons DISABLE TRIGGER visibility_reasons_guard`);
+    await q(`UPDATE visibility_reasons SET created_at = now() - interval '800 days', effect_ended_at = now() - interval '400 days' WHERE ${where}`, p);
+    await q(`ALTER TABLE visibility_reasons ENABLE TRIGGER visibility_reasons_guard`);
+  };
   const world = async () => {
     const t = (await q(`INSERT INTO tenants (name) VALUES ($1) RETURNING id`, [`T096-${randomUUID().slice(0, 8)}`]))[0]!["id"] as string;
     const user = async () => (await q(`INSERT INTO users (tenant_id, email, display_name) VALUES ($1, $2, 'U') RETURNING id`, [t, `u-${randomUUID()}@x.test`]))[0]!["id"] as string;
@@ -39,7 +45,8 @@ describe.skipIf(!live)("096 on a real local database", () => {
     expect(await refused(`UPDATE visibility_reasons SET reviewed_at = now() WHERE id = $1`, [id])).toBeNull();
     expect(await refused(`UPDATE visibility_reasons SET source = 'autre' WHERE id = $1`, [id])).toMatch(/immutable/);
     expect(await refused(`UPDATE visibility_reasons SET tenant_id = $2 WHERE id = $1`, [id, (await world()).t])).toMatch(/immutable/);
-    expect(await refused(`UPDATE visibility_reasons SET text = NULL WHERE id = $1`, [id])).toMatch(/check constraint/); // erasure needs erased_at
+    expect(await refused(`UPDATE visibility_reasons SET text = NULL WHERE id = $1`, [id])).toMatch(/check constraint|retention period/); // erasure needs erased_at (and, since 097, an aged reason)
+    await age(`id = $1`, [id]);
     expect(await refused(`UPDATE visibility_reasons SET text = NULL, erased_at = now() WHERE id = $1`, [id])).toBeNull();
     expect(await refused(`UPDATE visibility_reasons SET text = 'retour' WHERE id = $1`, [id])).toMatch(/erased once/);
     expect(await refused(`UPDATE visibility_reasons SET erased_at = now() WHERE id = $1`, [id])).toMatch(/erased once|check constraint/);
@@ -57,6 +64,7 @@ describe.skipIf(!live)("096 on a real local database", () => {
     expect(raw["reason"]).toBeNull();
     expect(raw["reason_ref"]).not.toBeNull();
     expect((await audit.listRecent(t, 10))[0]).toMatchObject({ reason: "Dossier sensible", reasonRef: raw["reason_ref"] });
+    await age(`id = $1`, [raw["reason_ref"]]);
     await q(`UPDATE visibility_reasons SET text = NULL, erased_at = '2026-11-13T10:00:00Z' WHERE id = $1`, [raw["reason_ref"]]);
     expect((await audit.search(t, { entityId }, 10))[0]!.reason).toBe("motif effacé le 13/11/2026 (conservation)");
   });
@@ -68,6 +76,7 @@ describe.skipIf(!live)("096 on a real local database", () => {
       requestId: "r", ...visibilityReasonOf("VISIBILITY_CHANGE", "Motif liste") });
     const repo = new PostgresResourceAccessRepository(pool);
     expect((await repo.listRestricted(t))[0]!.lastChange).toMatchObject({ reason: "Motif liste", widening: false });
+    await age(`tenant_id = $1`, [t]);
     await q(`UPDATE visibility_reasons SET text = NULL, erased_at = '2026-11-13T10:00:00Z' WHERE tenant_id = $1`, [t]);
     expect((await repo.listRestricted(t))[0]!.lastChange!.reason).toBe("motif effacé le 13/11/2026 (conservation)");
   });

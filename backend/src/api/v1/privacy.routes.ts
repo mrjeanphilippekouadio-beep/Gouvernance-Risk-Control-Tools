@@ -24,5 +24,13 @@ export function privacyRouter(service: PrivacyService): Router {
       next(err);
     }
   });
+  // Conservation L2b (q248 B): `retention.purge`, `?dryRun=true` lists the reasons concerned (count and ids) without erasing.
+  router.post("/visibility-reason-purge", perUserRateLimiter(), async (req, res, next) => {
+    try {
+      res.json({ data: await service.purgeVisibilityReasons(req.user, req.requestId, { dryRun: req.query["dryRun"] === "true" }) });
+    } catch (err) {
+      next(err);
+    }
+  });
   return router;
 }

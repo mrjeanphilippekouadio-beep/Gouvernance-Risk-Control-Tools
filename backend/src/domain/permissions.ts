@@ -244,7 +244,8 @@ export type Permission =
   | "riskframework.update"
   | "riskframework.activate"
   | "riskframework.archive"
-  | "riskframework.process.assign";
+  | "riskframework.process.assign"
+  | "retention.purge";
 
 /**
  * Kept in sync with the Permission union by hand (TS types don't exist
@@ -379,6 +380,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "riskframework.activate",
   "riskframework.archive",
   "riskframework.process.assign",
+  "retention.purge",
 ];
 
 /**

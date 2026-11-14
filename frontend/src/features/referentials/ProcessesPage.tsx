@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button, Card, FormField, MessageBanner, StatusBadge, Table, type TableColumn } from "@djamo/design-system";
+import { GOVERNANCE_REASON_RETENTION_HINT } from "../../api/visibility";
 import {
   processesApi,
   type Process,
@@ -200,7 +201,7 @@ export function ProcessesPage({ token }: { token: string }) {
           </select>
         </FormField>
         {formOpen === "edit" && selected && nullable(form.parentId) !== selected.parentId && (
-          <FormField label="Motif du changement de parent" htmlFor="proc-move-reason" help="Le serveur exige un motif seulement si ce changement fait passer le processus sous un autre Dispositif ; il refuse l'enregistrement sinon.">
+          <FormField label="Motif du changement de parent" htmlFor="proc-move-reason" help={`Le serveur exige un motif seulement si ce changement fait passer le processus sous un autre Dispositif ; il refuse l'enregistrement sinon. ${GOVERNANCE_REASON_RETENTION_HINT}`}>
             <textarea id="proc-move-reason" value={moveReason} onChange={(e) => setMoveReason(e.target.value)} maxLength={500} />
           </FormField>
         )}

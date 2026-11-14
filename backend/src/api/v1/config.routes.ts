@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from "express";
-import { DEFAULT_RESOURCE_READALL_MAX_DAYS, GOVERNANCE_THRESHOLDS, MIN_LAST_SEEN_RETENTION_DAYS } from "../../domain/entities/Config.js";
+import { DEFAULT_RESOURCE_READALL_MAX_DAYS, GOVERNANCE_THRESHOLDS, MIN_LAST_SEEN_RETENTION_DAYS, MIN_VISIBILITY_REASON_RETENTION_DAYS } from "../../domain/entities/Config.js";
 import { z } from "zod";
 import { ABSOLUTE_MAX_SCORE } from "../../domain/scoring.js";
 import { reasonText } from "../validation.js";
@@ -23,6 +23,8 @@ const GovernanceDelaysBody = z
     resourceReadallMaxDays: z.number().int().min(1).max(DEFAULT_RESOURCE_READALL_MAX_DAYS).nullable().optional(),
     // R3 (q227): retention of the « dernière activité » date after the end of an account.
     lastSeenRetentionDays: z.number().int().min(MIN_LAST_SEEN_RETENTION_DAYS).max(3650).nullable().optional(),
+    // Conservation L2b (q248 B, q249 A): retention of a visibility reason after the end of its effect; every change needs a second person.
+    visibilityReasonRetentionDays: z.number().int().min(MIN_VISIBILITY_REASON_RETENTION_DAYS).max(3650).nullable().optional(),
     // q233 A (DECISION-116): panel thresholds, never null, in the A13 ranges.
     govRmRiskShareMaxPct: z.number().int().min(GOVERNANCE_THRESHOLDS.govRmRiskShareMaxPct.min).max(GOVERNANCE_THRESHOLDS.govRmRiskShareMaxPct.max).optional(),
     govMaxAdmins: z.number().int().min(GOVERNANCE_THRESHOLDS.govMaxAdmins.min).max(GOVERNANCE_THRESHOLDS.govMaxAdmins.max).optional(),

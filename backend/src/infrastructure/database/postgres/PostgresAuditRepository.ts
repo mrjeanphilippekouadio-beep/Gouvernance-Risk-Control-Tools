@@ -4,7 +4,7 @@ import type { AuditEvent } from "../../../domain/entities/AuditEvent.js";
 import { ConflictError } from "../../../domain/errors/DomainErrors.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { displayReason } from "../../../domain/entities/VisibilityReason.js";
-import { insertVisibilityReason, reasonColumns } from "./visibilityReasons.js";
+import { REPLACED_BY_SAME_SOURCE, endReasonsOfEntity, insertVisibilityReason, reasonColumns } from "./visibilityReasons.js";
 
 interface AuditRow {
   id: string;
@@ -61,6 +61,8 @@ export async function insertAuditEvent(
     if (event.reason !== null) throw new Error("A visibility reason is never written in audit_log.reason");
     stored.id ??= await insertVisibilityReason(db, event.tenantId, stored.source, stored.text);
     reasonRef = stored.id;
+    // L2b (I-1): a later reason of the same source on the same entity replaces the effect of the earlier ones.
+    if (REPLACED_BY_SAME_SOURCE.includes(stored.source)) await endReasonsOfEntity(db, event.tenantId, event.entityType, event.entityId, [stored.source], stored.id);
   }
   await db
     .query(

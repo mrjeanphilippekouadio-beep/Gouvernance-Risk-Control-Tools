@@ -1,7 +1,10 @@
 import { requirePermission } from "../domain/permissions.js";
-import { DEFAULT_LAST_SEEN_RETENTION_DAYS } from "../domain/entities/Config.js";
+import { DEFAULT_LAST_SEEN_RETENTION_DAYS, DEFAULT_VISIBILITY_REASON_RETENTION_DAYS } from "../domain/entities/Config.js";
 import type { ConfigRepository } from "../domain/repositories/ConfigRepository.js";
 import type { LastSeenRetentionRepository } from "../domain/repositories/LastSeenRetentionRepository.js";
+import type { VisibilityReasonRetentionRepository } from "../domain/repositories/VisibilityReasonRetentionRepository.js";
+import type { ErasedVisibilityReason } from "../domain/repositories/VisibilityReasonRetentionRepository.js";
+import { ValidationError } from "../domain/errors/DomainErrors.js";
 import type { AuthenticatedUser } from "../infrastructure/identity/IdentityProvider.js";
 import type { AuditRepository } from "../domain/repositories/AuditRepository.js";
 
@@ -31,6 +34,8 @@ export class PrivacyService {
     private readonly configs: Pick<ConfigRepository, "getByTenant">,
     /** Traces a run with no retention set (nothing to erase). Optional for older wiring; the purge itself audits in its transaction. */
     private readonly audit?: Pick<AuditRepository, "record">,
+    /** Conservation L2b: erasing visibility reasons. Optional for older wiring (the purge then answers 400). */
+    private readonly reasonRetention?: VisibilityReasonRetentionRepository,
   ) {}
 
   private async settings(tenantId: string): Promise<PrivacyNoticeFacts> {
@@ -85,4 +90,44 @@ export class PrivacyService {
     ]);
     return { dryRun: false, retentionDays: days, erased: erased.length };
   }
+
+  /**
+   * Conservation L2b (q248 B): erases (text to NULL, never a DELETE) the visibility reasons whose effect ended more than
+   * `configs.visibility_reason_retention_days` days ago (365 by default, NULL = never). Own terminal permission
+   * `retention.purge`. One run line plus one line per reason erased, in the same transaction; the erased text is never copied.
+   */
+  async purgeVisibilityReasons(actor: AuthenticatedUser, requestId: string, options: { dryRun?: boolean } = {}): Promise<VisibilityReasonPurgeOutcome> {
+    requirePermission(actor, "retention.purge");
+    if (!this.reasonRetention) throw new ValidationError("The erasure of visibility reasons is not available");
+    const config = await this.configs.getByTenant(actor.tenantId);
+    const days = config?.visibilityReasonRetentionDays === undefined ? (config ? null : DEFAULT_VISIBILITY_REASON_RETENTION_DAYS) : config.visibilityReasonRetentionDays;
+    if (options.dryRun) {
+      const found = days === null ? [] : await this.reasonRetention.candidates(actor.tenantId, days);
+      return { dryRun: true, retentionDays: days, wouldErase: found.length, reasonIds: found.map((r) => r.id) };
+    }
+    const reason = days === null
+      ? "Conservation L2b : aucune durée fixée, rien à effacer"
+      : `Conservation L2b : motif de visibilité effacé ${days} jours après la fin de son effet`;
+    const run = (erased: ErasedVisibilityReason[]) => ({
+      tenantId: actor.tenantId, userId: actor.userId, entityType: "VisibilityReasonPurge", entityId: actor.tenantId, action: "UPDATE" as const,
+      oldValue: null, newValue: { erased: erased.length, retentionDays: days }, reason, requestId,
+    });
+    if (days === null) {
+      await this.audit?.record(run([]));
+      return { dryRun: false, retentionDays: null, erased: 0 };
+    }
+    const erased = await this.reasonRetention.purge(actor.tenantId, days, (rows) => [
+      run(rows),
+      ...rows.map((r) => ({
+        tenantId: actor.tenantId, userId: actor.userId, entityType: "VisibilityReason", entityId: r.id, action: "UPDATE" as const,
+        // Never the erased text (it would survive the purge): the source and the fact only.
+        oldValue: null, newValue: { source: r.source, text: null, purge: "L2b" }, reason, requestId,
+      })),
+    ]);
+    return { dryRun: false, retentionDays: days, erased: erased.length };
+  }
 }
+
+export type VisibilityReasonPurgeOutcome =
+  | { dryRun: false; retentionDays: number | null; erased: number }
+  | { dryRun: true; retentionDays: number | null; wouldErase: number; reasonIds: string[] };

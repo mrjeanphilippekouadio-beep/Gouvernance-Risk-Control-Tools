@@ -223,6 +223,21 @@ describe("ConfigService.setSelfValidationPolicy", () => {
     expect(shorter.config.lastSeenRetentionDays).toBe(2000);
   });
 
+  it("L2b (q249 A, I-2): visibility reason retention — at least 365 days; EVERY change, up or down, needs the second person", async () => {
+    const w = configWorld(true);
+    Object.assign(w.row(), { visibilityReasonRetentionDays: 365 }); // the column DEFAULT of migration 097
+    const delaysAdmin = actor("u-admin", ["config.read", "config.governancedelays.set"]);
+    await expect(w.service.setGovernanceDelays(delaysAdmin, { visibilityReasonRetentionDays: 364 }, "r", "q")).rejects.toThrow(ValidationError);
+    const longer = await w.service.setGovernanceDelays(delaysAdmin, { visibilityReasonRetentionDays: 730 }, "Plus long", "q");
+    expect(longer.pendingRequest).toMatchObject({ status: "PENDING", requestedDelays: { visibilityReasonRetentionDays: 730 } });
+    expect(longer.config.visibilityReasonRetentionDays).toBe(365);
+    const never = await w.service.setGovernanceDelays(delaysAdmin, { visibilityReasonRetentionDays: null }, "Jamais", "q");
+    expect(never.pendingRequest).toMatchObject({ requestedDelays: { visibilityReasonRetentionDays: null } });
+    Object.assign(w.row(), { visibilityReasonRetentionDays: 1000 });
+    const shorter = await w.service.setGovernanceDelays(delaysAdmin, { visibilityReasonRetentionDays: 400 }, "Plus court", "q");
+    expect(shorter.pendingRequest).toMatchObject({ status: "PENDING", requestedDelays: { visibilityReasonRetentionDays: 400 } });
+  });
+
   it("q233 A (DECISION-116): a panel threshold — in its A13 range, never null; RAISING it (fewer alerts) needs the second person, lowering is direct", async () => {
     const w = configWorld(true);
     Object.assign(w.row(), { govMaxAdmins: 3 });
