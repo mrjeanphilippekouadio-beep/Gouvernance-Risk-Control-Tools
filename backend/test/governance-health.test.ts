@@ -262,20 +262,15 @@ describe("D6 — GovernanceHealthService (masking R-6.1 / q156)", () => {
       { listDue: async () => ({ total: 7, totalExcludingNominative: 3, items: [item] }) },
     ).get(as);
     const admin = (await view(actor(["governancehealth.read", "resourcevisibility.set"]))).visibilityReview;
-    expect(admin).toEqual({ periodMonths: 12, total: { belowThreshold: true }, items: [], canConfirm: false }); // SEC-L2C-02 no NOMINATIF; QA 5.1 « moins de 5 » like hidden-counts
+    // SEC-L2C-09: a reader outside the groups that see everything gets nothing (no total, no items): a count leaks by subtraction
+    expect(admin).toBeNull();
+    expect((await view(actor(["governancehealth.read"]))).visibilityReview).toBeNull();
     const rm = (await view({ ...actor(["governancehealth.read", "resourcevisibility.set"]), userId: RM })).visibilityReview;
     expect(rm).toMatchObject({ total: 7, canConfirm: true, items: [{ resourceId: "res-1", dueSince: "2025-01-02", everReviewed: false }] });
-    // 0 and 5 or more stay exact (same rule as hidden-counts); the groups that see everything keep the exact total (7 above)
-    const counted = (n: number) => new GovernanceHealthService({ loadFacts: async () => facts(), activeAcceptances: async () => [] },
-      { getActive: async () => null, observe: async () => ({ activeAccounts: 3, riskManagers: 1, committeeMembers: 0, auditMembers: 1 }) }, undefined,
-      { listDue: async () => ({ total: n, totalExcludingNominative: n, items: [] }) }).get(actor(["governancehealth.read"]));
-    expect((await counted(0)).visibilityReview.total).toBe(0);
-    expect((await counted(4)).visibilityReview.total).toEqual({ belowThreshold: true });
-    expect((await counted(5)).visibilityReview.total).toBe(5);
     const noWrite = (await view({ ...actor(["governancehealth.read"]), userId: RM })).visibilityReview;
-    expect(noWrite.canConfirm).toBe(false);
-    // without the optional dependency (older wirings): zero, no failure
-    expect((await service().get(actor(["governancehealth.read"]))).visibilityReview).toMatchObject({ total: 0, items: [] });
+    expect(noWrite).toMatchObject({ total: 7, canConfirm: false });
+    // without the optional dependency (older wirings): zero for a group that sees everything, no failure
+    expect((await service().get({ ...actor(["governancehealth.read"]), userId: RM })).visibilityReview).toMatchObject({ total: 0, items: [] });
   });
 
   it("q266 A: a SOLE_RM exception is overdue after the SOLE_RM default delay when the tenant set none, the tenant's delay wins otherwise", async () => {

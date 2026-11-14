@@ -189,14 +189,14 @@ export function GovernanceHealthPage({ token }: Readonly<{ token: string }>) {
           dont {data.soleRm.overdue} en retard (délai {data.soleRm.reviewDelayDays} jours) · {data.soleRm.withoutPriorReview} sans revue des précédentes.</p>}
         <Table columns={exceptionColumns} rows={data.exceptions.items} rowKey={(e) => e.auditId} loading={false} emptyMessage="Aucune exception à revoir." />
       </Card>}
-      {data.visibilityReview.total !== 0 && <Card header={<strong>Restrictions d'accès à revoir</strong>}>
+      {data.visibilityReview !== null && data.visibilityReview.total > 0 && <Card header={<strong>Restrictions d'accès à revoir</strong>}>
         {reviewError && <MessageBanner tone="danger">{reviewError}</MessageBanner>}
-        <p className="muted">{typeof data.visibilityReview.total === "number" ? data.visibilityReview.total : "Moins de 5"} restriction(s) active(s) non revue(s) depuis plus de {data.visibilityReview.periodMonths} mois (signal, rien n'est bloqué).</p>
+        <p className="muted">{data.visibilityReview.total} restriction(s) active(s) non revue(s) depuis plus de {data.visibilityReview.periodMonths} mois (signal, rien n'est bloqué).</p>
         {data.visibilityReview.items.length > 0 && <Table
           columns={[
             { key: "resource", header: "Ressource", render: (i: VisibilityReviewItem) => `${i.resourceType} ${i.resourceId}` },
             { key: "since", header: "Sans revue depuis", render: (i: VisibilityReviewItem) => day(i.dueSince) },
-            { key: "actions", header: "", render: (i: VisibilityReviewItem) => data.visibilityReview.canConfirm
+            { key: "actions", header: "", render: (i: VisibilityReviewItem) => data.visibilityReview?.canConfirm
               ? <Button aria-label={`Confirmer la revue ${i.resourceId}`} disabled={busy} onClick={() => void confirmReview(i)}>Confirmer</Button> : null },
           ]}
           rows={data.visibilityReview.items} rowKey={(i) => `${i.resourceType}-${i.resourceId}`} loading={false} emptyMessage="" />}

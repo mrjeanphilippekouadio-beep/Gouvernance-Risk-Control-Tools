@@ -61,7 +61,7 @@ export interface GovernanceHealth {
   soleRm: { total: number; unreviewed: number; overdue: number; withoutPriorReview: number; reviewDelayDays: number };
   retentionPurge: { lastRunAt: string | null; ageDays: number | null };
   /** q269 A: restrictions whose yearly review is overdue. `items` is empty unless the reader sees everything; never a reason text. */
-  visibilityReview: { periodMonths: number; total: number | { belowThreshold: true }; items: VisibilityReviewItem[]; canConfirm: boolean };
+  visibilityReview: { periodMonths: number; total: number; items: VisibilityReviewItem[]; canConfirm: boolean } | null;
 }
 
 export interface VisibilityReviewItem {
