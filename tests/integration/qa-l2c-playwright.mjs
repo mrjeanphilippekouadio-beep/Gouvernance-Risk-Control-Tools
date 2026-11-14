@@ -128,7 +128,7 @@ try {
     await S.shot(`${w}-card`);
     const nButtons = await anyBtn(S).count();
     if (w === "out" || w === "adm") {
-      check(`3.${w} ${w} : le nombre SANS les NOMINATIF (1), aucune liste, aucun bouton`, /1 restriction\(s\) active\(s\)/.test(t) && !t.includes(`RISK ${b}`) && !t.includes(`RISK ${c}`) && nButtons === 0, (t.match(/\d+ restriction\(s\)[^.]*/) ?? ["pas de carte"])[0]);
+      check(`3.${w} ${w} : « Moins de 5 » (les NOMINATIF ne comptent pas), aucune liste, aucun bouton`, /Moins de 5 restriction\(s\) active\(s\)/.test(t) && !t.includes(`RISK ${b}`) && !t.includes(`RISK ${c}`) && nButtons === 0, (t.match(/(\d+|Moins de 5) restriction\(s\)[^.]*/) ?? ["pas de carte"])[0]);
     } else {
       check(`3.${w} ${w} : carte et lignes visibles (2), AUCUN bouton`, t.includes(CARD) && t.includes(`RISK ${b}`) && t.includes(`RISK ${c}`) && nButtons === 0, `btn=${nButtons}`);
     }

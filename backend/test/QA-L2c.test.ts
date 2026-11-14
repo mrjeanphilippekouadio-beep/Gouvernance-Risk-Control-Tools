@@ -80,7 +80,7 @@ describe.skipIf(!live)("QA-L2c on the REAL server + LOCAL PostgreSQL 16", () => 
   const panel = async (who: Who = "rm") => {
     const r = await get(who, "/governance-health");
     expect(r.status, r.text).toBe(200);
-    return { body: r.text, v: r.json.data.visibilityReview as { periodMonths: number; total: number; canConfirm: boolean; items: Item[] } };
+    return { body: r.text, v: r.json.data.visibilityReview as { periodMonths: number; total: number | { belowThreshold: true }; canConfirm: boolean; items: Item[] } };
   };
   const ids = async (who: Who = "rm") => new Set((await panel(who)).v.items.map((i) => i.resourceId));
   const confirm = (who: Who | null, type: string, id: string) => call(who, "POST", `/visibility-reviews/${type}/${id}/confirm`);
@@ -336,7 +336,7 @@ describe.skipIf(!live)("QA-L2c on the REAL server + LOCAL PostgreSQL 16", () => 
     it("canConfirm per profile; total masking: the groups that see everything get exact total and items, others a total WITHOUT the NOMINATIF ones and no item", async () => {
       const nom = await risk("NOMINATIF", "13 months");
       const per = await risk("PERIMETRE", "13 months");
-      const seen: Record<string, { canConfirm: boolean; items: number; total: number }> = {};
+      const seen: Record<string, { canConfirm: boolean; items: number; total: number | { belowThreshold: true } }> = {};
       for (const w of ["rm", "com", "aud", "adm", "out"] as const) {
         const { v, body } = await panel(w);
         seen[w] = { canConfirm: v.canConfirm, items: v.items.length, total: v.total };
@@ -344,8 +344,27 @@ describe.skipIf(!live)("QA-L2c on the REAL server + LOCAL PostgreSQL 16", () => 
       }
       expect(seen["rm"]).toEqual({ canConfirm: true, items: 2, total: 2 });
       for (const w of ["com", "aud"]) expect(seen[w], w).toMatchObject({ canConfirm: false, items: 2, total: 2 });
-      for (const w of ["adm", "out"]) expect(seen[w], w).toEqual({ canConfirm: false, items: 0, total: 1 });
+      for (const w of ["adm", "out"]) expect(seen[w], w).toEqual({ canConfirm: false, items: 0, total: { belowThreshold: true } }); // 1 PERIMETRE (the NOMINATIF is left out), 1 to 4 is never sent
       expect(per).toBeTruthy();
+      await reset();
+    });
+  });
+
+  describe("SMALL-CELL rule of the total for readers who do not see everything (q228 A: 0 and 5+ exact, 1 to 4 never sent)", () => {
+    const totals = async (who: Who) => (await panel(who)).v.total;
+    it("0, 4, 5 and 6 due PERIMETRE restrictions (+ NOMINATIF ones that never count): adm and an ordinary reader see 0, belowThreshold, 5, 6; rm, com, aud stay exact", async () => {
+      await risk("NOMINATIF", "13 months"); // never counted for adm / out
+      await risk("NOMINATIF", "13 months");
+      expect([await totals("adm"), await totals("out")]).toEqual([0, 0]);
+      expect(await totals("rm")).toBe(2);
+      for (const n of [4, 5, 6]) {
+        const have = (await sql<{ n: number }>("SELECT count(*)::int AS n FROM risks WHERE process = $1 AND deleted_at IS NULL AND visibility = 'PERIMETRE'", [TAG]))[0]!.n;
+        await Promise.all(Array.from({ length: n - have }, () => risk("PERIMETRE", "13 months")));
+        const want = n < 5 ? { belowThreshold: true } : n;
+        expect([n, await totals("adm"), await totals("out")]).toEqual([n, want, want]);
+        expect([await totals("rm"), await totals("com"), await totals("aud")]).toEqual([n + 2, n + 2, n + 2]);
+        expect(JSON.stringify((await panel("out")).v)).not.toMatch(/"total":[1-4]\b/); // no exact 1..4 in the block
+      }
       await reset();
     });
   });
