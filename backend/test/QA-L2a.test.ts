@@ -71,6 +71,8 @@ describe("QA-L2a (static): independent inventory of the writers of a visibility 
   });
 });
 
+/** 097: the database stamps the erasure date itself (today, UTC), the caller cannot choose it. */
+const erasedDay = () => new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
 const live = process.env["QA_L2A_LIVE"] === "1";
 const DB = "grc_qa_l2at";
 const PORT = 8114;
@@ -453,7 +455,7 @@ describe.skipIf(!live)("QA-L2a on the REAL server + LOCAL PostgreSQL 16 (head 48
       const shown = [...byEntity.json.data, ...searched.json.data].filter((e: { id: string }) => refRows.includes(e.id)) as Array<{ reason: string | null }>;
       expect(shown.length).toBeGreaterThan(3);
       for (const e of shown) expect(e.reason).toMatch(GONE);
-      expect(shown[0]!.reason).toBe("motif effacé le 10/11/2026 (conservation)");
+      expect(shown[0]!.reason).toBe(`motif effacé le ${erasedDay()} (conservation)`);
       // 2. the restricted-resources list (last change)
       const list = await get("rm", "/restricted-resources?limit=500");
       expect(list.status).toBe(200);

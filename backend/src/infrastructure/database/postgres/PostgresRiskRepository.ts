@@ -2,7 +2,7 @@ import type { Pool } from "pg";
 import { riskVisibilityClause } from "./visibilityFilter.js";
 import type { ReadScope, Visibility } from "../../../domain/visibility.js";
 import { runAudited } from "./PostgresAuditRepository.js";
-import { endAllOnReturnToClient, insertVisibilityReason } from "./visibilityReasons.js";
+import { endAllOnReturnToClient, endReasonsOfEntity, insertVisibilityReason } from "./visibilityReasons.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import type { RiskRepository } from "../../../domain/repositories/RiskRepository.js";
 import type { CreateRiskInput, Risk, RiskVisibilityChange, RiskVisibilityState, UpdateRiskInput } from "../../../domain/entities/Risk.js";
@@ -372,6 +372,7 @@ export class PostgresRiskRepository implements RiskRepository {
   /** ACT-120/121: narrow write, never through the generic `update()` (see RiskRepository interface). */
   async assignOwner(tenantId: string, id: string, ownerId: string | null, audit?: TransactionalAudit<Risk>): Promise<Risk> {
     return runAudited(this.pool, async (db) => {
+      const previous = await db.query<{ designated: string | null }>(`SELECT owner_id AS designated FROM risks WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, [tenantId, id]);
       const { rows } = await db.query<RiskRow>(
         `UPDATE risks
          SET owner_id = $3, updated_at = now()
@@ -381,6 +382,10 @@ export class PostgresRiskRepository implements RiskRepository {
       );
       const row = rows[0];
       if (!row) throw new NotFoundError("Risk", id);
+      // L2b (I-1): a changed or removed designation ends the effect of the earlier opening for this role (the new one is written after).
+      if (previous.rows[0] && previous.rows[0].designated !== (row as { owner_id: string | null }).owner_id) {
+        await endReasonsOfEntity(db, tenantId, "Risk", id, ["RISK_DESIGNATION_OPENING"], null, { asRole: "owner" });
+      }
       return toDomain(row);
     }, audit);
   }
@@ -388,6 +393,7 @@ export class PostgresRiskRepository implements RiskRepository {
   /** ACT-122: narrow write, never through the generic `update()` (see RiskRepository interface). */
   async assignSuperiorOwner(tenantId: string, id: string, superiorOwnerId: string | null, audit?: TransactionalAudit<Risk>): Promise<Risk> {
     return runAudited(this.pool, async (db) => {
+      const previous = await db.query<{ designated: string | null }>(`SELECT superior_owner_id AS designated FROM risks WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, [tenantId, id]);
       const { rows } = await db.query<RiskRow>(
         `UPDATE risks
          SET superior_owner_id = $3, updated_at = now()
@@ -397,6 +403,10 @@ export class PostgresRiskRepository implements RiskRepository {
       );
       const row = rows[0];
       if (!row) throw new NotFoundError("Risk", id);
+      // L2b (I-1): a changed or removed designation ends the effect of the earlier opening for this role (the new one is written after).
+      if (previous.rows[0] && previous.rows[0].designated !== (row as { superior_owner_id: string | null }).superior_owner_id) {
+        await endReasonsOfEntity(db, tenantId, "Risk", id, ["RISK_DESIGNATION_OPENING"], null, { asRole: "superior owner" });
+      }
       return toDomain(row);
     }, audit);
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GOVERNANCE_REASON_RETENTION_HINT, REASON_NO_NAME_HINT } from "../../api/visibility";
+import { REASON_NO_NAME_HINT, ROLE_ASSIGNMENT_REASON_HINT } from "../../api/visibility";
 import { rolesApi, type Role } from "../../api/roles";
 import { permissionsApi } from "../../api/permissions";
 import { ApiError } from "../../api/client";
@@ -135,7 +135,7 @@ export function RolesAdmin({ token }: RolesAdminProps) {
 
       {error && <MessageBanner tone="danger">{error}</MessageBanner>}
 
-      <p className="muted" id="assign-reason-help">Motif d'attribution : demandé si le rôle ouvre la lecture de ressources restreintes. {REASON_NO_NAME_HINT} {GOVERNANCE_REASON_RETENTION_HINT}</p>
+      <p className="muted" id="assign-reason-help">Motif d'attribution : demandé si le rôle ouvre la lecture de ressources restreintes. {REASON_NO_NAME_HINT} {ROLE_ASSIGNMENT_REASON_HINT}</p>
 
       <Table
         loading={loading}

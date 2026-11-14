@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { PostgresAuditRepository } from "../src/infrastructure/database/postgres/PostgresAuditRepository.js";
+import { PostgresProcessRepository } from "../src/infrastructure/database/postgres/PostgresProcessRepository.js";
+import { PostgresRoleRepository } from "../src/infrastructure/database/postgres/PostgresRoleRepository.js";
 import { PostgresRiskRepository } from "../src/infrastructure/database/postgres/PostgresRiskRepository.js";
 import { PostgresSensitiveViewGrantRepository } from "../src/infrastructure/database/postgres/PostgresSensitiveViewGrantRepository.js";
 import { PostgresVisibilityReasonRetentionRepository } from "../src/infrastructure/database/postgres/PostgresVisibilityReasonRetentionRepository.js";
@@ -49,12 +51,15 @@ describe.skipIf(!live)("097 on a real local database", () => {
   it("guard UPDATE: no future date, no end before the creation, erasure only after effect end + retention (fail-closed)", async () => {
     const { t } = await world();
     const id = await reason(t);
-    expect(await refused(`UPDATE visibility_reasons SET effect_ended_at = now() + interval '1 day' WHERE id = $1`, [id])).toMatch(/never in the future/);
-    expect(await refused(`UPDATE visibility_reasons SET effect_ended_at = now() - interval '1 day' WHERE id = $1`, [id])).toMatch(/never precedes/);
-    expect(await refused(`UPDATE visibility_reasons SET reviewed_at = now() + interval '1 day' WHERE id = $1`, [id])).toMatch(/never in the future/);
+    // SEC-L2B-01/02: no date chosen by the caller; the database writes its own clock.
+    expect(await refused(`UPDATE visibility_reasons SET reviewed_at = '2001-01-01' WHERE id = $1`, [id])).toBeNull();
+    const rv = (await q(`SELECT reviewed_at FROM visibility_reasons WHERE id = $1`, [id]))[0]!["reviewed_at"] as Date;
+    expect(Date.now() - rv.getTime()).toBeLessThan(60_000);
     // effect not ended: no erasure, however old
     expect(await refused(`UPDATE visibility_reasons SET text = NULL, erased_at = now() WHERE id = $1`, [id])).toMatch(/effect has ended/);
-    expect(await refused(`UPDATE visibility_reasons SET effect_ended_at = clock_timestamp() WHERE id = $1`, [id])).toBeNull();
+    // a backdated end (to the creation, or to 2000) is stored as « now »: the retention cannot be skipped
+    expect(await refused(`UPDATE visibility_reasons SET effect_ended_at = '2000-01-01' WHERE id = $1`, [id])).toBeNull();
+    expect(Date.now() - (await ended(id))!.getTime()).toBeLessThan(60_000);
     // ended just now: the retention has not elapsed (no configs row = 365)
     expect(await refused(`UPDATE visibility_reasons SET text = NULL, erased_at = now() WHERE id = $1`, [id])).toMatch(/retention period/);
     expect(await refused(`UPDATE visibility_reasons SET erased_at = now() + interval '1 day', text = NULL WHERE id = $1`, [id])).not.toBeNull();
@@ -65,7 +70,13 @@ describe.skipIf(!live)("097 on a real local database", () => {
     await q(`INSERT INTO configs (tenant_id, visibility_reason_retention_days) VALUES ($1, NULL)`, [t]).catch(() => q(`UPDATE configs SET visibility_reason_retention_days = NULL WHERE tenant_id = $1`, [t]));
     expect(await refused(`UPDATE visibility_reasons SET text = NULL, erased_at = now() WHERE id = $1`, [id])).toMatch(/retention period/);
     await q(`UPDATE configs SET visibility_reason_retention_days = 365 WHERE tenant_id = $1`, [t]);
-    expect(await refused(`UPDATE visibility_reasons SET text = NULL, erased_at = now() WHERE id = $1`, [id])).toBeNull();
+    expect(await refused(`UPDATE visibility_reasons SET text = NULL, erased_at = '2001-01-01' WHERE id = $1`, [id])).toBeNull();
+    const er = (await q(`SELECT erased_at FROM visibility_reasons WHERE id = $1`, [id]))[0]!["erased_at"] as Date;
+    expect(Date.now() - er.getTime()).toBeLessThan(60_000);
+  });
+
+  it("SEC-L2B-04: the runtime role cannot DELETE a setting", async () => {
+    expect((await q(`SELECT has_table_privilege('grc_app_runtime', 'public.configs', 'DELETE') AS p`))[0]!["p"]).toBe(false);
   });
 
   it("configs.visibility_reason_retention_days: default 365, minimum 365", async () => {
@@ -113,6 +124,40 @@ describe.skipIf(!live)("097 on a real local database", () => {
     await grants.revoke(t, g2.id, { by: a, reason: "Retrait" }, () => []);
     const r3 = await refs(g2.id);
     for (const k of ["reason_ref", "decision_reason_ref", "revoke_reason_ref"]) expect(await ended(r3[k]), k).not.toBeNull();
+  });
+
+  it("C-L2B-2: a changed designation, process owner or department group member ends the matching opening reason only", async () => {
+    const { t, a, b, c } = await world();
+    const audit = new PostgresAuditRepository(pool);
+    const ev = (entityType: string, entityId: string, newValue: unknown, source: "RISK_DESIGNATION_OPENING" | "PROCESS_OWNER_OPENING" | "DEPARTMENT_GROUP_OPENING", text: string) =>
+      audit.record({ tenantId: t, userId: a, entityType, entityId, action: "PERMISSION_CHANGE", oldValue: null, newValue, requestId: "r", ...visibilityReasonOf(source, text) });
+    const refOf = async (entityId: string, text: string) => (await q(`SELECT a.reason_ref FROM audit_log a JOIN visibility_reasons v ON v.id = a.reason_ref WHERE a.entity_id = $1 AND v.text = $2`, [entityId, text]))[0]!["reason_ref"] as string;
+    // risk designation: the owner opening ends when the owner changes, the superior-owner one stays
+    const risk = (await q(`INSERT INTO risks (tenant_id, process, description, visibility, owner_id, superior_owner_id) VALUES ($1, 'p', 'R', 'PERIMETRE', $2, $3) RETURNING id`, [t, b, c]))[0]!["id"] as string;
+    await ev("Risk", risk, { as: "owner" }, "RISK_DESIGNATION_OPENING", "Ouverture owner");
+    await ev("Risk", risk, { as: "superior owner" }, "RISK_DESIGNATION_OPENING", "Ouverture superieur");
+    const risks = new PostgresRiskRepository(pool);
+    await risks.assignOwner(t, risk, b, undefined); // same person: nothing ends
+    expect(await ended(await refOf(risk, "Ouverture owner"))).toBeNull();
+    await risks.assignOwner(t, risk, a, undefined);
+    expect(await ended(await refOf(risk, "Ouverture owner"))).not.toBeNull();
+    expect(await ended(await refOf(risk, "Ouverture superieur"))).toBeNull();
+    // process owner
+    const proc = (await q(`INSERT INTO processes (tenant_id, level, name, owner_user_id) VALUES ($1, 'PROCESS', 'q', $2) RETURNING id`, [t, b]))[0]!["id"] as string;
+    await ev("Process", proc, { ownerUserId: b }, "PROCESS_OWNER_OPENING", "Ouverture processus");
+    const procs = new PostgresProcessRepository(pool);
+    await procs.setResponsibilities(t, proc, { riskChampionUserId: c });
+    expect(await ended(await refOf(proc, "Ouverture processus"))).toBeNull();
+    await procs.setResponsibilities(t, proc, { ownerUserId: null });
+    expect(await ended(await refOf(proc, "Ouverture processus"))).not.toBeNull();
+    // department group: revoking the member ends the reason given when he joined, not another member's
+    const role = (await q(`INSERT INTO roles (tenant_id, name, permissions) VALUES ($1, $2, '{}') RETURNING id`, [t, `G-${randomUUID()}`]))[0]!["id"] as string;
+    for (const u of [b, c]) await q(`INSERT INTO user_roles (tenant_id, role_id, user_id, granted_by) VALUES ($1, $2, $3, $4)`, [t, role, u, a]);
+    await ev("Role", role, { userId: b, widening: true }, "DEPARTMENT_GROUP_OPENING", "Ouverture groupe B");
+    await ev("Role", role, { userId: c, widening: true }, "DEPARTMENT_GROUP_OPENING", "Ouverture groupe C");
+    await new PostgresRoleRepository(pool).revokeFromUser(t, role, b);
+    expect(await ended(await refOf(role, "Ouverture groupe B"))).not.toBeNull();
+    expect(await ended(await refOf(role, "Ouverture groupe C"))).toBeNull();
   });
 
   it("purge: candidates and purge erase only what the guard allows, tenant-scoped, text gone, never a DELETE", async () => {

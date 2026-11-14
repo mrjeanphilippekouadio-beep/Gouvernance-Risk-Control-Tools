@@ -10,7 +10,7 @@
 -- 3. Garde de visibility_reasons reprise EN ENTIER (SEC-L2A-03, PRIV-L2A-02) : à l'INSERT, `created_at` est fixé par la base et
 --    `effect_ended_at`, `reviewed_at`, `erased_at` doivent être NULL ; à l'UPDATE, le texte ne s'efface que si la fin d'effet
 --    est déjà posée ET si `effect_ended_at` + durée du client est passée (durée NULL = jamais ; client sans ligne de réglage =
---    365, le plancher) ; une date de fin ne précède jamais la création du motif ; toute date posée ou avancée est <= clock_timestamp().
+--    365, le plancher) ; toute date posée ou avancée (fin d'effet, revue, effacement) est celle de la base, `clock_timestamp()`, jamais celle de l'appelant (SEC-L2B-01/02).
 -- 4. Permission `retention.purge` (action terminale, jamais `user.update` ni `config.update`) : rattrapée sur les rôles et
 --    comptes qui portent déjà une permission d'administrateur (même critère que 075), car c'est eux qui lançaient la purge 085
 --    sous `user.update`. Aucune autre attribution. Elle n'entre PAS dans ADMIN_PERMISSIONS (la détenir ne rend pas administrateur).
@@ -71,11 +71,16 @@ BEGIN
      OR (OLD.reviewed_at IS NOT NULL AND (NEW.reviewed_at IS NULL OR NEW.reviewed_at < OLD.reviewed_at)) THEN
     RAISE EXCEPTION 'visibility_reasons: effect_ended_at and reviewed_at are only set or advanced' USING ERRCODE = '42501';
   END IF;
-  -- SEC-L2A-03 : aucune date posée dans le futur, et une fin d'effet ne précède pas la création du motif.
-  IF (NEW.effect_ended_at IS DISTINCT FROM OLD.effect_ended_at AND (NEW.effect_ended_at > clock_timestamp() OR NEW.effect_ended_at < OLD.created_at))
-     OR (NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at AND NEW.reviewed_at > clock_timestamp())
-     OR (NEW.erased_at IS DISTINCT FROM OLD.erased_at AND NEW.erased_at > clock_timestamp()) THEN
-    RAISE EXCEPTION 'visibility_reasons: a date is never in the future, and the end of effect never precedes the reason' USING ERRCODE = '42501';
+  -- SEC-L2B-01/02 : plus aucune date choisie par l'appelant. Une date posée ou avancée est celle de la base, au moment de l'ordre
+  -- (jamais dans le futur, jamais avant la création du motif, jamais rétrodatée pour contourner la durée).
+  IF NEW.effect_ended_at IS DISTINCT FROM OLD.effect_ended_at THEN
+    NEW.effect_ended_at := clock_timestamp();
+  END IF;
+  IF NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at THEN
+    NEW.reviewed_at := clock_timestamp();
+  END IF;
+  IF NEW.text IS NULL AND OLD.text IS NOT NULL THEN
+    NEW.erased_at := clock_timestamp();
   END IF;
   -- PRIV-L2A-02 : effacement fail-closed. Fin d'effet déjà posée (par un ordre antérieur), durée du client écoulée depuis elle.
   IF NEW.text IS NULL AND OLD.text IS NOT NULL THEN
@@ -111,3 +116,6 @@ WHERE roles && ARRAY[
     'rolegroup.audit.update', 'config.cumul.set', 'config.committeeenforcement.set', 'config.manage',
     'config.selfvalidation.set', 'designation.manage', 'config.governancedelays.set'
   ]::text[];
+
+-- SEC-L2B-04 : jamais de suppression physique d'un réglage (soft delete) ; 043 donnait DELETE par défaut sur toute table.
+REVOKE DELETE ON configs FROM grc_app_runtime;

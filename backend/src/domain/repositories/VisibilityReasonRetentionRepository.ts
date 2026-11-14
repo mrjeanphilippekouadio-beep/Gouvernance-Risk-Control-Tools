@@ -4,6 +4,8 @@ import type { TransactionalAudit } from "../entities/RiskFramework.js";
 export interface ErasedVisibilityReason {
   id: string;
   source: string;
+  /** SEC-L2B-05: the end of effect the erasure relied on, so the journal alone reconstructs why it was allowed. */
+  effectEndedAt?: Date;
 }
 
 /** Conservation L2b (q248 B): erasing the text of visibility reasons whose effect ended long enough ago. Tenant-scoped. */

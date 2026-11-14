@@ -35,13 +35,16 @@ export const REPLACED_BY_SAME_SOURCE: readonly VisibilityReasonSource[] = ["VISI
  */
 export async function endReasonsOfEntity(
   db: Db, tenantId: string, entityType: string, entityId: string, sources: readonly VisibilityReasonSource[], exceptId: string | null,
+  /** Narrows to the openings whose audit row names this designation role (`as`) or this person (`userId`). */
+  only: { asRole?: string; userId?: string } = {},
 ): Promise<void> {
   await db.query(
     `UPDATE public.visibility_reasons SET effect_ended_at = clock_timestamp()
      WHERE tenant_id = $1 AND effect_ended_at IS NULL AND source = ANY($4::text[]) AND ($5::uuid IS NULL OR id <> $5)
        AND id IN (SELECT a.reason_ref FROM public.audit_log a
-                  WHERE a.tenant_id = $1 AND a.entity_type = $2 AND a.entity_id = $3 AND a.reason_ref IS NOT NULL)`,
-    [tenantId, entityType, entityId, sources, exceptId],
+                  WHERE a.tenant_id = $1 AND a.entity_type = $2 AND a.entity_id = $3 AND a.reason_ref IS NOT NULL
+                    AND ($6::text IS NULL OR a.new_value->>'as' = $6) AND ($7::text IS NULL OR a.new_value->>'userId' = $7))`,
+    [tenantId, entityType, entityId, sources, exceptId, only.asRole ?? null, only.userId ?? null],
   );
 }
 

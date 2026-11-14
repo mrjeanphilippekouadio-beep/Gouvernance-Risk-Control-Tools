@@ -76,5 +76,8 @@ export const hiddenCountsApi = {
 /** q215 A (DECISION-110): hint shown wherever a reason may open or restrict a resource; the reason is shown to the Committee and Audit. */
 export const REASON_NO_NAME_HINT = "Ne nommez pas la personne concernée : ce motif est visible du Comité et de l'Audit.";
 
-/** q294 A (DECISION-144): shown under the free-text reasons of governance decisions (role, fixed group, moves), kept 10 years as evidence. Provisional wording, to be validated by A15. */
-export const GOVERNANCE_REASON_RETENTION_HINT = "N'écrivez pas d'information personnelle (santé, vie privée) : ce motif est conservé 10 ans comme preuve.";
+/** q294 A (C-L2B-3, wording validated by Privacy): under the free-text reasons of governance decisions kept in the journal for 10 years, then masked. */
+export const GOVERNANCE_REASON_RETENTION_HINT = "N'écrivez pas d'information personnelle (santé, vie privée) : ce motif est conservé 10 ans comme preuve, puis masqué.";
+
+/** q294 A (C-L2B-3): under the role assignment reason, whose retention depends on whether it opens a restricted reading. */
+export const ROLE_ASSIGNMENT_REASON_HINT = "N'écrivez pas d'information personnelle (santé, vie privée) : ce motif est conservé comme preuve.";

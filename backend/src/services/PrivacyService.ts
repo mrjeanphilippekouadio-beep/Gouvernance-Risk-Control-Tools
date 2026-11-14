@@ -121,7 +121,7 @@ export class PrivacyService {
       ...rows.map((r) => ({
         tenantId: actor.tenantId, userId: actor.userId, entityType: "VisibilityReason", entityId: r.id, action: "UPDATE" as const,
         // Never the erased text (it would survive the purge): the source and the fact only.
-        oldValue: null, newValue: { source: r.source, text: null, purge: "L2b" }, reason, requestId,
+        oldValue: null, newValue: { source: r.source, text: null, effectEndedAt: r.effectEndedAt ?? null, purge: "L2b" }, reason, requestId,
       })),
     ]);
     return { dryRun: false, retentionDays: days, erased: erased.length };

@@ -44,6 +44,8 @@ END $$;
 UPDATE users SET roles = array_remove(roles, 'retention.purge') WHERE 'retention.purge' = ANY(roles);
 UPDATE roles SET permissions = array_remove(permissions, 'retention.purge') WHERE 'retention.purge' = ANY(permissions);
 
+-- État antérieur (043 : DELETE accordé par défaut sur toute table).
+GRANT DELETE ON configs TO grc_app_runtime;
 ALTER TABLE configs DROP COLUMN IF EXISTS visibility_reason_retention_days;
 
 DELETE FROM schema_migrations WHERE filename = '097_visibility_reasons_retention.sql';

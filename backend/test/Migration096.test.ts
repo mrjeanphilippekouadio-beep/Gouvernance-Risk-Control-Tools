@@ -11,6 +11,8 @@ import { visibilityReasonOf } from "../src/domain/entities/VisibilityReason.js";
  * Guard of visibility_reasons, journal written with a reference (no text in audit_log.reason), readers joining the text or the
  * erasure wording, grant reasons stored apart.
  */
+/** 097: the database stamps the erasure date itself (today, UTC), the caller cannot choose it. */
+const erasedDay = () => new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
 const live = process.env["MIG096_LIVE"] === "1" && /^grc_/.test(process.env["MIG096_DB"] ?? "");
 
 describe.skipIf(!live)("096 on a real local database", () => {
@@ -66,7 +68,7 @@ describe.skipIf(!live)("096 on a real local database", () => {
     expect((await audit.listRecent(t, 10))[0]).toMatchObject({ reason: "Dossier sensible", reasonRef: raw["reason_ref"] });
     await age(`id = $1`, [raw["reason_ref"]]);
     await q(`UPDATE visibility_reasons SET text = NULL, erased_at = '2026-11-13T10:00:00Z' WHERE id = $1`, [raw["reason_ref"]]);
-    expect((await audit.search(t, { entityId }, 10))[0]!.reason).toBe("motif effacé le 13/11/2026 (conservation)");
+    expect((await audit.search(t, { entityId }, 10))[0]!.reason).toBe(`motif effacé le ${erasedDay()} (conservation)`);
   });
 
   it("listRestricted reads the last change's reason through its reference, and shows the erasure wording once erased", async () => {
@@ -78,7 +80,7 @@ describe.skipIf(!live)("096 on a real local database", () => {
     expect((await repo.listRestricted(t))[0]!.lastChange).toMatchObject({ reason: "Motif liste", widening: false });
     await age(`tenant_id = $1`, [t]);
     await q(`UPDATE visibility_reasons SET text = NULL, erased_at = '2026-11-13T10:00:00Z' WHERE tenant_id = $1`, [t]);
-    expect((await repo.listRestricted(t))[0]!.lastChange!.reason).toBe("motif effacé le 13/11/2026 (conservation)");
+    expect((await repo.listRestricted(t))[0]!.lastChange!.reason).toBe(`motif effacé le ${erasedDay()} (conservation)`);
   });
 
   it("sensitive view grant: request, decision and revocation reasons are stored apart and read back through the join", async () => {

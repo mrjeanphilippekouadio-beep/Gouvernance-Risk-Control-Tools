@@ -12,6 +12,7 @@ import type { EvaluationMode } from "../../../domain/entities/Config.js";
 import { NotFoundError, ValidationError } from "../../../domain/errors/DomainErrors.js";
 import { buildUpdateSet } from "./dynamicUpdate.js";
 import { runAudited } from "./PostgresAuditRepository.js";
+import { endReasonsOfEntity } from "./visibilityReasons.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 
 export interface ProcessRow {
@@ -184,6 +185,8 @@ export class PostgresProcessRepository implements ProcessRepository {
     return runAudited(
       this.pool,
       async (db) => {
+        const previous = await db.query<{ owner_user_id: string | null }>(
+          `SELECT owner_user_id FROM processes WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, [tenantId, id]);
         const { rows } = await db.query<ProcessRow>(
           `UPDATE processes SET ${setClauses.join(", ")}, updated_at = now()
            WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
@@ -192,6 +195,10 @@ export class PostgresProcessRepository implements ProcessRepository {
         );
         const row = rows[0];
         if (!row) throw new NotFoundError("Process", id);
+        // L2b (I-1): a changed or removed process owner ends the effect of the earlier owner opening (the new one is written after).
+        if (previous.rows[0] && previous.rows[0].owner_user_id !== row.owner_user_id) {
+          await endReasonsOfEntity(db, tenantId, "Process", id, ["PROCESS_OWNER_OPENING"], null);
+        }
         return toDomain(row);
       },
       audit,

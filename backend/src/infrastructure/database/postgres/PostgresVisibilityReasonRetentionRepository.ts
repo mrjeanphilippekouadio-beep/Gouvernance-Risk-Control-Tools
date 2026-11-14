@@ -15,7 +15,7 @@ export class PostgresVisibilityReasonRetentionRepository implements VisibilityRe
       this.pool,
       async (db) => {
         const { rows } = await db.query<ErasedVisibilityReason>(
-          `UPDATE public.visibility_reasons SET text = NULL, erased_at = clock_timestamp() ${ELIGIBLE} RETURNING id, source`,
+          `UPDATE public.visibility_reasons SET text = NULL, erased_at = clock_timestamp() ${ELIGIBLE} RETURNING id, source, effect_ended_at AS "effectEndedAt"`,
           [tenantId, days],
         );
         return rows;

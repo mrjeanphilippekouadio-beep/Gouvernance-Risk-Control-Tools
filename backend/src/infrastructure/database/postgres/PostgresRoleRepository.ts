@@ -3,6 +3,7 @@ import type { HandOverInput, RoleRepository } from "../../../domain/repositories
 import type { AuditEvent } from "../../../domain/entities/AuditEvent.js";
 import type { TransactionalAudit } from "../../../domain/entities/RiskFramework.js";
 import { insertAuditEvent, runAudited } from "./PostgresAuditRepository.js";
+import { endReasonsOfEntity } from "./visibilityReasons.js";
 import type { CreateRoleInput, Role, RoleAssignment, SystemGroup, UpdateRoleInput } from "../../../domain/entities/Role.js";
 import type { Permission } from "../../../domain/permissions.js";
 import type { DashboardScopeMode } from "../../../domain/entities/DashboardScope.js";
@@ -360,6 +361,8 @@ export class PostgresRoleRepository implements RoleRepository {
         [tenantId, roleId, userId],
       );
       if (!rowCount) throw new NotFoundError("RoleAssignment", `${roleId}:${userId}`);
+      // L2b (I-1): leaving a department group ends the effect of the opening reason given when this person joined it.
+      await endReasonsOfEntity(client, tenantId, "Role", roleId, ["DEPARTMENT_GROUP_OPENING"], null, { userId });
       for (const event of options?.auditEvents ?? []) await insertAuditEvent(client, event);
       await client.query("COMMIT");
     } catch (err) {
