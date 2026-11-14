@@ -333,5 +333,7 @@ Statut : **SOUS CONDITIONS** (GAP_IDENTIFIED, REVALIDATION_REQUIRED). Document :
 - Points de saisie non identifiés : retrait de groupe fixe (front), déplacement de Dispositif seul (aucun champ front).
 - R5 : durée manuelle (pas automatique), ouvertures sans fin tant que non branchées, rattrapage 097, passage à NULL = jamais.
 
+Retest L2b (2026-11-14, tête 3a55d7d, statique) : C-L2B-1 levée en code (dates forcées à clock_timestamp()) ; C-L2B-3 levée en code (phrases A et B en place) ; C-L2B-2 partielle : branchée pour responsable de processus, désignation de risque, retrait de membre de groupe de département ; RACI et groupe de département via modification du rôle restent NULL (q297 PO en cours). Test PostgreSQL réel de 097 non vérifié (A08).
+
 Principe ajouté :
 18. Une durée de conservation n'est vraie que si l'événement qui la fait courir est branché. Un motif dont la fin n'est pas posée n'est pas « conservé 10 ans » ni « effacé à un an » : il est conservé sans limite, et le texte doit le dire. Une garde qui accepte une date d'événement antidatée annule la durée minimale.
